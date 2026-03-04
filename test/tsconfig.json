@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.base.json",
+  "include": ["../env.d.ts", "./**/*", "../src/**/*.test.ts"],
+  "compilerOptions": {
+    "customConditions": ["src"],
+    "moduleResolution": "nodenext",
+    "noEmit": true
+  }
+}

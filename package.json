@@ -1,0 +1,104 @@
+{
+	"scripts": {
+		"build": "zile",
+		"changeset:publish": "zile publish:prepare && changeset publish && zile publish:post",
+		"changeset:version": "changeset version && pnpm check",
+		"check": "oxlint --fix --ignore-pattern package.json && oxfmt",
+		"check:types": "tsc -b",
+		"check:types:examples": "pnpm --filter *-example check:types",
+		"preconstruct": "zile dev && pnpm check",
+		"test": "vitest"
+	},
+	"packageManager": "pnpm@10.18.3",
+	"devEngines": {
+		"runtime": {
+			"name": "node",
+			"version": "^24.5.1",
+			"onFail": "download"
+		}
+	},
+	"devDependencies": {
+		"@changesets/changelog-github": "^0.6.0",
+		"@changesets/cli": "^2.30.0",
+		"@remix-run/route-pattern": "^0.19.0",
+		"@types/express": "^5.0.6",
+		"@types/http-proxy": "^1.17.17",
+		"@types/node": "^25.3.3",
+		"@types/react": "catalog:default",
+		"@types/react-dom": "catalog:default",
+		"@typescript/native-preview": "7.0.0-dev.20260303.1",
+		"@vitejs/plugin-react": "catalog:default",
+		"@vitest/coverage-v8": "^4.0.18",
+		"elysia": "^1.4.27",
+		"express": "^5.2.1",
+		"hono": "^4.12.4",
+		"oxfmt": "^0.35.0",
+		"oxlint": "^1.50.0",
+		"prool": "catalog:default",
+		"react": "catalog:default",
+		"react-dom": "catalog:default",
+		"simple-git-hooks": "^2.13.1",
+		"testcontainers": "^11.12.0",
+		"typescript": "catalog:default",
+		"viem": "catalog:default",
+		"vitest": "^4.0.18",
+		"zile": "^0.0.22"
+	},
+	"simple-git-hooks": {
+		"pre-commit": "pnpm check"
+	},
+	"pnpm": {
+		"overrides": {
+			"ox": "~0.14.0",
+			"react": "catalog:default",
+			"react-dom": "catalog:default",
+			"zyzz": "workspace:*",
+			"viem": "catalog:default"
+		}
+	},
+	"[!start-pkg]": "",
+	"name": "zyzz",
+	"description": "Accounts tooling for Tempo",
+	"type": "module",
+	"version": "0.14.0",
+	"dependencies": {
+		"@remix-run/fetch-router": "~0.17.0",
+		"idb-keyval": "^6.2.2",
+		"ox": "~0.14.0",
+		"zod": "^4.3.6",
+		"zustand": "^5.0.11"
+	},
+	"peerDependencies": {
+		"viem": ">=2.43.3"
+	},
+	"peerDependenciesMeta": {
+		"viem": {
+			"optional": true
+		}
+	},
+	"repository": {
+		"url": "https://github.com/tempoxyz/zyzz"
+	},
+	"license": "MIT",
+	"files": [
+		"dist",
+		"src",
+		"CHANGELOG.md"
+	],
+	"sideEffects": false,
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"src": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./server": {
+			"src": "./src/server/index.ts",
+			"types": "./dist/server/index.d.ts",
+			"default": "./dist/server/index.js"
+		}
+	}
+}
