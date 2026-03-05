@@ -112,6 +112,14 @@ export function create(options: create.Options): create.ReturnType {
             })
           }
 
+          case 'eth_sendTransactionSync': {
+            const [decoded] = request._decoded.params
+            return await adapter.actions.sendTransactionSync({
+              ...decoded,
+              _encoded: { method: request.method, params: request.params },
+            })
+          }
+
           case 'wallet_connect': {
             const capabilities = request._decoded.params?.[0]?.capabilities
             if (capabilities?.method === 'register') {

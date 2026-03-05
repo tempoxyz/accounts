@@ -1,17 +1,12 @@
-import type { Client } from 'viem'
+import type { Client, Transport } from 'viem'
 import type { Address, LocalAccount } from 'viem/accounts'
 
 import type * as Store from './Store.js'
 import type * as Rpc from './zod/rpc.js'
+import type { tempo } from 'viem/chains'
 
 /** Adapter interface for the provider. */
 export type Adapter = {
-  /**
-   * Whether to persist account sign data (private keys, credentials) to storage.
-   * When `false`, only addresses are persisted.
-   * @default false
-   */
-  internal_persistPrivate?: boolean | undefined
   /** Called once when the provider is created. Returns an optional cleanup function. */
   setup?: (params: setup.Parameters) => (() => void) | undefined
   /** Adapter actions dispatched by the provider's `request()` method. */
@@ -24,9 +19,17 @@ export type Adapter = {
     loadAccounts: () => Promise<loadAccounts.ReturnType>
     /** Send a transaction. */
     sendTransaction: (request: ActionRequest<Rpc.eth_sendTransaction>) => Promise<`0x${string}`>
+    /** Send a transaction and wait for the receipt. */
+    sendTransactionSync: (request: ActionRequest<Rpc.eth_sendTransactionSync>) => Promise<Rpc.eth_sendTransactionSync['returns']>
     /** Switch the active chain. */
     switchChain: (params: switchChain.Parameters) => Promise<void>
   }
+  /**
+   * Whether to persist account sign data (private keys, credentials) to storage.
+   * When `false`, only addresses are persisted.
+   * @default false
+   */
+  internal_persistPrivate?: boolean | undefined
 }
 
 /** Spreads decoded params with `_encoded` carrying the raw wire format. */
@@ -41,7 +44,7 @@ export declare namespace setup {
     /** Returns the rehydrated local account for the given address, or the active account if omitted. */
     getAccount: (address?: Address | undefined, options?: { signable?: boolean | undefined } | undefined) => LocalAccount
     /** Get the viem client for a given chain ID. Defaults to the active chain. */
-    getClient: (chainId?: number | undefined) => Client
+    getClient: (chainId?: number | undefined) => Client<Transport, typeof tempo>
     /** Reactive state store. */
     store: Store.Store
   }

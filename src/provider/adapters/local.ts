@@ -1,4 +1,4 @@
-import { sendTransaction } from 'viem/actions'
+import { sendTransaction, sendTransactionSync } from 'viem/actions'
 
 import type { Adapter, setup } from '../Adapter.js'
 import type * as Store from '../Store.js'
@@ -43,17 +43,29 @@ export function local(options: local.Options): Adapter {
         params.store.setState({ accounts, activeAccount: 0, status: 'connected' })
         return accounts
       },
-      async sendTransaction({ calls, to, data, value, gas, nonce, maxFeePerGas, maxPriorityFeePerGas }) {
+      async sendTransaction({ calls, to, data, gas, nonce, maxFeePerGas, maxPriorityFeePerGas }) {
         const account = params.getAccount(undefined, { signable: true })
         const client = params.getClient()
         return await sendTransaction(client, {
           account,
-          calls: calls ?? [{ to, data, value }],
+          calls: calls ?? [{ to, data }],
           gas,
           nonce,
           maxFeePerGas,
           maxPriorityFeePerGas,
-        } as never)
+        })
+      },
+      async sendTransactionSync({ calls, to, data, gas, nonce, maxFeePerGas, maxPriorityFeePerGas }) {
+        const account = params.getAccount(undefined, { signable: true })
+        const client = params.getClient()
+        return await sendTransactionSync(client, {
+          account,
+          calls: calls ?? [{ to, data }],
+          gas,
+          nonce,
+          maxFeePerGas,
+          maxPriorityFeePerGas,
+        }) as never
       },
       async switchChain({ chainId }) {
         params.store.setState({ chainId })
