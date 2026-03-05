@@ -29,6 +29,25 @@ describe('DefineItem', () => {
     }>()
   })
 
+  test('eth_sendTransaction', () => {
+    expectTypeOf<Rpc.eth_sendTransaction>().toEqualTypeOf<{
+      method: 'eth_sendTransaction'
+      params: readonly [
+        {
+          calls?: readonly { data?: `0x${string}`; to?: `0x${string}`; value?: bigint }[] | undefined
+          data?: `0x${string}` | undefined
+          gas?: bigint | undefined
+          maxFeePerGas?: bigint | undefined
+          maxPriorityFeePerGas?: bigint | undefined
+          nonce?: number | undefined
+          to?: `0x${string}` | undefined
+          value?: bigint | undefined
+        },
+      ]
+      returns: `0x${string}`
+    }>()
+  })
+
   test('wallet_connect', () => {
     expectTypeOf<Rpc.wallet_connect>().toEqualTypeOf<{
       method: 'wallet_connect'
@@ -89,7 +108,7 @@ describe('Ox', () => {
 describe('Viem', () => {
   test('is a tuple of all provider methods', () => {
     expectTypeOf<Schema.Viem[0]['Method']>().toEqualTypeOf<'eth_accounts'>()
-    expectTypeOf<Schema.Viem[5]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
+    expectTypeOf<Schema.Viem[6]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
   })
 })
 
@@ -100,6 +119,7 @@ describe('Request', () => {
       | 'eth_accounts'
       | 'eth_chainId'
       | 'eth_requestAccounts'
+      | 'eth_sendTransaction'
       | 'wallet_connect'
       | 'wallet_disconnect'
       | 'wallet_switchEthereumChain'

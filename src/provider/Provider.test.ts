@@ -3,12 +3,12 @@ import { tempoModerato } from 'viem/chains'
 import { describe, expect, test } from 'vitest'
 
 import { local } from '../../test/adapters.js'
-import { accounts as core_accounts } from '../../test/config.js'
+import { accounts as core_accounts, privateKeys } from '../../test/config.js'
 import * as Provider from './Provider.js'
 
 describe('create', () => {
   test('default: returns an EIP-1193 provider', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
     expect(provider).toBeDefined()
@@ -18,7 +18,7 @@ describe('create', () => {
 
 describe('eth_chainId', () => {
   test('default: returns configured chain ID as hex', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
 
@@ -29,7 +29,7 @@ describe('eth_chainId', () => {
 
 describe('eth_accounts', () => {
   test('default: returns empty array initially', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
 
@@ -38,8 +38,13 @@ describe('eth_accounts', () => {
   })
 
   test('behavior: returns accounts after connecting', async () => {
-    const provider = await Provider.create({
-      adapter: local({ accounts: [core_accounts[0], core_accounts[1]] }),
+    const provider = Provider.create({
+      adapter: local({
+        accounts: [
+          { address: core_accounts[0].address, sign: { keyType: 'secp256k1', privateKey: privateKeys[0] } },
+          { address: core_accounts[1].address, sign: { keyType: 'secp256k1', privateKey: privateKeys[1] } },
+        ],
+      }),
     })
 
     await provider.request({ method: 'eth_requestAccounts' })
@@ -55,7 +60,7 @@ describe('eth_accounts', () => {
 
 describe('eth_requestAccounts', () => {
   test('default: loads accounts via adapter', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
 
@@ -70,7 +75,7 @@ describe('eth_requestAccounts', () => {
 
 describe('wallet_connect', () => {
   test('default: without capabilities calls loadAccounts', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
 
@@ -83,10 +88,10 @@ describe('wallet_connect', () => {
   })
 
   test('behavior: with register capability calls createAccount', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local({
-        accounts: [core_accounts[0]],
-        createAccounts: [core_accounts[1]],
+        accounts: [{ address: core_accounts[0].address, sign: { keyType: 'secp256k1', privateKey: privateKeys[0] } }],
+        createAccounts: [{ address: core_accounts[1].address, sign: { keyType: 'secp256k1', privateKey: privateKeys[1] } }],
       }),
     })
 
@@ -104,7 +109,7 @@ describe('wallet_connect', () => {
 
 describe('wallet_disconnect', () => {
   test('default: disconnects and clears accounts', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
 
@@ -118,7 +123,7 @@ describe('wallet_disconnect', () => {
 
 describe('wallet_switchEthereumChain', () => {
   test('default: switches chain', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
 
@@ -132,7 +137,7 @@ describe('wallet_switchEthereumChain', () => {
   })
 
   test('error: throws 4902 for unconfigured chain', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
 
@@ -151,7 +156,7 @@ describe('wallet_switchEthereumChain', () => {
 
 describe('events', () => {
   test('behavior: emits accountsChanged on connect', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
 
@@ -164,7 +169,7 @@ describe('events', () => {
   })
 
   test('behavior: emits connect on status change', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
 
@@ -183,7 +188,7 @@ describe('events', () => {
   })
 
   test('behavior: emits disconnect on disconnect', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
 
@@ -199,7 +204,7 @@ describe('events', () => {
   })
 
   test('behavior: emits chainChanged on switch', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
 
@@ -221,7 +226,7 @@ describe('events', () => {
 
 describe('rpc proxy', () => {
   test('error: proxies unknown methods to RPC client', async () => {
-    const provider = await Provider.create({
+    const provider = Provider.create({
       adapter: local(),
     })
 

@@ -1,6 +1,6 @@
-import type { Address } from 'viem/accounts'
+import { sendTransaction } from 'viem/actions'
 
-import type { Adapter } from '../Adapter.js'
+import type { Adapter, setup } from '../Adapter.js'
 import type * as Store from '../Store.js'
 
 /**
@@ -9,42 +9,54 @@ import type * as Store from '../Store.js'
  * @example
  * ```ts
  * import { local } from 'zyzz/provider'
- * import { Account } from 'viem/tempo'
- *
- * const account = Account.fromSecp256k1(privateKey)
  *
  * const adapter = local({
- *   loadAccounts: async () => [account],
+ *   loadAccounts: async () => [{
+ *     address: '0x...',
+ *     sign: { keyType: 'secp256k1', privateKey: '0x...' },
+ *   }],
  * })
  * ```
  */
 export function local(options: local.Options): Adapter {
   const { createAccount, loadAccounts } = options
 
-  let store: Store.Store
+  let params: setup.Parameters
 
   return {
-    setup(params) {
-      store = params.store
+    setup(params_) {
+      params = params_
       return undefined
     },
     actions: {
       async createAccount() {
         if (!createAccount) throw new Error('`createAccount` not configured on adapter.')
         const accounts = await createAccount()
-        store.setState({ accounts, activeAccount: 0, status: 'connected' })
+        params.store.setState({ accounts, activeAccount: 0, status: 'connected' })
         return accounts
       },
       async disconnect() {
-        store.setState({ accounts: [], activeAccount: 0, status: 'disconnected' })
+        params.store.setState({ accounts: [], activeAccount: 0, status: 'disconnected' })
       },
       async loadAccounts() {
         const accounts = await loadAccounts()
-        store.setState({ accounts, activeAccount: 0, status: 'connected' })
+        params.store.setState({ accounts, activeAccount: 0, status: 'connected' })
         return accounts
       },
+      async sendTransaction({ calls, to, data, value, gas, nonce, maxFeePerGas, maxPriorityFeePerGas }) {
+        const account = params.getAccount(undefined, { signable: true })
+        const client = params.getClient()
+        return await sendTransaction(client, {
+          account,
+          calls: calls ?? [{ to, data, value }],
+          gas,
+          nonce,
+          maxFeePerGas,
+          maxPriorityFeePerGas,
+        } as never)
+      },
       async switchChain({ chainId }) {
-        store.setState({ chainId })
+        params.store.setState({ chainId })
       },
     },
   }
@@ -53,8 +65,8 @@ export function local(options: local.Options): Adapter {
 export declare namespace local {
   type Options = {
     /** Create a new account. Optional — omit for login-only flows. */
-    createAccount?: (() => Promise<readonly { address: Address }[]>) | undefined
+    createAccount?: (() => Promise<readonly Store.Account[]>) | undefined
     /** Discover existing accounts (e.g. WebAuthn assertion). */
-    loadAccounts: () => Promise<readonly { address: Address }[]>
+    loadAccounts: () => Promise<readonly Store.Account[]>
   }
 }

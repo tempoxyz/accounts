@@ -16,7 +16,7 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          exclude: ['./src/**/*.browser.test.ts', './src/provider/**/*.test.ts'],
+          exclude: ['./src/**/*.browser.test.ts'],
           include: ['./src/**/*.test.ts'],
           name: 'core',
           globalSetup: [join(import.meta.dirname, './test/setup.global.ts')],

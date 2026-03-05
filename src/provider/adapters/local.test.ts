@@ -1,13 +1,20 @@
+import { createClient, http } from 'viem'
+import { tempoLocalnet } from 'viem/chains'
 import { describe, expect, test } from 'vitest'
 
 import { local } from '../../../test/adapters.js'
-import { accounts as core_accounts } from '../../../test/config.js'
+import { accounts as core_accounts, privateKeys } from '../../../test/config.js'
+import * as Account from '../Account.js'
 import * as Store from '../Store.js'
 
 function setup(options: local.Options = {}) {
   const adapter = local(options)
-  const store = Store.create({ chainId: 1 })
-  adapter.setup?.({ store })
+  const store = Store.create({ chainId: tempoLocalnet.id })
+  adapter.setup?.({
+    getAccount: (address) => Account.fromAddress({ address, signable: true, store }),
+    getClient: () => createClient({ chain: tempoLocalnet, transport: http() }),
+    store,
+  })
   return { adapter, store }
 }
 
@@ -35,7 +42,12 @@ describe('local', () => {
   describe('createAccount', () => {
     test('default: creates account and updates store', async () => {
       const { adapter, store } = setup({
-        createAccounts: [core_accounts[1]],
+        createAccounts: [
+          {
+            address: core_accounts[1].address,
+            sign: { keyType: 'secp256k1', privateKey: privateKeys[1] },
+          },
+        ],
       })
 
       const accounts = await adapter.actions.createAccount()
@@ -70,7 +82,7 @@ describe('local', () => {
         {
           "accounts": [],
           "activeAccount": 0,
-          "chainId": 1,
+          "chainId": 1337,
           "status": "disconnected",
         }
       `)

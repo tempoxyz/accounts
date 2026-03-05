@@ -1,4 +1,5 @@
-import type * as Adapter from '../src/provider/Adapter.js'
+import type { LocalAccount } from 'viem/accounts'
+
 import { local as core_local } from '../src/provider/adapters/local.js'
 import { accounts } from './config.js'
 
@@ -13,7 +14,7 @@ export function local(options: local.Options = {}) {
 
 export declare namespace local {
   type Options = {
-    accounts?: Adapter.loadAccounts.ReturnType | undefined
-    createAccounts?: Adapter.createAccount.ReturnType | undefined
+    accounts?: readonly LocalAccount[] | undefined
+    createAccounts?: readonly LocalAccount[] | undefined
   }
 }

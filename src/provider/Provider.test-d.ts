@@ -21,6 +21,10 @@ describe('request', () => {
     expectTypeOf<Result<'eth_requestAccounts'>>().toEqualTypeOf<readonly `0x${string}`[]>()
   })
 
+  test('eth_sendTransaction', () => {
+    expectTypeOf<Result<'eth_sendTransaction'>>().toEqualTypeOf<`0x${string}`>()
+  })
+
   test('wallet_connect', () => {
     expectTypeOf<Result<'wallet_connect'>>().toEqualTypeOf<readonly `0x${string}`[]>()
   })

@@ -24,6 +24,32 @@ export const eth_requestAccounts = Schema.defineItem({
 })
 export type eth_requestAccounts = Schema.DefineItem<typeof eth_requestAccounts>
 
+const call = z.object({
+  data: z.optional(u.hex()),
+  to: z.optional(u.address()),
+  value: z.optional(u.bigint()),
+})
+
+export const eth_sendTransaction = Schema.defineItem({
+  method: z.literal('eth_sendTransaction'),
+  params: z.readonly(
+    z.tuple([
+      z.object({
+        calls: z.optional(z.readonly(z.array(call))),
+        data: z.optional(u.hex()),
+        gas: z.optional(u.bigint()),
+        maxFeePerGas: z.optional(u.bigint()),
+        maxPriorityFeePerGas: z.optional(u.bigint()),
+        nonce: z.optional(u.number()),
+        to: z.optional(u.address()),
+        value: z.optional(u.bigint()),
+      }),
+    ]),
+  ),
+  returns: u.hex(),
+})
+export type eth_sendTransaction = Schema.DefineItem<typeof eth_sendTransaction>
+
 export const wallet_connect = Schema.defineItem({
   method: z.literal('wallet_connect'),
   params: z.optional(

@@ -9,6 +9,7 @@ export const schema = from([
   Rpc.eth_accounts,
   Rpc.eth_chainId,
   Rpc.eth_requestAccounts,
+  Rpc.eth_sendTransaction,
   Rpc.wallet_connect,
   Rpc.wallet_disconnect,
   Rpc.wallet_switchEthereumChain,

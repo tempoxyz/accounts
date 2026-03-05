@@ -1,15 +1,17 @@
-import type { Address } from 'viem/accounts'
 import type { Mutate, StoreApi } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { createStore } from 'zustand/vanilla'
 
+import type { Store as Account } from './Account.js'
 import * as Storage from './Storage.js'
+
+export type { Account }
 
 /** Reactive state for the provider. */
 export type State = {
   /** Connected accounts. */
-  accounts: readonly { address: Address }[]
+  accounts: readonly Account[]
   /** Index of the active account in {@link State.accounts}. */
   activeAccount: number
   /** Active chain ID. */
@@ -32,13 +34,26 @@ export type Options = {
   storage?: Storage.Storage | undefined
   /** Storage key. */
   storageKey?: string | undefined
+  /**
+   * Whether to persist account sign data (private keys, credentials) to storage.
+   * When `false`, only addresses are persisted.
+   * @default false
+   * @internal
+   * @deprecated
+   */
+  internal_persistPrivate?: boolean | undefined
 }
 
 /**
  * Creates a Zustand vanilla store with `subscribeWithSelector` and `persist` middleware.
  */
 export function create(options: Options): Store {
-  const { chainId, storage = Storage.memory(), storageKey = 'tempo.account' } = options
+  const {
+    chainId,
+    storage = Storage.memory(),
+    storageKey = 'tempo.account',
+    internal_persistPrivate = false,
+  } = options
 
   return createStore(
     subscribeWithSelector(
@@ -55,16 +70,16 @@ export function create(options: Options): Store {
             return {
               ...current,
               ...state,
-              // Always use the configured chainId if the persisted one is stale
               chainId: state.chainId ?? current.chainId,
-              // Status is never persisted — always start disconnected
               status: current.status,
             }
           },
           name: storageKey,
           partialize: (state) =>
             ({
-              accounts: state.accounts,
+              accounts: internal_persistPrivate
+                ? state.accounts
+                : state.accounts.map((a) => ({ address: a.address })),
               activeAccount: state.activeAccount,
               chainId: state.chainId,
             }) as unknown as State,
@@ -89,3 +104,5 @@ export async function waitForHydration(store: Store): Promise<void> {
     setTimeout(() => resolve(), 100)
   })
 }
+
+

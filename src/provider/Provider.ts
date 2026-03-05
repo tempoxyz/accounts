@@ -1,8 +1,10 @@
 import { Hex, Provider as oxProvider } from 'ox'
-import { type Chain, createClient, type Client, http } from 'viem'
+import type { Chain } from 'viem'
 import { tempo, tempoModerato } from 'viem/chains'
 
+import * as Account from './Account.js'
 import type { Adapter } from './Adapter.js'
+import * as Client from './Client.js'
 import * as Schema from './Schema.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
@@ -19,36 +21,28 @@ import * as RpcRequest from './zod/request.js'
  *
  * const account = Account.fromSecp256k1(privateKey)
  *
- * const provider = await Provider.create({
+ * const provider = Provider.create({
  *   adapter: local({
  *     loadAccounts: async () => [{ address: account.address }],
  *   }),
  * })
  * ```
  */
-export async function create(options: create.Options): Promise<create.ReturnType> {
+export function create(options: create.Options): create.ReturnType {
   const { adapter, chains = [tempo, tempoModerato], storage, storageKey } = options
 
   const store = Store.create({
     chainId: chains[0]!.id,
+    internal_persistPrivate: adapter.internal_persistPrivate,
     storage,
     storageKey,
   })
 
-  await Store.waitForHydration(store)
-
-  adapter.setup?.({ store })
-
-  const clients = new Map<number, Client>()
-  const getClient = (chainId: number) => {
-    let client = clients.get(chainId)
-    if (!client) {
-      const chain = chains.find((c) => c.id === chainId) ?? chains[0]!
-      client = createClient({ chain, transport: http() })
-      clients.set(chainId, client)
-    }
-    return client
-  }
+  adapter.setup?.({
+    getAccount: (address, options) => Account.fromAddress({ address, signable: options?.signable, store }),
+    getClient: (chainId) => Client.fromChainId(chainId, { chains, store }),
+    store,
+  })
 
   const emitter = oxProvider.createEmitter()
 
@@ -78,6 +72,8 @@ export async function create(options: create.Options): Promise<create.ReturnType
     {
       ...(emitter as unknown as oxProvider.Emitter),
       async request({ method, params }: { method: string; params?: any }) {
+        await Store.waitForHydration(store)
+
         // Validate known methods. Unknown methods fall through to the RPC proxy.
         let request: RpcRequest.WithDecoded<typeof Schema.Request>
         try {
@@ -85,7 +81,7 @@ export async function create(options: create.Options): Promise<create.ReturnType
         } catch (e) {
           if (!(e instanceof oxProvider.UnsupportedMethodError)) throw e
           // Proxy unknown methods to the RPC node.
-          return await getClient(store.getState().chainId).request({
+          return await Client.fromChainId(undefined, { chains, store }).request({
             method: method as any,
             params: params as any,
           })
@@ -106,6 +102,14 @@ export async function create(options: create.Options): Promise<create.ReturnType
           case 'eth_requestAccounts': {
             const accounts = await adapter.actions.loadAccounts()
             return accounts.map((a) => a.address)
+          }
+
+          case 'eth_sendTransaction': {
+            const [decoded] = request._decoded.params
+            return await adapter.actions.sendTransaction({
+              ...decoded,
+              _encoded: { method: request.method, params: request.params },
+            })
           }
 
           case 'wallet_connect': {
