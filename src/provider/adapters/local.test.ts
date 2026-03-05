@@ -12,7 +12,7 @@ function setup(options: local.Options = {}) {
   const store = Store.create({ chainId: tempoLocalnet.id })
   adapter.setup?.({
     getAccount: (address) => Account.fromAddress({ address, signable: true, store }),
-    getClient: () => createClient({ chain: tempoLocalnet, transport: http() }),
+    getClient: () => createClient({ chain: tempoLocalnet, transport: http() }) as never,
     store,
   })
   return { adapter, store }
