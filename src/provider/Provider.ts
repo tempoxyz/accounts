@@ -1,4 +1,4 @@
-import { Hash, Hex, Provider as oxProvider } from 'ox'
+import { Hash, Hex, Provider as ox_Provider } from 'ox'
 import type { Chain } from 'viem'
 import { tempo, tempoModerato } from 'viem/chains'
 
@@ -47,17 +47,7 @@ export function create(options: create.Options): create.ReturnType {
     store,
   })
 
-  /** Merges new accounts into the store, deduplicating by address, and sets the first new account as active. */
-  function mergeAccounts(newAccounts: readonly Store.Account[]) {
-    const existing = store.getState().accounts
-    const existingAddresses = new Set(existing.map((a) => a.address))
-    const unique = newAccounts.filter((a) => !existingAddresses.has(a.address))
-    const accounts = [...existing, ...unique]
-    const activeAccount = accounts.findIndex((a) => a.address === newAccounts[0]?.address)
-    store.setState({ accounts, activeAccount, status: 'connected' })
-  }
-
-  const emitter = oxProvider.createEmitter()
+  const emitter = ox_Provider.createEmitter()
 
   // Emit EIP-1193 events on state changes.
   store.subscribe(
@@ -77,13 +67,29 @@ export function create(options: create.Options): create.ReturnType {
     (status) => {
       if (status === 'connected')
         emitter.emit('connect', { chainId: Hex.fromNumber(store.getState().chainId) })
-      if (status === 'disconnected') emitter.emit('disconnect', new oxProvider.DisconnectedError())
+      if (status === 'disconnected') emitter.emit('disconnect', new ox_Provider.DisconnectedError())
     },
   )
 
-  return Object.assign(oxProvider.from(
+  /** Throws `DisconnectedError` if no accounts are connected. */
+  function assertConnected() {
+    if (store.getState().accounts.length === 0)
+      throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
+  }
+
+  /** Merges new accounts into the store, deduplicating by address, and sets the first new account as active. */
+  function mergeAccounts(newAccounts: readonly Store.Account[]) {
+    const existing = store.getState().accounts
+    const existingAddresses = new Set(existing.map((a) => a.address))
+    const unique = newAccounts.filter((a) => !existingAddresses.has(a.address))
+    const accounts = [...existing, ...unique]
+    const activeAccount = accounts.findIndex((a) => a.address === newAccounts[0]?.address)
+    store.setState({ accounts, activeAccount, status: 'connected' })
+  }
+
+  return Object.assign(ox_Provider.from(
     {
-      ...(emitter as unknown as oxProvider.Emitter),
+      ...(emitter as unknown as ox_Provider.Emitter),
       async request({ method, params }: { method: string; params?: any }) {
         await Store.waitForHydration(store)
 
@@ -92,7 +98,7 @@ export function create(options: create.Options): create.ReturnType {
         try {
           request = RpcRequest.validate(Schema.Request, { method, params })
         } catch (e) {
-          if (!(e instanceof oxProvider.UnsupportedMethodError)) throw e
+          if (!(e instanceof ox_Provider.UnsupportedMethodError)) throw e
           // Proxy unknown methods to the RPC node.
           return await Client.fromChainId(undefined, { chains, store }).request({
             method: method as any,
@@ -123,6 +129,7 @@ export function create(options: create.Options): create.ReturnType {
           }
 
           case 'eth_sendTransaction': {
+            assertConnected()
             const [decoded] = request._decoded.params
             return await adapter.actions.sendTransaction({
               ...decoded,
@@ -131,6 +138,7 @@ export function create(options: create.Options): create.ReturnType {
           }
 
           case 'eth_sendTransactionSync': {
+            assertConnected()
             const [decoded] = request._decoded.params
             return await adapter.actions.sendTransactionSync({
               ...decoded,
@@ -139,6 +147,7 @@ export function create(options: create.Options): create.ReturnType {
           }
 
           case 'wallet_sendCalls': {
+            assertConnected()
             const decoded = request._decoded.params?.[0]
             const { calls = [], capabilities } = decoded ?? {}
             const sync = capabilities?.sync
@@ -177,7 +186,9 @@ export function create(options: create.Options): create.ReturnType {
           case 'wallet_switchEthereumChain': {
             const { chainId } = request._decoded.params[0]
             if (!chains.some((c) => c.id === chainId))
-              throw new oxProvider.ProviderRpcError(4902, `Chain ${chainId} not configured.`)
+              throw new ox_Provider.UnsupportedChainIdError({
+                message: `Chain ${chainId} not configured.`,
+              })
             await adapter.actions.switchChain?.({ chainId })
             store.setState({ chainId })
             return
@@ -210,8 +221,8 @@ export declare namespace create {
      */
     testnet?: boolean | undefined
   }
-  type ReturnType = oxProvider.Provider<{ schema: Schema.Ox }> &
-    oxProvider.Emitter & {
+  type ReturnType = ox_Provider.Provider<{ schema: Schema.Ox }> &
+    ox_Provider.Emitter & {
       /** Configured chains. */
       chains: readonly [Chain, ...Chain[]]
       /** Reactive state store. */

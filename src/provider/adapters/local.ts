@@ -1,3 +1,4 @@
+import { Provider as oxProvider } from 'ox'
 import { sendTransaction, sendTransactionSync } from 'viem/actions'
 
 import type { Adapter, setup } from '../Adapter.js'
@@ -30,7 +31,10 @@ export function local(options: local.Options): Adapter {
     },
     actions: {
       async createAccount() {
-        if (!createAccount) throw new Error('`createAccount` not configured on adapter.')
+        if (!createAccount)
+          throw new oxProvider.UnsupportedMethodError({
+            message: '`createAccount` not configured on adapter.',
+          })
         return await createAccount()
       },
       async loadAccounts() {

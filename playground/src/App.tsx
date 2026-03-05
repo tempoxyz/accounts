@@ -378,7 +378,7 @@ function Method({
       <h3>{method}</h3>
       {children}
       {error && (
-        <pre style={{ color: 'red' }}>{error.message}</pre>
+        <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>
       )}
       {result !== undefined && (
         <pre>{JSON.stringify(result, null, 2)}</pre>

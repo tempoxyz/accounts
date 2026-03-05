@@ -250,21 +250,17 @@ describe('wallet_switchEthereumChain', () => {
     expect(chainId).toMatchInlineSnapshot(`"0xa5bf"`)
   })
 
-  test('error: throws 4902 for unconfigured chain', async () => {
+  test('error: throws for unconfigured chain', async () => {
     const provider = Provider.create({
       adapter: local(),
     })
 
-    try {
-      await provider.request({
+    await expect(
+      provider.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: '0x1' }],
-      })
-      expect.unreachable()
-    } catch (e) {
-      expect(e).toBeInstanceOf(core_Provider.ProviderRpcError)
-      expect((e as core_Provider.ProviderRpcError).code).toMatchInlineSnapshot(`4902`)
-    }
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[Provider.UnsupportedChainIdError: Chain 1 not configured.]`)
   })
 })
 

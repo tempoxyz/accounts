@@ -1,5 +1,6 @@
 import type { Hex } from 'viem'
 import type { Address, JsonRpcAccount, LocalAccount } from 'viem/accounts'
+import { Provider } from 'ox'
 import { Account as TempoAccount } from 'viem/tempo'
 
 import type { OneOf } from '../internal/types.js'
@@ -32,7 +33,10 @@ export function fromAddress(options: fromAddress.Options): LocalAccount {
   const { address, signable = false, store } = options
   const { accounts, activeAccount } = store.getState()
   const account = address ? accounts.find((a) => a.address === address) : accounts[activeAccount]
-  if (!account) throw new Error(address ? `Account ${address} not found.` : 'No active account.')
+  if (!account)
+    throw address
+      ? new Provider.UnauthorizedError({ message: `Account "${address}" not found.` })
+      : new Provider.DisconnectedError({ message: 'No active account.' })
   return hydrate(account, { sign: signable }) as never
 }
 
@@ -61,7 +65,8 @@ export function hydrate(
   if (!sign) return { address: account.address, type: 'json-rpc' }
   if ('sign' in account && typeof account.sign === 'function')
     return account as TempoAccount.Account
-  if (!account.keyType) throw new Error(`Account "${account.address}" cannot sign.`)
+  if (!account.keyType)
+    throw new Provider.UnauthorizedError({ message: `Account "${account.address}" cannot sign.` })
   switch (account.keyType) {
     case 'secp256k1':
       return TempoAccount.fromSecp256k1(account.privateKey)
@@ -77,7 +82,7 @@ export function hydrate(
         origin: account.origin,
       })
     default:
-      throw new Error('Unknown key type.')
+      throw new Provider.UnauthorizedError({ message: 'Unknown key type.' })
   }
 }
 
