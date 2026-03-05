@@ -7,17 +7,6 @@ import { accounts as core_accounts, privateKeys } from '../../../test/config.js'
 import * as Account from '../Account.js'
 import * as Store from '../Store.js'
 
-function setup(options: local.Options = {}) {
-  const adapter = local(options)
-  const store = Store.create({ chainId: tempoLocalnet.id })
-  adapter.setup?.({
-    getAccount: (address) => Account.fromAddress({ address, signable: true, store }),
-    getClient: () => createClient({ chain: tempoLocalnet, transport: http() }) as never,
-    store,
-  })
-  return { adapter, store }
-}
-
 describe('local', () => {
   describe('loadAccounts', () => {
     test('default: loads accounts and updates store', async () => {
@@ -99,3 +88,14 @@ describe('local', () => {
     })
   })
 })
+
+function setup(options: local.Options = {}) {
+  const adapter = local(options)
+  const store = Store.create({ chainId: tempoLocalnet.id })
+  adapter.setup?.({
+    getAccount: (address) => Account.fromAddress({ address, signable: true, store }),
+    getClient: () => createClient({ chain: tempoLocalnet, transport: http() }) as never,
+    store,
+  })
+  return { adapter, store }
+}
