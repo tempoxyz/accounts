@@ -1,3 +1,4 @@
+import { playwright } from '@vitest/browser-playwright'
 import { join } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
@@ -21,6 +22,25 @@ export default defineConfig({
           name: 'core',
           globalSetup: [join(import.meta.dirname, './test/setup.global.ts')],
           setupFiles: [join(import.meta.dirname, './test/setup.ts')],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'browser',
+          include: ['./src/**/*.browser.test.ts'],
+          globalSetup: [join(import.meta.dirname, './test/setup.global.ts')],
+          setupFiles: [
+            join(import.meta.dirname, './test/setup.ts'),
+            join(import.meta.dirname, './test/authenticator.setup.ts'),
+          ],
+          browser: {
+            enabled: true,
+            headless: true,
+            instances: [{ browser: 'chromium' }],
+            provider: playwright(),
+            screenshotFailures: false,
+          },
         },
       },
     ],

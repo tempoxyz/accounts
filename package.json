@@ -28,6 +28,7 @@
 		"@types/react-dom": "catalog:default",
 		"@typescript/native-preview": "7.0.0-dev.20260303.1",
 		"@vitejs/plugin-react": "catalog:default",
+		"@vitest/browser-playwright": "^4.0.18",
 		"@vitest/coverage-v8": "^4.0.18",
 		"elysia": "^1.4.27",
 		"express": "^5.2.1",
