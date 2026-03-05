@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore, useState } from 'react'
+import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { Hex } from 'ox'
 import { account, provider } from './provider.js'
 
@@ -63,18 +63,18 @@ function ProviderState() {
 // -- Connection --
 
 function WalletConnect() {
-  const [result, setResult] = useState<unknown>()
+  const [result, error, execute] = useRequest()
   return (
-    <Method method="wallet_connect" result={result}>
+    <Method method="wallet_connect" result={result} error={error}>
       <button
-        onClick={async () => setResult(await provider.request({ method: 'wallet_connect' }))}
+        onClick={() => execute(() => provider.request({ method: 'wallet_connect' }))}
       >
         Login
       </button>
       <button
-        onClick={async () =>
-          setResult(
-            await provider.request({
+        onClick={() =>
+          execute(() =>
+            provider.request({
               method: 'wallet_connect',
               params: [{ capabilities: { method: 'register' } }],
             }),
@@ -88,13 +88,11 @@ function WalletConnect() {
 }
 
 function EthRequestAccounts() {
-  const [result, setResult] = useState<unknown>()
+  const [result, error, execute] = useRequest()
   return (
-    <Method method="eth_requestAccounts" result={result}>
+    <Method method="eth_requestAccounts" result={result} error={error}>
       <button
-        onClick={async () =>
-          setResult(await provider.request({ method: 'eth_requestAccounts' }))
-        }
+        onClick={() => execute(() => provider.request({ method: 'eth_requestAccounts' }))}
       >
         Request Accounts
       </button>
@@ -103,14 +101,16 @@ function EthRequestAccounts() {
 }
 
 function WalletDisconnect() {
-  const [result, setResult] = useState<unknown>()
+  const [result, error, execute] = useRequest()
   return (
-    <Method method="wallet_disconnect" result={result}>
+    <Method method="wallet_disconnect" result={result} error={error}>
       <button
-        onClick={async () => {
-          await provider.request({ method: 'wallet_disconnect' })
-          setResult('disconnected')
-        }}
+        onClick={() =>
+          execute(async () => {
+            await provider.request({ method: 'wallet_disconnect' })
+            return 'disconnected'
+          })
+        }
       >
         Disconnect
       </button>
@@ -121,13 +121,11 @@ function WalletDisconnect() {
 // -- Accounts & Chain --
 
 function EthAccounts() {
-  const [result, setResult] = useState<unknown>()
+  const [result, error, execute] = useRequest()
   return (
-    <Method method="eth_accounts" result={result}>
+    <Method method="eth_accounts" result={result} error={error}>
       <button
-        onClick={async () =>
-          setResult(await provider.request({ method: 'eth_accounts' }))
-        }
+        onClick={() => execute(() => provider.request({ method: 'eth_accounts' }))}
       >
         Get Accounts
       </button>
@@ -136,13 +134,11 @@ function EthAccounts() {
 }
 
 function EthChainId() {
-  const [result, setResult] = useState<unknown>()
+  const [result, error, execute] = useRequest()
   return (
-    <Method method="eth_chainId" result={result}>
+    <Method method="eth_chainId" result={result} error={error}>
       <button
-        onClick={async () =>
-          setResult(await provider.request({ method: 'eth_chainId' }))
-        }
+        onClick={() => execute(() => provider.request({ method: 'eth_chainId' }))}
       >
         Get Chain ID
       </button>
@@ -151,19 +147,21 @@ function EthChainId() {
 }
 
 function WalletSwitchChain() {
-  const [result, setResult] = useState<unknown>()
+  const [result, error, execute] = useRequest()
   return (
-    <Method method="wallet_switchEthereumChain" result={result}>
+    <Method method="wallet_switchEthereumChain" result={result} error={error}>
       {provider.chains.map((c) => (
         <button
           key={c.id}
-          onClick={async () => {
-            await provider.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: Hex.fromNumber(c.id) }],
+          onClick={() =>
+            execute(async () => {
+              await provider.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: Hex.fromNumber(c.id) }],
+              })
+              return `switched to ${c.name} (${c.id})`
             })
-            setResult(`switched to ${c.name} (${c.id})`)
-          }}
+          }
         >
           {c.name}
         </button>
@@ -175,13 +173,13 @@ function WalletSwitchChain() {
 // -- Transactions --
 
 function EthSendTransaction() {
-  const [result, setResult] = useState<unknown>()
+  const [result, error, execute] = useRequest()
   return (
-    <Method method="eth_sendTransaction" result={result}>
+    <Method method="eth_sendTransaction" result={result} error={error}>
       <button
-        onClick={async () =>
-          setResult(
-            await provider.request({
+        onClick={() =>
+          execute(() =>
+            provider.request({
               method: 'eth_sendTransaction',
               params: [{ to: account.address, value: '0x0', data: '0x' }],
             }),
@@ -195,13 +193,13 @@ function EthSendTransaction() {
 }
 
 function EthSendTransactionSync() {
-  const [result, setResult] = useState<unknown>()
+  const [result, error, execute] = useRequest()
   return (
-    <Method method="eth_sendTransactionSync" result={result}>
+    <Method method="eth_sendTransactionSync" result={result} error={error}>
       <button
-        onClick={async () =>
-          setResult(
-            await provider.request({
+        onClick={() =>
+          execute(() =>
+            provider.request({
               method: 'eth_sendTransactionSync',
               params: [{ to: account.address, value: '0x0', data: '0x' }],
             }),
@@ -215,13 +213,13 @@ function EthSendTransactionSync() {
 }
 
 function WalletSendCalls() {
-  const [result, setResult] = useState<unknown>()
+  const [result, error, execute] = useRequest()
   return (
-    <Method method="wallet_sendCalls" result={result}>
+    <Method method="wallet_sendCalls" result={result} error={error}>
       <button
-        onClick={async () =>
-          setResult(
-            await provider.request({
+        onClick={() =>
+          execute(() =>
+            provider.request({
               method: 'wallet_sendCalls',
               params: [{ calls: [{ to: account.address, data: '0x' }], version: '1.0' }],
             }),
@@ -231,9 +229,9 @@ function WalletSendCalls() {
         Send Calls
       </button>
       <button
-        onClick={async () =>
-          setResult(
-            await provider.request({
+        onClick={() =>
+          execute(() =>
+            provider.request({
               method: 'wallet_sendCalls',
               params: [
                 {
@@ -255,13 +253,11 @@ function WalletSendCalls() {
 // -- RPC Proxy --
 
 function EthBlockNumber() {
-  const [result, setResult] = useState<unknown>()
+  const [result, error, execute] = useRequest()
   return (
-    <Method method="eth_blockNumber" result={result}>
+    <Method method="eth_blockNumber" result={result} error={error}>
       <button
-        onClick={async () =>
-          setResult(await provider.request({ method: 'eth_blockNumber' }))
-        }
+        onClick={() => execute(() => provider.request({ method: 'eth_blockNumber' }))}
       >
         Get Block Number
       </button>
@@ -270,13 +266,13 @@ function EthBlockNumber() {
 }
 
 function EthGetBalance() {
-  const [result, setResult] = useState<unknown>()
+  const [result, error, execute] = useRequest()
   return (
-    <Method method="eth_getBalance" result={result}>
+    <Method method="eth_getBalance" result={result} error={error}>
       <button
-        onClick={async () =>
-          setResult(
-            await provider.request({
+        onClick={() =>
+          execute(() =>
+            provider.request({
               method: 'eth_getBalance',
               params: [account.address, 'latest'],
             }),
@@ -347,21 +343,43 @@ function Events() {
   )
 }
 
+// -- Hooks --
+
+function useRequest() {
+  const [result, setResult] = useState<unknown>()
+  const [error, setError] = useState<Error>()
+  const execute = useCallback(async (fn: () => Promise<unknown>) => {
+    try {
+      setError(undefined)
+      setResult(await fn())
+    } catch (e) {
+      setResult(undefined)
+      setError(e instanceof Error ? e : new Error(String(e)))
+    }
+  }, [])
+  return [result, error, execute] as const
+}
+
 // -- Shared UI --
 
 function Method({
   method,
   result,
+  error,
   children,
 }: {
   method: string
   result: unknown
+  error?: Error | undefined
   children: React.ReactNode
 }) {
   return (
     <div>
       <h3>{method}</h3>
       {children}
+      {error && (
+        <pre style={{ color: 'red' }}>{error.message}</pre>
+      )}
       {result !== undefined && (
         <pre>{JSON.stringify(result, null, 2)}</pre>
       )}
