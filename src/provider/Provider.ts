@@ -39,7 +39,8 @@ export function create(options: create.Options): create.ReturnType {
   })
 
   adapter.setup?.({
-    getAccount: (address, options) => Account.fromAddress({ address, signable: options?.signable, store }),
+    getAccount: (address, options) =>
+      Account.fromAddress({ address, signable: options?.signable, store }),
     getClient: (chainId) => Client.fromChainId(chainId, { chains, store }),
     store,
   })

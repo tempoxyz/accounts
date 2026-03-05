@@ -35,7 +35,7 @@ export type Options = {
   /** Storage key. */
   storageKey?: string | undefined
   /**
-   * Whether to persist account sign data (private keys, credentials) to storage.
+   * Whether to persist account key data (private keys, credentials) to storage.
    * When `false`, only addresses are persisted.
    * @default false
    * @internal
@@ -104,5 +104,3 @@ export async function waitForHydration(store: Store): Promise<void> {
     setTimeout(() => resolve(), 100)
   })
 }
-
-

@@ -34,7 +34,8 @@ describe('local', () => {
         createAccounts: [
           {
             address: core_accounts[1].address,
-            sign: { keyType: 'secp256k1', privateKey: privateKeys[1] },
+            keyType: 'secp256k1',
+            privateKey: privateKeys[1],
           },
         ],
       })

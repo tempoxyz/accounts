@@ -21,7 +21,8 @@ describe('hydrate', () => {
     const result = Account.hydrate(
       {
         address: accounts[0].address,
-        sign: { keyType: 'secp256k1', privateKey: privateKeys[0] },
+        keyType: 'secp256k1',
+        privateKey: privateKeys[0],
       },
       { sign: true },
     )
@@ -35,7 +36,8 @@ describe('hydrate', () => {
     const result = Account.hydrate(
       {
         address: accounts[0].address,
-        sign: { keyType: 'p256', privateKey: privateKeys[0] },
+        keyType: 'p256',
+        privateKey: privateKeys[0],
       },
       { sign: true },
     )
@@ -44,11 +46,12 @@ describe('hydrate', () => {
     expect(typeof result.sign).toMatchInlineSnapshot(`"function"`)
   })
 
-  test('behavior: hydrates webcryptoP256 account', () => {
+  test('behavior: hydrates webCrypto account', () => {
     const result = Account.hydrate(
       {
         address: accounts[0].address,
-        sign: { keyType: 'webcryptoP256', privateKey: privateKeys[0] },
+        keyType: 'webCrypto',
+        privateKey: privateKeys[0],
       },
       { sign: true },
     )
@@ -61,12 +64,10 @@ describe('hydrate', () => {
     const result = Account.hydrate(
       {
         address: accounts[0].address,
-        sign: {
-          keyType: 'headlessWebAuthn',
-          privateKey: privateKeys[0],
-          rpId: 'example.com',
-          origin: 'https://example.com',
-        },
+        keyType: 'headlessWebAuthn',
+        privateKey: privateKeys[0],
+        rpId: 'example.com',
+        origin: 'https://example.com',
       },
       { sign: true },
     )
@@ -78,9 +79,7 @@ describe('hydrate', () => {
   test('error: throws when sign is true but no sign data', () => {
     expect(() =>
       Account.hydrate({ address: accounts[0].address }, { sign: true }),
-    ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: Account "${accounts[0].address}" cannot perform sign.]`,
-    )
+    ).toThrowErrorMatchingInlineSnapshot(`[Error: Account "${accounts[0].address}" cannot sign.]`)
   })
 })
 
@@ -95,7 +94,8 @@ describe('fromAddress', () => {
     const store = setup([
       {
         address: accounts[0].address,
-        sign: { keyType: 'secp256k1', privateKey: privateKeys[0] },
+        keyType: 'secp256k1',
+        privateKey: privateKeys[0],
       },
     ])
 
@@ -109,11 +109,13 @@ describe('fromAddress', () => {
     const store = setup([
       {
         address: accounts[0].address,
-        sign: { keyType: 'secp256k1', privateKey: privateKeys[0] },
+        keyType: 'secp256k1',
+        privateKey: privateKeys[0],
       },
       {
         address: accounts[1].address,
-        sign: { keyType: 'secp256k1', privateKey: privateKeys[1] },
+        keyType: 'secp256k1',
+        privateKey: privateKeys[1],
       },
     ])
 
@@ -126,7 +128,8 @@ describe('fromAddress', () => {
     const store = setup([
       {
         address: accounts[0].address,
-        sign: { keyType: 'secp256k1', privateKey: privateKeys[0] },
+        keyType: 'secp256k1',
+        privateKey: privateKeys[0],
       },
     ])
 
@@ -141,9 +144,7 @@ describe('fromAddress', () => {
 
     expect(() =>
       Account.fromAddress({ address: accounts[0].address, store }),
-    ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: Account ${accounts[0].address} not found.]`,
-    )
+    ).toThrowErrorMatchingInlineSnapshot(`[Error: Account ${accounts[0].address} not found.]`)
   })
 
   test('error: throws when no active account', () => {

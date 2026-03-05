@@ -1,12 +1,15 @@
 import { type Chain, createClient, type Client, http, type Transport } from 'viem'
+import type { tempo } from 'viem/chains'
 
 import type * as Store from './Store.js'
-import type { tempo } from 'viem/chains'
 
 const clients = new Map<number, Client>()
 
 /** Resolves a viem Client for a given chain ID (cached). */
-export function fromChainId(chainId: number | undefined, options: fromChainId.Options): Client<Transport, typeof tempo> {
+export function fromChainId(
+  chainId: number | undefined,
+  options: fromChainId.Options,
+): Client<Transport, typeof tempo> {
   const { chains, store } = options
   const id = chainId ?? store.getState().chainId
   let client = clients.get(id)

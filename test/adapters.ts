@@ -6,16 +6,14 @@ import { accounts, privateKeys } from './config.js'
 function toStoreAccount(index: number): Store.Account {
   return {
     address: accounts[index]!.address,
-    sign: { keyType: 'secp256k1', privateKey: privateKeys[index]! },
+    keyType: 'secp256k1',
+    privateKey: privateKeys[index]!,
   }
 }
 
 /** Creates a local adapter pre-configured with test accounts. */
 export function local(options: local.Options = {}) {
-  const {
-    accounts: accounts_ = [toStoreAccount(0)],
-    createAccounts,
-  } = options
+  const { accounts: accounts_ = [toStoreAccount(0)], createAccounts } = options
   return core_local({
     loadAccounts: async () => accounts_,
     createAccount: createAccounts ? async () => createAccounts : undefined,

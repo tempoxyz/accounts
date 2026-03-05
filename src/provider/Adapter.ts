@@ -1,9 +1,9 @@
 import type { Client, Transport } from 'viem'
 import type { Address, LocalAccount } from 'viem/accounts'
+import type { tempo } from 'viem/chains'
 
 import type * as Store from './Store.js'
 import type * as Rpc from './zod/rpc.js'
-import type { tempo } from 'viem/chains'
 
 /** Adapter interface for the provider. */
 export type Adapter = {
@@ -20,7 +20,9 @@ export type Adapter = {
     /** Send a transaction. */
     sendTransaction: (request: ActionRequest<Rpc.eth_sendTransaction>) => Promise<`0x${string}`>
     /** Send a transaction and wait for the receipt. */
-    sendTransactionSync: (request: ActionRequest<Rpc.eth_sendTransactionSync>) => Promise<Rpc.eth_sendTransactionSync.decoded>
+    sendTransactionSync: (
+      request: ActionRequest<Rpc.eth_sendTransactionSync>,
+    ) => Promise<Rpc.eth_sendTransactionSync.decoded>
     /** Switch the active chain. */
     switchChain: (params: switchChain.Parameters) => Promise<void>
   }
@@ -33,16 +35,18 @@ export type Adapter = {
 }
 
 /** Spreads decoded params with `_encoded` carrying the raw wire format. */
-export type ActionRequest<rpc extends { method: string; params: unknown }> = (rpc['params'] extends readonly [
-  infer first,
-]
-  ? first
-  : never) & { _encoded: { method: rpc['method']; params: rpc['params'] } }
+export type ActionRequest<rpc extends { method: string; params: unknown }> =
+  (rpc['params'] extends readonly [infer first] ? first : never) & {
+    _encoded: { method: rpc['method']; params: rpc['params'] }
+  }
 
 export declare namespace setup {
   type Parameters = {
     /** Returns the rehydrated local account for the given address, or the active account if omitted. */
-    getAccount: (address?: Address | undefined, options?: { signable?: boolean | undefined } | undefined) => LocalAccount
+    getAccount: (
+      address?: Address | undefined,
+      options?: { signable?: boolean | undefined } | undefined,
+    ) => LocalAccount
     /** Get the viem client for a given chain ID. Defaults to the active chain. */
     getClient: (chainId?: number | undefined) => Client<Transport, typeof tempo>
     /** Reactive state store. */

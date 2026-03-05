@@ -41,8 +41,8 @@ describe('eth_accounts', () => {
     const provider = Provider.create({
       adapter: local({
         accounts: [
-          { address: core_accounts[0].address, sign: { keyType: 'secp256k1', privateKey: privateKeys[0] } },
-          { address: core_accounts[1].address, sign: { keyType: 'secp256k1', privateKey: privateKeys[1] } },
+          { address: core_accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] },
+          { address: core_accounts[1].address, keyType: 'secp256k1', privateKey: privateKeys[1] },
         ],
       }),
     })
@@ -90,8 +90,12 @@ describe('wallet_connect', () => {
   test('behavior: with register capability calls createAccount', async () => {
     const provider = Provider.create({
       adapter: local({
-        accounts: [{ address: core_accounts[0].address, sign: { keyType: 'secp256k1', privateKey: privateKeys[0] } }],
-        createAccounts: [{ address: core_accounts[1].address, sign: { keyType: 'secp256k1', privateKey: privateKeys[1] } }],
+        accounts: [
+          { address: core_accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] },
+        ],
+        createAccounts: [
+          { address: core_accounts[1].address, keyType: 'secp256k1', privateKey: privateKeys[1] },
+        ],
       }),
     })
 

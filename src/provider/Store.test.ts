@@ -144,7 +144,8 @@ describe('persistence', () => {
       accounts: [
         {
           address: '0x0000000000000000000000000000000000000001',
-          sign: { keyType: 'secp256k1', privateKey: '0xdeadbeef' },
+          keyType: 'secp256k1',
+          privateKey: '0xdeadbeef',
         },
       ],
     })
@@ -168,7 +169,8 @@ describe('persistence', () => {
       accounts: [
         {
           address: '0x0000000000000000000000000000000000000001',
-          sign: { keyType: 'secp256k1', privateKey: '0xdeadbeef' },
+          keyType: 'secp256k1',
+          privateKey: '0xdeadbeef',
         },
       ],
     })
@@ -178,10 +180,8 @@ describe('persistence', () => {
       [
         {
           "address": "0x0000000000000000000000000000000000000001",
-          "sign": {
-            "keyType": "secp256k1",
-            "privateKey": "0xdeadbeef",
-          },
+          "keyType": "secp256k1",
+          "privateKey": "0xdeadbeef",
         },
       ]
     `)

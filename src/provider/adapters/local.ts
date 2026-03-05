@@ -13,7 +13,7 @@ import type * as Store from '../Store.js'
  * const adapter = local({
  *   loadAccounts: async () => [{
  *     address: '0x...',
- *     sign: { keyType: 'secp256k1', privateKey: '0x...' },
+ *     key: { type: 'secp256k1', privateKey: '0x...' },
  *   }],
  * })
  * ```

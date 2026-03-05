@@ -6,7 +6,7 @@ External apps have no way to embed Tempo Account management into their products.
 
 - Apps cannot create, discover, or manage Tempo Accounts programmatically.
 - There is no standard EIP-1193 interface for Tempo — apps must manually construct transactions, manage WebAuthn ceremonies, and handle signing logic.
-- There is no pluggable key model — apps that want to use their own signing infrastructure (HSMs, secp256k1, WebCrypto) have no integration path.
+- There is no pluggable key model — apps that want to use their own signing infrastructure (HSMs, secp256k1, webCrypto) have no integration path.
 - There is no foundation for the Connect adapter (`auth.tempo.xyz`) or Wagmi connector to build on.
 
 ## Solution
@@ -266,7 +266,7 @@ await Actions.token.getBalance(client, { ... })
 
 The implementation relies heavily on `viem/tempo`:
 
-- **`Account`** — `fromWebAuthnP256`, `fromSecp256k1`, `fromP256`, `fromWebCryptoP256` for account creation from key models
+- **`Account`** — `fromWebAuthnP256`, `fromSecp256k1`, `fromP256`, `fromwebCrypto` for account creation from key models
 - **`Transaction`** — Tempo transaction serialization, type `0x76`
 - **`Actions`** — `accessKey.*`, `fee.*`, `nonce.*`, `token.*` for chain interactions
 - **`WebAuthnP256`** — used internally by the `webAuthn()` adapter for credential type definitions

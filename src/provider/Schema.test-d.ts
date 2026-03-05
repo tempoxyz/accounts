@@ -34,7 +34,9 @@ describe('DefineItem', () => {
       method: 'eth_sendTransaction'
       params: readonly [
         {
-          calls?: readonly { data?: `0x${string}`; to?: `0x${string}`; value?: bigint }[] | undefined
+          calls?:
+            | readonly { data?: `0x${string}`; to?: `0x${string}`; value?: bigint }[]
+            | undefined
           data?: `0x${string}` | undefined
           gas?: bigint | undefined
           maxFeePerGas?: bigint | undefined
