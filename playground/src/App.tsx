@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useSyncExternalStore, useState } from 'react'
 import { Hex } from 'ox'
 import { account, provider } from './provider.js'
 
@@ -7,6 +7,9 @@ export function App() {
     <div>
       <h1>zyzz playground</h1>
       <p>{account.address}</p>
+
+      <h2>State</h2>
+      <ProviderState />
 
       <h2>Events</h2>
       <Events />
@@ -31,6 +34,29 @@ export function App() {
       <EthGetBalance />
 
     </div>
+  )
+}
+
+// -- State --
+
+function ProviderState() {
+  const state = useSyncExternalStore(
+    (cb) => provider.store.subscribe(cb),
+    () => provider.store.getState(),
+  )
+  return (
+    <pre>
+      {JSON.stringify(
+        {
+          status: state.status,
+          chainId: state.chainId,
+          activeAccount: state.activeAccount,
+          accounts: state.accounts.map((a) => a.address),
+        },
+        null,
+        2,
+      )}
+    </pre>
   )
 }
 

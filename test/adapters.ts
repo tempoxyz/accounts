@@ -13,16 +13,19 @@ function toStoreAccount(index: number): Store.Account {
 
 /** Creates a local adapter pre-configured with test accounts. */
 export function local(options: local.Options = {}) {
-  const { accounts: accounts_ = [toStoreAccount(0)], createAccounts } = options
+  const {
+    loadAccounts = async () => [toStoreAccount(0)],
+    createAccount,
+  } = options
   return core_local({
-    loadAccounts: async () => accounts_,
-    createAccount: createAccounts ? async () => createAccounts : undefined,
+    loadAccounts,
+    createAccount,
   })
 }
 
 export declare namespace local {
   type Options = {
-    accounts?: readonly Store.Account[] | undefined
-    createAccounts?: readonly Store.Account[] | undefined
+    createAccount?: (() => Promise<readonly Store.Account[]>) | undefined
+    loadAccounts?: (() => Promise<readonly Store.Account[]>) | undefined
   }
 }

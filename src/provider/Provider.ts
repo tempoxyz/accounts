@@ -45,6 +45,16 @@ export function create(options: create.Options): create.ReturnType {
     store,
   })
 
+  /** Merges new accounts into the store, deduplicating by address, and sets the first new account as active. */
+  function mergeAccounts(newAccounts: readonly Store.Account[]) {
+    const existing = store.getState().accounts
+    const existingAddresses = new Set(existing.map((a) => a.address))
+    const unique = newAccounts.filter((a) => !existingAddresses.has(a.address))
+    const accounts = [...existing, ...unique]
+    const activeAccount = accounts.findIndex((a) => a.address === newAccounts[0]?.address)
+    store.setState({ accounts, activeAccount, status: 'connected' })
+  }
+
   const emitter = oxProvider.createEmitter()
 
   // Emit EIP-1193 events on state changes.
@@ -101,8 +111,13 @@ export function create(options: create.Options): create.ReturnType {
             return Hex.fromNumber(store.getState().chainId)
 
           case 'eth_requestAccounts': {
-            const accounts = await adapter.actions.loadAccounts()
-            return accounts.map((a) => a.address)
+            const newAccounts = await adapter.actions.loadAccounts()
+            mergeAccounts(newAccounts)
+            const { accounts, activeAccount } = store.getState()
+            if (accounts.length === 0) return []
+            const sorted = [...accounts]
+            const [active] = sorted.splice(activeAccount, 1)
+            return [active!.address, ...sorted.map((a) => a.address)]
           }
 
           case 'eth_sendTransaction': {
@@ -138,29 +153,38 @@ export function create(options: create.Options): create.ReturnType {
 
           case 'wallet_connect': {
             const capabilities = request._decoded.params?.[0]?.capabilities
-            const accounts =
+            const newAccounts =
               capabilities?.method === 'register'
                 ? await adapter.actions.createAccount()
                 : await adapter.actions.loadAccounts()
+            mergeAccounts(newAccounts)
+            const { accounts: allAccounts, activeAccount } = store.getState()
+            const sorted = [...allAccounts]
+            const [active] = sorted.splice(activeAccount, 1)
+            const ordered = active ? [active, ...sorted] : sorted
             return {
-              accounts: accounts.map((a) => ({ address: a.address, capabilities: {} })),
+              accounts: ordered.map((a) => ({ address: a.address, capabilities: {} })),
             }
           }
 
           case 'wallet_disconnect':
-            return await adapter.actions.disconnect()
+            await adapter.actions.disconnect?.()
+            store.setState({ accounts: [], activeAccount: 0, status: 'disconnected' })
+            return
 
           case 'wallet_switchEthereumChain': {
             const { chainId } = request._decoded.params[0]
             if (!chains.some((c) => c.id === chainId))
               throw new oxProvider.ProviderRpcError(4902, `Chain ${chainId} not configured.`)
-            return await adapter.actions.switchChain({ chainId })
+            await adapter.actions.switchChain?.({ chainId })
+            store.setState({ chainId })
+            return
           }
         }
       },
     },
     { schema: Schema.ox },
-  ), { chains })
+  ), { chains, store })
 }
 
 const sendCallsMagic = Hash.keccak256(Hex.fromString('TEMPO_5792'))
@@ -183,5 +207,7 @@ export declare namespace create {
     oxProvider.Emitter & {
       /** Configured chains. */
       chains: readonly [Chain, ...Chain[]]
+      /** Reactive state store. */
+      store: Store.Store
     }
 }

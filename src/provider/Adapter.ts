@@ -13,8 +13,8 @@ export type Adapter = {
   actions: {
     /** Create a new account (e.g. WebAuthn registration). */
     createAccount: () => Promise<createAccount.ReturnType>
-    /** Disconnect and clear local state. */
-    disconnect: () => Promise<void>
+    /** Disconnect hook for adapter-specific cleanup. */
+    disconnect?: (() => Promise<void>) | undefined
     /** Discover existing accounts (e.g. WebAuthn assertion). */
     loadAccounts: () => Promise<loadAccounts.ReturnType>
     /** Send a transaction. */
@@ -23,8 +23,8 @@ export type Adapter = {
     sendTransactionSync: (
       request: ActionRequest<Rpc.eth_sendTransactionSync>,
     ) => Promise<Rpc.eth_sendTransactionSync.decoded>
-    /** Switch the active chain. */
-    switchChain: (params: switchChain.Parameters) => Promise<void>
+    /** Switch chain hook for adapter-specific handling. */
+    switchChain?: ((params: switchChain.Parameters) => Promise<void>) | undefined
   }
   /**
    * Whether to persist account sign data (private keys, credentials) to storage.

@@ -4,7 +4,7 @@ import { tempoModerato } from 'viem/chains'
 import { describe, expect, test } from 'vitest'
 
 import { local } from '../../test/adapters.js'
-import { accounts as core_accounts, chain, getClient, privateKeys } from '../../test/config.js'
+import { accounts as core_accounts, chain, getClient } from '../../test/config.js'
 import * as Provider from './Provider.js'
 
 describe('create', () => {
@@ -41,10 +41,7 @@ describe('eth_accounts', () => {
   test('behavior: returns accounts after connecting', async () => {
     const provider = Provider.create({
       adapter: local({
-        accounts: [
-          { address: core_accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] },
-          { address: core_accounts[1].address, keyType: 'secp256k1', privateKey: privateKeys[1] },
-        ],
+        loadAccounts: async () => [core_accounts[0], core_accounts[1]],
       }),
     })
 
@@ -72,6 +69,26 @@ describe('eth_requestAccounts', () => {
       ]
     `)
   })
+
+  test('behavior: returns active account first', async () => {
+    const provider = Provider.create({
+      adapter: local({
+        loadAccounts: async () => [core_accounts[0]],
+        createAccount: async () => [core_accounts[1]],
+      }),
+    })
+
+    // Login then register — activeAccount points to second account
+    await provider.request({ method: 'wallet_connect' })
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register' } }],
+    })
+
+    const accounts = await provider.request({ method: 'eth_requestAccounts' })
+    // Active account (account[0] from loadAccounts) returned first
+    expect(accounts[0]).toMatchInlineSnapshot(`"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"`)
+  })
 })
 
 describe('wallet_connect', () => {
@@ -96,12 +113,8 @@ describe('wallet_connect', () => {
   test('behavior: with register capability calls createAccount', async () => {
     const provider = Provider.create({
       adapter: local({
-        accounts: [
-          { address: core_accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] },
-        ],
-        createAccounts: [
-          { address: core_accounts[1].address, keyType: 'secp256k1', privateKey: privateKeys[1] },
-        ],
+        loadAccounts: async () => [core_accounts[0]],
+        createAccount: async () => [core_accounts[1]],
       }),
     })
 
@@ -119,6 +132,92 @@ describe('wallet_connect', () => {
         ],
       }
     `)
+  })
+
+  test('behavior: register preserves existing accounts and sets activeAccount', async () => {
+    const provider = Provider.create({
+      adapter: local({
+        loadAccounts: async () => [core_accounts[0]],
+        createAccount: async () => [core_accounts[1]],
+      }),
+    })
+
+    // Login first
+    await provider.request({ method: 'wallet_connect' })
+
+    // Register appends and sets active to new account
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register' } }],
+    })
+    // New account is returned first (active)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "accounts": [
+          {
+            "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+            "capabilities": {},
+          },
+          {
+            "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "capabilities": {},
+          },
+        ],
+      }
+    `)
+    // Store has both accounts with activeAccount pointing to new one
+    expect(provider.store.getState().activeAccount).toMatchInlineSnapshot(`1`)
+    expect(provider.store.getState().accounts.map((a) => a.address)).toMatchInlineSnapshot(`
+      [
+        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+      ]
+    `)
+  })
+
+  test('behavior: login preserves existing accounts and deduplicates', async () => {
+    const provider = Provider.create({
+      adapter: local({
+        loadAccounts: async () => [core_accounts[0]],
+        createAccount: async () => [core_accounts[1]],
+      }),
+    })
+
+    // Register first account
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register' } }],
+    })
+    // Login again with same account — should not duplicate
+    await provider.request({ method: 'wallet_connect' })
+
+    expect(provider.store.getState().accounts.map((a) => a.address)).toMatchInlineSnapshot(`
+      [
+        "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      ]
+    `)
+    // activeAccount should point to the loaded account
+    expect(provider.store.getState().activeAccount).toMatchInlineSnapshot(`1`)
+  })
+
+  test('behavior: login sets activeAccount to loaded account', async () => {
+    const provider = Provider.create({
+      adapter: local({
+        loadAccounts: async () => [core_accounts[0]],
+        createAccount: async () => [core_accounts[1]],
+      }),
+    })
+
+    // Register creates second account (activeAccount = 0 since no existing)
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register' } }],
+    })
+    // Register again creates another — but loadAccounts returns account[0]
+    // Login switches active back to account[0]
+    const result = await provider.request({ method: 'wallet_connect' })
+    expect(result.accounts[0]!.address).toMatchInlineSnapshot(`"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"`)
   })
 })
 
@@ -216,6 +315,22 @@ describe('events', () => {
 
     expect(events.length).toMatchInlineSnapshot(`1`)
     expect(events[0]).toBeInstanceOf(core_Provider.DisconnectedError)
+  })
+
+  test('behavior: does not emit accountsChanged on duplicate login', async () => {
+    const provider = Provider.create({
+      adapter: local(),
+    })
+
+    await provider.request({ method: 'wallet_connect' })
+
+    const events: unknown[] = []
+    provider.on('accountsChanged', (accounts) => events.push(accounts))
+
+    // Login again with same account — no new event
+    await provider.request({ method: 'wallet_connect' })
+
+    expect(events).toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: emits chainChanged on switch', async () => {

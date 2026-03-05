@@ -31,17 +31,10 @@ export function local(options: local.Options): Adapter {
     actions: {
       async createAccount() {
         if (!createAccount) throw new Error('`createAccount` not configured on adapter.')
-        const accounts = await createAccount()
-        params.store.setState({ accounts, activeAccount: 0, status: 'connected' })
-        return accounts
-      },
-      async disconnect() {
-        params.store.setState({ accounts: [], activeAccount: 0, status: 'disconnected' })
+        return await createAccount()
       },
       async loadAccounts() {
-        const accounts = await loadAccounts()
-        params.store.setState({ accounts, activeAccount: 0, status: 'connected' })
-        return accounts
+        return await loadAccounts()
       },
       async sendTransaction(parameters) {
         const account = params.getAccount(undefined, { signable: true })
@@ -66,9 +59,6 @@ export function local(options: local.Options): Adapter {
           ...rest,
           type: 'tempo',
         })
-      },
-      async switchChain({ chainId }) {
-        params.store.setState({ chainId })
       },
     },
   }
