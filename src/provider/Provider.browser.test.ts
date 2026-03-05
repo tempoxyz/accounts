@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
 import { local } from '../../test/adapters.js'
-import { accounts as core_accounts, chain, privateKeys } from '../../test/config.js'
+import { accounts as core_accounts, chain } from '../../test/config.js'
 import * as Provider from './Provider.js'
 
 describe('create', () => {
@@ -73,6 +73,15 @@ describe('eth_sendTransactionSync', () => {
     })
 
     const { blockHash, blockNumber, cumulativeGasUsed, effectiveGasPrice, gasUsed, logs, logsBloom, transactionHash, transactionIndex, ...rest } = receipt
+    expect(blockHash).toMatch(/^0x[0-9a-f]{64}$/)
+    expect(blockNumber).toMatch(/^0x/)
+    expect(cumulativeGasUsed).toMatch(/^0x/)
+    expect(effectiveGasPrice).toMatch(/^0x/)
+    expect(gasUsed).toMatch(/^0x/)
+    expect(logs).toBeInstanceOf(Array)
+    expect(logsBloom).toMatch(/^0x/)
+    expect(transactionHash).toMatch(/^0x[0-9a-f]{64}$/)
+    expect(transactionIndex).toMatch(/^0x/)
     expect(rest).toMatchInlineSnapshot(`
       {
         "contractAddress": null,

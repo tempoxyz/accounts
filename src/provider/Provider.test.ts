@@ -262,6 +262,15 @@ describe('eth_sendTransaction', () => {
     const receipt = await waitForTransactionReceipt(getClient(), { hash })
 
     const { blockHash, blockNumber, cumulativeGasUsed, effectiveGasPrice, gasUsed, logs, logsBloom, transactionHash, transactionIndex, ...rest } = receipt
+    expect(blockHash).toBeDefined()
+    expect(blockNumber).toBeDefined()
+    expect(cumulativeGasUsed).toBeDefined()
+    expect(effectiveGasPrice).toBeDefined()
+    expect(gasUsed).toBeDefined()
+    expect(logs).toBeInstanceOf(Array)
+    expect(logsBloom).toBeDefined()
+    expect(transactionHash).toBeDefined()
+    expect(transactionIndex).toBeDefined()
     expect(rest).toMatchInlineSnapshot(`
       {
         "contractAddress": null,
@@ -291,6 +300,15 @@ describe('eth_sendTransactionSync', () => {
     })
 
     const { blockHash, blockNumber, cumulativeGasUsed, effectiveGasPrice, gasUsed, logs, logsBloom, transactionHash, transactionIndex, ...rest } = receipt
+    expect(blockHash).toBeDefined()
+    expect(blockNumber).toBeDefined()
+    expect(cumulativeGasUsed).toBeDefined()
+    expect(effectiveGasPrice).toBeDefined()
+    expect(gasUsed).toBeDefined()
+    expect(logs).toBeInstanceOf(Array)
+    expect(logsBloom).toBeDefined()
+    expect(transactionHash).toBeDefined()
+    expect(transactionIndex).toBeDefined()
     expect(rest).toMatchInlineSnapshot(`
       {
         "contractAddress": null,

@@ -46,23 +46,25 @@ export function local(options: local.Options): Adapter {
       async sendTransaction(parameters) {
         const account = params.getAccount(undefined, { signable: true })
         const client = params.getClient()
-        const { feePayer, ...rest } = parameters
+        const { feePayer: _, ...rest } = parameters
         return await sendTransaction(client, {
           account,
           // TODO: support fee payer
           // feePayer,
           ...rest,
+          type: 'tempo',
         })
       },
       async sendTransactionSync(parameters) {
         const account = params.getAccount(undefined, { signable: true })
         const client = params.getClient()
-        const { feePayer, ...rest } = parameters
+        const { feePayer: _, ...rest } = parameters
         return await sendTransactionSync(client, {
           account,
           // TODO: support fee payer
           // feePayer,
           ...rest,
+          type: 'tempo',
         })
       },
       async switchChain({ chainId }) {

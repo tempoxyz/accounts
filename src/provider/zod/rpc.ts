@@ -91,6 +91,7 @@ const transactionRequest = z.object({
     z.array(z.object({ address: u.address(), storageKeys: z.array(u.hex()) })),
   ),
   calls: z.optional(z.readonly(z.array(call))),
+  chainId: z.optional(u.number()),
   feePayer: z.optional(z.union([z.boolean(), z.url()])),
   feeToken: z.optional(u.address()),
   from: z.optional(u.address()),

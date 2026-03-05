@@ -18,7 +18,7 @@ export type Adapter = {
     /** Discover existing accounts (e.g. WebAuthn assertion). */
     loadAccounts: () => Promise<loadAccounts.ReturnType>
     /** Send a transaction. */
-    sendTransaction: (request: ActionRequest<Rpc.eth_sendTransaction>) => Promise<`0x${string}`>
+    sendTransaction: (request: ActionRequest<Rpc.eth_sendTransaction>) => Promise<Rpc.eth_sendTransaction['returns']>
     /** Send a transaction and wait for the receipt. */
     sendTransactionSync: (
       request: ActionRequest<Rpc.eth_sendTransactionSync>,
