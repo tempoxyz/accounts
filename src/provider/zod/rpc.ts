@@ -171,6 +171,34 @@ export const wallet_sendCalls = Schema.defineItem({
 })
 export type wallet_sendCalls = Schema.DefineItem<typeof wallet_sendCalls>
 
+export const wallet_getBalances = Schema.defineItem({
+  method: z.literal('wallet_getBalances'),
+  params: z.optional(
+    z.readonly(
+      z.tuple([
+        z.object({
+          account: z.optional(u.address()),
+          chainId: z.optional(u.number()),
+          tokens: z.optional(z.readonly(z.array(u.address()))),
+        }),
+      ]),
+    ),
+  ),
+  returns: z.readonly(
+    z.array(
+      z.object({
+        address: u.address(),
+        balance: u.bigint(),
+        decimals: z.number(),
+        display: z.string(),
+        name: z.string(),
+        symbol: z.string(),
+      }),
+    ),
+  ),
+})
+export type wallet_getBalances = Schema.DefineItem<typeof wallet_getBalances>
+
 export const wallet_connect = Schema.defineItem({
   method: z.literal('wallet_connect'),
   params: z.optional(

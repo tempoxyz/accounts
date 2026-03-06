@@ -25,6 +25,9 @@ export function App() {
       <EthChainId />
       <WalletSwitchChain />
 
+      <h2>Balances</h2>
+      <WalletGetBalances />
+
       <h2>Transactions</h2>
       <EthSendTransaction />
       <EthSendTransactionSync />
@@ -269,6 +272,67 @@ function WalletSendCalls() {
       >
         Send Calls (Sync)
       </button>
+    </Method>
+  )
+}
+
+// -- Balances --
+
+type TokenBalance = {
+  address: string
+  balance: string
+  decimals: number
+  display: string
+  name: string
+  symbol: string
+}
+
+function WalletGetBalances() {
+  const [result, error, execute] = useRequest()
+  const balances = result as TokenBalance[] | undefined
+  return (
+    <Method method="wallet_getBalances" result={result} error={error}>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_getBalances',
+              params: [
+                {
+                  tokens: [
+                    '0x20c0000000000000000000000000000000000000',
+                    '0x20c0000000000000000000000000000000000001',
+                    '0x20c0000000000000000000000000000000000002',
+                    '0x20c0000000000000000000000000000000000003',
+                  ],
+                },
+              ],
+            }),
+          )
+        }
+      >
+        Get Balances
+      </button>
+      {balances && balances.length > 0 && (
+        <table style={{ marginTop: 8, borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', paddingRight: 16 }}>Token</th>
+              <th style={{ textAlign: 'right' }}>Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {balances.map((t) => (
+              <tr key={t.address}>
+                <td style={{ paddingRight: 16 }}>{t.name} ({t.symbol})</td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {t.display}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </Method>
   )
 }

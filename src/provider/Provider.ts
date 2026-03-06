@@ -1,6 +1,7 @@
 import { Hash, Hex, Provider as ox_Provider } from 'ox'
 import type { Chain } from 'viem'
 import { tempo, tempoModerato } from 'viem/chains'
+import { Actions } from 'viem/tempo'
 
 import * as Account from './Account.js'
 import type { Adapter } from './Adapter.js'
@@ -160,6 +161,38 @@ export function create(options: create.Options): create.ReturnType {
             const chainId = Hex.fromNumber(store.getState().chainId)
             const id = Hex.concat(hash, Hex.padLeft(chainId, 32), sendCallsMagic)
             return { capabilities: { sync }, id }
+          }
+
+          case 'wallet_getBalances': {
+            const decoded = request._decoded.params?.[0]
+            const { accounts, activeAccount } = store.getState()
+            const account = decoded?.account ?? accounts[activeAccount]?.address
+            if (!account)
+              throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
+            const tokens = decoded?.tokens
+            if (!tokens || tokens.length === 0) return []
+            const client = Client.fromChainId(decoded?.chainId, { chains, store })
+            return await Promise.all(
+              tokens.map(async (token) => {
+                const [balance, metadata] = await Promise.all([
+                  Actions.token.getBalance(client, { account, token }),
+                  Actions.token.getMetadata(client, { token }),
+                ])
+                const value = Number(balance) / 10 ** metadata.decimals
+                const display = new Intl.NumberFormat('en-US', {
+                  style: 'currency',
+                  currency: metadata.currency,
+                }).format(value)
+                return {
+                  address: token,
+                  balance: Hex.fromNumber(balance),
+                  decimals: metadata.decimals,
+                  display,
+                  name: metadata.name,
+                  symbol: metadata.symbol,
+                }
+              }),
+            )
           }
 
           case 'wallet_connect': {

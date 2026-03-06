@@ -496,6 +496,72 @@ describe('wallet_sendCalls', () => {
   })
 })
 
+describe('wallet_getBalances', () => {
+  test('default: returns empty array when no tokens provided', async () => {
+    const provider = Provider.create({
+      adapter: local(),
+      chains: [chain],
+    })
+
+    await provider.request({ method: 'eth_requestAccounts' })
+
+    const result = await provider.request({ method: 'wallet_getBalances' })
+    expect(result).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('default: returns token balances with metadata', async () => {
+    const provider = Provider.create({
+      adapter: local(),
+      chains: [chain],
+    })
+
+    await provider.request({ method: 'eth_requestAccounts' })
+
+    const result = await provider.request({
+      method: 'wallet_getBalances',
+      params: [{ tokens: ['0x20c0000000000000000000000000000000000001'] }],
+    })
+
+    expect(result.length).toMatchInlineSnapshot(`1`)
+    expect(result[0]!.address).toMatchInlineSnapshot(`"0x20c0000000000000000000000000000000000001"`)
+    expect(result[0]!.name).toBeDefined()
+    expect(result[0]!.symbol).toBeDefined()
+    expect(typeof result[0]!.decimals).toMatchInlineSnapshot(`"number"`)
+    expect(result[0]!.balance).toMatch(/^0x/)
+  })
+
+  test('behavior: accepts explicit account param', async () => {
+    const provider = Provider.create({
+      adapter: local(),
+      chains: [chain],
+    })
+
+    await provider.request({ method: 'eth_requestAccounts' })
+
+    const result = await provider.request({
+      method: 'wallet_getBalances',
+      params: [{ account: core_accounts[0].address, tokens: ['0x20c0000000000000000000000000000000000001'] }],
+    })
+
+    expect(result.length).toMatchInlineSnapshot(`1`)
+    expect(result[0]!.balance).toMatch(/^0x/)
+  })
+
+  test('error: throws DisconnectedError when no accounts connected', async () => {
+    const provider = Provider.create({
+      adapter: local(),
+      chains: [chain],
+    })
+
+    await expect(
+      provider.request({
+        method: 'wallet_getBalances',
+        params: [{ tokens: ['0x20c0000000000000000000000000000000000001'] }],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[Provider.DisconnectedError: No accounts connected.]`)
+  })
+})
+
 describe('rpc proxy', () => {
   test('error: proxies unknown methods to RPC client', async () => {
     const provider = Provider.create({
