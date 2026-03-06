@@ -40,6 +40,10 @@ export function local(options: local.Options): Adapter {
       async loadAccounts() {
         return await loadAccounts()
       },
+      async signPersonalMessage({ data, address }) {
+        const account = params.getAccount(address, { signable: true })
+        return await account.signMessage({ message: { raw: data } })
+      },
       async sendTransaction(parameters) {
         const account = params.getAccount(undefined, { signable: true })
         const client = params.getClient()

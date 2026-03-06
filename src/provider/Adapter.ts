@@ -1,4 +1,4 @@
-import type { Client, Transport } from 'viem'
+import type { Client, Hex, Transport } from 'viem'
 import type { Address, LocalAccount } from 'viem/accounts'
 import type { tempo } from 'viem/chains'
 
@@ -23,6 +23,8 @@ export type Adapter = {
     sendTransactionSync: (
       request: ActionRequest<Rpc.eth_sendTransactionSync>,
     ) => Promise<Rpc.eth_sendTransactionSync.decoded>
+    /** Sign a personal message (EIP-191). */
+    signPersonalMessage: (params: signPersonalMessage.Parameters) => Promise<Hex>
     /** Switch chain hook for adapter-specific handling. */
     switchChain?: ((params: switchChain.Parameters) => Promise<void>) | undefined
   }
@@ -60,6 +62,15 @@ export declare namespace createAccount {
 
 export declare namespace loadAccounts {
   type ReturnType = readonly Store.Account[]
+}
+
+export declare namespace signPersonalMessage {
+  type Parameters = {
+    /** Address of the account to sign with. */
+    address: Address
+    /** Hex-encoded message data. */
+    data: Hex
+  }
 }
 
 export declare namespace switchChain {

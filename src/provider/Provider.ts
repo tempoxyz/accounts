@@ -147,6 +147,12 @@ export function create(options: create.Options): create.ReturnType {
             })
           }
 
+          case 'personal_sign': {
+            assertConnected()
+            const [data, address] = request._decoded.params
+            return await adapter.actions.signPersonalMessage({ address, data })
+          }
+
           case 'wallet_sendCalls': {
             assertConnected()
             const decoded = request._decoded.params?.[0]

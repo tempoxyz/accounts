@@ -2,7 +2,7 @@ import { parseUnits } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
 import { afterAll, beforeAll } from 'vitest'
 
-import { accounts, getClient, nodeEnv, rpcUrl } from './config.js'
+import { accounts, getClient, nodeEnv, rpcUrl, webAuthnAccounts } from './config.js'
 
 const client = getClient()
 
@@ -22,6 +22,16 @@ beforeAll(async () => {
         }),
       ),
     )
+
+    // Fund first webAuthn account for provider tests.
+    await Actions.token.transferSync(client, {
+      account: accounts[0],
+      feeToken: Addresses.pathUsd,
+      to: webAuthnAccounts[0].address,
+      token: Addresses.pathUsd,
+      amount: parseUnits('100', 6),
+    })
+    
     return
   }
 

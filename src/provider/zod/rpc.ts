@@ -171,6 +171,13 @@ export const wallet_sendCalls = Schema.defineItem({
 })
 export type wallet_sendCalls = Schema.DefineItem<typeof wallet_sendCalls>
 
+export const personal_sign = Schema.defineItem({
+  method: z.literal('personal_sign'),
+  params: z.readonly(z.tuple([u.hex(), u.address()])),
+  returns: u.hex(),
+})
+export type personal_sign = Schema.DefineItem<typeof personal_sign>
+
 export const wallet_getBalances = Schema.defineItem({
   method: z.literal('wallet_getBalances'),
   params: z.optional(

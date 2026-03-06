@@ -1,10 +1,10 @@
-import { Provider as core_Provider } from 'ox'
+import { Hex, Provider as core_Provider } from 'ox'
 import { waitForTransactionReceipt } from 'viem/actions'
 import { tempoModerato } from 'viem/chains'
 import { describe, expect, test } from 'vitest'
 
 import { local } from '../../test/adapters.js'
-import { accounts as core_accounts, chain, getClient } from '../../test/config.js'
+import { chain, getClient, webAuthnAccounts } from '../../test/config.js'
 import * as Provider from './Provider.js'
 
 describe('create', () => {
@@ -41,7 +41,7 @@ describe('eth_accounts', () => {
   test('behavior: returns accounts after connecting', async () => {
     const provider = Provider.create({
       adapter: local({
-        loadAccounts: async () => [core_accounts[0], core_accounts[1]],
+        loadAccounts: async () => [webAuthnAccounts[0], webAuthnAccounts[1]],
       }),
     })
 
@@ -49,8 +49,8 @@ describe('eth_accounts', () => {
     const accounts = await provider.request({ method: 'eth_accounts' })
     expect(accounts).toMatchInlineSnapshot(`
       [
-        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-        "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+        "0x1ecBa262e4510F333FB5051743e2a53a765deBD0",
+        "0xB08a557649C30B96c28825748da6a940D6c8972e",
       ]
     `)
   })
@@ -65,7 +65,7 @@ describe('eth_requestAccounts', () => {
     const accounts = await provider.request({ method: 'eth_requestAccounts' })
     expect(accounts).toMatchInlineSnapshot(`
       [
-        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "0x1ecBa262e4510F333FB5051743e2a53a765deBD0",
       ]
     `)
   })
@@ -73,8 +73,8 @@ describe('eth_requestAccounts', () => {
   test('behavior: returns active account first', async () => {
     const provider = Provider.create({
       adapter: local({
-        loadAccounts: async () => [core_accounts[0]],
-        createAccount: async () => [core_accounts[1]],
+        loadAccounts: async () => [webAuthnAccounts[0]],
+        createAccount: async () => [webAuthnAccounts[1]],
       }),
     })
 
@@ -87,7 +87,7 @@ describe('eth_requestAccounts', () => {
 
     const accounts = await provider.request({ method: 'eth_requestAccounts' })
     // Active account (account[0] from loadAccounts) returned first
-    expect(accounts[0]).toMatchInlineSnapshot(`"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"`)
+    expect(accounts[0]).toMatchInlineSnapshot(`"0x1ecBa262e4510F333FB5051743e2a53a765deBD0"`)
   })
 })
 
@@ -102,7 +102,7 @@ describe('wallet_connect', () => {
       {
         "accounts": [
           {
-            "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "address": "0x1ecBa262e4510F333FB5051743e2a53a765deBD0",
             "capabilities": {},
           },
         ],
@@ -113,8 +113,8 @@ describe('wallet_connect', () => {
   test('behavior: with register capability calls createAccount', async () => {
     const provider = Provider.create({
       adapter: local({
-        loadAccounts: async () => [core_accounts[0]],
-        createAccount: async () => [core_accounts[1]],
+        loadAccounts: async () => [webAuthnAccounts[0]],
+        createAccount: async () => [webAuthnAccounts[1]],
       }),
     })
 
@@ -126,7 +126,7 @@ describe('wallet_connect', () => {
       {
         "accounts": [
           {
-            "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+            "address": "0xB08a557649C30B96c28825748da6a940D6c8972e",
             "capabilities": {},
           },
         ],
@@ -137,8 +137,8 @@ describe('wallet_connect', () => {
   test('behavior: register preserves existing accounts and sets activeAccount', async () => {
     const provider = Provider.create({
       adapter: local({
-        loadAccounts: async () => [core_accounts[0]],
-        createAccount: async () => [core_accounts[1]],
+        loadAccounts: async () => [webAuthnAccounts[0]],
+        createAccount: async () => [webAuthnAccounts[1]],
       }),
     })
 
@@ -155,11 +155,11 @@ describe('wallet_connect', () => {
       {
         "accounts": [
           {
-            "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+            "address": "0xB08a557649C30B96c28825748da6a940D6c8972e",
             "capabilities": {},
           },
           {
-            "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "address": "0x1ecBa262e4510F333FB5051743e2a53a765deBD0",
             "capabilities": {},
           },
         ],
@@ -169,8 +169,8 @@ describe('wallet_connect', () => {
     expect(provider.store.getState().activeAccount).toMatchInlineSnapshot(`1`)
     expect(provider.store.getState().accounts.map((a) => a.address)).toMatchInlineSnapshot(`
       [
-        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-        "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+        "0x1ecBa262e4510F333FB5051743e2a53a765deBD0",
+        "0xB08a557649C30B96c28825748da6a940D6c8972e",
       ]
     `)
   })
@@ -178,8 +178,8 @@ describe('wallet_connect', () => {
   test('behavior: login preserves existing accounts and deduplicates', async () => {
     const provider = Provider.create({
       adapter: local({
-        loadAccounts: async () => [core_accounts[0]],
-        createAccount: async () => [core_accounts[1]],
+        loadAccounts: async () => [webAuthnAccounts[0]],
+        createAccount: async () => [webAuthnAccounts[1]],
       }),
     })
 
@@ -193,8 +193,8 @@ describe('wallet_connect', () => {
 
     expect(provider.store.getState().accounts.map((a) => a.address)).toMatchInlineSnapshot(`
       [
-        "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
-        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "0xB08a557649C30B96c28825748da6a940D6c8972e",
+        "0x1ecBa262e4510F333FB5051743e2a53a765deBD0",
       ]
     `)
     // activeAccount should point to the loaded account
@@ -204,8 +204,8 @@ describe('wallet_connect', () => {
   test('behavior: login sets activeAccount to loaded account', async () => {
     const provider = Provider.create({
       adapter: local({
-        loadAccounts: async () => [core_accounts[0]],
-        createAccount: async () => [core_accounts[1]],
+        loadAccounts: async () => [webAuthnAccounts[0]],
+        createAccount: async () => [webAuthnAccounts[1]],
       }),
     })
 
@@ -217,7 +217,7 @@ describe('wallet_connect', () => {
     // Register again creates another — but loadAccounts returns account[0]
     // Login switches active back to account[0]
     const result = await provider.request({ method: 'wallet_connect' })
-    expect(result.accounts[0]!.address).toMatchInlineSnapshot(`"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"`)
+    expect(result.accounts[0]!.address).toMatchInlineSnapshot(`"0x1ecBa262e4510F333FB5051743e2a53a765deBD0"`)
   })
 })
 
@@ -275,7 +275,7 @@ describe('events', () => {
 
     await provider.request({ method: 'eth_requestAccounts' })
 
-    expect(events).toEqual([[core_accounts[0].address]])
+    expect(events).toEqual([[webAuthnAccounts[0].address]])
   })
 
   test('behavior: emits connect on status change', async () => {
@@ -361,7 +361,7 @@ describe('eth_sendTransaction', () => {
 
     const hash = await provider.request({
       method: 'eth_sendTransaction',
-      params: [{ calls: [{ to: core_accounts[1].address }] }],
+      params: [{ calls: [{ to: webAuthnAccounts[1].address }] }],
     })
 
     expect(hash).toMatch(/^0x[0-9a-f]{64}$/)
@@ -377,7 +377,7 @@ describe('eth_sendTransaction', () => {
 
     const hash = await provider.request({
       method: 'eth_sendTransaction',
-      params: [{ calls: [{ to: core_accounts[1].address }] }],
+      params: [{ calls: [{ to: webAuthnAccounts[1].address }] }],
     })
 
     const receipt = await waitForTransactionReceipt(getClient(), { hash })
@@ -395,11 +395,11 @@ describe('eth_sendTransaction', () => {
     expect(rest).toMatchInlineSnapshot(`
       {
         "contractAddress": null,
-        "feePayer": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
-        "feeToken": "0x20c0000000000000000000000000000000000001",
-        "from": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+        "feePayer": "0x1ecba262e4510f333fb5051743e2a53a765debd0",
+        "feeToken": "0x20c0000000000000000000000000000000000000",
+        "from": "0x1ecba262e4510f333fb5051743e2a53a765debd0",
         "status": "success",
-        "to": "0x8c8d35429f74ec245f8ef2f4fd1e551cff97d650",
+        "to": "0xb08a557649c30b96c28825748da6a940d6c8972e",
         "type": "0x76",
       }
     `)
@@ -417,7 +417,7 @@ describe('eth_sendTransactionSync', () => {
 
     const receipt = await provider.request({
       method: 'eth_sendTransactionSync',
-      params: [{ calls: [{ to: core_accounts[1].address }] }],
+      params: [{ calls: [{ to: webAuthnAccounts[1].address }] }],
     })
 
     const { blockHash, blockNumber, cumulativeGasUsed, effectiveGasPrice, gasUsed, logs, logsBloom, transactionHash, transactionIndex, ...rest } = receipt
@@ -433,11 +433,11 @@ describe('eth_sendTransactionSync', () => {
     expect(rest).toMatchInlineSnapshot(`
       {
         "contractAddress": null,
-        "feePayer": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
-        "feeToken": "0x20c0000000000000000000000000000000000001",
-        "from": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+        "feePayer": "0x1ecba262e4510f333fb5051743e2a53a765debd0",
+        "feeToken": "0x20c0000000000000000000000000000000000000",
+        "from": "0x1ecba262e4510f333fb5051743e2a53a765debd0",
         "status": "success",
-        "to": "0x8c8d35429f74ec245f8ef2f4fd1e551cff97d650",
+        "to": "0xb08a557649c30b96c28825748da6a940d6c8972e",
         "type": "0x76",
       }
     `)
@@ -457,7 +457,7 @@ describe('wallet_sendCalls', () => {
       method: 'wallet_sendCalls',
       params: [
         {
-          calls: [{ to: core_accounts[1].address }],
+          calls: [{ to: webAuthnAccounts[1].address }],
           chainId: `0x${chain.id.toString(16)}`,
           version: '2.0.0',
         },
@@ -479,7 +479,7 @@ describe('wallet_sendCalls', () => {
       method: 'wallet_sendCalls',
       params: [
         {
-          calls: [{ to: core_accounts[1].address }],
+          calls: [{ to: webAuthnAccounts[1].address }],
           capabilities: { sync: true },
           chainId: `0x${chain.id.toString(16)}`,
           version: '2.0.0',
@@ -540,7 +540,7 @@ describe('wallet_getBalances', () => {
 
     const result = await provider.request({
       method: 'wallet_getBalances',
-      params: [{ account: core_accounts[0].address, tokens: ['0x20c0000000000000000000000000000000000001'] }],
+      params: [{ account: webAuthnAccounts[0].address, tokens: ['0x20c0000000000000000000000000000000000001'] }],
     })
 
     expect(result.length).toMatchInlineSnapshot(`1`)
@@ -557,6 +557,63 @@ describe('wallet_getBalances', () => {
       provider.request({
         method: 'wallet_getBalances',
         params: [{ tokens: ['0x20c0000000000000000000000000000000000001'] }],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[Provider.DisconnectedError: No accounts connected.]`)
+  })
+})
+
+describe('personal_sign', () => {
+  test('default: signs a message and returns signature', async () => {
+    const provider = Provider.create({
+      adapter: local(),
+      chains: [chain],
+    })
+
+    await provider.request({ method: 'eth_requestAccounts' })
+
+    const message = Hex.fromString('hello world')
+    const signature = await provider.request({
+      method: 'personal_sign',
+      params: [message, webAuthnAccounts[0].address],
+    })
+
+    expect(signature).toMatchInlineSnapshot(`"0x02a379a6f6eeafb9a55e378c118034e2751e682fab9f2d30ab13d2125586ce194705000000007b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a223265756862744473726b4d72636634416a4a6a4d687975307a43464e4d69436a627a5a544a732d41665767222c226f726967696e223a2268747470733a2f2f6578616d706c652e636f6d222c2263726f73734f726967696e223a66616c73657d4af9635671d8b58c8a807210b53e88a05a5c780890fa092ceabd464f6fcd132e46326db882d495740e55ce8028165caf0a23f149e80218c0d354b1b2ff24985ca43b66d1eaee03f07d64920491f8b3487a90f527f2342c8caccd55d5065084496c57d409d6db06faefd8a0aa1106acd69501134e11cf74b2e95c81b451da34337777777777777777777777777777777777777777777777777777777777777777"`)
+  })
+
+  test('behavior: signature is verifiable on-chain', async () => {
+    const { verifyMessage } = await import('viem/actions')
+
+    const provider = Provider.create({
+      adapter: local(),
+      chains: [chain],
+    })
+
+    await provider.request({ method: 'eth_requestAccounts' })
+
+    const message = Hex.fromString('hello world')
+    const signature = await provider.request({
+      method: 'personal_sign',
+      params: [message, webAuthnAccounts[0].address],
+    })
+
+    const valid = await verifyMessage(getClient(), {
+      address: webAuthnAccounts[0].address,
+      message: { raw: message },
+      signature,
+    })
+    expect(valid).toMatchInlineSnapshot(`true`)
+  })
+
+  test('error: throws when not connected', async () => {
+    const provider = Provider.create({
+      adapter: local(),
+      chains: [chain],
+    })
+
+    await expect(
+      provider.request({
+        method: 'personal_sign',
+        params: [Hex.fromString('hello'), webAuthnAccounts[0].address],
       }),
     ).rejects.toThrowErrorMatchingInlineSnapshot(`[Provider.DisconnectedError: No accounts connected.]`)
   })

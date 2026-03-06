@@ -47,6 +47,13 @@ export const accounts = privateKeys.map((privateKey) =>
   Account.fromSecp256k1(privateKey),
 ) as unknown as FixedArray<Account.RootAccount, 20>
 
+export const webAuthnAccounts = privateKeys.map((privateKey) =>
+  Account.fromHeadlessWebAuthn(privateKey, {
+    rpId: 'example.com',
+    origin: 'https://example.com',
+  }),
+) as unknown as FixedArray<Account.RootAccount, 20>
+
 export const addresses = {
   alphaUsd: '0x20c0000000000000000000000000000000000001',
 } as const
