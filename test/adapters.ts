@@ -20,17 +20,23 @@ function toStoreAccount(index: number): Store.Account {
 
 /** Creates a local adapter pre-configured with deterministic headless WebAuthn test accounts. */
 export function headlessWebAuthn(options: headlessWebAuthn.Options = {}) {
-  const { loadAccounts = async () => [toStoreAccount(0)], createAccount } = options
+  const { createAccount, icon, loadAccounts = async () => [toStoreAccount(0)], name, rdns } = options
   return core_local({
-    loadAccounts,
     createAccount,
+    icon,
+    loadAccounts,
+    name,
+    rdns,
   })
 }
 
 export declare namespace headlessWebAuthn {
   type Options = {
-    createAccount?: (() => Promise<readonly Store.Account[]>) | undefined
+    createAccount?: ((params: { name: string }) => Promise<readonly Store.Account[]>) | undefined
+    icon?: `data:image/${string}` | undefined
     loadAccounts?: (() => Promise<readonly Store.Account[]>) | undefined
+    name?: string | undefined
+    rdns?: string | undefined
   }
 }
 
@@ -62,8 +68,8 @@ export function webAuthn(options: webAuthn.Options = {}) {
       return [loadedAccount]
     },
     createAccount: options.withCreate
-      ? async () => {
-          const account = await registerAccount('created')
+      ? async ({ name }) => {
+          const account = await registerAccount(name)
           return [account]
         }
       : undefined,

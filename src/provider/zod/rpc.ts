@@ -240,6 +240,7 @@ const connectCapabilities = {
     request: z.optional(
       z.object({
         method: z.optional(z.union([z.literal('register'), z.literal('login')])),
+        name: z.optional(z.string()),
       }),
     ),
     result: z.record(z.string(), z.unknown()),

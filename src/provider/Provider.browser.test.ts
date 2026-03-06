@@ -3,8 +3,9 @@ import { type Address, parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { Actions, Addresses } from 'viem/tempo'
 import { describe, expect, test } from 'vitest'
+import { requestProviders } from 'mipd'
 
-import { webAuthn } from '../../test/adapters.js'
+import { headlessWebAuthn, webAuthn } from '../../test/adapters.js'
 import { accounts, chain, getClient } from '../../test/config.js'
 import * as Provider from './Provider.js'
 
@@ -410,6 +411,52 @@ describe('eth_signTypedData_v4', () => {
       ...typedData,
     })
     expect(valid).toMatchInlineSnapshot(`true`)
+  })
+})
+
+describe('eip-6963', () => {
+  test('default: announces provider when adapter has icon, name, and rdns', async () => {
+    const discovered: { info: { icon: string; name: string; rdns: string; uuid: string } }[] = []
+    const unsubscribe = requestProviders((detail) => discovered.push(detail as never))
+
+    Provider.create({
+      adapter: headlessWebAuthn({
+        icon: 'data:image/svg+xml,<svg></svg>',
+        name: 'Test Wallet',
+        rdns: 'com.example.test',
+      }),
+    })
+
+    // Wait a tick for the event to fire
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(discovered.length).toMatchInlineSnapshot(`1`)
+    expect(discovered[0]!.info.name).toMatchInlineSnapshot(`"Test Wallet"`)
+    expect(discovered[0]!.info.rdns).toMatchInlineSnapshot(`"com.example.test"`)
+    expect(discovered[0]!.info.icon).toMatchInlineSnapshot(`"data:image/svg+xml,<svg></svg>"`)
+    expect(discovered[0]!.info.uuid).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    )
+
+    unsubscribe?.()
+  })
+
+  test('behavior: defaults icon and rdns when not provided', async () => {
+    const discovered: { info: { icon: string; name: string; rdns: string } }[] = []
+    const unsubscribe = requestProviders((detail) => discovered.push(detail as never))
+
+    Provider.create({
+      adapter: headlessWebAuthn({ name: 'My Wallet' }),
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const info = discovered[discovered.length - 1]!.info
+    expect(info.name).toMatchInlineSnapshot(`"My Wallet"`)
+    expect(info.rdns).toMatchInlineSnapshot(`"com.mywallet"`)
+    expect(info.icon).toMatch(/^data:image\/svg\+xml,/)
+
+    unsubscribe?.()
   })
 })
 

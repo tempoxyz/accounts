@@ -1,3 +1,4 @@
+import { announceProvider } from 'mipd'
 import { Hash, Hex, Provider as ox_Provider } from 'ox'
 import type { Chain } from 'viem'
 import { tempo, tempoModerato } from 'viem/chains'
@@ -90,7 +91,7 @@ export function create(options: create.Options): create.ReturnType {
     store.setState({ accounts, activeAccount, status: 'connected' })
   }
 
-  return Object.assign(
+  const provider = Object.assign(
     ox_Provider.from(
       {
         ...(emitter as unknown as ox_Provider.Emitter),
@@ -283,7 +284,7 @@ export function create(options: create.Options): create.ReturnType {
               const capabilities = request._decoded.params?.[0]?.capabilities
               const newAccounts =
                 capabilities?.method === 'register'
-                  ? await adapter.actions.createAccount()
+                  ? await adapter.actions.createAccount({ name: capabilities.name ?? 'default' })
                   : await adapter.actions.loadAccounts()
               mergeAccounts(newAccounts)
               const { accounts: allAccounts, activeAccount } = store.getState()
@@ -317,8 +318,23 @@ export function create(options: create.Options): create.ReturnType {
     ),
     { chains, store },
   )
+
+  if (typeof window !== 'undefined')
+    announceProvider({
+      info: {
+        icon: adapter.icon ?? defaultIcon,
+        name: adapter.name ?? 'Injected Wallet',
+        rdns: adapter.rdns ?? `com.${(adapter.name ?? 'Injected Wallet').toLowerCase().replace(/\s+/g, '')}`,
+        uuid: crypto.randomUUID(),
+      },
+      provider,
+    } as never)
+
+  return provider
 }
 
+const defaultIcon =
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>' as const
 const sendCallsMagic = Hash.keccak256(Hex.fromString('TEMPO_5792'))
 
 export declare namespace create {

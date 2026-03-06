@@ -9,10 +9,16 @@ import type * as Rpc from './zod/rpc.js'
 export type Adapter = {
   /** Called once when the provider is created. Returns an optional cleanup function. */
   setup?: (params: setup.Parameters) => (() => void) | undefined
+  /** Data URI of the provider icon. @default Black 1×1 SVG. */
+  icon?: `data:image/${string}` | undefined
+  /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */
+  name?: string | undefined
+  /** Reverse DNS identifier (e.g. `"com.example.mywallet"`). @default `com.{lowercase name}` */
+  rdns?: string | undefined
   /** Adapter actions dispatched by the provider's `request()` method. */
   actions: {
     /** Create a new account (e.g. WebAuthn registration). */
-    createAccount: () => Promise<createAccount.ReturnType>
+    createAccount: (params: createAccount.Parameters) => Promise<createAccount.ReturnType>
     /** Disconnect hook for adapter-specific cleanup. */
     disconnect?: (() => Promise<void>) | undefined
     /** Discover existing accounts (e.g. WebAuthn assertion). */
@@ -63,6 +69,10 @@ export declare namespace setup {
 }
 
 export declare namespace createAccount {
+  type Parameters = {
+    /** Display name for the new account (e.g. credential name for WebAuthn). */
+    name: string
+  }
   type ReturnType = readonly Store.Account[]
 }
 

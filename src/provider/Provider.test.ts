@@ -208,6 +208,42 @@ describe('wallet_connect', () => {
     expect(provider.store.getState().activeAccount).toMatchInlineSnapshot(`0`)
   })
 
+  test('behavior: register passes name to createAccount', async () => {
+    let receivedName: string | undefined
+    const provider = Provider.create({
+      adapter: headlessWebAuthn({
+        createAccount: async ({ name }) => {
+          receivedName = name
+          return [webAuthnAccounts[1]]
+        },
+      }),
+    })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'alice' } }],
+    })
+    expect(receivedName).toMatchInlineSnapshot(`"alice"`)
+  })
+
+  test('behavior: register defaults name to "default"', async () => {
+    let receivedName: string | undefined
+    const provider = Provider.create({
+      adapter: headlessWebAuthn({
+        createAccount: async ({ name }) => {
+          receivedName = name
+          return [webAuthnAccounts[1]]
+        },
+      }),
+    })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register' } }],
+    })
+    expect(receivedName).toMatchInlineSnapshot(`"default"`)
+  })
+
   test('behavior: login sets activeAccount to loaded account', async () => {
     const provider = Provider.create({
       adapter: headlessWebAuthn({

@@ -20,22 +20,25 @@ import type * as Store from '../Store.js'
  * ```
  */
 export function local(options: local.Options): Adapter {
-  const { createAccount, loadAccounts } = options
+  const { createAccount, icon, loadAccounts, name, rdns } = options
 
   let params: setup.Parameters
 
   return {
+    icon,
+    name,
+    rdns,
     setup(params_) {
       params = params_
       return undefined
     },
     actions: {
-      async createAccount() {
+      async createAccount({ name }) {
         if (!createAccount)
           throw new ox_Provider.UnsupportedMethodError({
             message: '`createAccount` not configured on adapter.',
           })
-        const accounts = await createAccount()
+        const accounts = await createAccount({ name })
         params.store.setState((state) => ({
           accounts: [...state.accounts, ...accounts],
           activeAccount: state.accounts.length,
@@ -107,8 +110,14 @@ export function local(options: local.Options): Adapter {
 export declare namespace local {
   type Options = {
     /** Create a new account. Optional — omit for login-only flows. */
-    createAccount?: (() => Promise<readonly Store.Account[]>) | undefined
+    createAccount?: ((params: { name: string }) => Promise<readonly Store.Account[]>) | undefined
     /** Discover existing accounts (e.g. WebAuthn assertion). */
     loadAccounts: () => Promise<readonly Store.Account[]>
+    /** Data URI of the provider icon. @default Black 1×1 SVG. */
+    icon?: `data:image/${string}` | undefined
+    /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */
+    name?: string | undefined
+    /** Reverse DNS identifier. @default `com.{lowercase name}` */
+    rdns?: string | undefined
   }
 }

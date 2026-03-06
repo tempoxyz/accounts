@@ -26,11 +26,11 @@ import { local } from './local.js'
  * ```
  */
 export function webAuthn(options: webAuthn.Options): Adapter {
-  const { ceremony, name = 'default' } = options
+  const { ceremony, icon, name, rdns } = options
 
   /** Performs a registration ceremony and returns a store account. */
-  async function register(displayName: string): Promise<Store.Account & { address: Address }> {
-    const { options } = await ceremony.getRegistrationOptions({ name: displayName })
+  async function register(name: string): Promise<Store.Account> {
+    const { options } = await ceremony.getRegistrationOptions({ name })
     const credential = await Registration.create({ options })
     const { publicKey } = await ceremony.verifyRegistration(credential)
     const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
@@ -42,7 +42,7 @@ export function webAuthn(options: webAuthn.Options): Adapter {
   }
 
   /** Performs an authentication ceremony and returns a store account. */
-  async function authenticate(): Promise<Store.Account & { address: Address }> {
+  async function authenticate(): Promise<Store.Account> {
     const { options } = await ceremony.getAuthenticationOptions()
     const response = await Authentication.sign({ options })
     const { publicKey } = await ceremony.verifyAuthentication(response)
@@ -56,9 +56,12 @@ export function webAuthn(options: webAuthn.Options): Adapter {
 
   return {
     ...local({
+      createAccount: async ({ name }) => [await register(name)],
       loadAccounts: async () => [await authenticate()],
-      createAccount: async () => [await register(name)],
     }),
+    icon,
+    name,
+    rdns,
     internal_persistPrivate: true,
   }
 }
@@ -67,10 +70,11 @@ export declare namespace webAuthn {
   type Options = {
     /** Ceremony strategy for WebAuthn registration and authentication. */
     ceremony: Ceremony
-    /**
-     * Display name for newly registered credentials.
-     * @default "default"
-     */
+    /** Data URI of the provider icon. @default Black 1×1 SVG. */
+    icon?: `data:image/${string}` | undefined
+    /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */
     name?: string | undefined
+    /** Reverse DNS identifier. @default `com.{lowercase name}` */
+    rdns?: string | undefined
   }
 }
