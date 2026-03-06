@@ -3,17 +3,6 @@ import * as z from 'zod/mini'
 import * as Schema from '../Schema.js'
 import * as u from './utils.js'
 
-const capabilities = {
-  connect: {
-    request: z.optional(
-      z.object({
-        method: z.optional(z.union([z.literal('register'), z.literal('login')])),
-      }),
-    ),
-    result: z.record(z.string(), z.unknown()),
-  },
-}
-
 const log = z.object({
   address: u.address(),
   blockHash: u.hex(),
@@ -220,13 +209,45 @@ export const wallet_getBalances = Schema.defineItem({
 })
 export type wallet_getBalances = Schema.DefineItem<typeof wallet_getBalances>
 
+export const wallet_getCapabilities = Schema.defineItem({
+  method: z.literal('wallet_getCapabilities'),
+  params: z.optional(
+    z.readonly(
+      z.union([
+        z.tuple([u.address()]),
+        z.tuple([u.address(), z.readonly(z.array(u.hex()))]),
+      ]),
+    ),
+  ),
+  returns: z.record(
+    u.hex(),
+    z.object({
+      atomic: z.object({
+        status: z.union([z.literal('supported'), z.literal('ready'), z.literal('unsupported')]),
+      }),
+    }),
+  ),
+})
+export type wallet_getCapabilities = Schema.DefineItem<typeof wallet_getCapabilities>
+
+const connectCapabilities = {
+  connect: {
+    request: z.optional(
+      z.object({
+        method: z.optional(z.union([z.literal('register'), z.literal('login')])),
+      }),
+    ),
+    result: z.record(z.string(), z.unknown()),
+  },
+}
+
 export const wallet_connect = Schema.defineItem({
   method: z.literal('wallet_connect'),
   params: z.optional(
     z.readonly(
       z.tuple([
         z.object({
-          capabilities: capabilities.connect.request,
+          capabilities: connectCapabilities.connect.request,
           version: z.optional(z.string()),
         }),
       ]),
@@ -237,7 +258,7 @@ export const wallet_connect = Schema.defineItem({
       z.array(
         z.object({
           address: u.address(),
-          capabilities: capabilities.connect.result,
+          capabilities: connectCapabilities.connect.result,
         }),
       ),
     ),

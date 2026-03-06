@@ -222,6 +222,29 @@ export function create(options: create.Options): create.ReturnType {
               )
             }
 
+            case 'wallet_getCapabilities': {
+              const decoded = request._decoded.params
+              const address = decoded?.[0]
+              const chainIds = decoded?.[1]
+
+              if (address) {
+                const { accounts } = store.getState()
+                if (!accounts.some((a) => a.address.toLowerCase() === address.toLowerCase()))
+                  throw new ox_Provider.UnauthorizedError({
+                    message: `Address ${address} is not connected.`,
+                  })
+              }
+
+              const filtered = chainIds
+                ? chains.filter((c) => chainIds.includes(Hex.fromNumber(c.id)))
+                : chains
+
+              const result: Record<string, { atomic: { status: 'supported' } }> = {}
+              for (const chain of filtered)
+                result[Hex.fromNumber(chain.id)] = { atomic: { status: 'supported' } }
+              return result
+            }
+
             case 'wallet_connect': {
               const capabilities = request._decoded.params?.[0]?.capabilities
               const newAccounts =

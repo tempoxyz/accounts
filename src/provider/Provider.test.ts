@@ -1,7 +1,7 @@
 import { Hex, Provider as core_Provider } from 'ox'
 import { parseUnits } from 'viem'
 import { waitForTransactionReceipt } from 'viem/actions'
-import { tempoModerato } from 'viem/chains'
+import { tempo, tempoModerato } from 'viem/chains'
 import { Actions, Addresses } from 'viem/tempo'
 import { describe, expect, test } from 'vitest'
 
@@ -10,7 +10,7 @@ import { chain, getClient, webAuthnAccounts } from '../../test/config.js'
 import * as Provider from './Provider.js'
 
 const transferCall = Actions.token.transfer.call({
-  to: Addresses.pathUsd,
+  to: webAuthnAccounts[1].address,
   token: Addresses.pathUsd,
   amount: parseUnits('1', 6),
 })
@@ -201,12 +201,11 @@ describe('wallet_connect', () => {
 
     expect(provider.store.getState().accounts.map((a) => a.address)).toMatchInlineSnapshot(`
       [
-        "0xB08a557649C30B96c28825748da6a940D6c8972e",
         "0x1ecBa262e4510F333FB5051743e2a53a765deBD0",
       ]
     `)
     // activeAccount should point to the loaded account
-    expect(provider.store.getState().activeAccount).toMatchInlineSnapshot(`1`)
+    expect(provider.store.getState().activeAccount).toMatchInlineSnapshot(`0`)
   })
 
   test('behavior: login sets activeAccount to loaded account', async () => {
@@ -422,7 +421,7 @@ describe('eth_sendTransaction', () => {
         "feeToken": "0x20c0000000000000000000000000000000000000",
         "from": "0x1ecba262e4510f333fb5051743e2a53a765debd0",
         "status": "success",
-        "to": "0xb08a557649c30b96c28825748da6a940d6c8972e",
+        "to": "0x20c0000000000000000000000000000000000000",
         "type": "0x76",
       }
     `)
@@ -471,7 +470,7 @@ describe('eth_sendTransactionSync', () => {
         "feeToken": "0x20c0000000000000000000000000000000000000",
         "from": "0x1ecba262e4510f333fb5051743e2a53a765debd0",
         "status": "success",
-        "to": "0xb08a557649c30b96c28825748da6a940d6c8972e",
+        "to": "0x20c0000000000000000000000000000000000000",
         "type": "0x76",
       }
     `)
@@ -579,6 +578,96 @@ describe('wallet_sendCalls', () => {
         "sync": true,
       }
     `)
+  })
+})
+
+describe('wallet_getCapabilities', () => {
+  test('default: returns atomic supported for all chains', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+    })
+
+    const result = await provider.request({ method: 'wallet_getCapabilities' })
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "0x1079": {
+          "atomic": {
+            "status": "supported",
+          },
+        },
+        "0xa5bf": {
+          "atomic": {
+            "status": "supported",
+          },
+        },
+      }
+    `)
+  })
+
+  test('behavior: filters by chainIds', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+    })
+
+    await provider.request({ method: 'eth_requestAccounts' })
+
+    const result = await provider.request({
+      method: 'wallet_getCapabilities',
+      params: [webAuthnAccounts[0].address, [Hex.fromNumber(tempoModerato.id)]],
+    })
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "0xa5bf": {
+          "atomic": {
+            "status": "supported",
+          },
+        },
+      }
+    `)
+  })
+
+  test('behavior: returns empty object for unknown chainIds', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+    })
+
+    await provider.request({ method: 'eth_requestAccounts' })
+
+    const result = await provider.request({
+      method: 'wallet_getCapabilities',
+      params: [webAuthnAccounts[0].address, ['0x1']],
+    })
+    expect(result).toMatchInlineSnapshot(`{}`)
+  })
+
+  test('error: throws UnauthorizedError for unconnected address', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+    })
+
+    await expect(
+      provider.request({
+        method: 'wallet_getCapabilities',
+        params: [webAuthnAccounts[0].address],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnauthorizedError: Address 0x1ecBa262e4510F333FB5051743e2a53a765deBD0 is not connected.]`,
+    )
+  })
+
+  test('behavior: succeeds with connected address', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+    })
+
+    await provider.request({ method: 'eth_requestAccounts' })
+
+    const result = await provider.request({
+      method: 'wallet_getCapabilities',
+      params: [webAuthnAccounts[0].address],
+    })
+    expect(Object.keys(result).length).toMatchInlineSnapshot(`2`)
+    expect(result[Hex.fromNumber(tempo.id)]!.atomic.status).toMatchInlineSnapshot(`"supported"`)
   })
 })
 

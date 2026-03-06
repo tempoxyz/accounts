@@ -16,6 +16,7 @@ export const schema = from([
   Rpc.personal_sign,
   Rpc.wallet_sendCalls,
   Rpc.wallet_getBalances,
+  Rpc.wallet_getCapabilities,
   Rpc.wallet_connect,
   Rpc.wallet_disconnect,
   Rpc.wallet_switchEthereumChain,
