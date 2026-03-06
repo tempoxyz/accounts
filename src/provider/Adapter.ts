@@ -25,6 +25,8 @@ export type Adapter = {
     ) => Promise<Rpc.eth_sendTransactionSync.decoded>
     /** Sign a personal message (EIP-191). */
     signPersonalMessage: (params: signPersonalMessage.Parameters) => Promise<Hex>
+    /** Sign EIP-712 typed data. */
+    signTypedData: (params: signTypedData.Parameters) => Promise<Hex>
     /** Switch chain hook for adapter-specific handling. */
     switchChain?: ((params: switchChain.Parameters) => Promise<void>) | undefined
   }
@@ -70,6 +72,15 @@ export declare namespace signPersonalMessage {
     address: Address
     /** Hex-encoded message data. */
     data: Hex
+  }
+}
+
+export declare namespace signTypedData {
+  type Parameters = {
+    /** Address of the account to sign with. */
+    address: Address
+    /** JSON-encoded EIP-712 typed data. */
+    data: string
   }
 }
 

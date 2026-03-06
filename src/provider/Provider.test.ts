@@ -562,6 +562,73 @@ describe('wallet_getBalances', () => {
   })
 })
 
+describe('eth_signTypedData_v4', () => {
+  const typedData = {
+    domain: { name: 'Test', version: '1', chainId: 1 },
+    types: {
+      Person: [
+        { name: 'name', type: 'string' },
+        { name: 'wallet', type: 'address' },
+      ],
+    },
+    primaryType: 'Person' as const,
+    message: { name: 'Bob', wallet: '0x0000000000000000000000000000000000000000' },
+  }
+
+  test('default: signs typed data and returns signature', async () => {
+    const provider = Provider.create({
+      adapter: local(),
+      chains: [chain],
+    })
+
+    await provider.request({ method: 'eth_requestAccounts' })
+
+    const signature = await provider.request({
+      method: 'eth_signTypedData_v4',
+      params: [webAuthnAccounts[0].address, JSON.stringify(typedData)],
+    })
+
+    expect(signature).toMatchInlineSnapshot(`"0x02a379a6f6eeafb9a55e378c118034e2751e682fab9f2d30ab13d2125586ce194705000000007b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a222d745a2d75397a57573059504758576c375238734a39616b566c3877746b5068474d6778444a446c494d45222c226f726967696e223a2268747470733a2f2f6578616d706c652e636f6d222c2263726f73734f726967696e223a66616c73657d59b52e35048aee0d1ba0cc01febbca9d090415b5405d149b122e6fe46b1fd03707857461856f876cf55fbf88b14bfcac39b664d446117e91afcc5c71c4c370f1a43b66d1eaee03f07d64920491f8b3487a90f527f2342c8caccd55d5065084496c57d409d6db06faefd8a0aa1106acd69501134e11cf74b2e95c81b451da34337777777777777777777777777777777777777777777777777777777777777777"`)
+  })
+
+  test('behavior: signature is verifiable on-chain', async () => {
+    const { verifyTypedData } = await import('viem/actions')
+
+    const provider = Provider.create({
+      adapter: local(),
+      chains: [chain],
+    })
+
+    await provider.request({ method: 'eth_requestAccounts' })
+
+    const signature = await provider.request({
+      method: 'eth_signTypedData_v4',
+      params: [webAuthnAccounts[0].address, JSON.stringify(typedData)],
+    })
+
+    const valid = await verifyTypedData(getClient(), {
+      address: webAuthnAccounts[0].address,
+      signature,
+      ...typedData,
+    })
+    expect(valid).toMatchInlineSnapshot(`true`)
+  })
+
+  test('error: throws when not connected', async () => {
+    const provider = Provider.create({
+      adapter: local(),
+      chains: [chain],
+    })
+
+    await expect(
+      provider.request({
+        method: 'eth_signTypedData_v4',
+        params: [webAuthnAccounts[0].address, JSON.stringify(typedData)],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[Provider.DisconnectedError: No accounts connected.]`)
+  })
+})
+
 describe('personal_sign', () => {
   test('default: signs a message and returns signature', async () => {
     const provider = Provider.create({

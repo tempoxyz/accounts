@@ -44,6 +44,11 @@ export function local(options: local.Options): Adapter {
         const account = params.getAccount(address, { signable: true })
         return await account.signMessage({ message: { raw: data } })
       },
+      async signTypedData({ data, address }) {
+        const account = params.getAccount(address, { signable: true })
+        const { domain, types, primaryType, message } = JSON.parse(data)
+        return await account.signTypedData({ domain, types, primaryType, message })
+      },
       async sendTransaction(parameters) {
         const account = params.getAccount(undefined, { signable: true })
         const client = params.getClient()

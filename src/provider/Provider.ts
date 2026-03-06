@@ -147,6 +147,12 @@ export function create(options: create.Options): create.ReturnType {
             })
           }
 
+          case 'eth_signTypedData_v4': {
+            assertConnected()
+            const [address, data] = request._decoded.params
+            return await adapter.actions.signTypedData({ address, data })
+          }
+
           case 'personal_sign': {
             assertConnected()
             const [data, address] = request._decoded.params
