@@ -1,11 +1,19 @@
 import { Hex, Provider as core_Provider } from 'ox'
+import { parseUnits } from 'viem'
 import { waitForTransactionReceipt } from 'viem/actions'
 import { tempoModerato } from 'viem/chains'
+import { Actions, Addresses } from 'viem/tempo'
 import { describe, expect, test } from 'vitest'
 
 import { headlessWebAuthn } from '../../test/adapters.js'
 import { chain, getClient, webAuthnAccounts } from '../../test/config.js'
 import * as Provider from './Provider.js'
+
+const transferCall = Actions.token.transfer.call({
+  to: Addresses.pathUsd,
+  token: Addresses.pathUsd,
+  amount: parseUnits('1', 6),
+})
 
 describe('create', () => {
   test('default: returns an EIP-1193 provider', async () => {
@@ -365,7 +373,7 @@ describe('eth_sendTransaction', () => {
 
     const hash = await provider.request({
       method: 'eth_sendTransaction',
-      params: [{ calls: [{ to: webAuthnAccounts[1].address }] }],
+      params: [{ calls: [transferCall] }],
     })
 
     expect(hash).toMatch(/^0x[0-9a-f]{64}$/)
@@ -381,7 +389,7 @@ describe('eth_sendTransaction', () => {
 
     const hash = await provider.request({
       method: 'eth_sendTransaction',
-      params: [{ calls: [{ to: webAuthnAccounts[1].address }] }],
+      params: [{ calls: [transferCall] }],
     })
 
     const receipt = await waitForTransactionReceipt(getClient(), { hash })
@@ -432,7 +440,7 @@ describe('eth_sendTransactionSync', () => {
 
     const receipt = await provider.request({
       method: 'eth_sendTransactionSync',
-      params: [{ calls: [{ to: webAuthnAccounts[1].address }] }],
+      params: [{ calls: [transferCall] }],
     })
 
     const {
@@ -481,7 +489,7 @@ describe('eth_signTransaction', () => {
 
     const signed = await provider.request({
       method: 'eth_signTransaction',
-      params: [{ calls: [{ to: webAuthnAccounts[1].address }] }],
+      params: [{ calls: [transferCall] }],
     })
 
     expect(signed).toMatch(/^0x/)
@@ -497,7 +505,7 @@ describe('eth_signTransaction', () => {
 
     const signed = await provider.request({
       method: 'eth_signTransaction',
-      params: [{ calls: [{ to: webAuthnAccounts[1].address }] }],
+      params: [{ calls: [transferCall] }],
     })
 
     const receipt = await provider.request({
@@ -518,7 +526,7 @@ describe('eth_signTransaction', () => {
     await expect(
       provider.request({
         method: 'eth_signTransaction',
-        params: [{ calls: [{ to: webAuthnAccounts[1].address }] }],
+        params: [{ calls: [transferCall] }],
       }),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[Provider.DisconnectedError: No accounts connected.]`,
@@ -539,9 +547,7 @@ describe('wallet_sendCalls', () => {
       method: 'wallet_sendCalls',
       params: [
         {
-          calls: [{ to: webAuthnAccounts[1].address }],
-          chainId: `0x${chain.id.toString(16)}`,
-          version: '2.0.0',
+          calls: [transferCall],
         },
       ],
     })
@@ -561,10 +567,8 @@ describe('wallet_sendCalls', () => {
       method: 'wallet_sendCalls',
       params: [
         {
-          calls: [{ to: webAuthnAccounts[1].address }],
+          calls: [transferCall],
           capabilities: { sync: true },
-          chainId: `0x${chain.id.toString(16)}`,
-          version: '2.0.0',
         },
       ],
     })

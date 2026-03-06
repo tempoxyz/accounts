@@ -3,10 +3,9 @@ import { Account } from 'viem/tempo'
 import { local, Provider } from 'zyzz/provider'
 
 const privateKey = generatePrivateKey()
-const account = Account.fromSecp256k1(privateKey)
+export const account = Account.fromSecp256k1(privateKey)
 
 export const provider = Provider.create({
-  testnet: true,
   adapter: local({
     loadAccounts: async () => [account],
     createAccount: async () => {
@@ -15,6 +14,6 @@ export const provider = Provider.create({
       return [account]
     },
   }),
+  testnet: true,
 })
 
-export { account }

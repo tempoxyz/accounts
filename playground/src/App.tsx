@@ -1,14 +1,14 @@
 import { Hex, Json } from 'ox'
+import { parseUnits } from 'viem'
+import { Actions } from 'viem/tempo'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 
 import { account, provider } from './provider.js'
 
 export function App() {
   return (
-    <div>
+    <div style={{ maxWidth: 640 }}>
       <h1>zyzz playground</h1>
-      <p>{account.address}</p>
-      <Faucet />
 
       <h2>State</h2>
       <ProviderState />
@@ -20,6 +20,7 @@ export function App() {
       <WalletConnect />
       <EthRequestAccounts />
       <WalletDisconnect />
+      <Faucet />
 
       <h2>Accounts &amp; Chain</h2>
       <EthAccounts />
@@ -30,13 +31,10 @@ export function App() {
       <WalletGetBalances />
 
       <h2>Transactions</h2>
-      <EthSendTransaction />
-      <EthSendTransactionSync />
-      <WalletSendCalls />
+      <Transactions />
 
       <h2>RPC Proxy (fallthrough)</h2>
       <EthBlockNumber />
-      <EthGetBalance />
     </div>
   )
 }
@@ -190,81 +188,165 @@ function WalletSwitchChain() {
 
 // -- Transactions --
 
-function EthSendTransaction() {
-  const [result, error, execute] = useRequest()
-  return (
-    <Method method="eth_sendTransaction" result={result} error={error}>
-      <button
-        onClick={() =>
-          execute(() =>
-            provider.request({
-              method: 'eth_sendTransaction',
-              params: [{ to: account.address, value: '0x0', data: '0x' }],
-            }),
-          )
-        }
-      >
-        Send Transaction
-      </button>
-    </Method>
+const tokens = {
+  pathUSD: '0x20c0000000000000000000000000000000000000',
+  alphaUSD: '0x20c0000000000000000000000000000000000001',
+  betaUSD: '0x20c0000000000000000000000000000000000002',
+  thetaUSD: '0x20c0000000000000000000000000000000000003',
+} as const satisfies Record<string, `0x${string}`>
+
+type CallRow = { to: `0x${string}`; token: `0x${string}`; amount: string }
+
+function defaultRow(i: number): CallRow {
+  return {
+    to: `0x${(i + 1).toString(16).padStart(40, '0')}` as `0x${string}`,
+    token: tokens.pathUSD,
+    amount: '1',
+  }
+}
+
+function buildCalls(rows: CallRow[]) {
+  return rows.map((r) =>
+    Actions.token.transfer.call({
+      to: r.to,
+      token: r.token,
+      amount: parseUnits(r.amount || '0', 6),
+    }),
   )
 }
 
-function EthSendTransactionSync() {
-  const [result, error, execute] = useRequest()
-  return (
-    <Method method="eth_sendTransactionSync" result={result} error={error}>
-      <button
-        onClick={() =>
-          execute(() =>
-            provider.request({
-              method: 'eth_sendTransactionSync',
-              params: [{ to: account.address, value: '0x0', data: '0x' }],
-            }),
-          )
-        }
-      >
-        Send Transaction (Sync)
-      </button>
-    </Method>
-  )
-}
+function Transactions() {
+  const [rows, setRows] = useState<CallRow[]>([defaultRow(0)])
+  const [result, setResult] = useState<unknown>()
+  const [error, setError] = useState<Error>()
+  const [method, setMethod] = useState('')
 
-function WalletSendCalls() {
-  const [result, error, execute] = useRequest()
+  function updateRow(i: number, field: keyof CallRow, value: CallRow[keyof CallRow]) {
+    setRows((prev) => prev.map((r, j) => (j === i ? { ...r, [field]: value } : r)))
+  }
+
+  async function send(label: string, fn: () => Promise<unknown>) {
+    setMethod(label)
+    try {
+      setError(undefined)
+      setResult(await fn())
+    } catch (e) {
+      setResult(undefined)
+      setError(e instanceof Error ? e : new Error(String(e)))
+    }
+  }
+
+  const calls = buildCalls(rows)
+
   return (
-    <Method method="wallet_sendCalls" result={result} error={error}>
-      <button
-        onClick={() =>
-          execute(() =>
-            provider.request({
-              method: 'wallet_sendCalls',
-              params: [{ calls: [{ to: account.address, data: '0x' }], version: '1.0' }],
-            }),
-          )
-        }
-      >
-        Send Calls
-      </button>
-      <button
-        onClick={() =>
-          execute(() =>
-            provider.request({
-              method: 'wallet_sendCalls',
-              params: [
-                {
-                  calls: [{ to: account.address, data: '0x' }],
-                  capabilities: { sync: true },
-                  version: '1.0',
-                },
-              ],
-            }),
-          )
-        }
-      >
-        Send Calls (Sync)
-      </button>
-    </Method>
+    <div>
+      <h3>Calls</h3>
+      <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
+        <colgroup>
+          <col style={{ width: '55%' }} />
+          <col style={{ width: '25%' }} />
+          <col style={{ width: '15%' }} />
+          <col style={{ width: '5%' }} />
+        </colgroup>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left' }}>To</th>
+            <th style={{ textAlign: 'left' }}>Token</th>
+            <th style={{ textAlign: 'left' }}>Amount</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              <td>
+                <input
+                  value={row.to}
+                  onChange={(e) => updateRow(i, 'to', e.target.value)}
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: 12, boxSizing: 'border-box' }}
+                  placeholder="0x..."
+                />
+              </td>
+              <td>
+                <select
+                  value={row.token}
+                  onChange={(e) => updateRow(i, 'token', e.target.value)}
+                  style={{ fontFamily: 'monospace', fontSize: 12 }}
+                >
+                  {Object.entries(tokens).map(([name, address]) => (
+                    <option key={address} value={address}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td>
+                <input
+                  value={row.amount}
+                  onChange={(e) => updateRow(i, 'amount', e.target.value)}
+                  style={{ width: 80, fontVariantNumeric: 'tabular-nums' }}
+                  placeholder="0"
+                />
+              </td>
+              <td>
+                {rows.length > 1 && (
+                  <button onClick={() => setRows((prev) => prev.filter((_, j) => j !== i))}>
+                    ✕
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button onClick={() => setRows((prev) => [...prev, defaultRow(prev.length)])}>+ Add Call</button>
+
+      <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          onClick={() =>
+            send('eth_sendTransaction', () =>
+              provider.request({ method: 'eth_sendTransaction', params: [{ calls }] }),
+            )
+          }
+        >
+          eth_sendTransaction
+        </button>
+        <button
+          onClick={() =>
+            send('eth_sendTransactionSync', () =>
+              provider.request({ method: 'eth_sendTransactionSync', params: [{ calls }] }),
+            )
+          }
+        >
+          eth_sendTransactionSync
+        </button>
+        <button
+          onClick={() =>
+            send('wallet_sendCalls', () =>
+              provider.request({ method: 'wallet_sendCalls', params: [{ calls }] }),
+            )
+          }
+        >
+          wallet_sendCalls
+        </button>
+        <button
+          onClick={() =>
+            send('wallet_sendCalls (sync)', () =>
+              provider.request({
+                method: 'wallet_sendCalls',
+                params: [{ calls, capabilities: { sync: true } }],
+              }),
+            )
+          }
+        >
+          wallet_sendCalls (sync)
+        </button>
+      </div>
+
+      {method && <h4>{method}</h4>}
+      {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
+      {result !== undefined && <pre>{Json.stringify(result, null, 2)}</pre>}
+    </div>
   )
 }
 
@@ -339,26 +421,6 @@ function EthBlockNumber() {
     <Method method="eth_blockNumber" result={result} error={error}>
       <button onClick={() => execute(() => provider.request({ method: 'eth_blockNumber' }))}>
         Get Block Number
-      </button>
-    </Method>
-  )
-}
-
-function EthGetBalance() {
-  const [result, error, execute] = useRequest()
-  return (
-    <Method method="eth_getBalance" result={result} error={error}>
-      <button
-        onClick={() =>
-          execute(() =>
-            provider.request({
-              method: 'eth_getBalance',
-              params: [account.address, 'latest'],
-            }),
-          )
-        }
-      >
-        Get Balance
       </button>
     </Method>
   )

@@ -8,6 +8,12 @@ import { webAuthn } from '../../test/adapters.js'
 import { accounts, chain, getClient } from '../../test/config.js'
 import * as Provider from './Provider.js'
 
+const transferCall = Actions.token.transfer.call({
+  to: Addresses.pathUsd,
+  token: Addresses.pathUsd,
+  amount: parseUnits('1', 6),
+})
+
 describe('create', () => {
   test('default: returns an EIP-1193 provider', async () => {
     const provider = Provider.create({
@@ -134,7 +140,7 @@ describe('eth_sendTransaction', () => {
 
     const hash = await provider.request({
       method: 'eth_sendTransaction',
-      params: [{ calls: [{ to: address }] }],
+      params: [{ calls: [transferCall] }],
     })
 
     expect(hash).toMatch(/^0x[0-9a-f]{64}$/)
@@ -153,7 +159,7 @@ describe('eth_sendTransactionSync', () => {
 
     const receipt = await provider.request({
       method: 'eth_sendTransactionSync',
-      params: [{ calls: [{ to: address }] }],
+      params: [{ calls: [transferCall] }],
     })
 
     const {
@@ -206,7 +212,7 @@ describe('eth_signTransaction', () => {
 
     const signed = await provider.request({
       method: 'eth_signTransaction',
-      params: [{ calls: [{ to: address }] }],
+      params: [{ calls: [transferCall] }],
     })
 
     expect(signed).toMatch(/^0x/)
@@ -223,7 +229,7 @@ describe('eth_signTransaction', () => {
 
     const signed = await provider.request({
       method: 'eth_signTransaction',
-      params: [{ calls: [{ to: address }] }],
+      params: [{ calls: [transferCall] }],
     })
 
     const receipt = await provider.request({
@@ -250,9 +256,7 @@ describe('wallet_sendCalls', () => {
       method: 'wallet_sendCalls',
       params: [
         {
-          calls: [{ to: address }],
-          chainId: `0x${chain.id.toString(16)}`,
-          version: '2.0.0',
+          calls: [transferCall],
         },
       ],
     })
@@ -273,10 +277,8 @@ describe('wallet_sendCalls', () => {
       method: 'wallet_sendCalls',
       params: [
         {
-          calls: [{ to: address }],
+          calls: [transferCall],
           capabilities: { sync: true },
-          chainId: `0x${chain.id.toString(16)}`,
-          version: '2.0.0',
         },
       ],
     })
@@ -302,10 +304,8 @@ describe('wallet_sendCalls', () => {
       method: 'wallet_sendCalls',
       params: [
         {
-          calls: [{ to: address }],
+          calls: [transferCall],
           capabilities: { sync: false },
-          chainId: `0x${chain.id.toString(16)}`,
-          version: '2.0.0',
         },
       ],
     })
