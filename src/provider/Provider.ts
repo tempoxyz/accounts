@@ -138,6 +138,15 @@ export function create(options: create.Options): create.ReturnType {
             })
           }
 
+          case 'eth_signTransaction': {
+            assertConnected()
+            const [decoded] = request._decoded.params
+            return await adapter.actions.signTransaction({
+              ...decoded,
+              _encoded: { method: request.method, params: request.params },
+            })
+          }
+
           case 'eth_sendTransactionSync': {
             assertConnected()
             const [decoded] = request._decoded.params

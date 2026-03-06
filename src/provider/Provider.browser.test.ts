@@ -190,6 +190,46 @@ describe('eth_sendTransactionSync', () => {
   })
 })
 
+describe('eth_signTransaction', () => {
+  test('default: signs transaction and returns serialized', async () => {
+    const provider = Provider.create({
+      adapter: local(),
+      chains: [chain],
+    })
+
+    await provider.request({ method: 'eth_requestAccounts' })
+
+    const signed = await provider.request({
+      method: 'eth_signTransaction',
+      params: [{ calls: [{ to: webAuthnAccounts[1].address }] }],
+    })
+
+    expect(signed).toMatch(/^0x/)
+  })
+
+  test('behavior: signed transaction can be sent via eth_sendRawTransactionSync', async () => {
+    const provider = Provider.create({
+      adapter: local(),
+      chains: [chain],
+    })
+
+    await provider.request({ method: 'eth_requestAccounts' })
+
+    const signed = await provider.request({
+      method: 'eth_signTransaction',
+      params: [{ calls: [{ to: webAuthnAccounts[1].address }] }],
+    })
+
+    const receipt = await provider.request({
+      method: 'eth_sendRawTransactionSync',
+      params: [signed],
+    })
+
+    expect(receipt.transactionHash).toMatch(/^0x[0-9a-f]{64}$/)
+    expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+  })
+})
+
 describe('wallet_sendCalls', () => {
   test('default: sends calls and returns id', async () => {
     const provider = Provider.create({

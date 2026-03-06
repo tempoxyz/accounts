@@ -1,5 +1,5 @@
-import { Provider as oxProvider } from 'ox'
-import { sendTransaction, sendTransactionSync } from 'viem/actions'
+import { Provider as ox_Provider } from 'ox'
+import { prepareTransactionRequest, sendTransaction, sendTransactionSync } from 'viem/actions'
 
 import type { Adapter, setup } from '../Adapter.js'
 import type * as Store from '../Store.js'
@@ -32,7 +32,7 @@ export function local(options: local.Options): Adapter {
     actions: {
       async createAccount() {
         if (!createAccount)
-          throw new oxProvider.UnsupportedMethodError({
+          throw new ox_Provider.UnsupportedMethodError({
             message: '`createAccount` not configured on adapter.',
           })
         return await createAccount()
@@ -43,6 +43,19 @@ export function local(options: local.Options): Adapter {
       async signPersonalMessage({ data, address }) {
         const account = params.getAccount(address, { signable: true })
         return await account.signMessage({ message: { raw: data } })
+      },
+      async signTransaction(parameters) {
+        const account = params.getAccount(undefined, { signable: true })
+        const client = params.getClient()
+        const { feePayer: _, ...rest } = parameters
+        const prepared = await prepareTransactionRequest(client, {
+          account,
+          // TODO: support fee payer
+          // feePayer,
+          ...rest,
+          type: 'tempo',
+        })
+        return await account.signTransaction(prepared as never)
       },
       async signTypedData({ data, address }) {
         const account = params.getAccount(address, { signable: true })

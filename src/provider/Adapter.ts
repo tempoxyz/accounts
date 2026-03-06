@@ -25,6 +25,8 @@ export type Adapter = {
     ) => Promise<Rpc.eth_sendTransactionSync.decoded>
     /** Sign a personal message (EIP-191). */
     signPersonalMessage: (params: signPersonalMessage.Parameters) => Promise<Hex>
+    /** Sign a transaction without broadcasting it. */
+    signTransaction: (request: ActionRequest<Rpc.eth_signTransaction>) => Promise<Hex>
     /** Sign EIP-712 typed data. */
     signTypedData: (params: signTypedData.Parameters) => Promise<Hex>
     /** Switch chain hook for adapter-specific handling. */

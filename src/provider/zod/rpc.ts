@@ -136,6 +136,13 @@ export const eth_sendTransaction = Schema.defineItem({
 })
 export type eth_sendTransaction = Schema.DefineItem<typeof eth_sendTransaction>
 
+export const eth_signTransaction = Schema.defineItem({
+  method: z.literal('eth_signTransaction'),
+  params: z.readonly(z.tuple([transactionRequest])),
+  returns: u.hex(),
+})
+export type eth_signTransaction = Schema.DefineItem<typeof eth_signTransaction>
+
 export const eth_sendTransactionSync = Schema.defineItem({
   method: z.literal('eth_sendTransactionSync'),
   params: z.readonly(z.tuple([transactionRequest])),
