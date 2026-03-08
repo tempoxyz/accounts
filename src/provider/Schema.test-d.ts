@@ -1,5 +1,5 @@
-import type { Hex } from 'viem'
 import type { RpcSchema } from 'ox'
+import type { Hex } from 'viem'
 import { describe, expectTypeOf, test } from 'vitest'
 
 import type * as Schema from './Schema.js'
@@ -36,9 +36,7 @@ describe('DefineItem', () => {
       params: readonly [
         {
           accessList?: { address: Hex; storageKeys: Hex[] }[] | undefined
-          calls?:
-            | readonly { data?: Hex | undefined; to?: Hex | undefined }[]
-            | undefined
+          calls?: readonly { data?: Hex | undefined; to?: Hex | undefined }[] | undefined
           chainId?: number | undefined
           feePayer?: boolean | string | undefined
           feeToken?: Hex | undefined

@@ -92,7 +92,7 @@ export function local(options: local.Options): Ceremony {
     },
 
     async getAuthenticationOptions(parameters = {}) {
-      const { challenge, credentialId } = parameters 
+      const { challenge, credentialId } = parameters
       const { options } = Authentication.getOptions({
         challenge,
         credentialId,

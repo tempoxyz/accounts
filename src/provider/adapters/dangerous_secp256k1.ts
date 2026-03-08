@@ -19,9 +19,7 @@ import { local } from './local.js'
  * const adapter = dangerous_secp256k1()
  * ```
  */
-export function dangerous_secp256k1(
-  options: dangerous_secp256k1.Options = {},
-): Adapter {
+export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}): Adapter {
   const { icon, name, rdns } = options
 
   let store: Store.Store | undefined
@@ -31,9 +29,7 @@ export function dangerous_secp256k1(
       const privateKey = Secp256k1.randomPrivateKey()
       const account = Account.fromSecp256k1(privateKey)
       return {
-        accounts: [
-          { address: account.address, keyType: 'secp256k1' as const, privateKey },
-        ],
+        accounts: [{ address: account.address, keyType: 'secp256k1' as const, privateKey }],
       }
     },
     async loadAccounts() {

@@ -1,7 +1,7 @@
 import { Hex, Json } from 'ox'
+import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { Actions } from 'viem/tempo'
-import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 
 import { type AdapterType, provider, switchAdapter } from './provider.js'
 
@@ -314,7 +314,9 @@ function Transactions() {
           ))}
         </tbody>
       </table>
-      <button onClick={() => setRows((prev) => [...prev, defaultRow(prev.length)])}>+ Add Call</button>
+      <button onClick={() => setRows((prev) => [...prev, defaultRow(prev.length)])}>
+        + Add Call
+      </button>
 
       <h3>Send</h3>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -369,7 +371,6 @@ function Transactions() {
         >
           wallet_sendCalls (sync)
         </button>
-
       </div>
 
       {method && <h4>{method}</h4>}

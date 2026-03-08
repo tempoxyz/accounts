@@ -35,14 +35,30 @@ export function webAuthn(options: webAuthn.Options): Adapter {
         const credential = await Registration.create({ options })
         const { publicKey } = await ceremony.verifyRegistration(credential)
         const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
-        return { accounts: [{ address: account.address, keyType: 'webAuthn', credential: { id: credential.id, publicKey } }] }
+        return {
+          accounts: [
+            {
+              address: account.address,
+              keyType: 'webAuthn',
+              credential: { id: credential.id, publicKey },
+            },
+          ],
+        }
       },
       async loadAccounts(params) {
         const { options } = await ceremony.getAuthenticationOptions(params)
         const response = await Authentication.sign({ options })
         const { publicKey } = await ceremony.verifyAuthentication(response)
         const account = Account.fromWebAuthnP256({ id: response.id, publicKey })
-        return { accounts: [{ address: account.address, keyType: 'webAuthn', credential: { id: response.id, publicKey } }] }
+        return {
+          accounts: [
+            {
+              address: account.address,
+              keyType: 'webAuthn',
+              credential: { id: response.id, publicKey },
+            },
+          ],
+        }
       },
     }),
     icon,

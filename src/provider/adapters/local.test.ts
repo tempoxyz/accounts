@@ -48,7 +48,9 @@ describe('local', () => {
     test('error: throws when createAccount not configured', async () => {
       const { adapter } = setup()
 
-      await expect(adapter.actions.createAccount({ name: 'test' })).rejects.toThrowErrorMatchingInlineSnapshot(
+      await expect(
+        adapter.actions.createAccount({ name: 'test' }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
         `[Provider.UnsupportedMethodError: \`createAccount\` not configured on adapter.]`,
       )
     })

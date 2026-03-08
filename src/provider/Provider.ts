@@ -45,8 +45,7 @@ export function create(options: create.Options): create.ReturnType {
   })
 
   adapter.setup?.({
-    getAccount: (address, options) =>
-      Account.find({ address, signable: options?.signable, store }),
+    getAccount: (address, options) => Account.find({ address, signable: options?.signable, store }),
     getClient: (chainId) => Client.fromChainId(chainId, { chains, store }),
     store,
   })
@@ -239,8 +238,7 @@ export function create(options: create.Options): create.ReturnType {
             case 'wallet_getCallsStatus': {
               const [id] = request._decoded.params ?? []
               if (!id) throw new Error('`id` not found')
-              if (!id.endsWith(sendCallsMagic.slice(2)))
-                throw new Error('`id` not supported')
+              if (!id.endsWith(sendCallsMagic.slice(2))) throw new Error('`id` not supported')
               Hex.assert(id)
               const hash = Hex.slice(id, 0, 32)
               const chainId = Hex.slice(id, 32, 64)
@@ -338,7 +336,9 @@ export function create(options: create.Options): create.ReturnType {
       info: {
         icon: adapter.icon ?? defaultIcon,
         name: adapter.name ?? 'Injected Wallet',
-        rdns: adapter.rdns ?? `com.${(adapter.name ?? 'Injected Wallet').toLowerCase().replace(/\s+/g, '')}`,
+        rdns:
+          adapter.rdns ??
+          `com.${(adapter.name ?? 'Injected Wallet').toLowerCase().replace(/\s+/g, '')}`,
         uuid: crypto.randomUUID(),
       },
       provider,

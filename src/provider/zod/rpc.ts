@@ -232,10 +232,7 @@ export namespace wallet_getCapabilities {
     method: z.literal('wallet_getCapabilities'),
     params: z.optional(
       z.readonly(
-        z.union([
-          z.tuple([u.address()]),
-          z.tuple([u.address(), z.readonly(z.array(u.hex()))]),
-        ]),
+        z.union([z.tuple([u.address()]), z.tuple([u.address(), z.readonly(z.array(u.hex()))])]),
       ),
     ),
     returns: z.record(

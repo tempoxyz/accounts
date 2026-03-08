@@ -1,14 +1,14 @@
+import { requestProviders } from 'mipd'
 import { Hex } from 'ox'
 import { type Address, createClient, custom, parseUnits } from 'viem'
 import { verifyHash, verifyMessage, verifyTypedData } from 'viem/actions'
 import { Actions, Addresses } from 'viem/tempo'
 import { describe, expect, test } from 'vitest'
-import { requestProviders } from 'mipd'
 
 import { accounts, chain, http } from '../../test/config.js'
+import { webAuthn } from './adapters/webAuthn.js'
 import * as Ceremony from './Ceremony.js'
 import * as Provider from './Provider.js'
-import { webAuthn } from './adapters/webAuthn.js'
 
 const ceremony = Ceremony.local({
   origin: 'http://localhost',

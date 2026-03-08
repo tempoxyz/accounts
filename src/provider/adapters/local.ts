@@ -1,10 +1,10 @@
 import { Provider as ox_Provider } from 'ox'
+import type { Hex } from 'viem'
 import { prepareTransactionRequest, sendTransaction } from 'viem/actions'
 
 import * as Account from '../Account.js'
 import type { Adapter, setup } from '../Adapter.js'
 import type * as Store from '../Store.js'
-import type { Hex } from 'viem'
 
 /**
  * Creates a local adapter where the app manages keys and signing in-process.
@@ -108,9 +108,20 @@ export function local(options: local.Options): Adapter {
 export declare namespace local {
   type Options = {
     /** Create a new account. Optional — omit for login-only flows. */
-    createAccount?: ((params: { digest?: `0x${string}` | undefined; name: string; userId?: string | undefined }) => Promise<{ accounts: readonly Store.Account[]; signature?: `0x${string}` | undefined }>) | undefined
+    createAccount?:
+      | ((params: {
+          digest?: `0x${string}` | undefined
+          name: string
+          userId?: string | undefined
+        }) => Promise<{
+          accounts: readonly Store.Account[]
+          signature?: `0x${string}` | undefined
+        }>)
+      | undefined
     /** Discover existing accounts (e.g. WebAuthn assertion). */
-    loadAccounts: (params?: { digest?: Hex | undefined; credentialId?: string | undefined } | undefined) => Promise<{ accounts: readonly Store.Account[]; signature?: Hex | undefined }>
+    loadAccounts: (
+      params?: { digest?: Hex | undefined; credentialId?: string | undefined } | undefined,
+    ) => Promise<{ accounts: readonly Store.Account[]; signature?: Hex | undefined }>
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */

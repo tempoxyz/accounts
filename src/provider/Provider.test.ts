@@ -670,7 +670,9 @@ describe.each(adapters)('$name', ({ adapter }) => {
           method: 'wallet_getCallsStatus',
           params: ['0xdeadbeef'],
         }),
-      ).rejects.toThrowErrorMatchingInlineSnapshot(`[RpcResponse.InternalError: \`id\` not supported]`)
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[RpcResponse.InternalError: \`id\` not supported]`,
+      )
     })
   })
 
@@ -776,7 +778,9 @@ describe.each(adapters)('$name', ({ adapter }) => {
       })
 
       expect(result.length).toMatchInlineSnapshot(`1`)
-      expect(result[0]!.address).toMatchInlineSnapshot(`"0x20c0000000000000000000000000000000000001"`)
+      expect(result[0]!.address).toMatchInlineSnapshot(
+        `"0x20c0000000000000000000000000000000000001"`,
+      )
       expect(typeof result[0]!.name).toMatch(/string/)
       expect(typeof result[0]!.symbol).toMatch(/string/)
       expect(typeof result[0]!.decimals).toMatchInlineSnapshot(`"number"`)
