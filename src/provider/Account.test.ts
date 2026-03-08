@@ -60,11 +60,11 @@ describe('hydrate', () => {
     expect(typeof result.sign).toMatchInlineSnapshot(`"function"`)
   })
 
-  test('behavior: hydrates headlessWebAuthn account', () => {
+  test('behavior: hydrates webAuthn_headless account', () => {
     const result = Account.hydrate(
       {
         address: accounts[0].address,
-        keyType: 'headlessWebAuthn',
+        keyType: 'webAuthn_headless',
         privateKey: privateKeys[0],
         rpId: 'example.com',
         origin: 'https://example.com',
@@ -83,7 +83,7 @@ describe('hydrate', () => {
   })
 })
 
-describe('fromAddress', () => {
+describe('find', () => {
   function setup(storeAccounts: readonly Account.Store[] = []) {
     const store = Store.create({ chainId: tempoLocalnet.id })
     store.setState({ accounts: storeAccounts, activeAccount: 0, status: 'connected' })
@@ -99,7 +99,7 @@ describe('fromAddress', () => {
       },
     ])
 
-    const result = Account.fromAddress({ store })
+    const result = Account.find({ store })
 
     expect(result.address).toMatchInlineSnapshot(`"${accounts[0].address}"`)
     expect(result.type).toMatchInlineSnapshot(`"json-rpc"`)
@@ -119,7 +119,7 @@ describe('fromAddress', () => {
       },
     ])
 
-    const result = Account.fromAddress({ address: accounts[1].address, store })
+    const result = Account.find({ address: accounts[1].address, store })
 
     expect(result.address).toMatchInlineSnapshot(`"${accounts[1].address}"`)
   })
@@ -133,7 +133,7 @@ describe('fromAddress', () => {
       },
     ])
 
-    const result = Account.fromAddress({ signable: true, store })
+    const result = Account.find({ signable: true, store })
 
     expect(result.type).toMatchInlineSnapshot(`"local"`)
     expect(typeof result.sign).toMatchInlineSnapshot(`"function"`)
@@ -143,14 +143,14 @@ describe('fromAddress', () => {
     const store = setup([])
 
     expect(() =>
-      Account.fromAddress({ address: accounts[0].address, store }),
+      Account.find({ address: accounts[0].address, store }),
     ).toThrowErrorMatchingInlineSnapshot(`[Error: Account ${accounts[0].address} not found.]`)
   })
 
   test('error: throws when no active account', () => {
     const store = setup([])
 
-    expect(() => Account.fromAddress({ store })).toThrowErrorMatchingInlineSnapshot(
+    expect(() => Account.find({ store })).toThrowErrorMatchingInlineSnapshot(
       `[Error: No active account.]`,
     )
   })

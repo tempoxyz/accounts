@@ -6,21 +6,21 @@ import * as Rpc from './zod/rpc.js'
 
 /** All provider-handled RPC method definitions. */
 export const schema = from([
-  Rpc.eth_accounts,
-  Rpc.eth_chainId,
-  Rpc.eth_requestAccounts,
-  Rpc.eth_sendTransaction,
-  Rpc.eth_signTransaction,
-  Rpc.eth_sendTransactionSync,
-  Rpc.eth_signTypedData_v4,
-  Rpc.personal_sign,
-  Rpc.wallet_sendCalls,
-  Rpc.wallet_getBalances,
-  Rpc.wallet_getCallsStatus,
-  Rpc.wallet_getCapabilities,
-  Rpc.wallet_connect,
-  Rpc.wallet_disconnect,
-  Rpc.wallet_switchEthereumChain,
+  Rpc.eth_accounts.schema,
+  Rpc.eth_chainId.schema,
+  Rpc.eth_requestAccounts.schema,
+  Rpc.eth_sendTransaction.schema,
+  Rpc.eth_signTransaction.schema,
+  Rpc.eth_sendTransactionSync.schema,
+  Rpc.eth_signTypedData_v4.schema,
+  Rpc.personal_sign.schema,
+  Rpc.wallet_sendCalls.schema,
+  Rpc.wallet_getBalances.schema,
+  Rpc.wallet_getCallsStatus.schema,
+  Rpc.wallet_getCapabilities.schema,
+  Rpc.wallet_connect.schema,
+  Rpc.wallet_disconnect.schema,
+  Rpc.wallet_switchEthereumChain.schema,
 ])
 
 /**

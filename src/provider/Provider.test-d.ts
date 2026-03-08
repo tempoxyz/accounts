@@ -27,7 +27,10 @@ describe('request', () => {
 
   test('wallet_connect', () => {
     expectTypeOf<Result<'wallet_connect'>>().toEqualTypeOf<{
-      accounts: readonly { address: `0x${string}`; capabilities: Record<string, unknown> }[]
+      accounts: readonly {
+        address: `0x${string}`
+        capabilities: { signature?: `0x${string}` | undefined }
+      }[]
     }>()
   })
 

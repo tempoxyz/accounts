@@ -21,7 +21,7 @@ export type Store = {
       privateKey: Hex
     }
   | {
-      keyType: 'headlessWebAuthn'
+      keyType: 'webAuthn_headless'
       privateKey: Hex
       rpId: string
       origin: string
@@ -29,7 +29,7 @@ export type Store = {
 >
 
 /** Resolves a viem Account from the store by address (or active account). */
-export function fromAddress(options: fromAddress.Options): LocalAccount {
+export function find(options: find.Options): LocalAccount {
   const { address, signable = false, store } = options
   const { accounts, activeAccount } = store.getState()
   const account = address ? accounts.find((a) => a.address === address) : accounts[activeAccount]
@@ -40,7 +40,7 @@ export function fromAddress(options: fromAddress.Options): LocalAccount {
   return hydrate(account, { sign: signable }) as never
 }
 
-export declare namespace fromAddress {
+export declare namespace find {
   type Options = {
     /** Address to resolve. Defaults to the active account. */
     address?: Address | undefined
@@ -76,7 +76,7 @@ export function hydrate(
       return TempoAccount.fromP256(account.privateKey)
     case 'webAuthn':
       return TempoAccount.fromWebAuthnP256(account.credential)
-    case 'headlessWebAuthn':
+    case 'webAuthn_headless':
       return TempoAccount.fromHeadlessWebAuthn(account.privateKey, {
         rpId: account.rpId,
         origin: account.origin,

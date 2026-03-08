@@ -25,16 +25,16 @@ export type Adapter = {
     loadAccounts: (params?: loadAccounts.Parameters | undefined) => Promise<loadAccounts.ReturnType>
     /** Send a transaction. */
     sendTransaction: (
-      request: ActionRequest<Rpc.eth_sendTransaction>,
-    ) => Promise<Rpc.eth_sendTransaction['returns']>
+      request: ActionRequest<Rpc.eth_sendTransaction.Schema>,
+    ) => Promise<Rpc.eth_sendTransaction.Schema['returns']>
     /** Send a transaction and wait for the receipt. */
     sendTransactionSync: (
-      request: ActionRequest<Rpc.eth_sendTransactionSync>,
-    ) => Promise<Rpc.eth_sendTransactionSync.decoded>
+      request: ActionRequest<Rpc.eth_sendTransactionSync.Schema>,
+    ) => Promise<Rpc.eth_sendTransactionSync.Schema['returns']>
     /** Sign a personal message (EIP-191). */
     signPersonalMessage: (params: signPersonalMessage.Parameters) => Promise<Hex>
     /** Sign a transaction without broadcasting it. */
-    signTransaction: (request: ActionRequest<Rpc.eth_signTransaction>) => Promise<Hex>
+    signTransaction: (request: ActionRequest<Rpc.eth_signTransaction.Schema>) => Promise<Hex>
     /** Sign EIP-712 typed data. */
     signTypedData: (params: signTypedData.Parameters) => Promise<Hex>
     /** Switch chain hook for adapter-specific handling. */

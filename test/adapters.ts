@@ -12,7 +12,7 @@ import { privateKeys, webAuthnAccounts } from './config.js'
 function toStoreAccount(index: number): Store.Account {
   return {
     address: webAuthnAccounts[index]!.address,
-    keyType: 'headlessWebAuthn',
+    keyType: 'webAuthn_headless',
     privateKey: privateKeys[index]!,
     rpId: 'example.com',
     origin: 'https://example.com',

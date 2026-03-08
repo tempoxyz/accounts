@@ -2,10 +2,10 @@ import { createClient, http } from 'viem'
 import { tempoLocalnet } from 'viem/chains'
 import { describe, expect, test } from 'vitest'
 
-import { headlessWebAuthn } from '../../../test/adapters.js'
-import { accounts as core_accounts, privateKeys } from '../../../test/config.js'
+import { accounts as core_accounts, privateKeys, webAuthnAccounts } from '../../../test/config.js'
 import * as Account from '../Account.js'
 import * as Store from '../Store.js'
+import { local } from './local.js'
 
 describe('local', () => {
   describe('loadAccounts', () => {
@@ -55,11 +55,24 @@ describe('local', () => {
   })
 })
 
-function setup(options: headlessWebAuthn.Options = {}) {
-  const adapter = headlessWebAuthn(options)
+function setup(overrides: Partial<local.Options> = {}) {
+  const adapter = local({
+    loadAccounts: async () => ({
+      accounts: [
+        {
+          address: webAuthnAccounts[0]!.address,
+          keyType: 'webAuthn_headless' as const,
+          privateKey: privateKeys[0]!,
+          rpId: 'example.com',
+          origin: 'https://example.com',
+        },
+      ],
+    }),
+    ...overrides,
+  })
   const store = Store.create({ chainId: tempoLocalnet.id })
   adapter.setup?.({
-    getAccount: (address) => Account.fromAddress({ address, signable: true, store }),
+    getAccount: (address) => Account.find({ address, signable: true, store }),
     getClient: () => createClient({ chain: tempoLocalnet, transport: http() }) as never,
     store,
   })
