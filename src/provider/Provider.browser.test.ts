@@ -13,15 +13,6 @@ import * as Provider from './Provider.js'
 
 const ceremony = Ceremony.server({ url: webauthnUrl })
 
-/** Registers a new account and returns its address. */
-async function connect(provider: ReturnType<typeof Provider.create>) {
-  const result = await provider.request({
-    method: 'wallet_connect',
-    params: [{ capabilities: { method: 'register' } }],
-  })
-  return result.accounts[0]!.address
-}
-
 const transferCall = Actions.token.transfer.call({
   to: Addresses.pathUsd,
   token: Addresses.pathUsd,
@@ -643,4 +634,14 @@ async function fundAccount(address: Address) {
     token: Addresses.pathUsd,
     amount: parseUnits('10', 6),
   })
+}
+
+
+/** Registers a new account and returns its address. */
+async function connect(provider: ReturnType<typeof Provider.create>) {
+  const result = await provider.request({
+    method: 'wallet_connect',
+    params: [{ capabilities: { method: 'register' } }],
+  })
+  return result.accounts[0]!.address
 }
