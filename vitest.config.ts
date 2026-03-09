@@ -29,7 +29,10 @@ export default defineConfig({
         test: {
           name: 'browser',
           include: ['./src/**/*.browser.test.ts'],
-          globalSetup: [join(import.meta.dirname, './test/setup.global.ts')],
+          globalSetup: [
+            join(import.meta.dirname, './test/setup.global.ts'),
+            join(import.meta.dirname, './test/webauthn.setup.global.ts'),
+          ],
           setupFiles: [
             join(import.meta.dirname, './test/setup.ts'),
             join(import.meta.dirname, './test/authenticator.setup.ts'),

@@ -4,14 +4,21 @@ import {
   type Router,
   type RouterOptions,
 } from '@remix-run/fetch-router'
-import { RpcRequest, RpcResponse } from 'ox'
+import { Base64, Bytes, Hex, RpcRequest, RpcResponse } from 'ox'
+import { Credential } from 'ox/webauthn'
 import { type Chain, type Client, createClient, type Transport } from 'viem'
 import type { LocalAccount } from 'viem/accounts'
 import { signTransaction } from 'viem/actions'
 import { Formatters, Transaction } from 'viem/tempo'
+import {
+  Authentication,
+  Registration,
+  type Registration as Registration_Types,
+} from 'webauthx/server'
 
 import type { OneOf } from '../internal/types.js'
 import * as RequestListener from './internal/requestListener.js'
+import type { Kv } from './Kv.js'
 
 export type Handler = Router & {
   listener: (req: any, res: any) => void
@@ -91,6 +98,8 @@ export declare namespace from {
     headers?: string | undefined
     /** Whether to allow credentials. */
     credentials?: boolean | undefined
+    /** Headers to expose to the browser. */
+    exposeHeaders?: string | undefined
     /** Max age for preflight cache in seconds. */
     maxAge?: number | undefined
   }
@@ -388,6 +397,199 @@ export declare namespace feePayer {
     >
 }
 
+/**
+ * Instantiates a WebAuthn ceremony handler that manages registration and
+ * authentication flows server-side.
+ *
+ * Exposes 4 POST endpoints following the webauthx convention:
+ * - `POST /register/options` — generate credential creation options
+ * - `POST /register` — verify registration and store credential
+ * - `POST /login/options` — generate credential request options
+ * - `POST /login` — verify authentication
+ *
+ * @example
+ * ```ts
+ * import { Handler, Kv } from 'zyzz/server'
+ *
+ * const handler = Handler.webauthn({
+ *   kv: Kv.memory(),
+ *   origin: 'https://example.com',
+ *   rpId: 'example.com',
+ * })
+ *
+ * export default handler
+ * ```
+ *
+ * @param options - Options.
+ * @returns Request handler.
+ */
+export function webauthn(options: webauthn.Options): Handler {
+  const { kv, onAuthenticate, onRegister, origin: origin_, rpId, ...rest } = options
+  const origin = origin_ as string | string[]
+
+  const router = from(rest)
+
+  router.post('/register/options', async ({ request: req }) => {
+    try {
+      const body = await req.json()
+      const { excludeCredentialIds, name, userId } = body as {
+        excludeCredentialIds?: string[]
+        name: string
+        userId?: string
+      }
+
+      const { challenge, options } = Registration.getOptions({
+        excludeCredentialIds,
+        name,
+        rp: { id: rpId, name: rpId },
+        ...(userId ? { user: { id: new TextEncoder().encode(userId), name } } : undefined),
+      })
+
+      await kv.set(`challenge:${challenge}`, true)
+
+      return Response.json({ options })
+    } catch (error) {
+      return Response.json({ error: (error as Error).message }, { status: 400 })
+    }
+  })
+
+  router.post('/register', async ({ request: req }) => {
+    try {
+      const credential = (await req.json()) as Registration_Types.Credential
+      const deserialized = Credential.deserialize(credential)
+
+      const clientData = JSON.parse(
+        Bytes.toString(new Uint8Array(deserialized.clientDataJSON)),
+      ) as { challenge: string }
+      const challenge = Hex.fromBytes(Base64.toBytes(clientData.challenge))
+      const stored = await kv.get<true>(`challenge:${challenge}`)
+      if (!stored) throw new Error('Missing or expired challenge')
+      await kv.delete(`challenge:${challenge}`)
+
+      const result = Registration.verify(credential, {
+        challenge,
+        origin,
+        rpId,
+      })
+
+      const { publicKey } = result.credential
+      const credentialId = credential.id
+
+      await kv.set(`credential:${credentialId}`, { publicKey })
+
+      const json = { credentialId, publicKey }
+      const hook = await onRegister?.({ credentialId, publicKey, request: req })
+      return mergeResponse(json, hook)
+    } catch (error) {
+      return Response.json({ error: (error as Error).message }, { status: 400 })
+    }
+  })
+
+  router.post('/login/options', async ({ request: req }) => {
+    try {
+      const body = await req.json()
+      const {
+        allowCredentialIds,
+        credentialId,
+        mediation: _,
+      } = body as {
+        allowCredentialIds?: string[]
+        credentialId?: string
+        mediation?: string
+      }
+
+      const { challenge, options } = Authentication.getOptions({
+        credentialId: allowCredentialIds ?? credentialId,
+        rpId,
+      })
+
+      await kv.set(`challenge:${challenge}`, true)
+
+      return Response.json({ options })
+    } catch (error) {
+      return Response.json({ error: (error as Error).message }, { status: 400 })
+    }
+  })
+
+  router.post('/login', async ({ request: req }) => {
+    try {
+      const response = (await req.json()) as Authentication.Response
+
+      const clientData = JSON.parse(response.metadata.clientDataJSON) as {
+        challenge: string
+      }
+      const challenge = Hex.fromBytes(Base64.toBytes(clientData.challenge))
+      const stored = await kv.get<true>(`challenge:${challenge}`)
+      if (!stored) throw new Error('Missing or expired challenge')
+      await kv.delete(`challenge:${challenge}`)
+
+      const credentialData = await kv.get<{ publicKey: string }>(`credential:${response.id}`)
+      if (!credentialData) throw new Error('Unknown credential')
+
+      const valid = Authentication.verify(response, {
+        challenge,
+        origin,
+        publicKey: credentialData.publicKey as `0x${string}`,
+        rpId,
+      })
+      if (!valid) throw new Error('Authentication failed')
+
+      const userHandle = (response.raw.response as unknown as Record<string, string>).userHandle
+
+      const json = {
+        credentialId: response.id,
+        publicKey: credentialData.publicKey,
+        ...(userHandle ? { userId: userHandle } : undefined),
+      }
+      const hook = await onAuthenticate?.({ ...json, request: req })
+      return mergeResponse(json, hook)
+    } catch (error) {
+      return Response.json({ error: (error as Error).message }, { status: 400 })
+    }
+  })
+
+  return router
+}
+
+export declare namespace webauthn {
+  type Options = from.Options & {
+    /** Key-value store for challenges and credentials. */
+    kv: Kv
+    /** Called after a successful registration. The returned response is merged onto the default JSON response. */
+    onRegister?: (parameters: {
+      credentialId: string
+      publicKey: string
+      request: Request
+    }) => Response | Promise<Response> | void | Promise<void>
+    /** Called after a successful authentication. The returned response is merged onto the default JSON response. */
+    onAuthenticate?: (parameters: {
+      credentialId: string
+      publicKey: string
+      userId?: string | undefined
+      request: Request
+    }) => Response | Promise<Response> | void | Promise<void>
+    /** Expected origin(s) (e.g. `"https://example.com"` or `["https://a.com", "https://b.com"]`). */
+    origin: string | readonly string[]
+    /** Relying Party ID (e.g. `"example.com"`). */
+    rpId: string
+  }
+}
+
+/** @internal */
+async function mergeResponse(
+  json: Record<string, unknown>,
+  hook?: Response | void,
+): Promise<Response> {
+  if (!hook) return Response.json(json)
+  const extra = await hook.json().catch(() => ({}))
+  const headers = new Headers(hook.headers)
+  headers.set('content-type', 'application/json')
+  return new Response(JSON.stringify({ ...json, ...extra }), {
+    headers,
+    status: hook.status,
+  })
+}
+
 /** @internal */
 function normalizeHeaders(headers?: Headers | Record<string, string>): Headers {
   if (!headers) return new Headers()
@@ -407,6 +609,7 @@ function corsToHeaders(cors?: boolean | from.Cors): Headers {
   headers.set('Access-Control-Allow-Methods', config.methods ?? 'GET, POST, PUT, DELETE, OPTIONS')
   headers.set('Access-Control-Allow-Headers', config.headers ?? 'Content-Type')
   if (config.credentials) headers.set('Access-Control-Allow-Credentials', 'true')
+  if (config.exposeHeaders) headers.set('Access-Control-Expose-Headers', config.exposeHeaders)
   if (config.maxAge !== undefined) headers.set('Access-Control-Max-Age', String(config.maxAge))
 
   return headers

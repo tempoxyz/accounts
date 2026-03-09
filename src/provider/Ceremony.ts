@@ -114,7 +114,7 @@ export function local(options: local.Options): Ceremony {
       const { allowCredentialIds, challenge, credentialId } = parameters
       const { options } = Authentication.getOptions({
         challenge,
-        credentialId: allowCredentialIds as string[] | undefined ?? credentialId,
+        credentialId: (allowCredentialIds as string[] | undefined) ?? credentialId,
         rpId,
       })
       return { options }
@@ -134,5 +134,69 @@ export declare namespace local {
     origin: string
     /** Relying Party ID (e.g. `"example.com"`). */
     rpId: string
+  }
+}
+
+/**
+ * Creates a server-backed ceremony that delegates to a remote {@link Handler.webauthn} endpoint.
+ *
+ * All challenge generation, verification, and credential storage happen server-side.
+ * The client uses `fetch()` to communicate with 4 POST endpoints derived from the base URL.
+ *
+ * @example
+ * ```ts
+ * import { Ceremony } from 'zyzz/provider'
+ *
+ * const ceremony = Ceremony.server({ url: 'https://example.com/webauthn' })
+ * ```
+ */
+export function server(options: server.Options): Ceremony {
+  const { url } = options
+
+  return {
+    async getRegistrationOptions(parameters) {
+      const { excludeCredentialIds, name, userId } = parameters
+      const response = await fetch(`${url}/register/options`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ excludeCredentialIds, name, userId }),
+      })
+      return response.json()
+    },
+
+    async verifyRegistration(credential) {
+      const response = await fetch(`${url}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credential),
+      })
+      return response.json()
+    },
+
+    async getAuthenticationOptions(parameters = {}) {
+      const { allowCredentialIds, challenge, credentialId, mediation } = parameters
+      const response = await fetch(`${url}/login/options`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allowCredentialIds, challenge, credentialId, mediation }),
+      })
+      return response.json()
+    },
+
+    async verifyAuthentication(response) {
+      const res = await fetch(`${url}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(response),
+      })
+      return res.json()
+    },
+  }
+}
+
+export declare namespace server {
+  type Options = {
+    /** Base URL of the WebAuthn handler (e.g. `"https://example.com/webauthn"`). */
+    url: string
   }
 }
