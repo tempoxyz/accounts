@@ -994,7 +994,13 @@ describe('webauthn', () => {
         body: JSON.stringify({
           id: 'unknown',
           metadata: { authenticatorData: '0x00', clientDataJSON: '{"challenge":"0xdead"}' },
-          raw: { id: 'unknown', type: 'public-key', authenticatorAttachment: null, rawId: 'unknown', response: { clientDataJSON: 'e30' } },
+          raw: {
+            id: 'unknown',
+            type: 'public-key',
+            authenticatorAttachment: null,
+            rawId: 'unknown',
+            response: { clientDataJSON: 'e30' },
+          },
           signature: '0x00',
         }),
       })

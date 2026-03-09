@@ -170,7 +170,6 @@ describe('server (provider round-trip)', () => {
 })
 
 describe('server (hooks)', () => {
-
   test('behavior: onRegister merges extra JSON and headers', async () => {
     const regOptionsRes = await fetch(`${hooksUrl}/register/options`, {
       method: 'POST',

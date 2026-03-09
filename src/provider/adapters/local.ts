@@ -110,9 +110,7 @@ export declare namespace local {
       | ((params: createAccount.Parameters) => Promise<createAccount.ReturnType>)
       | undefined
     /** Discover existing accounts (e.g. WebAuthn assertion). */
-    loadAccounts: (
-      params?: loadAccounts.Parameters | undefined,
-    ) => Promise<loadAccounts.ReturnType>
+    loadAccounts: (params?: loadAccounts.Parameters | undefined) => Promise<loadAccounts.ReturnType>
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */
