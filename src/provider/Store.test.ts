@@ -89,7 +89,7 @@ describe('persistence', () => {
       chainId: 456,
     })
 
-    const raw = storage.getItem('zyzz.provider') as any
+    const raw = storage.getItem('store') as any
     expect(raw.state).toMatchInlineSnapshot(`
       {
         "accounts": [
@@ -146,7 +146,7 @@ describe('persistence', () => {
       ],
     })
 
-    const raw = storage.getItem('zyzz.provider') as any
+    const raw = storage.getItem('store') as any
     expect(raw.state.accounts).toMatchInlineSnapshot(`
       [
         {
@@ -171,7 +171,7 @@ describe('persistence', () => {
       ],
     })
 
-    const raw = storage.getItem('zyzz.provider') as any
+    const raw = storage.getItem('store') as any
     expect(raw.state.accounts).toMatchInlineSnapshot(`
       [
         {
@@ -199,7 +199,7 @@ describe('waitForHydration', () => {
   test('default: resolves after hydration', async () => {
     const storage = Storage.memory()
 
-    storage.setItem('zyzz.provider', {
+    storage.setItem('store', {
       state: {
         accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
         activeAccount: 0,

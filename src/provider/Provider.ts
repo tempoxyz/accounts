@@ -1,5 +1,6 @@
 import { announceProvider } from 'mipd'
-import { Hash, Hex, Provider as ox_Provider, RpcRequest, RpcResponse } from 'ox'
+import { Mppx, tempo as mppx_tempo } from 'mppx/client'
+import { Hash, Hex, Json, Provider as ox_Provider, RpcRequest, RpcResponse } from 'ox'
 import type { Chain } from 'viem'
 import { tempo, tempoModerato } from 'viem/chains'
 import { Actions } from 'viem/tempo'
@@ -44,9 +45,7 @@ export function create(options: create.Options): create.ReturnType {
     adapter,
     chains = [tempo, tempoModerato],
     testnet,
-    storage = typeof window !== 'undefined'
-      ? Storage.idb()
-      : Storage.memory(),
+    storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
   } = options
 
   const defaultChain = testnet
@@ -354,7 +353,7 @@ export function create(options: create.Options): create.ReturnType {
             },
             {
               enabled: shouldDedupe,
-              id: JSON.stringify({ method, params }),
+              id: Json.stringify({ method, params }),
             },
           )
         },
@@ -364,7 +363,7 @@ export function create(options: create.Options): create.ReturnType {
     { chains, store },
   )
 
-  if (typeof window !== 'undefined')
+  if (typeof window !== 'undefined') {
     announceProvider({
       info: {
         icon: adapter.icon ?? defaultIcon,
@@ -376,6 +375,19 @@ export function create(options: create.Options): create.ReturnType {
       },
       provider,
     } as never)
+  }
+
+  Mppx.create({
+    methods: [
+      mppx_tempo({
+        getClient: ({ chainId }) => {
+          const client = Client.fromChainId(chainId, { chains, store })
+          const account = Account.find({ store, signable: true })
+          return Object.assign(client, { account })
+        },
+      }),
+    ],
+  })
 
   return provider
 }

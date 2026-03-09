@@ -14,7 +14,7 @@ import * as Provider from './Provider.js'
 const ceremony = Ceremony.server({ url: webauthnUrl })
 
 const transferCall = Actions.token.transfer.call({
-  to: Addresses.pathUsd,
+  to: '0x0000000000000000000000000000000000000001',
   token: Addresses.pathUsd,
   amount: parseUnits('1', 6),
 })

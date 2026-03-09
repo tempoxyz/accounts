@@ -91,8 +91,7 @@ export function from(ceremony: Ceremony): Ceremony {
 export function local(options: local.Options = {}): Ceremony {
   const rpId = options.rpId ?? (typeof location !== 'undefined' ? location.hostname : 'localhost')
   const storage =
-    options.storage ??
-    (typeof window !== 'undefined' ? Storage.idb() : Storage.memory())
+    options.storage ?? (typeof window !== 'undefined' ? Storage.idb() : Storage.memory())
   const storageKey = 'credentials'
 
   return from({
@@ -109,8 +108,7 @@ export function local(options: local.Options = {}): Ceremony {
 
     async verifyRegistration(credential) {
       const publicKey = credential.publicKey
-      const credentials =
-        (await storage.getItem<Record<string, Hex>>(storageKey)) ?? {}
+      const credentials = (await storage.getItem<Record<string, Hex>>(storageKey)) ?? {}
       credentials[credential.id] = publicKey
       await storage.setItem(storageKey, credentials)
       return { credentialId: credential.id, publicKey }
@@ -127,8 +125,7 @@ export function local(options: local.Options = {}): Ceremony {
     },
 
     async verifyAuthentication(response) {
-      const credentials =
-        (await storage.getItem<Record<string, Hex>>(storageKey)) ?? {}
+      const credentials = (await storage.getItem<Record<string, Hex>>(storageKey)) ?? {}
       const publicKey = credentials[response.id]
       if (!publicKey) throw new Error(`Unknown credential: ${response.id}`)
       return { credentialId: response.id, publicKey }

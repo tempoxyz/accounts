@@ -79,7 +79,7 @@ describe('hydrate', () => {
   test('error: throws when sign is true but no sign data', () => {
     expect(() =>
       Account.hydrate({ address: accounts[0].address }, { sign: true }),
-    ).toThrowErrorMatchingInlineSnapshot(`[Error: Account "${accounts[0].address}" cannot sign.]`)
+    ).toThrowErrorMatchingInlineSnapshot(`[Provider.UnauthorizedError: Account "${accounts[0].address}" cannot sign.]`)
   })
 })
 
@@ -144,14 +144,14 @@ describe('find', () => {
 
     expect(() =>
       Account.find({ address: accounts[0].address, store }),
-    ).toThrowErrorMatchingInlineSnapshot(`[Error: Account ${accounts[0].address} not found.]`)
+    ).toThrowErrorMatchingInlineSnapshot(`[Provider.UnauthorizedError: Account "${accounts[0].address}" not found.]`)
   })
 
   test('error: throws when no active account', () => {
     const store = setup([])
 
     expect(() => Account.find({ store })).toThrowErrorMatchingInlineSnapshot(
-      `[Error: No active account.]`,
+      `[Provider.DisconnectedError: No active account.]`,
     )
   })
 })

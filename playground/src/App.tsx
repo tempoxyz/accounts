@@ -52,6 +52,9 @@ export function App() {
       <EthGetTransactionReceipt />
       <WalletGetCallsStatus />
 
+      <h2>MPP</h2>
+      <Fortune />
+
       <h2>RPC Proxy (fallthrough)</h2>
       <EthBlockNumber />
     </div>
@@ -501,6 +504,21 @@ function WalletGetBalances() {
           </tbody>
         </table>
       )}
+    </Method>
+  )
+}
+
+// -- Payments (mppx) --
+
+function Fortune() {
+  const [result, error, execute] = useRequest()
+  return (
+    <Method method="fetch /fortune" result={result} error={error}>
+      <button
+        onClick={() => execute(() => fetch('/fortune').then((r) => r.json()))}
+      >
+        Get Fortune (0.01 pathUSD)
+      </button>
     </Method>
   )
 }

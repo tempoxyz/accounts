@@ -59,10 +59,7 @@ function Connect() {
       >
         Register
       </button>
-      <button
-        type="button"
-        onClick={() => connect({ connector })}
-      >
+      <button type="button" onClick={() => connect({ connector })}>
         Login
       </button>
       <div>{status}</div>

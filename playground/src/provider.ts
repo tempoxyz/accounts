@@ -1,3 +1,4 @@
+import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 import { Ceremony, local, Provider, webAuthn } from 'zyzz/provider'
@@ -31,5 +32,6 @@ export function createProvider(adapterType: AdapterType) {
 }
 
 export function switchAdapter(adapterType: AdapterType) {
+  Mppx.restore()
   provider = createProvider(adapterType)
 }

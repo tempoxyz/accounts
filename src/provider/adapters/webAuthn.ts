@@ -48,9 +48,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter {
     async loadAccounts(params) {
       const credentialId = params?.selectAccount
         ? undefined
-        : (params?.credentialId ??
-          (await storage.getItem<string>('lastCredentialId')) ??
-          undefined)
+        : (params?.credentialId ?? (await storage.getItem<string>('lastCredentialId')) ?? undefined)
       const { options } = await ceremony.getAuthenticationOptions({
         ...params,
         credentialId,

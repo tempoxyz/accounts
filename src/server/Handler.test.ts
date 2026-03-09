@@ -840,8 +840,8 @@ describe('feePayer', () => {
           },
           "id": 1,
           "jsonrpc": "2.0",
-          }
-          `)
+        }
+      `)
     })
   })
 })
