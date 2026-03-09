@@ -2,6 +2,8 @@ import { Bytes } from 'ox'
 import type { Hex } from 'viem'
 import { Authentication, Registration } from 'webauthx/server'
 
+import * as Storage from './Storage.js'
+
 /** Pluggable strategy for WebAuthn registration and authentication ceremonies. */
 export type Ceremony = {
   /** Get credential creation options for `navigator.credentials.create()`. */
@@ -88,11 +90,12 @@ export function from(ceremony: Ceremony): Ceremony {
  */
 export function local(options: local.Options = {}): Ceremony {
   const rpId = options.rpId ?? (typeof location !== 'undefined' ? location.hostname : 'localhost')
+  const storage =
+    options.storage ??
+    (typeof window !== 'undefined' ? Storage.idb() : Storage.memory())
+  const storageKey = 'credentials'
 
-  /** In-memory credential store: `credentialId → publicKey (hex)`. */
-  const credentials = new Map<string, Hex>()
-
-  return {
+  return from({
     async getRegistrationOptions(parameters) {
       const { excludeCredentialIds, name, userId } = parameters
       const { options } = Registration.getOptions({
@@ -106,7 +109,10 @@ export function local(options: local.Options = {}): Ceremony {
 
     async verifyRegistration(credential) {
       const publicKey = credential.publicKey
-      credentials.set(credential.id, publicKey)
+      const credentials =
+        (await storage.getItem<Record<string, Hex>>(storageKey)) ?? {}
+      credentials[credential.id] = publicKey
+      await storage.setItem(storageKey, credentials)
       return { credentialId: credential.id, publicKey }
     },
 
@@ -121,17 +127,21 @@ export function local(options: local.Options = {}): Ceremony {
     },
 
     async verifyAuthentication(response) {
-      const publicKey = credentials.get(response.id)
+      const credentials =
+        (await storage.getItem<Record<string, Hex>>(storageKey)) ?? {}
+      const publicKey = credentials[response.id]
       if (!publicKey) throw new Error(`Unknown credential: ${response.id}`)
       return { credentialId: response.id, publicKey }
     },
-  }
+  })
 }
 
 export declare namespace local {
   type Options = {
     /** Relying Party ID (e.g. `"example.com"`). @default location.hostname */
     rpId?: string | undefined
+    /** Storage adapter for credential persistence. @default Storage.idb() in browser, Storage.memory() otherwise. */
+    storage?: Storage.Storage | undefined
   }
 }
 
@@ -162,7 +172,7 @@ export function server(options: server.Options): Ceremony {
     return json
   }
 
-  return {
+  return from({
     async getRegistrationOptions(parameters) {
       const { excludeCredentialIds, name, userId } = parameters
       return request('/register/options', { excludeCredentialIds, name, userId })
@@ -180,7 +190,7 @@ export function server(options: server.Options): Ceremony {
     async verifyAuthentication(response) {
       return request('/login', response)
     },
-  }
+  })
 }
 
 export declare namespace server {

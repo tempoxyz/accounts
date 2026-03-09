@@ -72,6 +72,7 @@ describe('DefineItem', () => {
                     digest?: Hex | undefined
                     credentialId?: string | undefined
                     method?: 'login' | undefined
+                    selectAccount?: boolean | undefined
                   }
                 | undefined
               version?: string | undefined

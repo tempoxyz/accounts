@@ -261,6 +261,7 @@ export namespace wallet_connect {
           digest: z.optional(u.hex()),
           credentialId: z.optional(z.string()),
           method: z.optional(z.literal('login')),
+          selectAccount: z.optional(z.boolean()),
         }),
       ]),
     ),

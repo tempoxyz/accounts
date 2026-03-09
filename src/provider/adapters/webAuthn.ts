@@ -3,8 +3,8 @@ import { Account } from 'viem/tempo'
 import { Authentication, Registration } from 'webauthx/client'
 
 import type { Adapter } from '../Adapter.js'
-import type { Ceremony } from '../Ceremony.js'
-import type * as Store from '../Store.js'
+import * as Ceremony from '../Ceremony.js'
+import type * as Storage from '../Storage.js'
 import { local } from './local.js'
 
 /**
@@ -22,42 +22,62 @@ import { local } from './local.js'
  * const adapter = webAuthn({ ceremony })
  * ```
  */
-export function webAuthn(options: webAuthn.Options): Adapter {
-  const { ceremony, icon, name, rdns } = options
+export function webAuthn(options: webAuthn.Options = {}): Adapter {
+  const { icon, name, rdns } = options
+
+  let ceremony: Ceremony.Ceremony
+  let storage: Storage.Storage
+
+  const adapter = local({
+    async createAccount(params) {
+      const { options } = await ceremony.getRegistrationOptions(params)
+      const credential = await Registration.create({ options })
+      const { publicKey } = await ceremony.verifyRegistration(credential)
+      await storage.setItem('lastCredentialId', credential.id)
+      const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
+      return {
+        accounts: [
+          {
+            address: account.address,
+            keyType: 'webAuthn',
+            credential: { id: credential.id, publicKey },
+          },
+        ],
+      }
+    },
+    async loadAccounts(params) {
+      const credentialId = params?.selectAccount
+        ? undefined
+        : (params?.credentialId ??
+          (await storage.getItem<string>('lastCredentialId')) ??
+          undefined)
+      const { options } = await ceremony.getAuthenticationOptions({
+        ...params,
+        credentialId,
+      })
+      const response = await Authentication.sign({ options })
+      const { publicKey } = await ceremony.verifyAuthentication(response)
+      await storage.setItem('lastCredentialId', response.id)
+      const account = Account.fromWebAuthnP256({ id: response.id, publicKey })
+      return {
+        accounts: [
+          {
+            address: account.address,
+            keyType: 'webAuthn',
+            credential: { id: response.id, publicKey },
+          },
+        ],
+      }
+    },
+  })
 
   return {
-    ...local({
-      async createAccount(params) {
-        const { options } = await ceremony.getRegistrationOptions(params)
-        const credential = await Registration.create({ options })
-        const { publicKey } = await ceremony.verifyRegistration(credential)
-        const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
-        return {
-          accounts: [
-            {
-              address: account.address,
-              keyType: 'webAuthn',
-              credential: { id: credential.id, publicKey },
-            },
-          ],
-        }
-      },
-      async loadAccounts(params) {
-        const { options } = await ceremony.getAuthenticationOptions(params)
-        const response = await Authentication.sign({ options })
-        const { publicKey } = await ceremony.verifyAuthentication(response)
-        const account = Account.fromWebAuthnP256({ id: response.id, publicKey })
-        return {
-          accounts: [
-            {
-              address: account.address,
-              keyType: 'webAuthn',
-              credential: { id: response.id, publicKey },
-            },
-          ],
-        }
-      },
-    }),
+    ...adapter,
+    setup(params) {
+      storage = params.storage
+      ceremony = options.ceremony ?? Ceremony.local({ storage })
+      return adapter.setup?.(params)
+    },
     icon,
     name,
     rdns,
@@ -67,8 +87,8 @@ export function webAuthn(options: webAuthn.Options): Adapter {
 
 export declare namespace webAuthn {
   type Options = {
-    /** Ceremony strategy for WebAuthn registration and authentication. */
-    ceremony: Ceremony
+    /** Ceremony strategy for WebAuthn registration and authentication. @default Ceremony.local() */
+    ceremony?: Ceremony.Ceremony | undefined
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */

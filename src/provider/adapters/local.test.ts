@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest'
 
 import { accounts as core_accounts, privateKeys, webAuthnAccounts } from '../../../test/config.js'
 import * as Account from '../Account.js'
+import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { local } from './local.js'
 
@@ -72,10 +73,12 @@ function setup(overrides: Partial<local.Options> = {}) {
     }),
     ...overrides,
   })
-  const store = Store.create({ chainId: tempoLocalnet.id })
+  const storage = Storage.memory()
+  const store = Store.create({ chainId: tempoLocalnet.id, storage })
   adapter.setup?.({
     getAccount: (address) => Account.find({ address, signable: true, store }),
     getClient: () => createClient({ chain: tempoLocalnet, transport: http() }) as never,
+    storage,
     store,
   })
   return { adapter, store }

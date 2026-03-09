@@ -13,6 +13,14 @@ import * as Storage from './Storage.js'
 import * as Store from './Store.js'
 import * as Request from './zod/request.js'
 
+export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
+  ox_Provider.Emitter & {
+    /** Configured chains. */
+    chains: readonly [Chain, ...Chain[]]
+    /** Reactive state store. */
+    store: Store.Store
+  }
+
 /**
  * Creates an EIP-1193 provider with a pluggable adapter.
  *
@@ -32,7 +40,14 @@ import * as Request from './zod/request.js'
  * ```
  */
 export function create(options: create.Options): create.ReturnType {
-  const { adapter, chains = [tempo, tempoModerato], testnet, storage, storageKey } = options
+  const {
+    adapter,
+    chains = [tempo, tempoModerato],
+    testnet,
+    storage = typeof window !== 'undefined'
+      ? Storage.idb()
+      : Storage.memory(),
+  } = options
 
   const defaultChain = testnet
     ? (chains.find((c) => c.testnet) ?? chains[chains.length - 1]!)
@@ -42,12 +57,12 @@ export function create(options: create.Options): create.ReturnType {
     chainId: defaultChain.id,
     internal_persistPrivate: adapter.internal_persistPrivate,
     storage,
-    storageKey,
   })
 
   adapter.setup?.({
     getAccount: (address, options) => Account.find({ address, signable: options?.signable, store }),
     getClient: (chainId) => Client.fromChainId(chainId, { chains, store }),
+    storage,
     store,
   })
 
@@ -301,8 +316,9 @@ export function create(options: create.Options): create.ReturnType {
                         userId: capabilities.userId,
                       })
                     return await adapter.actions.loadAccounts({
-                      digest: capabilities?.digest,
                       credentialId: capabilities?.credentialId,
+                      digest: capabilities?.digest,
+                      selectAccount: capabilities?.selectAccount,
                     })
                   })()
                   mergeAccounts(newAccounts)
@@ -377,21 +393,13 @@ export declare namespace create {
      * @default [tempo, tempoModerato]
      */
     chains?: readonly [Chain, ...Chain[]] | undefined
-    /** Storage adapter for persistence. */
+    /** Storage adapter for persistence. @default Storage.idb() in browser, Storage.memory() otherwise. */
     storage?: Storage.Storage | undefined
-    /** Storage key for persistence. */
-    storageKey?: string | undefined
     /**
      * Default to the first testnet chain.
      * @default false
      */
     testnet?: boolean | undefined
   }
-  type ReturnType = ox_Provider.Provider<{ schema: Schema.Ox }> &
-    ox_Provider.Emitter & {
-      /** Configured chains. */
-      chains: readonly [Chain, ...Chain[]]
-      /** Reactive state store. */
-      store: Store.Store
-    }
+  type ReturnType = Provider
 }

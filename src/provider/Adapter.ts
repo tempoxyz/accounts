@@ -2,6 +2,7 @@ import type { Client, Hex, Transport } from 'viem'
 import type { Address, LocalAccount } from 'viem/accounts'
 import type { tempo } from 'viem/chains'
 
+import type * as Storage from './Storage.js'
 import type * as Store from './Store.js'
 import type * as Rpc from './zod/rpc.js'
 
@@ -63,6 +64,8 @@ export declare namespace setup {
     ) => LocalAccount
     /** Get the viem client for a given chain ID. Defaults to the active chain. */
     getClient: (chainId?: number | undefined) => Client<Transport, typeof tempo>
+    /** Storage adapter used by the provider. */
+    storage: Storage.Storage
     /** Reactive state store. */
     store: Store.Store
   }
@@ -86,10 +89,12 @@ export declare namespace createAccount {
 
 export declare namespace loadAccounts {
   type Parameters = {
-    /** Digest to sign. */
-    digest?: Hex | undefined
     /** Credential ID to restrict authentication to a specific credential. */
     credentialId?: string | undefined
+    /** Digest to sign. */
+    digest?: Hex | undefined
+    /** When `true`, prompts the user to pick from all available credentials instead of using the last-used one. */
+    selectAccount?: boolean | undefined
   }
   type ReturnType = {
     /** Loaded accounts. */

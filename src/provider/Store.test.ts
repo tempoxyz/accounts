@@ -89,7 +89,7 @@ describe('persistence', () => {
       chainId: 456,
     })
 
-    const raw = storage.getItem('tempo.account') as any
+    const raw = storage.getItem('zyzz.provider') as any
     expect(raw.state).toMatchInlineSnapshot(`
       {
         "accounts": [
@@ -146,7 +146,7 @@ describe('persistence', () => {
       ],
     })
 
-    const raw = storage.getItem('tempo.account') as any
+    const raw = storage.getItem('zyzz.provider') as any
     expect(raw.state.accounts).toMatchInlineSnapshot(`
       [
         {
@@ -171,7 +171,7 @@ describe('persistence', () => {
       ],
     })
 
-    const raw = storage.getItem('tempo.account') as any
+    const raw = storage.getItem('zyzz.provider') as any
     expect(raw.state.accounts).toMatchInlineSnapshot(`
       [
         {
@@ -183,16 +183,15 @@ describe('persistence', () => {
     `)
   })
 
-  test('behavior: custom storageKey', async () => {
-    const storage = Storage.memory()
-    const store = Store.create({ chainId: 123, storage, storageKey: 'custom.key' })
+  test('behavior: custom storage key', async () => {
+    const storage = Storage.memory({ key: 'custom' })
+    const store = Store.create({ chainId: 123, storage })
     await Store.waitForHydration(store)
 
     store.setState({ chainId: 789 })
 
-    const raw = storage.getItem('custom.key') as any
+    const raw = storage.getItem('store') as any
     expect(raw.state.chainId).toMatchInlineSnapshot(`789`)
-    expect(storage.getItem('tempo.account')).toMatchInlineSnapshot(`null`)
   })
 })
 
@@ -200,7 +199,7 @@ describe('waitForHydration', () => {
   test('default: resolves after hydration', async () => {
     const storage = Storage.memory()
 
-    storage.setItem('tempo.account', {
+    storage.setItem('zyzz.provider', {
       state: {
         accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
         activeAccount: 0,

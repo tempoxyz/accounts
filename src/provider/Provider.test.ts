@@ -947,16 +947,16 @@ describe.each(adapters)('$name', ({ adapter }) => {
 
   describe('persistence', () => {
     test('behavior: new provider hydrates accounts from shared storage', async () => {
-      const storage = Storage.memory()
+      const storage = Storage.memory({ key: 'persist-test' })
 
-      const provider1 = Provider.create({ adapter: adapter(), storage, storageKey: 'persist-test' })
+      const provider1 = Provider.create({ adapter: adapter(), storage })
       await connect(provider1)
 
       const accts1 = await provider1.request({ method: 'eth_accounts' })
       expect(accts1.length).toBeGreaterThanOrEqual(1)
 
       // Create a second provider with the same storage — it should hydrate.
-      const provider2 = Provider.create({ adapter: adapter(), storage, storageKey: 'persist-test' })
+      const provider2 = Provider.create({ adapter: adapter(), storage })
 
       // Wait for hydration + reconnection.
       await new Promise((resolve) => setTimeout(resolve, 200))
@@ -967,17 +967,13 @@ describe.each(adapters)('$name', ({ adapter }) => {
     })
 
     test('behavior: concurrent providers with different storage keys are isolated', async () => {
-      const storage = Storage.memory()
-
       const providerA = Provider.create({
         adapter: adapter(),
-        storage,
-        storageKey: 'provider-a',
+        storage: Storage.memory({ key: 'provider-a' }),
       })
       const providerB = Provider.create({
         adapter: adapter(),
-        storage,
-        storageKey: 'provider-b',
+        storage: Storage.memory({ key: 'provider-b' }),
       })
 
       await connect(providerA)
@@ -992,12 +988,12 @@ describe.each(adapters)('$name', ({ adapter }) => {
 
   describe('reconnection', () => {
     test('behavior: hydrated provider has accounts available', async () => {
-      const storage = Storage.memory()
+      const storage = Storage.memory({ key: 'reconnect' })
 
-      const provider1 = Provider.create({ adapter: adapter(), storage, storageKey: 'reconnect' })
+      const provider1 = Provider.create({ adapter: adapter(), storage })
       await connect(provider1)
 
-      const provider2 = Provider.create({ adapter: adapter(), storage, storageKey: 'reconnect' })
+      const provider2 = Provider.create({ adapter: adapter(), storage })
 
       // Wait for hydration.
       await new Promise((resolve) => setTimeout(resolve, 200))

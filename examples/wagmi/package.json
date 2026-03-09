@@ -1,0 +1,27 @@
+{
+  "name": "wagmi",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "catalog:default",
+    "react": "catalog:default",
+    "react-dom": "catalog:default",
+    "viem": "catalog:default",
+    "wagmi": "catalog:default",
+    "zyzz": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "catalog:default",
+    "@types/react-dom": "catalog:default",
+    "@vitejs/plugin-react": "catalog:default",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  }
+}

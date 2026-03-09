@@ -28,10 +28,8 @@ export type Store = Mutate<
 export type Options = {
   /** Initial chain ID. */
   chainId: number
-  /** Storage adapter for persistence. Defaults to `Storage.memory()`. */
+  /** Storage adapter for persistence. */
   storage?: Storage.Storage | undefined
-  /** Storage key. */
-  storageKey?: string | undefined
   /**
    * Whether to persist account key data (private keys, credentials) to storage.
    * When `false`, only addresses are persisted.
@@ -48,8 +46,9 @@ export type Options = {
 export function create(options: Options): Store {
   const {
     chainId,
-    storage = Storage.memory(),
-    storageKey = 'tempo.account',
+    storage = typeof window !== 'undefined'
+      ? Storage.idb({ key: 'zyzz' })
+      : Storage.memory({ key: 'zyzz' }),
     internal_persistPrivate = false,
   } = options
 
@@ -70,7 +69,7 @@ export function create(options: Options): Store {
               chainId: state.chainId ?? current.chainId,
             }
           },
-          name: storageKey,
+          name: 'store',
           partialize: (state) =>
             ({
               accounts: internal_persistPrivate
