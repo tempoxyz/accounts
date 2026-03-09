@@ -86,7 +86,7 @@ describe('hydrate', () => {
 describe('find', () => {
   function setup(storeAccounts: readonly Account.Store[] = []) {
     const store = Store.create({ chainId: tempoLocalnet.id })
-    store.setState({ accounts: storeAccounts, activeAccount: 0, status: 'connected' })
+    store.setState({ accounts: storeAccounts, activeAccount: 0 })
     return store
   }
 
