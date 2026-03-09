@@ -933,6 +933,21 @@ describe('webauthn', () => {
     })
   })
 
+  describe('challenge replay', () => {
+    test('behavior: challenge consumed after register/options → re-fetching is required', async () => {
+      // Get options twice — each should have a unique challenge stored in KV
+      const { options: a } = await ceremony.getRegistrationOptions({ name: 'Replay' })
+      const { options: b } = await ceremony.getRegistrationOptions({ name: 'Replay' })
+      expect(a.publicKey!.challenge).not.toBe(b.publicKey!.challenge)
+    })
+
+    test('behavior: challenge consumed after login/options → re-fetching is required', async () => {
+      const { options: a } = await ceremony.getAuthenticationOptions()
+      const { options: b } = await ceremony.getAuthenticationOptions()
+      expect(a.publicKey!.challenge).not.toBe(b.publicKey!.challenge)
+    })
+  })
+
   describe('hooks', () => {
     test('behavior: onRegister error does not call hook', async () => {
       let called = false

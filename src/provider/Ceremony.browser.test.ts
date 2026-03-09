@@ -46,7 +46,8 @@ describe('local', () => {
 })
 
 describe('server', () => {
-  const ceremony = Ceremony.server({ url: 'http://localhost:44320' })
+  const url = 'http://localhost:44320'
+  const ceremony = Ceremony.server({ url })
 
   test('default: register → verify returns valid publicKey hex', async () => {
     const { options } = await ceremony.getRegistrationOptions({ name: 'Server Test' })
@@ -70,6 +71,25 @@ describe('server', () => {
 
     expect(auth.publicKey).toBe(reg.publicKey)
     expect(auth.credentialId).toBe(reg.credentialId)
+  })
+
+  test('behavior: challenge consumed after use (replay → 400)', async () => {
+    const { options } = await ceremony.getRegistrationOptions({ name: 'Replay Test' })
+    const credential = await Registration.create({ options })
+
+    // First verify succeeds
+    const result = await ceremony.verifyRegistration(credential)
+    expect(result.credentialId).toBeTypeOf('string')
+
+    // Replay same credential → 400 (challenge consumed)
+    const response = await fetch(`${url}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credential),
+    })
+    expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body.error).toMatchInlineSnapshot(`"Missing or expired challenge"`)
   })
 
   test('behavior: multiple credentials return correct publicKeys', async () => {
