@@ -69,7 +69,7 @@ export const wagmiConfig = createConfig({
 
 | Adapter | Description |
 | --- | --- |
-| `connect` | Adapter for universal accounts, including [Tempo Wallet](https://wallet.tempo.xyz), orchestrated via [Tempo Connect](https://metronome-git-main-tempoxyz.vercel.app/ideas/tempo-connect) (an embedded iframe/popup dialog). |
+| `connect` 🚧 | Adapter for universal accounts, including [Tempo Wallet](https://wallet.tempo.xyz), orchestrated via [Tempo Connect](https://metronome-git-main-tempoxyz.vercel.app/ideas/tempo-connect) (an embedded iframe/popup dialog). |
 | `webAuthn` | App-bound passkey accounts using WebAuthn registration and authentication flows. |
 | `local` | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
 
