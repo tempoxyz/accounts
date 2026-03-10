@@ -22,7 +22,10 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     /** Returns a viem Account for the given address (or active account). */
     getAccount: Account.Find
     /** Returns a viem Client for the given (or current) chain ID. */
-    getClient(options?: { chainId?: number | undefined; feePayer?: string | undefined }): ViemClient<Transport, typeof tempo>
+    getClient(options?: {
+      chainId?: number | undefined
+      feePayer?: string | undefined
+    }): ViemClient<Transport, typeof tempo>
     /** Reactive state store. */
     store: Store.Store
   }
@@ -61,7 +64,9 @@ export function create(options: create.Options): create.ReturnType {
 
   const getAccount: Account.Find = (options = {}) => Account.find({ ...options, store }) as never
 
-  function getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
+  function getClient(
+    options: { chainId?: number | undefined; feePayer?: string | undefined } = {},
+  ) {
     const { chainId, feePayer } = options
     return Client.fromChainId(chainId, { chains, feePayer, store })
   }
@@ -520,7 +525,7 @@ export declare namespace create {
      * @default [tempo, tempoModerato]
      */
     chains?: readonly [Chain, ...Chain[]] | undefined
-    /** 
+    /**
      * Fee payer URL for interacting with a service running `Handler.feePayer`
      * from `zyzz/server`.
      */

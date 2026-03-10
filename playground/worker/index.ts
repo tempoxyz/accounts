@@ -1,6 +1,5 @@
 import { Mppx, tempo } from 'mppx/server'
 import { privateKeyToAccount } from 'viem/accounts'
-import { tempoModerato } from 'viem/chains'
 import { Handler, Kv } from 'zyzz/server'
 
 const payment = Mppx.create({

@@ -55,6 +55,7 @@ const keyAuthorization = z.looseObject({
 const call = z.looseObject({
   data: z.optional(u.hex()),
   to: z.optional(u.address()),
+  value: z.optional(u.bigint()),
 })
 
 const transactionRequest = z.looseObject({
@@ -251,7 +252,7 @@ export namespace wallet_authorizeAccessKey {
     address: z.optional(u.address()),
     expiry: z.number(),
     keyType: z.optional(keyType),
-    limits: z.optional(z.array(z.object({ token: u.address(), limit: u.bigint() }))),
+    limits: z.optional(z.readonly(z.array(z.object({ token: u.address(), limit: u.bigint() })))),
     publicKey: z.optional(u.hex()),
   })
 

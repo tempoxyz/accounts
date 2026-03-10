@@ -10,7 +10,7 @@ export const address = () => z.templateLiteral(['0x', z.string()], 'Expected add
 /** Hex-encoded bigint. Decodes from `0x...` hex to `bigint`. */
 export const bigint = () =>
   z.codec(hex(), z.bigint(), {
-    decode: (value) => Hex.toBigInt(value),
+    decode: (value) => (value === '0x' ? 0n : Hex.toBigInt(value)),
     encode: (value) => Hex.fromNumber(value),
   })
 
@@ -20,7 +20,7 @@ export const hex = () => z.templateLiteral(['0x', z.string()], 'Expected hex val
 /** Hex-encoded number. Decodes from `0x...` hex to `number`. */
 export const number = () =>
   z.codec(hex(), z.number(), {
-    decode: (value) => Hex.toNumber(value),
+    decode: (value) => (value === '0x' ? 0 : Hex.toNumber(value)),
     encode: (value) => Hex.fromNumber(value),
   })
 
