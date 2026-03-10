@@ -12,11 +12,13 @@ import {
 } from 'viem/actions'
 import { tempo, tempoModerato } from 'viem/chains'
 import { Account as TempoAccount, Actions, Addresses } from 'viem/tempo'
-import { describe, expect, test } from 'vitest'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import { headlessWebAuthn, secp256k1 } from '../../test/adapters.js'
 import { accounts, chain, getClient } from '../../test/config.js'
+import { createServer, type Server } from '../../test/utils.js'
 import * as Expiry from './Expiry.js'
+import * as Handler from '../server/Handler.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 
@@ -1519,6 +1521,128 @@ describe.each(adapters)('$name', ({ adapter }) => {
         keyAuthorization: KeyAuthorization.fromRpc(keyAuthorization!),
       })
       expect(receipt.status).toBe('success')
+    })
+  })
+
+  describe('feePayer', () => {
+    const feePayerAccount = accounts[0]!
+    let server: Server
+
+    beforeAll(async () => {
+      server = await createServer(
+        Handler.feePayer({
+          account: feePayerAccount,
+          client: getClient(),
+        }).listener,
+      )
+    })
+
+    afterAll(() => {
+      server.close()
+    })
+
+    test('default: feePayer URL on eth_sendTransaction', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{ calls: [transferCall], feePayer: server.url }],
+      })
+
+      expect(hash).toMatch(/^0x[0-9a-f]{64}$/)
+
+      const client = provider.getClient()
+      const receipt = await waitForTransactionReceipt(client, { hash })
+      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: feePayer URL on eth_sendTransactionSync', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall], feePayer: server.url }],
+      })
+
+      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: feePayer URL on eth_signTransaction', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const signed = await provider.request({
+        method: 'eth_signTransaction',
+        params: [{ calls: [transferCall], feePayer: server.url }],
+      })
+
+      expect(signed).toMatch(/^0x/)
+    })
+
+    test('behavior: feePayer: true uses default from Provider.create', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        feePayer: server.url,
+      })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{ calls: [transferCall], feePayer: true }],
+      })
+
+      expect(hash).toMatch(/^0x[0-9a-f]{64}$/)
+
+      const client = provider.getClient()
+      const receipt = await waitForTransactionReceipt(client, { hash })
+      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: feePayer: true on eth_sendTransactionSync', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        feePayer: server.url,
+      })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall], feePayer: true }],
+      })
+
+      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: no feePayer does not use fee payer', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{ calls: [transferCall] }],
+      })
+
+      expect(hash).toMatch(/^0x[0-9a-f]{64}$/)
+
+      const client = provider.getClient()
+      const receipt = await waitForTransactionReceipt(client, { hash })
+      expect(receipt.feePayer).not.toBe(feePayerAccount.address.toLowerCase())
     })
   })
 })

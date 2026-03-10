@@ -69,11 +69,20 @@ export declare namespace setup {
     /** Returns the rehydrated local account for the given address, or the active account if omitted. */
     getAccount: Account.Find
     /** Get the viem client for a given chain ID. Defaults to the active chain. */
-    getClient: (chainId?: number | undefined) => Client<Transport, typeof tempo>
+    getClient: (options?: getClient.Options | undefined) => Client<Transport, typeof tempo>
     /** Storage adapter used by the provider. */
     storage: Storage.Storage
     /** Reactive state store. */
     store: Store.Store
+  }
+}
+
+export declare namespace getClient {
+  type Options = {
+    /** Chain ID. Defaults to the active chain. */
+    chainId?: number | undefined
+    /** Fee payer service URL. */
+    feePayer?: string | undefined
   }
 }
 

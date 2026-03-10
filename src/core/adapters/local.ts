@@ -255,14 +255,16 @@ export function local(options: local.Options): Adapter {
         return await account.signMessage({ message: { raw: data } })
       },
       async signTransaction(parameters) {
-        const client = params.getClient()
-        // TODO: support fee payer
-        const { feePayer: _, ...rest } = parameters
+        const { feePayer, ...rest } = parameters
+        const client = params.getClient({
+          feePayer: typeof feePayer === 'string' ? feePayer : undefined,
+        })
         const { account, prepared } = await withAccessKey(async (account, keyAuthorization) => ({
           account,
           prepared: await prepareTransactionRequest(client, {
             account,
             ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
             keyAuthorization,
             type: 'tempo',
           }),
@@ -275,14 +277,16 @@ export function local(options: local.Options): Adapter {
         return await account.signTypedData({ domain, types, primaryType, message })
       },
       async sendTransaction(parameters) {
-        const client = params.getClient()
-        // TODO: support fee payer
-        const { feePayer: _, ...rest } = parameters
+        const { feePayer, ...rest } = parameters
+        const client = params.getClient({
+          feePayer: typeof feePayer === 'string' ? feePayer : undefined,
+        })
         const { account, prepared } = await withAccessKey(async (account, keyAuthorization) => ({
           account,
           prepared: await prepareTransactionRequest(client, {
             account,
             ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
             keyAuthorization,
             type: 'tempo',
           }),
@@ -294,14 +298,16 @@ export function local(options: local.Options): Adapter {
         })
       },
       async sendTransactionSync(parameters) {
-        const client = params.getClient()
-        // TODO: support fee payer
-        const { feePayer: _, ...rest } = parameters
+        const { feePayer, ...rest } = parameters
+        const client = params.getClient({
+          feePayer: typeof feePayer === 'string' ? feePayer : undefined,
+        })
         const { account, prepared } = await withAccessKey(async (account, keyAuthorization) => ({
           account,
           prepared: await prepareTransactionRequest(client, {
             account,
             ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
             keyAuthorization,
             type: 'tempo',
           }),

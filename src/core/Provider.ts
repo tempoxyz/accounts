@@ -22,7 +22,7 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     /** Returns a viem Account for the given address (or active account). */
     getAccount: Account.Find
     /** Returns a viem Client for the given (or current) chain ID. */
-    getClient(chainId?: number | undefined): ViemClient<Transport, typeof tempo>
+    getClient(options?: { chainId?: number | undefined; feePayer?: string | undefined }): ViemClient<Transport, typeof tempo>
     /** Reactive state store. */
     store: Store.Store
   }
@@ -44,6 +44,7 @@ export function create(options: create.Options): create.ReturnType {
     adapter,
     authorizeAccessKey: getAuthorizeAccessKey,
     chains = [tempo, tempoModerato],
+    feePayer: defaultFeePayer,
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
   } = options
@@ -60,8 +61,9 @@ export function create(options: create.Options): create.ReturnType {
 
   const getAccount: Account.Find = (options = {}) => Account.find({ ...options, store }) as never
 
-  function getClient(chainId?: number) {
-    return Client.fromChainId(chainId, { chains, store })
+  function getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
+    const { chainId, feePayer } = options
+    return Client.fromChainId(chainId, { chains, feePayer, store })
   }
 
   adapter.setup?.({ getAccount, getClient, storage, store })
@@ -93,6 +95,13 @@ export function create(options: create.Options): create.ReturnType {
   function assertConnected() {
     if (store.getState().accounts.length === 0)
       throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
+  }
+
+  /** Resolves the `feePayer` field from a transaction request into a URL string or `undefined`. */
+  function resolveFeePayer(feePayer: string | boolean | undefined): string | undefined {
+    if (typeof feePayer === 'string') return feePayer
+    if (feePayer === true) return defaultFeePayer
+    return undefined
   }
 
   /** Merges new accounts into the store, deduplicating by address, and sets the first new account as active. */
@@ -180,6 +189,7 @@ export function create(options: create.Options): create.ReturnType {
                     const [decoded] = request._decoded.params
                     return (await adapter.actions.sendTransaction({
                       ...decoded,
+                      feePayer: resolveFeePayer(decoded.feePayer),
                       _encoded: { method: request.method, params: request.params },
                     })) satisfies Rpc.eth_sendTransaction.Encoded['returns']
                   }
@@ -189,6 +199,7 @@ export function create(options: create.Options): create.ReturnType {
                     const [decoded] = request._decoded.params
                     return (await adapter.actions.signTransaction({
                       ...decoded,
+                      feePayer: resolveFeePayer(decoded.feePayer),
                       _encoded: { method: request.method, params: request.params },
                     })) satisfies Rpc.eth_signTransaction.Encoded['returns']
                   }
@@ -198,6 +209,7 @@ export function create(options: create.Options): create.ReturnType {
                     const [decoded] = request._decoded.params
                     return (await adapter.actions.sendTransactionSync({
                       ...decoded,
+                      feePayer: resolveFeePayer(decoded.feePayer),
                       _encoded: { method: request.method, params: request.params },
                     })) satisfies Rpc.eth_sendTransactionSync.Encoded['returns']
                   }
@@ -225,8 +237,10 @@ export function create(options: create.Options): create.ReturnType {
                     const decoded = request._decoded.params?.[0]
                     const { calls = [], capabilities } = decoded ?? {}
                     const sync = capabilities?.sync
+                    const feePayer = resolveFeePayer(defaultFeePayer ? true : undefined)
                     const txRequest = {
                       calls,
+                      ...(feePayer ? { feePayer } : {}),
                       _encoded: { method: 'eth_sendTransaction' as const, params: [{}] as const },
                     }
                     if (!sync) {
@@ -506,6 +520,13 @@ export declare namespace create {
      * @default [tempo, tempoModerato]
      */
     chains?: readonly [Chain, ...Chain[]] | undefined
+    /**
+     * Default fee payer service URL.
+     *
+     * When set, transactions with `feePayer: true` will use this URL.
+     * The service should implement the `Handler.feePayer` protocol.
+     */
+    feePayer?: string | undefined
     /** Storage adapter for persistence. @default Storage.idb() in browser, Storage.memory() otherwise. */
     storage?: Storage.Storage | undefined
     /**
