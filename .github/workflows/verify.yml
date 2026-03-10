@@ -11,9 +11,6 @@ jobs:
     steps:
       - name: Clone repository
         uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-          token: ${{ secrets.GH_PAT }}
 
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies
@@ -34,14 +31,12 @@ jobs:
     strategy:
       matrix:
         tag:
-          - https://rpc.testnet.tempo.xyz
+          - latest
+          - https://rpc.moderato.tempo.xyz
 
     steps:
       - name: Clone repository
         uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-          token: ${{ secrets.GH_PAT }}
 
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies
