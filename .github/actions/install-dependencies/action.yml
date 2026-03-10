@@ -39,9 +39,9 @@ runs:
     - name: Install Playwright browsers
       if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: npx playwright install chromium --with-deps
+      run: pnpx playwright install chromium --with-deps
 
     - name: Install Playwright system deps
       if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
       shell: bash
-      run: npx playwright install-deps chromium
+      run: pnpx playwright install-deps chromium
