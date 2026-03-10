@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react(), cloudflare()],
   resolve: {
     alias: {
-      zyzz: path.resolve(__dirname, '../src'),
+      '@tempoxyz/accounts': path.resolve(__dirname, '../src'),
     },
   },
 })

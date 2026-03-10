@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "zyzz-playground",
+  "name": "accounts-playground",
   "compatibility_date": "2026-03-09",
   "main": "./worker/index.ts",
   "assets": {

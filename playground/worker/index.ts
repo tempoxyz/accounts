@@ -1,6 +1,6 @@
 import { Mppx, tempo } from 'mppx/server'
 import { privateKeyToAccount } from 'viem/accounts'
-import { Handler, Kv } from 'zyzz/server'
+import { Handler, Kv } from '@tempoxyz/accounts/server'
 
 const payment = Mppx.create({
   methods: [
@@ -10,7 +10,7 @@ const payment = Mppx.create({
       testnet: true,
     }),
   ],
-  realm: 'zyzz-playground',
+  realm: 'accounts-playground',
   secretKey: 'playground-secret-key',
 })
 

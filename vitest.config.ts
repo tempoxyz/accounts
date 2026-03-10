@@ -5,7 +5,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   resolve: {
     alias: {
-      zyzz: join(import.meta.dirname, './src'),
+      '@tempoxyz/accounts': join(import.meta.dirname, './src'),
     },
   },
   test: {

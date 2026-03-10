@@ -56,12 +56,12 @@
       "ox": "~0.14.0",
       "react": "catalog:",
       "react-dom": "catalog:",
-      "zyzz": "workspace:*",
+      "@tempoxyz/accounts": "workspace:*",
       "viem": "catalog:"
     }
   },
   "[!start-pkg]": "",
-  "name": "zyzz",
+  "name": "@tempoxyz/accounts",
   "description": "Accounts tooling for Tempo",
   "type": "module",
   "version": "0.14.0",
@@ -88,7 +88,7 @@
     }
   },
   "repository": {
-    "url": "https://github.com/tempoxyz/zyzz"
+    "url": "https://github.com/tempoxyz/accounts"
   },
   "license": "MIT",
   "files": [

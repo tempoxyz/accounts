@@ -22,4 +22,4 @@ onlyBuiltDependencies:
   - workerd
 
 overrides:
-  zyzz: workspace:*
+  '@tempoxyz/accounts': workspace:*

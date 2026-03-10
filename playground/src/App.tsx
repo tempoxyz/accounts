@@ -3,7 +3,7 @@ import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { Actions } from 'viem/tempo'
-import { Expiry } from 'zyzz'
+import { Expiry } from '@tempoxyz/accounts'
 
 import { type AdapterType, provider, switchAdapter } from './provider.js'
 
@@ -19,7 +19,7 @@ export function App() {
 
   return (
     <div style={{ maxWidth: 640 }}>
-      <h1>zyzz playground</h1>
+      <h1>accounts playground</h1>
 
       <h2>Adapter</h2>
       <select value={adapterType} onChange={(e) => onSwitch(e.target.value as AdapterType)}>

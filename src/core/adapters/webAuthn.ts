@@ -3,6 +3,7 @@ import { SignatureEnvelope } from 'ox/tempo'
 import { Account } from 'viem/tempo'
 import { Authentication, Registration } from 'webauthx/client'
 
+import type { OneOf } from '../../internal/types.js'
 import type { Adapter } from '../Adapter.js'
 import * as Ceremony from '../Ceremony.js'
 import type * as Storage from '../Storage.js'
@@ -16,7 +17,7 @@ import { local } from './local.js'
  *
  * @example
  * ```ts
- * import { webAuthn } from 'zyzz'
+ * import { webAuthn } from '@tempoxyz/accounts'
  *
  * const provider = Provider.create({
  *   adapter: webAuthn(),
@@ -24,7 +25,7 @@ import { local } from './local.js'
  * ```
  */
 export function webAuthn(options: webAuthn.Options = {}): Adapter {
-  const { icon, name, rdns } = options
+  const { authUrl, icon, name, rdns } = options
 
   let ceremony: Ceremony.Ceremony
   let storage: Storage.Storage
@@ -89,7 +90,9 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter {
     ...adapter,
     setup(params) {
       storage = params.storage
-      ceremony = options.ceremony ?? Ceremony.local({ storage })
+      ceremony =
+        options.ceremony ??
+        (authUrl ? Ceremony.server({ url: authUrl }) : Ceremony.local({ storage }))
       return adapter.setup?.(params)
     },
     icon,
@@ -100,9 +103,16 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter {
 }
 
 export declare namespace webAuthn {
-  type Options = {
-    /** Ceremony strategy for WebAuthn registration and authentication. @default Ceremony.local() */
-    ceremony?: Ceremony.Ceremony | undefined
+  type Options = OneOf<
+    | {
+        /** Ceremony strategy for WebAuthn registration and authentication. @default Ceremony.local() */
+        ceremony?: Ceremony.Ceremony | undefined
+      }
+    | {
+        /** URL of a WebAuthn handler (shorthand for `Ceremony.server({ url })`). */
+        authUrl?: string | undefined
+      }
+  > & {
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */

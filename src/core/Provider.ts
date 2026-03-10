@@ -35,7 +35,7 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
  *
  * @example
  * ```ts
- * import { Provider, webAuthn } from 'zyzz'
+ * import { Provider, webAuthn } from '@tempoxyz/accounts'
  *
  * const provider = Provider.create({
  *   adapter: webAuthn(),
@@ -47,7 +47,7 @@ export function create(options: create.Options): create.ReturnType {
     adapter,
     authorizeAccessKey: getAuthorizeAccessKey,
     chains = [tempo, tempoModerato],
-    feePayer: defaultFeePayer,
+    feePayerUrl,
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
   } = options
@@ -105,7 +105,7 @@ export function create(options: create.Options): create.ReturnType {
   /** Resolves the `feePayer` field from a transaction request into a URL string or `undefined`. */
   function resolveFeePayer(feePayer: string | boolean | undefined): string | undefined {
     if (typeof feePayer === 'string') return feePayer
-    if (feePayer === true) return defaultFeePayer
+    if (feePayer === true) return feePayerUrl
     return undefined
   }
 
@@ -242,7 +242,7 @@ export function create(options: create.Options): create.ReturnType {
                     const decoded = request._decoded.params?.[0]
                     const { calls = [], capabilities } = decoded ?? {}
                     const sync = capabilities?.sync
-                    const feePayer = resolveFeePayer(defaultFeePayer ? true : undefined)
+                    const feePayer = resolveFeePayer(feePayerUrl ? true : undefined)
                     const txRequest = {
                       calls,
                       ...(feePayer ? { feePayer } : {}),
@@ -527,9 +527,9 @@ export declare namespace create {
     chains?: readonly [Chain, ...Chain[]] | undefined
     /**
      * Fee payer URL for interacting with a service running `Handler.feePayer`
-     * from `zyzz/server`.
+     * from `@tempoxyz/accounts/server`.
      */
-    feePayer?: string | undefined
+    feePayerUrl?: string | undefined
     /** Storage adapter for persistence. @default Storage.idb() in browser, Storage.memory() otherwise. */
     storage?: Storage.Storage | undefined
     /**

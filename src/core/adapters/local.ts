@@ -13,7 +13,7 @@ import type * as Store from '../Store.js'
  *
  * @example
  * ```ts
- * import { local, Provider } from 'zyzz'
+ * import { local, Provider } from '@tempoxyz/accounts'
  *
  * const Provider = Provider.create({
  *   adapter: local({
@@ -73,7 +73,7 @@ export function local(options: local.Options): Adapter {
           account,
           accessKey: { accessKeyAddress, keyType: type },
           expiry,
-          limits,
+          limits: limits as never,
         })
       })()
 
@@ -113,7 +113,7 @@ export function local(options: local.Options): Adapter {
         account,
         accessKey,
         expiry,
-        limits,
+        limits: limits as never,
       })
     })()
 

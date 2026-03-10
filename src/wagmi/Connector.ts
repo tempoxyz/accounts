@@ -13,12 +13,14 @@ import * as Provider from '../core/Provider.js'
 import * as Rpc from '../core/zod/rpc.js'
 
 /**
- * Creates a wagmi connector backed by a zyzz provider.
+ * Creates a wagmi connector backed by an @tempoxyz/accounts provider.
  */
 export function setup(parameters: setup.Parameters = {} as setup.Parameters) {
   type Properties = {
     connect<withCapabilities extends boolean = false>(parameters?: {
-      capabilities?: NonNullable<z.output<typeof Rpc.wallet_connect.capabilities.request>> | undefined
+      capabilities?:
+        | NonNullable<z.output<typeof Rpc.wallet_connect.capabilities.request>>
+        | undefined
       chainId?: number | undefined
       isReconnecting?: boolean | undefined
       withCapabilities?: withCapabilities | boolean | undefined
@@ -61,7 +63,13 @@ export function setup(parameters: setup.Parameters = {} as setup.Parameters) {
           if (!accounts?.length && !isReconnecting) {
             const res = await provider.request({
               method: 'wallet_connect',
-              params: [capabilities ? { capabilities: z.encode(Rpc.wallet_connect.capabilities.request, capabilities) } : {}] as never,
+              params: [
+                capabilities
+                  ? {
+                      capabilities: z.encode(Rpc.wallet_connect.capabilities.request, capabilities),
+                    }
+                  : {},
+              ] as never,
             })
             accounts = res.accounts
           }
@@ -141,7 +149,7 @@ export function setup(parameters: setup.Parameters = {} as setup.Parameters) {
           return false
         }
       },
-      name: parameters.adapter?.name ?? 'Zyzz',
+      name: parameters.adapter?.name ?? 'Accounts',
       async onAccountsChanged(accounts) {
         wagmiConfig.emitter.emit('change', {
           accounts: accounts as readonly Address[],
@@ -229,7 +237,7 @@ export declare namespace setup {
  * ```ts
  * import { createConfig, http } from 'wagmi'
  * import { tempoModerato } from 'wagmi/chains'
- * import { webAuthn } from 'zyzz/wagmi'
+ * import { webAuthn } from '@tempoxyz/accounts/wagmi'
  *
  * const config = createConfig({
  *   chains: [tempoModerato],

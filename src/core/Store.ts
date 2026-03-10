@@ -49,8 +49,8 @@ export function create(options: Options): Store {
   const {
     chainId,
     storage = typeof window !== 'undefined'
-      ? Storage.idb({ key: 'zyzz' })
-      : Storage.memory({ key: 'zyzz' }),
+      ? Storage.idb({ key: '@tempoxyz/accounts' })
+      : Storage.memory({ key: '@tempoxyz/accounts' }),
     internal_persistPrivate = false,
   } = options
 

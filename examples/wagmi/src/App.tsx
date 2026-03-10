@@ -11,7 +11,7 @@ import {
   useSignTypedData,
 } from 'wagmi'
 import { Hooks } from 'wagmi/tempo'
-import { Expiry } from 'zyzz'
+import { Expiry } from '@tempoxyz/accounts'
 
 export default function App() {
   const { address, chainId, status } = useConnection()

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "gen:types": "wrangler types",
+    "postinstall": "pnpm gen:types",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -14,14 +16,16 @@
     "react-dom": "latest",
     "viem": "latest",
     "wagmi": "latest",
-    "zyzz": "latest"
+    "@tempoxyz/accounts": "latest"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "latest",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
     "typescript": "~5.9.3",
-    "vite": "latest"
+    "vite": "latest",
+    "wrangler": "latest"
   }
 }

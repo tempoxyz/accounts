@@ -1,7 +1,7 @@
 import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
-import { Ceremony, local, Provider, webAuthn } from 'zyzz'
+import { Ceremony, local, Provider, webAuthn } from '@tempoxyz/accounts'
 
 export type AdapterType = 'secp256k1' | 'webAuthn'
 
@@ -12,7 +12,7 @@ export function createProvider(adapterType: AdapterType) {
     const ceremony = Ceremony.server({ url: '/webauthn' })
     return Provider.create({
       adapter: webAuthn({ ceremony }),
-      feePayer: '/fee-payer',
+      feePayerUrl: '/fee-payer',
       testnet: true,
     })
   }
@@ -28,7 +28,7 @@ export function createProvider(adapterType: AdapterType) {
         return { accounts: [newAccount] }
       },
     }),
-    feePayer: '/fee-payer',
+    feePayerUrl: '/fee-payer',
     testnet: true,
   })
 }

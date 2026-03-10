@@ -14,7 +14,7 @@
     "react-dom": "catalog:default",
     "mppx": "^0.2.3",
     "viem": "catalog:default",
-    "zyzz": "workspace:*"
+    "@tempoxyz/accounts": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.26.1",
