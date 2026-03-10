@@ -1,8 +1,5 @@
 {
+  "extends": "./tsconfig.base.json",
   "files": [],
-  "references": [{ "path": "./src/tsconfig.json" }, { "path": "./test/tsconfig.json" }],
-  "compilerOptions": {
-    "module": "nodenext",
-    "moduleResolution": "nodenext"
-  }
+  "references": [{ "path": "./src/tsconfig.json" }, { "path": "./test/tsconfig.json" }]
 }
