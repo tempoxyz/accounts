@@ -1,6 +1,12 @@
 name: 'Install dependencies'
 description: 'Prepare repository and all dependencies'
 
+inputs:
+  playwright:
+    description: 'Install Playwright browsers'
+    required: false
+    default: 'false'
+
 runs:
   using: 'composite'
   steps:
@@ -17,11 +23,13 @@ runs:
       run: pnpm install
 
     - name: Get Playwright version
+      if: inputs.playwright == 'true'
       id: playwright-version
       shell: bash
-      run: echo "version=$(pnpm list playwright --depth=0 --json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'))[0].dependencies.playwright.version)")" >> "$GITHUB_OUTPUT"
+      run: echo "version=$(node -e "const lf = require('fs').readFileSync('pnpm-lock.yaml','utf8'); const m = lf.match(/playwright@(\d+\.\d+\.\d+)/); process.stdout.write(m?.[1] ?? 'unknown')")" >> "$GITHUB_OUTPUT"
 
     - name: Cache Playwright browsers
+      if: inputs.playwright == 'true'
       id: playwright-cache
       uses: actions/cache@v4
       with:
@@ -29,11 +37,11 @@ runs:
         key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
     - name: Install Playwright browsers
-      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: pnpm exec playwright install chromium --with-deps
+      run: npx playwright install chromium --with-deps
 
     - name: Install Playwright system deps
-      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
       shell: bash
-      run: pnpm exec playwright install-deps chromium
+      run: npx playwright install-deps chromium

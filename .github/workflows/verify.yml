@@ -40,6 +40,8 @@ jobs:
 
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies
+        with:
+          playwright: 'true'
 
       - name: Setup Docker
         uses: docker/setup-docker-action@v4
