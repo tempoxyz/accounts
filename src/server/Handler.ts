@@ -396,7 +396,7 @@ export declare namespace feePayer {
  * @returns Request handler.
  */
 export function webauthn(options: webauthn.Options): Handler {
-  const { kv, onAuthenticate, onRegister, origin: origin_, path = '', rpId, ...rest } = options
+  const { challengeTtl = 300, kv, onAuthenticate, onRegister, origin: origin_, path = '', rpId, ...rest } = options
   const origin = origin_ as string | string[]
 
   const router = from(rest)
@@ -417,7 +417,7 @@ export function webauthn(options: webauthn.Options): Handler {
         ...(userId ? { user: { id: new TextEncoder().encode(userId), name } } : undefined),
       })
 
-      await kv.set(`challenge:${challenge}`, true)
+      await kv.set(`challenge:${challenge}`, Date.now())
 
       return Response.json({ options })
     } catch (error) {
@@ -434,8 +434,9 @@ export function webauthn(options: webauthn.Options): Handler {
         Bytes.toString(new Uint8Array(deserialized.clientDataJSON)),
       ) as { challenge: string }
       const challenge = Hex.fromBytes(Base64.toBytes(clientData.challenge))
-      const stored = await kv.get<true>(`challenge:${challenge}`)
-      if (!stored) throw new Error('Missing or expired challenge')
+      const stored = await kv.get<number>(`challenge:${challenge}`)
+      if (!stored || Date.now() - stored > challengeTtl * 1_000)
+        throw new Error('Missing or expired challenge')
       await kv.delete(`challenge:${challenge}`)
 
       const result = Registration.verify(credential, {
@@ -464,7 +465,7 @@ export function webauthn(options: webauthn.Options): Handler {
         allowCredentialIds,
         challenge: requestChallenge,
         credentialId,
-        mediation: _,
+        mediation,
       } = body as {
         allowCredentialIds?: string[]
         challenge?: Hex.Hex
@@ -472,13 +473,16 @@ export function webauthn(options: webauthn.Options): Handler {
         mediation?: string
       }
 
-      const { challenge, options } = Authentication.getOptions({
+      const { challenge, options: authOptions } = Authentication.getOptions({
         challenge: requestChallenge,
         credentialId: allowCredentialIds ?? credentialId,
         rpId,
       })
+      const options = mediation
+        ? { ...authOptions, mediation }
+        : authOptions
 
-      await kv.set(`challenge:${challenge}`, true)
+      await kv.set(`challenge:${challenge}`, Date.now())
 
       return Response.json({ options })
     } catch (error) {
@@ -494,8 +498,9 @@ export function webauthn(options: webauthn.Options): Handler {
         challenge: string
       }
       const challenge = Hex.fromBytes(Base64.toBytes(clientData.challenge))
-      const stored = await kv.get<true>(`challenge:${challenge}`)
-      if (!stored) throw new Error('Missing or expired challenge')
+      const stored = await kv.get<number>(`challenge:${challenge}`)
+      if (!stored || Date.now() - stored > challengeTtl * 1_000)
+        throw new Error('Missing or expired challenge')
       await kv.delete(`challenge:${challenge}`)
 
       const credentialData = await kv.get<{ publicKey: string }>(`credential:${response.id}`)
@@ -509,12 +514,13 @@ export function webauthn(options: webauthn.Options): Handler {
       })
       if (!valid) throw new Error('Authentication failed')
 
-      const userHandle = (response.raw.response as unknown as Record<string, string>).userHandle
+      const rawResponse = response.raw?.response as unknown as Record<string, string> | undefined
+      const userHandle = rawResponse?.userHandle
 
       const json = {
         credentialId: response.id,
         publicKey: credentialData.publicKey,
-        ...(userHandle ? { userId: userHandle } : undefined),
+        ...(userHandle && userHandle.length > 0 ? { userId: userHandle } : undefined),
       }
       const hook = await onAuthenticate?.({ ...json, request: req })
       return mergeResponse(json, hook)
@@ -528,6 +534,8 @@ export function webauthn(options: webauthn.Options): Handler {
 
 export declare namespace webauthn {
   type Options = from.Options & {
+    /** Maximum age of a challenge in seconds before it expires. @default 300 */
+    challengeTtl?: number | undefined
     /** Key-value store for challenges and credentials. */
     kv: Kv
     /** Called after a successful registration. The returned response is merged onto the default JSON response. */
