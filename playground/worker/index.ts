@@ -1,6 +1,6 @@
+import { Handler, Kv } from '@tempoxyz/accounts/server'
 import { Mppx, tempo } from 'mppx/server'
 import { privateKeyToAccount } from 'viem/accounts'
-import { Handler, Kv } from '@tempoxyz/accounts/server'
 
 const payment = Mppx.create({
   methods: [
@@ -17,7 +17,7 @@ const payment = Mppx.create({
 const handler = Handler.compose([
   Handler.webauthn({
     kv: Kv.memory(),
-    origin: 'http://localhost:5173',
+    origin: 'https://localhost:5173',
     path: '/webauthn',
     rpId: 'localhost',
   }),

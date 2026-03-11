@@ -96,10 +96,7 @@ describe('route validators', () => {
 
   test('behavior: rejects unknown method', () => {
     expect(() =>
-      Router.validateSearch(
-        { id: '1', method: 'eth_foo' },
-        { method: 'wallet_connect' },
-      ),
+      Router.validateSearch({ id: '1', method: 'eth_foo' }, { method: 'wallet_connect' }),
     ).toThrow('Invalid request params')
   })
 })

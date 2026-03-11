@@ -8,8 +8,8 @@ let browser: Browser
 let page: Page
 
 beforeAll(async () => {
-  browser = await chromium.launch()
-  page = await browser.newPage()
+  browser = await chromium.launch({ args: ['--ignore-certificate-errors'] })
+  page = await browser.newPage({ ignoreHTTPSErrors: true })
 })
 
 afterAll(async () => {
@@ -22,59 +22,69 @@ describe('routes', () => {
     await page.getByText('Tempo Connect').waitFor()
   })
 
-  test('default: wallet_connect renders with valid search', async () => {
+  test('default: wallet_connect renders confirm/reject', async () => {
     await page.goto(`${url}/rpc/wallet_connect?method=wallet_connect&id=1`)
     await page.getByText('wallet_connect').waitFor()
+    await page.getByTestId('confirm').waitFor()
+    await page.getByTestId('reject').waitFor()
   })
 
-  test('default: eth_sendTransaction renders with valid search', async () => {
+  test('default: eth_sendTransaction renders confirm/reject', async () => {
     const params = encodeURIComponent(JSON.stringify([{ to: address }]))
     await page.goto(
       `${url}/rpc/eth_sendTransaction?method=eth_sendTransaction&id=2&params=${params}`,
     )
     await page.getByText('eth_sendTransaction').waitFor()
+    await page.getByTestId('confirm').waitFor()
+    await page.getByTestId('reject').waitFor()
   })
 
-  test('default: eth_sendTransactionSync renders with valid search', async () => {
+  test('default: eth_sendTransactionSync renders confirm/reject', async () => {
     const params = encodeURIComponent(JSON.stringify([{ to: address }]))
     await page.goto(
       `${url}/rpc/eth_sendTransactionSync?method=eth_sendTransactionSync&id=3&params=${params}`,
     )
     await page.getByText('eth_sendTransactionSync').waitFor()
+    await page.getByTestId('confirm').waitFor()
+    await page.getByTestId('reject').waitFor()
   })
 
-  test('default: eth_signTransaction renders with valid search', async () => {
+  test('default: eth_signTransaction renders confirm/reject', async () => {
     const params = encodeURIComponent(JSON.stringify([{ to: address }]))
     await page.goto(
       `${url}/rpc/eth_signTransaction?method=eth_signTransaction&id=4&params=${params}`,
     )
     await page.getByText('eth_signTransaction').waitFor()
+    await page.getByTestId('confirm').waitFor()
+    await page.getByTestId('reject').waitFor()
   })
 
-  test('default: personal_sign renders with valid search', async () => {
+  test('default: personal_sign renders confirm/reject', async () => {
     const params = encodeURIComponent(JSON.stringify(['0xdeadbeef', address]))
-    await page.goto(
-      `${url}/rpc/personal_sign?method=personal_sign&id=5&params=${params}`,
-    )
+    await page.goto(`${url}/rpc/personal_sign?method=personal_sign&id=5&params=${params}`)
     await page.getByText('personal_sign').waitFor()
+    await page.getByTestId('confirm').waitFor()
+    await page.getByTestId('reject').waitFor()
   })
 
-  test('default: eth_signTypedData_v4 renders with valid search', async () => {
+  test('default: eth_signTypedData_v4 renders confirm/reject', async () => {
     const params = encodeURIComponent(JSON.stringify([address, '{}']))
     await page.goto(
       `${url}/rpc/eth_signTypedData_v4?method=eth_signTypedData_v4&id=6&params=${params}`,
     )
     await page.getByText('eth_signTypedData_v4').waitFor()
+    await page.getByTestId('confirm').waitFor()
+    await page.getByTestId('reject').waitFor()
   })
 
-  test('default: wallet_authorizeAccessKey renders with valid search', async () => {
-    await page.goto(
-      `${url}/rpc/wallet_authorizeAccessKey?method=wallet_authorizeAccessKey&id=7`,
-    )
+  test('default: wallet_authorizeAccessKey renders confirm/reject', async () => {
+    await page.goto(`${url}/rpc/wallet_authorizeAccessKey?method=wallet_authorizeAccessKey&id=7`)
     await page.getByText('wallet_authorizeAccessKey').waitFor()
+    await page.getByTestId('confirm').waitFor()
+    await page.getByTestId('reject').waitFor()
   })
 
-  test('default: wallet_revokeAccessKey renders with valid search', async () => {
+  test('default: wallet_revokeAccessKey renders confirm/reject', async () => {
     const params = encodeURIComponent(
       JSON.stringify([{ address: address, accessKeyAddress: address }]),
     )
@@ -82,6 +92,8 @@ describe('routes', () => {
       `${url}/rpc/wallet_revokeAccessKey?method=wallet_revokeAccessKey&id=8&params=${params}`,
     )
     await page.getByText('wallet_revokeAccessKey').waitFor()
+    await page.getByTestId('confirm').waitFor()
+    await page.getByTestId('reject').waitFor()
   })
 
   test('default: unknown /rpc path renders Not Found', async () => {

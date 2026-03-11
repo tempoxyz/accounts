@@ -4,6 +4,7 @@ import { Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import type { Chain, Client as ViemClient, Transport } from 'viem'
 import { tempo, tempoModerato } from 'viem/chains'
 import { Actions } from 'viem/tempo'
+import * as z from 'zod/mini'
 
 import * as Account from './Account.js'
 import type { Adapter, authorizeAccessKey } from './Adapter.js'
@@ -173,7 +174,10 @@ export function create(options: create.Options): create.ReturnType {
                     ) satisfies Rpc.eth_chainId.Encoded['returns']
 
                   case 'eth_requestAccounts': {
-                    const { accounts: newAccounts } = await adapter.actions.loadAccounts()
+                    const { accounts: newAccounts } = await adapter.actions.loadAccounts(
+                      undefined,
+                      { method: 'wallet_connect', params: undefined },
+                    )
                     mergeAccounts(newAccounts)
                     const { accounts, activeAccount } = store.getState()
                     if (accounts.length === 0) return []
@@ -192,76 +196,95 @@ export function create(options: create.Options): create.ReturnType {
                   case 'eth_sendTransaction': {
                     assertConnected()
                     const [decoded] = request._decoded.params
-                    return (await adapter.actions.sendTransaction({
-                      ...decoded,
-                      feePayer: resolveFeePayer(decoded.feePayer),
-                      _encoded: { method: request.method, params: request.params },
-                    })) satisfies Rpc.eth_sendTransaction.Encoded['returns']
+                    return (await adapter.actions.sendTransaction(
+                      {
+                        ...decoded,
+                        feePayer: resolveFeePayer(decoded.feePayer),
+                      },
+                      request,
+                    )) satisfies Rpc.eth_sendTransaction.Encoded['returns']
                   }
 
                   case 'eth_signTransaction': {
                     assertConnected()
                     const [decoded] = request._decoded.params
-                    return (await adapter.actions.signTransaction({
-                      ...decoded,
-                      feePayer: resolveFeePayer(decoded.feePayer),
-                      _encoded: { method: request.method, params: request.params },
-                    })) satisfies Rpc.eth_signTransaction.Encoded['returns']
+                    return (await adapter.actions.signTransaction(
+                      {
+                        ...decoded,
+                        feePayer: resolveFeePayer(decoded.feePayer),
+                      },
+                      request,
+                    )) satisfies Rpc.eth_signTransaction.Encoded['returns']
                   }
 
                   case 'eth_sendTransactionSync': {
                     assertConnected()
                     const [decoded] = request._decoded.params
-                    return (await adapter.actions.sendTransactionSync({
-                      ...decoded,
-                      feePayer: resolveFeePayer(decoded.feePayer),
-                      _encoded: { method: request.method, params: request.params },
-                    })) satisfies Rpc.eth_sendTransactionSync.Encoded['returns']
+                    return (await adapter.actions.sendTransactionSync(
+                      {
+                        ...decoded,
+                        feePayer: resolveFeePayer(decoded.feePayer),
+                      },
+                      request,
+                    )) satisfies Rpc.eth_sendTransactionSync.Encoded['returns']
                   }
 
                   case 'eth_signTypedData_v4': {
                     assertConnected()
                     const [address, data] = request._decoded.params
-                    return (await adapter.actions.signTypedData({
-                      address,
-                      data,
-                    })) satisfies Rpc.eth_signTypedData_v4.Encoded['returns']
+                    return (await adapter.actions.signTypedData(
+                      {
+                        address,
+                        data,
+                      },
+                      request,
+                    )) satisfies Rpc.eth_signTypedData_v4.Encoded['returns']
                   }
 
                   case 'personal_sign': {
                     assertConnected()
                     const [data, address] = request._decoded.params
-                    return (await adapter.actions.signPersonalMessage({
-                      address,
-                      data,
-                    })) satisfies Rpc.personal_sign.Encoded['returns']
+                    return (await adapter.actions.signPersonalMessage(
+                      {
+                        address,
+                        data,
+                      },
+                      request,
+                    )) satisfies Rpc.personal_sign.Encoded['returns']
                   }
 
                   case 'wallet_sendCalls': {
                     assertConnected()
                     const decoded = request._decoded.params?.[0]
-                    const { calls = [], capabilities } = decoded ?? {}
+                    const { calls = [], capabilities, chainId, from } = decoded ?? {}
                     const sync = capabilities?.sync
                     const feePayer = resolveFeePayer(feePayerUrl ? true : undefined)
                     const txRequest = {
                       calls,
+                      chainId,
+                      from,
                       ...(feePayer ? { feePayer } : {}),
-                      _encoded: { method: 'eth_sendTransaction' as const, params: [{}] as const },
                     }
                     if (!sync) {
-                      const hash = await adapter.actions.sendTransaction(txRequest)
+                      const hash = await adapter.actions.sendTransaction(txRequest, {
+                        method: 'eth_sendTransaction',
+                        params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
+                      })
                       const chainId = Hex.fromNumber(store.getState().chainId)
                       const id = Hex.concat(hash, Hex.padLeft(chainId, 32), sendCallsMagic)
                       return { capabilities: { sync }, id }
                     }
-                    const receipt = await adapter.actions.sendTransactionSync(txRequest as never)
-                    const hash = (receipt as { transactionHash: Hex.Hex }).transactionHash
-                    const chainId = Hex.fromNumber(store.getState().chainId)
-                    const id = Hex.concat(hash, Hex.padLeft(chainId, 32), sendCallsMagic)
+                    const receipt = await adapter.actions.sendTransactionSync(txRequest as never, {
+                      method: 'eth_sendTransactionSync',
+                      params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
+                    })
+                    const hash = receipt.transactionHash
+                    const chainIdHex = Hex.fromNumber(store.getState().chainId)
+                    const id = Hex.concat(hash, Hex.padLeft(chainIdHex, 32), sendCallsMagic)
                     return {
                       atomic: true,
                       capabilities: { sync },
-                      chainId,
+                      chainId: chainIdHex,
                       id,
                       receipts: [receipt],
                       status: (receipt as { status: string }).status === '0x1' ? 200 : 500,
@@ -373,18 +396,24 @@ export function create(options: create.Options): create.ReturnType {
                       signature,
                     } = await (async () => {
                       if (capabilities?.method === 'register')
-                        return await adapter.actions.createAccount({
-                          digest: capabilities.digest,
+                        return await adapter.actions.createAccount(
+                          {
+                            digest: capabilities.digest,
+                            authorizeAccessKey,
+                            name: capabilities.name ?? 'default',
+                            userId: capabilities.userId,
+                          },
+                          request,
+                        )
+                      return await adapter.actions.loadAccounts(
+                        {
+                          credentialId: capabilities?.credentialId,
+                          digest: capabilities?.digest,
                           authorizeAccessKey,
-                          name: capabilities.name ?? 'default',
-                          userId: capabilities.userId,
-                        })
-                      return await adapter.actions.loadAccounts({
-                        credentialId: capabilities?.credentialId,
-                        digest: capabilities?.digest,
-                        authorizeAccessKey,
-                        selectAccount: capabilities?.selectAccount,
-                      })
+                          selectAccount: capabilities?.selectAccount,
+                        },
+                        request,
+                      )
                     })()
                     mergeAccounts(newAccounts)
 
@@ -429,10 +458,13 @@ export function create(options: create.Options): create.ReturnType {
                         message: '`authorizeAccessKey` not supported by adapter.',
                       })
                     const decoded = request._decoded.params?.[0]
-                    const result = await adapter.actions.authorizeAccessKey({
-                      ...getAuthorizeAccessKey?.(),
-                      ...decoded!,
-                    })
+                    const result = await adapter.actions.authorizeAccessKey(
+                      {
+                        ...getAuthorizeAccessKey?.(),
+                        ...decoded!,
+                      },
+                      request,
+                    )
                     return {
                       ...result,
                       address: result.keyId,
@@ -446,7 +478,12 @@ export function create(options: create.Options): create.ReturnType {
                         message: '`revokeAccessKey` not supported by adapter.',
                       })
                     const [decoded] = request._decoded.params
-                    await adapter.actions.revokeAccessKey(decoded)
+                    await adapter.actions.revokeAccessKey(
+                      {
+                        ...decoded,
+                      },
+                      request,
+                    )
                     return
                   }
 

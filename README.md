@@ -1,6 +1,6 @@
 # Accounts SDK
 
-Accounts toolchain for Tempo Wallets & Apps. 
+Accounts toolchain for Tempo Wallets & Apps.
 
 [Metronome](https://metronome-git-main-tempoxyz.vercel.app/ideas/account-sdk)
 
@@ -14,7 +14,7 @@ pnpm i @tempoxyz/accounts
 
 ### Vanilla JS
 
-You can get set up with the Accounts SDK with pure JavaScript by using the 
+You can get set up with the Accounts SDK with pure JavaScript by using the
 `Provider` instance.
 
 Internally, the `Provider` utilizes [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963) to inject it's provider instance into
@@ -22,13 +22,13 @@ the page so it can be picked up by wallet connection dialogs on external web app
 
 ```tsx
 import { Provider, webAuthn } from '@tempoxyz/accounts'
- 
+
 const provider = Provider.create({
   adapter: webAuthn(),
 })
 
-const { accounts } = await provider.request({ 
-  method: 'wallet_connect'
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
 })
 ```
 
@@ -38,7 +38,7 @@ The Provider provides a Viem Client instance via the `getClient` accessor.
 
 ```tsx
 import { Provider, webAuthn } from '@tempoxyz/accounts'
- 
+
 const provider = Provider.create({
   adapter: webAuthn(),
 })
@@ -55,10 +55,10 @@ accounts.
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
 import { webAuthn } from '@tempoxyz/accounts/wagmi'
- 
+
 export const wagmiConfig = createConfig({
   chains: [tempo],
-  connectors: [webAuthn()], 
+  connectors: [webAuthn()],
   transports: {
     [tempo.id]: http(),
   },
@@ -67,11 +67,11 @@ export const wagmiConfig = createConfig({
 
 ## Adapters
 
-| Adapter | Description |
-| --- | --- |
+| Adapter      | Description                                                                                                                                                                                                                 |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `connect` 🚧 | Adapter for universal accounts, including [Tempo Wallet](https://wallet.tempo.xyz), orchestrated via [Tempo Connect](https://metronome-git-main-tempoxyz.vercel.app/ideas/tempo-connect) (an embedded iframe/popup dialog). |
-| `webAuthn` | App-bound passkey accounts using WebAuthn registration and authentication flows. |
-| `local` | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
+| `webAuthn`   | App-bound passkey accounts using WebAuthn registration and authentication flows.                                                                                                                                            |
+| `local`      | Key agnostic adapter to define arbitrary account/key types and signing mechanisms.                                                                                                                                          |
 
 ## License
 

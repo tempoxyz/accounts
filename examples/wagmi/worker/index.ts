@@ -1,6 +1,6 @@
+import { Handler, Kv } from '@tempoxyz/accounts/server'
 import type { Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { Handler, Kv } from '@tempoxyz/accounts/server'
 
 export default {
   async fetch(request, env) {

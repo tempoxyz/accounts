@@ -1,13 +1,19 @@
+import { Ceremony, connect, local, Provider, webAuthn } from '@tempoxyz/accounts'
 import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
-import { Ceremony, local, Provider, webAuthn } from '@tempoxyz/accounts'
 
-export type AdapterType = 'secp256k1' | 'webAuthn'
+export type AdapterType = 'secp256k1' | 'webAuthn' | 'connect'
 
-export let provider = createProvider('secp256k1')
+export let provider = createProvider('connect')
 
 export function createProvider(adapterType: AdapterType) {
+  if (adapterType === 'connect')
+    return Provider.create({
+      adapter: connect({ host: 'https://localhost:5174' }),
+      testnet: true,
+    })
+
   if (adapterType === 'webAuthn') {
     const ceremony = Ceremony.server({ url: '/webauthn' })
     return Provider.create({

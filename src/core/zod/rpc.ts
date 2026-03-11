@@ -4,7 +4,7 @@ import * as z from 'zod/mini'
 import * as Schema from '../Schema.js'
 import * as u from './utils.js'
 
-const log = z.looseObject({
+export const log = z.object({
   address: u.address(),
   blockHash: u.hex(),
   blockNumber: u.bigint(),
@@ -16,7 +16,7 @@ const log = z.looseObject({
   transactionIndex: u.number(),
 })
 
-const receipt = z.looseObject({
+export const receipt = z.object({
   blobGasPrice: z.optional(u.bigint()),
   blobGasUsed: z.optional(u.bigint()),
   blockHash: u.hex(),
@@ -38,11 +38,11 @@ const receipt = z.looseObject({
   type: u.hex(),
 })
 
-const signatureEnvelope = z.custom<SignatureEnvelope.SignatureEnvelopeRpc>()
+export const signatureEnvelope = z.custom<SignatureEnvelope.SignatureEnvelopeRpc>()
 
-const keyType = z.union([z.literal('secp256k1'), z.literal('p256'), z.literal('webAuthn')])
+export const keyType = z.union([z.literal('secp256k1'), z.literal('p256'), z.literal('webAuthn')])
 
-const keyAuthorization = z.looseObject({
+export const keyAuthorization = z.object({
   address: u.address(),
   chainId: u.bigint(),
   expiry: z.nullish(u.number()),
@@ -52,13 +52,13 @@ const keyAuthorization = z.looseObject({
   signature: signatureEnvelope,
 })
 
-const call = z.looseObject({
+export const call = z.object({
   data: z.optional(u.hex()),
   to: z.optional(u.address()),
   value: z.optional(u.bigint()),
 })
 
-const transactionRequest = z.looseObject({
+export const transactionRequest = z.object({
   accessList: z.optional(
     z.array(z.object({ address: u.address(), storageKeys: z.array(u.hex()) })),
   ),
@@ -176,7 +176,7 @@ export namespace wallet_sendCalls {
         ]),
       ),
     ),
-    returns: z.looseObject({
+    returns: z.object({
       atomic: z.optional(z.boolean()),
       capabilities: sendCallsCapabilities,
       chainId: z.optional(u.number()),
@@ -248,7 +248,7 @@ export namespace wallet_getCapabilities {
 }
 
 export namespace wallet_authorizeAccessKey {
-  export const parameters = z.looseObject({
+  export const parameters = z.object({
     address: z.optional(u.address()),
     expiry: z.number(),
     keyType: z.optional(keyType),

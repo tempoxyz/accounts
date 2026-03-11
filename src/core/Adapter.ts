@@ -9,6 +9,12 @@ import type * as Storage from './Storage.js'
 import type * as Store from './Store.js'
 import type * as Rpc from './zod/rpc.js'
 
+/** Wire-format request (method + params) for a given RPC schema item. */
+type EncodedRequest<encoded extends { method: unknown; params: unknown }> = Pick<
+  encoded,
+  'method' | 'params'
+>
+
 /** Adapter interface for the provider. */
 export type Adapter = {
   /** Called once when the provider is created. Returns an optional cleanup function. */
@@ -23,28 +29,55 @@ export type Adapter = {
   actions: {
     /** Grant an access key for the active account. */
     authorizeAccessKey?:
-      | ((params: authorizeAccessKey.Parameters) => Promise<authorizeAccessKey.ReturnType>)
+      | ((
+          params: authorizeAccessKey.Parameters,
+          request: EncodedRequest<Rpc.wallet_authorizeAccessKey.Encoded>,
+        ) => Promise<authorizeAccessKey.ReturnType>)
       | undefined
     /** Create a new account (e.g. WebAuthn registration). */
-    createAccount: (params: createAccount.Parameters) => Promise<createAccount.ReturnType>
+    createAccount: (
+      params: createAccount.Parameters,
+      request: EncodedRequest<Rpc.wallet_connect.Encoded>,
+    ) => Promise<createAccount.ReturnType>
     /** Disconnect hook for adapter-specific cleanup. */
     disconnect?: (() => Promise<void>) | undefined
     /** Discover existing accounts (e.g. WebAuthn assertion). */
-    loadAccounts: (params?: loadAccounts.Parameters | undefined) => Promise<loadAccounts.ReturnType>
+    loadAccounts: (
+      params: loadAccounts.Parameters | undefined,
+      request: EncodedRequest<Rpc.wallet_connect.Encoded>,
+    ) => Promise<loadAccounts.ReturnType>
     /** Revoke an access key. */
-    revokeAccessKey?: ((params: revokeAccessKey.Parameters) => Promise<void>) | undefined
+    revokeAccessKey?:
+      | ((
+          params: revokeAccessKey.Parameters,
+          request: EncodedRequest<Rpc.wallet_revokeAccessKey.Encoded>,
+        ) => Promise<void>)
+      | undefined
     /** Send a transaction. */
-    sendTransaction: (request: sendTransaction.Parameters) => Promise<sendTransaction.ReturnType>
+    sendTransaction: (
+      params: sendTransaction.Parameters,
+      request: EncodedRequest<Rpc.eth_sendTransaction.Encoded>,
+    ) => Promise<sendTransaction.ReturnType>
     /** Send a transaction and wait for the receipt. */
     sendTransactionSync: (
-      request: sendTransactionSync.Parameters,
+      params: sendTransactionSync.Parameters,
+      request: EncodedRequest<Rpc.eth_sendTransactionSync.Encoded>,
     ) => Promise<sendTransactionSync.ReturnType>
     /** Sign a personal message (EIP-191). */
-    signPersonalMessage: (params: signPersonalMessage.Parameters) => Promise<Hex>
+    signPersonalMessage: (
+      params: signPersonalMessage.Parameters,
+      request: EncodedRequest<Rpc.personal_sign.Encoded>,
+    ) => Promise<Hex>
     /** Sign a transaction without broadcasting it. */
-    signTransaction: (request: signTransaction.Parameters) => Promise<signTransaction.ReturnType>
+    signTransaction: (
+      params: signTransaction.Parameters,
+      request: EncodedRequest<Rpc.eth_signTransaction.Encoded>,
+    ) => Promise<signTransaction.ReturnType>
     /** Sign EIP-712 typed data. */
-    signTypedData: (params: signTypedData.Parameters) => Promise<Hex>
+    signTypedData: (
+      params: signTypedData.Parameters,
+      request: EncodedRequest<Rpc.eth_signTypedData_v4.Encoded>,
+    ) => Promise<Hex>
     /** Switch chain hook for adapter-specific handling. */
     switchChain?: ((params: switchChain.Parameters) => Promise<void>) | undefined
   }
@@ -56,13 +89,9 @@ export type Adapter = {
   internal_persistPrivate?: boolean | undefined
 }
 
-/** Spreads decoded params with `_encoded` carrying the raw wire format. */
+/** Spreads decoded params. */
 export type ActionRequest<item extends Schema.Item> =
-  Schema.Decoded<item>['params'] extends readonly [infer first]
-    ? first & {
-        _encoded: { method: Schema.Encoded<item>['method']; params: Schema.Encoded<item>['params'] }
-      }
-    : never
+  Schema.Decoded<item>['params'] extends readonly [infer first] ? first : never
 
 export declare namespace setup {
   type Parameters = {
@@ -88,10 +117,10 @@ export declare namespace getClient {
 
 export declare namespace createAccount {
   type Parameters = {
-    /** Digest to sign. */
-    digest?: Hex | undefined
     /** Grant an access key during the ceremony. */
     authorizeAccessKey?: authorizeAccessKey.Parameters | undefined
+    /** Digest to sign. */
+    digest?: Hex | undefined
     /** Display name for the new account (e.g. credential name for WebAuthn). */
     name: string
     /** Opaque user identifier (e.g. for WebAuthn `user.id`). */
@@ -108,12 +137,12 @@ export declare namespace createAccount {
 
 export declare namespace loadAccounts {
   type Parameters = {
+    /** Grant an access key during the ceremony. */
+    authorizeAccessKey?: authorizeAccessKey.Parameters | undefined
     /** Credential ID to restrict authentication to a specific credential. */
     credentialId?: string | undefined
     /** Digest to sign. */
     digest?: Hex | undefined
-    /** Grant an access key during the ceremony. */
-    authorizeAccessKey?: authorizeAccessKey.Parameters | undefined
     /** When `true`, prompts the user to pick from all available credentials instead of using the last-used one. */
     selectAccount?: boolean | undefined
   }

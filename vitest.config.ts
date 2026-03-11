@@ -10,8 +10,8 @@ export default defineConfig({
   },
   test: {
     retry: 3,
-    hookTimeout: 30_000,
-    testTimeout: 30_000,
+    hookTimeout: 5_000,
+    testTimeout: 5_000,
     reporters: process.env.CI ? ['tree'] : [],
     projects: [
       {
@@ -49,7 +49,11 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'connect',
-          exclude: ['./connect/**/*.browser.test.ts', './connect/**/*.e2e.test.ts', './connect/**/node_modules/**'],
+          exclude: [
+            './connect/**/*.browser.test.ts',
+            './connect/**/*.e2e.test.ts',
+            './connect/**/node_modules/**',
+          ],
           include: ['./connect/**/*.test.ts'],
         },
       },
@@ -74,7 +78,7 @@ export default defineConfig({
           name: 'connect/e2e',
           include: ['./connect/**/*.e2e.test.ts'],
           globalSetup: [join(import.meta.dirname, './test/connect/setup.global.ts')],
-          env: { CONNECT_BASE_URL: 'http://localhost:5175' },
+          env: { CONNECT_BASE_URL: 'https://localhost:5175' },
         },
       },
     ],

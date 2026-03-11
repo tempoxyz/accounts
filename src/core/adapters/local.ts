@@ -201,7 +201,7 @@ export function local(options: local.Options): Adapter {
         return await authorizeAccessKey_internal(parameters)
       },
       async loadAccounts(parameters) {
-        const { authorizeAccessKey, ...rest } = parameters ?? {}
+        const { authorizeAccessKey, ...rest } = parameters ?? ({} as loadAccounts.Parameters)
 
         // If `authorizeAccessKey` is requested, no explicit digest was
         // provided, and no external publicKey is given (BYOAK), prepare a

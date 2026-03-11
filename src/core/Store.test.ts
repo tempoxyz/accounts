@@ -12,6 +12,7 @@ describe('create', () => {
         "accounts": [],
         "activeAccount": 0,
         "chainId": 123,
+        "requestQueue": [],
       }
     `)
   })
@@ -33,6 +34,7 @@ describe('create', () => {
         ],
         "activeAccount": 0,
         "chainId": 123,
+        "requestQueue": [],
       }
     `)
   })
@@ -131,6 +133,7 @@ describe('persistence', () => {
         ],
         "activeAccount": 0,
         "chainId": 456,
+        "requestQueue": [],
       }
     `)
   })
@@ -320,6 +323,7 @@ describe('waitForHydration', () => {
         ],
         "activeAccount": 0,
         "chainId": 789,
+        "requestQueue": [],
       }
     `)
   })

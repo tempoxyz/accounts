@@ -1,6 +1,6 @@
+import { webAuthn } from '@tempoxyz/accounts/wagmi'
 import { createConfig, http } from 'wagmi'
 import { tempoModerato } from 'wagmi/chains'
-import { webAuthn } from '@tempoxyz/accounts/wagmi'
 
 export const config = createConfig({
   chains: [tempoModerato],

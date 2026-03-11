@@ -1,3 +1,7 @@
+import type { RpcRequest, RpcResponse } from 'ox'
+
+import type * as Store from './Store.js'
+
 /** Messenger interface for cross-frame communication. */
 export type Messenger = {
   /** Tear down all listeners. */
@@ -27,21 +31,12 @@ export type Schema = [
   },
   {
     topic: 'rpc-requests'
-    payload: readonly {
-      id: number
-      jsonrpc: '2.0'
-      method: string
-      params?: unknown
-    }[]
+    payload: readonly Store.QueuedRequest[]
   },
   {
     topic: 'rpc-response'
-    payload: {
-      id: number
-      jsonrpc: '2.0'
-      result?: unknown
-      error?: { code: number; message: string }
-      _request: { id: number; method: string }
+    payload: RpcResponse.RpcResponse & {
+      _request: RpcRequest.RpcRequest
     }
   },
   {
@@ -86,21 +81,13 @@ export function from(messenger: Messenger): Messenger {
  * Creates a messenger backed by `window.postMessage` / `addEventListener('message')`.
  * Filters messages by `targetOrigin` when provided.
  */
-export function fromWindow(
-  w: Window,
-  options: fromWindow.Options = {},
-): Messenger {
+export function fromWindow(w: Window, options: fromWindow.Options = {}): Messenger {
   const { expectedSource, targetOrigin } = options
-  const listeners = new Set<(event: MessageEvent) => void>()
+  const listeners = new Map<string, (event: MessageEvent) => void>()
 
-  function handler(event: MessageEvent) {
-    for (const listener of listeners) listener(event)
-  }
-  w.addEventListener('message', handler)
-
-  return {
+  return from({
     destroy() {
-      w.removeEventListener('message', handler)
+      for (const listener of listeners.values()) w.removeEventListener('message', listener)
       listeners.clear()
     },
     on(topic, listener) {
@@ -112,17 +99,18 @@ export function fromWindow(
         if (expectedSource && event.source !== expectedSource) return
         listener(data.payload as never, event)
       }
-      listeners.add(onMessage)
+      w.addEventListener('message', onMessage)
+      listeners.set(topic, onMessage)
       return () => {
-        listeners.delete(onMessage)
+        w.removeEventListener('message', onMessage)
+        listeners.delete(topic)
       }
     },
     send(topic, payload) {
       const message: Message = { topic, payload, _tempo: true } as never
-      if (targetOrigin) w.postMessage(message, targetOrigin)
-      else w.postMessage(message)
+      w.postMessage(message, targetOrigin ?? '*')
     },
-  }
+  })
 }
 
 export declare namespace fromWindow {
@@ -141,19 +129,18 @@ export declare namespace fromWindow {
 export function bridge(parameters: bridge.Parameters): Bridge {
   const { from, to, waitForReady } = parameters
 
-  const { promise: readyPromise, resolve: resolveReady, reject: rejectReady } =
-    Promise.withResolvers<void>()
-  readyPromise.catch(() => {})
+  const promise = Promise.withResolvers<void>()
+  promise.promise.catch(() => {})
 
   let destroyed = false
   let readyReceived = false
-  
+
   const pending: Array<() => void> = []
 
   const offReady = from.on('ready', () => {
     if (readyReceived) return
     readyReceived = true
-    resolveReady()
+    promise.resolve()
     for (const send of pending) send()
     pending.length = 0
   })
@@ -166,7 +153,7 @@ export function bridge(parameters: bridge.Parameters): Bridge {
       from.destroy()
       to.destroy()
       pending.length = 0
-      rejectReady(new Error('Bridge destroyed'))
+      promise.reject(new Error('Bridge destroyed'))
     },
     on(topic, listener) {
       return from.on(topic, listener)
@@ -185,7 +172,7 @@ export function bridge(parameters: bridge.Parameters): Bridge {
       to.send('ready', undefined)
     },
     waitForReady() {
-      return readyPromise
+      return promise.promise
     },
   }
 }

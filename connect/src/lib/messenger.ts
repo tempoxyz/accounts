@@ -8,9 +8,7 @@ export function init(): Messenger.Bridge {
   if (!target || target === window) return Messenger.noop()
 
   return Messenger.bridge({
-    from: Messenger.fromWindow(window, {
-      expectedSource: target,
-    }),
+    from: Messenger.fromWindow(window),
     to: Messenger.fromWindow(target),
   })
 }

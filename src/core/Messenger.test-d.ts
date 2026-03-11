@@ -1,20 +1,16 @@
 import { describe, expectTypeOf, test } from 'vitest'
 
 import type * as Messenger from './Messenger.js'
+import type * as Store from './Store.js'
 
 describe('Payload', () => {
   test('ready resolves to undefined', () => {
     expectTypeOf<Messenger.Payload<'ready'>>().toEqualTypeOf<undefined>()
   })
 
-  test('rpc-requests resolves to array of RpcRequest shapes', () => {
+  test('rpc-requests resolves to readonly QueuedRequest[]', () => {
     expectTypeOf<Messenger.Payload<'rpc-requests'>>().toEqualTypeOf<
-      readonly {
-        id: number
-        jsonrpc: '2.0'
-        method: string
-        params?: unknown
-      }[]
+      readonly Store.QueuedRequest[]
     >()
   })
 

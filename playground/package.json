@@ -10,11 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tempoxyz/accounts": "workspace:*",
+    "mppx": "^0.2.3",
     "react": "catalog:default",
     "react-dom": "catalog:default",
-    "mppx": "^0.2.3",
-    "viem": "catalog:default",
-    "@tempoxyz/accounts": "workspace:*"
+    "viem": "catalog:default"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.26.1",
@@ -23,6 +23,7 @@
     "@vitejs/plugin-react": "catalog:default",
     "typescript": "catalog:default",
     "vite": "^7.3.1",
+    "vite-plugin-mkcert": "^1.17.10",
     "wrangler": "^4.71.0"
   }
 }

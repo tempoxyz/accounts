@@ -396,8 +396,8 @@ export declare namespace feePayer {
  * @returns Request handler.
  */
 export function webauthn(options: webauthn.Options): Handler {
-  const { challengeTtl = 300, kv, onAuthenticate, onRegister, origin: origin_, path = '', rpId, ...rest } = options
-  const origin = origin_ as string | string[]
+  const { challengeTtl = 300, kv, onAuthenticate, onRegister, path = '', rpId, ...rest } = options
+  const origin = options.origin as string | string[]
 
   const router = from(rest)
 
@@ -478,9 +478,7 @@ export function webauthn(options: webauthn.Options): Handler {
         credentialId: allowCredentialIds ?? credentialId,
         rpId,
       })
-      const options = mediation
-        ? { ...authOptions, mediation }
-        : authOptions
+      const options = mediation ? { ...authOptions, mediation } : authOptions
 
       await kv.set(`challenge:${challenge}`, Date.now())
 

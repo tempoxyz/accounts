@@ -1,27 +1,38 @@
+import { Provider, webAuthn } from '@tempoxyz/accounts'
+import { Events, Remote } from '@tempoxyz/accounts/remote'
+
+import { router } from '../router.js'
 import * as Messenger from './messenger.js'
-import * as Request from './request.js'
 import * as Store from './store.js'
 
-/** Messenger bridge singleton. */
-export const messenger = Messenger.init()
+/** Provider instance for executing confirmed requests. */
+export const provider = Provider.create({
+  adapter: webAuthn(),
+  testnet: true,
+})
+
+/** Remote context singleton. */
+export const remote = Remote.create({
+  messenger: Messenger.init(),
+  provider,
+})
 
 /** Dialog state store singleton. */
 export const store = Store.create()
 
 /** Wire messenger events. */
-messenger.on('__internal', (payload) => {
-  if (payload.type !== 'init') return
+Events.onInitialized(remote, (payload) => {
   store.setState({ mode: payload.mode, referrer: payload.referrer })
 })
-messenger.on('rpc-requests', (requests) => {
-  for (const request of requests) {
-    const response = Request.handle(request)
-    messenger.send('rpc-response', {
-      id: request.id,
-      jsonrpc: '2.0',
-      ...response,
-      _request: { id: request.id, method: request.method },
-    })
-  }
+
+Events.onRequests(remote, (requests) => {
+  const pending = requests.find((r) => r.status === 'pending')
+  if (!pending) return
+
+  router.navigate({
+    to: `/rpc/${pending.request.method}`,
+    search: pending.request,
+  } as never)
 })
-messenger.ready()
+
+Remote.ready(remote)

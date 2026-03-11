@@ -1,6 +1,17 @@
 import { describe, expect, test, vi } from 'vitest'
 
 import * as Messenger from './Messenger.js'
+import type * as Store from './Store.js'
+
+/** Helper to wrap a raw request as a QueuedRequest for the rpc-requests topic. */
+function queued(request: {
+  id: number
+  jsonrpc: '2.0'
+  method: string
+  params?: unknown
+}): Store.QueuedRequest {
+  return { request: { ...request, _returnType: undefined as unknown }, status: 'pending' as const }
+}
 
 describe('fromWindow', () => {
   test('default: sends and receives messages on a topic', () => {
@@ -12,11 +23,11 @@ describe('fromWindow', () => {
     channel.port2.start()
 
     return new Promise<void>((resolve) => {
-      const request = {
+      const request = queued({
         id: 1,
         jsonrpc: '2.0' as const,
         method: 'eth_chainId',
-      }
+      })
       receiver.on('rpc-requests', (payload) => {
         expect(payload).toEqual([request])
         sender.destroy()
@@ -40,7 +51,7 @@ describe('fromWindow', () => {
       listener({
         data: {
           topic: 'rpc-requests',
-          payload: [{ id: 1, jsonrpc: '2.0', method: 'test' }],
+          payload: [queued({ id: 1, jsonrpc: '2.0', method: 'test' })],
           _tempo: true,
         },
         origin: 'https://evil.com',
@@ -65,11 +76,11 @@ describe('fromWindow', () => {
 
     return new Promise<void>((resolve) => {
       sender.send('rpc-requests', [
-        {
+        queued({
           id: 1,
           jsonrpc: '2.0',
           method: 'test',
-        },
+        }),
       ])
 
       setTimeout(() => {
@@ -96,11 +107,11 @@ describe('fromWindow', () => {
 
     return new Promise<void>((resolve) => {
       sender.send('rpc-requests', [
-        {
+        queued({
           id: 1,
           jsonrpc: '2.0',
           method: 'test',
-        },
+        }),
       ])
 
       setTimeout(() => {
@@ -157,7 +168,7 @@ describe('fromWindow', () => {
       listener({
         data: {
           topic: 'rpc-requests',
-          payload: [{ id: 1, jsonrpc: '2.0', method: 'test' }],
+          payload: [queued({ id: 1, jsonrpc: '2.0', method: 'test' })],
           _tempo: true,
         },
         origin: '',
@@ -171,7 +182,7 @@ describe('fromWindow', () => {
       listener({
         data: {
           topic: 'rpc-requests',
-          payload: [{ id: 1, jsonrpc: '2.0', method: 'test' }],
+          payload: [queued({ id: 1, jsonrpc: '2.0', method: 'test' })],
           _tempo: true,
         },
         origin: '',
@@ -196,7 +207,7 @@ describe('fromWindow', () => {
 
     const msg = {
       topic: 'rpc-requests',
-      payload: [{ id: 1, jsonrpc: '2.0', method: 'test' }],
+      payload: [queued({ id: 1, jsonrpc: '2.0', method: 'test' })],
       _tempo: true,
     }
 
@@ -235,7 +246,7 @@ describe('fromWindow', () => {
     const fn = vi.fn()
     a.on('rpc-response', fn)
 
-    b.send('rpc-requests', [{ id: 1, jsonrpc: '2.0', method: 'test' }])
+    b.send('rpc-requests', [queued({ id: 1, jsonrpc: '2.0', method: 'test' })])
 
     expect(fn).not.toHaveBeenCalled()
     a.destroy()
@@ -250,7 +261,7 @@ describe('fromWindow', () => {
     a.on('rpc-requests', fn)
     a.on('rpc-requests', fn)
 
-    b.send('rpc-requests', [{ id: 1, jsonrpc: '2.0', method: 'test' }])
+    b.send('rpc-requests', [queued({ id: 1, jsonrpc: '2.0', method: 'test' })])
 
     expect(calls).toMatchInlineSnapshot(`
       [
@@ -272,7 +283,7 @@ describe('fromWindow', () => {
 
     off1()
 
-    b.send('rpc-requests', [{ id: 1, jsonrpc: '2.0', method: 'test' }])
+    b.send('rpc-requests', [queued({ id: 1, jsonrpc: '2.0', method: 'test' })])
 
     expect(calls).toMatchInlineSnapshot(`
       [
@@ -306,20 +317,23 @@ describe('bridge', () => {
 
     // Simulate the remote side sending a message.
     fromRemote.send('rpc-requests', [
-      {
+      queued({
         id: 1,
         jsonrpc: '2.0',
         method: 'eth_chainId',
-      },
+      }),
     ])
 
     expect(received).toMatchInlineSnapshot(`
       [
         [
           {
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "eth_chainId",
+            "request": {
+              "id": 1,
+              "jsonrpc": "2.0",
+              "method": "eth_chainId",
+            },
+            "status": "pending",
           },
         ],
       ]
@@ -330,20 +344,23 @@ describe('bridge', () => {
     toRemote.on('rpc-requests', (payload) => sent.push(payload))
 
     b.send('rpc-requests', [
-      {
+      queued({
         id: 2,
         jsonrpc: '2.0',
         method: 'personal_sign',
-      },
+      }),
     ])
 
     expect(sent).toMatchInlineSnapshot(`
       [
         [
           {
-            "id": 2,
-            "jsonrpc": "2.0",
-            "method": "personal_sign",
+            "request": {
+              "id": 2,
+              "jsonrpc": "2.0",
+              "method": "personal_sign",
+            },
+            "status": "pending",
           },
         ],
       ]
@@ -362,11 +379,11 @@ describe('bridge', () => {
     toRemote.on('rpc-requests', (payload) => sent.push(payload))
 
     b.send('rpc-requests', [
-      {
+      queued({
         id: 1,
         jsonrpc: '2.0',
         method: 'test',
-      },
+      }),
     ])
 
     // Not yet delivered — waiting for ready.
@@ -380,9 +397,12 @@ describe('bridge', () => {
       [
         [
           {
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "test",
+            "request": {
+              "id": 1,
+              "jsonrpc": "2.0",
+              "method": "test",
+            },
+            "status": "pending",
           },
         ],
       ]
@@ -437,20 +457,23 @@ describe('bridge', () => {
     toRemote.on('rpc-requests', (payload) => sent.push(payload))
 
     b.send('rpc-requests', [
-      {
+      queued({
         id: 2,
         jsonrpc: '2.0',
         method: 'post-ready',
-      },
+      }),
     ])
 
     expect(sent).toMatchInlineSnapshot(`
       [
         [
           {
-            "id": 2,
-            "jsonrpc": "2.0",
-            "method": "post-ready",
+            "request": {
+              "id": 2,
+              "jsonrpc": "2.0",
+              "method": "post-ready",
+            },
+            "status": "pending",
           },
         ],
       ]
@@ -481,7 +504,7 @@ describe('bridge', () => {
     toRemote.on('rpc-requests', (payload) => sent.push(payload))
 
     b.destroy()
-    b.send('rpc-requests', [{ id: 1, jsonrpc: '2.0', method: 'test' }])
+    b.send('rpc-requests', [queued({ id: 1, jsonrpc: '2.0', method: 'test' })])
 
     expect(sent).toMatchInlineSnapshot('[]')
   })
@@ -505,7 +528,7 @@ describe('bridge', () => {
     const sent: unknown[] = []
     toRemote.on('rpc-requests', (payload) => sent.push(payload))
 
-    b.send('rpc-requests', [{ id: 1, jsonrpc: '2.0', method: 'first' }])
+    b.send('rpc-requests', [queued({ id: 1, jsonrpc: '2.0', method: 'first' })])
 
     fromRemote.send('ready', undefined)
     fromRemote.send('ready', undefined)
@@ -514,9 +537,12 @@ describe('bridge', () => {
       [
         [
           {
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "first",
+            "request": {
+              "id": 1,
+              "jsonrpc": "2.0",
+              "method": "first",
+            },
+            "status": "pending",
           },
         ],
       ]
@@ -534,7 +560,7 @@ describe('bridge', () => {
     const sent: unknown[] = []
     toRemote.on('rpc-requests', (payload) => sent.push(payload))
 
-    b.send('rpc-requests', [{ id: 1, jsonrpc: '2.0', method: 'test' }])
+    b.send('rpc-requests', [queued({ id: 1, jsonrpc: '2.0', method: 'test' })])
     b.destroy()
 
     expect(sent).toMatchInlineSnapshot('[]')
@@ -547,14 +573,14 @@ describe('bridge', () => {
     const b = Messenger.bridge({ from, to, waitForReady: true })
 
     const sent: string[] = []
-    toRemote.on('rpc-requests', (payload) => sent.push(payload[0].method))
+    toRemote.on('rpc-requests', (payload) => sent.push(payload[0]!.request.method))
 
-    b.send('rpc-requests', [{ id: 1, jsonrpc: '2.0', method: 'A' }])
-    b.send('rpc-requests', [{ id: 2, jsonrpc: '2.0', method: 'B' }])
+    b.send('rpc-requests', [queued({ id: 1, jsonrpc: '2.0', method: 'A' })])
+    b.send('rpc-requests', [queued({ id: 2, jsonrpc: '2.0', method: 'B' })])
 
     fromRemote.send('ready', undefined)
 
-    b.send('rpc-requests', [{ id: 3, jsonrpc: '2.0', method: 'C' }])
+    b.send('rpc-requests', [queued({ id: 3, jsonrpc: '2.0', method: 'C' })])
 
     expect(sent).toMatchInlineSnapshot(`
       [
@@ -616,7 +642,7 @@ describe('noop', () => {
   test('default: send resolves without error', () => {
     const b = Messenger.noop()
     expect(() =>
-      b.send('rpc-requests', [{ id: 1, jsonrpc: '2.0', method: 'test' }]),
+      b.send('rpc-requests', [queued({ id: 1, jsonrpc: '2.0', method: 'test' })]),
     ).not.toThrow()
   })
 

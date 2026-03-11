@@ -17,7 +17,10 @@ describe('local', () => {
     test('default: loads accounts', async () => {
       const { adapter } = setup()
 
-      const { accounts } = await adapter.actions.loadAccounts()
+      const { accounts } = await adapter.actions.loadAccounts(undefined, {
+        method: 'wallet_connect',
+        params: undefined,
+      })
 
       expect(accounts.map((a) => a.address)).toMatchInlineSnapshot(`
         [
@@ -41,7 +44,10 @@ describe('local', () => {
         }),
       })
 
-      const { accounts } = await adapter.actions.createAccount({ name: 'test' })
+      const { accounts } = await adapter.actions.createAccount(
+        { name: 'test' },
+        { method: 'wallet_connect', params: undefined },
+      )
 
       expect(accounts.map((a) => a.address)).toMatchInlineSnapshot(`
         [
@@ -54,7 +60,10 @@ describe('local', () => {
       const { adapter } = setup()
 
       await expect(
-        adapter.actions.createAccount({ name: 'test' }),
+        adapter.actions.createAccount(
+          { name: 'test' },
+          { method: 'wallet_connect', params: undefined },
+        ),
       ).rejects.toThrowErrorMatchingInlineSnapshot(
         `[Provider.UnsupportedMethodError: \`createAccount\` not configured on adapter.]`,
       )

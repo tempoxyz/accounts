@@ -12,11 +12,11 @@
   },
   "dependencies": {
     "@tanstack/react-query": "latest",
+    "@tempoxyz/accounts": "latest",
     "react": "latest",
     "react-dom": "latest",
     "viem": "latest",
-    "wagmi": "latest",
-    "@tempoxyz/accounts": "latest"
+    "wagmi": "latest"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "latest",
@@ -26,6 +26,7 @@
     "@vitejs/plugin-react": "latest",
     "typescript": "~5.9.3",
     "vite": "latest",
+    "vite-plugin-mkcert": "^1.17.10",
     "wrangler": "latest"
   }
 }

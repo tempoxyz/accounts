@@ -1,3 +1,4 @@
+import { Expiry } from '@tempoxyz/accounts'
 import { useState } from 'react'
 import { formatUnits, parseUnits, stringify, type Hex } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
@@ -11,7 +12,6 @@ import {
   useSignTypedData,
 } from 'wagmi'
 import { Hooks } from 'wagmi/tempo'
-import { Expiry } from '@tempoxyz/accounts'
 
 export default function App() {
   const { address, chainId, status } = useConnection()

@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import * as Dialog from './Dialog.js'
-import * as Messenger from './Messenger.js'
+import * as Storage from './Storage.js'
+import * as Store from './Store.js'
 
 const host = 'https://auth.tempo.xyz'
 
 function setup() {
-  const messenger = Messenger.noop()
+  const store = Store.create({
+    chainId: 1,
+    storage: Storage.memory({ key: 'dialog-test' }),
+  })
   const dialog = Dialog.iframe()
-  const handle = dialog.setup({ host, messenger })
-  return { handle, messenger }
+  const handle = dialog.setup({ host, store })
+  return { handle, store }
 }
 
 afterEach(() => {
@@ -141,7 +145,6 @@ describe('Dialog.iframe', () => {
     handle.open()
     const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
 
-    // Clicking the dialog element itself (not a child) simulates backdrop click
     dialog.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
     expect(dialog.open).toBe(false)
@@ -166,11 +169,18 @@ describe('Dialog.iframe', () => {
 
     dialog.setAttribute('inert', '')
 
-    // MutationObserver fires asynchronously
     await new Promise((resolve) => setTimeout(resolve, 10))
 
     expect(dialog.hasAttribute('inert')).toBe(false)
     handle.close()
+  })
+
+  test('behavior: setup returns a messenger', () => {
+    const { handle } = setup()
+    expect(handle.messenger).toBeDefined()
+    expect(typeof handle.messenger.send).toBe('function')
+    expect(typeof handle.messenger.on).toBe('function')
+    handle.destroy()
   })
 })
 
@@ -181,9 +191,12 @@ describe('Dialog.popup', () => {
       close: vi.fn(),
     } as unknown as Window)
 
-    const messenger = Messenger.noop()
+    const store = Store.create({
+      chainId: 1,
+      storage: Storage.memory({ key: 'popup-test' }),
+    })
     const dialog = Dialog.popup()
-    const handle = dialog.setup({ host, messenger })
+    const handle = dialog.setup({ host, store })
     handle.open()
 
     expect(openSpy).toHaveBeenCalledOnce()
@@ -199,9 +212,12 @@ describe('Dialog.popup', () => {
       close: vi.fn(),
     } as unknown as Window)
 
-    const messenger = Messenger.noop()
+    const store = Store.create({
+      chainId: 1,
+      storage: Storage.memory({ key: 'popup-test' }),
+    })
     const dialog = Dialog.popup()
-    const handle = dialog.setup({ host, messenger })
+    const handle = dialog.setup({ host, store })
     handle.open()
 
     const features = openSpy.mock.calls[0]![2] as string
@@ -221,9 +237,12 @@ describe('Dialog.popup', () => {
       close: popupClose,
     } as unknown as Window)
 
-    const messenger = Messenger.noop()
+    const store = Store.create({
+      chainId: 1,
+      storage: Storage.memory({ key: 'popup-test' }),
+    })
     const dialog = Dialog.popup()
-    const handle = dialog.setup({ host, messenger })
+    const handle = dialog.setup({ host, store })
     handle.open()
     handle.close()
 
@@ -236,9 +255,12 @@ describe('Dialog.popup', () => {
   test('behavior: open throws if popup blocked', () => {
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
 
-    const messenger = Messenger.noop()
+    const store = Store.create({
+      chainId: 1,
+      storage: Storage.memory({ key: 'popup-test' }),
+    })
     const dialog = Dialog.popup()
-    const handle = dialog.setup({ host, messenger })
+    const handle = dialog.setup({ host, store })
 
     expect(() => handle.open()).toThrow('Failed to open popup')
 
@@ -252,9 +274,12 @@ describe('Dialog.popup', () => {
       close: popupClose,
     } as unknown as Window)
 
-    const messenger = Messenger.noop()
+    const store = Store.create({
+      chainId: 1,
+      storage: Storage.memory({ key: 'popup-test' }),
+    })
     const dialog = Dialog.popup()
-    const handle = dialog.setup({ host, messenger })
+    const handle = dialog.setup({ host, store })
     handle.open()
     handle.destroy()
 
@@ -266,8 +291,12 @@ describe('Dialog.popup', () => {
 
 describe('Dialog.noop', () => {
   test('default: open, close, destroy are callable without error', () => {
+    const store = Store.create({
+      chainId: 1,
+      storage: Storage.memory({ key: 'noop-test' }),
+    })
     const dialog = Dialog.noop()
-    const handle = dialog.setup({ host, messenger: Messenger.noop() })
+    const handle = dialog.setup({ host, store })
     expect(() => handle.open()).not.toThrow()
     expect(() => handle.close()).not.toThrow()
     expect(() => handle.destroy()).not.toThrow()

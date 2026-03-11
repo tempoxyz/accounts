@@ -112,6 +112,11 @@
       "types": "./dist/server/index.d.ts",
       "default": "./dist/server/index.js"
     },
+    "./remote": {
+      "src": "./src/remote/index.ts",
+      "types": "./dist/remote/index.d.ts",
+      "default": "./dist/remote/index.js"
+    },
     "./wagmi": {
       "src": "./src/wagmi/index.ts",
       "types": "./dist/wagmi/index.d.ts",
