@@ -73,6 +73,25 @@ export const wagmiConfig = createConfig({
 | `webAuthn`   | App-bound passkey accounts using WebAuthn registration and authentication flows.                                                                                                                                            |
 | `local`      | Key agnostic adapter to define arbitrary account/key types and signing mechanisms.                                                                                                                                          |
 
+## Development
+
+```sh
+pnpm dev              # start connect + playground dev servers
+pnpm dev:connect      # start connect app only
+pnpm dev:playground   # start playground app only
+pnpm dev:hosts        # start connect + playground instances on different TLDs
+pnpm build            # build library
+pnpm check            # lint + format
+pnpm check:types      # type checks
+pnpm test             # run tests
+```
+
+> `pnpm dev:hosts` starts three dev servers on different domains for cross-origin testing:
+> 
+> - `https://connect.local:5174`
+> - `https://playground.a:5173`
+> - `https://playground.b:5175`
+
 ## License
 
 MIT

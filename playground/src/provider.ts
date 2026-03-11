@@ -10,7 +10,7 @@ export let provider = createProvider('connect')
 export function createProvider(adapterType: AdapterType) {
   if (adapterType === 'connect')
     return Provider.create({
-      adapter: connect({ host: 'https://localhost:5174' }),
+      adapter: connect({ host: import.meta.env.VITE_CONNECT_HOST ?? 'https://localhost:5174' }),
       testnet: true,
     })
 

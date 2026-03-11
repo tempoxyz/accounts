@@ -5,10 +5,17 @@ import { defineConfig } from 'vite'
 import mkcert from 'vite-plugin-mkcert'
 
 export default defineConfig({
-  plugins: [react(), cloudflare(), mkcert()],
-  resolve: {
-    alias: {
-      '@tempoxyz/accounts': path.resolve(__dirname, '../src'),
-    },
+  server: {
+    host: process.env.VITE_HOST ?? 'localhost',
+    port: Number(process.env.PORT ?? 5173),
+    strictPort: true,
   },
+  plugins: [
+    react(),
+    cloudflare(),
+    mkcert({
+      force: true,
+      hosts: [process.env.VITE_HOST ?? 'localhost'],
+    }),
+  ],
 })

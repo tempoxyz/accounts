@@ -5,8 +5,16 @@ import mkcert from 'vite-plugin-mkcert'
 
 export default defineConfig({
   server: {
-    host: 'localhost',
-    port: 5174,
+    host: process.env.VITE_HOST ?? 'localhost',
+    port: Number(process.env.PORT ?? 5174),
+    strictPort: true,
   },
-  plugins: [tanstackStart(), viteReact(), mkcert()],
+  plugins: [
+    tanstackStart(),
+    viteReact(),
+    mkcert({
+      force: true,
+      hosts: [process.env.VITE_HOST ?? 'localhost'],
+    }),
+  ],
 })

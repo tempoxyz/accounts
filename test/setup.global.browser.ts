@@ -60,8 +60,8 @@ export default async function () {
 
     const timeout = setTimeout(() => {
       child.kill()
-      reject(new Error('Connect dev server did not start within 30s'))
-    }, 30_000)
+      reject(new Error('Connect dev server did not start within 60s'))
+    }, 60_000)
 
     function onData(data: Buffer) {
       if (data.toString().includes('localhost')) {

@@ -6,8 +6,11 @@
     "check": "oxlint --fix --ignore-pattern package.json && oxfmt",
     "check:types": "tsc -b",
     "check:types:examples": "pnpm --filter *-example check:types",
+    "dev": "pnpm dev:connect & pnpm dev:playground",
+    "dev:hosts": "./scripts/dev:hosts.sh",
+    "dev:connect": "pnpm --filter @tempoxyz/connect dev",
+    "dev:playground": "pnpm --filter playground dev",
     "example:wagmi": "pnpm --filter wagmi dev",
-    "playground": "pnpm --filter playground dev",
     "preconstruct": "zile dev && pnpm check",
     "test": "vitest"
   },

@@ -1,6 +1,7 @@
 import { Store } from '@tempoxyz/accounts'
 import { Json } from 'ox'
 import { useState } from 'react'
+import { useStore } from 'zustand'
 
 import { remote } from '../lib/config.js'
 
@@ -9,6 +10,7 @@ export function RequestView(props: RequestView.Props) {
   const { request } = props
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [error, setError] = useState<string>()
+  const state = useStore(remote.provider.store)
 
   async function confirm() {
     setStatus('loading')
@@ -37,10 +39,17 @@ export function RequestView(props: RequestView.Props) {
           Reject
         </button>
       </div>
-      {'params' in request && request.params ? (
-        <pre>{Json.stringify(request.params, null, 2)}</pre>
-      ) : null}
       {status === 'error' && <p style={{ color: 'red' }}>{error}</p>}
+      {'params' in request && request.params ? (
+        <details>
+          <summary>Request</summary>
+          <pre>{Json.stringify(request.params, null, 2)}</pre>
+        </details>
+      ) : null}
+      <details>
+        <summary>Store</summary>
+        <pre>{Json.stringify(state, null, 2)}</pre>
+      </details>
     </div>
   )
 }
