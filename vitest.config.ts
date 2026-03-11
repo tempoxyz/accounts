@@ -48,6 +48,14 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          name: 'connect',
+          exclude: ['./connect/**/*.browser.test.ts', './connect/**/node_modules/**'],
+          include: ['./connect/**/*.test.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
           name: 'connect/browser',
           include: ['./connect/**/*.browser.test.ts'],
           browser: {

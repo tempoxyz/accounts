@@ -12,7 +12,8 @@
     "@tanstack/react-start": "catalog:",
     "@tempoxyz/accounts": "workspace:*",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@types/react": "catalog:",
