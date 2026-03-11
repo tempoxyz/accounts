@@ -58,6 +58,7 @@ export function iframe(): Dialog {
       document.body.appendChild(root)
 
       const frame = document.createElement('iframe')
+      frame.dataset.testid = 'tempo-connect'
       frame.setAttribute(
         'sandbox',
         'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox',

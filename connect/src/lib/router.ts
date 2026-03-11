@@ -12,6 +12,7 @@ export function validateSearch<const method extends Schema.Request['method']>(
 ): validateSearch.ReturnType<method> {
   const { method } = parameters
   const result = Schema.Request.safeParse(search)
+  // TODO: reject request
   if (!result.success)
     throw new Error(`Invalid request params for "${method}".`, { cause: result.error })
   if (result.data.method !== method)

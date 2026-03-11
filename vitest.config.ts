@@ -10,15 +10,14 @@ export default defineConfig({
   },
   test: {
     retry: 3,
-    hookTimeout: 5_000,
-    testTimeout: 5_000,
+    hookTimeout: 30_000,
+    testTimeout: 30_000,
     reporters: process.env.CI ? ['tree'] : [],
     projects: [
       {
         extends: true,
         test: {
-          exclude: ['./src/**/*.browser.test.ts'],
-          include: ['./src/**/*.test.ts'],
+          include: ['./src/**/*.test.ts', '!./src/**/*.browser.test.ts'],
           name: 'lib',
           globalSetup: [join(import.meta.dirname, './test/setup.global.ts')],
           setupFiles: [join(import.meta.dirname, './test/setup.ts')],
@@ -29,6 +28,8 @@ export default defineConfig({
         test: {
           name: 'lib/browser',
           include: ['./src/**/*.browser.test.ts'],
+          hookTimeout: 30_000,
+          testTimeout: 30_000,
           env: { VITE_RPC_PORT: '8546' },
           globalSetup: [join(import.meta.dirname, './test/setup.global.browser.ts')],
           setupFiles: [
@@ -49,12 +50,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'connect',
-          exclude: [
-            './connect/**/*.browser.test.ts',
-            './connect/**/*.e2e.test.ts',
-            './connect/**/node_modules/**',
-          ],
-          include: ['./connect/**/*.test.ts'],
+          include: ['./connect/**/*.test.ts', '!./connect/**/*.browser.test.ts'],
         },
       },
       {
@@ -70,15 +66,6 @@ export default defineConfig({
             provider: playwright(),
             screenshotFailures: false,
           },
-        },
-      },
-      {
-        extends: true,
-        test: {
-          name: 'connect/e2e',
-          include: ['./connect/**/*.e2e.test.ts'],
-          globalSetup: [join(import.meta.dirname, './test/connect/setup.global.ts')],
-          env: { CONNECT_BASE_URL: 'https://localhost:5175' },
         },
       },
     ],

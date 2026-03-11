@@ -1,4 +1,6 @@
+import { type ChildProcess, spawn } from 'node:child_process'
 import * as Http from 'node:http'
+import { join } from 'node:path'
 
 import * as Handler from '../src/server/Handler.js'
 import * as Kv from '../src/server/Kv.js'
@@ -10,7 +12,7 @@ export default async function () {
   const teardowns: (() => Promise<void>)[] = []
 
   if (nodeEnv === 'localnet') {
-    const teardown = await setupServer({ port: 8546 })
+    const teardown = await setupServer({ port: Number(process.env.VITE_RPC_PORT ?? '8546') })
     teardowns.push(teardown)
   }
 
@@ -57,7 +59,44 @@ export default async function () {
     ])
   })
 
+  // Start connect app dev server.
+  const connectDir = join(import.meta.dirname, '../connect')
+  const connectServer = await new Promise<ChildProcess>((resolve, reject) => {
+    const child = spawn('pnpm', ['exec', 'vite', 'dev', '--port', '5175'], {
+      cwd: connectDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        NODE_ENV: 'development',
+        VITE_RPC_URL: `http://localhost:${process.env.VITE_RPC_PORT ?? '8546'}/99999`,
+      },
+    })
+
+    const timeout = setTimeout(() => {
+      child.kill()
+      reject(new Error('Connect dev server did not start within 30s'))
+    }, 30_000)
+
+    function onData(data: Buffer) {
+      if (data.toString().includes('localhost')) {
+        clearTimeout(timeout)
+        resolve(child)
+      }
+    }
+
+    child.stdout?.on('data', onData)
+    child.stderr?.on('data', onData)
+
+    child.on('error', (err) => {
+      clearTimeout(timeout)
+      reject(err)
+    })
+  })
+
   return async () => {
+    connectServer.kill('SIGTERM')
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    if (!connectServer.killed) connectServer.kill('SIGKILL')
     await Promise.all(teardowns.map((fn) => fn()))
   }
 }
