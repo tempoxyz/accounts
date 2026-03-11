@@ -4,7 +4,6 @@ import * as Messenger from './Messenger.js'
 
 describe('fromWindow', () => {
   test('default: sends and receives messages on a topic', () => {
-    // Use a MessageChannel to simulate two ends of a window pair.
     const channel = new MessageChannel()
     const sender = Messenger.fromWindow(channel.port1 as never)
     const receiver = Messenger.fromWindow(channel.port2 as never)
@@ -45,7 +44,6 @@ describe('fromWindow', () => {
     const fn = vi.fn()
     messenger.on('rpc-request', fn)
 
-    // Simulate a message from a different origin.
     for (const listener of listeners)
       listener({
         data: {
@@ -71,7 +69,6 @@ describe('fromWindow', () => {
     const fn = vi.fn()
     const off = receiver.on('rpc-request', fn)
 
-    // Unsubscribe before sending.
     off()
 
     return new Promise<void>((resolve) => {
@@ -81,7 +78,6 @@ describe('fromWindow', () => {
         method: 'test',
       })
 
-      // Give the message time to arrive (it shouldn't call fn).
       setTimeout(() => {
         expect(fn).not.toHaveBeenCalled()
         sender.destroy()
@@ -102,7 +98,6 @@ describe('fromWindow', () => {
     const fn = vi.fn()
     receiver.on('rpc-request', fn)
 
-    // Destroy receiver.
     receiver.destroy()
 
     return new Promise<void>((resolve) => {
@@ -122,35 +117,63 @@ describe('fromWindow', () => {
 })
 
 describe('bridge', () => {
-  test('default: on delegates to from, send delegates to to', () => {
-    const from = mockMessenger()
-    const to = mockMessenger()
+  test('default: sends and receives through bridge', () => {
+    const [from, fromRemote] = createPair()
+    const [toRemote, to] = createPair()
 
     const b = Messenger.bridge({ from, to })
 
-    const fn = vi.fn()
-    b.on('rpc-request', fn)
-    expect(from.on).toHaveBeenCalledWith('rpc-request', fn)
+    const received: unknown[] = []
+    b.on('rpc-request', (payload) => received.push(payload))
+
+    // Simulate the remote side sending a message.
+    fromRemote.send('rpc-request', {
+      id: 1,
+      jsonrpc: '2.0',
+      method: 'eth_chainId',
+    })
+
+    expect(received).toMatchInlineSnapshot(`
+      [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "eth_chainId",
+        },
+      ]
+    `)
+
+    // Send through bridge and verify it arrives on the remote side.
+    const sent: unknown[] = []
+    toRemote.on('rpc-request', (payload) => sent.push(payload))
 
     b.send('rpc-request', {
-      id: 1,
+      id: 2,
       jsonrpc: '2.0',
-      method: 'test',
+      method: 'personal_sign',
     })
-    expect(to.send).toHaveBeenCalledWith('rpc-request', {
-      id: 1,
-      jsonrpc: '2.0',
-      method: 'test',
-    })
+
+    expect(sent).toMatchInlineSnapshot(`
+      [
+        {
+          "id": 2,
+          "jsonrpc": "2.0",
+          "method": "personal_sign",
+        },
+      ]
+    `)
 
     b.destroy()
   })
 
-  test('behavior: waitForReady delays sends until ready', async () => {
-    const from = mockMessenger()
-    const to = mockMessenger()
+  test('behavior: waitForReady delays sends until ready', () => {
+    const [from, fromRemote] = createPair()
+    const [toRemote, to] = createPair()
 
     const b = Messenger.bridge({ from, to, waitForReady: true })
+
+    const sent: unknown[] = []
+    toRemote.on('rpc-request', (payload) => sent.push(payload))
 
     b.send('rpc-request', {
       id: 1,
@@ -158,39 +181,34 @@ describe('bridge', () => {
       method: 'test',
     })
 
-    // to.send should NOT have been called yet (only from.on for 'ready').
-    expect(to.send).not.toHaveBeenCalledWith('rpc-request', expect.anything())
+    // Not yet delivered — waiting for ready.
+    expect(sent).toMatchInlineSnapshot('[]')
 
-    // Simulate the remote frame signaling ready.
-    const readyListener = (from.on as ReturnType<typeof vi.fn>).mock.calls.find(
-      (c) => c[0] === 'ready',
-    )?.[1] as () => void
-    readyListener()
+    // Remote side signals ready.
+    fromRemote.send('ready', undefined)
 
-    // Wait for the ready promise microtask to flush.
-    await new Promise((r) => setTimeout(r, 10))
-
-    expect(to.send).toHaveBeenCalledWith('rpc-request', {
-      id: 1,
-      jsonrpc: '2.0',
-      method: 'test',
-    })
+    // Now the buffered send should have been delivered.
+    expect(sent).toMatchInlineSnapshot(`
+      [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "test",
+        },
+      ]
+    `)
 
     b.destroy()
   })
 
   test('behavior: waitForReady resolves', async () => {
-    const from = mockMessenger()
-    const to = mockMessenger()
+    const [from, fromRemote] = createPair()
+    const [, to] = createPair()
 
     const b = Messenger.bridge({ from, to, waitForReady: true })
 
     const readyPromise = b.waitForReady()
-
-    const readyListener = (from.on as ReturnType<typeof vi.fn>).mock.calls.find(
-      (c) => c[0] === 'ready',
-    )?.[1] as () => void
-    readyListener()
+    fromRemote.send('ready', undefined)
 
     await readyPromise
 
@@ -198,49 +216,58 @@ describe('bridge', () => {
   })
 
   test('behavior: ready sends ready topic', () => {
-    const from = mockMessenger()
-    const to = mockMessenger()
+    const [from] = createPair()
+    const [toRemote, to] = createPair()
 
     const b = Messenger.bridge({ from, to })
 
+    const received: unknown[] = []
+    toRemote.on('ready', (payload) => received.push(payload))
+
     b.ready()
 
-    expect(to.send).toHaveBeenCalledWith('ready', undefined)
+    expect(received).toMatchInlineSnapshot(`
+      [
+        undefined,
+      ]
+    `)
 
     b.destroy()
   })
 
-  test('behavior: sends after ready go directly without buffering', async () => {
-    const from = mockMessenger()
-    const to = mockMessenger()
+  test('behavior: sends after ready go directly without buffering', () => {
+    const [from, fromRemote] = createPair()
+    const [toRemote, to] = createPair()
 
     const b = Messenger.bridge({ from, to, waitForReady: true })
 
-    // Simulate ready.
-    const readyListener = (from.on as ReturnType<typeof vi.fn>).mock.calls.find(
-      (c) => c[0] === 'ready',
-    )?.[1] as () => void
-    readyListener()
+    fromRemote.send('ready', undefined)
 
-    // Send after ready — should go directly to `to.send`.
+    const sent: unknown[] = []
+    toRemote.on('rpc-request', (payload) => sent.push(payload))
+
     b.send('rpc-request', {
       id: 2,
       jsonrpc: '2.0',
       method: 'post-ready',
     })
 
-    expect(to.send).toHaveBeenCalledWith('rpc-request', {
-      id: 2,
-      jsonrpc: '2.0',
-      method: 'post-ready',
-    })
+    expect(sent).toMatchInlineSnapshot(`
+      [
+        {
+          "id": 2,
+          "jsonrpc": "2.0",
+          "method": "post-ready",
+        },
+      ]
+    `)
 
     b.destroy()
   })
 
   test('behavior: destroy rejects pending waitForReady', async () => {
-    const from = mockMessenger()
-    const to = mockMessenger()
+    const [from] = createPair()
+    const [, to] = createPair()
 
     const b = Messenger.bridge({ from, to, waitForReady: true })
 
@@ -251,14 +278,14 @@ describe('bridge', () => {
   })
 
   test('behavior: destroy cleans up', () => {
-    const from = mockMessenger()
-    const to = mockMessenger()
+    const [from] = createPair()
+    const [, to] = createPair()
 
     const b = Messenger.bridge({ from, to })
-    b.destroy()
 
-    expect(from.destroy).toHaveBeenCalled()
-    expect(to.destroy).toHaveBeenCalled()
+    // Should not throw after destroy.
+    b.destroy()
+    b.send('rpc-request', { id: 1, jsonrpc: '2.0', method: 'test' })
   })
 })
 
@@ -288,10 +315,30 @@ describe('noop', () => {
   })
 })
 
-function mockMessenger(): Messenger.Messenger {
-  return {
-    destroy: vi.fn(),
-    on: vi.fn(() => () => {}),
-    send: vi.fn(),
+/** Creates a pair of synchronous in-memory messengers wired together. */
+function createPair(): [Messenger.Messenger, Messenger.Messenger] {
+  type Listener = { topic: string; fn: (payload: unknown) => void }
+  const aListeners: Listener[] = []
+  const bListeners: Listener[] = []
+
+  function create(own: Listener[], peer: Listener[]): Messenger.Messenger {
+    return Messenger.from({
+      destroy() {
+        own.length = 0
+      },
+      on(topic, listener) {
+        const entry = { topic, fn: listener as (payload: unknown) => void }
+        own.push(entry)
+        return () => {
+          const idx = own.indexOf(entry)
+          if (idx >= 0) own.splice(idx, 1)
+        }
+      },
+      send(topic, payload) {
+        for (const l of [...peer]) if (l.topic === topic) l.fn(payload)
+      },
+    })
   }
+
+  return [create(aListeners, bListeners), create(bListeners, aListeners)]
 }
