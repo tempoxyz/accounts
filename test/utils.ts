@@ -6,11 +6,14 @@ export type Server = Http.Server & {
   url: string
 }
 
-export function createServer(handler: Http.RequestListener): Promise<Server> {
+export function createServer(
+  handler: Http.RequestListener,
+  options: createServer.Options = {},
+): Promise<Server> {
   const server = Http.createServer(handler)
 
   return new Promise((resolve) => {
-    server.listen(() => {
+    server.listen(options.port, () => {
       const { port } = server.address() as AddressInfo
       resolve(
         Object.assign(server, {
@@ -24,4 +27,11 @@ export function createServer(handler: Http.RequestListener): Promise<Server> {
       )
     })
   })
+}
+
+export declare namespace createServer {
+  type Options = {
+    /** Port to listen on. Defaults to a random available port. */
+    port?: number | undefined
+  }
 }
