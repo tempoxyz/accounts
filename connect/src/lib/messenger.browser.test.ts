@@ -8,7 +8,7 @@ describe('Messenger.init', () => {
     const messenger = Messenger_connect.init()
 
     expect(() => messenger.send('ready', undefined)).not.toThrow()
-    expect(() => messenger.on('rpc-request', () => {})).not.toThrow()
+    expect(() => messenger.on('rpc-requests', () => {})).not.toThrow()
     expect(() => messenger.destroy()).not.toThrow()
   })
 
@@ -30,12 +30,12 @@ describe('Messenger.init', () => {
     remote.ready()
     await ready
 
-    // Host → remote: rpc-request
-    const received = new Promise<Messenger.Payload<'rpc-request'>>((resolve) => {
-      remote.on('rpc-request', resolve)
+    // Host → remote: rpc-requests
+    const received = new Promise<Messenger.Payload<'rpc-requests'>>((resolve) => {
+      remote.on('rpc-requests', resolve)
     })
-    host.send('rpc-request', { id: 1, jsonrpc: '2.0', method: 'eth_accounts' })
-    expect(await received).toMatchObject({ id: 1, method: 'eth_accounts' })
+    host.send('rpc-requests', [{ id: 1, jsonrpc: '2.0', method: 'eth_accounts' }])
+    expect(await received).toMatchObject([{ id: 1, method: 'eth_accounts' }])
 
     // Remote → host: rpc-response
     const responded = new Promise<Messenger.Payload<'rpc-response'>>((resolve) => {

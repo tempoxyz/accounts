@@ -2,7 +2,7 @@ import type { Messenger } from '@tempoxyz/accounts'
 import { createStore } from 'zustand/vanilla'
 
 /** Pending RPC request from the host. */
-export type Request = Messenger.Payload<'rpc-request'> & {
+export type Request = Messenger.Payload<'rpc-requests'>[number] & {
   status: 'pending' | 'responded'
 }
 

@@ -130,6 +130,9 @@ importers:
       oxlint:
         specifier: ^1.50.0
         version: 1.51.0
+      playwright-core:
+        specifier: ^1.58.2
+        version: 1.58.2
       prool:
         specifier: 'catalog:'
         version: 0.2.3(testcontainers@11.12.0)

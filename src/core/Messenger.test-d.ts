@@ -7,13 +7,15 @@ describe('Payload', () => {
     expectTypeOf<Messenger.Payload<'ready'>>().toEqualTypeOf<undefined>()
   })
 
-  test('rpc-request resolves to RpcRequest shape', () => {
-    expectTypeOf<Messenger.Payload<'rpc-request'>>().toEqualTypeOf<{
-      id: number
-      jsonrpc: '2.0'
-      method: string
-      params?: unknown
-    }>()
+  test('rpc-requests resolves to array of RpcRequest shapes', () => {
+    expectTypeOf<Messenger.Payload<'rpc-requests'>>().toEqualTypeOf<
+      readonly {
+        id: number
+        jsonrpc: '2.0'
+        method: string
+        params?: unknown
+      }[]
+    >()
   })
 
   test('rpc-response includes _request', () => {

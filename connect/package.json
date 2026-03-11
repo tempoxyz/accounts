@@ -4,8 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
-    "test": "vitest run"
+    "build": "vite build"
   },
   "dependencies": {
     "@tanstack/react-router": "catalog:",

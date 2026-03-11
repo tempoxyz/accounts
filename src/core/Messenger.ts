@@ -5,7 +5,7 @@ export type Messenger = {
   /** Subscribe to a topic. Returns an unsubscribe function. */
   on: <const topic extends Topic>(
     topic: topic,
-    listener: (payload: Payload<topic>) => void,
+    listener: (payload: Payload<topic>, event: MessageEvent) => void,
   ) => () => void
   /** Send a message on a topic. */
   send: <const topic extends Topic>(topic: topic, payload: Payload<topic>) => void
@@ -26,13 +26,13 @@ export type Schema = [
     payload: undefined
   },
   {
-    topic: 'rpc-request'
-    payload: {
+    topic: 'rpc-requests'
+    payload: readonly {
       id: number
       jsonrpc: '2.0'
       method: string
       params?: unknown
-    }
+    }[]
   },
   {
     topic: 'rpc-response'
@@ -110,7 +110,7 @@ export function fromWindow(
         if (data.topic !== topic) return
         if (targetOrigin && event.origin !== targetOrigin) return
         if (expectedSource && event.source !== expectedSource) return
-        listener(data.payload as never)
+        listener(data.payload as never, event)
       }
       listeners.add(onMessage)
       return () => {

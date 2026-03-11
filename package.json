@@ -38,6 +38,7 @@
     "hono": "^4.12.4",
     "oxfmt": "^0.35.0",
     "oxlint": "^1.50.0",
+    "playwright-core": "^1.58.2",
     "prool": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

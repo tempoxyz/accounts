@@ -1,5 +1,6 @@
 export * as Ceremony from './core/Ceremony.js'
 export * as Messenger from './core/Messenger.js'
+export * as Schema from './core/Schema.js'
 export * as Provider from './core/Provider.js'
 export * as Expiry from './core/Expiry.js'
 export * as Rpc from './core/zod/rpc.js'
