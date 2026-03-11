@@ -61,19 +61,46 @@ export function iframe(): Dialog {
       root.appendChild(frame)
       document.body.appendChild(root)
 
+      let isOpen = false
       let savedOverflow = ''
+      let opener: HTMLElement | null = null
+
+      function close() {
+        if (!isOpen) return
+        isOpen = false
+        root.close()
+        document.body.style.overflow = savedOverflow
+        opener?.focus()
+        opener = null
+      }
+
+      root.addEventListener('cancel', () => close())
+
+      root.addEventListener('click', (event) => {
+        if (event.target === root) close()
+      })
+
+      const inertObserver = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          if (mutation.attributeName === 'inert') root.removeAttribute('inert')
+        }
+      })
+      inertObserver.observe(root, { attributes: true })
 
       return {
         open() {
+          if (isOpen) return
+          isOpen = true
+          if (document.activeElement instanceof HTMLElement)
+            opener = document.activeElement
           savedOverflow = document.body.style.overflow
           document.body.style.overflow = 'hidden'
           root.showModal()
         },
-        close() {
-          root.close()
-          document.body.style.overflow = savedOverflow
-        },
+        close,
         destroy() {
+          close()
+          inertObserver.disconnect()
           root.remove()
         },
       }
@@ -101,6 +128,7 @@ export function popup(options: popup.Options = {}): Dialog {
           const top = Math.round(window.screenY + 100)
           const features = `width=${size.width},height=${size.height},left=${left},top=${top}`
           win = window.open(host, '_blank', features)
+          if (!win) throw new Error('Failed to open popup')
 
           pollTimer = setInterval(() => {
             if (win?.closed) {
@@ -137,8 +165,8 @@ export declare namespace popup {
 /** Detects Safari (which does not support WebAuthn in cross-origin iframes). */
 export function isSafari(): boolean {
   if (typeof navigator === 'undefined') return false
-  const ua = navigator.userAgent
-  return /Safari/.test(ua) && !/Chrome/.test(ua) && !/Chromium/.test(ua)
+  const ua = navigator.userAgent.toLowerCase()
+  return ua.includes('safari') && !ua.includes('chrome')
 }
 
 /** Returns a no-op dialog for SSR environments. */

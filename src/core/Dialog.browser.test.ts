@@ -83,6 +83,95 @@ describe('Dialog.iframe', () => {
     handle.close()
     expect(document.body.style.overflow).toBe('auto')
   })
+
+  test('behavior: open is idempotent', () => {
+    const { handle } = setup()
+    handle.open()
+    expect(() => handle.open()).not.toThrow()
+    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+    expect(dialog.open).toBe(true)
+    handle.close()
+  })
+
+  test('behavior: close without open does not throw', () => {
+    const { handle } = setup()
+    expect(() => handle.close()).not.toThrow()
+  })
+
+  test('behavior: destroy restores body scroll', () => {
+    const { handle } = setup()
+    document.body.style.overflow = 'auto'
+    handle.open()
+    handle.destroy()
+    expect(document.body.style.overflow).toBe('auto')
+  })
+
+  test('behavior: destroy closes open dialog', () => {
+    const { handle } = setup()
+    handle.open()
+    handle.destroy()
+    expect(document.querySelector('dialog[data-tempo-connect]')).toBeNull()
+  })
+
+  test('behavior: native cancel event restores body scroll', () => {
+    const { handle } = setup()
+    document.body.style.overflow = 'auto'
+    handle.open()
+    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+    dialog.dispatchEvent(new Event('cancel'))
+    expect(document.body.style.overflow).toBe('auto')
+  })
+
+  test('behavior: focus restored to previous element on close', () => {
+    const button = document.createElement('button')
+    document.body.appendChild(button)
+    button.focus()
+    expect(document.activeElement).toBe(button)
+
+    const { handle } = setup()
+    handle.open()
+    handle.close()
+
+    expect(document.activeElement).toBe(button)
+    button.remove()
+  })
+
+  test('behavior: backdrop click closes dialog', () => {
+    const { handle } = setup()
+    handle.open()
+    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+
+    // Clicking the dialog element itself (not a child) simulates backdrop click
+    dialog.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    expect(dialog.open).toBe(false)
+    expect(document.body.style.overflow).not.toBe('hidden')
+  })
+
+  test('behavior: click inside iframe does not close dialog', () => {
+    const { handle } = setup()
+    handle.open()
+    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+    const iframe = dialog.querySelector('iframe')!
+
+    iframe.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    expect(dialog.open).toBe(true)
+  })
+
+  test('behavior: 1Password inert attribute stripped from dialog', async () => {
+    const { handle } = setup()
+    handle.open()
+    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+
+    dialog.setAttribute('inert', '')
+
+    // MutationObserver fires asynchronously
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(dialog.hasAttribute('inert')).toBe(false)
+    handle.close()
+  })
 })
 
 describe('Dialog.popup', () => {
@@ -141,6 +230,18 @@ describe('Dialog.popup', () => {
     expect(popupClose).toHaveBeenCalledOnce()
 
     handle.destroy()
+    openSpy.mockRestore()
+  })
+
+  test('behavior: open throws if popup blocked', () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+
+    const messenger = Messenger.noop()
+    const dialog = Dialog.popup()
+    const handle = dialog.setup({ host, messenger })
+
+    expect(() => handle.open()).toThrow('Failed to open popup')
+
     openSpy.mockRestore()
   })
 
