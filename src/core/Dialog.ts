@@ -83,6 +83,12 @@ export function iframe(): Dialog {
 
       messenger.on('rpc-response', (response) => handleResponse(store, response))
 
+      messenger.send('__internal', {
+        type: 'init',
+        chainId: store.getState().chainId,
+        mode: 'iframe',
+      })
+
       let isOpen = false
       let savedOverflow = ''
       let opener: HTMLElement | null = null
@@ -135,7 +141,7 @@ export function iframe(): Dialog {
         syncRequests(requests) {
           const requiresConfirm = requests.some((x) => x.status === 'pending')
           if (!isOpen && requiresConfirm) this.open()
-          messenger.send('rpc-requests', requests)
+          messenger.send('rpc-requests', { chainId: store.getState().chainId, requests })
         },
       }
     },
@@ -181,6 +187,12 @@ export function popup(options: popup.Options = {}): Dialog {
 
           messenger.on('rpc-response', (response) => handleResponse(store, response))
 
+          messenger.send('__internal', {
+            type: 'init',
+            chainId: store.getState().chainId,
+            mode: 'popup',
+          })
+
           pollTimer = setInterval(() => {
             if (win?.closed) {
               clearInterval(pollTimer)
@@ -213,7 +225,7 @@ export function popup(options: popup.Options = {}): Dialog {
             if (!win || win.closed) this.open()
             win?.focus()
           }
-          messenger.send('rpc-requests', requests)
+          messenger.send('rpc-requests', { chainId: store.getState().chainId, requests })
         },
       }
     },
@@ -242,10 +254,6 @@ export function noop(): Dialog {
     },
   })
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /** Updates the store with an RPC response from the remote auth app. */
 function handleResponse(

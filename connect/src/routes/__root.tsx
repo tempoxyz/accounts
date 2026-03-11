@@ -1,7 +1,19 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
-import '../lib/setup.js'
+import { remote } from '../lib/config'
+import { router } from '../router'
+
+remote.onDialogRequest(({ request }) => {
+  if (!request) return
+
+  router.navigate({
+    to: `/rpc/${request.method}`,
+    search: request as never,
+  })
+})
+
+remote.ready()
 
 export const Route = createRootRoute({
   head: () => ({

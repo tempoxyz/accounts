@@ -8,10 +8,11 @@ describe('Payload', () => {
     expectTypeOf<Messenger.Payload<'ready'>>().toEqualTypeOf<undefined>()
   })
 
-  test('rpc-requests resolves to readonly QueuedRequest[]', () => {
-    expectTypeOf<Messenger.Payload<'rpc-requests'>>().toEqualTypeOf<
-      readonly Store.QueuedRequest[]
-    >()
+  test('rpc-requests resolves to { chainId, requests }', () => {
+    expectTypeOf<Messenger.Payload<'rpc-requests'>>().toEqualTypeOf<{
+      chainId: number
+      requests: readonly Store.QueuedRequest[]
+    }>()
   })
 
   test('rpc-response includes _request', () => {
@@ -29,7 +30,6 @@ describe('Payload', () => {
     expectTypeOf<Extract<Internal, { type: 'init' }>>().toMatchTypeOf<{
       type: 'init'
       mode: 'iframe' | 'popup'
-      referrer: { title: string; icon?: string | undefined }
     }>()
     expectTypeOf<Extract<Internal, { type: 'resize' }>>().toMatchTypeOf<{
       type: 'resize'

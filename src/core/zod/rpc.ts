@@ -312,6 +312,7 @@ export namespace wallet_connect {
         z.tuple([
           z.object({
             capabilities: capabilities.request,
+            chainId: z.optional(u.number()),
             version: z.optional(z.string()),
           }),
         ]),

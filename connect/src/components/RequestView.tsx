@@ -1,9 +1,8 @@
-import { Schema, Store } from '@tempoxyz/accounts'
-import { Actions } from '@tempoxyz/accounts/remote'
+import { Store } from '@tempoxyz/accounts'
 import { Json } from 'ox'
 import { useState } from 'react'
 
-import { remote } from '../lib/setup.js'
+import { remote } from '../lib/config.js'
 
 /** Generic confirm/reject UI for an RPC request. */
 export function RequestView(props: RequestView.Props) {
@@ -14,7 +13,7 @@ export function RequestView(props: RequestView.Props) {
   async function confirm() {
     setStatus('loading')
     try {
-      await Actions.respond(remote, request)
+      await remote.respond(request)
     } catch (e) {
       setStatus('error')
       setError(e instanceof Error ? e.message : 'Unknown error')
@@ -24,7 +23,7 @@ export function RequestView(props: RequestView.Props) {
   }
 
   function reject() {
-    Actions.reject(remote, request)
+    remote.reject(request)
   }
 
   return (

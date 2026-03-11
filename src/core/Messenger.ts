@@ -31,7 +31,10 @@ export type Schema = [
   },
   {
     topic: 'rpc-requests'
-    payload: readonly Store.QueuedRequest[]
+    payload: {
+      chainId: number
+      requests: readonly Store.QueuedRequest[]
+    }
   },
   {
     topic: 'rpc-response'
@@ -47,10 +50,10 @@ export type Schema = [
     topic: '__internal'
     payload:
       | {
-          type: 'init'
-          mode: 'iframe' | 'popup'
-          referrer: { title: string; icon?: string | undefined }
-        }
+         type: 'init'
+         chainId: number
+         mode: 'iframe' | 'popup'
+       }
       | {
           type: 'resize'
           height?: number | undefined
