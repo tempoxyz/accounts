@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import * as Dialog from './Dialog.js'
 import * as Messenger from './Messenger.js'
@@ -82,5 +82,99 @@ describe('Dialog.iframe', () => {
     handle.open()
     handle.close()
     expect(document.body.style.overflow).toBe('auto')
+  })
+})
+
+describe('Dialog.popup', () => {
+  test('default: window.open called with correct URL', () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({
+      closed: false,
+      close: vi.fn(),
+    } as unknown as Window)
+
+    const messenger = Messenger.noop()
+    const dialog = Dialog.popup()
+    const handle = dialog.setup({ host, messenger })
+    handle.open()
+
+    expect(openSpy).toHaveBeenCalledOnce()
+    expect(openSpy.mock.calls[0]![0]).toBe(host)
+
+    handle.destroy()
+    openSpy.mockRestore()
+  })
+
+  test('behavior: window.open called with centered position', () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({
+      closed: false,
+      close: vi.fn(),
+    } as unknown as Window)
+
+    const messenger = Messenger.noop()
+    const dialog = Dialog.popup()
+    const handle = dialog.setup({ host, messenger })
+    handle.open()
+
+    const features = openSpy.mock.calls[0]![2] as string
+    expect(features).toContain('width=')
+    expect(features).toContain('height=')
+    expect(features).toContain('left=')
+    expect(features).toContain('top=')
+
+    handle.destroy()
+    openSpy.mockRestore()
+  })
+
+  test('behavior: close calls popup.close()', () => {
+    const popupClose = vi.fn()
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({
+      closed: false,
+      close: popupClose,
+    } as unknown as Window)
+
+    const messenger = Messenger.noop()
+    const dialog = Dialog.popup()
+    const handle = dialog.setup({ host, messenger })
+    handle.open()
+    handle.close()
+
+    expect(popupClose).toHaveBeenCalledOnce()
+
+    handle.destroy()
+    openSpy.mockRestore()
+  })
+
+  test('behavior: destroy cleans up', () => {
+    const popupClose = vi.fn()
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({
+      closed: false,
+      close: popupClose,
+    } as unknown as Window)
+
+    const messenger = Messenger.noop()
+    const dialog = Dialog.popup()
+    const handle = dialog.setup({ host, messenger })
+    handle.open()
+    handle.destroy()
+
+    expect(popupClose).toHaveBeenCalled()
+
+    openSpy.mockRestore()
+  })
+})
+
+describe('Dialog.noop', () => {
+  test('default: open, close, destroy are callable without error', () => {
+    const dialog = Dialog.noop()
+    const handle = dialog.setup({ host, messenger: Messenger.noop() })
+    expect(() => handle.open()).not.toThrow()
+    expect(() => handle.close()).not.toThrow()
+    expect(() => handle.destroy()).not.toThrow()
+  })
+})
+
+describe('isSafari', () => {
+  test('default: returns false in non-Safari environment', () => {
+    expect(Dialog.isSafari()).toBe(false)
   })
 })

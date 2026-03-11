@@ -81,6 +81,66 @@ export function iframe(): Dialog {
   })
 }
 
+/** Opens the auth app in a new browser window. */
+export function popup(options: popup.Options = {}): Dialog {
+  if (typeof window === 'undefined') return noop()
+
+  const { size = { width: 360, height: 440 } } = options
+
+  return from({
+    name: 'popup',
+    setup(parameters) {
+      const { host } = parameters
+
+      let win: Window | null = null
+      let pollTimer: ReturnType<typeof setInterval> | undefined
+
+      return {
+        open() {
+          const left = Math.round((window.innerWidth - size.width) / 2 + window.screenX)
+          const top = Math.round(window.screenY + 100)
+          const features = `width=${size.width},height=${size.height},left=${left},top=${top}`
+          win = window.open(host, '_blank', features)
+
+          pollTimer = setInterval(() => {
+            if (win?.closed) {
+              clearInterval(pollTimer)
+              pollTimer = undefined
+              win = null
+            }
+          }, 100)
+        },
+        close() {
+          win?.close()
+          win = null
+        },
+        destroy() {
+          win?.close()
+          win = null
+          if (pollTimer) {
+            clearInterval(pollTimer)
+            pollTimer = undefined
+          }
+        },
+      }
+    },
+  })
+}
+
+export declare namespace popup {
+  type Options = {
+    /** Popup window dimensions. @default `{ width: 360, height: 440 }` */
+    size?: { width: number; height: number } | undefined
+  }
+}
+
+/** Detects Safari (which does not support WebAuthn in cross-origin iframes). */
+export function isSafari(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  return /Safari/.test(ua) && !/Chrome/.test(ua) && !/Chromium/.test(ua)
+}
+
 /** Returns a no-op dialog for SSR environments. */
 export function noop(): Dialog {
   return from({
