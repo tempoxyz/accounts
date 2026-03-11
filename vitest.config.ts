@@ -19,7 +19,7 @@ export default defineConfig({
         test: {
           exclude: ['./src/**/*.browser.test.ts'],
           include: ['./src/**/*.test.ts'],
-          name: 'core',
+          name: 'lib',
           globalSetup: [join(import.meta.dirname, './test/setup.global.ts')],
           setupFiles: [join(import.meta.dirname, './test/setup.ts')],
         },
@@ -27,7 +27,7 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          name: 'browser',
+          name: 'lib/browser',
           include: ['./src/**/*.browser.test.ts'],
           env: { VITE_RPC_PORT: '8546' },
           globalSetup: [join(import.meta.dirname, './test/setup.global.browser.ts')],
@@ -38,6 +38,22 @@ export default defineConfig({
           browser: {
             enabled: true,
             headless: true,
+            api: 63315,
+            instances: [{ browser: 'chromium' }],
+            provider: playwright(),
+            screenshotFailures: false,
+          },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'connect/browser',
+          include: ['./connect/**/*.browser.test.ts'],
+          browser: {
+            enabled: true,
+            headless: true,
+            api: 63316,
             instances: [{ browser: 'chromium' }],
             provider: playwright(),
             screenshotFailures: false,

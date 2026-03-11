@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "moduleResolution": "Bundler",
+    "module": "ESNext",
+    "target": "ES2022",
+    "skipLibCheck": true,
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "outDir": "./dist",
+    "paths": {
+      "@tempoxyz/accounts": ["../src/index.ts"],
+      "@tempoxyz/accounts/*": ["../src/*"]
+    }
+  },
+  "include": ["src"]
+}
