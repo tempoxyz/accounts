@@ -88,9 +88,9 @@ function Connect() {
               })
             }
           >
-            Login with Tempo
+            Login
           </button>
-          {/* <div>
+          <div>
             <label>
               <input
                 type="checkbox"
@@ -99,7 +99,7 @@ function Connect() {
               />{' '}
               Authorize Access Key ($5 aUSD, 5 minutes)
             </label>
-          </div> */}
+          </div>
         </>
       )}
       <div>{status}</div>

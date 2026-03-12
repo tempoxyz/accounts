@@ -197,33 +197,19 @@ describe('removePending', () => {
   })
 })
 
-describe('prepare', () => {
-  test('default: returns access key, digest, and key pair', async () => {
-    const result = await AccessKey.prepare({ chainId: 1 })
+describe('generate', () => {
+  test('default: returns access key and key pair', async () => {
+    const result = await AccessKey.generate()
 
     expect(result.accessKey.address).toMatch(/^0x[0-9a-f]{40}$/i)
-    expect(result.digest).toMatch(/^0x[0-9a-f]+$/)
     expect(result.keyPair).toBeDefined()
   })
 
   test('behavior: with account attaches access to root', async () => {
-    const result = await AccessKey.prepare({ account: accounts[0]!, chainId: 1 })
+    const result = await AccessKey.generate({ account: accounts[0]! })
 
     expect(result.accessKey.source).toMatchInlineSnapshot(`"accessKey"`)
     expect(result.accessKey.accessKeyAddress).toMatch(/^0x[0-9a-f]{40}$/i)
-  })
-
-  test('behavior: digest matches getSignPayload', async () => {
-    const expiry = Math.floor(Date.now() / 1000) + 3600
-    const result = await AccessKey.prepare({ chainId: 1, expiry })
-
-    const expected = KeyAuthorization.getSignPayload({
-      address: result.accessKey.address,
-      chainId: 1n,
-      expiry,
-      type: result.accessKey.keyType,
-    })
-    expect(result.digest).toBe(expected)
   })
 })
 

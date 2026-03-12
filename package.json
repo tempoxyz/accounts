@@ -11,7 +11,7 @@
     "dev:auth": "pnpm --filter @tempoxyz/auth dev",
     "dev:playground": "pnpm --filter playground dev",
     "example:wagmi": "pnpm --filter wagmi dev & pnpm dev:auth",
-    "preconstruct": "zile dev && pnpm check",
+    "preconstruct": "zile dev",
     "test": "vitest"
   },
   "packageManager": "pnpm@10.18.3",

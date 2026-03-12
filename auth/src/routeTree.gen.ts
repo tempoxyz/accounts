@@ -10,36 +10,38 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as RpcSplatRouteImport } from './routes/rpc/$'
-import { Route as RpcEth_sendTransactionRouteImport } from './routes/rpc/eth_sendTransaction'
-import { Route as RpcEth_sendTransactionSyncRouteImport } from './routes/rpc/eth_sendTransactionSync'
-import { Route as RpcEth_signTransactionRouteImport } from './routes/rpc/eth_signTransaction'
-import { Route as RpcEth_signTypedData_v4RouteImport } from './routes/rpc/eth_signTypedData_v4'
-import { Route as RpcPersonal_signRouteImport } from './routes/rpc/personal_sign'
-import { Route as RpcWallet_authorizeAccessKeyRouteImport } from './routes/rpc/wallet_authorizeAccessKey'
-import { Route as RpcWallet_connectRouteImport } from './routes/rpc/wallet_connect'
 import { Route as RpcWallet_revokeAccessKeyRouteImport } from './routes/rpc/wallet_revokeAccessKey'
+import { Route as RpcWallet_connectRouteImport } from './routes/rpc/wallet_connect'
+import { Route as RpcWallet_authorizeAccessKeyRouteImport } from './routes/rpc/wallet_authorizeAccessKey'
+import { Route as RpcPersonal_signRouteImport } from './routes/rpc/personal_sign'
+import { Route as RpcEth_signTypedData_v4RouteImport } from './routes/rpc/eth_signTypedData_v4'
+import { Route as RpcEth_signTransactionRouteImport } from './routes/rpc/eth_signTransaction'
+import { Route as RpcEth_sendTransactionSyncRouteImport } from './routes/rpc/eth_sendTransactionSync'
+import { Route as RpcEth_sendTransactionRouteImport } from './routes/rpc/eth_sendTransaction'
+import { Route as RpcSplatRouteImport } from './routes/rpc/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RpcWallet_revokeAccessKeyRoute = RpcWallet_revokeAccessKeyRouteImport.update({
-  id: '/rpc/wallet_revokeAccessKey',
-  path: '/rpc/wallet_revokeAccessKey',
-  getParentRoute: () => rootRouteImport,
-} as any)
+const RpcWallet_revokeAccessKeyRoute =
+  RpcWallet_revokeAccessKeyRouteImport.update({
+    id: '/rpc/wallet_revokeAccessKey',
+    path: '/rpc/wallet_revokeAccessKey',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const RpcWallet_connectRoute = RpcWallet_connectRouteImport.update({
   id: '/rpc/wallet_connect',
   path: '/rpc/wallet_connect',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RpcWallet_authorizeAccessKeyRoute = RpcWallet_authorizeAccessKeyRouteImport.update({
-  id: '/rpc/wallet_authorizeAccessKey',
-  path: '/rpc/wallet_authorizeAccessKey',
-  getParentRoute: () => rootRouteImport,
-} as any)
+const RpcWallet_authorizeAccessKeyRoute =
+  RpcWallet_authorizeAccessKeyRouteImport.update({
+    id: '/rpc/wallet_authorizeAccessKey',
+    path: '/rpc/wallet_authorizeAccessKey',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const RpcPersonal_signRoute = RpcPersonal_signRouteImport.update({
   id: '/rpc/personal_sign',
   path: '/rpc/personal_sign',
@@ -55,11 +57,12 @@ const RpcEth_signTransactionRoute = RpcEth_signTransactionRouteImport.update({
   path: '/rpc/eth_signTransaction',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RpcEth_sendTransactionSyncRoute = RpcEth_sendTransactionSyncRouteImport.update({
-  id: '/rpc/eth_sendTransactionSync',
-  path: '/rpc/eth_sendTransactionSync',
-  getParentRoute: () => rootRouteImport,
-} as any)
+const RpcEth_sendTransactionSyncRoute =
+  RpcEth_sendTransactionSyncRouteImport.update({
+    id: '/rpc/eth_sendTransactionSync',
+    path: '/rpc/eth_sendTransactionSync',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const RpcEth_sendTransactionRoute = RpcEth_sendTransactionRouteImport.update({
   id: '/rpc/eth_sendTransaction',
   path: '/rpc/eth_sendTransaction',
@@ -251,9 +254,8 @@ export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
-import type { createStart } from '@tanstack/react-start'
-
 import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
