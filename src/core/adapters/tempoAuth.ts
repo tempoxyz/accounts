@@ -1,9 +1,15 @@
-import { Provider as ox_Provider, RpcRequest as ox_RpcRequest } from 'ox'
+import { Address, Provider as ox_Provider, RpcRequest as ox_RpcRequest } from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
+import { prepareTransactionRequest } from 'viem/actions'
+import { Account as TempoAccount } from 'viem/tempo'
+import { z } from 'zod/mini'
 
-import type { Adapter, setup } from '../Adapter.js'
+import * as AccessKey from '../AccessKey.js'
+import type { Adapter, authorizeAccessKey, setup } from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
 import * as Schema from '../Schema.js'
 import type * as Store from '../Store.js'
+import * as Rpc from '../zod/rpc.js'
 
 /**
  * Creates a dialog adapter that delegates signing to a remote Tempo Auth app
@@ -27,6 +33,7 @@ export function tempoAuth(options: tempoAuth.Options = {}): Adapter {
     rdns = 'xyz.tempo',
   } = options
 
+  let params: setup.Parameters
   let store: Store.Store
   let dialogHandle: Dialog.setup.ReturnType | undefined
 
@@ -93,12 +100,72 @@ export function tempoAuth(options: tempoAuth.Options = {}): Adapter {
     { schema: Schema.ox },
   )
 
+  /**
+   * Prepares a local key pair when `authorizeAccessKey` is requested without
+   * an external publicKey/address, and returns the params to inject into the
+   * RPC request so the dialog signs the authorization.
+   */
+  async function generateAccessKey(options: authorizeAccessKey.Parameters | undefined) {
+    if (!options) return undefined
+    if (options.publicKey || options.address) return undefined
+
+    const { accessKey, keyPair } = await AccessKey.generate()
+    return {
+      accessKey,
+      keyPair,
+      request: {
+        ...options,
+        publicKey: accessKey.publicKey,
+        keyType: 'p256' as const,
+      },
+    }
+  }
+
+  /**
+   * After the dialog returns a signed key authorization, saves the local
+   * key pair + key authorization into the store.
+   */
+  function saveAccessKey(
+    address: Address.Address,
+    keyAuth: KeyAuthorization.Rpc,
+    keyPair: AccessKey.generate.ReturnType['keyPair'],
+  ) {
+    const keyAuthorization = KeyAuthorization.fromRpc(keyAuth)
+    AccessKey.save({ address: address, keyAuthorization, keyPair, store })
+  }
+
+  /**
+   * Tries to execute `fn` with the local access key. Returns `undefined`
+   * when no access key exists so the caller can fall through to the dialog.
+   * On access key errors, removes the stale key and also returns `undefined`.
+   */
+  async function withAccessKey<result>(
+    fn: (
+      account: TempoAccount.Account,
+      keyAuthorization?: KeyAuthorization.Signed,
+    ) => Promise<result>,
+  ): Promise<result | undefined> {
+    const account = params.getAccount({ signable: true })
+    console.log('account', account)
+    if (account.source !== 'accessKey') return undefined
+    const keyAuthorization = AccessKey.getPending(account, { store })
+    try {
+      const result = await fn(account, keyAuthorization ?? undefined)
+      AccessKey.removePending(account, { store })
+      return result
+    } catch (error) {
+      if (AccessKey.isExecutionError(error)) AccessKey.remove(account, { store })
+      return undefined
+    }
+  }
+
   return {
     icon,
     name,
     rdns,
-    setup(params: setup.Parameters) {
-      store = params.store
+    setup(parameters: setup.Parameters) {
+      params = parameters
+      store = parameters.store
 
       dialogHandle = dialog.setup({ host, store })
 
@@ -125,29 +192,102 @@ export function tempoAuth(options: tempoAuth.Options = {}): Adapter {
       }
     },
     actions: {
-      async createAccount(_params, request) {
-        const { accounts } = await provider.request(request)
-        return { accounts: accounts.map((a) => ({ address: a.address })) }
+      async createAccount(parameters, request) {
+        const accessKey = await generateAccessKey(parameters.authorizeAccessKey)
+
+        const { accounts } = await provider.request({
+          ...request,
+          params: [
+            {
+              ...request.params?.[0],
+              capabilities: {
+                ...request.params?.[0]?.capabilities,
+                ...(accessKey
+                  ? {
+                      authorizeAccessKey: z.encode(
+                        Rpc.wallet_connect.authorizeAccessKey,
+                        accessKey.request,
+                      ),
+                    }
+                  : {}),
+              },
+            },
+          ] as const,
+        })
+
+        const address = accounts[0]?.address
+        const keyAuthorization = accounts[0]?.capabilities.keyAuthorization
+
+        if (accessKey && address && keyAuthorization)
+          saveAccessKey(address, keyAuthorization, accessKey.keyPair)
+
+        return {
+          accounts: accounts.map((a) => ({ address: a.address })),
+          ...(keyAuthorization ? { keyAuthorization } : {}),
+          ...(accounts[0]?.capabilities.signature
+            ? { signature: accounts[0].capabilities.signature }
+            : {}),
+        }
       },
 
-      async loadAccounts(_params, request) {
-        const { accounts } = await provider.request(request)
-        return { accounts: accounts.map((a) => ({ address: a.address })) }
-      },
+      async loadAccounts(parameters, request) {
+        const accessKey = await generateAccessKey(parameters?.authorizeAccessKey)
 
-      async sendTransaction(_params, request) {
-        return await provider.request(request)
-      },
+        const { accounts } = await provider.request({
+          ...request,
+          params: [
+            {
+              ...request.params?.[0],
+              capabilities: {
+                ...request.params?.[0]?.capabilities,
+                ...(accessKey
+                  ? {
+                      authorizeAccessKey: z.encode(
+                        Rpc.wallet_connect.authorizeAccessKey,
+                        accessKey.request,
+                      ),
+                    }
+                  : {}),
+              },
+            },
+          ] as const,
+        })
 
-      async sendTransactionSync(_params, request) {
-        return await provider.request(request)
-      },
+        const address = accounts[0]?.address
+        const keyAuthorization = accounts[0]?.capabilities.keyAuthorization
 
-      async signTransaction(_params, request) {
-        return await provider.request(request)
+        if (accessKey && address && keyAuthorization)
+          saveAccessKey(address, keyAuthorization, accessKey.keyPair)
+
+        return {
+          accounts: accounts.map((a) => ({ address: a.address })),
+          ...(keyAuthorization ? { keyAuthorization } : {}),
+          ...(accounts[0]?.capabilities.signature
+            ? { signature: accounts[0].capabilities.signature }
+            : {}),
+        }
       },
 
       async signPersonalMessage(_params, request) {
+        return await provider.request(request)
+      },
+
+      async signTransaction(parameters, request) {
+        const result = await withAccessKey(async (account, keyAuthorization) => {
+          const { feePayer, ...rest } = parameters
+          const client = params.getClient({
+            feePayer: typeof feePayer === 'string' ? feePayer : undefined,
+          })
+          const prepared = await prepareTransactionRequest(client, {
+            account,
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+            keyAuthorization,
+            type: 'tempo',
+          })
+          return await account.signTransaction(prepared as never)
+        })
+        if (result !== undefined) return result
         return await provider.request(request)
       },
 
@@ -155,8 +295,66 @@ export function tempoAuth(options: tempoAuth.Options = {}): Adapter {
         return await provider.request(request)
       },
 
-      async authorizeAccessKey(_params, request) {
+      async sendTransaction(parameters, request) {
+        const result = await withAccessKey(async (account, keyAuthorization) => {
+          const { feePayer, ...rest } = parameters
+          const client = params.getClient({
+            feePayer: typeof feePayer === 'string' ? feePayer : undefined,
+          })
+          const prepared = await prepareTransactionRequest(client, {
+            account,
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+            keyAuthorization,
+            type: 'tempo',
+          })
+          const signed = await account.signTransaction(prepared as never)
+          return await client.request({
+            method: 'eth_sendRawTransaction' as never,
+            params: [signed],
+          })
+        })
+        if (result !== undefined) return result
         return await provider.request(request)
+      },
+
+      async sendTransactionSync(parameters, request) {
+        const result = await withAccessKey(async (account, keyAuthorization) => {
+          const { feePayer, ...rest } = parameters
+          const client = params.getClient({
+            feePayer: typeof feePayer === 'string' ? feePayer : undefined,
+          })
+          const prepared = await prepareTransactionRequest(client, {
+            account,
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+            keyAuthorization,
+            type: 'tempo',
+          })
+          const signed = await account.signTransaction(prepared as never)
+          return await client.request({
+            method: 'eth_sendRawTransactionSync' as never,
+            params: [signed],
+          })
+        })
+        if (result !== undefined) return result
+        return await provider.request(request)
+      },
+
+      async authorizeAccessKey(parameters, request) {
+        const accessKey = await generateAccessKey(parameters)
+
+        const result = await provider.request({
+          ...request,
+          params: [z.encode(Rpc.wallet_connect.authorizeAccessKey, accessKey!.request)!],
+        })
+
+        if (accessKey) {
+          const account = params.getAccount({ accessKey: false, signable: false })
+          saveAccessKey(account.address, result, accessKey.keyPair)
+        }
+
+        return result
       },
 
       async revokeAccessKey(_params, request) {

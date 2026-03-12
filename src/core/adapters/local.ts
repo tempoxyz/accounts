@@ -1,4 +1,4 @@
-import { Address as ox_Address, Provider as ox_Provider, PublicKey, type WebCryptoP256 } from 'ox'
+import { Address as ox_Address, Provider as ox_Provider, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { prepareTransactionRequest } from 'viem/actions'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
@@ -31,116 +31,65 @@ export function local(options: local.Options): Adapter {
   let store: Store.Store
 
   /**
-   * Grants an access key for the given (or active) account.
+   * Resolves access key params and computes the key authorization digest.
    *
-   * When `account` is provided, uses it directly — this is needed during
-   * `createAccount`/`loadAccounts` where the account hasn't been merged
-   * into the store yet.
-   *
-   * When `keyPair` is provided, reuses a pre-computed key pair so the
-   * ceremony signature can double as the key authorization signature,
-   * avoiding a second biometric prompt.
+   * For external keys (BYOAK): derives the address from the provided publicKey/address.
+   * For local keys: generates a P256 key pair via `AccessKey.generate`.
    */
-  async function authorizeAccessKey_internal(
-    options: authorizeAccessKey.Parameters & {
-      account?: TempoAccount.Account | undefined
-      keyPair?: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
-    },
-  ): Promise<authorizeAccessKey.ReturnType> {
-    const { address, expiry, keyType, limits, publicKey, signature } = options
+  async function prepareKeyAuthorization(options: authorizeAccessKey.Parameters) {
+    const { expiry, limits } = options
+    const chainId = params.getClient().chain.id
 
-    const account = options.account ?? params.getAccount({ accessKey: false, signable: true })
-    const client = params.getClient()
-
-    // External key: caller provides publicKey or address.
-    if (publicKey || address) {
-      const accessKeyAddress = address ?? ox_Address.fromPublicKey(PublicKey.from(publicKey!))
-      const type = keyType ?? 'secp256k1'
-
-      const keyAuthorization = await (async () => {
-        if (signature)
-          return KeyAuthorization.from(
-            {
-              address: accessKeyAddress,
-              chainId: BigInt(client.chain.id),
-              expiry,
-              limits,
-              type,
-            },
-            { signature: SignatureEnvelope.from(signature) },
-          )
-        return await Actions.accessKey.signAuthorization(client, {
-          account,
-          accessKey: { accessKeyAddress, keyType: type },
-          expiry,
-          limits: limits as never,
-        })
-      })()
-
-      AccessKey.save({ address: account.address, keyAuthorization, store })
-
-      return KeyAuthorization.toRpc(keyAuthorization)
+    if (options.publicKey || options.address) {
+      const accessKeyAddress =
+        options.address ?? ox_Address.fromPublicKey(PublicKey.from(options.publicKey!))
+      const keyType = options.keyType ?? 'secp256k1'
+      const keyAuthorization = KeyAuthorization.from({
+        address: accessKeyAddress,
+        chainId: BigInt(chainId),
+        expiry,
+        limits,
+        type: keyType,
+      })
+      return { keyAuthorization }
     }
 
-    // Reuse a prepared key pair or generate a fresh one.
-    const { keyPair, accessKey } = options.keyPair
-      ? {
-          keyPair: options.keyPair,
-          accessKey: TempoAccount.fromWebCryptoP256(options.keyPair, { access: account }),
-        }
-      : await AccessKey.prepare({
-          account,
-          chainId: client.chain.id,
-          expiry,
-          limits,
-        })
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const address = ox_Address.fromPublicKey(PublicKey.from(keyPair.publicKey))
+    const keyAuthorization = KeyAuthorization.from({
+      address,
+      chainId: BigInt(chainId),
+      expiry,
+      limits,
+      type: 'p256',
+    })
+    return { keyAuthorization, keyPair }
+  }
 
-    // If we already have a signature from the ceremony, wrap it as a key
-    // authorization. Otherwise, perform a separate signing.
+  /**
+   * Signs (or wraps a pre-computed signature into) a key authorization
+   * and saves the result to the store.
+   */
+  async function signKeyAuthorization(
+    account: TempoAccount.Account,
+    prepared: Awaited<ReturnType<typeof prepareKeyAuthorization>>,
+    options: {
+      signature?: `0x${string}` | undefined
+    } = {},
+  ): Promise<authorizeAccessKey.ReturnType> {
+    const { keyPair } = prepared
+
     const keyAuthorization = await (async () => {
-      if (signature)
-        return KeyAuthorization.from(
-          {
-            address: accessKey.accessKeyAddress,
-            chainId: BigInt(client.chain.id),
-            expiry,
-            limits,
-            type: accessKey.keyType,
-          },
-          { signature: SignatureEnvelope.from(signature) },
-        )
-      return await Actions.accessKey.signAuthorization(client, {
-        account,
-        accessKey,
-        expiry,
-        limits: limits as never,
+      const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
+      const signature = options.signature ?? (await account.sign({ hash: digest }))
+      return KeyAuthorization.from(prepared.keyAuthorization, {
+        signature: SignatureEnvelope.from(signature),
       })
     })()
 
     AccessKey.save({ address: account.address, keyAuthorization, keyPair, store })
 
     return KeyAuthorization.toRpc(keyAuthorization)
-  }
-
-  /** Access key-related error patterns from the Tempo precompile/tx-pool. */
-  const accessKeyErrors = [
-    'KeyAuthorization',
-    'key authorization',
-    'keychain',
-    'access key',
-    'AccessKey',
-    'UnauthorizedCaller',
-    'KeyAlreadyExists',
-    'KeyNotFound',
-    'KeyExpired',
-    'SpendingLimitExceeded',
-    'KeyAlreadyRevoked',
-    'SignatureTypeMismatch',
-  ]
-
-  function isAccessKeyError(error: unknown): boolean {
-    const message = error instanceof Error ? error.message : String(error)
-    return accessKeyErrors.some((p) => message.includes(p))
   }
 
   async function withAccessKey<result>(
@@ -157,7 +106,7 @@ export function local(options: local.Options): Adapter {
       return result
     } catch (error) {
       if (account.source !== 'accessKey') throw error
-      if (isAccessKeyError(error)) AccessKey.remove(account, { store })
+      if (AccessKey.isExecutionError(error)) AccessKey.remove(account, { store })
       const root = params.getAccount({ accessKey: false, signable: true })
       return await fn(root, undefined)
     }
@@ -191,31 +140,32 @@ export function local(options: local.Options): Adapter {
         const signature_ =
           rest.digest && !signature ? await account.sign({ hash: rest.digest }) : signature
 
-        const keyAuthorization = grantOptions
-          ? await authorizeAccessKey_internal({ ...grantOptions, account })
-          : undefined
+        const keyAuthorization = await (async () => {
+          if (!grantOptions) return undefined
+          const prepared = await prepareKeyAuthorization(grantOptions)
+          return await signKeyAuthorization(account, prepared)
+        })()
 
         return { accounts, keyAuthorization, signature: signature_ }
       },
       async authorizeAccessKey(parameters) {
-        return await authorizeAccessKey_internal(parameters)
+        const prepared = await prepareKeyAuthorization(parameters)
+        const account = params.getAccount({ accessKey: false, signable: true })
+        return await signKeyAuthorization(account, prepared, { signature: parameters.signature })
       },
       async loadAccounts(parameters) {
         const { authorizeAccessKey, ...rest } = parameters ?? ({} as loadAccounts.Parameters)
 
-        // If `authorizeAccessKey` is requested, no explicit digest was
-        // provided, and no external publicKey is given (BYOAK), prepare a
-        // key pair + digest upfront so the ceremony signature can be reused
-        // as the key authorization signature.
-        const prepared =
-          authorizeAccessKey && !rest.digest && !authorizeAccessKey.publicKey
-            ? await AccessKey.prepare({
-                chainId: params.getClient().chain.id,
-                ...authorizeAccessKey,
-              })
-            : undefined
+        const preparedAuth = authorizeAccessKey
+          ? await prepareKeyAuthorization(authorizeAccessKey)
+          : undefined
 
-        const digest = rest.digest ?? prepared?.digest
+        const digest = (() => {
+          if (rest.digest) return rest.digest
+          if (preparedAuth?.keyAuthorization)
+            return KeyAuthorization.getSignPayload(preparedAuth.keyAuthorization)
+          return undefined
+        })()
 
         // Pass the prepared digest (or the caller's) into loadAccounts so
         // the ceremony can sign it in a single biometric prompt.
@@ -229,17 +179,9 @@ export function local(options: local.Options): Adapter {
         let signature_ = signature
         if (digest && !signature_ && account) signature_ = await account.sign({ hash: digest })
 
-        // If a key pair was prepared, forward the ceremony signature + key
-        // pair so authorizeAccessKey_internal can skip a second signing.
         const keyAuthorization =
-          authorizeAccessKey && account
-            ? await authorizeAccessKey_internal({
-                ...authorizeAccessKey,
-                account,
-                ...(prepared && signature_
-                  ? { signature: signature_, keyPair: prepared.keyPair }
-                  : {}),
-              })
+          preparedAuth && account
+            ? await signKeyAuthorization(account, preparedAuth, { signature: signature_ })
             : undefined
 
         return { accounts, keyAuthorization, signature: signature_ }

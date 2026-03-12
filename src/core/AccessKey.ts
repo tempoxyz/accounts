@@ -1,10 +1,30 @@
-import type { Hex } from 'ox'
-import { WebCryptoP256 } from 'ox'
+import { Address, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import type { Address } from 'viem'
 import { Account as TempoAccount } from 'viem/tempo'
 
 import type * as Store from './Store.js'
+
+/** Access key-related error patterns from the Tempo precompile/tx-pool. */
+const errorPatterns = [
+  'KeyAuthorization',
+  'key authorization',
+  'keychain',
+  'access key',
+  'AccessKey',
+  'UnauthorizedCaller',
+  'KeyAlreadyExists',
+  'KeyNotFound',
+  'KeyExpired',
+  'SpendingLimitExceeded',
+  'KeyAlreadyRevoked',
+  'SignatureTypeMismatch',
+]
+
+/** Returns `true` if the error is an access key-related error from the Tempo precompile/tx-pool. */
+export function isExecutionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return errorPatterns.some((p) => message.includes(p))
+}
 
 /** Returns the pending key authorization for an access key account without removing it. */
 export function getPending(
@@ -15,46 +35,30 @@ export function getPending(
   const { store } = options
   const accessKeyAddress = (account as TempoAccount.AccessKeyAccount).accessKeyAddress
   const { accessKeys } = store.getState()
-  const entry = accessKeys.find((a) => a.address.toLowerCase() === accessKeyAddress.toLowerCase())
+  const entry = accessKeys.find((a) => a.address?.toLowerCase() === accessKeyAddress.toLowerCase())
   return entry?.keyAuthorization
 }
 
-/**
- * Pre-computes a key authorization digest and key pair.
- */
-export async function prepare(options: prepare.Options): Promise<prepare.ReturnType> {
-  const { account, chainId, expiry, limits } = options
+/** Generates a P256 key pair and access key account. */
+export async function generate(options: generate.Options = {}): Promise<generate.ReturnType> {
+  const { account } = options
   const keyPair = await WebCryptoP256.createKeyPair()
   const accessKey = TempoAccount.fromWebCryptoP256(
     keyPair,
     account ? { access: account } : undefined,
   )
-  const digest = KeyAuthorization.getSignPayload({
-    address: accessKey.address,
-    chainId: BigInt(chainId),
-    expiry,
-    limits,
-    type: accessKey.keyType,
-  })
-  return { accessKey, digest, keyPair }
+  return { accessKey, keyPair }
 }
 
-export declare namespace prepare {
+export declare namespace generate {
   type Options = {
     /** Root account to attach to the access key. */
     account?: TempoAccount.Account | undefined
-    /** Chain ID for the key authorization. */
-    chainId: number
-    /** Unix timestamp when the key expires. */
-    expiry?: number | undefined
-    /** TIP-20 spending limits. */
-    limits?: readonly { token: Address; limit: bigint }[] | undefined
   }
+
   type ReturnType = {
     /** The generated access key account. */
     accessKey: TempoAccount.AccessKeyAccount
-    /** Digest to sign during the ceremony. */
-    digest: Hex.Hex
     /** Generated key pair to pass to `authorizeAccessKey`. */
     keyPair: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>>
   }
@@ -67,7 +71,7 @@ export function remove(account: TempoAccount.Account, options: { store: Store.St
   const accessKeyAddress = account.accessKeyAddress
   store.setState((state) => ({
     accessKeys: state.accessKeys.filter(
-      (a) => a.address.toLowerCase() !== accessKeyAddress.toLowerCase(),
+      (a) => a.address?.toLowerCase() !== accessKeyAddress?.toLowerCase(),
     ),
   }))
 }
@@ -113,16 +117,16 @@ export function save(options: save.Options): void {
 
   store.setState((state) => ({
     accessKeys: [
-      ...state.accessKeys,
       {
         address: keyAuthorization.address,
         access: address,
         expiry: keyAuthorization.expiry ?? undefined,
         keyAuthorization,
         keyType: keyAuthorization.type,
-        limits: keyAuthorization.limits as { token: Address; limit: bigint }[] | undefined,
+        limits: keyAuthorization.limits as { token: Address.Address; limit: bigint }[] | undefined,
         ...(keyPair ? { keyPair } : {}),
       },
+      ...state.accessKeys,
     ],
   }))
 }
@@ -130,7 +134,7 @@ export function save(options: save.Options): void {
 export declare namespace save {
   type Options = {
     /** Root account address that owns this access key. */
-    address: Address
+    address: Address.Address
     /** Signed key authorization to attach to the first transaction. */
     keyAuthorization: KeyAuthorization.Signed
     /** The WebCrypto key pair backing the access key. Only present for locally-generated keys. */
