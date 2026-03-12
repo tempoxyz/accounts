@@ -68,7 +68,7 @@
   "name": "@tempoxyz/accounts",
   "description": "Accounts tooling for Tempo",
   "type": "module",
-  "version": "0.14.0",
+  "version": "0.0.1",
   "dependencies": {
     "@remix-run/fetch-router": "~0.17.0",
     "idb-keyval": "^6.2.2",

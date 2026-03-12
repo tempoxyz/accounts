@@ -62,11 +62,11 @@ export const wagmiConfig = createConfig({
 
 ## Adapters
 
-| Adapter      | Description                                                                                                                                                                                                        |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tempoAuth` 🚧 | Adapter for the Tempo Auth dialog (an embedded iframe/popup dialog). |
-| `webAuthn`   | App-bound passkey accounts using WebAuthn registration and authentication flows.                                                                                                                                   |
-| `local`      | Key agnostic adapter to define arbitrary account/key types and signing mechanisms.                                                                                                                                 |
+| Adapter        | Description                                                                        |
+| -------------- | ---------------------------------------------------------------------------------- |
+| `tempoAuth` 🚧 | Adapter for the Tempo Auth dialog (an embedded iframe/popup dialog).               |
+| `webAuthn`     | App-bound passkey accounts using WebAuthn registration and authentication flows.   |
+| `local`        | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
 
 ## Development
 
@@ -82,7 +82,7 @@ pnpm test             # run tests
 ```
 
 > `pnpm dev:hosts` starts three dev servers on different domains for cross-origin testing:
-> 
+>
 > - `https://auth.local:5174`
 > - `https://playground.a:5173`
 > - `https://playground.b:5175`

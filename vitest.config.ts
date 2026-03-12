@@ -49,15 +49,15 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          name: 'connect',
-          include: ['./connect/**/*.test.ts', '!./connect/**/*.browser.test.ts'],
+          name: 'auth',
+          include: ['./auth/**/*.test.ts', '!./auth/**/*.browser.test.ts'],
         },
       },
       {
         extends: true,
         test: {
-          name: 'connect/browser',
-          include: ['./connect/**/*.browser.test.ts'],
+          name: 'auth/browser',
+          include: ['./auth/**/*.browser.test.ts'],
           browser: {
             enabled: true,
             headless: true,

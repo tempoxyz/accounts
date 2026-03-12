@@ -184,8 +184,7 @@ export function iframe(): Dialog {
         if (visible) return
         visible = true
 
-        if (document.activeElement instanceof HTMLElement)
-          opener = document.activeElement
+        if (document.activeElement instanceof HTMLElement) opener = document.activeElement
 
         root.removeAttribute('hidden')
         root.removeAttribute('aria-closed')
@@ -200,9 +199,7 @@ export function iframe(): Dialog {
 
         // 1Password extension sometimes adds `inert` to dialog siblings
         // and does not clean up when dialog closes.
-        for (const sibling of root.parentNode
-          ? Array.from(root.parentNode.children)
-          : []) {
+        for (const sibling of root.parentNode ? Array.from(root.parentNode.children) : []) {
           if (sibling === root) continue
           if (!sibling.hasAttribute('inert')) continue
           sibling.removeAttribute('inert')
@@ -250,7 +247,11 @@ export function iframe(): Dialog {
           } else {
             const requiresConfirm = requests.some((x) => x.status === 'pending')
             if (!open && requiresConfirm) this.open()
-            messenger.send('rpc-requests', { account: getAccount(store), chainId: store.getState().chainId, requests })
+            messenger.send('rpc-requests', {
+              account: getAccount(store),
+              chainId: store.getState().chainId,
+              requests,
+            })
           }
         },
       }
@@ -337,7 +338,11 @@ export function popup(options: popup.Options = {}): Dialog {
             if (!win || win.closed) this.open()
             win?.focus()
           }
-          messenger?.send('rpc-requests', { account: getAccount(store), chainId: store.getState().chainId, requests })
+          messenger?.send('rpc-requests', {
+            account: getAccount(store),
+            chainId: store.getState().chainId,
+            requests,
+          })
         },
       }
     },

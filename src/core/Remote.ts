@@ -18,15 +18,15 @@ export type State = {
 
 /** Remote context — bundles messenger, provider, and remote store. */
 export type Remote = {
-  /** 
+  /**
    * Messenger for remote communication.
    */
   messenger: Messenger.Bridge
-  /** 
-   * Provider instance for executing RPC methods. 
+  /**
+   * Provider instance for executing RPC methods.
    */
   provider: CoreProvider.Provider
-  /** 
+  /**
    * Remote context store.
    */
   store: StoreApi<State>
@@ -61,8 +61,8 @@ export type Remote = {
    * Call this after the remote context is fully initialized.
    */
   ready: () => void
-  /** 
-   * Reject an RPC request. 
+  /**
+   * Reject an RPC request.
    */
   reject: (
     request: Store.QueuedRequest['request'],
@@ -77,10 +77,7 @@ export type Remote = {
    * When `options.error` is provided, sends an error response.
    * Otherwise, executes `provider.request(request)` and sends the result.
    */
-  respond: (
-    request: Store.QueuedRequest['request'],
-    options?: respond.Options,
-  ) => Promise<unknown>
+  respond: (request: Store.QueuedRequest['request'], options?: respond.Options) => Promise<unknown>
 }
 
 export declare namespace onDialogRequest {

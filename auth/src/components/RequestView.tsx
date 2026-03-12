@@ -1,5 +1,5 @@
-import { Store } from '@tempoxyz/accounts'
 import { useMutation } from '@tanstack/react-query'
+import { Store } from '@tempoxyz/accounts'
 import { Json } from 'ox'
 import { useStore } from 'zustand'
 
@@ -21,7 +21,11 @@ export function RequestView(props: RequestView.Props) {
         <button onClick={() => confirm.mutate()} disabled={confirm.isPending} data-testid="confirm">
           {confirm.isPending ? 'Confirming...' : 'Confirm'}
         </button>
-        <button onClick={() => remote.reject(request)} disabled={confirm.isPending} data-testid="reject">
+        <button
+          onClick={() => remote.reject(request)}
+          disabled={confirm.isPending}
+          data-testid="reject"
+        >
           Reject
         </button>
       </div>

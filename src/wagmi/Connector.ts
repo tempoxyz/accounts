@@ -8,8 +8,8 @@ import {
 } from 'viem'
 import * as z from 'zod/mini'
 
+import { tempoAuth as tempoAuth_adapter } from '../core/adapters/tempoAuth.js'
 import { webAuthn as webAuthn_adapter } from '../core/adapters/webAuthn.js'
-import { tempoAuth as tempoAuth_adapter } from '../core/adapters/connect.js'
 import * as Provider from '../core/Provider.js'
 import * as Rpc from '../core/zod/rpc.js'
 

@@ -3,8 +3,8 @@ import { createRootRoute, HeadContent, Outlet, Scripts, useSearch } from '@tanst
 import { reconnect } from '@wagmi/core'
 import type { ReactNode } from 'react'
 import { WagmiProvider } from 'wagmi'
-import '../styles/index.css'
 
+import '../styles/index.css'
 import { remote, wagmiConfig } from '../lib/config'
 import { store, useStore } from '../lib/store.js'
 import { router } from '../router'
@@ -120,13 +120,17 @@ function Dialog({ children }: Readonly<{ children: ReactNode }>) {
                 src={icon}
                 alt=""
                 className="size-[20px] -m-1 rounded-sm dark:hidden"
-                onError={(e) => { e.currentTarget.style.display = 'none' }}
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                }}
               />
               <img
                 src={iconDark ?? icon}
                 alt=""
                 className="size-[20px] -m-1 rounded-sm hidden dark:block"
-                onError={(e) => { e.currentTarget.style.display = 'none' }}
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                }}
               />
             </>
           )}
@@ -142,9 +146,7 @@ function Dialog({ children }: Readonly<{ children: ReactNode }>) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex flex-col">
-        {children}
-      </div>
+      <div className="flex-1 flex flex-col">{children}</div>
     </div>
   )
 }

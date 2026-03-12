@@ -1,12 +1,12 @@
 import { Hex } from 'ox'
 import { type Address, createClient, defineChain, parseUnits } from 'viem'
 import { tempoLocalnet, tempoModerato } from 'viem/chains'
-import { afterEach, beforeAll, describe, expect, test } from 'vitest'
 import { Actions, Addresses } from 'viem/tempo'
+import { afterEach, beforeAll, describe, expect, test } from 'vitest'
 
 import { accounts, http } from '../../test/config.js'
 import { interact } from '../../test/utils.browser.js'
-import { tempoAuth } from './adapters/connect.js'
+import { tempoAuth } from './adapters/tempoAuth.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 

@@ -22,6 +22,5 @@ export function Input(props: Input.Props) {
 }
 
 export declare namespace Input {
-  type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> &
-    VariantProps<typeof input>
+  type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> & VariantProps<typeof input>
 }
