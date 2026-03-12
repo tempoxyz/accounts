@@ -5,5 +5,5 @@ export const Route = createFileRoute('/')({
 })
 
 function Home() {
-  return <div>Tempo Connect</div>
+  return <div>Tempo Auth</div>
 }

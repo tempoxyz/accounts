@@ -1,7 +1,7 @@
 import { type FrameLocator, page } from 'vitest/browser'
 
 /**
- * Interact with the connect iframe while a provider request is in flight.
+ * Interact with the dialog iframe while a provider request is in flight.
  * Waits for the iframe to render, then executes the action.
  */
 export async function interact<returnType>(
@@ -11,6 +11,6 @@ export async function interact<returnType>(
   // Prevent unhandled rejection while we wait to interact with the iframe.
   promise.catch(() => {})
   await new Promise((resolve) => setTimeout(resolve, 500))
-  await action(page.frameLocator(page.getByTestId('tempo-connect')))
+  await action(page.frameLocator(page.getByTestId('tempo-auth')))
   return promise
 }

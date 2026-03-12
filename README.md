@@ -21,11 +21,9 @@ Internally, the `Provider` utilizes [EIP-6963](https://eips.ethereum.org/EIPS/ei
 the page so it can be picked up by wallet connection dialogs on external web applications.
 
 ```tsx
-import { Provider, webAuthn } from '@tempoxyz/accounts'
+import { Provider } from '@tempoxyz/accounts'
 
-const provider = Provider.create({
-  adapter: webAuthn(),
-})
+const provider = Provider.create()
 
 const { accounts } = await provider.request({
   method: 'wallet_connect',
@@ -37,28 +35,25 @@ const { accounts } = await provider.request({
 The Provider provides a Viem Client instance via the `getClient` accessor.
 
 ```tsx
-import { Provider, webAuthn } from '@tempoxyz/accounts'
+import { Provider } from '@tempoxyz/accounts'
 
-const provider = Provider.create({
-  adapter: webAuthn(),
-})
+const provider = Provider.create()
 
 const client = provider.getClient()
 ```
 
 ### Wagmi
 
-Use the `webAuthn` Wagmi connector to allow your Wagmi application to use WebAuthn-based
-accounts.
+Use the `tempoAuth` Wagmi connector to allow your Wagmi application to enable the Tempo Auth dialog.
 
 ```tsx
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
-import { webAuthn } from '@tempoxyz/accounts/wagmi'
+import { tempoAuth } from '@tempoxyz/accounts/wagmi'
 
 export const wagmiConfig = createConfig({
   chains: [tempo],
-  connectors: [webAuthn()],
+  connectors: [tempoAuth()],
   transports: {
     [tempo.id]: http(),
   },
@@ -67,19 +62,19 @@ export const wagmiConfig = createConfig({
 
 ## Adapters
 
-| Adapter      | Description                                                                                                                                                                                                                 |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `connect` 🚧 | Adapter for universal accounts, including [Tempo Wallet](https://wallet.tempo.xyz), orchestrated via [Tempo Connect](https://metronome-git-main-tempoxyz.vercel.app/ideas/tempo-connect) (an embedded iframe/popup dialog). |
-| `webAuthn`   | App-bound passkey accounts using WebAuthn registration and authentication flows.                                                                                                                                            |
-| `local`      | Key agnostic adapter to define arbitrary account/key types and signing mechanisms.                                                                                                                                          |
+| Adapter      | Description                                                                                                                                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tempoAuth` 🚧 | Adapter for the Tempo Auth dialog (an embedded iframe/popup dialog). |
+| `webAuthn`   | App-bound passkey accounts using WebAuthn registration and authentication flows.                                                                                                                                   |
+| `local`      | Key agnostic adapter to define arbitrary account/key types and signing mechanisms.                                                                                                                                 |
 
 ## Development
 
 ```sh
-pnpm dev              # start connect + playground dev servers
-pnpm dev:connect      # start connect app only
+pnpm dev              # start auth + playground dev servers
+pnpm dev:auth         # start auth app only
 pnpm dev:playground   # start playground app only
-pnpm dev:hosts        # start connect + playground instances on different TLDs
+pnpm dev:hosts        # start auth + playground instances on different TLDs
 pnpm build            # build library
 pnpm check            # lint + format
 pnpm check:types      # type checks
@@ -88,7 +83,7 @@ pnpm test             # run tests
 
 > `pnpm dev:hosts` starts three dev servers on different domains for cross-origin testing:
 > 
-> - `https://connect.local:5174`
+> - `https://auth.local:5174`
 > - `https://playground.a:5173`
 > - `https://playground.b:5175`
 

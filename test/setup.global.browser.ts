@@ -46,10 +46,10 @@ export default async function () {
     await Promise.all([server.closeAsync(), hooksServer.closeAsync()])
   })
 
-  // Start connect app dev server.
-  const connectServer = await new Promise<ChildProcess>((resolve, reject) => {
+  // Start auth app dev server.
+  const authServer = await new Promise<ChildProcess>((resolve, reject) => {
     const child = spawn('pnpm', ['exec', 'vite', 'dev', '--port', '5175'], {
-      cwd: join(import.meta.dirname, '../connect'),
+      cwd: join(import.meta.dirname, '../auth'),
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
@@ -60,7 +60,7 @@ export default async function () {
 
     const timeout = setTimeout(() => {
       child.kill()
-      reject(new Error('Connect dev server did not start within 60s'))
+      reject(new Error('Auth dev server did not start within 60s'))
     }, 60_000)
 
     function onData(data: Buffer) {
@@ -80,9 +80,9 @@ export default async function () {
   })
 
   return async () => {
-    connectServer.kill('SIGTERM')
+    authServer.kill('SIGTERM')
     await new Promise((resolve) => setTimeout(resolve, 500))
-    if (!connectServer.killed) connectServer.kill('SIGKILL')
+    if (!authServer.killed) authServer.kill('SIGKILL')
     await Promise.all(teardowns.map((fn) => fn()))
   }
 }

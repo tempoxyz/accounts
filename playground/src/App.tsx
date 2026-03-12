@@ -15,7 +15,7 @@ import {
 } from './provider.js'
 
 export function App() {
-  const [adapterType, setAdapterType] = useState<AdapterType>('connect')
+  const [adapterType, setAdapterType] = useState<AdapterType>('auth')
   const [, rerender] = useState(0)
 
   function onSwitch(type: AdapterType) {
@@ -30,11 +30,11 @@ export function App() {
 
       <h2>Adapter</h2>
       <select value={adapterType} onChange={(e) => onSwitch(e.target.value as AdapterType)}>
-        <option value="connect">connect</option>
+        <option value="auth">auth</option>
         <option value="webAuthn">webAuthn</option>
         <option value="secp256k1">secp256k1</option>
       </select>
-      {adapterType === 'connect' && (
+      {adapterType === 'auth' && (
         <>
           {' '}
           <select

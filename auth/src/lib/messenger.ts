@@ -1,6 +1,6 @@
 import { Messenger } from '@tempoxyz/accounts'
 
-/** Initializes the bridge messenger for the Tempo Connect app (the "remote" side). */
+/** Initializes the bridge messenger for the Tempo Auth app (the "remote" side). */
 export function init(): Messenger.Bridge {
   if (typeof window === 'undefined') return Messenger.noop()
 

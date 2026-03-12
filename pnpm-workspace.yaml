@@ -1,6 +1,6 @@
 packages:
   - .
-  - connect
+  - auth
   - examples/*
   - playground
 

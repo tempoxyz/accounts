@@ -6,7 +6,7 @@ import { Actions, Addresses } from 'viem/tempo'
 
 import { accounts, http } from '../../test/config.js'
 import { interact } from '../../test/utils.browser.js'
-import { connect } from './adapters/connect.js'
+import { tempoAuth } from './adapters/connect.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 
@@ -45,7 +45,7 @@ const transferCall = Actions.token.transfer.call({
 
 function getProvider(options: Partial<Provider.create.Options> = {}) {
   return Provider.create({
-    adapter: connect({ host }),
+    adapter: tempoAuth({ host }),
     chains: [chain],
     storage: Storage.idb({ key: crypto.randomUUID() }),
     ...options,
@@ -60,7 +60,7 @@ afterEach(() => {
     window.localStorage.clear()
     window.sessionStorage.clear()
   }
-  document.querySelectorAll('dialog[data-tempo-connect]').forEach((el) => el.remove())
+  document.querySelectorAll('dialog[data-tempo-auth]').forEach((el) => el.remove())
   provider = undefined
 })
 
@@ -370,7 +370,7 @@ describe('edge cases', () => {
           params: [Hex.fromString('hello'), provider.store.getState().accounts[0]!.address],
         }),
         async () => {
-          const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+          const dialog = document.querySelector('dialog[data-tempo-auth]') as HTMLDialogElement
           dialog.dispatchEvent(new Event('cancel'))
         },
       ),

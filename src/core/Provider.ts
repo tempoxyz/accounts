@@ -8,6 +8,7 @@ import * as z from 'zod/mini'
 
 import * as Account from './Account.js'
 import type { Adapter, authorizeAccessKey } from './Adapter.js'
+import { tempoAuth } from './adapters/connect.js'
 import * as Client from './Client.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Schema from './Schema.js'
@@ -36,16 +37,14 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
  *
  * @example
  * ```ts
- * import { Provider, webAuthn } from '@tempoxyz/accounts'
+ * import { Provider } from '@tempoxyz/accounts'
  *
- * const provider = Provider.create({
- *   adapter: webAuthn(),
- * })
+ * const provider = Provider.create()
  * ```
  */
-export function create(options: create.Options): create.ReturnType {
+export function create(options: create.Options = {}): create.ReturnType {
   const {
-    adapter,
+    adapter = tempoAuth(),
     authorizeAccessKey: getAuthorizeAccessKey,
     chains = [tempo, tempoModerato],
     feePayerUrl,
@@ -549,8 +548,8 @@ const sendCallsMagic = Hash.keccak256(Hex.fromString('TEMPO_5792'))
 
 export declare namespace create {
   type Options = {
-    /** Adapter to use for account management. */
-    adapter: Adapter
+    /** Adapter to use for account management. @default dialog() */
+    adapter?: Adapter | undefined
     /**
      * Default access key parameters for `wallet_connect`.
      *

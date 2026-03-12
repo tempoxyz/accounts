@@ -1,7 +1,7 @@
 import { useStore as useStore_ } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-/** App-level store for the connect dialog. */
+/** App-level store for the auth dialog. */
 export const store = createStore<store.State>(() => ({
   origin: undefined,
   ready: false,

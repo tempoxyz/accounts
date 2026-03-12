@@ -9,7 +9,7 @@ import {
 import * as z from 'zod/mini'
 
 import { webAuthn as webAuthn_adapter } from '../core/adapters/webAuthn.js'
-import { connect as connect_adapter } from '../core/adapters/connect.js'
+import { tempoAuth as tempoAuth_adapter } from '../core/adapters/connect.js'
 import * as Provider from '../core/Provider.js'
 import * as Rpc from '../core/zod/rpc.js'
 
@@ -260,28 +260,28 @@ export declare namespace webAuthn {
 }
 
 /**
- * Creates a wagmi connector backed by a WebAuthn adapter.
+ * Creates a wagmi connector backed by a Tempo Auth adapter.
  *
  * @example
  * ```ts
  * import { createConfig, http } from 'wagmi'
  * import { tempoModerato } from 'wagmi/chains'
- * import { webAuthn } from '@tempoxyz/accounts/wagmi'
+ * import { tempoAuth } from '@tempoxyz/accounts/wagmi'
  *
  * const config = createConfig({
  *   chains: [tempoModerato],
- *   connectors: [webAuthn()],
+ *   connectors: [tempoAuth()],
  *   transports: { [tempoModerato.id]: http() },
  * })
  * ```
  */
-export function connect(options: connect.Options = {}) {
+export function tempoAuth(options: tempoAuth.Options = {}) {
   const { dialog, host, icon, name, rdns } = options
   return setup({
-    adapter: connect_adapter({ dialog, host, icon, name, rdns }),
+    adapter: tempoAuth_adapter({ dialog, host, icon, name, rdns }),
   })
 }
 
-export declare namespace connect {
-  type Options = connect_adapter.Options & Omit<setup.Parameters, 'adapter'>
+export declare namespace tempoAuth {
+  type Options = tempoAuth_adapter.Options & Omit<setup.Parameters, 'adapter'>
 }

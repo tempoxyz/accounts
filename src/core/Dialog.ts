@@ -70,11 +70,11 @@ export function iframe(): Dialog {
       }
 
       const root = document.createElement('dialog')
-      root.dataset.tempoConnect = ''
+      root.dataset.tempoAuth = ''
 
       root.setAttribute('role', 'dialog')
       root.setAttribute('aria-closed', 'true')
-      root.setAttribute('aria-label', 'Tempo Connect')
+      root.setAttribute('aria-label', 'Tempo Auth')
       root.setAttribute('hidden', 'until-found')
 
       Object.assign(root.style, {
@@ -88,7 +88,7 @@ export function iframe(): Dialog {
       document.body.appendChild(root)
 
       const frame = document.createElement('iframe')
-      frame.dataset.testid = 'tempo-connect'
+      frame.dataset.testid = 'tempo-auth'
       frame.setAttribute(
         'sandbox',
         'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox',
@@ -102,7 +102,7 @@ export function iframe(): Dialog {
       )
       frame.setAttribute('allowtransparency', 'true')
       frame.setAttribute('tabindex', '0')
-      frame.setAttribute('title', 'Tempo Connect')
+      frame.setAttribute('title', 'Tempo Auth')
       frame.src = hostUrl.toString()
 
       Object.assign(frame.style, {
@@ -118,7 +118,7 @@ export function iframe(): Dialog {
 
       const style = document.createElement('style')
       style.innerHTML = `
-        dialog[data-tempo-connect]::backdrop {
+        dialog[data-tempo-auth]::backdrop {
           background: transparent!important;
         }
       `

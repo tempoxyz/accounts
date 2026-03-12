@@ -6,22 +6,22 @@ import * as Schema from '../Schema.js'
 import type * as Store from '../Store.js'
 
 /**
- * Creates a connect adapter that delegates signing to a remote Tempo Auth app
+ * Creates a dialog adapter that delegates signing to a remote Tempo Auth app
  * via an iframe or popup dialog.
  *
  * @example
  * ```ts
- * import { connect, Provider } from '@tempoxyz/accounts'
+ * import { tempoAuth, Provider } from '@tempoxyz/accounts'
  *
  * const provider = Provider.create({
- *   adapter: connect(),
+ *   adapter: tempoAuth(),
  * })
  * ```
  */
-export function connect(options: connect.Options = {}): Adapter {
+export function tempoAuth(options: tempoAuth.Options = {}): Adapter {
   const {
     dialog = Dialog.isSafari() ? Dialog.popup() : Dialog.iframe(),
-    host = 'https://connect.tempo.xyz',
+    host = 'https://auth.tempo.xyz',
     icon,
     name = 'Tempo',
     rdns = 'xyz.tempo',
@@ -170,11 +170,11 @@ export function connect(options: connect.Options = {}): Adapter {
   }
 }
 
-export declare namespace connect {
+export declare namespace tempoAuth {
   type Options = {
     /** Dialog to use for the auth app. @default `Dialog.iframe()` (or `Dialog.popup()` in Safari) */
     dialog?: Dialog.Dialog | undefined
-    /** URL of the Tempo Auth app. @default `'https://connect.tempo.xyz'` */
+    /** URL of the Tempo Auth app. @default `'https://auth.tempo.xyz'` */
     host?: string | undefined
     /** Data URI of the provider icon. */
     icon?: `data:image/${string}` | undefined

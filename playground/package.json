@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@tempoxyz/accounts": "workspace:*",
-    "mppx": "^0.2.3",
+    "mppx": "^0.4.0",
     "react": "catalog:default",
     "react-dom": "catalog:default",
     "viem": "catalog:default"
