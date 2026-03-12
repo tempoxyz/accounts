@@ -124,18 +124,10 @@ function ProviderState() {
     () => provider.store.getState(),
   )
   return (
-    <pre>
-      {Json.stringify(
-        {
-          connected: state.accounts.length > 0,
-          chainId: state.chainId,
-          activeAccount: state.activeAccount,
-          accounts: state.accounts.map((a) => a.address),
-        },
-        null,
-        2,
-      )}
-    </pre>
+    <details>
+      <summary>View</summary>
+      <pre>{Json.stringify(state, null, 2)}</pre>
+    </details>
   )
 }
 
