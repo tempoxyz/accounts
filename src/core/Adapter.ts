@@ -16,15 +16,23 @@ type EncodedRequest<encoded extends { method: unknown; params: unknown }> = Pick
 >
 
 /** Adapter interface for the provider. */
-export type Adapter = {
-  /** Called once when the provider is created. Returns an optional cleanup function. */
-  setup?: (params: setup.Parameters) => (() => void) | undefined
+export type Adapter = AdapterFn & Meta
+
+/** The setup function an adapter must implement. */
+export type AdapterFn = (params: setup.Parameters) => ReturnType
+
+/** Static metadata attached to an adapter function. */
+export type Meta = {
   /** Data URI of the provider icon. @default Black 1×1 SVG. */
   icon?: `data:image/${string}` | undefined
   /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */
   name?: string | undefined
   /** Reverse DNS identifier (e.g. `"com.example.mywallet"`). @default `com.{lowercase name}` */
   rdns?: string | undefined
+}
+
+/** Value returned from an adapter's setup function. */
+export type ReturnType = {
   /** Adapter actions dispatched by the provider's `request()` method. */
   actions: {
     /** Grant an access key for the active account. */
@@ -81,12 +89,15 @@ export type Adapter = {
     /** Switch chain hook for adapter-specific handling. */
     switchChain?: ((params: switchChain.Parameters) => Promise<void>) | undefined
   }
-  /**
-   * Whether to persist account sign data (private keys, credentials) to storage.
-   * When `false`, only addresses are persisted.
-   * @default false
-   */
-  internal_persistPrivate?: boolean | undefined
+  /** Cleanup function called when the provider is destroyed. */
+  cleanup?: (() => void) | undefined
+}
+
+/** Creates an adapter from metadata and a setup function. */
+export function define(meta: Meta, fn: AdapterFn): Adapter {
+  const { name, ...rest } = meta
+  Object.defineProperty(fn, 'name', { value: name, configurable: true })
+  return Object.assign(fn, rest) as Adapter
 }
 
 /** Spreads decoded params. */
@@ -219,9 +230,4 @@ export declare namespace signTransaction {
 
 export declare namespace switchChain {
   type Parameters = { chainId: number }
-}
-
-/** Creates an adapter from a custom implementation. */
-export function from(adapter: Adapter): Adapter {
-  return adapter
 }

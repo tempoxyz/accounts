@@ -7,7 +7,7 @@ import { Actions } from 'viem/tempo'
 import * as z from 'zod/mini'
 
 import * as Account from './Account.js'
-import type { Adapter, authorizeAccessKey } from './Adapter.js'
+import type * as Adapter from './Adapter.js'
 import { tempoAuth } from './adapters/tempoAuth.js'
 import * as Client from './Client.js'
 import { withDedupe } from './internal/withDedupe.js'
@@ -58,7 +58,6 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const store = Store.create({
     chainId: defaultChain.id,
-    internal_persistPrivate: adapter.internal_persistPrivate,
     storage,
   })
 
@@ -71,7 +70,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     return Client.fromChainId(chainId, { chains, feePayer, store })
   }
 
-  adapter.setup?.({ getAccount, getClient, storage, store })
+  const { actions } = adapter({ getAccount, getClient, storage, store })
 
   const emitter = ox_Provider.createEmitter()
 
@@ -173,7 +172,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     ) satisfies Rpc.eth_chainId.Encoded['returns']
 
                   case 'eth_requestAccounts': {
-                    const { accounts: newAccounts } = await adapter.actions.loadAccounts(
+                    const { accounts: newAccounts } = await actions.loadAccounts(
                       undefined,
                       { method: 'wallet_connect', params: undefined },
                     )
@@ -195,7 +194,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'eth_sendTransaction': {
                     assertConnected()
                     const [decoded] = request._decoded.params
-                    return (await adapter.actions.sendTransaction(
+                    return (await actions.sendTransaction(
                       {
                         ...decoded,
                         feePayer: resolveFeePayer(decoded.feePayer),
@@ -207,7 +206,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'eth_signTransaction': {
                     assertConnected()
                     const [decoded] = request._decoded.params
-                    return (await adapter.actions.signTransaction(
+                    return (await actions.signTransaction(
                       {
                         ...decoded,
                         feePayer: resolveFeePayer(decoded.feePayer),
@@ -219,7 +218,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'eth_sendTransactionSync': {
                     assertConnected()
                     const [decoded] = request._decoded.params
-                    return (await adapter.actions.sendTransactionSync(
+                    return (await actions.sendTransactionSync(
                       {
                         ...decoded,
                         feePayer: resolveFeePayer(decoded.feePayer),
@@ -231,7 +230,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'eth_signTypedData_v4': {
                     assertConnected()
                     const [address, data] = request._decoded.params
-                    return (await adapter.actions.signTypedData(
+                    return (await actions.signTypedData(
                       {
                         address,
                         data,
@@ -243,7 +242,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'personal_sign': {
                     assertConnected()
                     const [data, address] = request._decoded.params
-                    return (await adapter.actions.signPersonalMessage(
+                    return (await actions.signPersonalMessage(
                       {
                         address,
                         data,
@@ -265,7 +264,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                       ...(feePayer ? { feePayer } : {}),
                     }
                     if (!sync) {
-                      const hash = await adapter.actions.sendTransaction(txRequest, {
+                      const hash = await actions.sendTransaction(txRequest, {
                         method: 'eth_sendTransaction',
                         params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
                       })
@@ -273,7 +272,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                       const id = Hex.concat(hash, Hex.padLeft(chainId, 32), sendCallsMagic)
                       return { capabilities: { sync }, id }
                     }
-                    const receipt = await adapter.actions.sendTransactionSync(txRequest as never, {
+                    const receipt = await actions.sendTransactionSync(txRequest as never, {
                       method: 'eth_sendTransactionSync',
                       params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
                     })
@@ -395,7 +394,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                       signature,
                     } = await (async () => {
                       if (capabilities?.method === 'register')
-                        return await adapter.actions.createAccount(
+                        return await actions.createAccount(
                           {
                             digest: capabilities.digest,
                             authorizeAccessKey,
@@ -404,7 +403,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                           },
                           request,
                         )
-                      return await adapter.actions.loadAccounts(
+                      return await actions.loadAccounts(
                         {
                           credentialId: capabilities?.credentialId,
                           digest: capabilities?.digest,
@@ -446,18 +445,18 @@ export function create(options: create.Options = {}): create.ReturnType {
                   }
 
                   case 'wallet_disconnect':
-                    await adapter.actions.disconnect?.()
+                    await actions.disconnect?.()
                     store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
                     return
 
                   case 'wallet_authorizeAccessKey': {
                     assertConnected()
-                    if (!adapter.actions.authorizeAccessKey)
+                    if (!actions.authorizeAccessKey)
                       throw new ox_Provider.UnsupportedMethodError({
                         message: '`authorizeAccessKey` not supported by adapter.',
                       })
                     const decoded = request._decoded.params?.[0]
-                    const result = await adapter.actions.authorizeAccessKey(
+                    const result = await actions.authorizeAccessKey(
                       {
                         ...getAuthorizeAccessKey?.(),
                         ...decoded!,
@@ -472,12 +471,12 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                   case 'wallet_revokeAccessKey': {
                     assertConnected()
-                    if (!adapter.actions.revokeAccessKey)
+                    if (!actions.revokeAccessKey)
                       throw new ox_Provider.UnsupportedMethodError({
                         message: '`revokeAccessKey` not supported by adapter.',
                       })
                     const [decoded] = request._decoded.params
-                    await adapter.actions.revokeAccessKey(
+                    await actions.revokeAccessKey(
                       {
                         ...decoded,
                       },
@@ -492,7 +491,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                       throw new ox_Provider.UnsupportedChainIdError({
                         message: `Chain ${chainId} not configured.`,
                       })
-                    await adapter.actions.switchChain?.({ chainId })
+                    await actions.switchChain?.({ chainId })
                     store.setState({ chainId })
                     return
                   }
@@ -549,13 +548,13 @@ const sendCallsMagic = Hash.keccak256(Hex.fromString('TEMPO_5792'))
 export declare namespace create {
   type Options = {
     /** Adapter to use for account management. @default dialog() */
-    adapter?: Adapter | undefined
+    adapter?: Adapter.Adapter | undefined
     /**
      * Default access key parameters for `wallet_connect`.
      *
      * When set, `wallet_connect` will automatically authorize an access key.
      */
-    authorizeAccessKey?: (() => authorizeAccessKey.Parameters) | undefined
+    authorizeAccessKey?: (() => Adapter.authorizeAccessKey.Parameters) | undefined
     /**
      * Supported chains. First chain is the default.
      * @default [tempo, tempoModerato]
