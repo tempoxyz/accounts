@@ -144,7 +144,14 @@ export function tempoAuth(options: tempoAuth.Options = {}): Adapter.Adapter {
         keyAuthorization?: KeyAuthorization.Signed,
       ) => Promise<result>,
     ): Promise<result | undefined> {
-      const account = getAccount({ signable: true })
+      const account = (() => {
+        try {
+          return getAccount({ signable: true })
+        } catch (error) {
+          return undefined
+        }
+      })()
+      if (!account) return undefined
       if (account.source !== 'accessKey') return undefined
       const keyAuthorization = AccessKey.getPending(account, { store })
       try {
