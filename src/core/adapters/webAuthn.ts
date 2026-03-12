@@ -4,9 +4,8 @@ import { Account } from 'viem/tempo'
 import { Authentication, Registration } from 'webauthx/client'
 
 import type { OneOf } from '../../internal/types.js'
-import type { Adapter } from '../Adapter.js'
+import * as Adapter from '../Adapter.js'
 import * as Ceremony from '../Ceremony.js'
-import type * as Storage from '../Storage.js'
 import { local } from './local.js'
 
 /**
@@ -24,82 +23,73 @@ import { local } from './local.js'
  * })
  * ```
  */
-export function webAuthn(options: webAuthn.Options = {}): Adapter {
+export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
   const { authUrl, icon, name, rdns } = options
 
-  let ceremony: Ceremony.Ceremony
-  let storage: Storage.Storage
+  return Adapter.define({ icon, name, rdns }, (params) => {
+    const { storage } = params
+    const ceremony =
+      options.ceremony ??
+      (authUrl ? Ceremony.server({ url: authUrl }) : Ceremony.local({ storage }))
 
-  const adapter = local({
-    async createAccount(params) {
-      const { options } = await ceremony.getRegistrationOptions(params)
-      const credential = await Registration.create({ options })
-      const { publicKey } = await ceremony.verifyRegistration(credential)
-      await storage.setItem('lastCredentialId', credential.id)
-      const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
-      return {
-        accounts: [
-          {
-            address: account.address,
-            keyType: 'webAuthn',
-            credential: { id: credential.id, publicKey },
-          },
-        ],
-      }
-    },
-    async loadAccounts(params) {
-      const credentialId = params?.selectAccount
-        ? undefined
-        : (params?.credentialId ?? (await storage.getItem<string>('lastCredentialId')) ?? undefined)
-      const { options } = await ceremony.getAuthenticationOptions({
-        ...params,
-        challenge: params?.digest,
-        credentialId,
-      })
-      const response = await Authentication.sign({ options })
-      const { publicKey } = await ceremony.verifyAuthentication(response)
-      await storage.setItem('lastCredentialId', response.id)
-      const account = Account.fromWebAuthnP256({ id: response.id, publicKey })
-
-      const signature = params?.digest
-        ? SignatureEnvelope.serialize(
+    const base = local({
+      async createAccount(p) {
+        const { options } = await ceremony.getRegistrationOptions(p)
+        const credential = await Registration.create({ options })
+        const { publicKey } = await ceremony.verifyRegistration(credential)
+        await storage.setItem('lastCredentialId', credential.id)
+        const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
+        return {
+          accounts: [
             {
-              metadata: response.metadata,
-              publicKey: PublicKey.fromHex(publicKey),
-              signature: Signature.from(response.signature),
-              type: 'webAuthn',
+              address: account.address,
+              keyType: 'webAuthn',
+              credential: { id: credential.id, publicKey },
             },
-            { magic: true },
-          )
-        : undefined
+          ],
+        }
+      },
+      async loadAccounts(p) {
+        const credentialId = p?.selectAccount
+          ? undefined
+          : (p?.credentialId ?? (await storage.getItem<string>('lastCredentialId')) ?? undefined)
+        const { options } = await ceremony.getAuthenticationOptions({
+          ...p,
+          challenge: p?.digest,
+          credentialId,
+        })
+        const response = await Authentication.sign({ options })
+        const { publicKey } = await ceremony.verifyAuthentication(response)
+        await storage.setItem('lastCredentialId', response.id)
+        const account = Account.fromWebAuthnP256({ id: response.id, publicKey })
 
-      return {
-        accounts: [
-          {
-            address: account.address,
-            keyType: 'webAuthn',
-            credential: { id: response.id, publicKey },
-          },
-        ],
-        signature,
-      }
-    },
+        const signature = p?.digest
+          ? SignatureEnvelope.serialize(
+              {
+                metadata: response.metadata,
+                publicKey: PublicKey.fromHex(publicKey),
+                signature: Signature.from(response.signature),
+                type: 'webAuthn',
+              },
+              { magic: true },
+            )
+          : undefined
+
+        return {
+          accounts: [
+            {
+              address: account.address,
+              keyType: 'webAuthn',
+              credential: { id: response.id, publicKey },
+            },
+          ],
+          signature,
+        }
+      },
+    })(params)
+
+    return base
   })
-
-  return {
-    ...adapter,
-    setup(params) {
-      storage = params.storage
-      ceremony =
-        options.ceremony ??
-        (authUrl ? Ceremony.server({ url: authUrl }) : Ceremony.local({ storage }))
-      return adapter.setup?.(params)
-    },
-    icon,
-    name,
-    rdns,
-    internal_persistPrivate: true,
-  }
 }
 
 export declare namespace webAuthn {

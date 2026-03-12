@@ -36,14 +36,6 @@ export type Options = {
   chainId: number
   /** Storage adapter for persistence. */
   storage?: Storage.Storage | undefined
-  /**
-   * Whether to persist account key data (private keys, credentials) to storage.
-   * When `false`, only addresses are persisted.
-   * @default false
-   * @internal
-   * @deprecated
-   */
-  internal_persistPrivate?: boolean | undefined
 }
 
 /** A queued JSON-RPC request tracked in the store. */
@@ -71,9 +63,8 @@ export function create(options: Options): Store {
   const {
     chainId,
     storage = typeof window !== 'undefined'
-      ? Storage.idb({ key: '@tempoxyz/accounts' })
-      : Storage.memory({ key: '@tempoxyz/accounts' }),
-    internal_persistPrivate = false,
+      ? Storage.idb({ key: 'tempo' })
+      : Storage.memory({ key: 'tempo' }),
   } = options
 
   return createStore(
@@ -100,9 +91,7 @@ export function create(options: Options): Store {
           partialize: (state) =>
             ({
               accessKeys: state.accessKeys,
-              accounts: internal_persistPrivate
-                ? state.accounts
-                : state.accounts.map((a) => ({ address: a.address })),
+              accounts: state.accounts,
               activeAccount: state.activeAccount,
               chainId: state.chainId,
             }) as unknown as State,

@@ -72,6 +72,8 @@ describe('local', () => {
 })
 
 function setup(overrides: Partial<local.Options> = {}) {
+  const storage = Storage.memory()
+  const store = Store.create({ chainId: tempoLocalnet.id, storage })
   const adapter = local({
     loadAccounts: async () => ({
       accounts: [
@@ -85,10 +87,7 @@ function setup(overrides: Partial<local.Options> = {}) {
       ],
     }),
     ...overrides,
-  })
-  const storage = Storage.memory()
-  const store = Store.create({ chainId: tempoLocalnet.id, storage })
-  adapter.setup?.({
+  })({
     getAccount: (options) => Account.find({ ...options, signable: true, store }),
     getClient: () => getClient({ chain: tempoLocalnet }) as never,
     storage,

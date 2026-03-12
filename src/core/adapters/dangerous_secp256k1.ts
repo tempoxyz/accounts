@@ -1,7 +1,6 @@
 import { Account, Secp256k1 } from 'viem/tempo'
 
-import type { Adapter } from '../Adapter.js'
-import type * as Store from '../Store.js'
+import * as Adapter from '../Adapter.js'
 import { local } from './local.js'
 
 /**
@@ -21,37 +20,25 @@ import { local } from './local.js'
  * })
  * ```
  */
-export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}): Adapter {
+export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}): Adapter.Adapter {
   const { icon, name, rdns } = options
 
-  let store: Store.Store | undefined
+  return Adapter.define({ icon, name, rdns }, (config) => {
+    const { store } = config
 
-  const base = local({
-    async createAccount() {
-      const privateKey = Secp256k1.randomPrivateKey()
-      const account = Account.fromSecp256k1(privateKey)
-      return {
-        accounts: [{ address: account.address, keyType: 'secp256k1' as const, privateKey }],
-      }
-    },
-    async loadAccounts() {
-      if (!store) return { accounts: [] }
-      return { accounts: [...store.getState().accounts] }
-    },
+    return local({
+      async createAccount() {
+        const privateKey = Secp256k1.randomPrivateKey()
+        const account = Account.fromSecp256k1(privateKey)
+        return {
+          accounts: [{ address: account.address, keyType: 'secp256k1' as const, privateKey }],
+        }
+      },
+      async loadAccounts() {
+        return { accounts: [...store.getState().accounts] }
+      },
+    })(config)
   })
-
-  const baseSetup = base.setup
-  return {
-    ...base,
-    setup(params) {
-      store = params.store
-      return baseSetup?.(params)
-    },
-    icon,
-    name,
-    rdns,
-    internal_persistPrivate: true,
-  }
 }
 
 export declare namespace dangerous_secp256k1 {

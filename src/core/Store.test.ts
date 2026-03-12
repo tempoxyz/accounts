@@ -138,58 +138,6 @@ describe('persistence', () => {
     `)
   })
 
-  test('behavior: strips sign data when internal_persistPrivate is false', async () => {
-    const storage = Storage.memory()
-    const store = Store.create({ chainId: 123, storage })
-    await Store.waitForHydration(store)
-
-    store.setState({
-      accounts: [
-        {
-          address: '0x0000000000000000000000000000000000000001',
-          keyType: 'secp256k1',
-          privateKey: '0xdeadbeef',
-        },
-      ],
-    })
-
-    const raw = storage.getItem('store') as any
-    expect(raw.state.accounts).toMatchInlineSnapshot(`
-      [
-        {
-          "address": "0x0000000000000000000000000000000000000001",
-        },
-      ]
-    `)
-  })
-
-  test('behavior: persists sign data when internal_persistPrivate is true', async () => {
-    const storage = Storage.memory()
-    const store = Store.create({ chainId: 123, storage, internal_persistPrivate: true })
-    await Store.waitForHydration(store)
-
-    store.setState({
-      accounts: [
-        {
-          address: '0x0000000000000000000000000000000000000001',
-          keyType: 'secp256k1',
-          privateKey: '0xdeadbeef',
-        },
-      ],
-    })
-
-    const raw = storage.getItem('store') as any
-    expect(raw.state.accounts).toMatchInlineSnapshot(`
-      [
-        {
-          "address": "0x0000000000000000000000000000000000000001",
-          "keyType": "secp256k1",
-          "privateKey": "0xdeadbeef",
-        },
-      ]
-    `)
-  })
-
   test('behavior: persists accessKeys to storage', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: 123, storage })
