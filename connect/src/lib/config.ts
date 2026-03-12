@@ -1,7 +1,10 @@
-import { Provider, Storage, webAuthn } from '@tempoxyz/accounts'
+import { Storage } from '@tempoxyz/accounts'
 import { Remote } from '@tempoxyz/accounts'
-import { defineChain } from 'viem'
+import { defineChain, http } from 'viem'
+import { webAuthn } from '@tempoxyz/accounts/wagmi'
 import { tempo, tempoLocalnet, tempoModerato } from 'viem/chains'
+import { createConfig } from 'wagmi'
+import { getConnectors } from '@wagmi/core'
 
 import * as Messenger from './messenger.js'
 
@@ -16,14 +19,21 @@ const chains = (() => {
 })()
 
 /** Provider instance for executing confirmed requests. */
-export const provider = Provider.create({
-  adapter: webAuthn(),
+export const wagmiConfig = createConfig({
   chains,
-  storage: Storage.combine(Storage.cookie(), Storage.localStorage()),
+  connectors: [webAuthn({
+    storage: Storage.combine(Storage.cookie(), Storage.localStorage()),
+  })],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+    [tempoModerato.id]: http(),
+    [tempoLocalnet.id]: http(),
+  },
 })
 
 /** Remote context singleton. */
 export const remote = Remote.create({
   messenger: Messenger.init(),
-  provider,
+  provider: await getConnectors(wagmiConfig)[0].getProvider(),
 })

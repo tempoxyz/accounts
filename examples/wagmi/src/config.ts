@@ -1,15 +1,10 @@
-import { webAuthn } from '@tempoxyz/accounts/wagmi'
+import { connect } from '@tempoxyz/accounts/wagmi'
 import { createConfig, http } from 'wagmi'
 import { tempoModerato } from 'wagmi/chains'
 
 export const config = createConfig({
   chains: [tempoModerato],
-  connectors: [
-    webAuthn({
-      authUrl: '/auth',
-      feePayerUrl: '/fee-payer',
-    }),
-  ],
+  connectors: [connect({ host: 'https://localhost:5174' })],
   multiInjectedProviderDiscovery: false,
   transports: {
     [tempoModerato.id]: http(),

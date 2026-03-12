@@ -88,36 +88,9 @@ function Connect() {
               })
             }
           >
-            Login
+            Login with Tempo
           </button>
-          <button
-            type="button"
-            onClick={() =>
-              connect({
-                connector,
-                capabilities: {
-                  method: 'register',
-                  name: 'Wagmi Example',
-                  ...(accessKey
-                    ? {
-                        authorizeAccessKey: {
-                          expiry: Expiry.minutes(5),
-                          limits: [
-                            {
-                              token: Addresses.pathUsd,
-                              limit: parseUnits('5', 6),
-                            },
-                          ],
-                        },
-                      }
-                    : {}),
-                },
-              })
-            }
-          >
-            Register
-          </button>
-          <div>
+          {/* <div>
             <label>
               <input
                 type="checkbox"
@@ -126,7 +99,7 @@ function Connect() {
               />{' '}
               Authorize Access Key ($5 aUSD, 5 minutes)
             </label>
-          </div>
+          </div> */}
         </>
       )}
       <div>{status}</div>

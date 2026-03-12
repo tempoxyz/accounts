@@ -117,13 +117,13 @@ describe('Dialog.iframe', () => {
     expect(document.querySelector('dialog[data-tempo-connect]')).toBeNull()
   })
 
-  test('behavior: native cancel event restores body scroll', () => {
-    const { handle } = setup()
-    document.body.style.overflow = 'auto'
+  test('behavior: cancel event rejects pending requests', () => {
+    const { handle, store } = setup()
     handle.open()
     const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
     dialog.dispatchEvent(new Event('cancel'))
-    expect(document.body.style.overflow).toBe('auto')
+    const queue = store.getState().requestQueue
+    for (const q of queue) expect(q.status).toBe('error')
   })
 
   test('behavior: focus restored to previous element on close', () => {
@@ -140,15 +140,15 @@ describe('Dialog.iframe', () => {
     button.remove()
   })
 
-  test('behavior: backdrop click closes dialog', () => {
-    const { handle } = setup()
+  test('behavior: backdrop click rejects pending requests', () => {
+    const { handle, store } = setup()
     handle.open()
     const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
 
     dialog.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
-    expect(dialog.open).toBe(false)
-    expect(document.body.style.overflow).not.toBe('hidden')
+    const queue = store.getState().requestQueue
+    for (const q of queue) expect(q.status).toBe('error')
   })
 
   test('behavior: click inside iframe does not close dialog', () => {
@@ -175,12 +175,11 @@ describe('Dialog.iframe', () => {
     handle.close()
   })
 
-  test('behavior: setup returns a messenger', () => {
-    const { handle } = setup()
-    expect(handle.messenger).toBeDefined()
-    expect(typeof handle.messenger.send).toBe('function')
-    expect(typeof handle.messenger.on).toBe('function')
-    handle.destroy()
+  test('behavior: iframe has accessibility attributes', () => {
+    setup()
+    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+    expect(dialog.getAttribute('role')).toBe('dialog')
+    expect(dialog.getAttribute('aria-label')).toBe('Tempo Connect')
   })
 })
 

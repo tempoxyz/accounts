@@ -10,7 +10,7 @@
     "dev:hosts": "./scripts/dev:hosts.sh",
     "dev:connect": "pnpm --filter @tempoxyz/connect dev",
     "dev:playground": "pnpm --filter playground dev",
-    "example:wagmi": "pnpm --filter wagmi dev",
+    "example:wagmi": "pnpm --filter wagmi dev & pnpm dev:connect",
     "preconstruct": "zile dev && pnpm check",
     "test": "vitest"
   },

@@ -22,14 +22,14 @@ export declare namespace setup {
     close: () => void
     /** Destroy the dialog (remove DOM elements, clean up). */
     destroy: () => void
-    /** Bridge messenger for cross-frame communication. */
-    messenger: Messenger.Bridge
     /** Open the dialog (show iframe / open popup). */
     open: () => void
     /** Sync the pending request queue to the remote auth app. */
-    syncRequests: (requests: readonly Store.QueuedRequest[]) => void
+    syncRequests: (requests: readonly Store.QueuedRequest[]) => Promise<void>
   }
 }
+
+export const defaultSize = { height: 440, width: 360 }
 
 /** Creates a dialog from a custom implementation. */
 export function from(dialog: Dialog): Dialog {
@@ -51,10 +51,40 @@ export function iframe(): Dialog {
     name: 'iframe',
     setup(parameters) {
       const { host, store } = parameters
+
+      const fallback = popup().setup(parameters)
+
+      let open = false
+
+      const referrer = getReferrer()
+
       const hostUrl = new URL(host)
+      hostUrl.searchParams.set('chainId', String(store.getState().chainId))
+      hostUrl.searchParams.set('mode', 'iframe')
+      if (referrer.icon) {
+        if (typeof referrer.icon === 'string') hostUrl.searchParams.set('icon', referrer.icon)
+        else {
+          hostUrl.searchParams.set('icon', referrer.icon.light)
+          hostUrl.searchParams.set('iconDark', referrer.icon.dark)
+        }
+      }
 
       const root = document.createElement('dialog')
       root.dataset.tempoConnect = ''
+
+      root.setAttribute('role', 'dialog')
+      root.setAttribute('aria-closed', 'true')
+      root.setAttribute('aria-label', 'Tempo Connect')
+      root.setAttribute('hidden', 'until-found')
+
+      Object.assign(root.style, {
+        background: 'transparent',
+        border: '0',
+        outline: '0',
+        padding: '0',
+        position: 'fixed',
+      })
+
       document.body.appendChild(root)
 
       const frame = document.createElement('iframe')
@@ -70,8 +100,30 @@ export function iframe(): Dialog {
           `publickey-credentials-create ${hostUrl.origin}`,
         ].join('; '),
       )
-      frame.src = host
+      frame.setAttribute('allowtransparency', 'true')
+      frame.setAttribute('tabindex', '0')
+      frame.setAttribute('title', 'Tempo Connect')
+      frame.src = hostUrl.toString()
 
+      Object.assign(frame.style, {
+        backgroundColor: 'transparent',
+        border: '0',
+        colorScheme: 'light dark',
+        height: '100%',
+        left: '0',
+        position: 'fixed',
+        top: '0',
+        width: '100%',
+      })
+
+      const style = document.createElement('style')
+      style.innerHTML = `
+        dialog[data-tempo-connect]::backdrop {
+          background: transparent!important;
+        }
+      `
+
+      root.appendChild(style)
       root.appendChild(frame)
 
       const messenger = Messenger.bridge({
@@ -84,65 +136,122 @@ export function iframe(): Dialog {
 
       messenger.on('rpc-response', (response) => handleResponse(store, response))
 
-      messenger.send('__internal', {
-        type: 'init',
-        chainId: store.getState().chainId,
-        mode: 'iframe',
-      })
-
-      let isOpen = false
       let savedOverflow = ''
       let opener: HTMLElement | null = null
 
-      function close() {
-        if (!isOpen) return
-        isOpen = false
-        root.close()
-        document.body.style.overflow = savedOverflow
-        opener?.focus()
-        opener = null
-      }
-
-      root.addEventListener('cancel', () => {
-        close()
-        handleBlur(store)
-      })
-
-      root.addEventListener('click', (event) => {
-        if (event.target !== root) return
-        close()
-        handleBlur(store)
-      })
+      const onBlur = () => handleBlur(store)
 
       // 1Password extension adds `inert` attribute to `dialog` rendering it unusable.
       const inertObserver = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
-          if (mutation.attributeName === 'inert') root.removeAttribute('inert')
+          if (mutation.type !== 'attributes') continue
+          if (mutation.attributeName !== 'inert') continue
+          root.removeAttribute('inert')
         }
       })
-      inertObserver.observe(root, { attributes: true })
+      inertObserver.observe(root, { attributeOldValue: true, attributes: true })
+
+      // dialog/page interactivity (no visibility change)
+      let dialogActive = false
+      const activatePage = () => {
+        if (!dialogActive) return
+        dialogActive = false
+
+        root.removeEventListener('cancel', onBlur)
+        root.removeEventListener('click', onBlur)
+        root.style.pointerEvents = 'none'
+        opener?.focus()
+        opener = null
+
+        document.body.style.overflow = savedOverflow
+      }
+      const activateDialog = () => {
+        if (dialogActive) return
+        dialogActive = true
+
+        root.addEventListener('cancel', onBlur)
+        root.addEventListener('click', onBlur)
+        frame.focus()
+        root.style.pointerEvents = 'auto'
+
+        savedOverflow = document.body.style.overflow
+        document.body.style.overflow = 'hidden'
+      }
+
+      // dialog visibility
+      let visible = false
+      const showDialog = () => {
+        if (visible) return
+        visible = true
+
+        if (document.activeElement instanceof HTMLElement)
+          opener = document.activeElement
+
+        root.removeAttribute('hidden')
+        root.removeAttribute('aria-closed')
+        root.showModal()
+      }
+      const hideDialog = () => {
+        if (!visible) return
+        visible = false
+        root.setAttribute('hidden', 'true')
+        root.setAttribute('aria-closed', 'true')
+        root.close()
+
+        // 1Password extension sometimes adds `inert` to dialog siblings
+        // and does not clean up when dialog closes.
+        for (const sibling of root.parentNode
+          ? Array.from(root.parentNode.children)
+          : []) {
+          if (sibling === root) continue
+          if (!sibling.hasAttribute('inert')) continue
+          sibling.removeAttribute('inert')
+        }
+      }
 
       return {
-        messenger,
-        open() {
-          if (isOpen) return
-          isOpen = true
-          if (document.activeElement instanceof HTMLElement) opener = document.activeElement
-          savedOverflow = document.body.style.overflow
-          document.body.style.overflow = 'hidden'
-          root.showModal()
+        close() {
+          fallback.close()
+          open = false
+
+          hideDialog()
+          activatePage()
         },
-        close,
         destroy() {
-          close()
-          inertObserver.disconnect()
+          fallback.close()
+          open = false
+
+          activatePage()
+          hideDialog()
+
+          fallback.destroy()
           messenger.destroy()
           root.remove()
+          inertObserver.disconnect()
         },
-        syncRequests(requests) {
-          const requiresConfirm = requests.some((x) => x.status === 'pending')
-          if (!isOpen && requiresConfirm) this.open()
-          messenger.send('rpc-requests', { chainId: store.getState().chainId, requests })
+        open() {
+          if (open) return
+          open = true
+
+          showDialog()
+          activateDialog()
+        },
+        async syncRequests(requests) {
+          // Safari does not support WebAuthn credential creation in iframes.
+          // Fall back to popup dialog.
+          const unsupported =
+            isSafari() &&
+            requests.some((x) =>
+              ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method),
+            )
+
+          if (unsupported) {
+            fallback.syncRequests(requests)
+          } else {
+            const requiresConfirm = requests.some((x) => x.status === 'pending')
+            if (!open && requiresConfirm) this.open()
+            messenger.send('rpc-requests', { account: getAccount(store), chainId: store.getState().chainId, requests })
+          }
         },
       }
     },
@@ -153,31 +262,62 @@ export function iframe(): Dialog {
 export function popup(options: popup.Options = {}): Dialog {
   if (typeof window === 'undefined') return noop()
 
-  const { size = { width: 360, height: 440 } } = options
+  const { size = defaultSize } = options
 
   return from({
     name: 'popup',
     setup(parameters) {
       const { host, store } = parameters
-      const hostUrl = new URL(host)
 
       let win: Window | null = null
-      let pollTimer: ReturnType<typeof setInterval> | undefined
-      let messenger: Messenger.Bridge = Messenger.noop()
 
       function onBlur() {
         if (win) handleBlur(store)
       }
 
+      const offDetectClosed = (() => {
+        const timer = setInterval(() => {
+          if (win?.closed) handleBlur(store)
+        }, 100)
+        return () => clearInterval(timer)
+      })()
+
+      let messenger: Messenger.Bridge | undefined
+
       return {
-        get messenger() {
-          return messenger
+        close() {
+          if (!win) return
+          win.close()
+          win = null
+        },
+        destroy() {
+          this.close()
+          window.removeEventListener('focus', onBlur)
+          messenger?.destroy()
+          offDetectClosed()
         },
         open() {
-          const left = Math.round((window.innerWidth - size.width) / 2 + window.screenX)
-          const top = Math.round(window.screenY + 100)
-          const features = `width=${size.width},height=${size.height},left=${left},top=${top}`
-          win = window.open(host, '_blank', features)
+          const referrer = getReferrer()
+
+          const hostUrl = new URL(host)
+          hostUrl.searchParams.set('chainId', String(store.getState().chainId))
+          hostUrl.searchParams.set('mode', 'popup')
+          if (referrer.icon) {
+            if (typeof referrer.icon === 'string') hostUrl.searchParams.set('icon', referrer.icon)
+            else {
+              hostUrl.searchParams.set('icon', referrer.icon.light)
+              hostUrl.searchParams.set('iconDark', referrer.icon.dark)
+            }
+          }
+
+          const left = (window.innerWidth - size.width) / 2 + window.screenX
+          const top = window.screenY + 100
+
+          win = window.open(
+            hostUrl.toString(),
+            '_blank',
+            `width=${size.width},height=${size.height},left=${left},top=${top}`,
+          )
           if (!win) throw new Error('Failed to open popup')
 
           messenger = Messenger.bridge({
@@ -188,45 +328,16 @@ export function popup(options: popup.Options = {}): Dialog {
 
           messenger.on('rpc-response', (response) => handleResponse(store, response))
 
-          messenger.send('__internal', {
-            type: 'init',
-            chainId: store.getState().chainId,
-            mode: 'popup',
-          })
-
-          pollTimer = setInterval(() => {
-            if (win?.closed) {
-              clearInterval(pollTimer)
-              pollTimer = undefined
-              win = null
-              handleBlur(store)
-            }
-          }, 100)
-
           window.removeEventListener('focus', onBlur)
           window.addEventListener('focus', onBlur)
         },
-        close() {
-          win?.close()
-          win = null
-        },
-        destroy() {
-          win?.close()
-          win = null
-          if (pollTimer) {
-            clearInterval(pollTimer)
-            pollTimer = undefined
-          }
-          window.removeEventListener('focus', onBlur)
-          messenger.destroy()
-        },
-        syncRequests(requests) {
+        async syncRequests(requests) {
           const requiresConfirm = requests.some((x) => x.status === 'pending')
           if (requiresConfirm) {
             if (!win || win.closed) this.open()
             win?.focus()
           }
-          messenger.send('rpc-requests', { chainId: store.getState().chainId, requests })
+          messenger?.send('rpc-requests', { account: getAccount(store), chainId: store.getState().chainId, requests })
         },
       }
     },
@@ -246,11 +357,10 @@ export function noop(): Dialog {
     name: 'noop',
     setup() {
       return {
-        messenger: Messenger.noop(),
         open() {},
         close() {},
         destroy() {},
-        syncRequests() {},
+        async syncRequests() {},
       }
     },
   })
@@ -294,4 +404,44 @@ function handleBlur(store: Store.Store) {
         : queued,
     ),
   }))
+}
+
+/** Returns the active account from the store, or `undefined` if none. */
+function getAccount(store: Store.Store): { address: string } | undefined {
+  const { accounts, activeAccount } = store.getState()
+  const account = accounts[activeAccount]
+  if (!account) return undefined
+  return { address: account.address }
+}
+
+/**
+ * Extracts referrer metadata from the host page.
+ * Must be called in the host page context (where `document` is accessible).
+ */
+function getReferrer(): getReferrer.ReturnType {
+  const icon = (() => {
+    const dark = document.querySelector(
+      'link[rel~="icon"][media="(prefers-color-scheme: dark)"]',
+    ) as HTMLLinkElement | null
+    const light = (document.querySelector(
+      'link[rel~="icon"][media="(prefers-color-scheme: light)"]',
+    ) ?? document.querySelector('link[rel~="icon"]')) as HTMLLinkElement | null
+
+    if (dark?.href && light?.href && dark.href !== light.href)
+      return { dark: dark.href, light: light.href }
+
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    return (isDark ? dark?.href : light?.href) ?? light?.href
+  })()
+
+  return { icon, title: document.title }
+}
+
+declare namespace getReferrer {
+  type ReturnType = {
+    /** Favicon URL, or separate light/dark URLs. */
+    icon: string | { light: string; dark: string } | undefined
+    /** Document title of the host page. */
+    title: string
+  }
 }

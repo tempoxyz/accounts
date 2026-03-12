@@ -1,4 +1,5 @@
 export * as Ceremony from './core/Ceremony.js'
+export * as Dialog from './core/Dialog.js'
 export * as Messenger from './core/Messenger.js'
 export * as Schema from './core/Schema.js'
 export * as Provider from './core/Provider.js'

@@ -8,8 +8,9 @@ describe('Payload', () => {
     expectTypeOf<Messenger.Payload<'ready'>>().toEqualTypeOf<undefined>()
   })
 
-  test('rpc-requests resolves to { chainId, requests }', () => {
+  test('rpc-requests resolves to { account, chainId, requests }', () => {
     expectTypeOf<Messenger.Payload<'rpc-requests'>>().toEqualTypeOf<{
+      account: { address: string } | undefined
       chainId: number
       requests: readonly Store.QueuedRequest[]
     }>()
@@ -23,18 +24,5 @@ describe('Payload', () => {
 
   test('close resolves to undefined', () => {
     expectTypeOf<Messenger.Payload<'close'>>().toEqualTypeOf<undefined>()
-  })
-
-  test('__internal is a discriminated union on type', () => {
-    type Internal = Messenger.Payload<'__internal'>
-    expectTypeOf<Extract<Internal, { type: 'init' }>>().toMatchTypeOf<{
-      type: 'init'
-      mode: 'iframe' | 'popup'
-    }>()
-    expectTypeOf<Extract<Internal, { type: 'resize' }>>().toMatchTypeOf<{
-      type: 'resize'
-      height?: number | undefined
-      width?: number | undefined
-    }>()
   })
 })

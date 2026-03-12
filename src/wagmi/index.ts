@@ -1,2 +1,2 @@
 export * as Connector from './Connector.js'
-export { webAuthn } from './Connector.js'
+export { connect, webAuthn } from './Connector.js'

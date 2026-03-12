@@ -50,7 +50,11 @@ export type Remote = {
    * @returns Unsubscribe function.
    */
   onRequests: (
-    cb: (requests: readonly Store.QueuedRequest[], event: MessageEvent) => void,
+    cb: (
+      requests: readonly Store.QueuedRequest[],
+      event: MessageEvent,
+      extra: { account: { address: string } | undefined },
+    ) => void,
   ) => () => void
   /**
    * Signals readiness to the host and begins accepting requests.
@@ -81,6 +85,8 @@ export type Remote = {
 
 export declare namespace onDialogRequest {
   type Payload = {
+    /** Active account on the host side. */
+    account: { address: string } | undefined
     /** Origin of the host that opened this dialog. */
     origin: string
     /** The pending request to display, or `null` when the dialog should close. */
@@ -110,9 +116,20 @@ export function create(options: create.Options): Remote {
     store,
 
     onDialogRequest(cb) {
-      return this.onRequests((requests, event) => {
+      return this.onRequests((requests, event, { account }) => {
+        // Sync the active account with the host.
+        if (account) {
+          const state = provider.store.getState()
+          const index = state.accounts.findIndex(
+            (a) => a.address.toLowerCase() === account.address.toLowerCase(),
+          )
+          if (index >= 0 && index !== state.activeAccount)
+            provider.store.setState({ activeAccount: index })
+        }
+
         const pending = requests.find((r) => r.status === 'pending')
         cb({
+          account,
           origin: event.origin,
           request: pending?.request ?? null,
         })
@@ -120,8 +137,12 @@ export function create(options: create.Options): Remote {
     },
 
     onRequests(cb) {
-      return messenger.on('rpc-requests', (payload, event) => {
-        const { chainId, requests } = payload
+      return messenger.on('rpc-requests', async (payload, event) => {
+        const { account, chainId, requests } = payload
+
+        // Rehydrate persisted state so the iframe picks up accounts
+        // created in a popup (e.g. Safari WebAuthn fallback).
+        await provider.store.persist?.rehydrate()
 
         store.setState({ requests })
 
@@ -131,24 +152,26 @@ export function create(options: create.Options): Remote {
             params: [{ chainId: Hex.fromNumber(chainId) }],
           })
 
-        cb(requests, event)
+        cb(requests, event, { account })
       })
     },
 
     ready() {
       messenger.ready()
 
-      messenger.on('__internal', (payload) => {
-        if (payload.type !== 'init') return
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search)
+        const mode = params.get('mode') as State['mode']
+        const chainId = Number(params.get('chainId'))
 
-        store.setState({ mode: payload.mode })
+        if (mode) store.setState({ mode })
 
-        if (provider.store.getState().chainId !== payload.chainId)
+        if (chainId && provider.store.getState().chainId !== chainId)
           provider.request({
             method: 'wallet_switchEthereumChain',
-            params: [{ chainId: Hex.fromNumber(payload.chainId) }],
+            params: [{ chainId: Hex.fromNumber(chainId) }],
           })
-      })
+      }
     },
 
     reject(request, error) {

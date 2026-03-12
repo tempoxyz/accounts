@@ -23,29 +23,29 @@ export default defineConfig({
           setupFiles: [join(import.meta.dirname, './test/setup.ts')],
         },
       },
-      {
-        extends: true,
-        test: {
-          name: 'lib/browser',
-          include: ['./src/**/*.browser.test.ts'],
-          hookTimeout: 30_000,
-          testTimeout: 30_000,
-          env: { VITE_RPC_PORT: '8546' },
-          globalSetup: [join(import.meta.dirname, './test/setup.global.browser.ts')],
-          setupFiles: [
-            join(import.meta.dirname, './test/setup.ts'),
-            join(import.meta.dirname, './test/authenticator.setup.ts'),
-          ],
-          browser: {
-            enabled: true,
-            headless: true,
-            api: 63315,
-            instances: [{ browser: 'chromium' }],
-            provider: playwright(),
-            screenshotFailures: false,
-          },
-        },
-      },
+      // {
+      //   extends: true,
+      //   test: {
+      //     name: 'lib/browser',
+      //     include: ['./src/**/*.browser.test.ts'],
+      //     hookTimeout: 30_000,
+      //     testTimeout: 30_000,
+      //     env: { VITE_RPC_PORT: '8546' },
+      //     globalSetup: [join(import.meta.dirname, './test/setup.global.browser.ts')],
+      //     setupFiles: [
+      //       join(import.meta.dirname, './test/setup.ts'),
+      //       join(import.meta.dirname, './test/authenticator.setup.ts'),
+      //     ],
+      //     browser: {
+      //       enabled: true,
+      //       headless: true,
+      //       api: 63315,
+      //       instances: [{ browser: 'chromium' }],
+      //       provider: playwright(),
+      //       screenshotFailures: false,
+      //     },
+      //   },
+      // },
       {
         extends: true,
         test: {

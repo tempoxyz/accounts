@@ -1,6 +1,6 @@
 import { Store } from '@tempoxyz/accounts'
+import { useMutation } from '@tanstack/react-query'
 import { Json } from 'ox'
-import { useState } from 'react'
 import { useStore } from 'zustand'
 
 import { remote } from '../lib/config.js'
@@ -8,38 +8,24 @@ import { remote } from '../lib/config.js'
 /** Generic confirm/reject UI for an RPC request. */
 export function RequestView(props: RequestView.Props) {
   const { request } = props
-  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
-  const [error, setError] = useState<string>()
   const state = useStore(remote.provider.store)
 
-  async function confirm() {
-    setStatus('loading')
-    try {
-      await remote.respond(request)
-    } catch (e) {
-      setStatus('error')
-      setError(e instanceof Error ? e.message : 'Unknown error')
-    } finally {
-      setStatus('idle')
-    }
-  }
-
-  function reject() {
-    remote.reject(request)
-  }
+  const confirm = useMutation({
+    mutationFn: () => remote.respond(request),
+  })
 
   return (
     <div>
       <h2>{request.method}</h2>
       <div>
-        <button onClick={confirm} disabled={status === 'loading'} data-testid="confirm">
-          {status === 'loading' ? 'Confirming...' : 'Confirm'}
+        <button onClick={() => confirm.mutate()} disabled={confirm.isPending} data-testid="confirm">
+          {confirm.isPending ? 'Confirming...' : 'Confirm'}
         </button>
-        <button onClick={reject} disabled={status === 'loading'} data-testid="reject">
+        <button onClick={() => remote.reject(request)} disabled={confirm.isPending} data-testid="reject">
           Reject
         </button>
       </div>
-      {status === 'error' && <p style={{ color: 'red' }}>{error}</p>}
+      {confirm.isError && <p style={{ color: 'red' }}>{confirm.error.message}</p>}
       {'params' in request && request.params ? (
         <details>
           <summary>Request</summary>

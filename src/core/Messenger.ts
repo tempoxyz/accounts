@@ -8,11 +8,16 @@ export type Messenger = {
   destroy: () => void
   /** Subscribe to a topic. Returns an unsubscribe function. */
   on: <const topic extends Topic>(
-    topic: topic,
+    topic: topic | Topic,
     listener: (payload: Payload<topic>, event: MessageEvent) => void,
+    id?: string | undefined,
   ) => () => void
   /** Send a message on a topic. */
-  send: <const topic extends Topic>(topic: topic, payload: Payload<topic>) => void
+  send: <const topic extends Topic>(
+    topic: topic | Topic,
+    payload: Payload<topic>,
+    targetOrigin?: string | undefined,
+  ) => Promise<{ id: string; topic: topic; payload: Payload<topic> }>
 }
 
 /** Bridge messenger that waits for a `ready` signal from the remote frame. */
@@ -32,6 +37,7 @@ export type Schema = [
   {
     topic: 'rpc-requests'
     payload: {
+      account: { address: string } | undefined
       chainId: number
       requests: readonly Store.QueuedRequest[]
     }
@@ -46,20 +52,6 @@ export type Schema = [
     topic: 'close'
     payload: undefined
   },
-  {
-    topic: '__internal'
-    payload:
-      | {
-         type: 'init'
-         chainId: number
-         mode: 'iframe' | 'popup'
-       }
-      | {
-          type: 'resize'
-          height?: number | undefined
-          width?: number | undefined
-        }
-  },
 ]
 
 /** Union of all topic strings. */
@@ -68,16 +60,30 @@ export type Topic = Schema[number]['topic']
 /** Payload for a given topic. */
 export type Payload<topic extends Topic> = Extract<Schema[number], { topic: topic }>['payload']
 
-type Message<topic extends Topic = Topic> = {
-  topic: topic
-  payload: Payload<topic>
-  /** Namespace to avoid collisions with other postMessage users. */
-  _tempo: true
-}
-
 /** Creates a messenger from a custom implementation. */
 export function from(messenger: Messenger): Messenger {
   return messenger
+}
+
+/**
+ * Normalizes a value into a structured-clone compatible format.
+ *
+ * @see https://developer.mozilla.org/en-US/docs/Web/API/Window/structuredClone
+ */
+function normalizeValue<type>(value: type): type {
+  if (Array.isArray(value)) return value.map(normalizeValue) as never
+  if (typeof value === 'function') return undefined as never
+  if (typeof value !== 'object' || value === null) return value
+  if (Object.getPrototypeOf(value) !== Object.prototype)
+    try {
+      return structuredClone(value)
+    } catch {
+      return undefined as never
+    }
+
+  const normalized: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(value)) normalized[k] = normalizeValue(v)
+  return normalized as never
 }
 
 /**
@@ -85,7 +91,7 @@ export function from(messenger: Messenger): Messenger {
  * Filters messages by `targetOrigin` when provided.
  */
 export function fromWindow(w: Window, options: fromWindow.Options = {}): Messenger {
-  const { expectedSource, targetOrigin } = options
+  const { targetOrigin } = options
   const listeners = new Map<string, (event: MessageEvent) => void>()
 
   return from({
@@ -93,14 +99,12 @@ export function fromWindow(w: Window, options: fromWindow.Options = {}): Messeng
       for (const listener of listeners.values()) w.removeEventListener('message', listener)
       listeners.clear()
     },
-    on(topic, listener) {
+    on(topic, listener, id) {
       function onMessage(event: MessageEvent) {
-        const data = event.data as Message | undefined
-        if (!data?._tempo) return
-        if (data.topic !== topic) return
+        if (event.data.topic !== topic) return
+        if (id && event.data.id !== id) return
         if (targetOrigin && event.origin !== targetOrigin) return
-        if (expectedSource && event.source !== expectedSource) return
-        listener(data.payload as never, event)
+        listener(event.data.payload as never, event)
       }
       w.addEventListener('message', onMessage)
       listeners.set(topic, onMessage)
@@ -109,17 +113,16 @@ export function fromWindow(w: Window, options: fromWindow.Options = {}): Messeng
         listeners.delete(topic)
       }
     },
-    send(topic, payload) {
-      const message: Message = { topic, payload, _tempo: true } as never
-      w.postMessage(message, targetOrigin ?? '*')
+    async send(topic, payload, target) {
+      const id = crypto.randomUUID()
+      w.postMessage(normalizeValue({ id, payload, topic }), target ?? targetOrigin ?? '*')
+      return { id, payload, topic } as never
     },
   })
 }
 
 export declare namespace fromWindow {
   type Options = {
-    /** Expected `event.source` — rejects messages from other frames. */
-    expectedSource?: MessageEventSource | undefined
     /** Only accept messages from this origin. Also used as the `targetOrigin` for `postMessage`. */
     targetOrigin?: string | undefined
   }
@@ -130,52 +133,36 @@ export declare namespace fromWindow {
  * before sending messages when `waitForReady` is `true`.
  */
 export function bridge(parameters: bridge.Parameters): Bridge {
-  const { from, to, waitForReady } = parameters
+  const { from: from_, to, waitForReady = false } = parameters
 
-  const promise = Promise.withResolvers<void>()
-  promise.promise.catch(() => {})
+  let pending = false
 
-  let destroyed = false
-  let readyReceived = false
+  const ready = withResolvers<void>()
+  from_.on('ready', ready.resolve)
 
-  const pending: Array<() => void> = []
-
-  const offReady = from.on('ready', () => {
-    if (readyReceived) return
-    readyReceived = true
-    promise.resolve()
-    for (const send of pending) send()
-    pending.length = 0
+  const messenger = from({
+    destroy() {
+      from_.destroy()
+      to.destroy()
+      if (pending) ready.reject()
+    },
+    on(topic, listener, id) {
+      return from_.on(topic, listener, id)
+    },
+    async send(topic, payload) {
+      pending = true
+      if (waitForReady) await ready.promise.finally(() => (pending = false))
+      return to.send(topic, payload)
+    },
   })
 
   return {
-    destroy() {
-      if (destroyed) return
-      destroyed = true
-      offReady()
-      from.destroy()
-      to.destroy()
-      pending.length = 0
-      promise.reject(new Error('Bridge destroyed'))
-    },
-    on(topic, listener) {
-      return from.on(topic, listener)
-    },
-    send(topic, payload) {
-      if (destroyed) return
-      if (waitForReady && !readyReceived) {
-        pending.push(() => {
-          if (!destroyed) to.send(topic, payload)
-        })
-        return
-      }
-      to.send(topic, payload)
-    },
+    ...messenger,
     ready() {
-      to.send('ready', undefined)
+      void messenger.send('ready', undefined)
     },
     waitForReady() {
-      return promise.promise
+      return ready.promise
     },
   }
 }
@@ -198,10 +185,22 @@ export function noop(): Bridge {
     on() {
       return () => {}
     },
-    send() {},
+    send() {
+      return Promise.resolve(undefined as never)
+    },
     ready() {},
     waitForReady() {
       return Promise.resolve()
     },
   }
+}
+
+function withResolvers<type>() {
+  let resolve: (value: type | PromiseLike<type>) => void = () => undefined
+  let reject: (reason?: unknown) => void = () => undefined
+  const promise = new Promise<type>((resolve_, reject_) => {
+    resolve = resolve_
+    reject = reject_
+  })
+  return { promise, reject, resolve }
 }

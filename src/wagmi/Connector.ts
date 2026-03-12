@@ -9,6 +9,7 @@ import {
 import * as z from 'zod/mini'
 
 import { webAuthn as webAuthn_adapter } from '../core/adapters/webAuthn.js'
+import { connect as connect_adapter } from '../core/adapters/connect.js'
 import * as Provider from '../core/Provider.js'
 import * as Rpc from '../core/zod/rpc.js'
 
@@ -45,7 +46,7 @@ export function setup(parameters: setup.Parameters = {} as setup.Parameters) {
     let disconnect: Connector['onDisconnect'] | undefined
 
     return {
-      async connect(params = {}) {
+      async connect(params: Parameters<Properties['connect']>[0] = {}) {
         const { isReconnecting, withCapabilities } = params
         const capabilities = 'capabilities' in params ? params.capabilities : undefined
 
@@ -87,11 +88,11 @@ export function setup(parameters: setup.Parameters = {} as setup.Parameters) {
           }
           if (!chainChanged) {
             chainChanged = this.onChainChanged.bind(this)
-            provider.on('chainChanged', chainChanged)
+            provider.on('chainChanged', chainChanged!)
           }
           if (!disconnect) {
             disconnect = this.onDisconnect.bind(this)
-            provider.on('disconnect', disconnect)
+            provider.on('disconnect', disconnect!)
           }
 
           return {
@@ -177,11 +178,11 @@ export function setup(parameters: setup.Parameters = {} as setup.Parameters) {
         }
         if (!chainChanged) {
           chainChanged = this.onChainChanged.bind(this)
-          provider.on('chainChanged', chainChanged)
+          provider.on('chainChanged', chainChanged!)
         }
         if (!disconnect) {
           disconnect = this.onDisconnect.bind(this)
-          provider.on('disconnect', disconnect)
+          provider.on('disconnect', disconnect!)
         }
       },
       async onDisconnect(_error) {
@@ -256,4 +257,31 @@ export function webAuthn(options: webAuthn.Options = {}) {
 
 export declare namespace webAuthn {
   type Options = webAuthn_adapter.Options & Omit<setup.Parameters, 'adapter'>
+}
+
+/**
+ * Creates a wagmi connector backed by a WebAuthn adapter.
+ *
+ * @example
+ * ```ts
+ * import { createConfig, http } from 'wagmi'
+ * import { tempoModerato } from 'wagmi/chains'
+ * import { webAuthn } from '@tempoxyz/accounts/wagmi'
+ *
+ * const config = createConfig({
+ *   chains: [tempoModerato],
+ *   connectors: [webAuthn()],
+ *   transports: { [tempoModerato.id]: http() },
+ * })
+ * ```
+ */
+export function connect(options: connect.Options = {}) {
+  const { dialog, host, icon, name, rdns } = options
+  return setup({
+    adapter: connect_adapter({ dialog, host, icon, name, rdns }),
+  })
+}
+
+export declare namespace connect {
+  type Options = connect_adapter.Options & Omit<setup.Parameters, 'adapter'>
 }

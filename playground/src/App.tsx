@@ -5,7 +5,14 @@ import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { Actions } from 'viem/tempo'
 
-import { type AdapterType, provider, switchAdapter } from './provider.js'
+import {
+  type AdapterType,
+  type DialogMode,
+  dialogMode,
+  provider,
+  switchAdapter,
+  switchDialogMode,
+} from './provider.js'
 
 export function App() {
   const [adapterType, setAdapterType] = useState<AdapterType>('connect')
@@ -27,6 +34,21 @@ export function App() {
         <option value="webAuthn">webAuthn</option>
         <option value="secp256k1">secp256k1</option>
       </select>
+      {adapterType === 'connect' && (
+        <>
+          {' '}
+          <select
+            value={dialogMode}
+            onChange={(e) => {
+              switchDialogMode(e.target.value as DialogMode)
+              rerender((n) => n + 1)
+            }}
+          >
+            <option value="iframe">iframe</option>
+            <option value="popup">popup</option>
+          </select>
+        </>
+      )}
 
       <h2>State</h2>
       <ProviderState />
