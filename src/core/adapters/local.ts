@@ -1,7 +1,7 @@
-import { Address as ox_Address, Provider as ox_Provider, PublicKey, WebCryptoP256 } from 'ox'
+import { Address as ox_Address, Hex, Provider as ox_Provider, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { prepareTransactionRequest } from 'viem/actions'
-import { Account as TempoAccount, Actions } from 'viem/tempo'
+import { Account as TempoAccount } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Account from '../Account.js'
@@ -30,7 +30,7 @@ export function local(options: local.Options): Adapter.Adapter {
     /**
      * Resolves access key params and computes the key authorization digest.
      *
-     * For external keys (BYOAK): derives the address from the provided publicKey/address.
+     * For external keys: derives the address from the provided publicKey/address.
      * For local keys: generates a P256 key pair via `AccessKey.generate`.
      */
     async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
@@ -71,7 +71,7 @@ export function local(options: local.Options): Adapter.Adapter {
       account: TempoAccount.Account,
       prepared: Awaited<ReturnType<typeof prepareKeyAuthorization>>,
       options: {
-        signature?: `0x${string}` | undefined
+        signature?: Hex.Hex | undefined
       } = {},
     ): Promise<Adapter.authorizeAccessKey.ReturnType> {
       const { keyPair } = prepared
@@ -143,16 +143,17 @@ export function local(options: local.Options): Adapter.Adapter {
           return await signKeyAuthorization(account, prepared, { signature: parameters.signature })
         },
         async loadAccounts(parameters) {
-          const { authorizeAccessKey, ...rest } = parameters ?? ({} as Adapter.loadAccounts.Parameters)
+          const { authorizeAccessKey, ...rest } =
+            parameters ?? ({} as Adapter.loadAccounts.Parameters)
 
-          const preparedAuth = authorizeAccessKey
+          const keyAuthorization_unsigned = authorizeAccessKey
             ? await prepareKeyAuthorization(authorizeAccessKey)
             : undefined
 
           const digest = (() => {
             if (rest.digest) return rest.digest
-            if (preparedAuth?.keyAuthorization)
-              return KeyAuthorization.getSignPayload(preparedAuth.keyAuthorization)
+            if (keyAuthorization_unsigned?.keyAuthorization)
+              return KeyAuthorization.getSignPayload(keyAuthorization_unsigned.keyAuthorization)
             return undefined
           })()
 
@@ -162,17 +163,15 @@ export function local(options: local.Options): Adapter.Adapter {
 
           // Hydrate here (not from the store) — same reason as createAccount.
           // Guard against empty accounts (e.g. user cancelled the ceremony).
-          const account = accounts[0]
-            ? Account.hydrate(accounts[0], { signable: true })
-            : undefined
+          const account = accounts[0] ? Account.hydrate(accounts[0], { signable: true }) : undefined
 
           // Fall back to local signing if the adapter didn't return a signature.
           let signature_ = signature
           if (digest && !signature_ && account) signature_ = await account.sign({ hash: digest })
 
           const keyAuthorization =
-            preparedAuth && account
-              ? await signKeyAuthorization(account, preparedAuth, { signature: signature_ })
+            keyAuthorization_unsigned && account
+              ? await signKeyAuthorization(account, keyAuthorization_unsigned, { signature: signature_ })
               : undefined
 
           return { accounts, keyAuthorization, signature: signature_ }
@@ -263,7 +262,9 @@ export declare namespace local {
       | ((params: Adapter.createAccount.Parameters) => Promise<Adapter.createAccount.ReturnType>)
       | undefined
     /** Discover existing accounts (e.g. WebAuthn assertion). */
-    loadAccounts: (params?: Adapter.loadAccounts.Parameters | undefined) => Promise<Adapter.loadAccounts.ReturnType>
+    loadAccounts: (
+      params?: Adapter.loadAccounts.Parameters | undefined,
+    ) => Promise<Adapter.loadAccounts.ReturnType>
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */

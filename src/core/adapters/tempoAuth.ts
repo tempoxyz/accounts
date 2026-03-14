@@ -147,7 +147,7 @@ export function tempoAuth(options: tempoAuth.Options = {}): Adapter.Adapter {
       const account = (() => {
         try {
           return getAccount({ signable: true })
-        } catch (error) {
+        } catch {
           return undefined
         }
       })()

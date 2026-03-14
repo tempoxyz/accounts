@@ -45,7 +45,6 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
 export function create(options: create.Options = {}): create.ReturnType {
   const {
     adapter = tempoAuth(),
-    authorizeAccessKey: getAuthorizeAccessKey,
     chains = [tempo, tempoModerato],
     feePayerUrl,
     testnet,
@@ -172,10 +171,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                     ) satisfies Rpc.eth_chainId.Encoded['returns']
 
                   case 'eth_requestAccounts': {
-                    const { accounts: newAccounts } = await actions.loadAccounts(
-                      undefined,
-                      { method: 'wallet_connect', params: undefined },
-                    )
+                    const { accounts: newAccounts } = await actions.loadAccounts(undefined, {
+                      method: 'wallet_connect',
+                      params: undefined,
+                    })
                     mergeAccounts(newAccounts)
                     const { accounts, activeAccount } = store.getState()
                     if (accounts.length === 0) return []
@@ -380,13 +379,8 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                   case 'wallet_connect': {
                     const capabilities = request._decoded.params?.[0]?.capabilities
-                    const authorized = capabilities?.authorizeAccessKey ?? getAuthorizeAccessKey?.()
-                    const authorizeAccessKey = authorized
-                      ? {
-                          ...getAuthorizeAccessKey?.(),
-                          ...authorized,
-                        }
-                      : undefined
+                    const authorizeAccessKey =
+                      capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
 
                     const {
                       keyAuthorization,
@@ -456,13 +450,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         message: '`authorizeAccessKey` not supported by adapter.',
                       })
                     const decoded = request._decoded.params?.[0]
-                    const result = await actions.authorizeAccessKey(
-                      {
-                        ...getAuthorizeAccessKey?.(),
-                        ...decoded!,
-                      },
-                      request,
-                    )
+                    const result = await actions.authorizeAccessKey(decoded, request)
                     return {
                       ...result,
                       address: result.keyId,
