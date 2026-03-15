@@ -1,6 +1,6 @@
 # tempox
 
-Accounts toolchain for Tempo Wallets & Apps.
+Accounts SDK for Tempo Wallets & Apps.
 
 [Metronome](https://metronome-git-main-tempoxyz.vercel.app/ideas/account-sdk)
 
