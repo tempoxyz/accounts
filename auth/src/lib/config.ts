@@ -1,7 +1,7 @@
+import { getConnectors } from '@wagmi/core'
 import { Storage } from 'tempox'
 import { Remote } from 'tempox'
 import { webAuthn } from 'tempox/wagmi'
-import { getConnectors } from '@wagmi/core'
 import { defineChain, http } from 'viem'
 import { tempo, tempoLocalnet, tempoModerato } from 'viem/chains'
 import { createConfig } from 'wagmi'

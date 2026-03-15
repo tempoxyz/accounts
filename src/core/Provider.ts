@@ -450,6 +450,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                         message: '`authorizeAccessKey` not supported by adapter.',
                       })
                     const decoded = request._decoded.params?.[0]
+                    if (!decoded)
+                      throw new RpcResponse.InternalError({
+                        message: 'Missing access key parameters.',
+                      })
                     const result = await actions.authorizeAccessKey(decoded, request)
                     return {
                       ...result,

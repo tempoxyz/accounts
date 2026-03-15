@@ -171,7 +171,9 @@ export function local(options: local.Options): Adapter.Adapter {
 
           const keyAuthorization =
             keyAuthorization_unsigned && account
-              ? await signKeyAuthorization(account, keyAuthorization_unsigned, { signature: signature_ })
+              ? await signKeyAuthorization(account, keyAuthorization_unsigned, {
+                  signature: signature_,
+                })
               : undefined
 
           return { accounts, keyAuthorization, signature: signature_ }
