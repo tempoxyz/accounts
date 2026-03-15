@@ -16,7 +16,7 @@ import { local } from './local.js'
  *
  * @example
  * ```ts
- * import { webAuthn } from '@tempoxyz/accounts'
+ * import { webAuthn } from 'tempox'
  *
  * const provider = Provider.create({
  *   adapter: webAuthn(),

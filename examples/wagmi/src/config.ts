@@ -1,4 +1,4 @@
-import { tempoAuth } from '@tempoxyz/accounts/wagmi'
+import { tempoAuth } from 'tempox/wagmi'
 import { createConfig, http } from 'wagmi'
 import { tempoModerato } from 'wagmi/chains'
 

@@ -14,7 +14,7 @@ import * as Provider from '../core/Provider.js'
 import * as Rpc from '../core/zod/rpc.js'
 
 /**
- * Creates a wagmi connector backed by an @tempoxyz/accounts provider.
+ * Creates a wagmi connector backed by an tempox provider.
  */
 export function setup(parameters: setup.Parameters = {} as setup.Parameters) {
   type Properties = {
@@ -238,7 +238,7 @@ export declare namespace setup {
  * ```ts
  * import { createConfig, http } from 'wagmi'
  * import { tempoModerato } from 'wagmi/chains'
- * import { webAuthn } from '@tempoxyz/accounts/wagmi'
+ * import { webAuthn } from 'tempox/wagmi'
  *
  * const config = createConfig({
  *   chains: [tempoModerato],
@@ -266,7 +266,7 @@ export declare namespace webAuthn {
  * ```ts
  * import { createConfig, http } from 'wagmi'
  * import { tempoModerato } from 'wagmi/chains'
- * import { tempoAuth } from '@tempoxyz/accounts/wagmi'
+ * import { tempoAuth } from 'tempox/wagmi'
  *
  * const config = createConfig({
  *   chains: [tempoModerato],

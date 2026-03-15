@@ -1,4 +1,4 @@
-import { Ceremony, Dialog, local, Provider, tempoAuth, webAuthn } from '@tempoxyz/accounts'
+import { Ceremony, Dialog, local, Provider, tempoAuth, webAuthn } from 'tempox'
 import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'

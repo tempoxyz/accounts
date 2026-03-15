@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "latest",
-    "@tempoxyz/accounts": "latest",
+    "tempox": "latest",
     "react": "latest",
     "react-dom": "latest",
     "viem": "latest",

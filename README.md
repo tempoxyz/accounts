@@ -1,4 +1,4 @@
-# Accounts SDK
+# tempox
 
 Accounts toolchain for Tempo Wallets & Apps.
 
@@ -7,21 +7,21 @@ Accounts toolchain for Tempo Wallets & Apps.
 ## Install
 
 ```sh
-pnpm i @tempoxyz/accounts
+pnpm i tempox
 ```
 
 ## Usage
 
 ### Vanilla JS
 
-You can get set up with the Accounts SDK with pure JavaScript by using the
+You can get set up with tempox with pure JavaScript by using the
 `Provider` instance.
 
 Internally, the `Provider` utilizes [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963) to inject it's provider instance into
 the page so it can be picked up by wallet connection dialogs on external web applications.
 
 ```tsx
-import { Provider } from '@tempoxyz/accounts'
+import { Provider } from 'tempox'
 
 const provider = Provider.create()
 
@@ -35,7 +35,7 @@ const { accounts } = await provider.request({
 The Provider provides a Viem Client instance via the `getClient` accessor.
 
 ```tsx
-import { Provider } from '@tempoxyz/accounts'
+import { Provider } from 'tempox'
 
 const provider = Provider.create()
 
@@ -49,7 +49,7 @@ Use the `tempoAuth` Wagmi connector to allow your Wagmi application to enable th
 ```tsx
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
-import { tempoAuth } from '@tempoxyz/accounts/wagmi'
+import { tempoAuth } from 'tempox/wagmi'
 
 export const wagmiConfig = createConfig({
   chains: [tempo],

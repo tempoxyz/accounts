@@ -1,4 +1,4 @@
-import { Expiry } from '@tempoxyz/accounts'
+import { Expiry } from 'tempox'
 import { Hex, Json } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'

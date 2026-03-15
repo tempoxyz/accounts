@@ -13,7 +13,7 @@ import { local } from './local.js'
  *
  * @example
  * ```ts
- * import { dangerous_secp256k1, Provider } from '@tempoxyz/accounts'
+ * import { dangerous_secp256k1, Provider } from 'tempox'
  *
  * const provider = Provider.create({
  *   adapter: dangerous_secp256k1(),

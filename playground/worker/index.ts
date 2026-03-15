@@ -1,4 +1,4 @@
-import { Handler, Kv } from '@tempoxyz/accounts/server'
+import { Handler, Kv } from 'tempox/server'
 import { Mppx, tempo } from 'mppx/server'
 import { privateKeyToAccount } from 'viem/accounts'
 

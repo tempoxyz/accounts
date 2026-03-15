@@ -12,7 +12,7 @@ import * as Adapter from '../Adapter.js'
  *
  * @example
  * ```ts
- * import { local, Provider } from '@tempoxyz/accounts'
+ * import { local, Provider } from 'tempox'
  *
  * const Provider = Provider.create({
  *   adapter: local({
