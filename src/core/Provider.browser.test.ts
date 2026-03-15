@@ -523,7 +523,10 @@ describe('wallet_authorizeAccessKey', () => {
     const provider = getProvider({ chains: [chain] })
     await connect(provider)
 
-    const result = await provider.request({ method: 'wallet_authorizeAccessKey' })
+    const result = await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [{ expiry: Expiry.days(1) }],
+    })
     expect(result.address).toMatch(/^0x[0-9a-fA-F]{40}$/)
   })
 
@@ -532,7 +535,10 @@ describe('wallet_authorizeAccessKey', () => {
     const address = await connect(provider)
     await fundAccount(address)
 
-    await provider.request({ method: 'wallet_authorizeAccessKey' })
+    await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [{ expiry: Expiry.days(1) }],
+    })
 
     const receipt = await provider.request({
       method: 'eth_sendTransactionSync',
@@ -593,6 +599,7 @@ describe('wallet_revokeAccessKey', () => {
     const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
     const { address: keyAddress } = await provider.request({
       method: 'wallet_authorizeAccessKey',
+      params: [{ expiry: Expiry.days(1) }],
     })
 
     await provider.request({

@@ -7,6 +7,7 @@ import { afterEach, beforeAll, describe, expect, test } from 'vitest'
 import { accounts, http } from '../../test/config.js'
 import { interact } from '../../test/utils.browser.js'
 import { tempoAuth } from './adapters/tempoAuth.js'
+import * as Expiry from './Expiry.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 
@@ -300,7 +301,10 @@ describe('wallet_authorizeAccessKey', () => {
     await connectViaIframe(provider)
 
     const result = await interact(
-      provider.request({ method: 'wallet_authorizeAccessKey' }),
+      provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      }),
       async (iframe) => {
         await iframe.getByTestId('confirm').click()
       },
@@ -315,7 +319,10 @@ describe('wallet_revokeAccessKey', () => {
     const address = await connectViaIframe(provider)
 
     const { address: keyAddress } = await interact(
-      provider.request({ method: 'wallet_authorizeAccessKey' }),
+      provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      }),
       async (iframe) => {
         await iframe.getByTestId('confirm').click()
       },

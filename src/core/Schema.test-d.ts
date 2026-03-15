@@ -108,17 +108,15 @@ describe('Encoded', () => {
   test('wallet_authorizeAccessKey', () => {
     expectTypeOf<Rpc.wallet_authorizeAccessKey.Encoded>().toMatchTypeOf<{
       method: 'wallet_authorizeAccessKey'
-      params:
-        | readonly [
-            {
-              address?: Hex | undefined
-              expiry: number
-              keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
-              limits?: readonly { token: Hex; limit: Hex }[] | undefined
-              publicKey?: Hex | undefined
-            },
-          ]
-        | undefined
+      params: readonly [
+        {
+          address?: Hex | undefined
+          expiry: number
+          keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
+          limits?: readonly { token: Hex; limit: Hex }[] | undefined
+          publicKey?: Hex | undefined
+        },
+      ]
     }>()
   })
 

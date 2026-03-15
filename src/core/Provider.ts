@@ -449,11 +449,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                       throw new ox_Provider.UnsupportedMethodError({
                         message: '`authorizeAccessKey` not supported by adapter.',
                       })
-                    const decoded = request._decoded.params?.[0]
-                    if (!decoded)
-                      throw new RpcResponse.InternalError({
-                        message: 'Missing access key parameters.',
-                      })
+                    const decoded = request._decoded.params[0]
                     const result = await actions.authorizeAccessKey(decoded, request)
                     return {
                       ...result,

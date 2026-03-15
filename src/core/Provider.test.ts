@@ -1071,7 +1071,10 @@ describe.each(adapters)('$name', ({ adapter }) => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       await connect(provider)
 
-      const result = await provider.request({ method: 'wallet_authorizeAccessKey' })
+      const result = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
       expect(result.keyId).toMatch(/^0x[0-9a-fA-F]{40}$/)
     })
 
@@ -1080,7 +1083,10 @@ describe.each(adapters)('$name', ({ adapter }) => {
       const address = await connect(provider)
       await fund(address)
 
-      await provider.request({ method: 'wallet_authorizeAccessKey' })
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
 
       const receipt = await provider.request({
         method: 'eth_sendTransactionSync',
@@ -1107,7 +1113,10 @@ describe.each(adapters)('$name', ({ adapter }) => {
       const address = await connect(provider)
       await fund(address)
 
-      await provider.request({ method: 'wallet_authorizeAccessKey' })
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
       expect(provider.store.getState().accessKeys.length).toBe(1)
 
       // Expire the access key by mutating the store.
@@ -1221,7 +1230,10 @@ describe.each(adapters)('$name', ({ adapter }) => {
       await fund(address)
 
       // Grant access key without limits — spending limit won't be an issue.
-      await provider.request({ method: 'wallet_authorizeAccessKey' })
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
 
       // Key auth should be present before first tx.
       expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
@@ -1248,6 +1260,7 @@ describe.each(adapters)('$name', ({ adapter }) => {
       const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
       const { keyId } = await provider.request({
         method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
       })
 
       await provider.request({
