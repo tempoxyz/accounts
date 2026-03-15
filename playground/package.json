@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tempoxyz/accounts": "workspace:*",
+    "tempox": "workspace:*",
     "mppx": "^0.4.0",
     "react": "catalog:default",
     "react-dom": "catalog:default",

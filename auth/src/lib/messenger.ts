@@ -1,4 +1,4 @@
-import { Messenger } from '@tempoxyz/accounts'
+import { Messenger } from 'tempox'
 
 /** Initializes the bridge messenger for the Tempo Auth app (the "remote" side). */
 export function init(): Messenger.Bridge {

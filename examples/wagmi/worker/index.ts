@@ -1,4 +1,4 @@
-import { Handler, Kv } from '@tempoxyz/accounts/server'
+import { Handler, Kv } from 'tempox/server'
 import type { Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 

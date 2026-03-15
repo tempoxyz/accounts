@@ -17,7 +17,7 @@ import * as Rpc from '../zod/rpc.js'
  *
  * @example
  * ```ts
- * import { tempoAuth, Provider } from '@tempoxyz/accounts'
+ * import { tempoAuth, Provider } from 'tempox'
  *
  * const provider = Provider.create({
  *   adapter: tempoAuth(),

@@ -47,7 +47,7 @@ overrides:
   ox: ~0.14.0
   react: ^19.1.1
   react-dom: ^19.1.1
-  '@tempoxyz/accounts': workspace:*
+  tempox: workspace:*
   viem: ^2.47.1
 
 importers:
@@ -178,9 +178,6 @@ importers:
       '@tanstack/react-start':
         specifier: 'catalog:'
         version: 1.166.7(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(vite@7.3.1(@types/node@25.4.0)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
-      '@tempoxyz/accounts':
-        specifier: workspace:*
-        version: link:..
       cva:
         specifier: 1.0.0-beta.4
         version: 1.0.0-beta.4(typescript@5.9.3)
@@ -190,6 +187,9 @@ importers:
       react-dom:
         specifier: ^19.1.1
         version: 19.2.0(react@19.2.0)
+      tempox:
+        specifier: workspace:*
+        version: link:..
       wagmi:
         specifier: 'catalog:'
         version: 3.5.0(@tanstack/query-core@5.90.20)(@tanstack/react-query@5.90.5(react@19.2.0))(@types/react@19.2.2)(ox@0.14.0(typescript@5.9.3)(zod@4.3.6))(react@19.2.0)(typescript@5.9.3)(viem@2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
@@ -233,15 +233,15 @@ importers:
       '@tanstack/react-query':
         specifier: latest
         version: 5.90.21(react@19.2.0)
-      '@tempoxyz/accounts':
-        specifier: workspace:*
-        version: link:../..
       react:
         specifier: ^19.1.1
         version: 19.2.0
       react-dom:
         specifier: ^19.1.1
         version: 19.2.0(react@19.2.0)
+      tempox:
+        specifier: workspace:*
+        version: link:../..
       viem:
         specifier: ^2.47.1
         version: 2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
@@ -279,9 +279,6 @@ importers:
 
   playground:
     dependencies:
-      '@tempoxyz/accounts':
-        specifier: workspace:*
-        version: link:..
       mppx:
         specifier: ^0.4.0
         version: 0.4.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.4)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
@@ -291,6 +288,9 @@ importers:
       react-dom:
         specifier: ^19.1.1
         version: 19.2.0(react@19.2.0)
+      tempox:
+        specifier: workspace:*
+        version: link:..
       viem:
         specifier: ^2.47.1
         version: 2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)

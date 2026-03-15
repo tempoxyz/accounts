@@ -11,8 +11,8 @@
     "isolatedModules": true,
     "outDir": "./dist",
     "paths": {
-      "@tempoxyz/accounts": ["../src/index.ts"],
-      "@tempoxyz/accounts/*": ["../src/*"]
+      "tempox": ["../src/index.ts"],
+      "tempox/*": ["../src/*"]
     }
   },
   "include": ["src"]

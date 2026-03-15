@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "types": ["vite/client"],
     "paths": {
-      "@tempoxyz/accounts/*": ["../src/*"]
+      "tempox/*": ["../src/*"]
     }
   },
   "include": ["src", "worker", "worker-configuration.d.ts"]

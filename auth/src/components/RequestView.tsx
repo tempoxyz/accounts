@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
-import { Store } from '@tempoxyz/accounts'
+import { Store } from 'tempox'
 import { Json } from 'ox'
 import { useStore } from 'zustand'
 
