@@ -1,5 +1,5 @@
 {
-  "name": "@tempoxyz/auth",
+  "name": "auth",
   "private": true,
   "type": "module",
   "scripts": {
