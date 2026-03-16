@@ -8,7 +8,7 @@ import * as z from 'zod/mini'
 
 import * as Account from './Account.js'
 import type * as Adapter from './Adapter.js'
-import { tempoAuth } from './adapters/tempoAuth.js'
+import { tempoWallet } from './adapters/tempoWallet.js'
 import * as Client from './Client.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Schema from './Schema.js'
@@ -44,7 +44,7 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
  */
 export function create(options: create.Options = {}): create.ReturnType {
   const {
-    adapter = tempoAuth(),
+    adapter = tempoWallet(),
     chains = [tempo, tempoModerato],
     feePayerUrl,
     testnet,

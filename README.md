@@ -44,16 +44,16 @@ const client = provider.getClient()
 
 ### Wagmi
 
-Use the `tempoAuth` Wagmi connector to allow your Wagmi application to enable the Tempo Auth dialog.
+Use the `tempoWallet` Wagmi connector to allow your Wagmi application to enable the Tempo Wallet dialog.
 
 ```tsx
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
-import { tempoAuth } from 'tempox/wagmi'
+import { tempoWallet } from 'tempox/wagmi'
 
 export const wagmiConfig = createConfig({
   chains: [tempo],
-  connectors: [tempoAuth()],
+  connectors: [tempoWallet()],
   transports: {
     [tempo.id]: http(),
   },
@@ -64,7 +64,7 @@ export const wagmiConfig = createConfig({
 
 | Adapter        | Description                                                                        |
 | -------------- | ---------------------------------------------------------------------------------- |
-| `tempoAuth` 🚧 | Adapter for the Tempo Auth dialog (an embedded iframe/popup dialog).               |
+| `tempoWallet` 🚧 | Adapter for the Tempo Wallet dialog (an embedded iframe/popup dialog).               |
 | `webAuthn`     | App-bound passkey accounts using WebAuthn registration and authentication flows.   |
 | `local`        | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
 

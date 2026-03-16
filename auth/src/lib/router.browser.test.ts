@@ -67,7 +67,7 @@ describe('route validators', () => {
 
   test('wallet_authorizeAccessKey: accepts valid search', () => {
     const result = Router.validateSearch(
-      { id: '7', method: 'wallet_authorizeAccessKey' },
+      { id: '7', method: 'wallet_authorizeAccessKey', params: [{ expiry: 3600 }] },
       { method: 'wallet_authorizeAccessKey' },
     )
     expect(result._decoded.method).toMatchInlineSnapshot(`"wallet_authorizeAccessKey"`)

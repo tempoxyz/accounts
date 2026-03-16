@@ -12,19 +12,19 @@ import type * as Store from '../Store.js'
 import * as Rpc from '../zod/rpc.js'
 
 /**
- * Creates a dialog adapter that delegates signing to a remote Tempo Auth app
+ * Creates a dialog adapter that delegates signing to a remote Tempo Wallet app
  * via an iframe or popup dialog.
  *
  * @example
  * ```ts
- * import { tempoAuth, Provider } from 'tempox'
+ * import { tempoWallet, Provider } from 'tempox'
  *
  * const provider = Provider.create({
- *   adapter: tempoAuth(),
+ *   adapter: tempoWallet(),
  * })
  * ```
  */
-export function tempoAuth(options: tempoAuth.Options = {}): Adapter.Adapter {
+export function tempoWallet(options: tempoWallet.Options = {}): Adapter.Adapter {
   const {
     dialog = Dialog.isSafari() ? Dialog.popup() : Dialog.iframe(),
     host = 'https://auth.tempo.xyz',
@@ -366,11 +366,11 @@ export function tempoAuth(options: tempoAuth.Options = {}): Adapter.Adapter {
   })
 }
 
-export declare namespace tempoAuth {
+export declare namespace tempoWallet {
   type Options = {
     /** Dialog to use for the auth app. @default `Dialog.iframe()` (or `Dialog.popup()` in Safari) */
     dialog?: Dialog.Dialog | undefined
-    /** URL of the Tempo Auth app. @default `'https://auth.tempo.xyz'` */
+    /** URL of the Tempo Wallet app. @default `'https://auth.tempo.xyz'` */
     host?: string | undefined
     /** Data URI of the provider icon. */
     icon?: `data:image/${string}` | undefined

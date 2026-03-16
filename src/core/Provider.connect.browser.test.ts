@@ -6,7 +6,7 @@ import { afterEach, beforeAll, describe, expect, test } from 'vitest'
 
 import { accounts, http } from '../../test/config.js'
 import { interact } from '../../test/utils.browser.js'
-import { tempoAuth } from './adapters/tempoAuth.js'
+import { tempoWallet } from './adapters/tempoWallet.js'
 import * as Expiry from './Expiry.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
@@ -46,7 +46,7 @@ const transferCall = Actions.token.transfer.call({
 
 function getProvider(options: Partial<Provider.create.Options> = {}) {
   return Provider.create({
-    adapter: tempoAuth({ host }),
+    adapter: tempoWallet({ host }),
     chains: [chain],
     storage: Storage.idb({ key: crypto.randomUUID() }),
     ...options,
@@ -61,7 +61,7 @@ afterEach(() => {
     window.localStorage.clear()
     window.sessionStorage.clear()
   }
-  document.querySelectorAll('dialog[data-tempo-auth]').forEach((el) => el.remove())
+  document.querySelectorAll('dialog[data-tempo-wallet]').forEach((el) => el.remove())
   provider = undefined
 })
 
@@ -377,7 +377,7 @@ describe('edge cases', () => {
           params: [Hex.fromString('hello'), provider.store.getState().accounts[0]!.address],
         }),
         async () => {
-          const dialog = document.querySelector('dialog[data-tempo-auth]') as HTMLDialogElement
+          const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
           dialog.dispatchEvent(new Event('cancel'))
         },
       ),
