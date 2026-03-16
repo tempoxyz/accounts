@@ -1,4 +1,4 @@
-# tempox — Agent Guidelines
+# tempodk — Agent Guidelines
 
 > **Update after learnings or mistakes** — when a correction, new convention, or hard-won lesson emerges during development, append it to the relevant section of this file immediately. AGENTS.md is the source of truth for project conventions and should grow as the project does.
 

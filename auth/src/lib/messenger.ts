@@ -1,4 +1,4 @@
-import { Messenger } from 'tempox'
+import { Messenger } from 'tempodk'
 
 /** Initializes the bridge messenger for the Tempo Auth app (the "remote" side). */
 export function init(): Messenger.Bridge {

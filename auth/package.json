@@ -10,7 +10,7 @@
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-start": "catalog:",
-    "tempox": "workspace:*",
+    "tempodk": "workspace:*",
     "cva": "1.0.0-beta.4",
     "react": "catalog:",
     "react-dom": "catalog:",

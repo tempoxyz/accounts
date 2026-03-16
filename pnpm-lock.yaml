@@ -47,7 +47,7 @@ overrides:
   ox: ~0.14.0
   react: ^19.1.1
   react-dom: ^19.1.1
-  tempox: workspace:*
+  tempodk: workspace:*
   viem: ^2.47.1
 
 importers:
@@ -187,7 +187,7 @@ importers:
       react-dom:
         specifier: ^19.1.1
         version: 19.2.0(react@19.2.0)
-      tempox:
+      tempodk:
         specifier: workspace:*
         version: link:..
       wagmi:
@@ -239,7 +239,7 @@ importers:
       react-dom:
         specifier: ^19.1.1
         version: 19.2.0(react@19.2.0)
-      tempox:
+      tempodk:
         specifier: workspace:*
         version: link:../..
       viem:
@@ -288,7 +288,7 @@ importers:
       react-dom:
         specifier: ^19.1.1
         version: 19.2.0(react@19.2.0)
-      tempox:
+      tempodk:
         specifier: workspace:*
         version: link:..
       viem:

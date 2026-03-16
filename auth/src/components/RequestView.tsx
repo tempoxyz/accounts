@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import { Json } from 'ox'
-import { Store } from 'tempox'
+import { Store } from 'tempodk'
 import { useStore } from 'zustand'
 
 import { remote } from '../lib/config.js'

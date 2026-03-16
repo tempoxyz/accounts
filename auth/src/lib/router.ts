@@ -1,4 +1,4 @@
-import { Schema } from 'tempox'
+import { Schema } from 'tempodk'
 
 /**
  * Validates an RPC request from TanStack Router search params.

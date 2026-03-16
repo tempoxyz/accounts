@@ -60,12 +60,12 @@
       "ox": "~0.14.0",
       "react": "catalog:",
       "react-dom": "catalog:",
-      "tempox": "workspace:*",
+      "tempodk": "workspace:*",
       "viem": "catalog:"
     }
   },
   "[!start-pkg]": "",
-  "name": "tempox",
+  "name": "tempodk",
   "description": "Accounts tooling for Tempo",
   "type": "module",
   "version": "0.0.1",

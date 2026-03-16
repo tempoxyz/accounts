@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Expiry } from 'tempox'
+import { Expiry } from 'tempodk'
 import { formatUnits, parseUnits, stringify, type Hex } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
 import {

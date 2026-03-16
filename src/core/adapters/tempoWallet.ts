@@ -17,7 +17,7 @@ import * as Rpc from '../zod/rpc.js'
  *
  * @example
  * ```ts
- * import { tempoWallet, Provider } from 'tempox'
+ * import { tempoWallet, Provider } from 'tempodk'
  *
  * const provider = Provider.create({
  *   adapter: tempoWallet(),

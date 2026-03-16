@@ -1,27 +1,27 @@
-# tempox
+# tempodk
 
-Accounts SDK for Tempo Wallets & Apps.
+Accounts Development Kit for Tempo Wallets & Apps.
 
 [Metronome](https://metronome-git-main-tempoxyz.vercel.app/ideas/account-sdk)
 
 ## Install
 
 ```sh
-pnpm i tempox
+pnpm i tempodk
 ```
 
 ## Usage
 
 ### Vanilla JS
 
-You can get set up with tempox with pure JavaScript by using the
+You can get set up with tempodk with pure JavaScript by using the
 `Provider` instance.
 
 Internally, the `Provider` utilizes [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963) to inject it's provider instance into
 the page so it can be picked up by wallet connection dialogs on external web applications.
 
 ```tsx
-import { Provider } from 'tempox'
+import { Provider } from 'tempodk'
 
 const provider = Provider.create()
 
@@ -35,7 +35,7 @@ const { accounts } = await provider.request({
 The Provider provides a Viem Client instance via the `getClient` accessor.
 
 ```tsx
-import { Provider } from 'tempox'
+import { Provider } from 'tempodk'
 
 const provider = Provider.create()
 
@@ -49,7 +49,7 @@ Use the `tempoWallet` Wagmi connector to allow your Wagmi application to enable 
 ```tsx
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
-import { tempoWallet } from 'tempox/wagmi'
+import { tempoWallet } from 'tempodk/wagmi'
 
 export const wagmiConfig = createConfig({
   chains: [tempo],

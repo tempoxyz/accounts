@@ -1,5 +1,5 @@
 import { Mppx } from 'mppx/client'
-import { Ceremony, Dialog, local, Provider, tempoWallet, webAuthn } from 'tempox'
+import { Ceremony, Dialog, local, Provider, tempoWallet, webAuthn } from 'tempodk'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 

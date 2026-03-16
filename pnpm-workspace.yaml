@@ -27,4 +27,4 @@ onlyBuiltDependencies:
   - workerd
 
 overrides:
-  'tempox': workspace:*
+  'tempodk': workspace:*

@@ -37,7 +37,7 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
  *
  * @example
  * ```ts
- * import { Provider } from 'tempox'
+ * import { Provider } from 'tempodk'
  *
  * const provider = Provider.create()
  * ```
@@ -550,7 +550,7 @@ export declare namespace create {
     chains?: readonly [Chain, ...Chain[]] | undefined
     /**
      * Fee payer URL for interacting with a service running `Handler.feePayer`
-     * from `tempox/server`.
+     * from `tempodk/server`.
      */
     feePayerUrl?: string | undefined
     /** Storage adapter for persistence. @default Storage.idb() in browser, Storage.memory() otherwise. */

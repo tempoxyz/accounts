@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "latest",
-    "tempox": "latest",
+    "tempodk": "latest",
     "react": "latest",
     "react-dom": "latest",
     "viem": "latest",
