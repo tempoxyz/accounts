@@ -70,7 +70,7 @@ export function iframe(): Dialog {
       }
 
       const root = document.createElement('dialog')
-      root.dataset.tempoAuth = ''
+      root.dataset.tempoWallet = ''
 
       root.setAttribute('role', 'dialog')
       root.setAttribute('aria-closed', 'true')
@@ -88,7 +88,7 @@ export function iframe(): Dialog {
       document.body.appendChild(root)
 
       const frame = document.createElement('iframe')
-      frame.dataset.testid = 'tempo-auth'
+      frame.dataset.testid = 'tempo-wallet'
       frame.setAttribute(
         'sandbox',
         'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox',
@@ -118,7 +118,7 @@ export function iframe(): Dialog {
 
       const style = document.createElement('style')
       style.innerHTML = `
-        dialog[data-tempo-auth]::backdrop {
+        dialog[data-tempo-wallet]::backdrop {
           background: transparent!important;
         }
       `

@@ -1,5 +1,5 @@
 import { Mppx } from 'mppx/client'
-import { Ceremony, Dialog, local, Provider, tempoAuth, webAuthn } from 'tempox'
+import { Ceremony, Dialog, local, Provider, tempoWallet, webAuthn } from 'tempox'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
@@ -12,7 +12,7 @@ export let provider = createProvider('auth')
 export function createProvider(adapterType: AdapterType) {
   if (adapterType === 'auth')
     return Provider.create({
-      adapter: tempoAuth({
+      adapter: tempoWallet({
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host: import.meta.env.VITE_AUTH_HOST ?? 'https://localhost:5174',
       }),

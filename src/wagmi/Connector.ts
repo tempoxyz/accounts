@@ -8,7 +8,7 @@ import {
 } from 'viem'
 import * as z from 'zod/mini'
 
-import { tempoAuth as tempoAuth_adapter } from '../core/adapters/tempoAuth.js'
+import { tempoWallet as core_tempoWallet } from '../core/adapters/tempoWallet.js'
 import { webAuthn as webAuthn_adapter } from '../core/adapters/webAuthn.js'
 import * as Provider from '../core/Provider.js'
 import * as Rpc from '../core/zod/rpc.js'
@@ -260,28 +260,28 @@ export declare namespace webAuthn {
 }
 
 /**
- * Creates a wagmi connector backed by a Tempo Auth adapter.
+ * Creates a wagmi connector backed by a Tempo Wallet adapter.
  *
  * @example
  * ```ts
  * import { createConfig, http } from 'wagmi'
  * import { tempoModerato } from 'wagmi/chains'
- * import { tempoAuth } from 'tempox/wagmi'
+ * import { tempoWallet } from 'tempox/wagmi'
  *
  * const config = createConfig({
  *   chains: [tempoModerato],
- *   connectors: [tempoAuth()],
+ *   connectors: [tempoWallet()],
  *   transports: { [tempoModerato.id]: http() },
  * })
  * ```
  */
-export function tempoAuth(options: tempoAuth.Options = {}) {
+export function tempoWallet(options: tempoWallet.Options = {}) {
   const { dialog, host, icon, name, rdns } = options
   return setup({
-    adapter: tempoAuth_adapter({ dialog, host, icon, name, rdns }),
+    adapter: core_tempoWallet({ dialog, host, icon, name, rdns }),
   })
 }
 
-export declare namespace tempoAuth {
-  type Options = tempoAuth_adapter.Options & Omit<setup.Parameters, 'adapter'>
+export declare namespace tempoWallet {
+  type Options = core_tempoWallet.Options & Omit<setup.Parameters, 'adapter'>
 }
