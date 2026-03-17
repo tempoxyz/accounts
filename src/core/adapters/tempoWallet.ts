@@ -128,7 +128,7 @@ export function tempoWallet(options: tempoWallet.Options = {}): Adapter.Adapter 
       keyPair: AccessKey.generate.ReturnType['keyPair'],
     ) {
       const keyAuthorization = KeyAuthorization.fromRpc(keyAuth)
-      AccessKey.save({ address: address, keyAuthorization, keyPair, store })
+      AccessKey.save({ address, keyAuthorization, keyPair, store })
     }
 
     /**

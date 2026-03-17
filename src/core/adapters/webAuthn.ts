@@ -26,15 +26,16 @@ import { local } from './local.js'
 export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
   const { authUrl, icon, name, rdns } = options
 
-  return Adapter.define({ icon, name, rdns }, (params) => {
-    const { storage } = params
+  return Adapter.define({ icon, name, rdns }, (parameters) => {
+    const { storage } = parameters
+
     const ceremony =
       options.ceremony ??
       (authUrl ? Ceremony.server({ url: authUrl }) : Ceremony.local({ storage }))
 
     const base = local({
-      async createAccount(p) {
-        const { options } = await ceremony.getRegistrationOptions(p)
+      async createAccount(parameters) {
+        const { options } = await ceremony.getRegistrationOptions(parameters)
         const credential = await Registration.create({ options })
         const { publicKey } = await ceremony.verifyRegistration(credential)
         await storage.setItem('lastCredentialId', credential.id)
@@ -49,21 +50,26 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           ],
         }
       },
-      async loadAccounts(p) {
-        const credentialId = p?.selectAccount
+      async loadAccounts(parameters = {}) {
+        const { selectAccount, digest } = parameters
+
+        const credentialId = selectAccount
           ? undefined
-          : (p?.credentialId ?? (await storage.getItem<string>('lastCredentialId')) ?? undefined)
+          : (parameters?.credentialId ?? (await storage.getItem<string>('lastCredentialId')) ?? undefined)
+
         const { options } = await ceremony.getAuthenticationOptions({
-          ...p,
-          challenge: p?.digest,
+          ...parameters,
+          challenge: digest,
           credentialId,
         })
         const response = await Authentication.sign({ options })
         const { publicKey } = await ceremony.verifyAuthentication(response)
+
         await storage.setItem('lastCredentialId', response.id)
+        
         const account = Account.fromWebAuthnP256({ id: response.id, publicKey })
 
-        const signature = p?.digest
+        const signature = digest
           ? SignatureEnvelope.serialize(
               {
                 metadata: response.metadata,
@@ -86,7 +92,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           signature,
         }
       },
-    })(params)
+    })(parameters)
 
     return base
   })
