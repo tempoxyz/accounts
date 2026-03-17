@@ -6,7 +6,6 @@ import { hooksPort, port } from './webauthn.constants.js'
 
 export default async function () {
   const kv = Kv.memory()
-
   const server = Http.createServer((req, res) => {
     // Origin varies per Playwright run; extract from request header.
     const origin = req.headers.origin ?? 'http://localhost'

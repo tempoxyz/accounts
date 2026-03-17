@@ -16,10 +16,10 @@ type EncodedRequest<encoded extends { method: unknown; params: unknown }> = Pick
 >
 
 /** Adapter interface for the provider. */
-export type Adapter = AdapterFn & Meta
+export type Adapter = SetupFn & Meta
 
 /** The setup function an adapter must implement. */
-export type AdapterFn = (params: setup.Parameters) => ReturnType
+export type SetupFn = (params: SetupFn.Parameters) => Instance
 
 /** Static metadata attached to an adapter function. */
 export type Meta = {
@@ -31,8 +31,7 @@ export type Meta = {
   rdns?: string | undefined
 }
 
-/** Value returned from an adapter's setup function. */
-export type ReturnType = {
+export type Instance = {
   /** Adapter actions dispatched by the provider's `request()` method. */
   actions: {
     /** Grant an access key for the active account. */
@@ -93,19 +92,9 @@ export type ReturnType = {
   cleanup?: (() => void) | undefined
 }
 
-/** Creates an adapter from metadata and a setup function. */
-export function define(meta: Meta, fn: AdapterFn): Adapter {
-  const { name, ...rest } = meta
-  Object.defineProperty(fn, 'name', { value: name, configurable: true })
-  return Object.assign(fn, rest) as Adapter
-}
-
-/** Spreads decoded params. */
-export type ActionRequest<item extends Schema.Item> =
-  Schema.Decoded<item>['params'] extends readonly [infer first] ? first : never
-
-export declare namespace setup {
-  type Parameters = {
+export declare namespace SetupFn {
+  /** Parameters passed to an adapter's setup function. */
+  export type Parameters = {
     /** Returns the rehydrated local account for the given address, or the active account if omitted. */
     getAccount: Account.Find
     /** Get the viem client for a given chain ID. Defaults to the active chain. */
@@ -115,7 +104,21 @@ export declare namespace setup {
     /** Reactive state store. */
     store: Store.Store
   }
+
+  /** Value returned from an adapter's setup function. */
+  export type ReturnType = Instance
 }
+
+/** Creates an adapter from metadata and a setup function. */
+export function define(meta: Meta, fn: SetupFn): Adapter {
+  const { name, ...rest } = meta
+  Object.defineProperty(fn, 'name', { value: name, configurable: true })
+  return Object.assign(fn, rest) as Adapter
+}
+
+/** Spreads decoded params. */
+export type ActionRequest<item extends Schema.Item> =
+  Schema.Decoded<item>['params'] extends readonly [infer first] ? first : never
 
 export declare namespace getClient {
   type Options = {
