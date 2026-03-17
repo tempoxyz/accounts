@@ -62,11 +62,11 @@ export const wagmiConfig = createConfig({
 
 ## Adapters
 
-| Adapter        | Description                                                                        |
-| -------------- | ---------------------------------------------------------------------------------- |
-| `tempoWallet` 🚧 | Adapter for the Tempo Wallet dialog (an embedded iframe/popup dialog).               |
-| `webAuthn`     | App-bound passkey accounts using WebAuthn registration and authentication flows.   |
-| `local`        | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
+| Adapter          | Description                                                                        |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| `tempoWallet` 🚧 | Adapter for the Tempo Wallet dialog (an embedded iframe/popup dialog).             |
+| `webAuthn`       | App-bound passkey accounts using WebAuthn registration and authentication flows.   |
+| `local`          | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
 
 ## Development
 
