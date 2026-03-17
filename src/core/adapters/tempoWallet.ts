@@ -34,8 +34,6 @@ export function tempoWallet(options: tempoWallet.Options = {}): Adapter.Adapter 
   } = options
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
-    let dialogHandle: Dialog.setup.ReturnType | undefined
-
     const listeners = new Set<(requestQueue: readonly Store.QueuedRequest[]) => void>()
     const requestStore = ox_RpcRequest.createStore()
 
@@ -164,7 +162,7 @@ export function tempoWallet(options: tempoWallet.Options = {}): Adapter.Adapter 
       }
     }
 
-    dialogHandle = dialog.setup({ host, store })
+    const dialogInstance = dialog({ host, store })
 
     // Sync store → dialog: whenever the request queue changes, notify
     // listeners and sync pending requests to the dialog.
@@ -177,16 +175,15 @@ export function tempoWallet(options: tempoWallet.Options = {}): Adapter.Adapter 
           (x): x is Store.QueuedRequest & { status: 'pending' } => x.status === 'pending',
         )
 
-        dialogHandle?.syncRequests(pending)
-        if (pending.length === 0) dialogHandle?.close()
+        dialogInstance?.syncRequests(pending)
+        if (pending.length === 0) dialogInstance?.close()
       },
     )
 
     return {
       cleanup() {
         unsubscribe()
-        dialogHandle?.destroy()
-        dialogHandle = undefined
+        dialogInstance?.destroy()
       },
       actions: {
         async createAccount(parameters, request) {

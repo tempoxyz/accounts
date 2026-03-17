@@ -2,38 +2,44 @@ import * as Messenger from './Messenger.js'
 import type * as Store from './Store.js'
 
 /** Dialog interface — manages the iframe/popup lifecycle for cross-origin auth. */
-export type Dialog = {
+export type Dialog = SetupFn & Meta
+
+/** Static metadata attached to a dialog function. */
+export type Meta = {
   /** Identifier for the dialog type (e.g. `'iframe'`, `'popup'`). */
-  name: string
-  /** Initialize the dialog with the given host and store. */
-  setup: (parameters: setup.Parameters) => setup.ReturnType
+  name?: string | undefined
 }
 
-export declare namespace setup {
+export type Instance = {
+  /** Close the dialog (hide iframe / close popup). */
+  close: () => void
+  /** Destroy the dialog (remove DOM elements, clean up). */
+  destroy: () => void
+  /** Open the dialog (show iframe / open popup). */
+  open: () => void
+  /** Sync the pending request queue to the remote auth app. */
+  syncRequests: (requests: readonly Store.QueuedRequest[]) => Promise<void>
+}
+
+/** The setup function a dialog must implement. */
+export type SetupFn = (parameters: SetupFn.Parameters) => Instance
+
+export declare namespace SetupFn {
   type Parameters = {
     /** URL of the Tempo Auth app. */
     host: string
     /** Reactive state store. */
     store: Store.Store
   }
-
-  type ReturnType = {
-    /** Close the dialog (hide iframe / close popup). */
-    close: () => void
-    /** Destroy the dialog (remove DOM elements, clean up). */
-    destroy: () => void
-    /** Open the dialog (show iframe / open popup). */
-    open: () => void
-    /** Sync the pending request queue to the remote auth app. */
-    syncRequests: (requests: readonly Store.QueuedRequest[]) => Promise<void>
-  }
 }
 
 export const defaultSize = { height: 440, width: 360 }
 
-/** Creates a dialog from a custom implementation. */
-export function from(dialog: Dialog): Dialog {
-  return dialog
+/** Creates a dialog from metadata and a setup function. */
+export function define(meta: Meta, fn: SetupFn): Dialog {
+  const { name, ...rest } = meta
+  Object.defineProperty(fn, 'name', { value: name, configurable: true })
+  return Object.assign(fn, rest) as Dialog
 }
 
 /** Detects Safari (which does not support WebAuthn in cross-origin iframes). */
@@ -47,215 +53,210 @@ export function isSafari(): boolean {
 export function iframe(): Dialog {
   if (typeof window === 'undefined') return noop()
 
-  return from({
-    name: 'iframe',
-    setup(parameters) {
-      const { host, store } = parameters
+  return define({ name: 'iframe' }, (parameters) => {
+    const { host, store } = parameters
 
-      const fallback = popup().setup(parameters)
+    const fallback = popup()(parameters)
 
-      let open = false
+    let open = false
 
-      const referrer = getReferrer()
+    const referrer = getReferrer()
 
-      const hostUrl = new URL(host)
-      hostUrl.searchParams.set('chainId', String(store.getState().chainId))
-      hostUrl.searchParams.set('mode', 'iframe')
-      if (referrer.icon) {
-        if (typeof referrer.icon === 'string') hostUrl.searchParams.set('icon', referrer.icon)
-        else {
-          hostUrl.searchParams.set('icon', referrer.icon.light)
-          hostUrl.searchParams.set('iconDark', referrer.icon.dark)
-        }
+    const hostUrl = new URL(host)
+    hostUrl.searchParams.set('chainId', String(store.getState().chainId))
+    hostUrl.searchParams.set('mode', 'iframe')
+    if (referrer.icon) {
+      if (typeof referrer.icon === 'string') hostUrl.searchParams.set('icon', referrer.icon)
+      else {
+        hostUrl.searchParams.set('icon', referrer.icon.light)
+        hostUrl.searchParams.set('iconDark', referrer.icon.dark)
       }
+    }
 
-      const root = document.createElement('dialog')
-      root.dataset.tempoWallet = ''
+    const root = document.createElement('dialog')
+    root.dataset.tempoWallet = ''
 
-      root.setAttribute('role', 'dialog')
-      root.setAttribute('aria-closed', 'true')
-      root.setAttribute('aria-label', 'Tempo Auth')
-      root.setAttribute('hidden', 'until-found')
+    root.setAttribute('role', 'dialog')
+    root.setAttribute('aria-closed', 'true')
+    root.setAttribute('aria-label', 'Tempo Auth')
+    root.setAttribute('hidden', 'until-found')
 
-      Object.assign(root.style, {
-        background: 'transparent',
-        border: '0',
-        outline: '0',
-        padding: '0',
-        position: 'fixed',
-      })
+    Object.assign(root.style, {
+      background: 'transparent',
+      border: '0',
+      outline: '0',
+      padding: '0',
+      position: 'fixed',
+    })
 
-      document.body.appendChild(root)
+    document.body.appendChild(root)
 
-      const frame = document.createElement('iframe')
-      frame.dataset.testid = 'tempo-wallet'
-      frame.setAttribute(
-        'sandbox',
-        'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox',
-      )
-      frame.setAttribute(
-        'allow',
-        [
-          `publickey-credentials-get ${hostUrl.origin}`,
-          `publickey-credentials-create ${hostUrl.origin}`,
-        ].join('; '),
-      )
-      frame.setAttribute('allowtransparency', 'true')
-      frame.setAttribute('tabindex', '0')
-      frame.setAttribute('title', 'Tempo Auth')
-      frame.src = hostUrl.toString()
+    const frame = document.createElement('iframe')
+    frame.dataset.testid = 'tempo-wallet'
+    frame.setAttribute(
+      'sandbox',
+      'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox',
+    )
+    frame.setAttribute(
+      'allow',
+      [
+        `publickey-credentials-get ${hostUrl.origin}`,
+        `publickey-credentials-create ${hostUrl.origin}`,
+      ].join('; '),
+    )
+    frame.setAttribute('allowtransparency', 'true')
+    frame.setAttribute('tabindex', '0')
+    frame.setAttribute('title', 'Tempo Auth')
+    frame.src = hostUrl.toString()
 
-      Object.assign(frame.style, {
-        backgroundColor: 'transparent',
-        border: '0',
-        colorScheme: 'light dark',
-        height: '100%',
-        left: '0',
-        position: 'fixed',
-        top: '0',
-        width: '100%',
-      })
+    Object.assign(frame.style, {
+      backgroundColor: 'transparent',
+      border: '0',
+      colorScheme: 'light dark',
+      height: '100%',
+      left: '0',
+      position: 'fixed',
+      top: '0',
+      width: '100%',
+    })
 
-      const style = document.createElement('style')
-      style.innerHTML = `
+    const style = document.createElement('style')
+    style.innerHTML = `
         dialog[data-tempo-wallet]::backdrop {
           background: transparent!important;
         }
       `
 
-      root.appendChild(style)
-      root.appendChild(frame)
+    root.appendChild(style)
+    root.appendChild(frame)
 
-      const messenger = Messenger.bridge({
-        from: Messenger.fromWindow(window, { targetOrigin: hostUrl.origin }),
-        to: Messenger.fromWindow(frame.contentWindow!, {
-          targetOrigin: hostUrl.origin,
-        }),
-        waitForReady: true,
-      })
+    const messenger = Messenger.bridge({
+      from: Messenger.fromWindow(window, { targetOrigin: hostUrl.origin }),
+      to: Messenger.fromWindow(frame.contentWindow!, {
+        targetOrigin: hostUrl.origin,
+      }),
+      waitForReady: true,
+    })
 
-      messenger.on('rpc-response', (response) => handleResponse(store, response))
+    messenger.on('rpc-response', (response) => handleResponse(store, response))
 
-      let savedOverflow = ''
-      let opener: HTMLElement | null = null
+    let savedOverflow = ''
+    let opener: HTMLElement | null = null
 
-      const onBlur = () => handleBlur(store)
+    const onBlur = () => handleBlur(store)
 
-      // 1Password extension adds `inert` attribute to `dialog` rendering it unusable.
-      const inertObserver = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-          if (mutation.type !== 'attributes') continue
-          if (mutation.attributeName !== 'inert') continue
-          root.removeAttribute('inert')
+    // 1Password extension adds `inert` attribute to `dialog` rendering it unusable.
+    const inertObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type !== 'attributes') continue
+        if (mutation.attributeName !== 'inert') continue
+        root.removeAttribute('inert')
+      }
+    })
+    inertObserver.observe(root, { attributeOldValue: true, attributes: true })
+
+    // dialog/page interactivity (no visibility change)
+    let dialogActive = false
+    const activatePage = () => {
+      if (!dialogActive) return
+      dialogActive = false
+
+      root.removeEventListener('cancel', onBlur)
+      root.removeEventListener('click', onBlur)
+      root.style.pointerEvents = 'none'
+      opener?.focus()
+      opener = null
+
+      document.body.style.overflow = savedOverflow
+    }
+    const activateDialog = () => {
+      if (dialogActive) return
+      dialogActive = true
+
+      root.addEventListener('cancel', onBlur)
+      root.addEventListener('click', onBlur)
+      frame.focus()
+      root.style.pointerEvents = 'auto'
+
+      savedOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+    }
+
+    // dialog visibility
+    let visible = false
+    const showDialog = () => {
+      if (visible) return
+      visible = true
+
+      if (document.activeElement instanceof HTMLElement) opener = document.activeElement
+
+      root.removeAttribute('hidden')
+      root.removeAttribute('aria-closed')
+      root.showModal()
+    }
+    const hideDialog = () => {
+      if (!visible) return
+      visible = false
+      root.setAttribute('hidden', 'true')
+      root.setAttribute('aria-closed', 'true')
+      root.close()
+
+      // 1Password extension sometimes adds `inert` to dialog siblings
+      // and does not clean up when dialog closes.
+      for (const sibling of root.parentNode ? Array.from(root.parentNode.children) : []) {
+        if (sibling === root) continue
+        if (!sibling.hasAttribute('inert')) continue
+        sibling.removeAttribute('inert')
+      }
+    }
+
+    return {
+      close() {
+        fallback.close()
+        open = false
+
+        hideDialog()
+        activatePage()
+      },
+      destroy() {
+        fallback.close()
+        open = false
+
+        activatePage()
+        hideDialog()
+
+        fallback.destroy()
+        messenger.destroy()
+        root.remove()
+        inertObserver.disconnect()
+      },
+      open() {
+        if (open) return
+        open = true
+
+        showDialog()
+        activateDialog()
+      },
+      async syncRequests(requests) {
+        // Safari does not support WebAuthn credential creation in iframes.
+        // Fall back to popup dialog.
+        const unsupported =
+          isSafari() &&
+          requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
+
+        if (unsupported) {
+          fallback.syncRequests(requests)
+        } else {
+          const requiresConfirm = requests.some((x) => x.status === 'pending')
+          if (!open && requiresConfirm) this.open()
+          messenger.send('rpc-requests', {
+            account: getAccount(store),
+            chainId: store.getState().chainId,
+            requests,
+          })
         }
-      })
-      inertObserver.observe(root, { attributeOldValue: true, attributes: true })
-
-      // dialog/page interactivity (no visibility change)
-      let dialogActive = false
-      const activatePage = () => {
-        if (!dialogActive) return
-        dialogActive = false
-
-        root.removeEventListener('cancel', onBlur)
-        root.removeEventListener('click', onBlur)
-        root.style.pointerEvents = 'none'
-        opener?.focus()
-        opener = null
-
-        document.body.style.overflow = savedOverflow
-      }
-      const activateDialog = () => {
-        if (dialogActive) return
-        dialogActive = true
-
-        root.addEventListener('cancel', onBlur)
-        root.addEventListener('click', onBlur)
-        frame.focus()
-        root.style.pointerEvents = 'auto'
-
-        savedOverflow = document.body.style.overflow
-        document.body.style.overflow = 'hidden'
-      }
-
-      // dialog visibility
-      let visible = false
-      const showDialog = () => {
-        if (visible) return
-        visible = true
-
-        if (document.activeElement instanceof HTMLElement) opener = document.activeElement
-
-        root.removeAttribute('hidden')
-        root.removeAttribute('aria-closed')
-        root.showModal()
-      }
-      const hideDialog = () => {
-        if (!visible) return
-        visible = false
-        root.setAttribute('hidden', 'true')
-        root.setAttribute('aria-closed', 'true')
-        root.close()
-
-        // 1Password extension sometimes adds `inert` to dialog siblings
-        // and does not clean up when dialog closes.
-        for (const sibling of root.parentNode ? Array.from(root.parentNode.children) : []) {
-          if (sibling === root) continue
-          if (!sibling.hasAttribute('inert')) continue
-          sibling.removeAttribute('inert')
-        }
-      }
-
-      return {
-        close() {
-          fallback.close()
-          open = false
-
-          hideDialog()
-          activatePage()
-        },
-        destroy() {
-          fallback.close()
-          open = false
-
-          activatePage()
-          hideDialog()
-
-          fallback.destroy()
-          messenger.destroy()
-          root.remove()
-          inertObserver.disconnect()
-        },
-        open() {
-          if (open) return
-          open = true
-
-          showDialog()
-          activateDialog()
-        },
-        async syncRequests(requests) {
-          // Safari does not support WebAuthn credential creation in iframes.
-          // Fall back to popup dialog.
-          const unsupported =
-            isSafari() &&
-            requests.some((x) =>
-              ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method),
-            )
-
-          if (unsupported) {
-            fallback.syncRequests(requests)
-          } else {
-            const requiresConfirm = requests.some((x) => x.status === 'pending')
-            if (!open && requiresConfirm) this.open()
-            messenger.send('rpc-requests', {
-              account: getAccount(store),
-              chainId: store.getState().chainId,
-              requests,
-            })
-          }
-        },
-      }
-    },
+      },
+    }
   })
 }
 
@@ -265,87 +266,84 @@ export function popup(options: popup.Options = {}): Dialog {
 
   const { size = defaultSize } = options
 
-  return from({
-    name: 'popup',
-    setup(parameters) {
-      const { host, store } = parameters
+  return define({ name: 'popup' }, (parameters) => {
+    const { host, store } = parameters
 
-      let win: Window | null = null
+    let win: Window | null = null
 
-      function onBlur() {
-        if (win) handleBlur(store)
-      }
+    function onBlur() {
+      if (win) handleBlur(store)
+    }
 
-      const offDetectClosed = (() => {
-        const timer = setInterval(() => {
-          if (win?.closed) handleBlur(store)
-        }, 100)
-        return () => clearInterval(timer)
-      })()
+    const offDetectClosed = (() => {
+      const timer = setInterval(() => {
+        if (win?.closed) handleBlur(store)
+      }, 100)
+      return () => clearInterval(timer)
+    })()
 
-      let messenger: Messenger.Bridge | undefined
+    let messenger: Messenger.Bridge | undefined
 
-      return {
-        close() {
-          if (!win) return
-          win.close()
-          win = null
-        },
-        destroy() {
-          this.close()
-          window.removeEventListener('focus', onBlur)
-          messenger?.destroy()
-          offDetectClosed()
-        },
-        open() {
-          const referrer = getReferrer()
+    return {
+      close() {
+        if (!win) return
+        win.close()
+        win = null
+      },
+      destroy() {
+        this.close()
+        window.removeEventListener('focus', onBlur)
+        messenger?.destroy()
+        offDetectClosed()
+      },
+      open() {
+        const referrer = getReferrer()
 
-          const hostUrl = new URL(host)
-          hostUrl.searchParams.set('chainId', String(store.getState().chainId))
-          hostUrl.searchParams.set('mode', 'popup')
-          if (referrer.icon) {
-            if (typeof referrer.icon === 'string') hostUrl.searchParams.set('icon', referrer.icon)
-            else {
-              hostUrl.searchParams.set('icon', referrer.icon.light)
-              hostUrl.searchParams.set('iconDark', referrer.icon.dark)
-            }
+        const hostUrl = new URL(host)
+        hostUrl.searchParams.set('chainId', String(store.getState().chainId))
+        hostUrl.searchParams.set('mode', 'popup')
+        if (referrer.icon) {
+          if (typeof referrer.icon === 'string') hostUrl.searchParams.set('icon', referrer.icon)
+          else {
+            hostUrl.searchParams.set('icon', referrer.icon.light)
+            hostUrl.searchParams.set('iconDark', referrer.icon.dark)
           }
+        }
 
-          const left = (window.innerWidth - size.width) / 2 + window.screenX
-          const top = window.screenY + 100
+        const left = (window.innerWidth - size.width) / 2 + window.screenX
+        const top = window.screenY + 100
 
-          win = window.open(
-            hostUrl.toString(),
-            '_blank',
-            `width=${size.width},height=${size.height},left=${left},top=${top}`,
-          )
-          if (!win) throw new Error('Failed to open popup')
+        win = window.open(
+          hostUrl.toString(),
+          '_blank',
+          `width=${size.width},height=${size.height},left=${left},top=${top}`,
+        )
+        if (!win) throw new Error('Failed to open popup')
 
-          messenger = Messenger.bridge({
-            from: Messenger.fromWindow(window, { targetOrigin: hostUrl.origin }),
-            to: Messenger.fromWindow(win, { targetOrigin: hostUrl.origin }),
-            waitForReady: true,
-          })
+        messenger = Messenger.bridge({
+          from: Messenger.fromWindow(window, { targetOrigin: hostUrl.origin }),
+          to: Messenger.fromWindow(win, { targetOrigin: hostUrl.origin }),
+          waitForReady: true,
+        })
 
-          messenger.on('rpc-response', (response) => handleResponse(store, response))
+        messenger.on('rpc-response', (response) => handleResponse(store, response))
 
-          window.removeEventListener('focus', onBlur)
-          window.addEventListener('focus', onBlur)
-        },
-        async syncRequests(requests) {
-          const requiresConfirm = requests.some((x) => x.status === 'pending')
-          if (requiresConfirm) {
-            if (!win || win.closed) this.open()
-            win?.focus()
-          }
-          messenger?.send('rpc-requests', {
-            account: getAccount(store),
-            chainId: store.getState().chainId,
-            requests,
-          })
-        },
-      }
-    },
+        window.removeEventListener('focus', onBlur)
+        window.addEventListener('focus', onBlur)
+      },
+      async syncRequests(requests) {
+        const requiresConfirm = requests.some((x) => x.status === 'pending')
+        if (requiresConfirm) {
+          if (!win || win.closed) this.open()
+          win?.focus()
+        }
+        messenger?.send('rpc-requests', {
+          account: getAccount(store),
+          chainId: store.getState().chainId,
+          requests,
+        })
+      },
+    }
   })
 }
 
@@ -358,17 +356,12 @@ export declare namespace popup {
 
 /** Returns a no-op dialog for SSR environments. */
 export function noop(): Dialog {
-  return from({
-    name: 'noop',
-    setup() {
-      return {
-        open() {},
-        close() {},
-        destroy() {},
-        async syncRequests() {},
-      }
-    },
-  })
+  return define({ name: 'noop' }, () => ({
+    open() {},
+    close() {},
+    destroy() {},
+    async syncRequests() {},
+  }))
 }
 
 /** Updates the store with an RPC response from the remote auth app. */

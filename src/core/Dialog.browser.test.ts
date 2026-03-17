@@ -12,7 +12,7 @@ function setup() {
     storage: Storage.memory({ key: 'dialog-test' }),
   })
   const dialog = Dialog.iframe()
-  const handle = dialog.setup({ host, store })
+  const handle = dialog({ host, store })
   return { handle, store }
 }
 
@@ -195,7 +195,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog.setup({ host, store })
+    const handle = dialog({ host, store })
     handle.open()
 
     expect(openSpy).toHaveBeenCalledOnce()
@@ -216,7 +216,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog.setup({ host, store })
+    const handle = dialog({ host, store })
     handle.open()
 
     const features = openSpy.mock.calls[0]![2] as string
@@ -241,7 +241,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog.setup({ host, store })
+    const handle = dialog({ host, store })
     handle.open()
     handle.close()
 
@@ -259,7 +259,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog.setup({ host, store })
+    const handle = dialog({ host, store })
 
     expect(() => handle.open()).toThrow('Failed to open popup')
 
@@ -278,7 +278,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog.setup({ host, store })
+    const handle = dialog({ host, store })
     handle.open()
     handle.destroy()
 
@@ -295,7 +295,7 @@ describe('Dialog.noop', () => {
       storage: Storage.memory({ key: 'noop-test' }),
     })
     const dialog = Dialog.noop()
-    const handle = dialog.setup({ host, store })
+    const handle = dialog({ host, store })
     expect(() => handle.open()).not.toThrow()
     expect(() => handle.close()).not.toThrow()
     expect(() => handle.destroy()).not.toThrow()
