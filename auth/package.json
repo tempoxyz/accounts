@@ -10,10 +10,11 @@
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-start": "catalog:",
-    "tempodk": "workspace:*",
     "cva": "1.0.0-beta.4",
+    "nitro": "3.0.260311-beta",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "tempodk": "workspace:*",
     "wagmi": "catalog:",
     "zustand": "^5.0.11"
   },
