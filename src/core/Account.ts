@@ -16,7 +16,7 @@ export type Store = {
   | Pick<TempoAccount.Account, 'keyType' | 'sign'>
   | { keyType: 'secp256k1'; privateKey: Hex }
   | { keyType: 'p256'; privateKey: Hex }
-  | { keyType: 'webAuthn'; credential: { id: string; publicKey: Hex } }
+  | { keyType: 'webAuthn'; credential: { id: string; publicKey: Hex, rpId: string }; }
   | {
       keyType: 'webCrypto'
       keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>
@@ -131,7 +131,9 @@ export function hydrate(
     case 'webCrypto':
       return TempoAccount.fromWebCryptoP256(account.keyPair)
     case 'webAuthn':
-      return TempoAccount.fromWebAuthnP256(account.credential)
+      return TempoAccount.fromWebAuthnP256(account.credential, {
+        rpId: account.credential.rpId,
+      })
     case 'webAuthn_headless':
       return TempoAccount.fromHeadlessWebAuthn(account.privateKey, {
         rpId: account.rpId,

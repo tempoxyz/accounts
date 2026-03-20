@@ -13,6 +13,7 @@ export type Ceremony = {
   /** Verify a registration response and extract the public key. */
   verifyRegistration: (
     credential: Registration.Credential,
+    options?: verifyRegistration.Options | undefined,
   ) => Promise<verifyRegistration.ReturnType>
   /** Get credential request options for `navigator.credentials.get()`. */
   getAuthenticationOptions: (
@@ -37,6 +38,10 @@ export declare namespace getRegistrationOptions {
 }
 
 export declare namespace verifyRegistration {
+  type Options = {
+    /** Display name for the credential (e.g. user's email). */
+    name?: string | undefined
+  }
   type ReturnType = {
     /** The registered credential's ID. */
     credentialId: string

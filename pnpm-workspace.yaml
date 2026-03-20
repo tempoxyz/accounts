@@ -1,6 +1,7 @@
 packages:
   - .
   - auth
+  - embed
   - examples/*
   - playground
 

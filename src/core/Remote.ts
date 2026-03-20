@@ -120,6 +120,7 @@ export function create(options: create.Options): Remote {
           const index = state.accounts.findIndex(
             (a) => a.address.toLowerCase() === account.address.toLowerCase(),
           )
+          console.log('onDialogRequest', account, index, state.accounts)
           if (index >= 0 && index !== state.activeAccount)
             provider.store.setState({ activeAccount: index })
         }

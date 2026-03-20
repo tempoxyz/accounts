@@ -47,6 +47,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     adapter = tempoWallet(),
     chains = [tempo, tempoModerato],
     feePayerUrl,
+    persistCredentials,
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
   } = options
@@ -57,6 +58,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const store = Store.create({
     chainId: defaultChain.id,
+    persistCredentials,
     storage,
   })
 
@@ -105,16 +107,6 @@ export function create(options: create.Options = {}): create.ReturnType {
     if (typeof feePayer === 'string') return feePayer
     if (feePayer === true) return feePayerUrl
     return undefined
-  }
-
-  /** Merges new accounts into the store, deduplicating by address, and sets the first new account as active. */
-  function mergeAccounts(newAccounts: readonly Store.Account[]) {
-    const existing = store.getState().accounts
-    const existingAddresses = new Set(existing.map((a) => a.address))
-    const unique = newAccounts.filter((a) => !existingAddresses.has(a.address))
-    const accounts = [...existing, ...unique]
-    const activeAccount = accounts.findIndex((a) => a.address === newAccounts[0]?.address)
-    store.setState({ accounts, activeAccount })
   }
 
   const provider = Object.assign(
@@ -171,21 +163,12 @@ export function create(options: create.Options = {}): create.ReturnType {
                     ) satisfies Rpc.eth_chainId.Encoded['returns']
 
                   case 'eth_requestAccounts': {
-                    const { accounts: newAccounts } = await actions.loadAccounts(undefined, {
+                    const { accounts } = await actions.loadAccounts(undefined, {
                       method: 'wallet_connect',
                       params: undefined,
                     })
-                    mergeAccounts(newAccounts)
-                    const { accounts, activeAccount } = store.getState()
-                    if (accounts.length === 0) return []
-                    const activeAddr = accounts[activeAccount]?.address
-                    const activeIdx = accounts.findIndex((a) => a.address === activeAddr)
-                    const sorted = [...accounts]
-                    if (activeIdx >= 0) {
-                      const [active] = sorted.splice(activeIdx, 1)
-                      return [active!.address, ...sorted.map((a) => a.address)]
-                    }
-                    return sorted.map(
+                    store.setState({ accounts, activeAccount: 0 })
+                    return accounts.map(
                       (a) => a.address,
                     ) satisfies Rpc.eth_requestAccounts.Encoded['returns']
                   }
@@ -384,7 +367,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                     const {
                       keyAuthorization,
-                      accounts: newAccounts,
+                      accounts,
                       signature,
                     } = await (async () => {
                       if (capabilities?.method === 'register')
@@ -407,34 +390,27 @@ export function create(options: create.Options = {}): create.ReturnType {
                         request,
                       )
                     })()
-                    mergeAccounts(newAccounts)
 
-                    const { accounts: allAccounts, activeAccount } = store.getState()
-                    const activeAddr = allAccounts[activeAccount]?.address
-                    const activeIdx = allAccounts.findIndex((a) => a.address === activeAddr)
-                    const sorted = [...allAccounts]
-                    if (activeIdx >= 0) sorted.splice(activeIdx, 1)
-                    const active = activeIdx >= 0 ? allAccounts[activeIdx] : undefined
-                    const ordered = active ? [active, ...sorted] : sorted
-                    const signer = newAccounts[0]?.address
+                    store.setState({ accounts, activeAccount: 0 })
+
+                    const accountAddress = accounts[0]?.address
                     return {
-                      accounts: ordered.map((a) => {
-                        if (a.address !== signer) return { address: a.address, capabilities: {} }
-                        return {
-                          address: a.address,
-                          capabilities: {
-                            ...(keyAuthorization
-                              ? {
-                                  keyAuthorization: {
-                                    ...keyAuthorization,
-                                    address: keyAuthorization.keyId,
-                                  },
-                                }
-                              : {}),
-                            ...(signature && capabilities?.digest ? { signature } : {}),
-                          },
-                        }
-                      }),
+                      accounts: accounts.map((a) => ({
+                        address: a.address,
+                        capabilities: a.address === accountAddress
+                          ? {
+                              ...(keyAuthorization
+                                ? {
+                                    keyAuthorization: {
+                                      ...keyAuthorization,
+                                      address: keyAuthorization.keyId,
+                                    },
+                                  }
+                                : {}),
+                              ...(signature && capabilities?.digest ? { signature } : {}),
+                            }
+                          : {},
+                      })),
                     } satisfies Rpc.wallet_connect.Encoded['returns']
                   }
 
@@ -514,17 +490,18 @@ export function create(options: create.Options = {}): create.ReturnType {
     } as never)
   }
 
-  Mppx.create({
-    methods: [
-      mppx_tempo({
-        getClient: ({ chainId }) => {
-          const client = Client.fromChainId(chainId, { chains, store })
-          const account = Account.find({ store, signable: true })
-          return Object.assign(client, { account })
-        },
-      }),
-    ],
-  })
+  if (options.mpp)
+    Mppx.create({
+      methods: [
+        mppx_tempo({
+          getClient: ({ chainId }) => {
+            const client = Client.fromChainId(chainId, { chains, store })
+            const account = Account.find({ store, signable: true })
+            return Object.assign(client, { account })
+          },
+        }),
+      ],
+    })
 
   return provider
 }
@@ -553,6 +530,10 @@ export declare namespace create {
      * from `tempodk/server`.
      */
     feePayerUrl?: string | undefined
+    /** Enable Machine Payment Protocol (mppx) support. @default false */
+    mpp?: boolean | undefined
+    /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
+    persistCredentials?: boolean | undefined
     /** Storage adapter for persistence. @default Storage.idb() in browser, Storage.memory() otherwise. */
     storage?: Storage.Storage | undefined
     /**

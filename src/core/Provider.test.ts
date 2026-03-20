@@ -95,19 +95,6 @@ describe.each(adapters)('$name', ({ adapter }) => {
       const result = await provider.request({ method: 'eth_requestAccounts' })
       expect(result.length).toBeGreaterThanOrEqual(1)
     })
-
-    test('behavior: returns active account first', async () => {
-      const provider = Provider.create({ adapter: adapter() })
-
-      await connect(provider)
-      await provider.request({
-        method: 'wallet_connect',
-        params: [{ capabilities: { method: 'register' } }],
-      })
-
-      const result = await provider.request({ method: 'eth_requestAccounts' })
-      expect(result.length).toMatchInlineSnapshot(`2`)
-    })
   })
 
   describe('wallet_connect', () => {
@@ -130,30 +117,6 @@ describe.each(adapters)('$name', ({ adapter }) => {
       expect(result.accounts.length).toMatchInlineSnapshot(`1`)
       expect(result.accounts[0]!.address).toMatch(/^0x[0-9a-f]{40}$/i)
       expect(result.accounts[0]!.capabilities).toMatchInlineSnapshot(`{}`)
-    })
-
-    test('behavior: register preserves existing accounts and sets activeAccount', async () => {
-      const provider = Provider.create({ adapter: adapter() })
-
-      await connect(provider)
-
-      const result = await provider.request({
-        method: 'wallet_connect',
-        params: [{ capabilities: { method: 'register' } }],
-      })
-      expect(result.accounts.length).toMatchInlineSnapshot(`2`)
-      expect(result.accounts[0]!.address).toMatch(/^0x[0-9a-f]{40}$/i)
-      expect(result.accounts[0]!.capabilities).toMatchInlineSnapshot(`{}`)
-      expect(provider.store.getState().accounts.length).toMatchInlineSnapshot(`2`)
-    })
-
-    test('behavior: login preserves existing accounts and deduplicates', async () => {
-      const provider = Provider.create({ adapter: adapter() })
-
-      await connect(provider)
-      await provider.request({ method: 'wallet_connect' })
-
-      expect(provider.store.getState().accounts.length).toBeGreaterThanOrEqual(1)
     })
 
     test('behavior: register passes name to createAccount', async () => {
@@ -947,14 +910,6 @@ describe.each(adapters)('$name', ({ adapter }) => {
       ).rejects.toThrowErrorMatchingInlineSnapshot(
         `[Provider.DisconnectedError: No accounts connected.]`,
       )
-    })
-  })
-
-  describe('rpc proxy', () => {
-    test('error: proxies unknown methods to RPC client', async () => {
-      const provider = Provider.create({ adapter: adapter() })
-
-      await expect(provider.request({ method: 'eth_blockNumber' } as any)).rejects.toThrow()
     })
   })
 

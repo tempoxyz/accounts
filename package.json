@@ -6,11 +6,12 @@
     "check": "oxlint --fix --ignore-pattern package.json && oxfmt",
     "check:types": "tsc -b",
     "check:types:examples": "pnpm --filter *-example check:types",
-    "dev": "pnpm dev:auth & pnpm dev:playground",
+    "dev": "pnpm dev:embed & pnpm dev:playground",
     "dev:hosts": "./scripts/dev:hosts.sh",
     "dev:auth": "pnpm --filter auth dev",
+    "dev:embed": "VITE_TEMPO_ENV=moderato pnpm --filter tempo-app dev:ssl",
     "dev:playground": "pnpm --filter playground dev",
-    "example:wagmi": "pnpm --filter wagmi dev & pnpm dev:auth",
+    "example:wagmi": "pnpm --filter wagmi dev & pnpm dev:embed",
     "preconstruct": "zile dev",
     "test": "vitest"
   },
@@ -57,7 +58,7 @@
   },
   "pnpm": {
     "overrides": {
-      "ox": "~0.14.0",
+      "ox": "~0.14.7",
       "react": "catalog:",
       "react-dom": "catalog:",
       "tempodk": "workspace:*",
@@ -74,8 +75,8 @@
     "idb-keyval": "^6.2.2",
     "mipd": "^0.0.7",
     "mppx": "^0.4.0",
-    "ox": "~0.14.5",
-    "webauthx": "https://pkg.pr.new/wevm/webauthx@a8d08a7",
+    "ox": "~0.14.7",
+    "webauthx": "https://pkg.pr.new/wevm/webauthx@c77acdc",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"
   },
