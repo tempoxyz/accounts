@@ -71,7 +71,8 @@ export function create(options: create.Options = {}): create.ReturnType {
     return Client.fromChainId(chainId, { chains, feePayer, store })
   }
 
-  const { actions } = adapter({ getAccount, getClient, storage, store })
+  const instance = adapter({ getAccount, getClient, storage, store })
+  const { actions } = instance
 
   const emitter = ox_Provider.createEmitter()
 
@@ -100,6 +101,15 @@ export function create(options: create.Options = {}): create.ReturnType {
   function assertConnected() {
     if (store.getState().accounts.length === 0)
       throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
+  }
+
+  /** Returns accounts to persist. When `persistAccounts` is set, merges new accounts with existing ones. */
+  function resolveAccounts(accounts: readonly Account.Store[]) {
+    if (!instance.persistAccounts) return accounts
+    const merged = [...accounts]
+    for (const a of store.getState().accounts)
+      if (!merged.some((m) => m.address.toLowerCase() === a.address.toLowerCase())) merged.push(a)
+    return merged
   }
 
   /** Resolves the `feePayer` field from a transaction request into a URL string or `undefined`. */
@@ -167,7 +177,9 @@ export function create(options: create.Options = {}): create.ReturnType {
                       method: 'wallet_connect',
                       params: undefined,
                     })
-                    store.setState({ accounts, activeAccount: 0 })
+
+                    store.setState({ accounts: resolveAccounts(accounts), activeAccount: 0 })
+
                     return accounts.map(
                       (a) => a.address,
                     ) satisfies Rpc.eth_requestAccounts.Encoded['returns']
@@ -365,11 +377,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const authorizeAccessKey =
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
 
-                    const {
-                      keyAuthorization,
-                      accounts,
-                      signature,
-                    } = await (async () => {
+                    const { keyAuthorization, accounts, signature } = await (async () => {
                       if (capabilities?.method === 'register')
                         return await actions.createAccount(
                           {
@@ -391,25 +399,26 @@ export function create(options: create.Options = {}): create.ReturnType {
                       )
                     })()
 
-                    store.setState({ accounts, activeAccount: 0 })
+                    store.setState({ accounts: resolveAccounts(accounts), activeAccount: 0 })
 
                     const accountAddress = accounts[0]?.address
                     return {
                       accounts: accounts.map((a) => ({
                         address: a.address,
-                        capabilities: a.address === accountAddress
-                          ? {
-                              ...(keyAuthorization
-                                ? {
-                                    keyAuthorization: {
-                                      ...keyAuthorization,
-                                      address: keyAuthorization.keyId,
-                                    },
-                                  }
-                                : {}),
-                              ...(signature && capabilities?.digest ? { signature } : {}),
-                            }
-                          : {},
+                        capabilities:
+                          a.address === accountAddress
+                            ? {
+                                ...(keyAuthorization
+                                  ? {
+                                      keyAuthorization: {
+                                        ...keyAuthorization,
+                                        address: keyAuthorization.keyId,
+                                      },
+                                    }
+                                  : {}),
+                                ...(signature && capabilities?.digest ? { signature } : {}),
+                              }
+                            : {},
                       })),
                     } satisfies Rpc.wallet_connect.Encoded['returns']
                   }

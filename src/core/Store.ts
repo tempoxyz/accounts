@@ -87,12 +87,13 @@ export function create(options: Options): Store {
               ...state,
               ...current,
               // Preserve in-memory credentials when persisted accounts only have addresses.
-              accounts: state.accounts?.map((persisted) => {
-                const account = current.accounts.find(
-                  (a) => a.address.toLowerCase() === persisted.address.toLowerCase(),
-                )
-                return account ?? persisted
-              }) ?? current.accounts,
+              accounts:
+                state.accounts?.map((persisted) => {
+                  const account = current.accounts.find(
+                    (a) => a.address.toLowerCase() === persisted.address.toLowerCase(),
+                  )
+                  return account ?? persisted
+                }) ?? current.accounts,
               accessKeys: state.accessKeys ?? current.accessKeys,
               chainId: state.chainId ?? current.chainId,
             }
@@ -102,9 +103,7 @@ export function create(options: Options): Store {
             ({
               accounts: state.accounts,
               activeAccount: state.activeAccount,
-              ...(persistCredentials
-                ? { accessKeys: state.accessKeys }
-                : {}),
+              ...(persistCredentials ? { accessKeys: state.accessKeys } : {}),
               chainId: state.chainId,
             }) as unknown as State,
           storage,

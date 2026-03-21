@@ -46,6 +46,7 @@ describe('mppx integration', () => {
     const provider = Provider.create({
       adapter: headlessWebAuthn(),
       chains: [chain],
+      mpp: true,
     })
 
     const address = await connect(provider)

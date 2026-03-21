@@ -16,7 +16,7 @@ export type Store = {
   | Pick<TempoAccount.Account, 'keyType' | 'sign'>
   | { keyType: 'secp256k1'; privateKey: Hex }
   | { keyType: 'p256'; privateKey: Hex }
-  | { keyType: 'webAuthn'; credential: { id: string; publicKey: Hex, rpId: string }; }
+  | { keyType: 'webAuthn'; credential: { id: string; publicKey: Hex; rpId: string } }
   | {
       keyType: 'webCrypto'
       keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>

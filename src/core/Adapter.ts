@@ -90,6 +90,8 @@ export type Instance = {
   }
   /** Cleanup function called when the provider is destroyed. */
   cleanup?: (() => void) | undefined
+  /** When `true`, the provider merges new accounts onto existing ones instead of replacing. */
+  persistAccounts?: boolean | undefined
 }
 
 export declare namespace SetupFn {

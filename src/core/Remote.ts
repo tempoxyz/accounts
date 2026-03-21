@@ -1,6 +1,7 @@
 import { Hex } from 'ox'
 import * as Provider from 'ox/Provider'
 import * as RpcResponse from 'ox/RpcResponse'
+import { useStore } from 'zustand'
 import type { StoreApi } from 'zustand/vanilla'
 import { createStore } from 'zustand/vanilla'
 
@@ -12,6 +13,10 @@ import type * as Store from '../core/Store.js'
 export type State = {
   /** Whether the dialog is rendered in an iframe or popup. */
   mode: 'iframe' | 'popup' | undefined
+  /** Trusted host origin from MessageEvent. */
+  origin: string | undefined
+  /** Whether the dialog is ready to display content. */
+  ready: boolean
   /** Queued RPC requests received from the host. */
   requests: readonly Store.QueuedRequest[]
 }
@@ -40,7 +45,7 @@ export type Remote = {
    * @param cb - Callback receiving the dialog request payload.
    * @returns Unsubscribe function.
    */
-  onDialogRequest: (cb: (payload: onDialogRequest.Payload) => void) => () => void
+  onDialogRequest: (cb: (payload: onDialogRequest.Payload) => void | Promise<void>) => () => void
   /**
    * Subscribes to incoming RPC requests from the parent context.
    * Updates the remote store with the received requests and syncs the
@@ -105,7 +110,12 @@ export declare namespace respond {
 /** Creates a remote context for the dialog app. */
 export function create(options: create.Options): Remote {
   const { messenger, provider } = options
-  const store = createStore<State>(() => ({ mode: undefined, requests: [] }))
+  const store = createStore<State>(() => ({
+    mode: undefined,
+    origin: undefined,
+    ready: false,
+    requests: [],
+  }))
 
   return {
     messenger,
@@ -113,24 +123,28 @@ export function create(options: create.Options): Remote {
     store,
 
     onDialogRequest(cb) {
-      return this.onRequests((requests, event, { account }) => {
+      return this.onRequests(async (requests, event, { account }) => {
         // Sync the active account with the host.
         if (account) {
           const state = provider.store.getState()
           const index = state.accounts.findIndex(
             (a) => a.address.toLowerCase() === account.address.toLowerCase(),
           )
-          console.log('onDialogRequest', account, index, state.accounts)
           if (index >= 0 && index !== state.activeAccount)
             provider.store.setState({ activeAccount: index })
         }
 
         const pending = requests.find((r) => r.status === 'pending')
-        cb({
+        store.setState({
+          origin: event.origin,
+          ready: false,
+        })
+        await cb({
           account,
           origin: event.origin,
           request: pending?.request ?? null,
         })
+        if (pending) store.setState({ ready: true })
       })
     },
 
@@ -188,6 +202,7 @@ export function create(options: create.Options): Remote {
     },
 
     rejectAll(error) {
+      store.setState({ ready: false })
       const requests = store.getState().requests
       for (const queued of requests) this.reject(queued.request, error)
     },
@@ -235,4 +250,11 @@ export declare namespace create {
     /** Provider to execute RPC requests against. */
     provider: CoreProvider.Provider
   }
+}
+
+/** React hook to select state from a remote context's store. */
+export function useState(remote: Remote): State
+export function useState<selected>(remote: Remote, selector: (state: State) => selected): selected
+export function useState(remote: Remote, selector?: (state: State) => unknown) {
+  return useStore(remote.store, selector as never)
 }

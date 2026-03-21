@@ -3,7 +3,6 @@ import { SignatureEnvelope } from 'ox/tempo'
 import { Account } from 'viem/tempo'
 import { Authentication, Registration } from 'webauthx/client'
 
-import type * as Account_internal from '../Account.js'
 import type { OneOf } from '../../internal/types.js'
 import * as Adapter from '../Adapter.js'
 import * as Ceremony from '../Ceremony.js'
@@ -34,45 +33,35 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       options.ceremony ??
       (authUrl ? Ceremony.server({ url: authUrl }) : Ceremony.local({ storage }))
 
-    type WebAuthnAccount = Extract<Account_internal.Store, { keyType: 'webAuthn' }>
-    const storageKey = 'webauthn:accounts'
-
-    async function getStoredAccounts(): Promise<readonly WebAuthnAccount[]> {
-      return (await storage.getItem<WebAuthnAccount[]>(storageKey)) ?? []
-    }
-
-    async function saveAccount(account: WebAuthnAccount): Promise<readonly WebAuthnAccount[]> {
-      const stored = await getStoredAccounts()
-      const filtered = stored.filter(
-        (a) => a.address.toLowerCase() !== account.address.toLowerCase(),
-      )
-      const accounts = [account, ...filtered]
-      await storage.setItem(storageKey, accounts)
-      return accounts
-    }
-
     const base = local({
       async createAccount(parameters) {
         const { options } = await ceremony.getRegistrationOptions(parameters)
         const rpId = options.publicKey?.rp.id
         if (!rpId) throw new Error('rpId is required')
         const credential = await Registration.create({ options })
-        const { publicKey } = await ceremony.verifyRegistration(credential, { name: parameters.name })
+        const { publicKey } = await ceremony.verifyRegistration(credential, {
+          name: parameters.name,
+        })
         await storage.setItem('lastCredentialId', credential.id)
         const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
-        const accounts = await saveAccount({
-          address: account.address,
-          keyType: 'webAuthn',
-          credential: { id: credential.id, publicKey, rpId },
-        })
-        return { accounts }
+        return {
+          accounts: [
+            {
+              address: account.address,
+              keyType: 'webAuthn',
+              credential: { id: credential.id, publicKey, rpId },
+            },
+          ],
+        }
       },
       async loadAccounts(parameters = {}) {
         const { selectAccount, digest } = parameters
 
         const credentialId = selectAccount
           ? undefined
-          : (parameters?.credentialId ?? (await storage.getItem<string>('lastCredentialId')) ?? undefined)
+          : (parameters?.credentialId ??
+            (await storage.getItem<string>('lastCredentialId')) ??
+            undefined)
 
         const { options } = await ceremony.getAuthenticationOptions({
           ...parameters,
@@ -87,7 +76,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         const { publicKey } = await ceremony.verifyAuthentication(response)
 
         await storage.setItem('lastCredentialId', response.id)
-        
+
         const account = Account.fromWebAuthnP256({ id: response.id, publicKey }, { rpId })
 
         const signature = digest
@@ -102,16 +91,20 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
             )
           : undefined
 
-        const accounts = await saveAccount({
-          address: account.address,
-          keyType: 'webAuthn',
-          credential: { id: response.id, publicKey, rpId },
-        })
-        return { accounts, signature }
+        return {
+          accounts: [
+            {
+              address: account.address,
+              keyType: 'webAuthn',
+              credential: { id: response.id, publicKey, rpId },
+            },
+          ],
+          signature,
+        }
       },
     })(parameters)
 
-    return base
+    return { ...base, persistAccounts: true }
   })
 }
 

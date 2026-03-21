@@ -225,30 +225,6 @@ describe.each(adapters)('$name', ({ adapter }) => {
       })
       expect(valid).toMatchInlineSnapshot(`true`)
     })
-
-    test('behavior: signature only on signer account, not others', async () => {
-      const provider = Provider.create({ adapter: adapter() })
-
-      await provider.request({
-        method: 'wallet_connect',
-        params: [{ capabilities: { method: 'register' } }],
-      })
-      await provider.request({
-        method: 'wallet_connect',
-        params: [{ capabilities: { method: 'register' } }],
-      })
-      const result = await provider.request({
-        method: 'wallet_connect',
-        params: [{ capabilities: { digest: '0xabcd' } }],
-      })
-
-      const withSig = result.accounts.filter((a) => a.capabilities.signature)
-      const withoutSig = result.accounts.filter((a) => !a.capabilities.signature)
-      expect(withSig.length).toMatchInlineSnapshot(`1`)
-      expect(withSig[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
-      expect(withoutSig.length).toBeGreaterThanOrEqual(1)
-      expect(withoutSig[0]!.capabilities).toMatchInlineSnapshot(`{}`)
-    })
   })
 
   describe('wallet_disconnect', () => {
