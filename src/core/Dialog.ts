@@ -94,10 +94,6 @@ export function iframe(): Dialog {
     const frame = document.createElement('iframe')
     frame.dataset.testid = 'tempo-wallet'
     frame.setAttribute(
-      'sandbox',
-      'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox',
-    )
-    frame.setAttribute(
       'allow',
       [
         `publickey-credentials-get ${hostUrl.origin}`,

@@ -46,8 +46,8 @@ importers:
         specifier: ^0.0.7
         version: 0.0.7(typescript@5.9.3)
       mppx:
-        specifier: ^0.4.0
-        version: 0.4.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.4)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
+        specifier: ^0.4.8
+        version: 0.4.8(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.4)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
       ox:
         specifier: ~0.14.7
         version: 0.14.7(typescript@5.9.3)(zod@4.3.6)
@@ -248,8 +248,8 @@ importers:
         specifier: 3.5.0
         version: 3.5.0(@tanstack/query-core@5.91.2)(@tanstack/react-query@5.90.21(react@19.2.0))(@types/react@19.2.14)(ox@0.14.7(typescript@5.9.3)(zod@4.3.6))(react@19.2.0)(typescript@5.9.3)(viem@2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
       webauthx:
-        specifier: https://pkg.pr.new/wevm/webauthx@c77acdc
-        version: https://pkg.pr.new/wevm/webauthx@c77acdc(typescript@5.9.3)(zod@4.3.6)
+        specifier: ~0.1.0
+        version: 0.1.0(typescript@5.9.3)(zod@4.3.6)
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: ^1.30.0
@@ -430,8 +430,8 @@ importers:
   playground:
     dependencies:
       mppx:
-        specifier: ^0.4.0
-        version: 0.4.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.8)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
+        specifier: ^0.4.8
+        version: 0.4.8(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.8)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
       react:
         specifier: ^19.1.1
         version: 19.2.0
@@ -5276,9 +5276,8 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
-  mppx@0.4.0:
-    resolution: {integrity: sha512-Qjrw/VAWW1wLh02MyCTTIh/WpyPELl8SbP+XHZ9NaYFUKGRUEESVgcgaAoxNDsy0noqidNFoIL0Hh8s1x1la/g==}
-    deprecated: Please upgrade to >=0.4.8
+  mppx@0.4.8:
+    resolution: {integrity: sha512-vZnf1EoL9YyEs+HSmV73jsS7iD//ePBR0Qtnev39wbuHz/De4GMy74flejL759i+6H5Uz26CKdzjVWZODYR5Yw==}
     hasBin: true
     peerDependencies:
       '@modelcontextprotocol/sdk': '>=1.25.0'
@@ -6770,6 +6769,9 @@ packages:
 
   web-vitals@5.1.0:
     resolution: {integrity: sha512-ArI3kx5jI0atlTtmV0fWU3fjpLmq/nD3Zr1iFFlJLaqa5wLBkUSzINwBPySCX/8jRyjlmy1Volw1kz1g9XE4Jg==}
+
+  webauthx@0.1.0:
+    resolution: {integrity: sha512-Z43YHetVeXdV5/4+YqKSz+cAflpbMmxSMz//kXEb2u3ZUqVbPG1zrM+Zp7KaME/QgUFGhGkAE2XHwqCAXnU75g==}
 
   webauthx@https://pkg.pr.new/wevm/webauthx@c77acdc:
     resolution: {tarball: https://pkg.pr.new/wevm/webauthx@c77acdc}
@@ -11618,7 +11620,7 @@ snapshots:
 
   mkdirp@3.0.1: {}
 
-  mppx@0.4.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.4)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)):
+  mppx@0.4.8(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.4)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)):
     dependencies:
       '@remix-run/fetch-proxy': 0.7.1
       '@remix-run/node-fetch-server': 0.13.0
@@ -11637,7 +11639,7 @@ snapshots:
       - supports-color
       - typescript
 
-  mppx@0.4.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.8)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)):
+  mppx@0.4.8(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.8)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)):
     dependencies:
       '@remix-run/fetch-proxy': 0.7.1
       '@remix-run/node-fetch-server': 0.13.0
@@ -13236,6 +13238,13 @@ snapshots:
     optional: true
 
   web-vitals@5.1.0: {}
+
+  webauthx@0.1.0(typescript@5.9.3)(zod@4.3.6):
+    dependencies:
+      ox: 0.14.7(typescript@5.9.3)(zod@4.3.6)
+    transitivePeerDependencies:
+      - typescript
+      - zod
 
   webauthx@https://pkg.pr.new/wevm/webauthx@c77acdc(typescript@5.9.3)(zod@4.3.6):
     dependencies:
