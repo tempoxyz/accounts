@@ -8,7 +8,6 @@
     "check:types:examples": "pnpm --filter *-example check:types",
     "dev": "pnpm dev:embed & pnpm dev:playground",
     "dev:hosts": "./scripts/dev:hosts.sh",
-    "dev:auth": "pnpm --filter auth dev",
     "dev:embed": "VITE_TEMPO_ENV=moderato pnpm --filter tempo-app dev:ssl",
     "dev:playground": "pnpm --filter playground dev",
     "example:wagmi": "pnpm --filter wagmi dev & pnpm dev:embed",
