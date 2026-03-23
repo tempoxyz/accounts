@@ -36,8 +36,12 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     const base = local({
       async createAccount(parameters) {
         const { options } = await ceremony.getRegistrationOptions(parameters)
+        const rpId = options.publicKey?.rp.id
+        if (!rpId) throw new Error('rpId is required')
         const credential = await Registration.create({ options })
-        const { publicKey } = await ceremony.verifyRegistration(credential)
+        const { publicKey } = await ceremony.verifyRegistration(credential, {
+          name: parameters.name,
+        })
         await storage.setItem('lastCredentialId', credential.id)
         const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
         return {
@@ -45,7 +49,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
             {
               address: account.address,
               keyType: 'webAuthn',
-              credential: { id: credential.id, publicKey },
+              credential: { id: credential.id, publicKey, rpId },
             },
           ],
         }
@@ -55,19 +59,25 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
 
         const credentialId = selectAccount
           ? undefined
-          : (parameters?.credentialId ?? (await storage.getItem<string>('lastCredentialId')) ?? undefined)
+          : (parameters?.credentialId ??
+            (await storage.getItem<string>('lastCredentialId')) ??
+            undefined)
 
         const { options } = await ceremony.getAuthenticationOptions({
           ...parameters,
           challenge: digest,
           credentialId,
         })
+
+        const rpId = options.publicKey?.rpId
+        if (!rpId) throw new Error('rpId is required')
+
         const response = await Authentication.sign({ options })
         const { publicKey } = await ceremony.verifyAuthentication(response)
 
         await storage.setItem('lastCredentialId', response.id)
-        
-        const account = Account.fromWebAuthnP256({ id: response.id, publicKey })
+
+        const account = Account.fromWebAuthnP256({ id: response.id, publicKey }, { rpId })
 
         const signature = digest
           ? SignatureEnvelope.serialize(
@@ -86,7 +96,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
             {
               address: account.address,
               keyType: 'webAuthn',
-              credential: { id: response.id, publicKey },
+              credential: { id: response.id, publicKey, rpId },
             },
           ],
           signature,
@@ -94,7 +104,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       },
     })(parameters)
 
-    return base
+    return { ...base, persistAccounts: true }
   })
 }
 

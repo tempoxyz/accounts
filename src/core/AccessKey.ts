@@ -102,7 +102,7 @@ export function revoke(options: revoke.Options): void {
 export declare namespace revoke {
   type Options = {
     /** Root account address. */
-    address: string
+    address: Address.Address
     /** Reactive state store. */
     store: Store.Store
   }

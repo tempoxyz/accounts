@@ -16,7 +16,7 @@ export type State = {
   accessKeys: readonly AccessKey[]
   /** Connected accounts. */
   accounts: readonly Account[]
-  /** Index of the active account in {@link State.accounts}. */
+  /** Index of the active account. */
   activeAccount: number
   /** Active chain ID. */
   chainId: number
@@ -34,6 +34,8 @@ export type Store = Mutate<
 export type Options = {
   /** Initial chain ID. */
   chainId: number
+  /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
+  persistCredentials?: boolean | undefined
   /** Storage adapter for persistence. */
   storage?: Storage.Storage | undefined
 }
@@ -62,6 +64,7 @@ export type QueuedRequest<result = unknown> = OneOf<
 export function create(options: Options): Store {
   const {
     chainId,
+    persistCredentials = true,
     storage = typeof window !== 'undefined'
       ? Storage.idb({ key: 'tempo' })
       : Storage.memory({ key: 'tempo' }),
@@ -81,8 +84,16 @@ export function create(options: Options): Store {
           merge(persisted, current) {
             const state = persisted as State
             return {
-              ...current,
               ...state,
+              ...current,
+              // Preserve in-memory credentials when persisted accounts only have addresses.
+              accounts:
+                state.accounts?.map((persisted) => {
+                  const account = current.accounts.find(
+                    (a) => a.address.toLowerCase() === persisted.address.toLowerCase(),
+                  )
+                  return account ?? persisted
+                }) ?? current.accounts,
               accessKeys: state.accessKeys ?? current.accessKeys,
               chainId: state.chainId ?? current.chainId,
             }
@@ -90,9 +101,9 @@ export function create(options: Options): Store {
           name: 'store',
           partialize: (state) =>
             ({
-              accessKeys: state.accessKeys,
               accounts: state.accounts,
               activeAccount: state.activeAccount,
+              ...(persistCredentials ? { accessKeys: state.accessKeys } : {}),
               chainId: state.chainId,
             }) as unknown as State,
           storage,

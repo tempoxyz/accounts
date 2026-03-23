@@ -1,6 +1,7 @@
 import { Hex } from 'ox'
 import * as Provider from 'ox/Provider'
 import * as RpcResponse from 'ox/RpcResponse'
+import { useStore } from 'zustand'
 import type { StoreApi } from 'zustand/vanilla'
 import { createStore } from 'zustand/vanilla'
 
@@ -12,6 +13,10 @@ import type * as Store from '../core/Store.js'
 export type State = {
   /** Whether the dialog is rendered in an iframe or popup. */
   mode: 'iframe' | 'popup' | undefined
+  /** Trusted host origin from MessageEvent. */
+  origin: string | undefined
+  /** Whether the dialog is ready to display content. */
+  ready: boolean
   /** Queued RPC requests received from the host. */
   requests: readonly Store.QueuedRequest[]
 }
@@ -31,16 +36,16 @@ export type Remote = {
    */
   store: StoreApi<State>
   /**
-   * Subscribes to dialog-worthy RPC requests from the parent context.
+   * Subscribes to user-facing RPC requests from the parent context.
    *
    * Syncs the host's active chain, updates the remote store, and invokes
    * the callback with the first pending request (or `null` when the queue
-   * is cleared, signalling the dialog should close).
+   * is cleared, signalling the UI should close).
    *
-   * @param cb - Callback receiving the dialog request payload.
+   * @param cb - Callback receiving the request payload.
    * @returns Unsubscribe function.
    */
-  onDialogRequest: (cb: (payload: onDialogRequest.Payload) => void) => () => void
+  onUserRequest: (cb: (payload: onUserRequest.Payload) => void | Promise<void>) => () => void
   /**
    * Subscribes to incoming RPC requests from the parent context.
    * Updates the remote store with the received requests and syncs the
@@ -80,7 +85,7 @@ export type Remote = {
   respond: (request: Store.QueuedRequest['request'], options?: respond.Options) => Promise<unknown>
 }
 
-export declare namespace onDialogRequest {
+export declare namespace onUserRequest {
   type Payload = {
     /** Active account on the host side. */
     account: { address: string } | undefined
@@ -105,15 +110,20 @@ export declare namespace respond {
 /** Creates a remote context for the dialog app. */
 export function create(options: create.Options): Remote {
   const { messenger, provider } = options
-  const store = createStore<State>(() => ({ mode: undefined, requests: [] }))
+  const store = createStore<State>(() => ({
+    mode: undefined,
+    origin: undefined,
+    ready: false,
+    requests: [],
+  }))
 
   return {
     messenger,
     provider,
     store,
 
-    onDialogRequest(cb) {
-      return this.onRequests((requests, event, { account }) => {
+    onUserRequest(cb) {
+      return this.onRequests(async (requests, event, { account }) => {
         // Sync the active account with the host.
         if (account) {
           const state = provider.store.getState()
@@ -125,11 +135,16 @@ export function create(options: create.Options): Remote {
         }
 
         const pending = requests.find((r) => r.status === 'pending')
-        cb({
+        store.setState({
+          origin: event.origin,
+          ready: false,
+        })
+        await cb({
           account,
           origin: event.origin,
           request: pending?.request ?? null,
         })
+        if (pending) store.setState({ ready: true })
       })
     },
 
@@ -187,6 +202,7 @@ export function create(options: create.Options): Remote {
     },
 
     rejectAll(error) {
+      store.setState({ ready: false })
       const requests = store.getState().requests
       for (const queued of requests) this.reject(queued.request, error)
     },
@@ -234,4 +250,11 @@ export declare namespace create {
     /** Provider to execute RPC requests against. */
     provider: CoreProvider.Provider
   }
+}
+
+/** React hook to select state from a remote context's store. */
+export function useState(remote: Remote): State
+export function useState<selected>(remote: Remote, selector: (state: State) => selected): selected
+export function useState(remote: Remote, selector?: (state: State) => unknown) {
+  return useStore(remote.store, selector as never)
 }

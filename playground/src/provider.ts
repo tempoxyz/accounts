@@ -14,7 +14,7 @@ export function createProvider(adapterType: AdapterType) {
     return Provider.create({
       adapter: tempoWallet({
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
-        host: import.meta.env.VITE_AUTH_HOST ?? 'https://localhost:5174',
+        host: import.meta.env.VITE_AUTH_HOST ?? 'https://app.moderato.tempo.local:3001/embed',
       }),
       testnet: true,
     })

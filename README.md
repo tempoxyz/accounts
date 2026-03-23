@@ -64,17 +64,17 @@ export const wagmiConfig = createConfig({
 
 | Adapter          | Description                                                                        |
 | ---------------- | ---------------------------------------------------------------------------------- |
-| `tempoWallet` 🚧 | Adapter for the Tempo Wallet dialog (an embedded iframe/popup dialog).             |
+| `tempoWallet`    | Adapter for the Tempo Wallet dialog (an embedded iframe/popup dialog).             |
 | `webAuthn`       | App-bound passkey accounts using WebAuthn registration and authentication flows.   |
 | `local`          | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
 
 ## Development
 
 ```sh
-pnpm dev              # start auth + playground dev servers
-pnpm dev:auth         # start auth app only
+pnpm dev              # start Tempo Wallet embed + playground dev servers
+pnpm dev:embed        # start Tempo Wallet embed only
 pnpm dev:playground   # start playground app only
-pnpm dev:hosts        # start auth + playground instances on different TLDs
+pnpm dev:hosts        # start embed + playground instances on different TLDs
 pnpm build            # build library
 pnpm check            # lint + format
 pnpm check:types      # type checks
@@ -83,7 +83,7 @@ pnpm test             # run tests
 
 > `pnpm dev:hosts` starts three dev servers on different domains for cross-origin testing:
 >
-> - `https://auth.local:5174`
+> - `https://app.moderato.tempo.local:3001`
 > - `https://playground.a:5173`
 > - `https://playground.b:5175`
 
