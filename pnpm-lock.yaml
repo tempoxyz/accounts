@@ -52,8 +52,8 @@ importers:
         specifier: ~0.14.7
         version: 0.14.7(typescript@5.9.3)(zod@4.3.6)
       webauthx:
-        specifier: https://pkg.pr.new/wevm/webauthx@c77acdc
-        version: https://pkg.pr.new/wevm/webauthx@c77acdc(typescript@5.9.3)(zod@4.3.6)
+        specifier: ~0.1.0
+        version: 0.1.0(typescript@5.9.3)(zod@4.3.6)
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -6773,10 +6773,6 @@ packages:
   webauthx@0.1.0:
     resolution: {integrity: sha512-Z43YHetVeXdV5/4+YqKSz+cAflpbMmxSMz//kXEb2u3ZUqVbPG1zrM+Zp7KaME/QgUFGhGkAE2XHwqCAXnU75g==}
 
-  webauthx@https://pkg.pr.new/wevm/webauthx@c77acdc:
-    resolution: {tarball: https://pkg.pr.new/wevm/webauthx@c77acdc}
-    version: 0.1.0
-
   webidl-conversions@3.0.1:
     resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
 
@@ -13240,13 +13236,6 @@ snapshots:
   web-vitals@5.1.0: {}
 
   webauthx@0.1.0(typescript@5.9.3)(zod@4.3.6):
-    dependencies:
-      ox: 0.14.7(typescript@5.9.3)(zod@4.3.6)
-    transitivePeerDependencies:
-      - typescript
-      - zod
-
-  webauthx@https://pkg.pr.new/wevm/webauthx@c77acdc(typescript@5.9.3)(zod@4.3.6):
     dependencies:
       ox: 0.14.7(typescript@5.9.3)(zod@4.3.6)
     transitivePeerDependencies:
