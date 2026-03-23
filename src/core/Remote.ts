@@ -36,16 +36,16 @@ export type Remote = {
    */
   store: StoreApi<State>
   /**
-   * Subscribes to dialog-worthy RPC requests from the parent context.
+   * Subscribes to user-facing RPC requests from the parent context.
    *
    * Syncs the host's active chain, updates the remote store, and invokes
    * the callback with the first pending request (or `null` when the queue
-   * is cleared, signalling the dialog should close).
+   * is cleared, signalling the UI should close).
    *
-   * @param cb - Callback receiving the dialog request payload.
+   * @param cb - Callback receiving the request payload.
    * @returns Unsubscribe function.
    */
-  onDialogRequest: (cb: (payload: onDialogRequest.Payload) => void | Promise<void>) => () => void
+  onUserRequest: (cb: (payload: onUserRequest.Payload) => void | Promise<void>) => () => void
   /**
    * Subscribes to incoming RPC requests from the parent context.
    * Updates the remote store with the received requests and syncs the
@@ -85,7 +85,7 @@ export type Remote = {
   respond: (request: Store.QueuedRequest['request'], options?: respond.Options) => Promise<unknown>
 }
 
-export declare namespace onDialogRequest {
+export declare namespace onUserRequest {
   type Payload = {
     /** Active account on the host side. */
     account: { address: string } | undefined
@@ -122,7 +122,7 @@ export function create(options: create.Options): Remote {
     provider,
     store,
 
-    onDialogRequest(cb) {
+    onUserRequest(cb) {
       return this.onRequests(async (requests, event, { account }) => {
         // Sync the active account with the host.
         if (account) {

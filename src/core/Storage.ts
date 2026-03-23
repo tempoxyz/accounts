@@ -66,8 +66,7 @@ export function cookie(options: cookie.Options = {}): Storage {
 
   function flatten(prefix: string, value: unknown, result: [string, string][] = []) {
     if (Array.isArray(value)) {
-      for (let i = 0; i < value.length; i++)
-        flatten(`${prefix}[${i}]`, value[i], result)
+      for (let i = 0; i < value.length; i++) flatten(`${prefix}[${i}]`, value[i], result)
       // Store length so we know how many indices to reconstruct.
       result.push([`${prefix}.__length`, Json.stringify(value.length)])
     } else if (value !== null && typeof value === 'object') {
