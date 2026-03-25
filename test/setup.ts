@@ -1,6 +1,6 @@
 import { parseUnits } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
-import { afterAll, beforeAll } from 'vite-plus/test'
+import { afterAll, beforeAll } from 'vp/test'
 
 import { accounts, getClient, nodeEnv, rpcUrl, webAuthnAccounts } from './config.js'
 

@@ -4,7 +4,11 @@ import { tempoModerato } from 'wagmi/chains'
 
 export const config = createConfig({
   chains: [tempoModerato],
-  connectors: [tempoWallet({ host: 'https://localhost:5174' })],
+  connectors: [
+    tempoWallet({
+      host: import.meta.env.VITE_AUTH_HOST ?? 'https://app.moderato.tempo.local:3001/embed',
+    }),
+  ],
   multiInjectedProviderDiscovery: false,
   transports: {
     [tempoModerato.id]: http(),

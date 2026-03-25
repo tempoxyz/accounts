@@ -24,10 +24,25 @@ export function validate<const schema extends z.ZodMiniType>(
       })
     throw new Provider.ProviderRpcError(
       -32602,
-      `Invalid params: ${result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ')}`,
+      `Invalid params: ${formatIssues(result.error.issues)}`,
     )
   }
   return { ...(value as any), _decoded: result.data } as never
+}
+
+function formatIssues(issues: readonly z.core.$ZodIssue[]): string {
+  return issues
+    .flatMap((issue) => {
+      if (issue.code === 'invalid_union' && issue.errors.length > 0)
+        return issue.errors.flatMap((branch) =>
+          branch.map(
+            (i) =>
+              `${[...issue.path, ...i.path].join('.')}: ${i.code === 'invalid_union' && i.errors.length > 0 ? formatIssues([i]) : i.message}`,
+          ),
+        )
+      return [`${issue.path.join('.')}: ${issue.message}`]
+    })
+    .join(', ')
 }
 
 /**

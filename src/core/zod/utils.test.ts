@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
 import * as u from './utils.js'

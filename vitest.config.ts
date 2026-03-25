@@ -1,6 +1,6 @@
 import { join } from 'node:path'
-import { defineConfig } from 'vite-plus'
-import { playwright } from 'vite-plus/test/browser-playwright'
+import { defineConfig } from 'vp'
+import { playwright } from 'vp/test/browser-playwright'
 
 export default defineConfig({
   resolve: {

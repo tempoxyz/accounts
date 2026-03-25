@@ -1,6 +1,6 @@
 import type { RpcSchema } from 'ox'
 import type { Hex } from 'viem'
-import { describe, expectTypeOf, test } from 'vitest'
+import { describe, expectTypeOf, test } from 'vp/test'
 
 import type * as Schema from './Schema.js'
 import type * as Rpc from './zod/rpc.js'

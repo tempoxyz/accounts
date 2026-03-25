@@ -1,7 +1,7 @@
 import { WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { Account as TempoAccount } from 'viem/tempo'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'vp/test'
 
 import { accounts } from '../../test/config.js'
 import * as AccessKey from './AccessKey.js'

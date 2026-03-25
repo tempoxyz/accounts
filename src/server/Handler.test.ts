@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import type { RpcRequest } from 'ox'
 import { sendTransactionSync } from 'viem/actions'
 import { withFeePayer } from 'viem/tempo'
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, chain, getClient, http } from '../../test/config.js'
 import { createServer, type Server } from '../../test/utils.js'

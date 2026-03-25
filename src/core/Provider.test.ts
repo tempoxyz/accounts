@@ -12,7 +12,7 @@ import {
 } from 'viem/actions'
 import { tempo, tempoModerato } from 'viem/chains'
 import { Account as TempoAccount, Actions, Addresses } from 'viem/tempo'
-import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 
 import { headlessWebAuthn, secp256k1 } from '../../test/adapters.js'
 import { accounts, chain, getClient, http } from '../../test/config.js'
@@ -27,7 +27,7 @@ const adapters = [
   { name: 'secp256k1', adapter: secp256k1 },
 ] as const
 
-describe.each(adapters)('$name', ({ adapter }) => {
+describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
   const transferCall = Actions.token.transfer.call({
     to: '0x0000000000000000000000000000000000000001',
     token: Addresses.pathUsd,

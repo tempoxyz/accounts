@@ -1,5 +1,5 @@
-import { beforeAll } from 'vite-plus/test'
-import { cdp } from 'vite-plus/test/browser'
+import { beforeAll } from 'vp/test'
+import { cdp } from 'vp/test/browser'
 
 beforeAll(async () => {
   const session = cdp()

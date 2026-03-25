@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Dialog from './Dialog.js'
 import * as Storage from './Storage.js'

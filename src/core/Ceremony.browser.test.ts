@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'vp/test'
 import { Registration, Authentication } from 'webauthx/client'
 
 import { hooksUrl, url as webauthnUrl } from '../../test/webauthn.constants.js'

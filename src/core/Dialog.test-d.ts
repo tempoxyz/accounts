@@ -1,4 +1,4 @@
-import { describe, expectTypeOf, test } from 'vitest'
+import { describe, expectTypeOf, test } from 'vp/test'
 
 import type * as Dialog from './Dialog.js'
 import type * as Store from './Store.js'

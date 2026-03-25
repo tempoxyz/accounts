@@ -33,7 +33,6 @@
     "@types/react-dom": "catalog:",
     "@typescript/native-preview": "7.0.0-dev.20260303.1",
     "@vitejs/plugin-react": "catalog:",
-    "@vitest/coverage-v8": "^4.0.18",
     "@wagmi/core": "catalog:",
     "elysia": "^1.4.27",
     "express": "^5.2.1",
@@ -46,7 +45,7 @@
     "testcontainers": "^11.12.0",
     "typescript": "catalog:",
     "viem": "catalog:",
-    "vite-plus": "catalog:",
+    "vp": "catalog:",
     "zile": "^0.0.22"
   },
   "simple-git-hooks": {

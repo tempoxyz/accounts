@@ -2,7 +2,7 @@ import { Mppx as ServerMppx, tempo } from 'mppx/server'
 import { parseUnits } from 'viem'
 import { Addresses } from 'viem/tempo'
 import { Actions } from 'viem/tempo'
-import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 
 import { headlessWebAuthn } from '../../test/adapters.js'
 import { accounts, chain, getClient } from '../../test/config.js'

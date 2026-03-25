@@ -3,7 +3,7 @@ import { Hex } from 'ox'
 import { type Address, parseUnits } from 'viem'
 import { verifyHash, verifyMessage, verifyTypedData } from 'viem/actions'
 import { Actions, Addresses } from 'viem/tempo'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'vp/test'
 
 import { accounts, chain, getClient } from '../../test/config.js'
 import { url as webauthnUrl } from '../../test/webauthn.constants.js'

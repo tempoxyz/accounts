@@ -1,5 +1,5 @@
 import { tempoLocalnet } from 'viem/chains'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'vp/test'
 
 import {
   accounts as core_accounts,

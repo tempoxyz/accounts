@@ -1,5 +1,5 @@
 import type { RpcSchema } from 'ox'
-import { describe, expectTypeOf, test } from 'vitest'
+import { describe, expectTypeOf, test } from 'vp/test'
 
 import type * as Schema from './Schema.js'
 

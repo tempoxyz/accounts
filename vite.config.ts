@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite-plus'
+import { defineConfig } from 'vp'
 
 export default defineConfig({
   fmt: {
