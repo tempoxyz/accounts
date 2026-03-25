@@ -6,7 +6,7 @@ import { afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, http } from '../../test/config.js'
 import { interact } from '../../test/utils.browser.js'
-import { tempoWallet } from './adapters/tempoWallet.js'
+import { dialog } from './adapters/dialog.js'
 import * as Expiry from './Expiry.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
@@ -46,7 +46,7 @@ const transferCall = Actions.token.transfer.call({
 
 function getProvider(options: Partial<Provider.create.Options> = {}) {
   return Provider.create({
-    adapter: tempoWallet({ host }),
+    adapter: dialog({ host }),
     chains: [chain],
     storage: Storage.idb({ key: crypto.randomUUID() }),
     ...options,

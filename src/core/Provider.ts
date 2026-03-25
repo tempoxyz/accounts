@@ -8,7 +8,7 @@ import * as z from 'zod/mini'
 
 import * as Account from './Account.js'
 import type * as Adapter from './Adapter.js'
-import { tempoWallet } from './adapters/tempoWallet.js'
+import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Schema from './Schema.js'
@@ -44,7 +44,7 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
  */
 export function create(options: create.Options = {}): create.ReturnType {
   const {
-    adapter = tempoWallet(),
+    adapter = dialog(),
     chains = [tempo, tempoModerato],
     feePayerUrl,
     persistCredentials,
@@ -289,11 +289,15 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const { accounts, activeAccount } = store.getState()
                     const account = decoded?.account ?? accounts[activeAccount]?.address
                     if (!account)
-                      throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
+                      throw new ox_Provider.DisconnectedError({
+                        message: 'No accounts connected.',
+                      })
                     const tokens = decoded?.tokens
                     // TODO: hook up to indexer
                     if (!tokens || tokens.length === 0)
-                      throw new RpcResponse.InvalidParamsError({ message: '`tokens` is required.' })
+                      throw new RpcResponse.InvalidParamsError({
+                        message: '`tokens` is required.',
+                      })
                     const client = Client.fromChainId(decoded?.chainId, { chains, store })
                     return (await Promise.all(
                       tokens.map(async (token) => {

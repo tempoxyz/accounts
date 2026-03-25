@@ -1,6 +1,5 @@
 import { join } from 'node:path'
 import { defineConfig } from 'vp'
-import { playwright } from 'vp/test/browser-playwright'
 
 export default defineConfig({
   resolve: {
@@ -46,28 +45,6 @@ export default defineConfig({
       //     },
       //   },
       // },
-      {
-        extends: true,
-        test: {
-          name: 'auth',
-          include: ['./auth/**/*.test.ts', '!./auth/**/*.browser.test.ts'],
-        },
-      },
-      {
-        extends: true,
-        test: {
-          name: 'auth/browser',
-          include: ['./auth/**/*.browser.test.ts'],
-          browser: {
-            enabled: true,
-            headless: true,
-            api: 63316,
-            instances: [{ browser: 'chromium' }],
-            provider: playwright(),
-            screenshotFailures: false,
-          },
-        },
-      },
     ],
   },
 })

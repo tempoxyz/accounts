@@ -15,7 +15,7 @@ import {
 } from './provider.js'
 
 export function App() {
-  const [adapterType, setAdapterType] = useState<AdapterType>('auth')
+  const [adapterType, setAdapterType] = useState<AdapterType>('tempoWallet')
   const [, rerender] = useState(0)
 
   function onSwitch(type: AdapterType) {
@@ -30,17 +30,18 @@ export function App() {
 
       <h2>Adapter</h2>
       <select value={adapterType} onChange={(e) => onSwitch(e.target.value as AdapterType)}>
-        <option value="auth">auth</option>
+        <option value="tempoWallet">tempoWallet</option>
+        <option value="dialogRefImpl">dialogRefImpl</option>
         <option value="webAuthn">webAuthn</option>
         <option value="secp256k1">secp256k1</option>
       </select>
-      {adapterType === 'auth' && (
+      {(adapterType === 'tempoWallet' || adapterType === 'dialogRefImpl') && (
         <>
           {' '}
           <select
             value={dialogMode}
             onChange={(e) => {
-              switchDialogMode(e.target.value as DialogMode)
+              switchDialogMode(e.target.value as DialogMode, adapterType)
               rerender((n) => n + 1)
             }}
           >

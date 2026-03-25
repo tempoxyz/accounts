@@ -44,16 +44,16 @@ const client = provider.getClient()
 
 ### Wagmi
 
-Use the `tempoWallet` Wagmi connector to allow your Wagmi application to enable the Tempo Wallet dialog.
+Use the `dialog` Wagmi connector to allow your Wagmi application to enable the Tempo Wallet dialog.
 
 ```tsx
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
-import { tempoWallet } from 'tempodk/wagmi'
+import { dialog } from 'tempodk/wagmi'
 
 export const wagmiConfig = createConfig({
   chains: [tempo],
-  connectors: [tempoWallet()],
+  connectors: [dialog()],
   transports: {
     [tempo.id]: http(),
   },
@@ -62,17 +62,18 @@ export const wagmiConfig = createConfig({
 
 ## Adapters
 
-| Adapter       | Description                                                                        |
-| ------------- | ---------------------------------------------------------------------------------- |
-| `tempoWallet` | Adapter for the Tempo Wallet dialog (an embedded iframe/popup dialog).             |
-| `webAuthn`    | App-bound passkey accounts using WebAuthn registration and authentication flows.   |
-| `local`       | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
+| Adapter                  | Description                                                                        |
+| ------------------------ | ---------------------------------------------------------------------------------- |
+| `dialog` / `tempoWallet` | Adapter for the Tempo Wallet dialog (an embedded iframe/popup dialog).             |
+| `webAuthn`               | App-bound passkey accounts using WebAuthn registration and authentication flows.   |
+| `local`                  | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
 
 ## Development
 
 ```sh
-pnpm dev              # start Tempo Wallet embed + playground dev servers
+pnpm dev              # start embed + embed-ref + playground dev servers
 pnpm dev:embed        # start Tempo Wallet embed only
+pnpm dev:embed-ref    # start reference embed implementation only (port 5174)
 pnpm dev:playground   # start playground app only
 pnpm dev:hosts        # start embed + playground instances on different TLDs
 pnpm build            # build library
@@ -80,6 +81,12 @@ pnpm check            # lint + format
 pnpm check:types      # type checks
 pnpm test             # run tests
 ```
+
+### Embed Reference Implementation
+
+The `embed-ref/` directory contains a minimal, unstyled reference implementation of the embed dialog app. It demonstrates how to build a custom embed using tempodk's `Remote` API.
+
+Select `dialogRefImpl` in the playground's adapter dropdown to test against it.
 
 > `pnpm dev:hosts` starts three dev servers on different domains for cross-origin testing:
 >

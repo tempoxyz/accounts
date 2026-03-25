@@ -1,20 +1,29 @@
 import { Mppx } from 'mppx/client'
-import { Ceremony, Dialog, local, Provider, tempoWallet, webAuthn } from 'tempodk'
+import { Ceremony, dialog, Dialog, local, Provider, webAuthn } from 'tempodk'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
-export type AdapterType = 'secp256k1' | 'webAuthn' | 'auth'
+export type AdapterType = 'secp256k1' | 'webAuthn' | 'tempoWallet' | 'dialogRefImpl'
 export type DialogMode = 'iframe' | 'popup'
 
 export let dialogMode: DialogMode = 'iframe'
-export let provider = createProvider('auth')
+export let provider = createProvider('tempoWallet')
 
 export function createProvider(adapterType: AdapterType) {
-  if (adapterType === 'auth')
+  if (adapterType === 'tempoWallet')
     return Provider.create({
-      adapter: tempoWallet({
+      adapter: dialog({
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host: import.meta.env.VITE_AUTH_HOST ?? 'https://app.moderato.tempo.local:3001/embed',
+      }),
+      testnet: true,
+    })
+
+  if (adapterType === 'dialogRefImpl')
+    return Provider.create({
+      adapter: dialog({
+        dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
+        host: 'https://localhost:5174',
       }),
       testnet: true,
     })
@@ -49,8 +58,8 @@ export function switchAdapter(adapterType: AdapterType) {
   provider = createProvider(adapterType)
 }
 
-export function switchDialogMode(mode: DialogMode) {
+export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 'tempoWallet') {
   dialogMode = mode
   Mppx.restore()
-  provider = createProvider('auth')
+  provider = createProvider(adapterType)
 }
