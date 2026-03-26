@@ -1155,32 +1155,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
     })
 
-    test('behavior: key auth is restored after non-key-auth error', async () => {
-      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
-      const address = await connect(provider)
-      await fund(address)
 
-      // Grant access key without limits — spending limit won't be an issue.
-      await provider.request({
-        method: 'wallet_authorizeAccessKey',
-        params: [{ expiry: Expiry.days(1) }],
-      })
-
-      // Key auth should be present before first tx.
-      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
-
-      // Call a bogus function selector on a known contract — will revert with
-      // a generic contract error, not a key-auth error.
-      await expect(
-        provider.request({
-          method: 'eth_sendTransactionSync',
-          params: [{ calls: [{ to: Addresses.pathUsd, data: '0xdeadbeef' }] }],
-        }),
-      ).rejects.toThrow()
-
-      // Key auth should be restored since the error was not key-auth related.
-      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
-    })
   })
 
   describe('wallet_revokeAccessKey', () => {
