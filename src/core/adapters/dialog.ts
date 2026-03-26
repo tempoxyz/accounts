@@ -27,7 +27,7 @@ import * as Rpc from '../zod/rpc.js'
 export function dialog(options: dialog.Options = {}): Adapter.Adapter {
   const {
     dialog = Dialog.isSafari() ? Dialog.popup() : Dialog.iframe(),
-    host = 'https://auth.tempo.xyz',
+    host = 'https://wallet.tempo.xyz/embed',
     icon,
     name = 'Tempo',
     rdns = 'xyz.tempo',
@@ -367,7 +367,7 @@ export declare namespace dialog {
   type Options = {
     /** Dialog to use for the embed app. @default `Dialog.iframe()` (or `Dialog.popup()` in Safari) */
     dialog?: Dialog.Dialog | undefined
-    /** URL of the embed app. @default `'https://auth.tempo.xyz'` */
+    /** URL of the embed app. @default `'https://wallet.tempo.xyz/embed'` */
     host?: string | undefined
     /** Data URI of the provider icon. */
     icon?: `data:image/${string}` | undefined
