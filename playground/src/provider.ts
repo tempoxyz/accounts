@@ -16,7 +16,7 @@ export function createProvider(adapterType: AdapterType) {
     return Provider.create({
       adapter: dialog({
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
-        host: import.meta.env.VITE_DIALOG_HOST ?? 'https://app.moderato.tempo.local:3001/embed',
+        host: import.meta.env.VITE_DIALOG_HOST || 'https://app.moderato.tempo.local:3001/embed',
       }),
       testnet: isTestnet,
     })

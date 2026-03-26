@@ -110,10 +110,12 @@ export declare namespace respond {
 /** Creates a remote context for the dialog app. */
 export function create(options: create.Options): Remote {
   const { messenger, provider } = options
+  const ready =
+    typeof window !== 'undefined' && !new URLSearchParams(window.location.search).get('mode')
   const store = createStore<State>(() => ({
     mode: undefined,
     origin: undefined,
-    ready: false,
+    ready,
     requests: [],
   }))
 
