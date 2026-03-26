@@ -1,11 +1,11 @@
-import { dialog } from 'tempodk/wagmi'
+import { tempoWallet } from 'tempodk/wagmi'
 import { createConfig, http } from 'wagmi'
 import { tempoModerato } from 'wagmi/chains'
 
 export const config = createConfig({
   chains: [tempoModerato],
   connectors: [
-    dialog({
+    tempoWallet({
       host: import.meta.env.VITE_AUTH_HOST ?? 'https://app.moderato.tempo.local:3001/embed',
     }),
   ],
