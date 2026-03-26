@@ -163,7 +163,7 @@ export declare namespace local {
 export function server(options: server.Options): Ceremony {
   const { url } = options
 
-  async function request(path: string, body: unknown) {
+  async function request<returnType>(path: string, body: unknown): Promise<returnType> {
     const response = await fetch(`${url}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -171,7 +171,7 @@ export function server(options: server.Options): Ceremony {
     })
     const json = await response.json()
     if (!response.ok) throw new Error((json as { error?: string }).error ?? 'Request failed')
-    return json
+    return json as returnType
   }
 
   return from({

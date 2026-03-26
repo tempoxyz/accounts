@@ -36,7 +36,7 @@ export function compose(handlers: Handler[], options: compose.Options = {}): Han
 
       url.pathname = url.pathname.replace(path, '')
       for (const handler of handlers) {
-        const request = new Request(url, context.request.clone())
+        const request = new Request(url, context.request.clone() as RequestInit)
         const response = await handler.fetch(request)
         if (response.status !== 404) return response
       }
@@ -549,7 +549,7 @@ async function mergeResponse(
   hook?: Response | void,
 ): Promise<Response> {
   if (!hook) return Response.json(json)
-  const extra = await hook.json().catch(() => ({}))
+  const extra = (await hook.json().catch(() => ({}))) as Record<string, unknown>
   const headers = new Headers(hook.headers)
   headers.set('content-type', 'application/json')
   return new Response(JSON.stringify({ ...json, ...extra }), {

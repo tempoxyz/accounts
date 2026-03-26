@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "check:types": "tsc -b",
     "dev": "vp dev",
     "build": "tsc -b && vp build",
     "gen:types": "wrangler types",

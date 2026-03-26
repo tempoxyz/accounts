@@ -4,8 +4,7 @@
     "changeset:publish": "zile publish:prepare && changeset publish && zile publish:post",
     "changeset:version": "changeset version && pnpm check",
     "check": "vp lint --fix --ignore-pattern package.json --ignore-pattern embed && vp fmt",
-    "check:types": "tsc -b",
-    "check:types:examples": "pnpm --filter *-example check:types",
+    "check:types": "tsc -b && pnpm --filter './examples/*' check:types",
     "dev": "pnpm dev:embed & pnpm dev:embed-ref & pnpm dev:playground",
     "dev:hosts": "./scripts/dev:hosts.sh",
     "dev:embed": "VITE_TEMPO_ENV=moderato pnpm --filter tempo-app dev:ssl",
@@ -47,7 +46,7 @@
     "typescript": "catalog:",
     "viem": "catalog:",
     "vp": "catalog:",
-    "zile": "^0.0.22"
+    "zile": "^0.0.23"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm check"
@@ -103,18 +102,18 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "src": "./src/index.ts",
       "types": "./dist/index.d.ts",
+      "src": "./src/index.ts",
       "default": "./dist/index.js"
     },
     "./server": {
-      "src": "./src/server/index.ts",
       "types": "./dist/server/index.d.ts",
+      "src": "./src/server/index.ts",
       "default": "./dist/server/index.js"
     },
     "./wagmi": {
-      "src": "./src/wagmi/index.ts",
       "types": "./dist/wagmi/index.d.ts",
+      "src": "./src/wagmi/index.ts",
       "default": "./dist/wagmi/index.js"
     }
   }
