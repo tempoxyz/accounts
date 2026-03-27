@@ -1,0 +1,30 @@
+{
+  "name": "cli-server",
+  "version": "0.0.0",
+  "type": "module",
+  "imports": {
+    "#*": "./src/*",
+    "#package.json": "./package.json",
+    "#wrangler.json": "./wrangler.json"
+  },
+  "scripts": {
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview",
+    "check:types": "tsc --noEmit",
+    "types": "wrangler types --env-interface CloudflareBindings"
+  },
+  "dependencies": {
+    "hono": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "catalog:",
+    "@cloudflare/workers-types": "^4.20260317.1",
+    "@types/node": "catalog:",
+    "@vitejs/devtools": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

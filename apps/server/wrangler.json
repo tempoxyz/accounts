@@ -1,0 +1,19 @@
+{
+  "$schema": "https://esm.sh/wrangler/config-schema.json",
+  "name": "h0n0",
+  "keep_vars": true,
+  "workers_dev": true,
+  "main": "./src/main.ts",
+  "compatibility_date": "2026-03-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "placement": {
+    "mode": "smart"
+  },
+  "dev": {
+    "port": 6969
+  },
+  "observability": {
+    "enabled": true
+  },
+  "preview_urls": true
+}
