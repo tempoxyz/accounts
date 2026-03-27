@@ -8,6 +8,7 @@ import { Actions } from 'viem/tempo'
 import {
   type AdapterType,
   type DialogMode,
+  type ProviderValue,
   dialogMode,
   provider,
   switchAdapter,
@@ -120,9 +121,10 @@ function Faucet() {
 }
 
 function ProviderState() {
+  const p = provider as ProviderValue
   const state = useSyncExternalStore(
-    (cb) => provider.store.subscribe(cb),
-    () => provider.store.getState(),
+    (cb) => p.store.subscribe(cb),
+    () => p.store.getState(),
   )
   return (
     <details>

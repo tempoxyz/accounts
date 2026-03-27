@@ -111,6 +111,11 @@
       "src": "./src/server/index.ts",
       "default": "./dist/server/index.js"
     },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "src": "./src/cli/index.ts",
+      "default": "./dist/cli/index.js"
+    },
     "./wagmi": {
       "types": "./dist/wagmi/index.d.ts",
       "src": "./src/wagmi/index.ts",

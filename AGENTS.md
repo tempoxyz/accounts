@@ -40,6 +40,10 @@
 
 - **JSDoc on all exports** — every exported function, type, and constant gets a JSDoc comment. Type properties get JSDoc too. Namespace types (e.g. `declare namespace create { type Options }`) get JSDoc too. Doc-driven development: write the JSDoc before or alongside the implementation, not after.
 
+## Protocol Conventions
+
+- **CLI auth device codes are raw in protocol** — store, return, and query device codes as raw 8-character values (for example `ABCDEFGH`). Only apply hyphen formatting (`ABCD-EFGH`) when rendering for humans.
+
 ## Type Conventions
 
 - **No eager type definitions** — don't extract a named type until it's used in more than one place. Inline the shape (e.g. `{ address: Address }[]`) until a shared type is clearly needed.
@@ -51,6 +55,7 @@
 - **Optimize for change** — code that is easy to change beats code that is cleverly DRY. We don't know future requirements.
 - **No flags or mode parameters** — if an abstraction needs `if` branches or boolean params to handle different call sites, it's the wrong abstraction. Inline it.
 - **Start concrete, extract later** — begin inline. Extract only when a clear pattern emerges across multiple real usages.
+- **Keep server schemas out of `src/core/zod/rpc.ts`** — server-only modules must not import `src/core/zod/rpc.ts`. That file depends on `src/core/Schema.ts`, so reusing it from `src/server/*` can create runtime import cycles through provider schema initialization.
 
 ## Testing Conventions
 

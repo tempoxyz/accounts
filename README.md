@@ -58,6 +58,60 @@ export const wagmiConfig = createConfig({
 })
 ```
 
+### CLI Bootstrap
+
+Use the `tempodk/cli` entrypoint when an external CLI already owns the local key material and only needs the Tempo Wallet browser flow to authenticate the user and authorize that key.
+
+```ts
+import { Provider } from 'tempodk/cli'
+
+const provider = Provider.create({
+  serviceUrl: 'https://wallet.example.com/cli-auth',
+})
+
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
+  params: [
+    {
+      capabilities: {
+        authorizeAccessKey: {
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          keyType: 'p256',
+          publicKey: '0x...',
+        },
+      },
+    },
+  ],
+})
+```
+
+This adapter is bootstrap-only in v1. It supports `wallet_connect` and returns the root account plus `capabilities.keyAuthorization`, but it does not implement transaction or message signing.
+
+### CLI Auth Server
+
+Use `Handler.cliAuth` from `tempodk/server` to host the generic device-code protocol:
+
+- `POST /cli-auth/device-code`
+- `POST /cli-auth/poll/:code`
+- `POST /cli-auth/authorize`
+
+The create request uses snake_case fields:
+
+- `pub_key`
+- `key_type`
+- `code_challenge`
+- `expiry`
+- `limits`
+- `account`
+
+The poll response returns:
+
+- `status`
+- `account_address`
+- `key_authorization`
+
+The device-code protocol value is the raw 8-character code, for example `ABCDEFGH`. If you present it to a user, format it for display as `ABCD-EFGH`, but keep storage and URL/query values unformatted for compatibility with existing Tempo consumers.
+
 ## Adapters
 
 | Adapter                  | Description                                                                        |
