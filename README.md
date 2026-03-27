@@ -76,7 +76,6 @@ const { accounts } = await provider.request({
       capabilities: {
         authorizeAccessKey: {
           expiry: Math.floor(Date.now() / 1000) + 3600,
-          keyType: 'p256',
           publicKey: '0x...',
         },
       },
@@ -97,12 +96,14 @@ Use `Handler.cliAuth` from `tempodk/server` to host the generic device-code prot
 
 The create request uses snake_case fields:
 
-- `pub_key`
-- `key_type`
-- `code_challenge`
-- `expiry`
-- `limits`
-- `account`
+- `pub_key` required
+- `code_challenge` required
+- `key_type` optional, defaults to `secp256k1` when omitted
+- `expiry` optional, defaults via server policy
+- `limits` optional, defaults via server policy
+- `account` optional
+
+This CLI device-code request shape is intentionally more permissive than the shared `wallet_authorizeAccessKey` SDK contract. Keep generic RPC semantics strict unless we explicitly choose an SDK-wide widening.
 
 The poll response returns:
 

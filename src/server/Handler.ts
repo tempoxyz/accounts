@@ -27,7 +27,7 @@ export type Handler = Omit<Router, 'fetch'> & {
   listener: (req: any, res: any) => void
 }
 
-export function compose(handlers: Handler[], options: compose.Options = {}): Handler {
+export function compose(handlers: Array<Handler>, options: compose.Options = {}): Handler {
   const path = options.path ?? '/'
 
   return from({
@@ -448,7 +448,7 @@ export declare namespace cliAuth {
     now?: (() => number) | undefined
     /** Path prefix for the CLI auth endpoints. @default "/cli-auth" */
     path?: string | undefined
-    /** Policy used to validate requested expiry and limits. */
+    /** Policy used to validate and default requested CLI auth fields. */
     policy?: CliAuth.Policy | undefined
     /** Random byte generator used for device-code allocation. */
     random?: ((size: number) => Uint8Array) | undefined

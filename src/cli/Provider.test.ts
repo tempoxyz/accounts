@@ -1,24 +1,17 @@
 import { Hex } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
-import { accounts, chain, getClient, privateKeys } from '../../test/config.js'
+import { accounts, chain, getClient } from '../../test/config.js'
 import { createServer } from '../../test/utils.js'
 import * as CliAuth from '../server/CliAuth.js'
 import * as Handler from '../server/Handler.js'
 import * as Provider from './Provider.js'
 
 const root = accounts[0]!
-const accessKey = TempoAccount.fromP256(privateKeys[1]!)
+const accessKey = accounts[1]!
 const expiry = Math.floor(Date.now() / 1000) + 3_600
-const limits = [
-  {
-    limit: 1_000n,
-    token: '0x20c0000000000000000000000000000000000001' as const,
-  },
-] as const
 
 async function authorize(code: string) {
   const signed = await root.signKeyAuthorization(
@@ -29,7 +22,6 @@ async function authorize(code: string) {
     {
       chainId: BigInt(chain.id),
       expiry,
-      limits,
     },
   )
   const keyAuthorization = KeyAuthorization.toRpc(signed)
@@ -52,8 +44,6 @@ function connectRequest() {
         capabilities: {
           authorizeAccessKey: {
             expiry,
-            keyType: accessKey.keyType,
-            limits: [{ limit: Hex.fromNumber(1_000), token: limits[0]!.token }],
             publicKey: accessKey.publicKey,
           },
         },
@@ -62,13 +52,25 @@ function connectRequest() {
   } as const
 }
 
+function createHandler() {
+  return Handler.cliAuth({
+    chainId: chain.id,
+    client: getClient({ chain }),
+    policy: {
+      validate({ expiry: requestedExpiry, limits }) {
+        return {
+          expiry: requestedExpiry ?? expiry,
+          ...(limits ? { limits } : {}),
+        }
+      },
+    },
+    random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
+  })
+}
+
 describe('Provider.create', () => {
   test('default: bootstraps wallet_connect through the device-code flow', async () => {
-    const handler = Handler.cliAuth({
-      chainId: chain.id,
-      client: getClient({ chain }),
-      random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
-    })
+    const handler = createHandler()
     const server = await createServer(handler.listener)
     const opened: string[] = []
 
@@ -113,13 +115,7 @@ describe('Provider.create', () => {
                 "chainId": "${Hex.fromNumber(chain.id)}",
                 "expiry": "${Hex.fromNumber(expiry)}",
                 "keyId": "${accessKey.address}",
-                "keyType": "p256",
-                "limits": [
-                  {
-                    "limit": "0x3e8",
-                    "token": "0x20c0000000000000000000000000000000000001",
-                  },
-                ],
+                "keyType": "secp256k1",
                 "signature": {
                   "type": "secp256k1",
                 },
@@ -137,11 +133,7 @@ describe('Provider.create', () => {
   })
 
   test('behavior: browser-open failures surface the URL and code', async () => {
-    const handler = Handler.cliAuth({
-      chainId: chain.id,
-      client: getClient({ chain }),
-      random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
-    })
+    const handler = createHandler()
     const server = await createServer(handler.listener)
 
     try {
@@ -175,11 +167,7 @@ describe('Provider.create', () => {
   })
 
   test('behavior: times out while waiting for authorization', async () => {
-    const handler = Handler.cliAuth({
-      chainId: chain.id,
-      client: getClient({ chain }),
-      random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
-    })
+    const handler = createHandler()
     const server = await createServer(handler.listener)
 
     try {
@@ -213,11 +201,7 @@ describe('Provider.create', () => {
   })
 
   test('behavior: rejects non-bootstrap RPCs', async () => {
-    const handler = Handler.cliAuth({
-      chainId: chain.id,
-      client: getClient({ chain }),
-      random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
-    })
+    const handler = createHandler()
     const server = await createServer(handler.listener)
 
     try {
@@ -238,7 +222,7 @@ describe('Provider.create', () => {
       await expect(
         provider.request({
           method: 'wallet_authorizeAccessKey',
-          params: [{ expiry, keyType: 'p256', publicKey: accessKey.publicKey }],
+          params: [{ expiry, keyType: accessKey.keyType, publicKey: accessKey.publicKey }],
         }),
       ).rejects.toThrowErrorMatchingInlineSnapshot(
         `[Provider.UnsupportedMethodError: \`authorizeAccessKey\` not supported by adapter.]`,

@@ -41,8 +41,10 @@ export function cli(options: cli.Options): Adapter.Adapter {
         const created = await post({
           body: {
             code_challenge: codeChallenge,
-            expiry: authorizeAccessKey.expiry,
-            key_type: authorizeAccessKey.keyType ?? 'secp256k1',
+            ...(typeof authorizeAccessKey.expiry !== 'undefined'
+              ? { expiry: authorizeAccessKey.expiry }
+              : {}),
+            ...(authorizeAccessKey.keyType ? { key_type: authorizeAccessKey.keyType } : {}),
             ...(authorizeAccessKey.limits ? { limits: authorizeAccessKey.limits } : {}),
             pub_key: authorizeAccessKey.publicKey,
           } satisfies z.output<typeof CliAuth.createRequest>,

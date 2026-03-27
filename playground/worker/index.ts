@@ -47,4 +47,4 @@ export default {
 
     return handler.fetch(request)
   },
-} satisfies ExportedHandler
+} satisfies ExportedHandler<Cloudflare.Env>

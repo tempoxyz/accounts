@@ -28,8 +28,8 @@ export const keyAuthorization = z.object({
 export const createRequest = z.object({
   account: z.optional(u.address()),
   code_challenge: z.string(),
-  expiry: z.number(),
-  key_type: keyType,
+  expiry: z.optional(z.number()),
+  key_type: z.optional(keyType),
   limits: z.optional(z.readonly(z.array(z.object({ token: u.address(), limit: u.bigint() })))),
   pub_key: u.hex(),
 })
@@ -158,9 +158,16 @@ export declare namespace Store {
       code: string
     }
   }
+
+  export namespace kv {
+    export type Options = {
+      /** Prefix used for KV keys. @default "cli-auth" */
+      key?: string | undefined
+    }
+  }
 }
 
-/** Host validation and sanitization for requested expiry and limits. */
+/** Host validation and sanitization for requested CLI auth defaults. */
 export type Policy = {
   /** Validates and optionally rewrites requested policy before the entry is stored. */
   validate: (options: Policy.validate.Options) => MaybePromise<Policy.validate.ReturnType>
@@ -171,8 +178,8 @@ export declare namespace Policy {
     export type Options = {
       /** Requested root account restriction. */
       account?: Address | undefined
-      /** Requested access-key expiry timestamp. */
-      expiry: number
+      /** Requested access-key expiry timestamp. Omit to let the server choose one. */
+      expiry?: number | undefined
       /** Requested key type. */
       keyType: z.output<typeof keyType>
       /** Requested spending limits. */
@@ -224,8 +231,8 @@ export const Store = {
         } satisfies Entry.Consumed)
         return current
       },
-      async create(entry) {
-        entries.set(entry.code, entry)
+      async create(entry_) {
+        entries.set(entry_.code, entry_)
       },
       async delete(code) {
         entries.delete(code)
@@ -290,23 +297,14 @@ export const Store = {
   },
 }
 
-export declare namespace Store {
-  export namespace kv {
-    export type Options = {
-      /** Prefix used for KV keys. @default "cli-auth" */
-      key?: string | undefined
-    }
-  }
-}
-
 /** Built-in policy helpers. */
 export const Policy = {
-  /** Creates a pass-through policy. */
+  /** Creates an allow-all policy with a default 24-hour expiry when omitted. */
   allow(): Policy {
     return {
       validate({ expiry, limits }) {
         return {
-          expiry,
+          expiry: expiry ?? Math.floor(Date.now() / 1000) + 60 * 60 * 24,
           ...(limits ? { limits } : {}),
         }
       },
@@ -331,11 +329,12 @@ export async function createDeviceCode(
     store = Store.memory(),
     ttlMs = 10 * 60 * 1_000,
   } = options
-  const { account, code_challenge, key_type, pub_key } = request
+  const { account, code_challenge, pub_key } = request
+  const keyType = request.key_type ?? 'secp256k1'
   const approved = await policy.validate({
     ...(account ? { account } : {}),
     expiry: request.expiry,
-    keyType: key_type,
+    keyType,
     ...(request.limits ? { limits: request.limits } : {}),
     pubKey: pub_key,
   })
@@ -359,7 +358,7 @@ export async function createDeviceCode(
     createdAt,
     expiresAt: createdAt + ttlMs,
     expiry: approved.expiry,
-    keyType: key_type,
+    keyType,
     ...(approved.limits ? { limits: approved.limits } : {}),
     pubKey: pub_key,
     status: 'pending',
@@ -466,7 +465,7 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
   if (!sameLimits(actual.limits, expected.limits))
     throw new Error('Key authorization limits do not match the device-code request.')
 
-  const valid = await verifyHash(client, {
+  const valid = await verifyHash(client as never, {
     address: request.account_address,
     hash: TempoKeyAuthorization.getSignPayload(expected),
     signature: SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(actual.signature)),

@@ -7,9 +7,10 @@
 - Make `expiry` optional in the CLI bootstrap flow.
 - Keep `limits` optional.
 - Allow the CLI to send only `pub_key` and rely on server policy to apply sensible default `expiry` and `limits`.
-- Update the relevant request and adapter contracts in:
+- Keep this scoped to the CLI bootstrap path. Do not widen generic `wallet_authorizeAccessKey` semantics unless we explicitly want SDK-wide omission.
+- If we need different shapes, prefer keeping the generic SDK contract stricter and making the CLI device-code request shape more permissive.
+- Update the relevant CLI request and adapter contracts in:
   - `src/server/CliAuth.ts`
-  - `src/core/zod/rpc.ts`
   - `src/cli/adapter.ts`
 
 ### 2. Adopt the extracted flow in the real wallet app

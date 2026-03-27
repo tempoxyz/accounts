@@ -1,4 +1,7 @@
 {
+  "editor.hover.enabled": true,
+  "typescript.validate.enable": true,
+  "javascript.validate.enable": true,
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "editor.formatOnSave": true,
   "[typescript]": {
@@ -7,11 +10,20 @@
   "[typescriptreact]": {
     "editor.defaultFormatter": "oxc.oxc-vscode"
   },
+  "[markdown]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
   "[json]": {
     "editor.formatOnSave": false
   },
   "[jsonc]": {
     "editor.formatOnSave": false
+  },
+  "files.associations": {
+    ".env.*": "properties"
   },
   "typescript.tsdk": "node_modules/typescript/lib"
 }

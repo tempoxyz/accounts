@@ -2,7 +2,7 @@ import { Address as ox_Address, PublicKey } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { CliAuth, Handler } from 'tempodk/server'
 import { createClient, http } from 'viem'
-import { tempoModerato } from 'viem/chains'
+import { tempoModerato as tempoTestnet } from 'viem/chains'
 import { Account as TempoAccount } from 'viem/tempo'
 import * as z from 'zod/mini'
 
@@ -12,12 +12,28 @@ const root = TempoAccount.fromSecp256k1(
   '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
 )
 const client = createClient({
-  chain: tempoModerato,
-  transport: http(tempoModerato.rpcUrls.default.http[0]),
+  chain: tempoTestnet,
+  transport: http(tempoTestnet.rpcUrls.default.http[0]),
 })
 const store = CliAuth.Store.memory()
 
 const page = Handler.from()
+
+/** Raw 8-character device code: optional hyphens stripped, uppercased (see protocol in AGENTS.md). */
+const authCodeSchema = z.pipe(
+  z.string(),
+  z.transform((s, ctx) => {
+    const normalized = s.replaceAll('-', '').toUpperCase()
+    if (/^[A-Z0-9]{8}$/.test(normalized)) return normalized
+
+    ctx.issues.push({
+      code: 'custom',
+      message: 'Expected 8-character device code',
+      input: s,
+    })
+    return z.NEVER
+  }),
+)
 
 page.get(path, ({ request }) => {
   const requestUrl = new URL(request.url)
@@ -29,11 +45,15 @@ page.get(path, ({ request }) => {
 })
 
 page.get(`${path}/pending/:code`, async ({ params }) => {
-  const code = normalizeCode((params as { code: string }).code)
+  const parsed = z.safeParse(authCodeSchema, params.code)
+  if (!parsed.success) return Response.json({ error: parsed.error.message }, { status: 400 })
+
+  const code = parsed.data
   const current = await store.get(code)
   if (!current) return Response.json({ error: 'Unknown device code.' }, { status: 404 })
   if (current.status !== 'pending')
     return Response.json({ error: 'Device code already completed.' }, { status: 400 })
+
   return Response.json({
     access_key_address: ox_Address.fromPublicKey(PublicKey.from(current.pubKey)),
     ...(current.account ? { account: current.account } : {}),
@@ -58,12 +78,14 @@ page.get(`${path}/pending/:code`, async ({ params }) => {
 
 page.post(`${path}/approve`, async ({ request }) => {
   try {
-    const body = (await request.json()) as { code?: unknown }
-    if (typeof body.code !== 'string') throw new Error('Device code is required.')
-    const code = normalizeCode(body.code)
+    const body = z.safeParse(z.object({ code: authCodeSchema }), await request.json())
+    if (!body.success) return Response.json({ error: body.error.message }, { status: 400 })
+
+    const code = body.data.code
     const current = await store.get(code)
-    if (!current) throw new Error('Unknown device code.')
-    if (current.status !== 'pending') throw new Error('Device code already completed.')
+    if (!current) return Response.json({ error: 'Unknown device code.' }, { status: 404 })
+    if (current.status !== 'pending')
+      return Response.json({ error: 'Device code already completed.' }, { status: 400 })
 
     const signed = await root.signKeyAuthorization(
       {
@@ -78,7 +100,7 @@ page.post(`${path}/approve`, async ({ request }) => {
     )
     const keyAuthorization = KeyAuthorization.toRpc(signed)
     const result = await CliAuth.authorize({
-      chainId: tempoModerato.id,
+      chainId: tempoTestnet.id,
       client,
       request: {
         account_address: root.address,
@@ -96,20 +118,25 @@ page.post(`${path}/approve`, async ({ request }) => {
       status: result.status,
     })
   } catch (error) {
-    return Response.json({ error: (error as Error).message }, { status: 400 })
+    console.error(JSON.stringify({ path, error }, null, 2))
+    return Response.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Encountered an error while authorizing device code.',
+      },
+      { status: 400 },
+    )
   }
 })
 
 export const handler = Handler.compose([
   page,
   Handler.cliAuth({
-    chainId: tempoModerato.id,
+    chainId: tempoTestnet.id,
     client,
     path,
     store,
   }),
 ])
-
-function normalizeCode(code: string) {
-  return code.replaceAll('-', '').toUpperCase()
-}

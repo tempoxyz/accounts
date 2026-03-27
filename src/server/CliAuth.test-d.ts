@@ -9,8 +9,8 @@ describe('createRequest', () => {
     expectTypeOf<z.output<typeof CliAuth.createRequest>>().toMatchTypeOf<{
       account?: Hex | undefined
       code_challenge: string
-      expiry: number
-      key_type: 'secp256k1' | 'p256' | 'webAuthn'
+      expiry?: number | undefined
+      key_type?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
       limits?: readonly { token: Hex; limit: bigint }[] | undefined
       pub_key: Hex
     }>()

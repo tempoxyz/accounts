@@ -10,6 +10,7 @@ import * as Handler from './Handler.js'
 
 const root = accounts[0]!
 const accessKey = TempoAccount.fromP256(privateKeys[1]!)
+const secpAccessKey = accounts[1]!
 const expiry = Math.floor(Date.now() / 1000) + 3_600
 const limits = [
   {
@@ -21,15 +22,22 @@ const limits = [
 async function authorize(
   code: string,
   options: {
+    accessKey?:
+      | {
+          address: `0x${string}`
+          keyType: 'secp256k1' | 'p256' | 'webAuthn'
+        }
+      | undefined
     accessKeyAddress?: `0x${string}` | undefined
     expiry?: number | undefined
     limits?: readonly { token: `0x${string}`; limit: bigint }[] | undefined
   } = {},
 ) {
+  const key = options.accessKey ?? accessKey
   const signed = await root.signKeyAuthorization(
     {
-      accessKeyAddress: options.accessKeyAddress ?? accessKey.address,
-      keyType: accessKey.keyType,
+      accessKeyAddress: options.accessKeyAddress ?? key.address,
+      keyType: key.keyType,
     },
     {
       chainId: BigInt(chain.id),
@@ -49,15 +57,37 @@ async function authorize(
   } satisfies z.output<typeof CliAuth.authorizeRequest>
 }
 
-async function createRequest(codeVerifier = 'device-code-verifier') {
+async function createRequest(
+  codeVerifier = 'device-code-verifier',
+  options: {
+    accessKey?:
+      | {
+          keyType: 'secp256k1' | 'p256' | 'webAuthn'
+          publicKey: `0x${string}`
+        }
+      | undefined
+    expiry?: number | undefined
+    keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
+    limits?: readonly { token: `0x${string}`; limit: bigint }[] | undefined
+  } = {},
+) {
+  const key = options.accessKey ?? accessKey
   return {
     codeVerifier,
     request: {
       code_challenge: await createCodeChallenge(codeVerifier),
-      expiry,
-      key_type: accessKey.keyType,
-      limits,
-      pub_key: accessKey.publicKey,
+      ...('expiry' in options
+        ? typeof options.expiry !== 'undefined'
+          ? { expiry: options.expiry }
+          : {}
+        : { expiry }),
+      ...('keyType' in options
+        ? options.keyType
+          ? { key_type: options.keyType }
+          : {}
+        : { key_type: key.keyType }),
+      ...('limits' in options ? (options.limits ? { limits: options.limits } : {}) : { limits }),
+      pub_key: key.publicKey,
     } satisfies z.output<typeof CliAuth.createRequest>,
   }
 }
@@ -167,9 +197,53 @@ describe('createDeviceCode', () => {
     const body = await response.json()
 
     expect(body.error).toMatchInlineSnapshot(`
-      "[\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "code_challenge"\n    ],\n    "message": "Invalid input"\n  },\n  {\n    "code": "invalid_union",\n    "errors": [\n      [\n        {\n          "code": "invalid_value",\n          "values": [\n            "secp256k1"\n          ],\n          "path": [],\n          "message": "Invalid input"\n        }\n      ],\n      [\n        {\n          "code": "invalid_value",\n          "values": [\n            "p256"\n          ],\n          "path": [],\n          "message": "Invalid input"\n        }\n      ],\n      [\n        {\n          "code": "invalid_value",\n          "values": [\n            "webAuthn"\n          ],\n          "path": [],\n          "message": "Invalid input"\n        }\n      ]\n    ],\n    "path": [\n      "key_type"\n    ],\n    "message": "Invalid input"\n  },\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "pub_key"\n    ],\n    "message": "Expected hex value"\n  }\n]"
+      "[\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "code_challenge"\n    ],\n    "message": "Invalid input"\n  },\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "pub_key"\n    ],\n    "message": "Expected hex value"\n  }\n]"
     `)
     expect(response.status).toMatchInlineSnapshot(`400`)
+  })
+
+  test('behavior: supports pubkey-only requests with server defaults', async () => {
+    const store = CliAuth.Store.memory()
+    const now = () => 1_000
+    const defaultExpiry = 4_600
+    const { request } = await createRequest('device-code-verifier', {
+      accessKey: secpAccessKey,
+      expiry: undefined,
+      keyType: undefined,
+      limits: undefined,
+    })
+
+    const result = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      now,
+      policy: {
+        validate({ expiry, limits }) {
+          return {
+            expiry: expiry ?? defaultExpiry,
+            ...(limits ? { limits } : {}),
+          }
+        },
+      },
+      random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
+      request,
+      store,
+      ttlMs: 30_000,
+    })
+    const entry = await store.get(result.code)
+
+    expect(entry).toMatchInlineSnapshot(`
+      {
+        "chainId": 1337n,
+        "code": "ABCDEFGH",
+        "codeChallenge": "NUwjc1h8PuXcsvSOG44Rp4bMayBXnOkriHEJ19CaSQM",
+        "createdAt": 1000,
+        "expiresAt": 31000,
+        "expiry": 4600,
+        "keyType": "secp256k1",
+        "pubKey": "${secpAccessKey.publicKey}",
+        "status": "pending",
+      }
+    `)
   })
 })
 
@@ -444,7 +518,7 @@ describe('Store.kv', () => {
   test('default: persists encoded entries through KV', async () => {
     const store = CliAuth.Store.kv({
       async delete() {},
-      async get<value = unknown>(_key: string) {
+      async get<_value = unknown>(_key: string) {
         return undefined as never
       },
       async set() {},

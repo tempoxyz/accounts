@@ -3,13 +3,12 @@ import { Hex, Json } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
-import { Actions } from 'viem/tempo'
+import { Account as TempoAccount, Actions } from 'viem/tempo'
 
-import { CliAuth } from './cli-auth.js'
+import { CliAuth } from './CliAuth.js'
 import {
   type AdapterType,
   type DialogMode,
-  type ProviderValue,
   dialogMode,
   provider,
   switchAdapter,
@@ -67,6 +66,7 @@ export function App() {
 
       <h2 id="cli-auth">CLI Auth</h2>
       <CliAuth />
+      <CliAuthExamples />
 
       <h2>Accounts &amp; Chain</h2>
       <EthAccounts />
@@ -206,6 +206,136 @@ function WalletConnect() {
       </form>
     </Method>
   )
+}
+
+function CliAuthExamples() {
+  const [result, error, execute] = useRequest()
+  const [account] = useState(() => TempoAccount.fromP256(P256.randomPrivateKey()))
+  const serviceUrl = `${window.location.origin}/cli-auth`
+
+  return (
+    <Method method="cli_auth examples" result={result} error={error}>
+      <p>Start a real pending CLI auth request with one of these `wallet_connect` examples:</p>
+      <button
+        type="button"
+        onClick={() =>
+          execute(() =>
+            startCliAuthExample({
+              account,
+              label: 'public key only',
+              serviceUrl,
+            }),
+          )
+        }
+      >
+        Public Key Only
+      </button>{' '}
+      <button
+        type="button"
+        onClick={() =>
+          execute(() =>
+            startCliAuthExample({
+              account,
+              expiry: Math.floor(Date.now() / 1000) + 60 * 60,
+              label: 'public key + expiry',
+              serviceUrl,
+            }),
+          )
+        }
+      >
+        Public Key + Expiry
+      </button>{' '}
+      <button
+        type="button"
+        onClick={() =>
+          execute(() =>
+            startCliAuthExample({
+              account,
+              expiry: Math.floor(Date.now() / 1000) + 60 * 60,
+              label: 'public key + expiry + limits',
+              limits: [
+                {
+                  limit: Hex.fromNumber(1_000),
+                  token: '0x20c0000000000000000000000000000000000001',
+                },
+              ],
+              serviceUrl,
+            }),
+          )
+        }
+      >
+        Public Key + Expiry + Limits
+      </button>
+    </Method>
+  )
+}
+
+async function startCliAuthExample(options: {
+  account: ReturnType<typeof TempoAccount.fromP256>
+  expiry?: number | undefined
+  label: string
+  limits?: readonly { limit: `0x${string}`; token: `0x${string}` }[] | undefined
+  serviceUrl: string
+}) {
+  const codeVerifier = 'playground-cli-auth-demo'
+  const request = {
+    code_challenge: await createCodeChallenge(codeVerifier),
+    ...(typeof options.expiry !== 'undefined' ? { expiry: options.expiry } : {}),
+    ...(options.limits ? { limits: options.limits } : {}),
+    key_type: options.account.keyType,
+    pub_key: options.account.publicKey,
+  }
+
+  const response = await fetch(`${options.serviceUrl}/device-code`, {
+    body: JSON.stringify(request),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  })
+  const body = (await response.json().catch(() => ({}))) as { code?: unknown; error?: unknown }
+
+  if (!response.ok) {
+    const error =
+      typeof body.error === 'string'
+        ? body.error
+        : `CLI auth example failed with ${response.status}.`
+    throw new Error(error)
+  }
+  if (typeof body.code !== 'string') throw new Error('CLI auth example did not return a code.')
+
+  const url = new URL(window.location.href)
+  url.searchParams.set('code', body.code)
+  url.hash = 'cli-auth'
+  window.history.replaceState({}, '', url.toString())
+  window.dispatchEvent(new CustomEvent('cli-auth:code', { detail: { code: body.code } }))
+
+  return {
+    code: body.code,
+    label: options.label,
+    request: {
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: {
+            authorizeAccessKey: {
+              ...(typeof options.expiry !== 'undefined' ? { expiry: options.expiry } : {}),
+              ...(options.limits ? { limits: options.limits } : {}),
+              keyType: options.account.keyType,
+              publicKey: options.account.publicKey,
+            },
+          },
+        },
+      ],
+    },
+    url: url.toString(),
+  }
+}
+
+async function createCodeChallenge(codeVerifier: string) {
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier))
+  return btoa(String.fromCharCode(...new Uint8Array(hash)))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '')
 }
 
 function EthRequestAccounts() {
