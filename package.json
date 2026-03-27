@@ -6,6 +6,7 @@
     "check": "vp lint --fix --ignore-pattern package.json --ignore-pattern embed && vp fmt",
     "check:types": "tsc -b && pnpm --filter './examples/*' check:types && pnpm --filter playground check:types",
     "dev": "pnpm dev:embed & pnpm dev:embed-ref & pnpm dev:playground",
+    "demo:cli-auth": "pnpm tsx playground/scripts/cli-auth.ts",
     "dev:hosts": "./scripts/dev:hosts.sh",
     "dev:embed": "pnpm --filter tempo-app dev:ssl",
     "dev:embed-ref": "pnpm --filter embed-ref dev",
@@ -60,6 +61,9 @@
       "viem": "catalog:"
     }
   },
+  "imports": {
+    "#*": "./src/*"
+  },
   "[!start-pkg]": "",
   "name": "accounts",
   "description": "Tempo Accounts SDK",
@@ -67,6 +71,7 @@
   "version": "0.4.1",
   "dependencies": {
     "@remix-run/fetch-router": "~0.17.0",
+    "@vitejs/devtools": "^0.1.11",
     "idb-keyval": "^6.2.2",
     "mipd": "^0.0.7",
     "mppx": "^0.4.8",

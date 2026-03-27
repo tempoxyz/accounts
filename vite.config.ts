@@ -1,6 +1,9 @@
 import { defineConfig } from 'vp'
 
 export default defineConfig({
+  devtools: {
+    enabled: true,
+  },
   fmt: {
     semi: false,
     singleQuote: true,

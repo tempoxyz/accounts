@@ -112,6 +112,55 @@ The poll response returns:
 
 The device-code protocol value is the raw 8-character code, for example `ABCDEFGH`. If you present it to a user, format it for display as `ABCD-EFGH`, but keep storage and URL/query values unformatted for compatibility with existing Tempo consumers.
 
+### Local CLI Smoke Test
+
+Use the dev-only harness below when you want to manually exercise the extracted `tempodk/cli` + `tempodk/server` flow before `tempo/app` adopts the new server primitives.
+
+In one terminal, start the playground app and worker:
+
+```sh
+pnpm dev:playground
+```
+
+In a second terminal, run the CLI demo:
+
+```sh
+pnpm demo:cli-auth
+```
+
+What happens:
+
+1. the demo creates or loads a local P256 access key from `tmp/cli-auth-demo/access-key.json`
+2. it calls `Provider.create({ serviceUrl: 'https://localhost:5173/cli-auth' })`
+3. your browser opens the playground CLI auth approval screen
+4. the page shows the pending `pub_key`, `key_type`, `expiry`, and `limits`
+5. click `Approve`
+6. the demo prints the root account plus returned `capabilities.keyAuthorization`
+
+Expected terminal output from the CLI demo looks like:
+
+```json
+{
+  "account": "0x...",
+  "keyAuthorization": {
+    "address": "0x...",
+    "chainId": "0x...",
+    "keyType": "p256",
+    "signature": {
+      "type": "secp256k1"
+    }
+  }
+}
+```
+
+This harness is intentionally minimal:
+
+- it validates the extracted `tempodk/cli` + `tempodk/server` flow
+- the demo implementation lives under `playground/` and is intentionally not the real Tempo Wallet UI
+- it uses a fixed dev root account for approval
+- it does not include login, funding, or passkey UX
+- real wallet-backed testing is the next follow-up in `tempo/app`
+
 ## Adapters
 
 | Adapter                  | Description                                                                        |
@@ -124,6 +173,7 @@ The device-code protocol value is the raw 8-character code, for example `ABCDEFG
 
 ```sh
 pnpm dev              # start embed + embed-ref + playground dev servers
+pnpm demo:cli-auth    # run the CLI smoke-test client from playground/scripts
 pnpm dev:embed        # start Tempo Wallet embed only
 pnpm dev:embed-ref    # start reference embed implementation only (port 5174)
 pnpm dev:playground   # start playground app only

@@ -15,6 +15,7 @@
     "mppx": "^0.4.8",
     "react": "catalog:default",
     "react-dom": "catalog:default",
+    "tempodk": "workspace:*",
     "viem": "catalog:default"
   },
   "devDependencies": {
@@ -22,9 +23,10 @@
     "@types/react": "catalog:default",
     "@types/react-dom": "catalog:default",
     "@vitejs/plugin-react": "catalog:default",
+    "tsx": "^4.21.0",
     "typescript": "catalog:default",
     "vite-plugin-mkcert": "^1.17.10",
-    "wrangler": "^4.71.0",
-    "vp": "catalog:"
+    "vp": "catalog:",
+    "wrangler": "^4.71.0"
   }
 }

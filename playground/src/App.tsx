@@ -5,6 +5,7 @@ import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { Actions } from 'viem/tempo'
 
+import { CliAuth } from './cli-auth.js'
 import {
   type AdapterType,
   type DialogMode,
@@ -64,6 +65,9 @@ export function App() {
       <WalletDisconnect />
       <Faucet />
 
+      <h2 id="cli-auth">CLI Auth</h2>
+      <CliAuth />
+
       <h2>Accounts &amp; Chain</h2>
       <EthAccounts />
       <EthChainId />
@@ -121,7 +125,12 @@ function Faucet() {
 }
 
 function ProviderState() {
-  const p = provider as ProviderValue
+  const p = provider as {
+    store: {
+      subscribe: (cb: () => void) => () => void
+      getState: () => unknown
+    }
+  }
   const state = useSyncExternalStore(
     (cb) => p.store.subscribe(cb),
     () => p.store.getState(),
@@ -254,7 +263,7 @@ function WalletSwitchChain() {
   const [result, error, execute] = useRequest()
   return (
     <Method method="wallet_switchEthereumChain" result={result} error={error}>
-      {provider.chains.map((c) => (
+      {provider.chains.map((c: { id: number; name?: string | undefined }) => (
         <button
           key={c.id}
           onClick={() =>
