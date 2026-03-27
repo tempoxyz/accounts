@@ -138,6 +138,12 @@ What happens:
 5. click `Approve`
 6. the demo prints the root account plus returned `capabilities.keyAuthorization`
 
+Notes:
+
+- `playground/scripts/cli-auth.ts` is the authoritative terminal bootstrap demo. It generates its own PKCE verifier, creates its own device code, opens the browser, and polls until approval completes.
+- The extra CLI auth example buttons inside `playground/src/App.tsx` are browser-side demo helpers only. They seed pending requests directly so you can inspect different request shapes in the UI.
+- Those browser-side demo buttons intentionally use a fixed verifier and are not interchangeable with the real CLI script flow.
+
 Expected terminal output from the CLI demo looks like:
 
 ```json
@@ -159,6 +165,7 @@ This harness is intentionally minimal:
 - it validates the extracted `tempodk/cli` + `tempodk/server` flow
 - the demo implementation lives under `playground/` and is intentionally not the real Tempo Wallet UI
 - it uses a fixed dev root account for approval
+- it includes extra dev-only helper routes for the playground approval surface
 - it does not include login, funding, or passkey UX
 - real wallet-backed testing is the next follow-up in `tempo/app`
 
