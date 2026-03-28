@@ -3,6 +3,7 @@ import { Expiry } from 'tempodk'
 import { formatUnits, parseUnits, stringify, type Hex } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
 import {
+  useChains,
   useConnect,
   useConnection,
   useConnectors,
@@ -10,6 +11,7 @@ import {
   useSendTransactionSync,
   useSignMessage,
   useSignTypedData,
+  useSwitchChain,
 } from 'wagmi'
 import { Hooks } from 'wagmi/tempo'
 
@@ -29,9 +31,11 @@ export default function App() {
 
       {status === 'connected' && (
         <>
+          <h2>Switch Chain</h2>
+          <SwitchChain />
+
           <h2>Balance</h2>
           <Balance />
-          <Faucet />
 
           <h2>Transactions</h2>
           <SendTransaction />
@@ -108,6 +112,28 @@ function Connect() {
   )
 }
 
+function SwitchChain() {
+  const { chainId } = useConnection()
+  const chains = useChains()
+  const { mutate: switchChain, error, isPending } = useSwitchChain()
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      {chains.map((chain) => (
+        <button
+          key={chain.id}
+          type="button"
+          disabled={isPending || chain.id === chainId}
+          onClick={() => switchChain({ chainId: chain.id })}
+        >
+          {chain.name}
+          {chain.id === chainId && ' ✓'}
+        </button>
+      ))}
+      {error && <pre style={{ color: 'red' }}>{error.message}</pre>}
+    </div>
+  )
+}
+
 function Balance() {
   const { address } = useConnection()
   const { data, isLoading } = Hooks.token.useGetBalance({
@@ -118,20 +144,6 @@ function Balance() {
     },
   })
   return <div>{isLoading ? 'Loading...' : data !== undefined ? formatUnits(data, 6) : '—'}</div>
-}
-
-function Faucet() {
-  const { address } = useConnection()
-  const { mutate, data, error, isPending } = Hooks.faucet.useFundSync()
-  return (
-    <div>
-      <button disabled={!address || isPending} onClick={() => mutate({ account: address! })}>
-        Fund
-      </button>
-      {error && <pre style={{ color: 'red' }}>{error.message}</pre>}
-      {data !== undefined && <pre>{stringify(data, null, 2)}</pre>}
-    </div>
-  )
 }
 
 function SendTransaction() {

@@ -7,8 +7,6 @@
     "check:types": "tsc -b",
     "dev": "vp dev",
     "build": "tsc -b && vp build",
-    "gen:types": "wrangler types",
-    "postinstall": "pnpm gen:types",
     "preview": "vp preview"
   },
   "dependencies": {
@@ -27,7 +25,6 @@
     "@vitejs/plugin-react": "latest",
     "typescript": "~5.9.3",
     "vite-plugin-mkcert": "^1.17.10",
-    "wrangler": "latest",
-    "vp": "catalog:"
+    "vite-plus": "latest"
   }
 }
