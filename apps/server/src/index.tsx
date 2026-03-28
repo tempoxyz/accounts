@@ -47,7 +47,6 @@ app.get(
     return context.render(
       <main>
         <header>
-          <h1>Tempo CLI approval</h1>
           <p>Authenticate with a Tempo passkey and approve a pending CLI access-key request.</p>
         </header>
 

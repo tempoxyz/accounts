@@ -4,6 +4,7 @@ import * as Clack from '@clack/prompts'
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { Base64, Hex, P256 } from 'ox'
 import { Account as TempoAccount } from 'viem/tempo'
 import * as z from 'zod/mini'
@@ -13,25 +14,25 @@ import * as CliAuth from '../src/server/CliAuth.js'
 
 type AccessKey = ReturnType<typeof TempoAccount.fromP256>
 
+// ── Shell completions ────────────────────────────────────
+
 const connectCmd = Tab.command('connect', 'Sign in / sign up via browser approval')
-connectCmd.option('url', 'Auth service URL', (complete) => {
-  complete('http://localhost:5173/cli-auth', 'Local dev server')
-})
+connectCmd.option('url', 'Auth service URL', (c) => c('http://localhost:6969/cli-auth', 'Local'))
 connectCmd.option('key-file', 'Access key file path')
 
-const requestCmd = Tab.command('request', 'Create device code only')
-requestCmd.option('url', 'Auth service URL', (complete) => {
-  complete('http://localhost:5173/cli-auth', 'Local dev server')
-})
+const requestCmd = Tab.command('request', 'Authorize an access key')
+requestCmd.option('url', 'Auth service URL', (c) => c('http://localhost:6969/cli-auth', 'Local'))
 requestCmd.option('key-file', 'Access key file path')
 
 if (process.argv[2] === 'complete') {
   const shell = process.argv[3]
   if (shell === '--') Tab.parse(process.argv.slice(4))
-  else if (shell) Tab.setup('tempo-cli', 'node playground/scripts/cli.ts', shell)
+  else if (shell) Tab.setup('tempo-cli', 'pnpm tsx scripts/cli.ts', shell)
   else console.log('Usage: tempo-cli complete <shell|-->')
   process.exit(0)
 }
+
+// ── Args ─────────────────────────────────────────────────
 
 const args = parse(process.argv.slice(2), {
   string: ['url', 'key-file'],
@@ -44,11 +45,11 @@ if (args.help) {
   tempo · cli auth
 
   Usage
-    node playground/scripts/cli.ts [command] [options]
+    pnpm cli [command] [options]
 
   Commands
-    connect              Sign in / sign up (interactive default)
-    request              Create device code only
+    connect       Sign in / sign up via browser (default)
+    request       Authorize an access key
 
   Options
     -u, --url <url>        Auth service URL
@@ -56,7 +57,7 @@ if (args.help) {
     -h, --help             Show this help
 
   Shell Completions
-    source <(node playground/scripts/cli.ts complete zsh)
+    source <(pnpm tsx scripts/cli.ts complete zsh)
 `)
   process.exit(0)
 }
@@ -64,107 +65,127 @@ if (args.help) {
 const command = args._[0] as string | undefined
 
 if (command && command !== 'connect' && command !== 'request') {
-  console.error(`Unknown command: ${command}`)
-  console.error('Available commands: connect, request')
+  console.error(`Unknown command: ${command}. Try: connect, request`)
   process.exit(1)
 }
 
+// ── Main ─────────────────────────────────────────────────
+
 async function main() {
-  console.info('')
-  Clack.intro('Tempo Accounts SDK - CLI Auth', { withGuide: true })
+  Clack.intro('tempo')
 
-  const defaultUrl = resolveDefaultUrl()
+  const setup = await Clack.group(
+    {
+      serviceUrl: () => resolveServiceUrl(),
+      accessKey: async () => {
+        const keyFile = args['key-file'] ?? 'tmp/cli-auth-demo/access-key.json'
+        return loadAccessKey(keyFile)
+      },
+    },
+    { onCancel: () => cancel() },
+  )
 
-  let serviceUrl: string
+  const { serviceUrl } = setup
+  const { account, file } = setup.accessKey
 
-  if (args.url) {
-    serviceUrl = trimSlash(args.url)
-  } else {
-    const target = await Clack.select({
-      message: 'Auth service URL',
-      options: [
-        { value: 'local', label: defaultUrl, hint: 'localhost' },
-        { value: 'tailscale', label: 'https://o-1.tail388b2e.ts.net/cli-auth', hint: 'tailscale' },
-        { value: 'custom', label: 'Enter a URL' },
-      ],
-    })
+  Clack.box(
+    [
+      `address     ${dim(account.address)}`,
+      `public key  ${dim(truncate(account.publicKey, 24))}`,
+      `key file    ${dim(file)}`,
+      `service     ${dim(serviceUrl)}`,
+    ].join('\n'),
+    'Access Key',
+  )
 
-    if (Clack.isCancel(target)) {
-      Clack.cancel('Cancelled.')
-      return
-    }
-
-    if (target === 'custom') {
-      const input = await Clack.text({
-        message: 'Auth service URL',
-        placeholder: 'https://example.com/cli-auth',
-        validate(value) {
-          if (!value) return 'URL is required'
-          try {
-            new URL(value)
-          } catch {
-            return 'enter a valid URL'
-          }
-        },
-      })
-
-      if (Clack.isCancel(input)) {
-        Clack.cancel('Cancelled.')
-        return
-      }
-
-      serviceUrl = trimSlash(input)
-    } else if (target === 'tailscale') {
-      serviceUrl = 'https://o-1.tail388b2e.ts.net/cli-auth'
-    } else {
-      serviceUrl = trimSlash(defaultUrl)
-    }
-  }
-
-  const mode =
-    command ??
-    (await Clack.select({
-      message: 'What would you like to do?',
-      options: [
-        {
-          value: 'connect',
-          label: 'Sign in / Sign up',
-          hint: 'full device-code flow with browser',
-        },
-        { value: 'request', label: 'Send request', hint: 'authorize w/ access key' },
-      ],
-    }))
-
-  if (Clack.isCancel(mode)) {
-    Clack.cancel('Cancelled.')
+  // Single command mode
+  if (command) {
+    if (command === 'connect') await connectFlow(serviceUrl, account)
+    else await authorizeFlow(serviceUrl, account)
+    Clack.outro('Done')
     return
   }
 
-  const keyFile = args['key-file'] ?? 'tmp/cli-auth-demo/access-key.json'
-  const { account, file } = await loadAccessKey(keyFile)
+  // Interactive menu loop
+  let browserOpened = false
 
-  Clack.note(
-    [
-      `address      ${account.address}`,
-      `public key   ${truncate(account.publicKey)}`,
-      `key file     ${file}`,
-      `service      ${serviceUrl}`,
-    ].join('\n'),
-    'access key',
-  )
+  while (true) {
+    const action = await Clack.select({
+      message: 'What would you like to do?',
+      options: [
+        ...(!browserOpened
+          ? [{ value: 'connect' as const, label: 'Sign in / Sign up', hint: 'opens browser' }]
+          : []),
+        {
+          value: 'authorize',
+          label: 'Authorize access key',
+          hint: browserOpened ? 'uses open browser tab' : 'creates code + waits for browser',
+        },
+        { value: 'quit', label: 'Quit' },
+      ],
+    })
 
-  if (mode === 'request') await submitRequest(serviceUrl, account)
-  else await connectFlow(serviceUrl, account)
+    if (Clack.isCancel(action) || action === 'quit') {
+      Clack.outro('bye 👋')
+      return
+    }
 
-  Clack.outro('done')
+    if (action === 'connect') {
+      await connectFlow(serviceUrl, account)
+      browserOpened = true
+    } else {
+      await authorizeFlow(serviceUrl, account)
+    }
+  }
 }
 
-async function submitRequest(serviceUrl: string, account: AccessKey) {
-  const s = Clack.spinner()
-  s.start('Creating device code')
+// ── Flows ────────────────────────────────────────────────
+
+async function connectFlow(serviceUrl: string, account: AccessKey) {
+  const task = Clack.taskLog({ title: 'Sign in' })
+
+  const provider = Provider.create({
+    open(url) {
+      task.message(`Device code created`)
+      task.message(`Opening ${url}`)
+      openBrowser(url)
+      task.message('Waiting for passkey approval…')
+    },
+    pollIntervalMs: 2_000,
+    serviceUrl,
+    testnet: true,
+    timeoutMs: 300_000,
+  })
+
+  try {
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: {
+            authorizeAccessKey: accessKeyParams(account),
+          },
+        },
+      ],
+    })
+
+    const connected = result.accounts[0]
+    task.success(connected?.address ? `Signed in as ${connected.address}` : 'Signed in')
+
+    if (connected?.capabilities.keyAuthorization)
+      await logKeyAuthorization(connected.capabilities.keyAuthorization)
+  } catch (error) {
+    task.error(error instanceof Error ? error.message : String(error))
+  }
+}
+
+async function authorizeFlow(serviceUrl: string, account: AccessKey) {
+  const task = Clack.taskLog({ title: 'Authorize access key' })
 
   const codeVerifier = createCodeVerifier()
   const codeChallenge = await createCodeChallenge(codeVerifier)
+
+  task.message('Creating device code…')
 
   const created = await post({
     body: {
@@ -179,70 +200,46 @@ async function submitRequest(serviceUrl: string, account: AccessKey) {
     url: apiUrl(serviceUrl, 'device-code'),
   })
 
-  s.stop('Device code created')
+  task.message(`Code: ${bold(created.code)}`)
+  task.message(`URL: ${browserUrl(serviceUrl, created.code)}`)
+  task.message('Waiting for passkey approval…')
 
-  Clack.note(
-    [`code   ${created.code}`, `url    ${browserUrl(serviceUrl, created.code)}`].join('\n'),
-    'request',
-  )
-}
-
-async function connectFlow(serviceUrl: string, account: AccessKey) {
-  const s = Clack.spinner()
-  s.start('Creating device code')
-
-  const provider = Provider.create({
-    open(url) {
-      s.stop('Device code created')
-      Clack.log.info(url)
-      openBrowser(url)
-      s.start('Waiting for approval in browser')
-    },
-    pollIntervalMs: 2_000,
-    serviceUrl,
-    testnet: true,
-    timeoutMs: 300_000,
-  })
-
-  try {
-    const result = await provider.request({
-      method: 'wallet_connect',
-      params: [
-        {
-          capabilities: {
-            authorizeAccessKey: {
-              expiry: Math.floor(Date.now() / 1000) + 3600,
-              keyType: account.keyType,
-              limits: [
-                {
-                  limit: Hex.fromNumber(1_000),
-                  token: '0x20c0000000000000000000000000000000000001',
-                },
-              ],
-              publicKey: account.publicKey,
-            },
-          },
-        },
-      ],
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < 300_000) {
+    const result = await post({
+      body: { code_verifier: codeVerifier } satisfies z.output<typeof CliAuth.pollRequest>,
+      request: CliAuth.pollRequest,
+      response: CliAuth.pollResponse,
+      url: apiUrl(serviceUrl, `poll/${created.code}`),
     })
 
-    const connected = result.accounts[0]
-    s.stop(`Signed in as ${connected?.address}`)
+    if (result.status === 'pending') {
+      await sleep(2_000)
+      continue
+    }
 
-    if (connected?.capabilities.keyAuthorization)
-      Clack.note(
-        JSON.stringify(connected.capabilities.keyAuthorization, null, 2),
-        'key authorization',
-      )
-  } catch (error) {
-    s.stop('Failed')
-    Clack.log.error(error instanceof Error ? error.message : String(error))
-    process.exitCode = 1
+    if (result.status === 'expired') {
+      task.error('Device code expired.')
+      return
+    }
+
+    task.success(`Authorized by ${result.account_address}`)
+    if (result.key_authorization) await logKeyAuthorization(result.key_authorization)
+    return
   }
+
+  task.error('Timed out waiting for approval.')
 }
 
-function createAccessKey(privateKey: `0x${string}`) {
-  return TempoAccount.fromP256(privateKey)
+// ── Access key ───────────────────────────────────────────
+
+function accessKeyParams(account: AccessKey) {
+  return {
+    expiry: Math.floor(Date.now() / 1000) + 3600,
+    keyType: account.keyType,
+    limits: [{ limit: Hex.fromNumber(1_000), token: '0x20c0000000000000000000000000000000000001' }],
+    publicKey: account.publicKey,
+  }
 }
 
 async function loadAccessKey(file: string) {
@@ -258,14 +255,51 @@ async function loadAccessKey(file: string) {
     await writeFile(file, JSON.stringify({ privateKey }, null, 2) + '\n', 'utf8')
   }
 
-  return { account: createAccessKey(privateKey), file }
+  return { account: TempoAccount.fromP256(privateKey), file }
+}
+
+// ── URL resolution ───────────────────────────────────────
+
+async function resolveServiceUrl(): Promise<string> {
+  if (args.url) return trimSlash(args.url)
+
+  const defaultUrl = resolveDefaultUrl()
+  const target = await Clack.select({
+    message: 'Auth service',
+    options: [
+      { value: 'local', label: defaultUrl, hint: 'local dev' },
+      { value: 'tailscale', label: 'https://o-1.tail388b2e.ts.net/cli-auth', hint: 'tailscale' },
+      { value: 'custom', label: 'Custom URL…' },
+    ],
+  })
+
+  if (Clack.isCancel(target)) return cancel()
+
+  if (target === 'tailscale') return 'https://o-1.tail388b2e.ts.net/cli-auth'
+  if (target !== 'custom') return trimSlash(defaultUrl)
+
+  const input = await Clack.text({
+    message: 'Auth service URL',
+    placeholder: 'https://example.com/cli-auth',
+    validate: (v) => {
+      if (!v) return 'URL is required'
+      try {
+        new URL(v)
+      } catch {
+        return 'Invalid URL'
+      }
+    },
+  })
+
+  if (Clack.isCancel(input)) return cancel()
+  return trimSlash(input)
 }
 
 function resolveDefaultUrl() {
   const value = process.env.CLI_AUTH_URL
   if (value) {
     const url = new URL(value)
-    if (!url.pathname || url.pathname === '/') url.pathname = normalizePath(basePath())
+    if (!url.pathname || url.pathname === '/') url.pathname = '/cli-auth'
     url.hash = ''
     return trimSlash(url.toString())
   }
@@ -275,24 +309,15 @@ function resolveDefaultUrl() {
   const port = process.env.CLI_AUTH_PORT ?? process.env.HTTP_PORT ?? '6969'
   const url = new URL(`${protocol}://${host}`)
   if (!isDefaultPort(protocol, port)) url.port = port
-  url.pathname = normalizePath(basePath())
+  url.pathname = '/cli-auth'
   return trimSlash(url.toString())
 }
 
-function isDefaultPort(protocol: string, port: string) {
-  return (protocol === 'http' && port === '80') || (protocol === 'https' && port === '443')
-}
+// ── Helpers ──────────────────────────────────────────────
 
-function basePath() {
-  return process.env.CLI_AUTH_PATH || '/cli-auth'
-}
-
-function normalizePath(p: string) {
-  return p.startsWith('/') ? p : `/${p}`
-}
-
-function trimSlash(value: string) {
-  return value.endsWith('/') ? value.slice(0, -1) : value
+function cancel(): never {
+  Clack.cancel('Cancelled.')
+  process.exit(0)
 }
 
 function apiUrl(serviceUrl: string, path: string) {
@@ -306,6 +331,63 @@ function browserUrl(serviceUrl: string, code: string) {
   const url = new URL(serviceUrl)
   url.searchParams.set('code', code)
   return url.toString()
+}
+
+function openBrowser(url: string) {
+  const cmd =
+    process.platform === 'darwin'
+      ? { command: 'open', args: [url] }
+      : process.platform === 'win32'
+        ? { command: 'cmd', args: ['/c', 'start', '', url] }
+        : { command: 'xdg-open', args: [url] }
+  const child = spawn(cmd.command, cmd.args, { detached: true, stdio: 'ignore' })
+  child.unref()
+}
+
+function isDefaultPort(protocol: string, port: string) {
+  return (protocol === 'http' && port === '80') || (protocol === 'https' && port === '443')
+}
+
+function trimSlash(value: string) {
+  return value.endsWith('/') ? value.slice(0, -1) : value
+}
+
+function truncate(value: string, length = 20) {
+  return value.length <= length ? value : `${value.slice(0, length)}…${value.slice(-6)}`
+}
+
+async function logKeyAuthorization(auth: Record<string, unknown>) {
+  const keyId = auth.keyId ?? auth.key_id ?? auth.address
+  const keyType = auth.keyType ?? auth.key_type ?? '?'
+  const chainId = auth.chainId ?? auth.chain_id ?? '?'
+  const expiry = auth.expiry
+  const sig = (auth.signature as Record<string, unknown> | undefined)?.type ?? '?'
+
+  Clack.box(
+    [
+      `key      ${dim(String(keyId))}`,
+      `type     ${dim(String(keyType))}`,
+      `chain    ${dim(String(chainId))}`,
+      `expiry   ${dim(String(expiry))}`,
+      `sig      ${dim(String(sig))}`,
+    ].join('\n'),
+    'Key Authorization',
+  )
+
+  const show = await Clack.confirm({ message: 'Show full payload?', initialValue: false })
+  if (show === true) Clack.log.message(jsonStringify(auth))
+}
+
+function jsonStringify(value: unknown) {
+  return JSON.stringify(value, (_, v) => (typeof v === 'bigint' ? v.toString() : v), 2)
+}
+
+function bold(value: string) {
+  return `\x1b[1m${value}\x1b[22m`
+}
+
+function dim(value: string) {
+  return `\x1b[2m${value}\x1b[22m`
 }
 
 async function createCodeChallenge(codeVerifier: string) {
@@ -336,22 +418,7 @@ async function post<
   return z.decode(options.response, json)
 }
 
-function openBrowser(url: string) {
-  const cmd =
-    process.platform === 'darwin'
-      ? { command: 'open', args: [url] }
-      : process.platform === 'win32'
-        ? { command: 'cmd', args: ['/c', 'start', '', url] }
-        : { command: 'xdg-open', args: [url] }
-
-  const child = spawn(cmd.command, cmd.args, { detached: true, stdio: 'ignore' })
-  child.unref()
-}
-
-function truncate(value: string, length = 20) {
-  if (value.length <= length) return value
-  return `${value.slice(0, length)}…${value.slice(-6)}`
-}
+// ── Run ──────────────────────────────────────────────────
 
 main().catch((error) => {
   Clack.log.error(error instanceof Error ? error.message : String(error))

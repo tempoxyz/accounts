@@ -1,10 +1,10 @@
 import { tempo, tempoModerato } from 'viem/chains'
 import * as z from 'zod/mini'
 
+import { webAuthn } from '../../../src/core/adapters/webAuthn.js'
 import * as Ceremony from '../../../src/core/Ceremony.js'
 import * as Provider from '../../../src/core/Provider.js'
 import * as Storage from '../../../src/core/Storage.js'
-import { webAuthn } from '../../../src/core/adapters/webAuthn.js'
 import * as Rpc from '../../../src/core/zod/rpc.js'
 
 type Pending = {
@@ -178,6 +178,20 @@ async function loadLatestPending() {
   pending = next
   codeInput.value = pending.code
   renderPending(pending)
+
+  // Auto-authorize if already signed in
+  if (account && matchesRequestedAccount()) {
+    setStatus(`New request detected. Authorizing access key ${pending.access_key_address}…`)
+    syncUi()
+    try {
+      if (account) await authorizeOnly()
+      else await authenticateAndApprove()
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Auto-authorization failed.')
+    }
+    return
+  }
+
   setStatus('New access-key request loaded automatically.')
   syncUi()
 }
