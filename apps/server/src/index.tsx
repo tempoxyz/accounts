@@ -12,11 +12,6 @@ import * as z from 'zod/mini'
 
 const memoryKv = Kv.memory()
 const latestPendingCodeKey = 'tempo-server.latest-pending-code'
-const resetPrefixes = ['challenge:', 'cli-auth:', 'credential:'] as const
-const debugVersion = {
-  authorizeVerifier: 'webauthn-envelope-magic-only',
-  build: '2026-03-27-cli-auth-debug-version-1',
-}
 
 const app = new Hono<{ Bindings: Cloudflare.Env }>()
 app.use('*', prettyJSON({ force: true, space: 2 }))
@@ -129,7 +124,6 @@ app.get('/cli-auth/latest', async (context) => {
     const kv = getKv(context.env)
     const code = await kv.get<string | undefined>(latestPendingCodeKey)
 
-    console.info(JSON.stringify({ route: context.req.path, data: { code, kv } }, undefined, 2))
     if (!code) return new Response(null, { status: 204 })
 
     const pending = await CliAuth.pending({
@@ -181,7 +175,8 @@ app.post('/reset', async (context) => {
     )
 
   let deleted = 0
-  for (const prefix of resetPrefixes) deleted += await deletePrefix(kv, prefix)
+  for (const prefix of ['challenge:', 'cli-auth:', 'credential:'])
+    deleted += await deletePrefix(kv, prefix)
   await kv.delete(latestPendingCodeKey)
 
   return Response.json({
@@ -189,8 +184,6 @@ app.post('/reset', async (context) => {
     status: 'ok',
   })
 })
-
-app.get('/debug', (context) => context.json(debugVersion))
 
 app.post('/debug/authorize-check', async (context) => {
   try {

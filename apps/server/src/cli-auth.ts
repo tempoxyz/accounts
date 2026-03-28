@@ -1,8 +1,11 @@
 import { tempo, tempoModerato } from 'viem/chains'
 import * as z from 'zod/mini'
 
+import * as Ceremony from '../../../src/core/Ceremony.js'
+import * as Provider from '../../../src/core/Provider.js'
+import * as Storage from '../../../src/core/Storage.js'
+import { webAuthn } from '../../../src/core/adapters/webAuthn.js'
 import * as Rpc from '../../../src/core/zod/rpc.js'
-import { Ceremony, Provider, Storage, webAuthn } from '../../../src/index.js'
 
 type Pending = {
   access_key_address: `0x${string}`

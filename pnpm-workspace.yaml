@@ -19,6 +19,7 @@ catalog:
   react-dom: ^19.1.1
   typescript: ^5.9.3
   viem: ^2.47.1
+  tsx: ^4.21.0
   vp: npm:vite-plus@~0.1.14
   wagmi: ^3.5.0
   '@cloudflare/vite-plugin': ^1.30.2
@@ -30,6 +31,7 @@ catalog:
   hono: ^4.12.9
   zod: ^4.3.6
   typed-query-selector: ^2.12.1
+  '@cloudflare/workers-types': ^4.20260317.1
 
 onlyBuiltDependencies:
   - esbuild
