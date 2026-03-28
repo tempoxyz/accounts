@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
-import { Json } from 'ox'
 import type { Store } from 'accounts'
+import { Json } from 'ox'
 
 import { remote } from '../lib/config.js'
 

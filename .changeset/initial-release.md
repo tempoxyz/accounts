@@ -1,5 +1,0 @@
----
-'accounts': minor
----
-
-Initial release.
