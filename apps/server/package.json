@@ -18,7 +18,7 @@
     "hono": "catalog:",
     "viem": "catalog:",
     "zod": "catalog:",
-    "tempodk": "workspace:*"
+    "accounts": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "catalog:",

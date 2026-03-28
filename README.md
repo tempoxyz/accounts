@@ -60,10 +60,10 @@ export const wagmiConfig = createConfig({
 
 ### CLI Bootstrap
 
-Use the `tempodk/cli` entrypoint when an external CLI already owns the local key material and only needs the Tempo Wallet browser flow to authenticate the user and authorize that key.
+Use the `accounts/cli` entrypoint when an external CLI already owns the local key material and only needs the Tempo Wallet browser flow to authenticate the user and authorize that key.
 
 ```ts
-import { Provider } from 'tempodk/cli'
+import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
   serviceUrl: 'https://wallet.example.com/cli-auth',
@@ -88,7 +88,7 @@ This adapter is bootstrap-only in v1. It supports `wallet_connect` and returns t
 
 ### CLI Auth Server
 
-Use `Handler.cliAuth` from `tempodk/server` to host the generic device-code protocol:
+Use `Handler.cliAuth` from `accounts/server` to host the generic device-code protocol:
 
 - `POST /cli-auth/device-code`
 - `POST /cli-auth/poll/:code`
@@ -115,7 +115,7 @@ The device-code protocol value is the raw 8-character code, for example `ABCDEFG
 
 ### Local CLI Smoke Test
 
-Use the dev-only harness below when you want to manually exercise the extracted `tempodk/cli` + `tempodk/server` flow before `tempo/app` adopts the new server primitives.
+Use the dev-only harness below when you want to manually exercise the extracted `accounts/cli` + `accounts/server` flow before `tempo/app` adopts the new server primitives.
 
 In one terminal, start the playground app and worker:
 
@@ -162,7 +162,7 @@ Expected terminal output from the CLI demo looks like:
 
 This harness is intentionally minimal:
 
-- it validates the extracted `tempodk/cli` + `tempodk/server` flow
+- it validates the extracted `accounts/cli` + `accounts/server` flow
 - the demo implementation lives under `playground/` and is intentionally not the real Tempo Wallet UI
 - it uses a fixed dev root account for approval
 - it includes extra dev-only helper routes for the playground approval surface

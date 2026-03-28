@@ -17,7 +17,7 @@ type AccessKey = ReturnType<typeof createAccessKey>
 
 const { account, file } = await loadAccessKey()
 
-console.log(`tempodk CLI auth smoke test`)
+console.log(`accounts CLI auth smoke test`)
 console.log(`serviceUrl: ${serviceUrl}`)
 console.log(`access key file: ${file}`)
 console.log(`access key address: ${account.address}`)

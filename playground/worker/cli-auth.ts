@@ -1,6 +1,6 @@
+import { CliAuth, Handler } from 'accounts/server'
 import { Address as ox_Address, PublicKey } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { CliAuth, Handler } from 'tempodk/server'
 import { createClient, http } from 'viem'
 import { tempoModerato as tempoTestnet } from 'viem/chains'
 import { Account as TempoAccount } from 'viem/tempo'
