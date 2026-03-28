@@ -1,5 +1,5 @@
 import { Expiry } from 'accounts'
-import { Hex, Json } from 'ox'
+import { Hex, Json, P256 } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
@@ -419,6 +419,18 @@ function WalletSwitchChain() {
   )
 }
 
+const tokens =
+  process.env.VITE_ENV === 'testnet'
+    ? ({
+        pathUSD: '0x20c0000000000000000000000000000000000000',
+        alphaUSD: '0x20c0000000000000000000000000000000000001',
+        betaUSD: '0x20c0000000000000000000000000000000000002',
+        thetaUSD: '0x20c0000000000000000000000000000000000003',
+      } as const satisfies Record<string, `0x${string}`>)
+    : ({
+        pathUSD: '0x20c0000000000000000000000000000000000000',
+        'USDC.e': '0x20C000000000000000000000b9537d11c60E8b50',
+      } as const satisfies Record<string, `0x${string}`>)
 const tokens =
   process.env.VITE_ENV === 'testnet'
     ? ({
