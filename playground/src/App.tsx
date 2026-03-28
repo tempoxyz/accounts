@@ -273,7 +273,7 @@ function WalletSwitchChain() {
 }
 
 const tokens =
-  process.env.VITE_ENV === 'testnet'
+  import.meta.env.VITE_ENV === 'testnet'
     ? ({
         pathUSD: '0x20c0000000000000000000000000000000000000',
         alphaUSD: '0x20c0000000000000000000000000000000000001',

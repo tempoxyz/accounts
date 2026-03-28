@@ -16,7 +16,7 @@ export function createProvider(adapterType: AdapterType) {
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host: import.meta.env.VITE_WALLET_DIALOG_HOST,
       }),
-      testnet: process.env.VITE_ENV === 'testnet',
+      testnet: import.meta.env.VITE_ENV === 'testnet',
     })
 
   if (adapterType === 'dialogRefImpl')
@@ -25,7 +25,7 @@ export function createProvider(adapterType: AdapterType) {
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host: import.meta.env.VITE_REF_DIALOG_HOST,
       }),
-      testnet: process.env.VITE_ENV === 'testnet',
+      testnet: import.meta.env.VITE_ENV === 'testnet',
     })
 
   if (adapterType === 'webAuthn') {
@@ -33,7 +33,7 @@ export function createProvider(adapterType: AdapterType) {
     return Provider.create({
       adapter: webAuthn({ ceremony }),
       feePayerUrl: '/fee-payer',
-      testnet: process.env.VITE_ENV === 'testnet',
+      testnet: import.meta.env.VITE_ENV === 'testnet',
     })
   }
 
@@ -49,7 +49,7 @@ export function createProvider(adapterType: AdapterType) {
       },
     }),
     feePayerUrl: '/fee-payer',
-    testnet: process.env.VITE_ENV === 'testnet',
+    testnet: import.meta.env.VITE_ENV === 'testnet',
   })
 }
 
