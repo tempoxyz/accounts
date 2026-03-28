@@ -6,30 +6,27 @@
     "check": "vp lint --fix --ignore-pattern package.json --ignore-pattern embed && vp fmt",
     "check:types": "tsc -b && pnpm --filter './examples/*' check:types && pnpm --filter playground check:types",
     "dev": "pnpm dev:embed & pnpm dev:embed-ref & pnpm dev:playground",
-    "demo:cli-auth": "pnpm tsx playground/scripts/cli-auth.ts",
-    "cli": "pnpm tsx scripts/cli.ts",
     "dev:hosts": "./scripts/dev:hosts.sh",
     "dev:embed": "pnpm --filter tempo-app dev:ssl",
     "dev:embed-ref": "pnpm --filter embed-ref dev",
     "dev:playground": "pnpm --filter playground dev",
     "example:wagmi": "pnpm --filter wagmi dev & pnpm dev:embed",
+    "example:cli": "pnpm --filter server dev & pnpm --filter cli dev",
     "preconstruct": "zile dev",
-    "test": "vp test"
+    "test": "vp test",
+    "vp": "vp"
   },
   "packageManager": "pnpm@10.18.3",
   "devEngines": {
     "runtime": {
       "name": "node",
-      "version": "^24.5.1",
+      "version": "^24.14.1",
       "onFail": "download"
     }
   },
   "devDependencies": {
-    "@bomb.sh/args": "^0.3.1",
-    "@bomb.sh/tab": "^0.0.14",
     "@changesets/changelog-github": "^0.6.0",
     "@changesets/cli": "^2.30.0",
-    "@clack/prompts": "^1.1.0",
     "@remix-run/route-pattern": "^0.19.0",
     "@types/express": "^5.0.6",
     "@types/http-proxy": "^1.17.17",

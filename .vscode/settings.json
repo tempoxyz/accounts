@@ -17,9 +17,11 @@
     "editor.defaultFormatter": "oxc.oxc-vscode"
   },
   "[json]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.formatOnSave": false
   },
   "[jsonc]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.formatOnSave": false
   },
   "files.associations": {

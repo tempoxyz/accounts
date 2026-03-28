@@ -1,6 +1,8 @@
 import { parse } from '@bomb.sh/args'
 import Tab from '@bomb.sh/tab'
 import * as Clack from '@clack/prompts'
+import { Provider } from 'accounts/cli'
+import * as CliAuth from 'accounts/server'
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -8,9 +10,6 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { Base64, Hex, P256 } from 'ox'
 import { Account as TempoAccount } from 'viem/tempo'
 import * as z from 'zod/mini'
-
-import { Provider } from '../src/cli/index.js'
-import * as CliAuth from '../src/server/CliAuth.js'
 
 type AccessKey = ReturnType<typeof TempoAccount.fromP256>
 
@@ -194,9 +193,9 @@ async function authorizeFlow(serviceUrl: string, account: AccessKey) {
       keyType: account.keyType,
       limits: [{ limit: 1_000n, token: '0x20c0000000000000000000000000000000000001' as const }],
       pubKey: account.publicKey,
-    } satisfies z.output<typeof CliAuth.createRequest>,
-    request: CliAuth.createRequest,
-    response: CliAuth.createResponse,
+    } satisfies z.output<typeof CliAuth.CliAuth.createRequest>,
+    request: CliAuth.CliAuth.createRequest,
+    response: CliAuth.CliAuth.createResponse,
     url: apiUrl(serviceUrl, 'code'),
   })
 
@@ -207,9 +206,9 @@ async function authorizeFlow(serviceUrl: string, account: AccessKey) {
   const startedAt = Date.now()
   while (Date.now() - startedAt < 300_000) {
     const result = await post({
-      body: { codeVerifier } satisfies z.output<typeof CliAuth.pollRequest>,
-      request: CliAuth.pollRequest,
-      response: CliAuth.pollResponse,
+      body: { codeVerifier } satisfies z.output<typeof CliAuth.CliAuth.pollRequest>,
+      request: CliAuth.CliAuth.pollRequest,
+      response: CliAuth.CliAuth.pollResponse,
       url: apiUrl(serviceUrl, `poll/${created.code}`),
     })
 

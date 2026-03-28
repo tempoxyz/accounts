@@ -2,6 +2,8 @@ import { Base64, P256 } from 'ox'
 import { chromium } from 'playwright-core'
 import { Account as TempoAccount } from 'viem/tempo'
 
+// TODO: update to use Vitest to test
+
 const serviceUrl = 'http://localhost:6969/cli-auth'
 
 const privateKey = P256.randomPrivateKey()

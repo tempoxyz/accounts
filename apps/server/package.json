@@ -1,5 +1,5 @@
 {
-  "name": "tempo-server",
+  "name": "server",
   "version": "0.0.0",
   "type": "module",
   "imports": {
@@ -11,9 +11,8 @@
     "dev": "vp dev",
     "build": "vp build",
     "preview": "vp preview",
-    "postinstall": "wrangler types --env-interface CloudflareBindings",
     "check:types": "tsc --noEmit",
-    "types": "wrangler types --env-interface CloudflareBindings"
+    "postinstall": "wrangler types --env-interface='CloudflareBindings'"
   },
   "dependencies": {
     "hono": "catalog:",

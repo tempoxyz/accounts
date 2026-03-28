@@ -22,7 +22,6 @@
   "preview_urls": true,
   "kv_namespaces": [
     {
-      "remote": true,
       "binding": "CLI_AUTH_KV",
       "id": "8a5cb81cdabb4135afb4c004a2b12ace"
     }

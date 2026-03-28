@@ -16,6 +16,111 @@ const latestPendingCodeKey = 'tempo-server.latest-pending-code'
 const app = new Hono<{ Bindings: Cloudflare.Env }>()
 app.use('*', prettyJSON({ force: true, space: 2 }))
 
+/**
+ * TODO: remove
+ */
+app.get(
+  '/cli-auth',
+  jsxRenderer(({ children }) => {
+    return (
+      <html lang="en">
+        <head>
+          <meta charSet="utf-8" />
+          <meta content="width=device-width, initial-scale=1" name="viewport" />
+          <title>Tempo CLI Approval</title>
+        </head>
+        <body style="font-family:monospace;">
+          {children}
+          <script src={cliAuthUrl} type="module"></script>
+        </body>
+      </html>
+    )
+  }),
+  (context) => {
+    const code = context.req.query('code') ?? ''
+
+    console.info(
+      JSON.stringify(
+        { route: context.req.path, query: context.req.query(), data: { code } },
+        undefined,
+        2,
+      ),
+    )
+
+    return context.render(
+      <main>
+        <header>
+          <p>Authenticate with a Tempo passkey and approve a pending CLI access-key request.</p>
+        </header>
+
+        <section aria-labelledby="load-heading">
+          <h2 id="load-heading">Device code</h2>
+          <form action="/cli-auth" method="get">
+            <p>
+              <label for="code">Enter the code from your terminal</label>
+              <br />
+              <input
+                autoComplete="one-time-code"
+                id="code"
+                inputMode="text"
+                name="code"
+                size={12}
+                value={code}
+              />
+            </p>
+            <p>
+              <button type="submit">Load request</button>
+            </p>
+          </form>
+          <p id="status" role="status">
+            Enter the device code from your terminal to load a pending request.
+          </p>
+        </section>
+
+        <section aria-labelledby="pending-heading">
+          <h2 id="pending-heading">Pending request</h2>
+          <div id="pending"></div>
+        </section>
+
+        <section aria-labelledby="account-heading">
+          <h2 id="account-heading">Passkey account</h2>
+          <p id="account">Not signed in.</p>
+          <p>
+            <button id="register" type="button">
+              Create passkey
+            </button>{' '}
+            <button id="login" type="button">
+              Sign in with passkey
+            </button>
+          </p>
+          <p>
+            <button id="disconnect" type="button">
+              Sign out
+            </button>
+          </p>
+          <p>
+            <button id="reset" type="button">
+              Reset storage
+            </button>
+          </p>
+        </section>
+
+        <section aria-labelledby="approve-heading">
+          <h2 id="approve-heading">Approve</h2>
+          <p id="approval">Load a pending request to authenticate and authorize its access key.</p>
+          <p>
+            <button id="approve" type="button">
+              Authenticate and authorize key
+            </button>
+          </p>
+        </section>
+
+        <noscript>This page requires JavaScript for passkey approval.</noscript>
+      </main>,
+    )
+  },
+)
+
 app.get('/cli-auth/latest', async (context) => {
   try {
     const kv = getKv(context.env)
@@ -185,111 +290,6 @@ app.all('/webauthn/*', async (context) => {
   )
   return webauthn(context.req.raw, context.env).fetch(context.req.raw)
 })
-
-/**
- * TODO: remove
- */
-app.get(
-  '/cli-auth',
-  jsxRenderer(({ children }) => {
-    return (
-      <html lang="en">
-        <head>
-          <meta charSet="utf-8" />
-          <meta content="width=device-width, initial-scale=1" name="viewport" />
-          <title>Tempo CLI Approval</title>
-        </head>
-        <body style="font-family:monospace;">
-          {children}
-          <script src={cliAuthUrl} type="module"></script>
-        </body>
-      </html>
-    )
-  }),
-  (context) => {
-    const code = context.req.query('code') ?? ''
-
-    console.info(
-      JSON.stringify(
-        { route: context.req.path, query: context.req.query(), data: { code } },
-        undefined,
-        2,
-      ),
-    )
-
-    return context.render(
-      <main>
-        <header>
-          <p>Authenticate with a Tempo passkey and approve a pending CLI access-key request.</p>
-        </header>
-
-        <section aria-labelledby="load-heading">
-          <h2 id="load-heading">Device code</h2>
-          <form action="/cli-auth" method="get">
-            <p>
-              <label for="code">Enter the code from your terminal</label>
-              <br />
-              <input
-                autoComplete="one-time-code"
-                id="code"
-                inputMode="text"
-                name="code"
-                size={12}
-                value={code}
-              />
-            </p>
-            <p>
-              <button type="submit">Load request</button>
-            </p>
-          </form>
-          <p id="status" role="status">
-            Enter the device code from your terminal to load a pending request.
-          </p>
-        </section>
-
-        <section aria-labelledby="pending-heading">
-          <h2 id="pending-heading">Pending request</h2>
-          <div id="pending"></div>
-        </section>
-
-        <section aria-labelledby="account-heading">
-          <h2 id="account-heading">Passkey account</h2>
-          <p id="account">Not signed in.</p>
-          <p>
-            <button id="register" type="button">
-              Create passkey
-            </button>{' '}
-            <button id="login" type="button">
-              Sign in with passkey
-            </button>
-          </p>
-          <p>
-            <button id="disconnect" type="button">
-              Sign out
-            </button>
-          </p>
-          <p>
-            <button id="reset" type="button">
-              Reset storage
-            </button>
-          </p>
-        </section>
-
-        <section aria-labelledby="approve-heading">
-          <h2 id="approve-heading">Approve</h2>
-          <p id="approval">Load a pending request to authenticate and authorize its access key.</p>
-          <p>
-            <button id="approve" type="button">
-              Authenticate and authorize key
-            </button>
-          </p>
-        </section>
-
-        <noscript>This page requires JavaScript for passkey approval.</noscript>
-      </main>,
-    )
-  },
-)
 
 app.get('/', (context) => context.text('Tempo CLI auth server'))
 

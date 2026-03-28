@@ -109,21 +109,12 @@ importers:
         specifier: ^5.0.11
         version: 5.0.11(@types/react@19.2.2)(immer@11.1.4)(react@19.2.0)(use-sync-external-store@1.6.0(react@19.2.0))
     devDependencies:
-      '@bomb.sh/args':
-        specifier: ^0.3.1
-        version: 0.3.1
-      '@bomb.sh/tab':
-        specifier: ^0.0.14
-        version: 0.0.14(cac@6.7.14)
       '@changesets/changelog-github':
         specifier: ^0.6.0
         version: 0.6.0
       '@changesets/cli':
         specifier: ^2.30.0
         version: 2.30.0(@types/node@25.3.3)
-      '@clack/prompts':
-        specifier: ^1.1.0
-        version: 1.1.0
       '@remix-run/route-pattern':
         specifier: ^0.19.0
         version: 0.19.0
@@ -164,7 +155,7 @@ importers:
         specifier: ^4.12.4
         version: 4.12.4
       node:
-        specifier: runtime:^24.5.1
+        specifier: runtime:^24.14.1
         version: runtime:24.14.1
       playwright-core:
         specifier: ^1.58.2
@@ -511,6 +502,46 @@ importers:
       vite-plugin-mkcert:
         specifier: ^1.17.10
         version: 1.17.10(vite@8.0.1)
+      vp:
+        specifier: 'catalog:'
+        version: vite-plus@0.1.14(@opentelemetry/api@1.9.0)(@types/node@25.5.0)(@vitejs/devtools@0.1.11)(bufferutil@4.0.9)(esbuild@0.27.4)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.1)(yaml@2.8.2)
+
+  examples/cli:
+    dependencies:
+      '@bomb.sh/args':
+        specifier: ^0.3.1
+        version: 0.3.1
+      '@bomb.sh/tab':
+        specifier: ^0.0.14
+        version: 0.0.14(cac@6.7.14)
+      '@clack/prompts':
+        specifier: ^1.1.0
+        version: 1.1.0
+      accounts:
+        specifier: workspace:*
+        version: link:../..
+      ox:
+        specifier: ~0.14.7
+        version: 0.14.7(typescript@5.9.3)(zod@4.3.6)
+      viem:
+        specifier: ^2.47.1
+        version: 2.47.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.5.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
+      typed-query-selector:
+        specifier: 'catalog:'
+        version: 2.12.1
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
       vp:
         specifier: 'catalog:'
         version: vite-plus@0.1.14(@opentelemetry/api@1.9.0)(@types/node@25.5.0)(@vitejs/devtools@0.1.11)(bufferutil@4.0.9)(esbuild@0.27.4)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.1)(yaml@2.8.2)
