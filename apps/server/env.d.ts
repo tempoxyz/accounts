@@ -14,3 +14,9 @@ interface ImportMetaEnv extends EnvironmentVariables {}
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+declare module '*?url' {
+  const url: string
+
+  export default url
+}

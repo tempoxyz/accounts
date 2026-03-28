@@ -359,7 +359,8 @@ export declare namespace feePayer {
 /**
  * Instantiates a generic device-code handler for CLI access-key bootstrap.
  *
- * Exposes 3 POST endpoints:
+ * Exposes 4 endpoints:
+ * - `GET /cli-auth/pending/:code`
  * - `POST /cli-auth/device-code`
  * - `POST /cli-auth/poll/:code`
  * - `POST /cli-auth/authorize`
@@ -381,6 +382,22 @@ export function cliAuth(options: cliAuth.Options = {}): Handler {
   } = options
 
   const router = from(rest)
+
+  router.get(`${path}/pending/:code`, async ({ params }) => {
+    try {
+      const { code } = params as { code: string }
+      const result = await CliAuth.pending({
+        code,
+        ...(now ? { now } : {}),
+        store,
+      })
+
+      return Response.json(z.encode(CliAuth.pendingResponse, result))
+    } catch (error) {
+      const status = error instanceof CliAuth.PendingError ? error.status : 400
+      return Response.json({ error: (error as Error).message }, { status })
+    }
+  })
 
   router.post(`${path}/device-code`, async ({ request: req }) => {
     try {

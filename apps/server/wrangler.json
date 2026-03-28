@@ -1,13 +1,17 @@
 {
   "$schema": "https://esm.sh/wrangler/config-schema.json",
-  "name": "h0n0",
+  "name": "tempo-server",
   "keep_vars": true,
   "workers_dev": true,
-  "main": "./src/main.ts",
+  "main": "./src/index.tsx",
   "compatibility_date": "2026-03-17",
   "compatibility_flags": ["nodejs_compat"],
   "placement": {
     "mode": "smart"
+  },
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "dist/client"
   },
   "dev": {
     "port": 6969
@@ -15,5 +19,12 @@
   "observability": {
     "enabled": true
   },
-  "preview_urls": true
+  "preview_urls": true,
+  "kv_namespaces": [
+    {
+      "remote": true,
+      "binding": "CLI_AUTH_KV",
+      "id": "8a5cb81cdabb4135afb4c004a2b12ace"
+    }
+  ]
 }

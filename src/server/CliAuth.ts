@@ -59,6 +59,19 @@ export const pollResponse = u.oneOf([
   }),
 ])
 
+/** Response body for `GET /cli-auth/pending/:code`. */
+export const pendingResponse = z.object({
+  access_key_address: u.address(),
+  account: z.optional(u.address()),
+  chain_id: u.bigint(),
+  code: z.string(),
+  expiry: z.number(),
+  key_type: keyType,
+  limits: z.optional(z.readonly(z.array(z.object({ token: u.address(), limit: u.bigint() })))),
+  pub_key: u.hex(),
+  status: z.literal('pending'),
+})
+
 /** Request body for `POST /cli-auth/authorize`. */
 export const authorizeRequest = z.object({
   account_address: u.address(),
@@ -164,6 +177,17 @@ export declare namespace Store {
       /** Prefix used for KV keys. @default "cli-auth" */
       key?: string | undefined
     }
+  }
+}
+
+/** Error thrown when pending device-code lookup cannot return a pending request. */
+export class PendingError extends Error {
+  status: 400 | 404
+
+  constructor(message: string, status: 400 | 404) {
+    super(message)
+    this.name = 'PendingError'
+    this.status = status
   }
 }
 
@@ -388,6 +412,44 @@ export declare namespace createDeviceCode {
   export type ReturnType = z.output<typeof createResponse>
 }
 
+/** Looks up a pending device code for browser approval UIs. */
+export async function pending(options: pending.Options): Promise<pending.ReturnType> {
+  const { code, now = Date.now, store = Store.memory() } = options
+  const normalized = normalizeCode(code)
+  const current = await store.get(normalized)
+  if (!current) throw new PendingError('Unknown device code.', 404)
+  if (isExpired(current, now)) {
+    await store.delete(normalized)
+    throw new PendingError('Expired device code.', 404)
+  }
+  if (current.status !== 'pending') throw new PendingError('Device code already completed.', 400)
+
+  return {
+    access_key_address: core_Address.fromPublicKey(PublicKey.from(current.pubKey)),
+    ...(current.account ? { account: current.account } : {}),
+    chain_id: current.chainId,
+    code: current.code,
+    expiry: current.expiry,
+    key_type: current.keyType,
+    ...(current.limits ? { limits: current.limits } : {}),
+    pub_key: current.pubKey,
+    status: 'pending',
+  }
+}
+
+export declare namespace pending {
+  export type Options = {
+    /** Verification code from the route path. */
+    code: string
+    /** Time source used for TTL evaluation. */
+    now?: (() => number) | undefined
+    /** Device-code store. */
+    store?: Store | undefined
+  }
+
+  export type ReturnType = z.output<typeof pendingResponse>
+}
+
 /** Polls a device code with PKCE verification. */
 export async function poll(options: poll.Options): Promise<poll.ReturnType> {
   const { code, now = Date.now, request, store = Store.memory() } = options
@@ -468,7 +530,9 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
   const valid = await verifyHash(client as never, {
     address: request.account_address,
     hash: TempoKeyAuthorization.getSignPayload(expected),
-    signature: SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(actual.signature)),
+    signature: SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(actual.signature), {
+      magic: actual.signature.type === 'webAuthn',
+    }),
   })
   if (!valid) throw new Error('Key authorization signature is invalid.')
 

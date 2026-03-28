@@ -44,6 +44,7 @@
 
 - **CLI auth device codes are raw in protocol** — store, return, and query device codes as raw 8-character values (for example `ABCDEFGH`). Only apply hyphen formatting (`ABCD-EFGH`) when rendering for humans.
 - **Keep CLI protocol looseness scoped** — if the CLI bootstrap/device-code flow needs a more permissive request shape than the shared SDK RPC contract, keep that looseness in the CLI/server-specific surface (for example `src/server/CliAuth.ts` and CLI adapter handling). Do not widen `src/core/zod/rpc.ts` or shared `wallet_authorizeAccessKey` semantics unless the change is explicitly intended SDK-wide.
+- **Preserve WebAuthn signature-envelope magic when verifying RPC payloads** — `SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(signature))` must pass `{ magic: true }` for `webAuthn` signatures, but not for secp256k1/p256 signatures. `viem/tempo` uses the magic suffix to route stateless verification through `SignatureEnvelope.verify(...)`.
 
 ## Type Conventions
 
@@ -67,3 +68,16 @@
 ## Git Conventions
 
 - **Conventional commits** — use `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:` prefixes. Scope is optional (e.g. `feat(parser): add array coercion`).
+
+## Learned User Preferences
+
+- **Dev-only UIs use semantic HTML only** — approval surfaces and debug pages should use plain HTML with no inline styles or CSS. Zero styling.
+- **Short spinner messages** — keep `@clack/prompts` spinner text short to avoid terminal line wrapping; show URLs and long content as static `Clack.log.info()` lines, not inside spinner text.
+- **Understand full request flow before changing CLI UX** — trace the complete path (CLI → server → browser → server → CLI polling) before modifying feedback or error handling in CLI scripts.
+
+## Learned Workspace Facts
+
+- **Playground `run_worker_first`** — `playground/wrangler.jsonc` `assets.run_worker_first` must list all API route patterns (e.g. `/cli-auth/**`). POST requests to unlisted paths fall through to the static assets / SPA layer and return 405.
+- **CLI scripts tooling** — playground CLI scripts (`playground/scripts/`) use `@clack/prompts` (interactive UI), `@bomb.sh/args` (flag parsing), and `@bomb.sh/tab` (shell completions).
+- **`embed` is a git submodule** — points to `git@github.com:tempoxyz/app.git`. Initialize with `git submodule update --init --recursive`.
+- **`VITE_NODE_TAG`** — accepts a Docker image tag (e.g. `latest`, `sha-abc123`) or an HTTP RPC URL (e.g. `https://rpc.moderato.tempo.xyz`) that resolves to a `sha-<hash>` tag via `web3_clientVersion`.

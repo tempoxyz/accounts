@@ -29,6 +29,7 @@ catalog:
   '@vitejs/devtools': '^0.1.3'
   hono: ^4.12.9
   zod: ^4.3.6
+  typed-query-selector: ^2.12.1
 
 onlyBuiltDependencies:
   - esbuild

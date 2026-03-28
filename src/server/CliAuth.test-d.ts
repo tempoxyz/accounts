@@ -33,6 +33,22 @@ describe('pollResponse', () => {
   })
 })
 
+describe('pendingResponse', () => {
+  test('pending responses expose the browser approval payload', () => {
+    expectTypeOf<z.output<typeof CliAuth.pendingResponse>>().toMatchTypeOf<{
+      access_key_address: Hex
+      account?: Hex | undefined
+      chain_id: bigint
+      code: string
+      expiry: number
+      key_type: 'secp256k1' | 'p256' | 'webAuthn'
+      limits?: readonly { token: Hex; limit: bigint }[] | undefined
+      pub_key: Hex
+      status: 'pending'
+    }>()
+  })
+})
+
 describe('Store', () => {
   test('memory helper satisfies the shared store contract', () => {
     expectTypeOf(CliAuth.Store.memory).returns.toMatchTypeOf<CliAuth.Store>()

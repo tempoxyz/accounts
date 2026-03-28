@@ -19,7 +19,10 @@
     "viem": "catalog:default"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.26.1",
+    "@bomb.sh/args": "^0.3.1",
+    "@bomb.sh/tab": "^0.0.14",
+    "@clack/prompts": "^1.1.0",
+    "@cloudflare/vite-plugin": "catalog:",
     "@types/react": "catalog:default",
     "@types/react-dom": "catalog:default",
     "@vitejs/plugin-react": "catalog:default",
@@ -27,6 +30,6 @@
     "typescript": "catalog:default",
     "vite-plugin-mkcert": "^1.17.10",
     "vp": "catalog:",
-    "wrangler": "^4.71.0"
+    "wrangler": "catalog:"
   }
 }

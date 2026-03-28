@@ -4,11 +4,12 @@ import { Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
-import { accounts, chain, privateKeys } from '../../test/config.js'
+import { accounts, chain, privateKeys, webAuthnAccounts } from '../../test/config.js'
 import * as CliAuth from './CliAuth.js'
 import * as Handler from './Handler.js'
 
 const root = accounts[0]!
+const webAuthnRoot = webAuthnAccounts[0]!
 const accessKey = TempoAccount.fromP256(privateKeys[1]!)
 const secpAccessKey = accounts[1]!
 const expiry = Math.floor(Date.now() / 1000) + 3_600
@@ -49,6 +50,43 @@ async function authorize(
 
   return {
     account_address: root.address,
+    code,
+    key_authorization: z.decode(CliAuth.keyAuthorization, {
+      ...keyAuthorization,
+      address: keyAuthorization.keyId,
+    }),
+  } satisfies z.output<typeof CliAuth.authorizeRequest>
+}
+
+async function authorizeWebAuthn(
+  code: string,
+  options: {
+    accessKey?:
+      | {
+          address: `0x${string}`
+          keyType: 'secp256k1' | 'p256' | 'webAuthn'
+        }
+      | undefined
+    expiry?: number | undefined
+    limits?: readonly { token: `0x${string}`; limit: bigint }[] | undefined
+  } = {},
+) {
+  const key = options.accessKey ?? secpAccessKey
+  const signed = await webAuthnRoot.signKeyAuthorization(
+    {
+      accessKeyAddress: key.address,
+      keyType: key.keyType,
+    },
+    {
+      chainId: BigInt(chain.id),
+      expiry: options.expiry ?? expiry,
+      limits: options.limits ?? limits,
+    },
+  )
+  const keyAuthorization = KeyAuthorization.toRpc(signed)
+
+  return {
+    account_address: webAuthnRoot.address,
     code,
     key_authorization: z.decode(CliAuth.keyAuthorization, {
       ...keyAuthorization,
@@ -108,6 +146,22 @@ async function post<request extends z.ZodMiniType, response extends z.ZodMiniTyp
       method: 'POST',
     }),
   )
+  const json = (await result.json().catch(() => ({}))) as z.input<response>
+
+  return {
+    body: options.response ? z.decode(options.response, json) : json,
+    status: result.status,
+  }
+}
+
+async function get<response extends z.ZodMiniType>(
+  handler: Handler.Handler,
+  options: {
+    response?: response | undefined
+    url: string
+  },
+) {
+  const result = await handler.fetch(new Request(options.url))
   const json = (await result.json().catch(() => ({}))) as z.input<response>
 
   return {
@@ -242,6 +296,141 @@ describe('createDeviceCode', () => {
         "keyType": "secp256k1",
         "pubKey": "${secpAccessKey.publicKey}",
         "status": "pending",
+      }
+    `)
+  })
+})
+
+describe('pending', () => {
+  test('default: returns request details for a pending entry', async () => {
+    const store = CliAuth.Store.memory()
+    const { request } = await createRequest()
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
+      request,
+      store,
+    })
+
+    const result = await CliAuth.pending({
+      code,
+      store,
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "access_key_address": "${accessKey.address.toLowerCase()}",
+        "chain_id": 1337n,
+        "code": "ABCDEFGH",
+        "expiry": ${expiry},
+        "key_type": "p256",
+        "limits": [
+          {
+            "limit": 1000n,
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+        "pub_key": "${accessKey.publicKey}",
+        "status": "pending",
+      }
+    `)
+  })
+
+  test('behavior: handler returns 404 for an unknown code', async () => {
+    const handler = Handler.cliAuth()
+
+    const result = await get(handler, {
+      url: 'http://localhost/cli-auth/pending/ABCDEFGH',
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "Unknown device code.",
+        },
+        "status": 404,
+      }
+    `)
+  })
+
+  test('behavior: handler returns 400 for a completed code', async () => {
+    const store = CliAuth.Store.memory()
+    const handler = Handler.cliAuth({
+      chainId: chain.id,
+      store,
+    })
+    const { codeVerifier, request } = await createRequest()
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
+      request,
+      store,
+    })
+
+    await CliAuth.authorize({
+      chainId: chain.id,
+      request: await authorize(code),
+      store,
+    })
+    await CliAuth.poll({
+      code,
+      request: {
+        code_verifier: codeVerifier,
+      },
+      store,
+    })
+
+    const result = await get(handler, {
+      url: `http://localhost/cli-auth/pending/${code}`,
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "Device code already completed.",
+        },
+        "status": 400,
+      }
+    `)
+  })
+
+  test('behavior: handler accepts a hyphenated code', async () => {
+    const store = CliAuth.Store.memory()
+    const handler = Handler.cliAuth({
+      chainId: chain.id,
+      store,
+    })
+    const { request } = await createRequest()
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
+      request,
+      store,
+    })
+
+    const result = await get(handler, {
+      response: CliAuth.pendingResponse,
+      url: `http://localhost/cli-auth/pending/${code.slice(0, 4)}-${code.slice(4)}`,
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "access_key_address": "${accessKey.address.toLowerCase()}",
+          "chain_id": 1337n,
+          "code": "ABCDEFGH",
+          "expiry": ${expiry},
+          "key_type": "p256",
+          "limits": [
+            {
+              "limit": 1000n,
+              "token": "0x20c0000000000000000000000000000000000001",
+            },
+          ],
+          "pub_key": "${accessKey.publicKey}",
+          "status": "pending",
+        },
+        "status": 200,
       }
     `)
   })
@@ -511,6 +700,79 @@ describe('authorize', () => {
       }
     `)
     expect(polled.status).toMatchInlineSnapshot(`"authorized"`)
+  })
+
+  test('behavior: accepts a WebAuthn signature envelope from RPC', async () => {
+    const store = CliAuth.Store.memory()
+    const { codeVerifier, request } = await createRequest('device-code-verifier', {
+      accessKey: secpAccessKey,
+      keyType: secpAccessKey.keyType,
+    })
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      request,
+      store,
+    })
+
+    const authorized = await CliAuth.authorize({
+      chainId: chain.id,
+      request: await authorizeWebAuthn(code),
+      store,
+    })
+    const polled = await CliAuth.poll({
+      code,
+      request: {
+        code_verifier: codeVerifier,
+      },
+      store,
+    })
+
+    const keyAuthorization =
+      polled.status === 'authorized'
+        ? {
+            ...polled.key_authorization,
+            signature: {
+              type: polled.key_authorization.signature.type,
+            },
+          }
+        : undefined
+
+    expect({
+      authorized,
+      polled:
+        polled.status === 'authorized'
+          ? {
+              ...polled,
+              key_authorization: keyAuthorization,
+            }
+          : polled,
+    }).toMatchInlineSnapshot(`
+      {
+        "authorized": {
+          "status": "authorized",
+        },
+        "polled": {
+          "account_address": "${webAuthnRoot.address}",
+          "key_authorization": {
+            "address": "${secpAccessKey.address}",
+            "chainId": 1337n,
+            "expiry": ${expiry},
+            "keyId": "${secpAccessKey.address}",
+            "keyType": "secp256k1",
+            "limits": [
+              {
+                "limit": 1000n,
+                "token": "0x20c0000000000000000000000000000000000001",
+              },
+            ],
+            "signature": {
+              "type": "webAuthn",
+            },
+          },
+          "status": "authorized",
+        },
+      }
+    `)
   })
 })
 

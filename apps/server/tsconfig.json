@@ -28,7 +28,7 @@
     "noFallthroughCasesInSwitch": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["node", "@cloudflare/workers-types"]
+    "types": ["node", "@cloudflare/workers-types", "typed-query-selector/strict"]
   },
   "include": ["src/**/*"],
   "files": ["env.d.ts", "reset.d.ts", "vite.config.ts", "worker-configuration.d.ts"],
