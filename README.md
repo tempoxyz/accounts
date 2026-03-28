@@ -2,7 +2,6 @@
 
 Accounts SDK for Tempo Wallets & Apps.
 
-
 ## Install
 
 ```sh
