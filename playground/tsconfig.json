@@ -7,10 +7,10 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["vp/client"],
+    "types": ["vp/client", "node"],
     "paths": {
       "tempodk/*": ["../src/*"]
     }
   },
-  "include": ["src", "worker", "worker-configuration.d.ts"]
+  "include": ["src", "worker", "env.d.ts", "worker-configuration.d.ts"]
 }

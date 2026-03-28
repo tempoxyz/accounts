@@ -7,24 +7,21 @@ const payment = Mppx.create({
     tempo.charge({
       currency: '0x20c0000000000000000000000000000000000000',
       recipient: '0x0000000000000000000000000000000000000001',
-      testnet: true,
+      testnet: process.env.VITE_ENV === 'testnet',
     }),
   ],
-  realm: 'accounts-playground',
-  secretKey: 'playground-secret-key',
+  secretKey: process.env.MPP_SECRET_KEY,
 })
 
 const handler = Handler.compose([
   Handler.webauthn({
     kv: Kv.memory(),
-    origin: 'https://localhost:5173',
+    origin: process.env.ORIGIN,
     path: '/webauthn',
-    rpId: 'localhost',
+    rpId: process.env.RP_ID,
   }),
   Handler.feePayer({
-    account: privateKeyToAccount(
-      '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
-    ),
+    account: privateKeyToAccount(process.env.PRIVATE_KEY),
     path: '/fee-payer',
   }),
 ])
