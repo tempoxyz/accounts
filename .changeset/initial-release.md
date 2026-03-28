@@ -1,5 +1,5 @@
 ---
-'accounts': patch
+'accounts': minor
 ---
 
 Initial release.
