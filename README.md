@@ -43,16 +43,16 @@ const client = provider.getClient()
 
 ### Wagmi
 
-Use the `dialog` Wagmi connector to allow your Wagmi application to enable the Tempo Wallet dialog.
+Use the `tempoWallet` Wagmi connector to allow your Wagmi application to enable the Tempo Wallet dialog.
 
 ```tsx
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
-import { dialog } from 'accounts/wagmi'
+import { tempoWallet } from 'accounts/wagmi'
 
 export const wagmiConfig = createConfig({
   chains: [tempo],
-  connectors: [dialog()],
+  connectors: [tempoWallet()],
   transports: {
     [tempo.id]: http(),
   },
