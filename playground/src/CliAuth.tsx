@@ -1,7 +1,7 @@
 import * as React from 'react'
 
 type Pending = {
-  access_key_address: string
+  accessKeyAddress: string
   account?: string | undefined
   chain_id: string
   code: string
@@ -14,7 +14,7 @@ type Pending = {
   status: 'pending'
 }
 
-type Details = Pending | { account_address: string; status: string } | { error: string }
+type Details = Pending | { accountAddress: string; status: string } | { error: string }
 type State = {
   details?: Details | undefined
   status: string
@@ -157,7 +157,7 @@ async function approvePending(options: { code: string; serviceUrl: string }): Pr
     method: 'POST',
   })
   const body = (await response.json().catch(() => ({}))) as {
-    account_address?: unknown
+    accountAddress?: unknown
     error?: unknown
     status?: unknown
   }
@@ -172,9 +172,9 @@ async function approvePending(options: { code: string; serviceUrl: string }): Pr
   }
 
   const details =
-    typeof body.account_address === 'string' && typeof body.status === 'string'
+    typeof body.accountAddress === 'string' && typeof body.status === 'string'
       ? {
-          account_address: body.account_address,
+          accountAddress: body.accountAddress,
           status: body.status,
         }
       : undefined
@@ -182,8 +182,8 @@ async function approvePending(options: { code: string; serviceUrl: string }): Pr
   return {
     details,
     status:
-      typeof body.account_address === 'string'
-        ? `Approved for ${body.account_address}.`
+      typeof body.accountAddress === 'string'
+        ? `Approved for ${body.accountAddress}.`
         : 'Approved.',
   }
 }

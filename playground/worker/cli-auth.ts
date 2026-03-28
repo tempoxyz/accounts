@@ -1,5 +1,5 @@
 import { CliAuth, Handler } from 'accounts/server'
-import { Address as ox_Address, PublicKey } from 'ox'
+import { Address, PublicKey } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { createClient, http } from 'viem'
 import { tempoModerato as tempoTestnet } from 'viem/chains'
@@ -55,7 +55,7 @@ page.get(`${path}/pending/:code`, async ({ params }) => {
     return Response.json({ error: 'Device code already completed.' }, { status: 400 })
 
   return Response.json({
-    access_key_address: ox_Address.fromPublicKey(PublicKey.from(current.pubKey)),
+    accessKeyAddress: Address.fromPublicKey(PublicKey.from(current.pubKey)),
     ...(current.account ? { account: current.account } : {}),
     chain_id: current.chainId.toString(),
     code: current.code,
@@ -89,7 +89,7 @@ page.post(`${path}/approve`, async ({ request }) => {
 
     const signed = await root.signKeyAuthorization(
       {
-        accessKeyAddress: ox_Address.fromPublicKey(PublicKey.from(current.pubKey)),
+        accessKeyAddress: Address.fromPublicKey(PublicKey.from(current.pubKey)),
         keyType: current.keyType,
       },
       {
@@ -103,9 +103,9 @@ page.post(`${path}/approve`, async ({ request }) => {
       chainId: tempoTestnet.id,
       client,
       request: {
-        account_address: root.address,
+        accountAddress: root.address,
         code,
-        key_authorization: z.decode(CliAuth.keyAuthorization, {
+        keyAuthorization: z.decode(CliAuth.keyAuthorization, {
           ...keyAuthorization,
           address: keyAuthorization.keyId,
         }),
@@ -114,7 +114,7 @@ page.post(`${path}/approve`, async ({ request }) => {
     })
 
     return Response.json({
-      account_address: root.address,
+      accountAddress: root.address,
       status: result.status,
     })
   } catch (error) {
@@ -133,7 +133,7 @@ page.post(`${path}/approve`, async ({ request }) => {
 
 export const handler = Handler.compose([
   page,
-  Handler.cliAuth({
+  Handler.codeAuth({
     chainId: tempoTestnet.id,
     client,
     path,

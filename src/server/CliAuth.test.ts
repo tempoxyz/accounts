@@ -49,9 +49,9 @@ async function authorize(
   const keyAuthorization = KeyAuthorization.toRpc(signed)
 
   return {
-    account_address: root.address,
+    accountAddress: root.address,
     code,
-    key_authorization: z.decode(CliAuth.keyAuthorization, {
+    keyAuthorization: z.decode(CliAuth.keyAuthorization, {
       ...keyAuthorization,
       address: keyAuthorization.keyId,
     }),
@@ -86,9 +86,9 @@ async function authorizeWebAuthn(
   const keyAuthorization = KeyAuthorization.toRpc(signed)
 
   return {
-    account_address: webAuthnRoot.address,
+    accountAddress: webAuthnRoot.address,
     code,
-    key_authorization: z.decode(CliAuth.keyAuthorization, {
+    keyAuthorization: z.decode(CliAuth.keyAuthorization, {
       ...keyAuthorization,
       address: keyAuthorization.keyId,
     }),
@@ -113,7 +113,7 @@ async function createRequest(
   return {
     codeVerifier,
     request: {
-      code_challenge: await createCodeChallenge(codeVerifier),
+      codeChallenge: await createCodeChallenge(codeVerifier),
       ...('expiry' in options
         ? typeof options.expiry !== 'undefined'
           ? { expiry: options.expiry }
@@ -121,11 +121,11 @@ async function createRequest(
         : { expiry }),
       ...('keyType' in options
         ? options.keyType
-          ? { key_type: options.keyType }
+          ? { keyType: options.keyType }
           : {}
-        : { key_type: key.keyType }),
+        : { keyType: key.keyType }),
       ...('limits' in options ? (options.limits ? { limits: options.limits } : {}) : { limits }),
-      pub_key: key.publicKey,
+      pubKey: key.publicKey,
     } satisfies z.output<typeof CliAuth.createRequest>,
   }
 }
@@ -214,7 +214,7 @@ describe('createDeviceCode', () => {
 
   test('behavior: policy rejection returns an error from the handler', async () => {
     const { request } = await createRequest()
-    const handler = Handler.cliAuth({
+    const handler = Handler.codeAuth({
       policy: {
         validate() {
           throw new Error('Expiry exceeds policy.')
@@ -225,7 +225,7 @@ describe('createDeviceCode', () => {
     const result = await post(handler, {
       body: request,
       request: CliAuth.createRequest,
-      url: 'http://localhost/cli-auth/device-code',
+      url: 'http://localhost/auth/pkce/code',
     })
 
     expect(result).toMatchInlineSnapshot(`
@@ -239,9 +239,9 @@ describe('createDeviceCode', () => {
   })
 
   test('behavior: invalid input returns 400', async () => {
-    const handler = Handler.cliAuth()
+    const handler = Handler.codeAuth()
     const response = await handler.fetch(
-      new Request('http://localhost/cli-auth/device-code', {
+      new Request('http://localhost/auth/pkce/code', {
         body: JSON.stringify({ expiry }),
         headers: { 'content-type': 'application/json' },
         method: 'POST',
@@ -251,7 +251,7 @@ describe('createDeviceCode', () => {
     const body = await response.json()
 
     expect(body.error).toMatchInlineSnapshot(`
-      "[\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "code_challenge"\n    ],\n    "message": "Invalid input"\n  },\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "pub_key"\n    ],\n    "message": "Expected hex value"\n  }\n]"
+      "[\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "codeChallenge"\n    ],\n    "message": "Invalid input"\n  },\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "pubKey"\n    ],\n    "message": "Expected hex value"\n  }\n]"
     `)
     expect(response.status).toMatchInlineSnapshot(`400`)
   })
@@ -319,28 +319,28 @@ describe('pending', () => {
 
     expect(result).toMatchInlineSnapshot(`
       {
-        "access_key_address": "${accessKey.address.toLowerCase()}",
-        "chain_id": 1337n,
+        "accessKeyAddress": "${accessKey.address.toLowerCase()}",
+        "chainId": 1337n,
         "code": "ABCDEFGH",
         "expiry": ${expiry},
-        "key_type": "p256",
+        "keyType": "p256",
         "limits": [
           {
             "limit": 1000n,
             "token": "0x20c0000000000000000000000000000000000001",
           },
         ],
-        "pub_key": "${accessKey.publicKey}",
+        "pubKey": "${accessKey.publicKey}",
         "status": "pending",
       }
     `)
   })
 
   test('behavior: handler returns 404 for an unknown code', async () => {
-    const handler = Handler.cliAuth()
+    const handler = Handler.codeAuth()
 
     const result = await get(handler, {
-      url: 'http://localhost/cli-auth/pending/ABCDEFGH',
+      url: 'http://localhost/auth/pkce/pending/ABCDEFGH',
     })
 
     expect(result).toMatchInlineSnapshot(`
@@ -355,7 +355,7 @@ describe('pending', () => {
 
   test('behavior: handler returns 400 for a completed code', async () => {
     const store = CliAuth.Store.memory()
-    const handler = Handler.cliAuth({
+    const handler = Handler.codeAuth({
       chainId: chain.id,
       store,
     })
@@ -375,13 +375,13 @@ describe('pending', () => {
     await CliAuth.poll({
       code,
       request: {
-        code_verifier: codeVerifier,
+        codeVerifier: codeVerifier,
       },
       store,
     })
 
     const result = await get(handler, {
-      url: `http://localhost/cli-auth/pending/${code}`,
+      url: `http://localhost/auth/pkce/pending/${code}`,
     })
 
     expect(result).toMatchInlineSnapshot(`
@@ -396,7 +396,7 @@ describe('pending', () => {
 
   test('behavior: handler accepts a hyphenated code', async () => {
     const store = CliAuth.Store.memory()
-    const handler = Handler.cliAuth({
+    const handler = Handler.codeAuth({
       chainId: chain.id,
       store,
     })
@@ -410,24 +410,24 @@ describe('pending', () => {
 
     const result = await get(handler, {
       response: CliAuth.pendingResponse,
-      url: `http://localhost/cli-auth/pending/${code.slice(0, 4)}-${code.slice(4)}`,
+      url: `http://localhost/auth/pkce/pending/${code.slice(0, 4)}-${code.slice(4)}`,
     })
 
     expect(result).toMatchInlineSnapshot(`
       {
         "body": {
-          "access_key_address": "${accessKey.address.toLowerCase()}",
-          "chain_id": 1337n,
+          "accessKeyAddress": "${accessKey.address.toLowerCase()}",
+          "chainId": 1337n,
           "code": "ABCDEFGH",
           "expiry": ${expiry},
-          "key_type": "p256",
+          "keyType": "p256",
           "limits": [
             {
               "limit": 1000n,
               "token": "0x20c0000000000000000000000000000000000001",
             },
           ],
-          "pub_key": "${accessKey.publicKey}",
+          "pubKey": "${accessKey.publicKey}",
           "status": "pending",
         },
         "status": 200,
@@ -449,7 +449,7 @@ describe('poll', () => {
     const result = await CliAuth.poll({
       code,
       request: {
-        code_verifier: codeVerifier,
+        codeVerifier: codeVerifier,
       },
       store,
     })
@@ -462,7 +462,7 @@ describe('poll', () => {
   })
 
   test('behavior: rejects a PKCE mismatch', async () => {
-    const handler = Handler.cliAuth({
+    const handler = Handler.codeAuth({
       chainId: chain.id,
       store: CliAuth.Store.memory(),
     })
@@ -471,15 +471,15 @@ describe('poll', () => {
       body: request,
       request: CliAuth.createRequest,
       response: CliAuth.createResponse,
-      url: 'http://localhost/cli-auth/device-code',
+      url: 'http://localhost/auth/pkce/code',
     })
 
     const result = await post(handler, {
       body: {
-        code_verifier: 'wrong',
+        codeVerifier: 'wrong',
       },
       request: CliAuth.pollRequest,
-      url: `http://localhost/cli-auth/poll/${(created.body as z.output<typeof CliAuth.createResponse>).code}`,
+      url: `http://localhost/auth/pkce/poll/${(created.body as z.output<typeof CliAuth.createResponse>).code}`,
     })
 
     expect(result).toMatchInlineSnapshot(`
@@ -510,14 +510,14 @@ describe('poll', () => {
     const first = await CliAuth.poll({
       code,
       request: {
-        code_verifier: codeVerifier,
+        codeVerifier: codeVerifier,
       },
       store,
     })
     const second = await CliAuth.poll({
       code,
       request: {
-        code_verifier: codeVerifier,
+        codeVerifier: codeVerifier,
       },
       store,
     })
@@ -526,10 +526,10 @@ describe('poll', () => {
       first.status === 'authorized'
         ? {
             ...first,
-            key_authorization: {
-              ...first.key_authorization,
+            keyAuthorization: {
+              ...first.keyAuthorization,
               signature: {
-                type: first.key_authorization.signature.type,
+                type: first.keyAuthorization.signature.type,
               },
             },
           }
@@ -538,8 +538,8 @@ describe('poll', () => {
     expect({ first: first_, second }).toMatchInlineSnapshot(`
       {
         "first": {
-          "account_address": "${root.address}",
-          "key_authorization": {
+          "accountAddress": "${root.address}",
+          "keyAuthorization": {
             "address": "${accessKey.address}",
             "chainId": 1337n,
             "expiry": ${expiry},
@@ -576,7 +576,7 @@ describe('poll', () => {
     const result = await CliAuth.poll({
       code: `${code.slice(0, 4)}-${code.slice(4)}`,
       request: {
-        code_verifier: codeVerifier,
+        codeVerifier: codeVerifier,
       },
       store,
     })
@@ -607,7 +607,7 @@ describe('poll', () => {
       code,
       now,
       request: {
-        code_verifier: codeVerifier,
+        codeVerifier: codeVerifier,
       },
       store,
     })
@@ -638,7 +638,7 @@ describe('authorize', () => {
     const polled = await CliAuth.poll({
       code,
       request: {
-        code_verifier: codeVerifier,
+        codeVerifier: codeVerifier,
       },
       store,
     })
@@ -689,7 +689,7 @@ describe('authorize', () => {
     const polled = await CliAuth.poll({
       code,
       request: {
-        code_verifier: codeVerifier,
+        codeVerifier: codeVerifier,
       },
       store,
     })
@@ -722,7 +722,7 @@ describe('authorize', () => {
     const polled = await CliAuth.poll({
       code,
       request: {
-        code_verifier: codeVerifier,
+        codeVerifier: codeVerifier,
       },
       store,
     })
@@ -730,9 +730,9 @@ describe('authorize', () => {
     const keyAuthorization =
       polled.status === 'authorized'
         ? {
-            ...polled.key_authorization,
+            ...polled.keyAuthorization,
             signature: {
-              type: polled.key_authorization.signature.type,
+              type: polled.keyAuthorization.signature.type,
             },
           }
         : undefined
@@ -743,7 +743,7 @@ describe('authorize', () => {
         polled.status === 'authorized'
           ? {
               ...polled,
-              key_authorization: keyAuthorization,
+              keyAuthorization: keyAuthorization,
             }
           : polled,
     }).toMatchInlineSnapshot(`
@@ -752,8 +752,8 @@ describe('authorize', () => {
           "status": "authorized",
         },
         "polled": {
-          "account_address": "${webAuthnRoot.address}",
-          "key_authorization": {
+          "accountAddress": "${webAuthnRoot.address}",
+          "keyAuthorization": {
             "address": "${secpAccessKey.address}",
             "chainId": 1337n,
             "expiry": ${expiry},

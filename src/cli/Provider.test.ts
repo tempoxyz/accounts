@@ -27,9 +27,9 @@ async function authorize(code: string) {
   const keyAuthorization = KeyAuthorization.toRpc(signed)
 
   return z.encode(CliAuth.authorizeRequest, {
-    account_address: root.address,
+    accountAddress: root.address,
     code,
-    key_authorization: z.decode(CliAuth.keyAuthorization, {
+    keyAuthorization: z.decode(CliAuth.keyAuthorization, {
       ...keyAuthorization,
       address: keyAuthorization.keyId,
     }),
@@ -53,7 +53,8 @@ function connectRequest() {
 }
 
 function createHandler() {
-  return Handler.cliAuth({
+  return Handler.codeAuth({
+    path: '/cli-auth',
     chainId: chain.id,
     client: getClient({ chain }),
     policy: {
@@ -79,13 +80,13 @@ describe('Provider.create', () => {
         open: async (url) => {
           opened.push(url)
           const code = new URL(url).searchParams.get('code')!
-          await fetch(`${server.url}/cli-auth/authorize`, {
+          await fetch(`${server.url}/cli-auth`, {
             body: JSON.stringify(await authorize(code)),
             headers: { 'content-type': 'application/json' },
             method: 'POST',
           })
         },
-        serviceUrl: `${server.url}/cli-auth`,
+        host: `${server.url}/cli-auth`,
       })
 
       const result = await provider.request(connectRequest())
@@ -141,7 +142,7 @@ describe('Provider.create', () => {
         open() {
           throw new Error('browser unavailable')
         },
-        serviceUrl: `${server.url}/cli-auth`,
+        host: `${server.url}/cli-auth`,
       })
 
       await expect(
@@ -174,7 +175,7 @@ describe('Provider.create', () => {
       const provider = Provider.create({
         open() {},
         pollIntervalMs: 1,
-        serviceUrl: `${server.url}/cli-auth`,
+        host: `${server.url}/cli-auth`,
         timeoutMs: 10,
       })
 
@@ -208,13 +209,13 @@ describe('Provider.create', () => {
       const provider = Provider.create({
         open: async (url) => {
           const code = new URL(url).searchParams.get('code')!
-          await fetch(`${server.url}/cli-auth/authorize`, {
+          await fetch(`${server.url}/cli-auth`, {
             body: JSON.stringify(await authorize(code)),
             headers: { 'content-type': 'application/json' },
             method: 'POST',
           })
         },
-        serviceUrl: `${server.url}/cli-auth`,
+        host: `${server.url}/cli-auth`,
       })
 
       await provider.request(connectRequest())

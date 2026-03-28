@@ -8,11 +8,11 @@ describe('createRequest', () => {
   test('includes the v1 device-code request fields', () => {
     expectTypeOf<z.output<typeof CliAuth.createRequest>>().toMatchTypeOf<{
       account?: Hex | undefined
-      code_challenge: string
+      codeChallenge: string
       expiry?: number | undefined
-      key_type?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
+      keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
       limits?: readonly { token: Hex; limit: bigint }[] | undefined
-      pub_key: Hex
+      pubKey: Hex
     }>()
   })
 
@@ -26,8 +26,8 @@ describe('pollResponse', () => {
   test('authorized responses carry the normal keyAuthorization shape', () => {
     type Response = Extract<z.output<typeof CliAuth.pollResponse>, { status: 'authorized' }>
     expectTypeOf<Response>().toMatchTypeOf<{
-      account_address: Hex
-      key_authorization: z.output<typeof CliAuth.keyAuthorization>
+      accountAddress: Hex
+      keyAuthorization: z.output<typeof CliAuth.keyAuthorization>
       status: 'authorized'
     }>()
   })
@@ -36,14 +36,14 @@ describe('pollResponse', () => {
 describe('pendingResponse', () => {
   test('pending responses expose the browser approval payload', () => {
     expectTypeOf<z.output<typeof CliAuth.pendingResponse>>().toMatchTypeOf<{
-      access_key_address: Hex
+      accessKeyAddress: Hex
       account?: Hex | undefined
-      chain_id: bigint
+      chainId: bigint
       code: string
       expiry: number
-      key_type: 'secp256k1' | 'p256' | 'webAuthn'
+      keyType: 'secp256k1' | 'p256' | 'webAuthn'
       limits?: readonly { token: Hex; limit: bigint }[] | undefined
-      pub_key: Hex
+      pubKey: Hex
       status: 'pending'
     }>()
   })

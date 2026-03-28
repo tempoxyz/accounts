@@ -7,7 +7,7 @@ import type * as Provider from './Provider.js'
 describe('create', () => {
   test('accepts CLI bootstrap options', () => {
     expectTypeOf<Parameters<typeof Provider.create>[0]>().toMatchTypeOf<{
-      serviceUrl: string
+      host: string
       open?: ((url: string) => Promise<void> | void) | undefined
       pollIntervalMs?: number | undefined
       timeoutMs?: number | undefined
@@ -22,7 +22,7 @@ describe('create', () => {
 describe('cli', () => {
   test('requires a service URL', () => {
     expectTypeOf<Parameters<typeof cli>[0]>().toMatchTypeOf<{
-      serviceUrl: string
+      host: string
     }>()
   })
 })

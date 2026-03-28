@@ -18,7 +18,7 @@ const createRes = await fetch(`${serviceUrl}/device-code`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({
-    code_challenge: codeChallenge,
+    codeChallenge,
     expiry: Math.floor(Date.now() / 1000) + 3600,
     key_type: 'p256',
     limits: [{ limit: '0x3e8', token: '0x20c0000000000000000000000000000000000001' }],
@@ -97,11 +97,11 @@ console.log('6. Polling for authorization...')
 const pollRes = await fetch(`${serviceUrl}/poll/${code}`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ code_verifier: codeVerifier }),
+  body: JSON.stringify({ codeVerifier: codeVerifier }),
 })
-const pollData = (await pollRes.json()) as { status: string; account_address?: string }
+const pollData = (await pollRes.json()) as { status: string; accountAddress?: string }
 console.log(`   poll status: ${pollData.status}`)
-if (pollData.account_address) console.log(`   account: ${pollData.account_address}`)
+if (pollData.accountAddress) console.log(`   account: ${pollData.accountAddress}`)
 
 console.log(
   pollData.status === 'authorized' ? '\n✓ Full flow works end-to-end' : '\n✗ Flow did not complete',

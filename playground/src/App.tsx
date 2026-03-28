@@ -284,7 +284,7 @@ async function startCliAuthExample(options: {
 }) {
   const codeVerifier = 'playground-cli-auth-demo'
   const request = {
-    code_challenge: await createCodeChallenge(codeVerifier),
+    codeChallenge: await createCodeChallenge(codeVerifier),
     ...(typeof options.expiry !== 'undefined' ? { expiry: options.expiry } : {}),
     ...(options.limits ? { limits: options.limits } : {}),
     key_type: options.account.keyType,
