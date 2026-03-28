@@ -19,6 +19,6 @@ jobs:
         run: pnpm install
 
       - name: Build
-        run: pnpm changeset:publish
+        run: pnpm zile publish:prepare
 
       - run: pnpx pkg-pr-new publish --pnpm
