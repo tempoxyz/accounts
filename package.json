@@ -62,9 +62,9 @@
   },
   "[!start-pkg]": "",
   "name": "accounts",
-  "description": "Accounts Development Kit for Tempo",
+  "description": "Tempo Accounts SDK",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.4.0",
   "dependencies": {
     "@remix-run/fetch-router": "~0.17.0",
     "idb-keyval": "^6.2.2",

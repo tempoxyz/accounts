@@ -1,5 +1,5 @@
 ---
-'tempodk': patch
+'accounts': patch
 ---
 
 Initial release.
