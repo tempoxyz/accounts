@@ -11,6 +11,7 @@
     "dev": "vp dev",
     "build": "vp build",
     "preview": "vp preview",
+    "postinstall": "wrangler types --env-interface CloudflareBindings",
     "check:types": "tsc --noEmit",
     "types": "wrangler types --env-interface CloudflareBindings"
   },
