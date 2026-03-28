@@ -24,14 +24,14 @@ export const keyAuthorization = z.object({
   signature: z.custom<SignatureEnvelope.SignatureEnvelopeRpc>(),
 })
 
-/** Request body for `POST /cli-auth/device-code`. */
+/** Request body for `POST /auth/pkce/code`. */
 export const createRequest = z.object({
   account: z.optional(u.address()),
-  code_challenge: z.string(),
+  codeChallenge: z.string(),
   expiry: z.optional(z.number()),
-  key_type: z.optional(keyType),
+  keyType: z.optional(keyType),
   limits: z.optional(z.readonly(z.array(z.object({ token: u.address(), limit: u.bigint() })))),
-  pub_key: u.hex(),
+  pubKey: u.hex(),
 })
 
 /** Response body for `POST /cli-auth/device-code`. */
@@ -39,44 +39,44 @@ export const createResponse = z.object({
   code: z.string(),
 })
 
-/** Request body for `POST /cli-auth/poll/:code`. */
+/** Request body for `POST /auth/pkce/poll/:code`. */
 export const pollRequest = z.object({
-  code_verifier: z.string(),
+  codeVerifier: z.string(),
 })
 
-/** Response body for `POST /cli-auth/poll/:code`. */
+/** Response body for `POST /auth/pkce/poll/:code`. */
 export const pollResponse = u.oneOf([
   z.object({
     status: z.literal('pending'),
   }),
   z.object({
     status: z.literal('authorized'),
-    account_address: u.address(),
-    key_authorization: keyAuthorization,
+    accountAddress: u.address(),
+    keyAuthorization: keyAuthorization,
   }),
   z.object({
     status: z.literal('expired'),
   }),
 ])
 
-/** Response body for `GET /cli-auth/pending/:code`. */
+/** Response body for `GET /auth/pkce/pending/:code`. */
 export const pendingResponse = z.object({
-  access_key_address: u.address(),
+  accessKeyAddress: u.address(),
   account: z.optional(u.address()),
-  chain_id: u.bigint(),
+  chainId: u.bigint(),
   code: z.string(),
   expiry: z.number(),
-  key_type: keyType,
+  keyType,
   limits: z.optional(z.readonly(z.array(z.object({ token: u.address(), limit: u.bigint() })))),
-  pub_key: u.hex(),
+  pubKey: u.hex(),
   status: z.literal('pending'),
 })
 
-/** Request body for `POST /cli-auth/authorize`. */
+/** Request body for `POST /auth/pkce`. */
 export const authorizeRequest = z.object({
-  account_address: u.address(),
+  accountAddress: u.address(),
   code: z.string(),
-  key_authorization: keyAuthorization,
+  keyAuthorization: keyAuthorization,
 })
 
 /** Response body for `POST /cli-auth/authorize`. */
@@ -353,14 +353,14 @@ export async function createDeviceCode(
     store = Store.memory(),
     ttlMs = 10 * 60 * 1_000,
   } = options
-  const { account, code_challenge, pub_key } = request
-  const keyType = request.key_type ?? 'secp256k1'
+  const { account, codeChallenge, pubKey } = request
+  const keyType = request.keyType ?? 'secp256k1'
   const approved = await policy.validate({
     ...(account ? { account } : {}),
     expiry: request.expiry,
     keyType,
     ...(request.limits ? { limits: request.limits } : {}),
-    pubKey: pub_key,
+    pubKey,
   })
 
   let code: string | undefined
@@ -378,13 +378,13 @@ export async function createDeviceCode(
     ...(account ? { account } : {}),
     chainId: typeof chainId === 'bigint' ? chainId : BigInt(chainId),
     code,
-    codeChallenge: code_challenge,
+    codeChallenge,
     createdAt,
     expiresAt: createdAt + ttlMs,
     expiry: approved.expiry,
     keyType,
     ...(approved.limits ? { limits: approved.limits } : {}),
-    pubKey: pub_key,
+    pubKey,
     status: 'pending',
   })
 
@@ -425,14 +425,14 @@ export async function pending(options: pending.Options): Promise<pending.ReturnT
   if (current.status !== 'pending') throw new PendingError('Device code already completed.', 400)
 
   return {
-    access_key_address: core_Address.fromPublicKey(PublicKey.from(current.pubKey)),
+    accessKeyAddress: core_Address.fromPublicKey(PublicKey.from(current.pubKey)),
     ...(current.account ? { account: current.account } : {}),
-    chain_id: current.chainId,
+    chainId: current.chainId,
     code: current.code,
     expiry: current.expiry,
-    key_type: current.keyType,
+    keyType: current.keyType,
     ...(current.limits ? { limits: current.limits } : {}),
-    pub_key: current.pubKey,
+    pubKey: current.pubKey,
     status: 'pending',
   }
 }
@@ -460,7 +460,7 @@ export async function poll(options: poll.Options): Promise<poll.ReturnType> {
     await store.delete(normalized)
     return { status: 'expired' }
   }
-  if (!(await verifyCodeChallenge(request.code_verifier, current.codeChallenge)))
+  if (!(await verifyCodeChallenge(request.codeVerifier, current.codeChallenge)))
     throw new Error('Invalid code verifier.')
   if (current.status === 'pending') return { status: 'pending' }
   if (current.status === 'consumed') {
@@ -470,8 +470,8 @@ export async function poll(options: poll.Options): Promise<poll.ReturnType> {
   const authorized = await store.consume(normalized)
   if (!authorized) return { status: 'expired' }
   return {
-    account_address: authorized.accountAddress,
-    key_authorization: authorized.keyAuthorization,
+    accountAddress: authorized.accountAddress,
+    keyAuthorization: authorized.keyAuthorization,
     status: 'authorized',
   }
 }
@@ -508,11 +508,11 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
     throw new Error('Expired device code.')
   }
   if (current.status !== 'pending') throw new Error('Device code already completed.')
-  if (current.account && current.account.toLowerCase() !== request.account_address.toLowerCase())
+  if (current.account && current.account.toLowerCase() !== request.accountAddress.toLowerCase())
     throw new Error('Account does not match requested account.')
 
   const expected = expectedKeyAuthorization(current)
-  const actual = normalizeKeyAuthorization(request.key_authorization)
+  const actual = normalizeKeyAuthorization(request.keyAuthorization)
 
   if (actual.keyId.toLowerCase() !== expected.address.toLowerCase())
     throw new Error('Key authorization key does not match the device-code request.')
@@ -528,7 +528,7 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
     throw new Error('Key authorization limits do not match the device-code request.')
 
   const valid = await verifyHash(client as never, {
-    address: request.account_address,
+    address: request.accountAddress,
     hash: TempoKeyAuthorization.getSignPayload(expected),
     signature: SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(actual.signature), {
       magic: actual.signature.type === 'webAuthn',
@@ -537,9 +537,9 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
   if (!valid) throw new Error('Key authorization signature is invalid.')
 
   const authorized = await store.authorize({
-    accountAddress: request.account_address,
+    accountAddress: request.accountAddress,
     code,
-    keyAuthorization: request.key_authorization,
+    keyAuthorization: request.keyAuthorization,
   })
   if (!authorized) throw new Error('Unable to authorize device code.')
 

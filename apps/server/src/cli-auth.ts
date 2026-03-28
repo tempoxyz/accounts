@@ -1,3 +1,4 @@
+import { Address } from 'ox'
 import { tempo, tempoModerato } from 'viem/chains'
 import * as z from 'zod/mini'
 
@@ -8,20 +9,20 @@ import * as Storage from '../../../src/core/Storage.js'
 import * as Rpc from '../../../src/core/zod/rpc.js'
 
 type Pending = {
-  access_key_address: `0x${string}`
-  account?: `0x${string}` | undefined
-  chain_id: `0x${string}`
+  accessKeyAddress: Address.Address
+  account?: Address.Address | undefined
+  chainId: Address.Address
   code: string
   expiry: number
-  key_type: 'secp256k1' | 'p256' | 'webAuthn'
-  limits?: readonly { token: `0x${string}`; limit: `0x${string}` }[] | undefined
-  pub_key: `0x${string}`
+  keyType: 'secp256k1' | 'p256' | 'webAuthn'
+  limits?: readonly { token: Address.Address; limit: Address.Address }[] | undefined
+  pubKey: Address.Address
   status: 'pending'
 }
 
 type AuthorizationResult = {
   accounts: {
-    address?: `0x${string}` | undefined
+    address?: Address.Address | undefined
     capabilities: {
       keyAuthorization?: z.output<typeof Rpc.keyAuthorization> | undefined
     }
@@ -50,7 +51,7 @@ const approveButton = element<HTMLButtonElement>('approve')
 const disconnectButton = element<HTMLButtonElement>('disconnect')
 const resetButton = element<HTMLButtonElement>('reset')
 
-let account: `0x${string}` | undefined
+let account: Address.Address | undefined
 let busy = false
 let pending: Pending | undefined
 
@@ -72,9 +73,9 @@ function matchesRequestedAccount() {
 function accessKeyRequest(value: Pending) {
   return {
     expiry: value.expiry,
-    keyType: value.key_type,
+    keyType: value.keyType,
     ...(value.limits ? { limits: value.limits } : {}),
-    publicKey: value.pub_key,
+    publicKey: value.pubKey,
   }
 }
 
@@ -86,10 +87,10 @@ function primaryActionLabel() {
 
 function readyStatus(value: Pending) {
   if (!account)
-    return `Ready. ${primaryActionLabel()} to approve access key ${value.access_key_address}.`
+    return `Ready. ${primaryActionLabel()} to approve access key ${value.accessKeyAddress}.`
   if (!matchesRequestedAccount() && value.account)
-    return `Ready. Authenticate as ${value.account} to approve access key ${value.access_key_address}.`
-  return `Ready. Authorize access key ${value.access_key_address}.`
+    return `Ready. Authenticate as ${value.account} to approve access key ${value.accessKeyAddress}.`
+  return `Ready. Authorize access key ${value.accessKeyAddress}.`
 }
 
 function syncUi() {
@@ -119,10 +120,10 @@ function syncUi() {
 function approvalText() {
   if (!pending) return 'Load a pending request to continue.'
   if (!account)
-    return `Authenticate and authorize access key ${pending.access_key_address} for device code ${pending.code}.`
+    return `Authenticate and authorize access key ${pending.accessKeyAddress} for device code ${pending.code}.`
   if (!matchesRequestedAccount() && pending.account)
-    return `Authenticate as ${pending.account} and authorize access key ${pending.access_key_address} for device code ${pending.code}.`
-  return `Authorize access key ${pending.access_key_address} for device code ${pending.code}.`
+    return `Authenticate as ${pending.account} and authorize access key ${pending.accessKeyAddress} for device code ${pending.code}.`
+  return `Authorize access key ${pending.accessKeyAddress} for device code ${pending.code}.`
 }
 
 function setBusyState(value: boolean) {
@@ -142,10 +143,10 @@ function renderPending(value: Pending) {
   pendingPanel.innerHTML = `
     <dl>
       ${item('Code', value.code)}
-      ${item('Access key', value.access_key_address)}
-      ${item('Public key', value.pub_key)}
-      ${item('Key type', value.key_type)}
-      ${item('Chain', value.chain_id)}
+      ${item('Access key', value.accessKeyAddress)}
+      ${item('Public key', value.pubKey)}
+      ${item('Key type', value.keyType)}
+      ${item('Chain', value.chainId)}
       ${item('Expiry', `${value.expiry}`)}
       ${value.account ? item('Requested account', value.account) : ''}
       ${limits}
@@ -181,7 +182,7 @@ async function loadLatestPending() {
 
   // Auto-authorize if already signed in
   if (account && matchesRequestedAccount()) {
-    setStatus(`New request detected. Authorizing access key ${pending.access_key_address}…`)
+    setStatus(`New request detected. Authorizing access key ${pending.accessKeyAddress}…`)
     syncUi()
     try {
       if (account) await authorizeOnly()
@@ -240,7 +241,7 @@ async function connect(mode: 'register' | 'login') {
     if (current) {
       await provider.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: current.chain_id }],
+        params: [{ chainId: current.chainId }],
       })
       const lastCredentialId = await storage.getItem<string>('lastCredentialId')
       const result = (await provider.request({
@@ -302,15 +303,15 @@ function authorizationResult(result: AuthorizationResult) {
 async function postAuthorization(
   current: Pending,
   options: {
-    account: `0x${string}`
+    account: Address.Address
     keyAuthorization: z.output<typeof Rpc.keyAuthorization>
   },
 ) {
-  const response = await fetch('/cli-auth/authorize', {
+  const response = await fetch('/cli-auth', {
     body: JSON.stringify({
-      account_address: options.account,
+      accountAddress: options.account,
       code: current.code,
-      key_authorization: options.keyAuthorization,
+      keyAuthorization: options.keyAuthorization,
     }),
     headers: { 'content-type': 'application/json' },
     method: 'POST',
@@ -331,7 +332,7 @@ async function authenticateAndApprove() {
   try {
     await provider.request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: current.chain_id }],
+      params: [{ chainId: current.chainId }],
     })
     const lastCredentialId = await storage.getItem<string>('lastCredentialId')
     const login = Boolean(lastCredentialId || account || current.account)
@@ -377,7 +378,7 @@ async function authorizeOnly() {
   try {
     await provider.request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: current.chain_id }],
+      params: [{ chainId: current.chainId }],
     })
     const result = (await provider.request({
       method: 'wallet_connect',

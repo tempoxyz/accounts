@@ -152,7 +152,7 @@ async function connectFlow(serviceUrl: string, account: AccessKey) {
       task.message('Waiting for passkey approval…')
     },
     pollIntervalMs: 2_000,
-    serviceUrl,
+    host: serviceUrl,
     testnet: true,
     timeoutMs: 300_000,
   })
@@ -189,15 +189,15 @@ async function authorizeFlow(serviceUrl: string, account: AccessKey) {
 
   const created = await post({
     body: {
-      code_challenge: codeChallenge,
+      codeChallenge,
       expiry: Math.floor(Date.now() / 1000) + 3600,
-      key_type: account.keyType,
-      limits: [{ limit: 1_000n, token: '0x20c0000000000000000000000000000000000001' }],
-      pub_key: account.publicKey,
+      keyType: account.keyType,
+      limits: [{ limit: 1_000n, token: '0x20c0000000000000000000000000000000000001' as const }],
+      pubKey: account.publicKey,
     } satisfies z.output<typeof CliAuth.createRequest>,
     request: CliAuth.createRequest,
     response: CliAuth.createResponse,
-    url: apiUrl(serviceUrl, 'device-code'),
+    url: apiUrl(serviceUrl, 'code'),
   })
 
   task.message(`Code: ${bold(created.code)}`)
@@ -207,7 +207,7 @@ async function authorizeFlow(serviceUrl: string, account: AccessKey) {
   const startedAt = Date.now()
   while (Date.now() - startedAt < 300_000) {
     const result = await post({
-      body: { code_verifier: codeVerifier } satisfies z.output<typeof CliAuth.pollRequest>,
+      body: { codeVerifier } satisfies z.output<typeof CliAuth.pollRequest>,
       request: CliAuth.pollRequest,
       response: CliAuth.pollResponse,
       url: apiUrl(serviceUrl, `poll/${created.code}`),
@@ -223,8 +223,8 @@ async function authorizeFlow(serviceUrl: string, account: AccessKey) {
       return
     }
 
-    task.success(`Authorized by ${result.account_address}`)
-    if (result.key_authorization) await logKeyAuthorization(result.key_authorization)
+    task.success(`Authorized by ${result.accountAddress}`)
+    if (result.keyAuthorization) await logKeyAuthorization(result.keyAuthorization)
     return
   }
 
@@ -237,7 +237,12 @@ function accessKeyParams(account: AccessKey) {
   return {
     expiry: Math.floor(Date.now() / 1000) + 3600,
     keyType: account.keyType,
-    limits: [{ limit: Hex.fromNumber(1_000), token: '0x20c0000000000000000000000000000000000001' }],
+    limits: [
+      {
+        limit: Hex.fromNumber(1_000),
+        token: '0x20c0000000000000000000000000000000000001' as const,
+      },
+    ],
     publicKey: account.publicKey,
   }
 }
@@ -358,7 +363,7 @@ function truncate(value: string, length = 20) {
 
 async function logKeyAuthorization(auth: Record<string, unknown>) {
   const keyId = auth.keyId ?? auth.key_id ?? auth.address
-  const keyType = auth.keyType ?? auth.key_type ?? '?'
+  const keyType = auth.keyType ?? '?'
   const chainId = auth.chainId ?? auth.chain_id ?? '?'
   const expiry = auth.expiry
   const sig = (auth.signature as Record<string, unknown> | undefined)?.type ?? '?'

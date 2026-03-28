@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { Base64, Provider as core_Provider, RpcResponse } from 'ox'
+import { Base64, Hash, Hex, Provider as core_Provider, RpcResponse } from 'ox'
 import * as z from 'zod/mini'
 
 import * as Adapter from '../core/Adapter.js'
@@ -16,12 +16,12 @@ export function cli(options: cli.Options): Adapter.Adapter {
 
   return Adapter.define({ name, rdns }, () => ({
     actions: {
-      async createAccount() {
-        throw unsupported('`wallet_connect` register flow not supported by CLI adapter.')
+      async createAccount(params, request) {
+        return this.loadAccounts(params, request)
       },
       async loadAccounts(parameters) {
         const {
-          serviceUrl,
+          host,
           open = defaultOpen,
           pollIntervalMs = 2_000,
           timeoutMs = 5 * 60 * 1_000,
@@ -37,22 +37,22 @@ export function cli(options: cli.Options): Adapter.Adapter {
           throw unsupported('`wallet_connect` digest signing not supported by CLI adapter.')
 
         const codeVerifier = createCodeVerifier()
-        const codeChallenge = await createCodeChallenge(codeVerifier)
+        const codeChallenge = createCodeChallenge(codeVerifier)
         const created = await post({
           body: {
-            code_challenge: codeChallenge,
+            codeChallenge,
             ...(typeof authorizeAccessKey.expiry !== 'undefined'
               ? { expiry: authorizeAccessKey.expiry }
               : {}),
-            ...(authorizeAccessKey.keyType ? { key_type: authorizeAccessKey.keyType } : {}),
+            ...(authorizeAccessKey.keyType ? { keyType: authorizeAccessKey.keyType } : {}),
             ...(authorizeAccessKey.limits ? { limits: authorizeAccessKey.limits } : {}),
-            pub_key: authorizeAccessKey.publicKey,
+            pubKey: authorizeAccessKey.publicKey,
           } satisfies z.output<typeof CliAuth.createRequest>,
           request: CliAuth.createRequest,
           response: CliAuth.createResponse,
-          url: getApiUrl(serviceUrl, 'device-code'),
+          url: getApiUrl(host, 'code'),
         })
-        const url = getBrowserUrl(serviceUrl, created.code)
+        const url = getBrowserUrl(host, created.code)
 
         try {
           await open(url)
@@ -65,11 +65,11 @@ export function cli(options: cli.Options): Adapter.Adapter {
         while (Date.now() - startedAt < timeoutMs) {
           const result = await post({
             body: {
-              code_verifier: codeVerifier,
+              codeVerifier,
             } satisfies z.output<typeof CliAuth.pollRequest>,
             request: CliAuth.pollRequest,
             response: CliAuth.pollResponse,
-            url: getApiUrl(serviceUrl, `poll/${created.code}`),
+            url: getApiUrl(host, `poll/${created.code}`),
           })
 
           if (result.status === 'pending') {
@@ -82,11 +82,11 @@ export function cli(options: cli.Options): Adapter.Adapter {
           return {
             accounts: [
               {
-                address: result.account_address,
+                address: result.accountAddress,
                 capabilities: {},
               },
             ],
-            keyAuthorization: z.encode(CliAuth.keyAuthorization, result.key_authorization),
+            keyAuthorization: z.encode(CliAuth.keyAuthorization, result.keyAuthorization),
           }
         }
 
@@ -116,8 +116,8 @@ export function cli(options: cli.Options): Adapter.Adapter {
 
 export declare namespace cli {
   export type Options = {
-    /** Browser page URL for the device-code flow. API calls are made under the same base path. */
-    serviceUrl: string
+    /** Host URL for the device-code flow. API calls are made under the same base path. */
+    host: string
     /** Provider display name. @default "Tempo CLI" */
     name?: string | undefined
     /** Browser opener override. */
@@ -157,16 +157,15 @@ class TimeoutError extends Error {
   }
 }
 
-async function createCodeChallenge(codeVerifier: string) {
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier))
-  return Base64.fromBytes(new Uint8Array(hash), { pad: false, url: true })
-}
-
-function createCodeVerifier() {
-  return Base64.fromBytes(crypto.getRandomValues(new Uint8Array(32)), {
+function createCodeChallenge(codeVerifier: string) {
+  return Base64.fromBytes(Hash.sha256(Hex.fromString(codeVerifier), { as: 'Bytes' }), {
     pad: false,
     url: true,
   })
+}
+
+function createCodeVerifier() {
+  return Base64.fromBytes(Hex.toBytes(Hex.random(32)), { pad: false, url: true })
 }
 
 function formatCode(code: string) {

@@ -38,7 +38,7 @@ const provider = Provider.create({
     open(url)
   },
   pollIntervalMs,
-  serviceUrl,
+  host: serviceUrl,
   testnet: true,
   timeoutMs,
 })
@@ -89,20 +89,20 @@ async function requestApproval() {
   const codeChallenge = await createCodeChallenge(codeVerifier)
   const created = await post({
     body: {
-      code_challenge: codeChallenge,
+      codeChallenge: codeChallenge,
       expiry: Math.floor(Date.now() / 1000) + 3600,
-      key_type: account.keyType,
+      keyType: account.keyType,
       limits: [
         {
           limit: 1_000n,
           token: '0x20c0000000000000000000000000000000000001',
         },
       ],
-      pub_key: account.publicKey,
+      pubKey: account.publicKey,
     } satisfies z.output<typeof CliAuth.createRequest>,
     request: CliAuth.createRequest,
     response: CliAuth.createResponse,
-    url: getApiUrl(serviceUrl, 'device-code'),
+    url: getApiUrl(serviceUrl, 'code'),
   })
   const url = getBrowserUrl(serviceUrl, created.code)
 

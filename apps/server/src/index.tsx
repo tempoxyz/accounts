@@ -16,6 +16,179 @@ const latestPendingCodeKey = 'tempo-server.latest-pending-code'
 const app = new Hono<{ Bindings: Cloudflare.Env }>()
 app.use('*', prettyJSON({ force: true, space: 2 }))
 
+app.get('/cli-auth/latest', async (context) => {
+  try {
+    const kv = getKv(context.env)
+    const code = await kv.get<string | undefined>(latestPendingCodeKey)
+
+    if (!code) return new Response(null, { status: 204 })
+
+    const pending = await CliAuth.pending({
+      code,
+      store: CliAuth.Store.kv(kv),
+    })
+
+    console.info(JSON.stringify({ route: context.req.path, data: { pending } }, undefined, 2))
+
+    return Response.json(z.encode(CliAuth.pendingResponse, pending))
+  } catch {
+    return new Response(null, { status: 204 })
+  }
+})
+
+app.post('/cli-auth/device-code', async (context) => {
+  try {
+    const kv = getKv(context.env)
+    const request = z.decode(CliAuth.createRequest, await context.req.json())
+    const created = await CliAuth.createDeviceCode({
+      request,
+      store: CliAuth.Store.kv(kv),
+    })
+
+    console.info(JSON.stringify({ route: context.req.path, data: { created } }, undefined, 2))
+
+    await kv.set(latestPendingCodeKey, created.code)
+    return Response.json(z.encode(CliAuth.createResponse, created))
+  } catch (error) {
+    console.error(JSON.stringify({ route: context.req.path, data: { error } }, undefined, 2))
+    return Response.json(
+      {
+        error: error instanceof Error ? error.message : `Encountered error in ${context.req.path}`,
+      },
+      { status: 400 },
+    )
+  }
+})
+
+app.post('/reset', async (context) => {
+  const kv = context.env.CLI_AUTH_KV
+  console.info(JSON.stringify({ route: context.req.path, data: { kv } }, undefined, 2))
+  if (!supportsReset(kv))
+    return Response.json(
+      {
+        error: 'Server reset requires a Cloudflare KV binding with list support.',
+      },
+      { status: 501 },
+    )
+
+  let deleted = 0
+  for (const prefix of ['challenge:', 'cli-auth:', 'credential:'])
+    deleted += await deletePrefix(kv, prefix)
+  await kv.delete(latestPendingCodeKey)
+
+  return Response.json({
+    deleted,
+    status: 'ok',
+  })
+})
+
+app.post('/debug/authorize-check', async (context) => {
+  try {
+    const request = z.decode(CliAuth.authorizeRequest, await context.req.json())
+    const store = CliAuth.Store.kv(getKv(context.env))
+    const code = request.code.replace(/-/g, '').toUpperCase()
+    const current = await store.get(code)
+    const actual = {
+      ...request.keyAuthorization,
+      expiry: request.keyAuthorization.expiry ?? undefined,
+      limits: request.keyAuthorization.limits ?? undefined,
+    }
+
+    console.info(
+      JSON.stringify({ route: context.req.path, data: { request, current } }, undefined, 2),
+    )
+
+    if (!current)
+      return jsonDebug({
+        code,
+        error: 'Unknown device code.',
+      })
+
+    if (current.status !== 'pending')
+      return jsonDebug({
+        code,
+        current,
+        error: 'Device code already completed.',
+      })
+
+    const expected = TempoKeyAuthorization.from({
+      address: core_Address.fromPublicKey(PublicKey.from(current.pubKey)),
+      chainId: current.chainId,
+      expiry: current.expiry,
+      ...(current.limits ? { limits: current.limits } : {}),
+      type: current.keyType,
+    })
+    console.info(JSON.stringify({ route: context.req.path, data: { expected } }, undefined, 2))
+    const hash = TempoKeyAuthorization.getSignPayload(expected)
+    console.info(JSON.stringify({ route: context.req.path, data: { hash } }, undefined, 2))
+    const envelope = SignatureEnvelope.fromRpc(actual.signature)
+    console.info(JSON.stringify({ route: context.req.path, data: { envelope } }, undefined, 2))
+    const stateless = SignatureEnvelope.verify(envelope, {
+      address: request.accountAddress,
+      payload: hash,
+    })
+    console.info(JSON.stringify({ route: context.req.path, data: { stateless } }, undefined, 2))
+    const client = createClient({
+      chain: {
+        ...tempo,
+        id: Number(current.chainId),
+      },
+      transport: http(),
+    })
+    const onchainCode = await getCode(client, { address: request.accountAddress })
+    console.info(JSON.stringify({ route: context.req.path, data: { onchainCode } }, undefined, 2))
+    const viaVerifyHash = await verifyHash(client as never, {
+      address: request.accountAddress,
+      hash,
+      signature: SignatureEnvelope.serialize(envelope, {
+        magic: actual.signature.type === 'webAuthn',
+      }),
+    })
+
+    console.info(JSON.stringify({ route: context.req.path, data: { viaVerifyHash } }, undefined, 2))
+
+    return jsonDebug({
+      actual,
+      code,
+      current,
+      expected: {
+        address: expected.address,
+        chainId: expected.chainId.toString(),
+        expiry: expected.expiry,
+        keyType: expected.type,
+        limits: expected.limits,
+      },
+      hash,
+      onchainCode,
+      stateless,
+      viaVerifyHash,
+    })
+  } catch (error) {
+    console.error(JSON.stringify({ route: context.req.path, data: { error } }, undefined, 2))
+    return jsonDebug(
+      {
+        error: error instanceof Error ? error.message : `Encountered error in ${context.req.path}`,
+      },
+      400,
+    )
+  }
+})
+
+app.all('/cli-auth/*', async (context) => codeAuth(context.env).fetch(context.req.raw))
+
+app.all('/webauthn/*', async (context) => {
+  console.info(
+    JSON.stringify({ route: context.req.path, data: { env: context.env } }, undefined, 2),
+  )
+  console.info(
+    JSON.stringify({ route: context.req.path, data: { req: context.req.raw } }, undefined, 2),
+  )
+  return webauthn(context.req.raw, context.env).fetch(context.req.raw)
+})
+
+/**
+ * TODO: remove
+ */
 app.get(
   '/cli-auth',
   jsxRenderer(({ children }) => {
@@ -118,184 +291,15 @@ app.get(
   },
 )
 
-app.get('/cli-auth/latest', async (context) => {
-  try {
-    const kv = getKv(context.env)
-    const code = await kv.get<string | undefined>(latestPendingCodeKey)
-
-    if (!code) return new Response(null, { status: 204 })
-
-    const pending = await CliAuth.pending({
-      code,
-      store: CliAuth.Store.kv(kv),
-    })
-
-    console.info(JSON.stringify({ route: context.req.path, data: { pending } }, undefined, 2))
-
-    return Response.json(z.encode(CliAuth.pendingResponse, pending))
-  } catch {
-    return new Response(null, { status: 204 })
-  }
-})
-
-app.post('/cli-auth/device-code', async (context) => {
-  try {
-    const kv = getKv(context.env)
-    const request = z.decode(CliAuth.createRequest, await context.req.json())
-    const created = await CliAuth.createDeviceCode({
-      request,
-      store: CliAuth.Store.kv(kv),
-    })
-
-    console.info(JSON.stringify({ route: context.req.path, data: { created } }, undefined, 2))
-
-    await kv.set(latestPendingCodeKey, created.code)
-    return Response.json(z.encode(CliAuth.createResponse, created))
-  } catch (error) {
-    console.error(JSON.stringify({ route: context.req.path, data: { error } }, undefined, 2))
-    return Response.json(
-      {
-        error: error instanceof Error ? error.message : `Encountered error in ${context.req.path}`,
-      },
-      { status: 400 },
-    )
-  }
-})
-
-app.post('/reset', async (context) => {
-  const kv = context.env.CLI_AUTH_KV
-  console.info(JSON.stringify({ route: context.req.path, data: { kv } }, undefined, 2))
-  if (!supportsReset(kv))
-    return Response.json(
-      {
-        error: 'Server reset requires a Cloudflare KV binding with list support.',
-      },
-      { status: 501 },
-    )
-
-  let deleted = 0
-  for (const prefix of ['challenge:', 'cli-auth:', 'credential:'])
-    deleted += await deletePrefix(kv, prefix)
-  await kv.delete(latestPendingCodeKey)
-
-  return Response.json({
-    deleted,
-    status: 'ok',
-  })
-})
-
-app.post('/debug/authorize-check', async (context) => {
-  try {
-    const request = z.decode(CliAuth.authorizeRequest, await context.req.json())
-    const store = CliAuth.Store.kv(getKv(context.env))
-    const code = request.code.replace(/-/g, '').toUpperCase()
-    const current = await store.get(code)
-    const actual = {
-      ...request.key_authorization,
-      expiry: request.key_authorization.expiry ?? undefined,
-      limits: request.key_authorization.limits ?? undefined,
-    }
-
-    console.info(
-      JSON.stringify({ route: context.req.path, data: { request, current } }, undefined, 2),
-    )
-
-    if (!current)
-      return jsonDebug({
-        code,
-        error: 'Unknown device code.',
-      })
-
-    if (current.status !== 'pending')
-      return jsonDebug({
-        code,
-        current,
-        error: 'Device code already completed.',
-      })
-
-    const expected = TempoKeyAuthorization.from({
-      address: core_Address.fromPublicKey(PublicKey.from(current.pubKey)),
-      chainId: current.chainId,
-      expiry: current.expiry,
-      ...(current.limits ? { limits: current.limits } : {}),
-      type: current.keyType,
-    })
-    console.info(JSON.stringify({ route: context.req.path, data: { expected } }, undefined, 2))
-    const hash = TempoKeyAuthorization.getSignPayload(expected)
-    console.info(JSON.stringify({ route: context.req.path, data: { hash } }, undefined, 2))
-    const envelope = SignatureEnvelope.fromRpc(actual.signature)
-    console.info(JSON.stringify({ route: context.req.path, data: { envelope } }, undefined, 2))
-    const stateless = SignatureEnvelope.verify(envelope, {
-      address: request.account_address,
-      payload: hash,
-    })
-    console.info(JSON.stringify({ route: context.req.path, data: { stateless } }, undefined, 2))
-    const client = createClient({
-      chain: {
-        ...tempo,
-        id: Number(current.chainId),
-      },
-      transport: http(),
-    })
-    const onchainCode = await getCode(client, { address: request.account_address })
-    console.info(JSON.stringify({ route: context.req.path, data: { onchainCode } }, undefined, 2))
-    const viaVerifyHash = await verifyHash(client as never, {
-      address: request.account_address,
-      hash,
-      signature: SignatureEnvelope.serialize(envelope, {
-        magic: actual.signature.type === 'webAuthn',
-      }),
-    })
-
-    console.info(JSON.stringify({ route: context.req.path, data: { viaVerifyHash } }, undefined, 2))
-
-    return jsonDebug({
-      actual,
-      code,
-      current,
-      expected: {
-        address: expected.address,
-        chainId: expected.chainId.toString(),
-        expiry: expected.expiry,
-        keyType: expected.type,
-        limits: expected.limits,
-      },
-      hash,
-      onchainCode,
-      stateless,
-      viaVerifyHash,
-    })
-  } catch (error) {
-    console.error(JSON.stringify({ route: context.req.path, data: { error } }, undefined, 2))
-    return jsonDebug(
-      {
-        error: error instanceof Error ? error.message : `Encountered error in ${context.req.path}`,
-      },
-      400,
-    )
-  }
-})
-
-app.all('/cli-auth/*', async (context) => cliAuth(context.env).fetch(context.req.raw))
-
-app.all('/webauthn/*', async (context) => {
-  console.info(
-    JSON.stringify({ route: context.req.path, data: { env: context.env } }, undefined, 2),
-  )
-  console.info(
-    JSON.stringify({ route: context.req.path, data: { req: context.req.raw } }, undefined, 2),
-  )
-  return webauthn(context.req.raw, context.env).fetch(context.req.raw)
-})
-
 app.get('/', (context) => context.text('Tempo CLI auth server'))
 
 app.get('*', (context) => context.env.ASSETS.fetch(context.req.raw))
 
 export default app satisfies ExportedHandler<Cloudflare.Env>
 
-function cliAuth(env: Cloudflare.Env) {
-  return Handler.cliAuth({
+function codeAuth(env: Cloudflare.Env) {
+  return Handler.codeAuth({
+    path: '/cli-auth',
     store: CliAuth.Store.kv(getKv(env)),
   })
 }

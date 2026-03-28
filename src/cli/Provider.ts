@@ -6,12 +6,12 @@ import { cli } from './adapter.js'
  * device-code flow.
  */
 export function create(options: create.Options): create.ReturnType {
-  const { serviceUrl, open, pollIntervalMs, timeoutMs, ...rest } = options
+  const { host, open, pollIntervalMs, timeoutMs, ...rest } = options
 
   return CoreProvider.create({
     ...rest,
     adapter: cli({
-      serviceUrl,
+      host,
       ...(open ? { open } : {}),
       ...(typeof pollIntervalMs !== 'undefined' ? { pollIntervalMs } : {}),
       ...(typeof timeoutMs !== 'undefined' ? { timeoutMs } : {}),

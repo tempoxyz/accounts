@@ -357,23 +357,23 @@ export declare namespace feePayer {
 }
 
 /**
- * Instantiates a generic device-code handler for CLI access-key bootstrap.
+ * Instantiates a generic device-code handler for access-key bootstrap.
  *
  * Exposes 4 endpoints:
- * - `GET /cli-auth/pending/:code`
- * - `POST /cli-auth/device-code`
- * - `POST /cli-auth/poll/:code`
- * - `POST /cli-auth/authorize`
+ * - `GET /auth/pkce/pending/:code`
+ * - `POST /auth/pkce/code`
+ * - `POST /auth/pkce/poll/:code`
+ * - `POST /auth/pkce`
  *
  * @param options - Options.
  * @returns Request handler.
  */
-export function cliAuth(options: cliAuth.Options = {}): Handler {
+export function codeAuth(options: codeAuth.Options = {}): Handler {
   const {
     chainId,
     client,
     now,
-    path = '/cli-auth',
+    path = '/auth/pkce',
     policy,
     random,
     store = CliAuth.Store.memory(),
@@ -399,7 +399,7 @@ export function cliAuth(options: cliAuth.Options = {}): Handler {
     }
   })
 
-  router.post(`${path}/device-code`, async ({ request: req }) => {
+  router.post(`${path}/code`, async ({ request: req }) => {
     try {
       const request = z.decode(CliAuth.createRequest, await req.json())
       const result = await CliAuth.createDeviceCode({
@@ -435,7 +435,7 @@ export function cliAuth(options: cliAuth.Options = {}): Handler {
     }
   })
 
-  router.post(`${path}/authorize`, async ({ request: req }) => {
+  router.post(path, async ({ request: req }) => {
     try {
       const request = z.decode(CliAuth.authorizeRequest, await req.json())
       const result = await CliAuth.authorize({
@@ -455,7 +455,7 @@ export function cliAuth(options: cliAuth.Options = {}): Handler {
   return router
 }
 
-export declare namespace cliAuth {
+export declare namespace codeAuth {
   export type Options = from.Options & {
     /** Chain ID embedded into authorized access keys. Defaults to the client chain or tempo.id. */
     chainId?: bigint | number | undefined
@@ -463,7 +463,7 @@ export declare namespace cliAuth {
     client?: Client<Transport, Chain | undefined> | undefined
     /** Time source used for TTL evaluation. */
     now?: (() => number) | undefined
-    /** Path prefix for the CLI auth endpoints. @default "/cli-auth" */
+    /** Path prefix for the code auth endpoints. @default "/auth/pkce" */
     path?: string | undefined
     /** Policy used to validate and default requested CLI auth fields. */
     policy?: CliAuth.Policy | undefined
