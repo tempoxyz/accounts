@@ -5,6 +5,7 @@ import { http } from 'viem'
 import { createConfig } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 
+import trustedHosts from '../trusted-hosts.json'
 import * as Messenger from './messenger.js'
 
 /** Provider instance for executing confirmed requests. */
@@ -30,4 +31,5 @@ export const wagmiConfig = createConfig({
 export const remote = Remote.create({
   messenger: Messenger.init(),
   provider: await getConnectors(wagmiConfig)[0]!.getProvider(),
+  trustedHosts,
 })
