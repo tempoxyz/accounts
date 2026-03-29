@@ -13,7 +13,7 @@ import * as z from 'zod/mini'
 
 type AccessKey = ReturnType<typeof TempoAccount.fromP256>
 
-// ── Shell completions ────────────────────────────────────
+// shell completions
 
 const connectCmd = Tab.command('connect', 'Sign in / sign up via browser approval')
 connectCmd.option('url', 'Auth service URL', (c) => c('http://localhost:6969/cli-auth', 'Local'))
@@ -24,14 +24,14 @@ requestCmd.option('url', 'Auth service URL', (c) => c('http://localhost:6969/cli
 requestCmd.option('key-file', 'Access key file path')
 
 if (process.argv[2] === 'complete') {
-  const shell = process.argv[3]
+  const [, , , shell] = process.argv
   if (shell === '--') Tab.parse(process.argv.slice(4))
   else if (shell) Tab.setup('tempo-cli', 'pnpm tsx scripts/cli.ts', shell)
   else console.log('Usage: tempo-cli complete <shell|-->')
   process.exit(0)
 }
 
-// ── Args ─────────────────────────────────────────────────
+// args
 
 const args = parse(process.argv.slice(2), {
   string: ['url', 'key-file'],
@@ -68,7 +68,7 @@ if (command && command !== 'connect' && command !== 'request') {
   process.exit(1)
 }
 
-// ── Main ─────────────────────────────────────────────────
+// main
 
 async function main() {
   Clack.intro('tempo')
@@ -138,7 +138,7 @@ async function main() {
   }
 }
 
-// ── Flows ────────────────────────────────────────────────
+// flows
 
 async function connectFlow(serviceUrl: string, account: AccessKey) {
   const task = Clack.taskLog({ title: 'Sign in' })
@@ -230,7 +230,7 @@ async function authorizeFlow(serviceUrl: string, account: AccessKey) {
   task.error('Timed out waiting for approval.')
 }
 
-// ── Access key ───────────────────────────────────────────
+// access key
 
 function accessKeyParams(account: AccessKey) {
   return {
@@ -262,7 +262,7 @@ async function loadAccessKey(file: string) {
   return { account: TempoAccount.fromP256(privateKey), file }
 }
 
-// ── URL resolution ───────────────────────────────────────
+// url resolution
 
 async function resolveServiceUrl(): Promise<string> {
   if (args.url) return trimSlash(args.url)
@@ -292,6 +292,7 @@ async function resolveServiceUrl(): Promise<string> {
       } catch {
         return 'Invalid URL'
       }
+      return
     },
   })
 
@@ -300,7 +301,7 @@ async function resolveServiceUrl(): Promise<string> {
 }
 
 function resolveDefaultUrl() {
-  const value = process.env.CLI_AUTH_URL
+  const value = process.env.HTTP_URL
   if (value) {
     const url = new URL(value)
     if (!url.pathname || url.pathname === '/') url.pathname = '/cli-auth'
@@ -308,16 +309,16 @@ function resolveDefaultUrl() {
     return trimSlash(url.toString())
   }
 
-  const protocol = process.env.CLI_AUTH_PROTOCOL ?? process.env.HTTP_PROTOCOL ?? 'http'
-  const host = process.env.CLI_AUTH_HOST ?? process.env.HTTP_HOST ?? 'localhost'
-  const port = process.env.CLI_AUTH_PORT ?? process.env.HTTP_PORT ?? '6969'
+  const protocol = process.env.HTTP_PROTOCOL ?? 'http'
+  const host = process.env.HTTP_HOST ?? 'localhost'
+  const port = process.env.HTTP_PORT ?? '6969'
   const url = new URL(`${protocol}://${host}`)
   if (!isDefaultPort(protocol, port)) url.port = port
   url.pathname = '/cli-auth'
   return trimSlash(url.toString())
 }
 
-// ── Helpers ──────────────────────────────────────────────
+// helpers
 
 function cancel(): never {
   Clack.cancel('Cancelled.')
@@ -422,7 +423,7 @@ async function post<
   return z.decode(options.response, json)
 }
 
-// ── Run ──────────────────────────────────────────────────
+// run
 
 main().catch((error) => {
   Clack.log.error(error instanceof Error ? error.message : String(error))

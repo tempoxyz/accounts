@@ -30,7 +30,7 @@
     "@remix-run/route-pattern": "^0.19.0",
     "@types/express": "^5.0.6",
     "@types/http-proxy": "^1.17.17",
-    "@types/node": "^25.3.3",
+    "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@typescript/native-preview": "7.0.0-dev.20260303.1",
