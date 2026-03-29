@@ -1,7 +1,6 @@
 import { Hex } from 'ox'
 import * as Provider from 'ox/Provider'
 import * as RpcResponse from 'ox/RpcResponse'
-import { useStore } from 'zustand'
 import type { StoreApi } from 'zustand/vanilla'
 import { createStore } from 'zustand/vanilla'
 
@@ -35,6 +34,10 @@ export type Remote = {
    * Remote context store.
    */
   store: StoreApi<State>
+  /**
+   * Hostnames trusted to render the embed in an iframe.
+   */
+  trustedHosts: readonly string[]
   /**
    * Subscribes to user-facing RPC requests from the parent context.
    *
@@ -109,7 +112,7 @@ export declare namespace respond {
 
 /** Creates a remote context for the dialog app. */
 export function create(options: create.Options): Remote {
-  const { messenger, provider } = options
+  const { messenger, provider, trustedHosts } = options
   const ready =
     typeof window !== 'undefined' && !new URLSearchParams(window.location.search).get('mode')
   const store = createStore<State>(() => ({
@@ -123,6 +126,7 @@ export function create(options: create.Options): Remote {
     messenger,
     provider,
     store,
+    trustedHosts: trustedHosts ?? [],
 
     onUserRequest(cb) {
       return this.onRequests(async (requests, event, { account }) => {
@@ -171,7 +175,7 @@ export function create(options: create.Options): Remote {
     },
 
     ready() {
-      messenger.ready()
+      messenger.ready({ trustedHosts })
 
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search)
@@ -251,12 +255,8 @@ export declare namespace create {
     messenger: Messenger.Bridge
     /** Provider to execute RPC requests against. */
     provider: CoreProvider.Provider
+    /** Hostnames trusted to render the embed in an iframe. */
+    trustedHosts?: string[] | undefined
   }
 }
 
-/** React hook to select state from a remote context's store. */
-export function useState(remote: Remote): State
-export function useState<selected>(remote: Remote, selector: (state: State) => selected): selected
-export function useState(remote: Remote, selector?: (state: State) => unknown) {
-  return useStore(remote.store, selector as never)
-}

@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { Remote } from 'accounts'
+import { Remote } from 'accounts/react'
 import { useState } from 'react'
 import { useConnection } from 'wagmi'
 

@@ -20,19 +20,25 @@ export type Messenger = {
   ) => Promise<{ id: string; topic: topic; payload: Payload<topic> }>
 }
 
+/** Options sent with the `ready` signal from the remote frame. */
+export type ReadyOptions = {
+  /** Hostnames trusted by the remote embed to render in an iframe. */
+  trustedHosts?: string[] | undefined
+}
+
 /** Bridge messenger that waits for a `ready` signal from the remote frame. */
 export type Bridge = Messenger & {
   /** Signal readiness (called by the remote frame). */
-  ready: () => void
+  ready: (options?: ReadyOptions | undefined) => void
   /** Promise that resolves when the remote frame signals ready. */
-  waitForReady: () => Promise<void>
+  waitForReady: () => Promise<ReadyOptions>
 }
 
 /** Message schema for cross-frame communication. */
 export type Schema = [
   {
     topic: 'ready'
-    payload: undefined
+    payload: ReadyOptions
   },
   {
     topic: 'rpc-requests'
@@ -51,6 +57,10 @@ export type Schema = [
   {
     topic: 'close'
     payload: undefined
+  },
+  {
+    topic: 'switch-mode'
+    payload: { mode: 'popup' }
   },
 ]
 
@@ -116,8 +126,8 @@ export function bridge(parameters: bridge.Parameters): Bridge {
 
   let pending = false
 
-  const ready = withResolvers<void>()
-  from_.on('ready', ready.resolve)
+  const ready = withResolvers<ReadyOptions>()
+  from_.on('ready', (payload) => ready.resolve(payload ?? {}))
 
   const messenger = from({
     destroy() {
@@ -137,8 +147,8 @@ export function bridge(parameters: bridge.Parameters): Bridge {
 
   return {
     ...messenger,
-    ready() {
-      void messenger.send('ready', undefined)
+    ready(options) {
+      void messenger.send('ready', options ?? {})
     },
     waitForReady() {
       return ready.promise
@@ -169,7 +179,7 @@ export function noop(): Bridge {
     },
     ready() {},
     waitForReady() {
-      return Promise.resolve()
+      return Promise.resolve({})
     },
   }
 }
