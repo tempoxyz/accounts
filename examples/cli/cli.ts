@@ -15,12 +15,14 @@ type AccessKey = ReturnType<typeof TempoAccount.fromP256>
 
 // shell completions
 
+const defaultUrl = resolveDefaultUrl()
+
 const connectCmd = Tab.command('connect', 'Sign in / sign up via browser approval')
-connectCmd.option('url', 'Auth service URL', (c) => c('http://localhost:6969/cli-auth', 'Local'))
+connectCmd.option('url', 'Auth service URL', (c) => c(defaultUrl, 'Default'))
 connectCmd.option('key-file', 'Access key file path')
 
 const requestCmd = Tab.command('request', 'Authorize an access key')
-requestCmd.option('url', 'Auth service URL', (c) => c('http://localhost:6969/cli-auth', 'Local'))
+requestCmd.option('url', 'Auth service URL', (c) => c(defaultUrl, 'Default'))
 requestCmd.option('key-file', 'Access key file path')
 
 if (process.argv[2] === 'complete') {
@@ -267,20 +269,16 @@ async function loadAccessKey(file: string) {
 async function resolveServiceUrl(): Promise<string> {
   if (args.url) return trimSlash(args.url)
 
-  const defaultUrl = resolveDefaultUrl()
   const target = await Clack.select({
     message: 'Auth service',
     options: [
-      { value: 'local', label: defaultUrl, hint: 'local dev' },
-      { value: 'tailscale', label: 'https://o-1.tail388b2e.ts.net/cli-auth', hint: 'tailscale' },
+      { value: 'default', label: defaultUrl, hint: 'default' },
       { value: 'custom', label: 'Custom URL…' },
     ],
   })
 
   if (Clack.isCancel(target)) return cancel()
-
-  if (target === 'tailscale') return 'https://o-1.tail388b2e.ts.net/cli-auth'
-  if (target !== 'custom') return trimSlash(defaultUrl)
+  if (target === 'default') return defaultUrl
 
   const input = await Clack.text({
     message: 'Auth service URL',
@@ -301,7 +299,7 @@ async function resolveServiceUrl(): Promise<string> {
 }
 
 function resolveDefaultUrl() {
-  const value = process.env.HTTP_URL
+  const value = process.env.AUTH_URL
   if (value) {
     const url = new URL(value)
     if (!url.pathname || url.pathname === '/') url.pathname = '/cli-auth'
@@ -309,9 +307,9 @@ function resolveDefaultUrl() {
     return trimSlash(url.toString())
   }
 
-  const protocol = process.env.HTTP_PROTOCOL ?? 'http'
-  const host = process.env.HTTP_HOST ?? 'localhost'
-  const port = process.env.HTTP_PORT ?? '6969'
+  const protocol = process.env.AUTH_PROTOCOL ?? 'http'
+  const host = process.env.AUTH_HOST ?? 'localhost'
+  const port = process.env.AUTH_PORT ?? '6969'
   const url = new URL(`${protocol}://${host}`)
   if (!isDefaultPort(protocol, port)) url.port = port
   url.pathname = '/cli-auth'
