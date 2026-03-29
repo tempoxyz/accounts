@@ -1,7 +1,6 @@
 import { Hex } from 'ox'
 import * as Provider from 'ox/Provider'
 import * as RpcResponse from 'ox/RpcResponse'
-import { useStore } from 'zustand'
 import type { StoreApi } from 'zustand/vanilla'
 import { createStore } from 'zustand/vanilla'
 
@@ -35,6 +34,10 @@ export type Remote = {
    * Remote context store.
    */
   store: StoreApi<State>
+  /**
+   * Hostnames trusted to render the embed in an iframe.
+   */
+  trustedHosts: readonly string[]
   /**
    * Subscribes to user-facing RPC requests from the parent context.
    *
@@ -123,6 +126,7 @@ export function create(options: create.Options): Remote {
     messenger,
     provider,
     store,
+    trustedHosts: trustedHosts ?? [],
 
     onUserRequest(cb) {
       return this.onRequests(async (requests, event, { account }) => {
@@ -256,9 +260,3 @@ export declare namespace create {
   }
 }
 
-/** React hook to select state from a remote context's store. */
-export function useState(remote: Remote): State
-export function useState<selected>(remote: Remote, selector: (state: State) => selected): selected
-export function useState(remote: Remote, selector?: (state: State) => unknown) {
-  return useStore(remote.store, selector as never)
-}

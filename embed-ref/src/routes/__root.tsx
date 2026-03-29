@@ -1,6 +1,6 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router'
 import { reconnect } from '@wagmi/core'
-import { Remote } from 'accounts'
+import { Remote } from 'accounts/react'
 
 import { EnsureVisibility } from '../components/EnsureVisibility'
 import { remote, wagmiConfig } from '../lib/config'
