@@ -114,7 +114,8 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   /** Resolves the `feePayer` field from a transaction request into an absolute URL string or `undefined`. */
   function resolveFeePayer(feePayer: string | boolean | undefined): string | undefined {
-    const url = typeof feePayer === 'string' ? feePayer : feePayer === true ? feePayerUrl : undefined
+    const url =
+      typeof feePayer === 'string' ? feePayer : feePayer === true ? feePayerUrl : undefined
     if (!url) return undefined
     if (url.startsWith('http://') || url.startsWith('https://')) return url
     if (typeof window !== 'undefined') return new URL(url, window.location.origin).href
@@ -193,7 +194,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     return (await actions.sendTransaction(
                       {
                         ...decoded,
-                        feePayer: resolveFeePayer(decoded.feePayer ?? (feePayerUrl ? true : undefined)),
+                        feePayer: resolveFeePayer(decoded.feePayer),
                       },
                       request,
                     )) satisfies Rpc.eth_sendTransaction.Encoded['returns']
@@ -205,7 +206,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     return (await actions.signTransaction(
                       {
                         ...decoded,
-                        feePayer: resolveFeePayer(decoded.feePayer ?? (feePayerUrl ? true : undefined)),
+                        feePayer: resolveFeePayer(decoded.feePayer),
                       },
                       request,
                     )) satisfies Rpc.eth_signTransaction.Encoded['returns']
@@ -217,7 +218,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     return (await actions.sendTransactionSync(
                       {
                         ...decoded,
-                        feePayer: resolveFeePayer(decoded.feePayer ?? (feePayerUrl ? true : undefined)),
+                        feePayer: resolveFeePayer(decoded.feePayer),
                       },
                       request,
                     )) satisfies Rpc.eth_sendTransactionSync.Encoded['returns']
