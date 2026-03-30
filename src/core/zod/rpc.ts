@@ -67,7 +67,7 @@ export const transactionRequest = z.object({
   ),
   calls: z.optional(z.readonly(z.array(call))),
   chainId: z.optional(u.number()),
-  feePayer: z.optional(z.union([z.boolean(), z.url()])),
+  feePayer: z.optional(z.union([z.boolean(), z.string()])),
   feeToken: z.optional(u.address()),
   from: z.optional(u.address()),
   gas: z.optional(u.bigint()),

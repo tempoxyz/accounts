@@ -112,11 +112,14 @@ export function create(options: create.Options = {}): create.ReturnType {
     return merged
   }
 
-  /** Resolves the `feePayer` field from a transaction request into a URL string or `undefined`. */
+  /** Resolves the `feePayer` field from a transaction request into an absolute URL string or `undefined`. */
   function resolveFeePayer(feePayer: string | boolean | undefined): string | undefined {
-    if (typeof feePayer === 'string') return feePayer
-    if (feePayer === true) return feePayerUrl
-    return undefined
+    const url =
+      typeof feePayer === 'string' ? feePayer : feePayer === true ? feePayerUrl : undefined
+    if (!url) return undefined
+    if (url.startsWith('http://') || url.startsWith('https://')) return url
+    if (typeof window !== 'undefined') return new URL(url, window.location.origin).href
+    return url
   }
 
   const provider = Object.assign(
