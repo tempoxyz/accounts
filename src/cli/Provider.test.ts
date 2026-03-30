@@ -11,17 +11,27 @@ import * as Provider from './Provider.js'
 
 const root = accounts[0]!
 const accessKey = accounts[1]!
+const accessKey_2 = accounts[2]!
 const expiry = Math.floor(Date.now() / 1000) + 3_600
+const expiry_2 = expiry + 60
 
-async function authorize(code: string) {
+async function authorize(
+  code: string,
+  options: {
+    accessKey?: typeof accessKey | undefined
+    expiry?: number | undefined
+  } = {},
+) {
+  const { accessKey: key = accessKey, expiry: expiry_ = expiry } = options
+
   const signed = await root.signKeyAuthorization(
     {
-      accessKeyAddress: accessKey.address,
-      keyType: accessKey.keyType,
+      accessKeyAddress: key.address,
+      keyType: key.keyType,
     },
     {
       chainId: BigInt(chain.id),
-      expiry,
+      expiry: expiry_,
     },
   )
   const keyAuthorization = KeyAuthorization.toRpc(signed)
@@ -36,15 +46,23 @@ async function authorize(code: string) {
   })
 }
 
-function connectRequest() {
+function connectRequest(
+  options: {
+    accessKey?: typeof accessKey | undefined
+    expiry?: number | undefined
+  } = {},
+) {
+  const { accessKey: key = accessKey, expiry: expiry_ = expiry } = options
+
   return {
     method: 'wallet_connect',
     params: [
       {
         capabilities: {
           authorizeAccessKey: {
-            expiry,
-            publicKey: accessKey.publicKey,
+            expiry: expiry_,
+            keyType: key.keyType,
+            publicKey: key.publicKey,
           },
         },
       },
@@ -53,6 +71,8 @@ function connectRequest() {
 }
 
 function createHandler() {
+  let random = 0
+
   return Handler.codeAuth({
     path: '/cli-auth',
     chainId: chain.id,
@@ -65,7 +85,11 @@ function createHandler() {
         }
       },
     },
-    random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
+    random: () => {
+      const out = new Uint8Array(Array.from({ length: 8 }, (_, i) => random + i))
+      random += 8
+      return out
+    },
   })
 }
 
@@ -77,6 +101,7 @@ describe('Provider.create', () => {
 
     try {
       const provider = Provider.create({
+        chains: [chain],
         open: async (url) => {
           opened.push(url)
           const code = new URL(url).searchParams.get('code')!
@@ -139,6 +164,7 @@ describe('Provider.create', () => {
 
     try {
       const provider = Provider.create({
+        chains: [chain],
         open() {
           throw new Error('browser unavailable')
         },
@@ -173,6 +199,7 @@ describe('Provider.create', () => {
 
     try {
       const provider = Provider.create({
+        chains: [chain],
         open() {},
         pollIntervalMs: 1,
         host: `${server.url}/cli-auth`,
@@ -201,12 +228,146 @@ describe('Provider.create', () => {
     }
   })
 
-  test('behavior: rejects non-bootstrap RPCs', async () => {
+  test('behavior: authorizes an access key while disconnected when publicKey is provided', async () => {
+    const handler = createHandler()
+    const server = await createServer(handler.listener)
+    const opened: string[] = []
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (url) => {
+          opened.push(url)
+          const code = new URL(url).searchParams.get('code')!
+          try {
+            await fetch(`${server.url}/cli-auth`, {
+              body: JSON.stringify(
+                await authorize(code, { accessKey: accessKey_2, expiry: expiry_2 }),
+              ),
+              headers: { 'content-type': 'application/json' },
+              method: 'POST',
+            })
+          } catch (error) {}
+        },
+        host: `${server.url}/cli-auth`,
+      })
+
+      const result = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [
+          { expiry: expiry_2, keyType: accessKey_2.keyType, publicKey: accessKey_2.publicKey },
+        ],
+      })
+      const keyAuthorization = {
+        ...result.keyAuthorization,
+        signature: {
+          type: result.keyAuthorization.signature.type,
+        },
+      }
+
+      expect({
+        keyAuthorization,
+        rootAddress: result.rootAddress,
+        opened: opened.map((url) => url.replace(server.url, 'http://service')),
+      }).toMatchInlineSnapshot(`
+        {
+          "keyAuthorization": {
+            "address": "${accessKey_2.address}",
+            "chainId": "${Hex.fromNumber(chain.id)}",
+            "expiry": "${Hex.fromNumber(expiry_2)}",
+            "keyId": "${accessKey_2.address}",
+            "keyType": "secp256k1",
+            "signature": {
+              "type": "secp256k1",
+            },
+          },
+          "opened": [
+            "http://service/cli-auth?code=ABCDEFGH",
+          ],
+          "rootAddress": "${root.address}",
+        }
+      `)
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('behavior: authorizes an access key for the active account', async () => {
+    const handler = createHandler()
+    const server = await createServer(handler.listener)
+    const opened: string[] = []
+
+    try {
+      const approvals = [
+        (code: string) => authorize(code),
+        (code: string) => authorize(code, { accessKey: accessKey_2, expiry: expiry_2 }),
+      ]
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (url) => {
+          opened.push(url)
+          const approve = approvals.shift()
+          if (!approve) throw new Error('Unexpected device-code approval request.')
+          const code = new URL(url).searchParams.get('code')!
+          await fetch(`${server.url}/cli-auth`, {
+            body: JSON.stringify(await approve(code)),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          })
+        },
+        host: `${server.url}/cli-auth`,
+      })
+
+      await provider.request(connectRequest())
+
+      const result = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [
+          { expiry: expiry_2, keyType: accessKey_2.keyType, publicKey: accessKey_2.publicKey },
+        ],
+      })
+      const keyAuthorization = {
+        ...result.keyAuthorization,
+        signature: {
+          type: result.keyAuthorization.signature.type,
+        },
+      }
+
+      expect({
+        keyAuthorization,
+        rootAddress: result.rootAddress,
+        opened: opened.map((url) => url.replace(server.url, 'http://service')),
+      }).toMatchInlineSnapshot(`
+        {
+          "keyAuthorization": {
+            "address": "${accessKey_2.address}",
+            "chainId": "${Hex.fromNumber(chain.id)}",
+            "expiry": "${Hex.fromNumber(expiry_2)}",
+            "keyId": "${accessKey_2.address}",
+            "keyType": "secp256k1",
+            "signature": {
+              "type": "secp256k1",
+            },
+          },
+          "opened": [
+            "http://service/cli-auth?code=ABCDEFGH",
+            "http://service/cli-auth?code=JKLMNPQR",
+          ],
+          "rootAddress": "${root.address}",
+        }
+      `)
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('behavior: rejects unsupported revokeAccessKey after bootstrap', async () => {
     const handler = createHandler()
     const server = await createServer(handler.listener)
 
     try {
       const provider = Provider.create({
+        chains: [chain],
         open: async (url) => {
           const code = new URL(url).searchParams.get('code')!
           await fetch(`${server.url}/cli-auth`, {
@@ -222,11 +383,11 @@ describe('Provider.create', () => {
 
       await expect(
         provider.request({
-          method: 'wallet_authorizeAccessKey',
-          params: [{ expiry, keyType: accessKey.keyType, publicKey: accessKey.publicKey }],
+          method: 'wallet_revokeAccessKey',
+          params: [{ accessKeyAddress: accessKey.address, address: root.address }],
         }),
       ).rejects.toThrowErrorMatchingInlineSnapshot(
-        `[Provider.UnsupportedMethodError: \`authorizeAccessKey\` not supported by adapter.]`,
+        `[Provider.UnsupportedMethodError: \`wallet_revokeAccessKey\` not supported by CLI adapter.]`,
       )
     } finally {
       await server.closeAsync()

@@ -361,7 +361,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
 
           if (accessKey) {
             const account = getAccount({ accessKey: false, signable: false })
-            saveAccessKey(account.address, result, accessKey.keyPair)
+            saveAccessKey(account.address, result.keyAuthorization, accessKey.keyPair)
           }
 
           return result

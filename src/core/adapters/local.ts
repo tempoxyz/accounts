@@ -73,7 +73,7 @@ export function local(options: local.Options): Adapter.Adapter {
       options: {
         signature?: Hex.Hex | undefined
       } = {},
-    ): Promise<Adapter.authorizeAccessKey.ReturnType> {
+    ) {
       const { keyPair } = prepared
 
       const keyAuthorization = await (async () => {
@@ -140,7 +140,10 @@ export function local(options: local.Options): Adapter.Adapter {
         async authorizeAccessKey(parameters) {
           const prepared = await prepareKeyAuthorization(parameters)
           const account = getAccount({ accessKey: false, signable: true })
-          return await signKeyAuthorization(account, prepared, { signature: parameters.signature })
+          const keyAuthorization = await signKeyAuthorization(account, prepared, {
+            signature: parameters.signature,
+          })
+          return { keyAuthorization, rootAddress: account.address }
         },
         async loadAccounts(parameters) {
           const { authorizeAccessKey, ...rest } =
