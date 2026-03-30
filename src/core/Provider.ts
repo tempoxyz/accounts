@@ -339,7 +339,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                       chainId,
                       id,
                       receipts: receipt ? [receipt as never] : [],
-                      status: receipt?.status === '0x1' ? 200 : 500,
+                      status: (() => {
+                        if (!receipt) return 100 // pending
+                        if (receipt.status === '0x1') return 200 // success
+                        return 500 // failed
+                      })(),
                       version: '2.0.0',
                     } satisfies Rpc.wallet_getCallsStatus.Encoded['returns']
                   }
