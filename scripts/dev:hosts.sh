@@ -38,7 +38,7 @@ echo "Playground A: https://$PLAYGROUND_A_HOST:$PLAYGROUND_PORT_A"
 echo "Playground B: https://$PLAYGROUND_B_HOST:$PLAYGROUND_PORT_B"
 echo ""
 
-pnpm dev:embed &
+pnpm dev:dialog &
 
 cd "$ROOT/playground"
 PORT="$PLAYGROUND_PORT_A" VITE_HOST="$PLAYGROUND_A_HOST" pnpm dev &

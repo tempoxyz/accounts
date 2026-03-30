@@ -259,4 +259,3 @@ export declare namespace create {
     trustedHosts?: string[] | undefined
   }
 }
-

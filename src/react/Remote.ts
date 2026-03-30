@@ -70,7 +70,10 @@ export function useState<selected>(
   remote: CoreRemote.Remote,
   selector: (state: CoreRemote.State) => selected,
 ): selected
-export function useState(remote: CoreRemote.Remote, selector?: (state: CoreRemote.State) => unknown) {
+export function useState(
+  remote: CoreRemote.Remote,
+  selector?: (state: CoreRemote.State) => unknown,
+) {
   return useStore(remote.store, selector as never)
 }
 
@@ -79,7 +82,7 @@ export declare namespace useEnsureVisibility {
     /** Whether visibility monitoring is enabled. @default true */
     enabled?: boolean | undefined
   }
-  
+
   type ReturnType = {
     /** Requests the host switch to a popup dialog. */
     invokePopup: () => void

@@ -58,7 +58,7 @@ export const wagmiConfig = createConfig({
 })
 ```
 
-### CLI Bootstrap
+### CLI
 
 Use the `accounts/cli` entrypoint when an external CLI already owns the local key material and only needs the Tempo Wallet browser flow to authenticate the user and authorize that key.
 
@@ -84,108 +84,24 @@ const { accounts } = await provider.request({
 })
 ```
 
-This adapter is bootstrap-only in v1. It supports `wallet_connect` and returns the root account plus `capabilities.keyAuthorization`, but it does not implement transaction or message signing.
-
-### CLI Auth Server
-
-Use `Handler.cliAuth` from `accounts/server` to host the generic device-code protocol:
-
-- `POST /cli-auth/device-code`
-- `POST /cli-auth/poll/:code`
-- `POST /cli-auth/authorize`
-
-The create request uses snake_case fields:
-
-- `pub_key` required
-- `code_challenge` required
-- `key_type` optional, defaults to `secp256k1` when omitted
-- `expiry` optional, defaults via server policy
-- `limits` optional, defaults via server policy
-- `account` optional
-
-This CLI device-code request shape is intentionally more permissive than the shared `wallet_authorizeAccessKey` SDK contract. Keep generic RPC semantics strict unless we explicitly choose an SDK-wide widening.
-
-The poll response returns:
-
-- `status`
-- `account_address`
-- `key_authorization`
-
-The device-code protocol value is the raw 8-character code, for example `ABCDEFGH`. If you present it to a user, format it for display as `ABCD-EFGH`, but keep storage and URL/query values unformatted for compatibility with existing Tempo consumers.
-
-### Local CLI Smoke Test
-
-Use the dev-only harness below when you want to manually exercise the extracted `accounts/cli` + `accounts/server` flow before `tempo/app` adopts the new server primitives.
-
-In one terminal, start the playground app and worker:
-
-```sh
-pnpm dev:playground
-```
-
-In a second terminal, run the CLI demo:
-
-```sh
-pnpm demo:cli-auth
-```
-
-What happens:
-
-1. the demo creates or loads a local P256 access key from `tmp/cli-auth-demo/access-key.json`
-2. it calls `Provider.create({ serviceUrl: 'https://localhost:5173/cli-auth' })`
-3. your browser opens the playground CLI auth approval screen
-4. the page shows the pending `pub_key`, `key_type`, `expiry`, and `limits`
-5. click `Approve`
-6. the demo prints the root account plus returned `capabilities.keyAuthorization`
-
-Notes:
-
-- `playground/scripts/cli-auth.ts` is the authoritative terminal bootstrap demo. It generates its own PKCE verifier, creates its own device code, opens the browser, and polls until approval completes.
-- The extra CLI auth example buttons inside `playground/src/App.tsx` are browser-side demo helpers only. They seed pending requests directly so you can inspect different request shapes in the UI.
-- Those browser-side demo buttons intentionally use a fixed verifier and are not interchangeable with the real CLI script flow.
-
-Expected terminal output from the CLI demo looks like:
-
-```json
-{
-  "account": "0x...",
-  "keyAuthorization": {
-    "address": "0x...",
-    "chainId": "0x...",
-    "keyType": "p256",
-    "signature": {
-      "type": "secp256k1"
-    }
-  }
-}
-```
-
-This harness is intentionally minimal:
-
-- it validates the extracted `accounts/cli` + `accounts/server` flow
-- the demo implementation lives under `playground/` and is intentionally not the real Tempo Wallet UI
-- it uses a fixed dev root account for approval
-- it includes extra dev-only helper routes for the playground approval surface
-- it does not include login, funding, or passkey UX
-- real wallet-backed testing is the next follow-up in `tempo/app`
-
 ## Adapters
 
 | Adapter                  | Description                                                                        |
 | ------------------------ | ---------------------------------------------------------------------------------- |
 | `dialog` / `tempoWallet` | Adapter for the Tempo Wallet dialog (an embedded iframe/popup dialog).             |
 | `webAuthn`               | App-bound passkey accounts using WebAuthn registration and authentication flows.   |
+| `cli`                    | Device-code based adapter for CLI authentication and access key authorization.    |
 | `local`                  | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
 
 ## Development
 
 ```sh
-pnpm dev              # start embed + embed-ref + playground dev servers
+pnpm dev              # start dialog + dialog-ref + playground dev servers
 pnpm demo:cli-auth    # run the CLI smoke-test client from playground/scripts
-pnpm dev:embed        # start Tempo Wallet embed only
-pnpm dev:embed-ref    # start reference embed implementation only (port 5174)
+pnpm dev:dialog       # start Tempo Wallet dialog only
+pnpm dev:dialog-ref   # start reference dialog implementation only (port 5174)
 pnpm dev:playground   # start playground app only
-pnpm dev:hosts        # start embed + playground instances on different TLDs
+pnpm dev:hosts        # start dialog + playground instances on different TLDs
 pnpm build            # build library
 pnpm check            # lint + format
 pnpm check:types      # type checks
@@ -198,11 +114,14 @@ pnpm test             # run tests
 > - `https://playground.a:5173`
 > - `https://playground.b:5175`
 
-### Embed Reference Implementation
+### Reference Implementations
 
-The `embed-ref/` directory contains a minimal, unstyled reference implementation of the embed dialog app. It demonstrates how to build a custom embed using the Account SDK's `Remote` API.
+The `ref-impls/` directory contains reference implementations for building on the Account SDK:
 
-Select `dialogRefImpl` in the playground's adapter dropdown to test against it.
+| Directory               | Description                                                                                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ref-impls/dialog/`     | Minimal, unstyled embed dialog app demonstrating how to build a custom embed using the `Remote` API. Select `dialogRefImpl` in the playground's adapter dropdown to test against it. |
+| `ref-impls/cli-auth/` | Cloudflare Workers server demonstrating device-code based CLI authentication and access key authorization. |
 
 ## License
 
