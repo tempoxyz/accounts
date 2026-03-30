@@ -33,6 +33,13 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     rdns = 'xyz.tempo',
   } = options
 
+  if (typeof window !== 'undefined' && !window.isSecureContext)
+    console.warn(
+      '[accounts] Detected insecure context (HTTP).',
+      `\n\nThe Tempo Wallet iframe dialog is not supported on HTTP origins (${window.location.origin})`,
+      'due to lack of WebAuthn passkey support in non-secure contexts.',
+    )
+
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
     const listeners = new Set<(requestQueue: readonly Store.QueuedRequest[]) => void>()
     const requestStore = ox_RpcRequest.createStore()
