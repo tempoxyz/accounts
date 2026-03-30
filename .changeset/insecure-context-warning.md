@@ -1,5 +1,5 @@
 ---
-"accounts": patch
+'accounts': patch
 ---
 
-Warn when dialog adapter is initialized on a non-secure (HTTP) origin.
+Added warning when dialog adapter is initialized on a non-secure (HTTP) origin.
