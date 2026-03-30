@@ -1482,10 +1482,15 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const syncTransferCall = Actions.token.transfer.call({
+        to: '0x0000000000000000000000000000000000000001',
+        token: Addresses.pathUsd,
+        amount: parseUnits('2', 6),
+      })
 
       const receipt = await provider.request({
         method: 'eth_sendTransactionSync',
-        params: [{ calls: [transferCall], feePayer: server.url }],
+        params: [{ calls: [syncTransferCall], feePayer: server.url }],
       })
 
       expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
@@ -1536,10 +1541,15 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const syncTransferCall = Actions.token.transfer.call({
+        to: '0x0000000000000000000000000000000000000001',
+        token: Addresses.pathUsd,
+        amount: parseUnits('3', 6),
+      })
 
       const receipt = await provider.request({
         method: 'eth_sendTransactionSync',
-        params: [{ calls: [transferCall], feePayer: true }],
+        params: [{ calls: [syncTransferCall], feePayer: true }],
       })
 
       expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())

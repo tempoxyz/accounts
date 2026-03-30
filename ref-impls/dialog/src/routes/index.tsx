@@ -5,5 +5,5 @@ export const Route = createFileRoute('/')({
 })
 
 function Home() {
-  return <div>Tempo Embed (Reference)</div>
+  return <div>Tempo Dialog (Reference)</div>
 }

@@ -58,22 +58,50 @@ export const wagmiConfig = createConfig({
 })
 ```
 
+### CLI
+
+Use the `accounts/cli` entrypoint when an external CLI already owns the local key material and only needs the Tempo Wallet browser flow to authenticate the user and authorize that key.
+
+```ts
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  serviceUrl: 'https://wallet.example.com/cli-auth',
+})
+
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
+  params: [
+    {
+      capabilities: {
+        authorizeAccessKey: {
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          publicKey: '0x...',
+        },
+      },
+    },
+  ],
+})
+```
+
 ## Adapters
 
 | Adapter                  | Description                                                                        |
 | ------------------------ | ---------------------------------------------------------------------------------- |
 | `dialog` / `tempoWallet` | Adapter for the Tempo Wallet dialog (an embedded iframe/popup dialog).             |
 | `webAuthn`               | App-bound passkey accounts using WebAuthn registration and authentication flows.   |
+| `cli`                    | Device-code based adapter for CLI authentication and access key authorization.    |
 | `local`                  | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
 
 ## Development
 
 ```sh
-pnpm dev              # start embed + embed-ref + playground dev servers
-pnpm dev:embed        # start Tempo Wallet embed only
-pnpm dev:embed-ref    # start reference embed implementation only (port 5174)
+pnpm dev              # start dialog + dialog-ref + playground dev servers
+pnpm demo:cli-auth    # run the CLI smoke-test client from playground/scripts
+pnpm dev:dialog       # start Tempo Wallet dialog only
+pnpm dev:dialog-ref   # start reference dialog implementation only (port 5174)
 pnpm dev:playground   # start playground app only
-pnpm dev:hosts        # start embed + playground instances on different TLDs
+pnpm dev:hosts        # start dialog + playground instances on different TLDs
 pnpm build            # build library
 pnpm check            # lint + format
 pnpm check:types      # type checks
@@ -86,11 +114,14 @@ pnpm test             # run tests
 > - `https://playground.a:5173`
 > - `https://playground.b:5175`
 
-### Embed Reference Implementation
+### Reference Implementations
 
-The `embed-ref/` directory contains a minimal, unstyled reference implementation of the embed dialog app. It demonstrates how to build a custom embed using the Account SDK's `Remote` API.
+The `ref-impls/` directory contains reference implementations for building on the Account SDK:
 
-Select `dialogRefImpl` in the playground's adapter dropdown to test against it.
+| Directory               | Description                                                                                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ref-impls/dialog/`     | Minimal, unstyled embed dialog app demonstrating how to build a custom embed using the `Remote` API. Select `dialogRefImpl` in the playground's adapter dropdown to test against it. |
+| `ref-impls/cli-auth/` | Cloudflare Workers server demonstrating device-code based CLI authentication and access key authorization. |
 
 ## License
 

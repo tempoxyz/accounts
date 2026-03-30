@@ -1,9 +1,9 @@
 packages:
   - .
-  - embed
-  - embed-ref
+  - dialog
   - examples/*
   - playground
+  - ref-impls/*
 
 catalog:
   '@tanstack/react-query': 5.90.5
@@ -17,9 +17,20 @@ catalog:
   react: ^19.1.1
   react-dom: ^19.1.1
   typescript: ^5.9.3
-  viem: ^2.47.1
+  viem: ^2.47.6
+  tsx: ^4.21.0
   vp: npm:vite-plus@~0.1.14
   wagmi: ^3.5.0
+  '@cloudflare/vite-plugin': ^1.30.2
+  '@total-typescript/ts-reset': '^0.6.1'
+  '@types/node': '^25.5.0'
+  'vite': '^8.0.1'
+  'wrangler': '^4.78.0'
+  '@vitejs/devtools': '^0.1.3'
+  hono: ^4.12.9
+  zod: ^4.3.6
+  typed-query-selector: ^2.12.1
+  '@cloudflare/workers-types': ^4.20260317.1
 
 onlyBuiltDependencies:
   - esbuild

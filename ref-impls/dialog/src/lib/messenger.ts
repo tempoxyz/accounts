@@ -1,6 +1,6 @@
 import { Messenger } from 'accounts'
 
-/** Initializes the bridge messenger for the embed app (the "remote" side). */
+/** Initializes the bridge messenger for the dialog app (the "remote" side). */
 export function init(): Messenger.Bridge {
   if (typeof window === 'undefined') return Messenger.noop()
 

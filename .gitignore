@@ -8,3 +8,13 @@ tmp
 tsconfig*.tsbuildinfo
 tasks/
 tsbuildinfo
+.DS_Store
+.env.*
+!.env.example
+_
+.cursor
+mise.toml
+_TODO
+.pi
+worker-configuration.d.ts
+_TODO

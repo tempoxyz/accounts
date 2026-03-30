@@ -16,7 +16,9 @@ import {
   Registration,
   type Registration as Registration_Types,
 } from 'webauthx/server'
+import * as z from 'zod/mini'
 
+import * as CliAuth from './CliAuth.js'
 import * as RequestListener from './internal/requestListener.js'
 import type { Kv } from './Kv.js'
 
@@ -25,7 +27,7 @@ export type Handler = Omit<Router, 'fetch'> & {
   listener: (req: any, res: any) => void
 }
 
-export function compose(handlers: Handler[], options: compose.Options = {}): Handler {
+export function compose(handlers: Array<Handler>, options: compose.Options = {}): Handler {
   const path = options.path ?? '/'
 
   return from({
@@ -351,6 +353,126 @@ export declare namespace feePayer {
     path?: string | undefined
     /** Transports keyed by chain ID. Defaults to `http()` for each chain. */
     transports?: Record<number, Transport> | undefined
+  }
+}
+
+/**
+ * Instantiates a generic device-code handler for access-key bootstrap.
+ *
+ * Exposes 4 endpoints:
+ * - `GET /auth/pkce/pending/:code`
+ * - `POST /auth/pkce/code`
+ * - `POST /auth/pkce/poll/:code`
+ * - `POST /auth/pkce`
+ *
+ * @param options - Options.
+ * @returns Request handler.
+ */
+export function codeAuth(options: codeAuth.Options = {}): Handler {
+  const {
+    chainId,
+    client,
+    now,
+    path = '/auth/pkce',
+    policy,
+    random,
+    store = CliAuth.Store.memory(),
+    ttlMs,
+    ...rest
+  } = options
+
+  const router = from(rest)
+
+  router.get(`${path}/pending/:code`, async ({ params }) => {
+    try {
+      const { code } = params as { code: string }
+      const result = await CliAuth.pending({
+        code,
+        ...(now ? { now } : {}),
+        store,
+      })
+
+      return Response.json(z.encode(CliAuth.pendingResponse, result))
+    } catch (error) {
+      const status = error instanceof CliAuth.PendingError ? error.status : 400
+      return Response.json({ error: (error as Error).message }, { status })
+    }
+  })
+
+  router.post(`${path}/code`, async ({ request: req }) => {
+    try {
+      const request = z.decode(CliAuth.createRequest, await req.json())
+      const result = await CliAuth.createDeviceCode({
+        ...(typeof chainId !== 'undefined' ? { chainId } : {}),
+        ...(now ? { now } : {}),
+        ...(policy ? { policy } : {}),
+        ...(random ? { random } : {}),
+        request,
+        store,
+        ...(typeof ttlMs !== 'undefined' ? { ttlMs } : {}),
+      })
+
+      return Response.json(z.encode(CliAuth.createResponse, result))
+    } catch (error) {
+      return Response.json({ error: (error as Error).message }, { status: 400 })
+    }
+  })
+
+  router.post(`${path}/poll/:code`, async ({ params, request: req }) => {
+    try {
+      const request = z.decode(CliAuth.pollRequest, await req.json())
+      const { code } = params as { code: string }
+      const result = await CliAuth.poll({
+        code,
+        ...(now ? { now } : {}),
+        request,
+        store,
+      })
+
+      return Response.json(z.encode(CliAuth.pollResponse, result))
+    } catch (error) {
+      return Response.json({ error: (error as Error).message }, { status: 400 })
+    }
+  })
+
+  router.post(path, async ({ request: req }) => {
+    try {
+      const request = z.decode(CliAuth.authorizeRequest, await req.json())
+      const result = await CliAuth.authorize({
+        ...(typeof chainId !== 'undefined' ? { chainId } : {}),
+        ...(client ? { client } : {}),
+        ...(now ? { now } : {}),
+        request,
+        store,
+      })
+
+      return Response.json(z.encode(CliAuth.authorizeResponse, result))
+    } catch (error) {
+      return Response.json({ error: (error as Error).message }, { status: 400 })
+    }
+  })
+
+  return router
+}
+
+export declare namespace codeAuth {
+  export type Options = from.Options & {
+    /** Chain ID embedded into authorized access keys. Defaults to the client chain or tempo.id. */
+    chainId?: bigint | number | undefined
+    /** Client used to verify signed key authorizations. */
+    client?: Client<Transport, Chain | undefined> | undefined
+    /** Time source used for TTL evaluation. */
+    now?: (() => number) | undefined
+    /** Path prefix for the code auth endpoints. @default "/auth/pkce" */
+    path?: string | undefined
+    /** Policy used to validate and default requested CLI auth fields. */
+    policy?: CliAuth.Policy | undefined
+    /** Random byte generator used for device-code allocation. */
+    random?: ((size: number) => Uint8Array) | undefined
+    /** Device-code store. */
+    store?: CliAuth.Store | undefined
+    /** Pending entry TTL in milliseconds. @default 600000 */
+    ttlMs?: number | undefined
   }
 }
 

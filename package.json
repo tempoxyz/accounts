@@ -3,22 +3,24 @@
     "build": "zile",
     "changeset:publish": "zile publish:prepare && changeset publish && zile publish:post",
     "changeset:version": "changeset version && pnpm check",
-    "check": "vp lint --fix --ignore-pattern package.json --ignore-pattern embed && vp fmt",
+    "check": "vp lint --fix --ignore-pattern package.json --ignore-pattern dialog && vp fmt",
     "check:types": "tsc -b && pnpm --filter './examples/*' check:types && pnpm --filter playground check:types",
-    "dev": "pnpm dev:embed & pnpm dev:embed-ref & pnpm dev:playground",
+    "dev": "pnpm dev:dialog & pnpm dev:dialog-ref & pnpm dev:playground",
     "dev:hosts": "./scripts/dev:hosts.sh",
-    "dev:embed": "pnpm --filter tempo-app dev:ssl",
-    "dev:embed-ref": "pnpm --filter embed-ref dev",
+    "dev:dialog": "pnpm --filter tempo-app dev:ssl",
+    "dev:dialog-ref": "pnpm --filter dialog-ref dev",
     "dev:playground": "pnpm --filter playground dev",
-    "example:wagmi": "pnpm --filter wagmi dev & pnpm dev:embed",
+    "example:wagmi": "pnpm --filter wagmi dev & pnpm dev:dialog",
+    "example:cli": "pnpm --filter server dev & pnpm --filter cli connect",
     "preconstruct": "zile dev",
-    "test": "vp test"
+    "test": "vp test",
+    "vp": "vp"
   },
   "packageManager": "pnpm@10.18.3",
   "devEngines": {
     "runtime": {
       "name": "node",
-      "version": "^24.5.1",
+      "version": "^24.14.1",
       "onFail": "download"
     }
   },
@@ -28,10 +30,11 @@
     "@remix-run/route-pattern": "^0.19.0",
     "@types/express": "^5.0.6",
     "@types/http-proxy": "^1.17.17",
-    "@types/node": "^25.3.3",
+    "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@typescript/native-preview": "7.0.0-dev.20260303.1",
+    "@vitejs/devtools": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@wagmi/core": "catalog:",
     "elysia": "^1.4.27",
@@ -60,6 +63,9 @@
       "viem": "catalog:"
     }
   },
+  "imports": {
+    "#*": "./src/*"
+  },
   "[!start-pkg]": "",
   "name": "accounts",
   "description": "Tempo Accounts SDK",
@@ -71,6 +77,7 @@
     "mipd": "^0.0.7",
     "mppx": "^0.4.8",
     "ox": "~0.14.7",
+    "tsx": "^4.21.0",
     "webauthx": "~0.1.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"
@@ -114,6 +121,11 @@
       "types": "./dist/server/index.d.ts",
       "src": "./src/server/index.ts",
       "default": "./dist/server/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "src": "./src/cli/index.ts",
+      "default": "./dist/cli/index.js"
     },
     "./react": {
       "types": "./dist/react/index.d.ts",

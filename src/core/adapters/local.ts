@@ -207,8 +207,13 @@ export function local(options: local.Options): Adapter.Adapter {
         },
         async signTypedData({ data, address }) {
           const account = getAccount({ address, signable: true })
-          const { domain, types, primaryType, message } = JSON.parse(data)
-          return await account.signTypedData({ domain, types, primaryType, message })
+          const parsed = JSON.parse(data) as {
+            domain: Record<string, unknown>
+            message: Record<string, unknown>
+            primaryType: string
+            types: Record<string, unknown>
+          }
+          return await account.signTypedData(parsed)
         },
         async sendTransaction(parameters) {
           const { feePayer, ...rest } = parameters

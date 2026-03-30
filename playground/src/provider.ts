@@ -5,11 +5,12 @@ import { Account } from 'viem/tempo'
 
 export type AdapterType = 'secp256k1' | 'webAuthn' | 'tempoWallet' | 'dialogRefImpl'
 export type DialogMode = 'iframe' | 'popup'
+export type ProviderValue = ReturnType<typeof Provider.create>
 
 export let dialogMode: DialogMode = 'iframe'
-export let provider = createProvider('tempoWallet')
+export let provider: ProviderValue = createProvider('tempoWallet')
 
-export function createProvider(adapterType: AdapterType) {
+export function createProvider(adapterType: AdapterType): ProviderValue {
   if (adapterType === 'tempoWallet')
     return Provider.create({
       adapter: dialog({
