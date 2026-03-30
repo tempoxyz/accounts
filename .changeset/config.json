@@ -6,5 +6,9 @@
   "fixed": [],
   "ignore": ["playground"],
   "linked": [],
-  "updateInternalDependencies": "patch"
+  "updateInternalDependencies": "patch",
+  "privatePackages": {
+    "version": false,
+    "tag": false
+  }
 }

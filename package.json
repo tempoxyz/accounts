@@ -11,7 +11,7 @@
     "dev:dialog-ref": "pnpm --filter dialog-ref dev",
     "dev:playground": "pnpm --filter playground dev",
     "example:wagmi": "pnpm --filter wagmi dev & pnpm dev:dialog",
-    "example:cli": "pnpm --filter server dev & pnpm --filter cli connect",
+    "example:cli": "pnpm --filter cli-auth dev & pnpm --filter cli connect",
     "preconstruct": "zile dev",
     "test": "vp test",
     "vp": "vp"
