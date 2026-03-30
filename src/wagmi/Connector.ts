@@ -276,8 +276,9 @@ export declare namespace webAuthn {
  * ```
  */
 export function dialog(options: dialog.Options = {}) {
-  const { dialog: dialogOption, host, icon, name, rdns } = options
+  const { dialog: dialogOption, host, icon, name, rdns, ...rest } = options
   return setup({
+    ...rest,
     adapter: core_dialog({ dialog: dialogOption, host, icon, name, rdns }),
   })
 }
