@@ -58,7 +58,7 @@ export const addresses = {
   alphaUsd: '0x20c0000000000000000000000000000000000001',
 } as const
 
-export const chain = (() => {
+export const chain: Chain = (() => {
   if (nodeEnv === 'testnet') return tempoModerato
   return defineChain({
     ...tempoLocalnet,
