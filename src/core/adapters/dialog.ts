@@ -289,7 +289,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             return await account.signTransaction(prepared as never)
           })
           if (result !== undefined) return result
-          return await provider.request(request)
+          return await provider.request({
+            ...request,
+            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
+          })
         },
 
         async signTypedData(_params, request) {
@@ -316,7 +319,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             })
           })
           if (result !== undefined) return result
-          return await provider.request(request)
+          return await provider.request({
+            ...request,
+            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
+          })
         },
 
         async sendTransactionSync(parameters, request) {
@@ -339,7 +345,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             })
           })
           if (result !== undefined) return result
-          return await provider.request(request)
+          return await provider.request({
+            ...request,
+            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
+          })
         },
 
         async authorizeAccessKey(parameters, request) {
