@@ -1,5 +1,12 @@
 # accounts
 
+## 0.4.4
+
+### Patch Changes
+
+- c7c1682: Fixed `wallet_getCallsStatus` returning status 500 for pending transactions. Now returns status 100 when `eth_getTransactionReceipt` is null, allowing `waitForCallsStatus` to continue polling until inclusion.
+- bd37754: Fixed `dialog` wagmi connector dropping `Provider.create` options like `authorizeAccessKey` and `feePayerUrl`. Now forwards all remaining options to `setup()`.
+
 ## 0.4.3
 
 ### Patch Changes
