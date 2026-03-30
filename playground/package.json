@@ -15,7 +15,6 @@
     "mppx": "^0.4.8",
     "react": "catalog:default",
     "react-dom": "catalog:default",
-    "accounts": "workspace:*",
     "viem": "catalog:default"
   },
   "devDependencies": {
