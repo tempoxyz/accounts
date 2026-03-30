@@ -259,10 +259,15 @@ export namespace wallet_authorizeAccessKey {
     publicKey: z.optional(u.hex()),
   })
 
+  const returns = z.object({
+    keyAuthorization,
+    rootAddress: u.address(),
+  })
+
   export const schema = Schema.defineItem({
     method: z.literal('wallet_authorizeAccessKey'),
     params: z.readonly(z.tuple([parameters])),
-    returns: keyAuthorization,
+    returns,
   })
   export type Encoded = Schema.Encoded<typeof schema>
   export type Decoded = Schema.Decoded<typeof schema>

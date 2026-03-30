@@ -145,7 +145,7 @@ export declare namespace createAccount {
   type ReturnType = {
     accounts: readonly Store.Account[]
     /** Signed key authorization, if an access key was granted. */
-    keyAuthorization?: authorizeAccessKey.ReturnType | undefined
+    keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Signature over the digest, if one was provided. */
     signature?: Hex | undefined
   }
@@ -166,7 +166,7 @@ export declare namespace loadAccounts {
     /** Loaded accounts. */
     accounts: readonly Store.Account[]
     /** Signed key authorization, if an access key was granted. */
-    keyAuthorization?: authorizeAccessKey.ReturnType | undefined
+    keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Signature over the digest, if one was provided. */
     signature?: Hex | undefined
   }
@@ -206,7 +206,10 @@ export declare namespace authorizeAccessKey {
     signature?: Hex | undefined
   }
 
-  type ReturnType = KeyAuthorization.Rpc
+  type ReturnType = {
+    keyAuthorization: KeyAuthorization.Rpc
+    rootAddress: Address
+  }
 }
 
 export declare namespace revokeAccessKey {

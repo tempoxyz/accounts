@@ -8,76 +8,110 @@ import * as CliAuth from '../server/CliAuth.js'
 
 /**
  * Creates a CLI bootstrap adapter backed by the device-code protocol.
- *
- * Only `wallet_connect` is supported in v1.
  */
 export function cli(options: cli.Options): Adapter.Adapter {
   const { name = 'Tempo CLI', rdns = 'xyz.tempo.cli' } = options
 
-  return Adapter.define({ name, rdns }, () => ({
-    actions: {
-      async createAccount(params, request) {
-        return this.loadAccounts(params, request)
-      },
-      async loadAccounts(parameters) {
-        const {
-          host,
-          open = defaultOpen,
-          pollIntervalMs = 2_000,
-          timeoutMs = 5 * 60 * 1_000,
-        } = options
-        const authorizeAccessKey = parameters?.authorizeAccessKey
+  return Adapter.define({ name, rdns }, ({ store }) => {
+    async function authorize(request: {
+      account?: Adapter.authorizeAccessKey.ReturnType['rootAddress'] | undefined
+      authorizeAccessKey: Adapter.authorizeAccessKey.Parameters | undefined
+      method: 'wallet_authorizeAccessKey' | 'wallet_connect'
+    }) {
+      const {
+        host,
+        open = defaultOpen,
+        pollIntervalMs = 2_000,
+        timeoutMs = 5 * 60 * 1_000,
+      } = options
+      const { account, authorizeAccessKey, method } = request
 
-        if (!authorizeAccessKey?.publicKey)
-          throw new RpcResponse.InvalidParamsError({
-            message:
-              '`wallet_connect` on the CLI adapter requires `capabilities.authorizeAccessKey.publicKey`.',
-          })
-        if (parameters?.digest)
-          throw unsupported('`wallet_connect` digest signing not supported by CLI adapter.')
-
-        const codeVerifier = createCodeVerifier()
-        const codeChallenge = createCodeChallenge(codeVerifier)
-        const created = await post({
-          body: {
-            codeChallenge,
-            ...(typeof authorizeAccessKey.expiry !== 'undefined'
-              ? { expiry: authorizeAccessKey.expiry }
-              : {}),
-            ...(authorizeAccessKey.keyType ? { keyType: authorizeAccessKey.keyType } : {}),
-            ...(authorizeAccessKey.limits ? { limits: authorizeAccessKey.limits } : {}),
-            pubKey: authorizeAccessKey.publicKey,
-          } satisfies z.output<typeof CliAuth.createRequest>,
-          request: CliAuth.createRequest,
-          response: CliAuth.createResponse,
-          url: getApiUrl(host, 'code'),
+      if (!authorizeAccessKey?.publicKey)
+        throw new RpcResponse.InvalidParamsError({
+          message:
+            method === 'wallet_connect'
+              ? '`wallet_connect` on the CLI adapter requires `capabilities.authorizeAccessKey.publicKey`.'
+              : '`wallet_authorizeAccessKey` on the CLI adapter requires `publicKey`.',
         })
-        const url = getBrowserUrl(host, created.code)
 
-        try {
-          await open(url)
-        } catch (error) {
-          throw new OpenError(url, created.code, error)
+      const codeVerifier = createCodeVerifier()
+      const codeChallenge = createCodeChallenge(codeVerifier)
+      const created = await post({
+        body: {
+          ...(account ? { account } : {}),
+          chainId: BigInt(store.getState().chainId),
+          codeChallenge,
+          ...(typeof authorizeAccessKey.expiry !== 'undefined'
+            ? { expiry: authorizeAccessKey.expiry }
+            : {}),
+          ...(authorizeAccessKey.keyType ? { keyType: authorizeAccessKey.keyType } : {}),
+          ...(authorizeAccessKey.limits ? { limits: authorizeAccessKey.limits } : {}),
+          pubKey: authorizeAccessKey.publicKey,
+        } satisfies z.output<typeof CliAuth.createRequest>,
+        request: CliAuth.createRequest,
+        response: CliAuth.createResponse,
+        url: getApiUrl(host, 'code'),
+      })
+      const url = getBrowserUrl(host, created.code)
+
+      try {
+        await open(url)
+      } catch (error) {
+        throw new OpenError(url, created.code, error)
+      }
+
+      const startedAt = Date.now()
+
+      while (Date.now() - startedAt < timeoutMs) {
+        const result = await post({
+          body: {
+            codeVerifier,
+          } satisfies z.output<typeof CliAuth.pollRequest>,
+          request: CliAuth.pollRequest,
+          response: CliAuth.pollResponse,
+          url: getApiUrl(host, `poll/${created.code}`),
+        })
+
+        if (result.status === 'pending') {
+          await sleep(pollIntervalMs)
+          continue
         }
+        if (result.status === 'expired')
+          throw new Error('Device code expired before authorization completed.')
 
-        const startedAt = Date.now()
+        return result
+      }
 
-        while (Date.now() - startedAt < timeoutMs) {
-          const result = await post({
-            body: {
-              codeVerifier,
-            } satisfies z.output<typeof CliAuth.pollRequest>,
-            request: CliAuth.pollRequest,
-            response: CliAuth.pollResponse,
-            url: getApiUrl(host, `poll/${created.code}`),
+      throw new TimeoutError(url, created.code)
+    }
+
+    return {
+      actions: {
+        async authorizeAccessKey(parameters) {
+          const { accounts, activeAccount } = store.getState()
+          const account = accounts[activeAccount]?.address
+          const result = await authorize({
+            ...(account ? { account } : {}),
+            authorizeAccessKey: parameters,
+            method: 'wallet_authorizeAccessKey',
           })
 
-          if (result.status === 'pending') {
-            await sleep(pollIntervalMs)
-            continue
+          return {
+            keyAuthorization: z.encode(CliAuth.keyAuthorization, result.keyAuthorization),
+            rootAddress: result.accountAddress,
           }
-          if (result.status === 'expired')
-            throw new Error('Device code expired before authorization completed.')
+        },
+        async createAccount(params, request) {
+          return this.loadAccounts(params, request)
+        },
+        async loadAccounts(parameters) {
+          if (parameters?.digest)
+            throw unsupported('`wallet_connect` digest signing not supported by CLI adapter.')
+
+          const result = await authorize({
+            authorizeAccessKey: parameters?.authorizeAccessKey,
+            method: 'wallet_connect',
+          })
 
           return {
             accounts: [
@@ -88,30 +122,28 @@ export function cli(options: cli.Options): Adapter.Adapter {
             ],
             keyAuthorization: z.encode(CliAuth.keyAuthorization, result.keyAuthorization),
           }
-        }
-
-        throw new TimeoutError(url, created.code)
+        },
+        async revokeAccessKey() {
+          throw unsupported('`wallet_revokeAccessKey` not supported by CLI adapter.')
+        },
+        async sendTransaction() {
+          throw unsupported('`eth_sendTransaction` not supported by CLI adapter.')
+        },
+        async sendTransactionSync() {
+          throw unsupported('`eth_sendTransactionSync` not supported by CLI adapter.')
+        },
+        async signPersonalMessage() {
+          throw unsupported('`personal_sign` not supported by CLI adapter.')
+        },
+        async signTransaction() {
+          throw unsupported('`eth_signTransaction` not supported by CLI adapter.')
+        },
+        async signTypedData() {
+          throw unsupported('`eth_signTypedData_v4` not supported by CLI adapter.')
+        },
       },
-      async revokeAccessKey() {
-        throw unsupported('`wallet_revokeAccessKey` not supported by CLI adapter.')
-      },
-      async sendTransaction() {
-        throw unsupported('`eth_sendTransaction` not supported by CLI adapter.')
-      },
-      async sendTransactionSync() {
-        throw unsupported('`eth_sendTransactionSync` not supported by CLI adapter.')
-      },
-      async signPersonalMessage() {
-        throw unsupported('`personal_sign` not supported by CLI adapter.')
-      },
-      async signTransaction() {
-        throw unsupported('`eth_signTransaction` not supported by CLI adapter.')
-      },
-      async signTypedData() {
-        throw unsupported('`eth_signTypedData_v4` not supported by CLI adapter.')
-      },
-    },
-  }))
+    }
+  })
 }
 
 export declare namespace cli {
@@ -133,7 +165,7 @@ export declare namespace cli {
 
 class OpenError extends Error {
   code: string
-  cause?: unknown | undefined
+  override cause?: unknown | undefined
   url: string
 
   constructor(url: string, code: string, cause?: unknown) {

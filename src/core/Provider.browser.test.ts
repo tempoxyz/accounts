@@ -521,13 +521,14 @@ describe('eth_signTypedData_v4', () => {
 describe('wallet_authorizeAccessKey', () => {
   test('default: grants an access key and returns its address', async () => {
     const provider = getProvider({ chains: [chain] })
-    await connect(provider)
+    const rootAddress = await connect(provider)
 
     const result = await provider.request({
       method: 'wallet_authorizeAccessKey',
       params: [{ expiry: Expiry.days(1) }],
     })
-    expect(result.address).toMatch(/^0x[0-9a-fA-F]{40}$/)
+    expect(result.keyAuthorization.address).toMatch(/^0x[0-9a-fA-F]{40}$/)
+    expect(result.rootAddress).toBe(rootAddress)
   })
 
   test('behavior: granted access key is used for sendTransactionSync', async () => {
@@ -556,8 +557,8 @@ describe('wallet_authorizeAccessKey', () => {
       method: 'wallet_authorizeAccessKey',
       params: [{ expiry }],
     })
-    expect(result.address).toMatch(/^0x[0-9a-fA-F]{40}$/)
-    expect(result.expiry).toBe(Hex.fromNumber(expiry))
+    expect(result.keyAuthorization.address).toMatch(/^0x[0-9a-fA-F]{40}$/)
+    expect(result.keyAuthorization.expiry).toBe(Hex.fromNumber(expiry))
   })
 
   test('behavior: with limits option', async () => {
@@ -574,7 +575,7 @@ describe('wallet_authorizeAccessKey', () => {
         },
       ],
     })
-    expect(result.limits).toMatchInlineSnapshot(`
+    expect(result.keyAuthorization.limits).toMatchInlineSnapshot(`
       [
         {
           "limit": "0x4c4b40",
@@ -597,14 +598,14 @@ describe('wallet_revokeAccessKey', () => {
     await connect(provider)
 
     const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
-    const { address: keyAddress } = await provider.request({
+    const { keyAuthorization } = await provider.request({
       method: 'wallet_authorizeAccessKey',
       params: [{ expiry: Expiry.days(1) }],
     })
 
     await provider.request({
       method: 'wallet_revokeAccessKey',
-      params: [{ address: connected, accessKeyAddress: keyAddress }],
+      params: [{ address: connected, accessKeyAddress: keyAuthorization.keyId }],
     })
 
     await fundAccount(connected)

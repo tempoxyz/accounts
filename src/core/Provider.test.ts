@@ -998,15 +998,29 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
   })
 
   describe('wallet_authorizeAccessKey', () => {
+    test('behavior: without publicKey or address requires a connected account', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+
+      await expect(
+        provider.request({
+          method: 'wallet_authorizeAccessKey',
+          params: [{ expiry: Expiry.days(1) }],
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.DisconnectedError: No active account.]`,
+      )
+    })
+
     test('default: grants an access key and returns its address', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
-      await connect(provider)
+      const rootAddress = await connect(provider)
 
       const result = await provider.request({
         method: 'wallet_authorizeAccessKey',
         params: [{ expiry: Expiry.days(1) }],
       })
-      expect(result.keyId).toMatch(/^0x[0-9a-fA-F]{40}$/)
+      expect(result.keyAuthorization.keyId).toMatch(/^0x[0-9a-fA-F]{40}$/)
+      expect(result.rootAddress).toBe(rootAddress)
     })
 
     test('behavior: granted access key is used for sendTransactionSync', async () => {
@@ -1035,8 +1049,8 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         method: 'wallet_authorizeAccessKey',
         params: [{ expiry }],
       })
-      expect(result.keyId).toMatch(/^0x[0-9a-fA-F]{40}$/)
-      expect(result.expiry).toBe(Hex.fromNumber(expiry))
+      expect(result.keyAuthorization.keyId).toMatch(/^0x[0-9a-fA-F]{40}$/)
+      expect(result.keyAuthorization.expiry).toBe(Hex.fromNumber(expiry))
     })
 
     test('behavior: expired access key falls back to root account', async () => {
@@ -1086,7 +1100,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
           },
         ],
       })
-      expect(result.limits).toMatchInlineSnapshot(`
+      expect(result.keyAuthorization.limits).toMatchInlineSnapshot(`
         [
           {
             "limit": "0x4c4b40",
@@ -1162,14 +1176,14 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       await connect(provider)
 
       const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
-      const { keyId } = await provider.request({
+      const { keyAuthorization } = await provider.request({
         method: 'wallet_authorizeAccessKey',
         params: [{ expiry: Expiry.days(1) }],
       })
 
       await provider.request({
         method: 'wallet_revokeAccessKey',
-        params: [{ address: connected, accessKeyAddress: keyId }],
+        params: [{ address: connected, accessKeyAddress: keyAuthorization.address }],
       })
 
       // After revoking, sendTransactionSync should use root key (still works)
@@ -1344,8 +1358,8 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         method: 'wallet_authorizeAccessKey',
         params: [{ ...accessKeyAccount, expiry: Expiry.days(1) }],
       })
-      expect(result.keyId).toBe(accessKeyAccount.address)
-      expect(result.keyType).toBe('p256')
+      expect(result.keyAuthorization.keyId).toBe(accessKeyAccount.address)
+      expect(result.keyAuthorization.keyType).toBe('p256')
     })
 
     test('behavior: external key authorization can be used to send a transaction', async () => {
@@ -1365,7 +1379,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const receipt = await sendTransactionSync(client, {
         account: TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress }),
         calls: [transferCall],
-        keyAuthorization: KeyAuthorization.fromRpc(result),
+        keyAuthorization: KeyAuthorization.fromRpc(result.keyAuthorization),
       })
       expect(receipt.status).toBe('success')
     })
