@@ -90,8 +90,6 @@ export function iframe(): Dialog {
       position: 'fixed',
     })
 
-    document.body.appendChild(root)
-
     const frame = document.createElement('iframe')
     frame.dataset.testid = 'tempo-wallet'
     frame.setAttribute(
@@ -128,15 +126,34 @@ export function iframe(): Dialog {
     root.appendChild(style)
     root.appendChild(frame)
 
-    const messenger = Messenger.bridge({
-      from: Messenger.fromWindow(window, { targetOrigin: hostUrl.origin }),
-      to: Messenger.fromWindow(frame.contentWindow!, {
-        targetOrigin: hostUrl.origin,
-      }),
-      waitForReady: true,
-    })
+    function createMessenger() {
+      const m = Messenger.bridge({
+        from: Messenger.fromWindow(window, { targetOrigin: hostUrl.origin }),
+        to: Messenger.fromWindow(frame.contentWindow!, {
+          targetOrigin: hostUrl.origin,
+        }),
+        waitForReady: true,
+      })
+      m.on('rpc-response', (response) => handleResponse(store, response))
+      return m
+    }
 
-    messenger.on('rpc-response', (response) => handleResponse(store, response))
+    document.body.appendChild(root)
+    let messenger = createMessenger()
+
+    // Re-mount if removed (e.g. React hydration clears non-server-rendered elements).
+    // The iframe reloads on re-append, so the messenger must be re-established.
+    new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.removedNodes) {
+          if (node !== root) continue
+          document.body.appendChild(root)
+          messenger.destroy()
+          messenger = createMessenger()
+          return
+        }
+      }
+    }).observe(document.body, { childList: true })
 
     let savedOverflow = ''
     let opener: HTMLElement | null = null
