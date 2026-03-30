@@ -84,10 +84,14 @@
   },
   "peerDependencies": {
     "@wagmi/core": ">=2",
+    "react": ">=18",
     "viem": ">=2.43.3"
   },
   "peerDependenciesMeta": {
     "@wagmi/core": {
+      "optional": true
+    },
+    "react": {
       "optional": true
     },
     "viem": {
@@ -122,6 +126,11 @@
       "types": "./dist/cli/index.d.ts",
       "src": "./src/cli/index.ts",
       "default": "./dist/cli/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "src": "./src/react/index.ts",
+      "default": "./dist/react/index.js"
     },
     "./wagmi": {
       "types": "./dist/wagmi/index.d.ts",

@@ -49,6 +49,8 @@ export function App() {
             <option value="iframe">iframe</option>
             <option value="popup">popup</option>
           </select>
+          <h3>Occlusion Test</h3>
+          <OcclusionSimulator />
         </>
       )}
 
@@ -420,7 +422,7 @@ function WalletSwitchChain() {
 }
 
 const tokens =
-  process.env.VITE_ENV === 'testnet'
+  import.meta.env.VITE_ENV === 'testnet'
     ? ({
         pathUSD: '0x20c0000000000000000000000000000000000000',
         alphaUSD: '0x20c0000000000000000000000000000000000001',
@@ -1080,6 +1082,71 @@ function useRequest() {
     }
   }, [])
   return [result, error, execute] as const
+}
+
+function OcclusionSimulator() {
+  const [active, setActive] = useState(false)
+
+  useEffect(() => {
+    if (!active) return
+
+    // The iframe lives inside a native <dialog> rendered via showModal(),
+    // which sits in the top layer. No external z-index can cover it.
+    // To simulate occlusion we inject an overlay *inside* the dialog.
+    // The dialog may not exist yet (created lazily), so we observe the
+    // body for it to appear, then watch its hidden attribute.
+    let overlay: HTMLDivElement | null = null
+
+    function inject(dialog: Element) {
+      if (overlay?.parentNode === dialog) return
+      overlay?.remove()
+      overlay = document.createElement('div')
+      overlay.dataset.testid = 'occlusion-overlay'
+      Object.assign(overlay.style, {
+        position: 'fixed',
+        top: '0',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '100px',
+        height: '100px',
+        background: 'red',
+        border: '2px dashed red',
+        zIndex: '999999',
+      })
+      dialog.appendChild(overlay)
+    }
+
+    function sync() {
+      const dialog = document.querySelector('dialog[data-tempo-wallet][open]')
+      if (!dialog) {
+        overlay?.remove()
+        overlay = null
+        return
+      }
+      inject(dialog)
+    }
+
+    // Watch body for dialog appearing/disappearing.
+    const bodyObserver = new MutationObserver(sync)
+    bodyObserver.observe(document.body, { childList: true, subtree: true, attributes: true })
+    sync()
+
+    return () => {
+      bodyObserver.disconnect()
+      overlay?.remove()
+    }
+  }, [active])
+
+  return (
+    <div>
+      <button onClick={() => setActive((v) => !v)}>
+        {active ? 'Remove Overlay' : 'Simulate Occlusion'}
+      </button>
+      <p style={{ fontSize: 12, color: '#666' }}>
+        Injects an overlay inside the {'<dialog>'} to trigger IO v2 occlusion detection.
+      </p>
+    </div>
+  )
 }
 
 function Method({

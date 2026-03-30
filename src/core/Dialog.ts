@@ -1,3 +1,4 @@
+import * as IO from './IntersectionObserver.js'
 import * as Messenger from './Messenger.js'
 import type * as Store from './Store.js'
 
@@ -207,6 +208,19 @@ export function iframe(): Dialog {
       }
     }
 
+    messenger.on('switch-mode', () => {
+      hideDialog()
+      activatePage()
+      open = false
+
+      const pending = store
+        .getState()
+        .requestQueue.filter(
+          (x): x is Store.QueuedRequest & { status: 'pending' } => x.status === 'pending',
+        )
+      if (pending.length > 0) fallback.syncRequests(pending)
+    })
+
     return {
       close() {
         fallback.close()
@@ -241,7 +255,23 @@ export function iframe(): Dialog {
           isSafari() &&
           requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
 
-        if (unsupported) {
+        const secure = await (async () => {
+          const { trustedHosts } = await messenger.waitForReady()
+          const ioSupported = IO.supported()
+          const trusted = Boolean(trustedHosts?.includes(window.location.hostname))
+          return ioSupported || trusted
+        })()
+
+        if (unsupported || !secure) {
+          if (!secure)
+            console.warn(
+              [
+                `[accounts] Browser does not support IntersectionObserver v2 and "${window.location.hostname}" is not a trusted host.`,
+                'Falling back to popup dialog.',
+                '',
+                'To enable the iframe dialog, add your hostname to the trusted hosts list.',
+              ].join('\n'),
+            )
           fallback.syncRequests(requests)
         } else {
           const requiresConfirm = requests.some((x) => x.status === 'pending')
