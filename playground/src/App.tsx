@@ -66,10 +66,6 @@ export function App() {
       <WalletDisconnect />
       <Faucet />
 
-      <h2 id="cli-auth">CLI Auth</h2>
-      <CliAuth />
-      <CliAuthExamples />
-
       <h2>Accounts &amp; Chain</h2>
       <EthAccounts />
       <EthChainId />
@@ -100,6 +96,10 @@ export function App() {
 
       <h2>RPC Proxy (fallthrough)</h2>
       <EthBlockNumber />
+
+      <h2 id="cli-auth">CLI Auth</h2>
+      <CliAuth />
+      <CliAuthExamples />
     </div>
   )
 }
