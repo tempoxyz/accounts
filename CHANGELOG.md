@@ -1,5 +1,12 @@
 # accounts
 
+## 0.4.5
+
+### Patch Changes
+
+- c86cd60: Added fee payer support for the dialog adapter. When `feePayerUrl` is configured, transactions sent through the dialog embed now use `withFeePayer` transports for preparation and sending.
+- 1525992: Added warning when dialog adapter is initialized on a non-secure (HTTP) origin.
+
 ## 0.4.4
 
 ### Patch Changes
