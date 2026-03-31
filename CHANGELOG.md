@@ -1,5 +1,12 @@
 # accounts
 
+## 0.4.7
+
+### Patch Changes
+
+- 1b9e9a6: Added `Remote.noop()` for SSR environments and handled Bitwarden blocking WebAuthn in cross-origin iframes.
+- 457f7a7: Added strict parameter validation for `wallet_authorizeAccessKey` and `wallet_connect` in dialog adapters. `limits` is now required when authorizing access keys through the dialog. Added `Remote.validateSearch` to validate search params with formatted error messages and automatic rejection via `remote.rejectAll`.
+
 ## 0.4.6
 
 ### Patch Changes

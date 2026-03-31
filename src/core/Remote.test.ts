@@ -11,7 +11,11 @@ function createMockRemote() {
 describe('validateSearch', () => {
   test('default: validates eth_accounts', () => {
     const remote = createMockRemote()
-    const result = Remote.validateSearch(remote, { method: 'eth_accounts', id: 1, jsonrpc: '2.0' }, { method: 'eth_accounts' })
+    const result = Remote.validateSearch(
+      remote,
+      { method: 'eth_accounts', id: 1, jsonrpc: '2.0' },
+      { method: 'eth_accounts' },
+    )
     expect(result._decoded).toMatchInlineSnapshot(`
       {
         "method": "eth_accounts",
@@ -24,7 +28,11 @@ describe('validateSearch', () => {
 
   test('default: validates wallet_connect without params', () => {
     const remote = createMockRemote()
-    const result = Remote.validateSearch(remote, { method: 'wallet_connect', id: 2, jsonrpc: '2.0' }, { method: 'wallet_connect' })
+    const result = Remote.validateSearch(
+      remote,
+      { method: 'wallet_connect', id: 2, jsonrpc: '2.0' },
+      { method: 'wallet_connect' },
+    )
     expect(result._decoded).toMatchInlineSnapshot(`
       {
         "method": "wallet_connect",
@@ -41,7 +49,12 @@ describe('validateSearch', () => {
         method: 'wallet_authorizeAccessKey',
         id: 3,
         jsonrpc: '2.0',
-        params: [{ expiry: 100, limits: [{ token: '0x0000000000000000000000000000000000000001', limit: '0xa' }] }],
+        params: [
+          {
+            expiry: 100,
+            limits: [{ token: '0x0000000000000000000000000000000000000001', limit: '0xa' }],
+          },
+        ],
       },
       { method: 'wallet_authorizeAccessKey' },
     )
@@ -72,15 +85,17 @@ describe('validateSearch', () => {
         method: 'wallet_connect',
         id: 4,
         jsonrpc: '2.0',
-        params: [{
-          capabilities: {
-            method: 'register',
-            authorizeAccessKey: {
-              expiry: 100,
-              limits: [{ token: '0x0000000000000000000000000000000000000001', limit: '0xa' }],
+        params: [
+          {
+            capabilities: {
+              method: 'register',
+              authorizeAccessKey: {
+                expiry: 100,
+                limits: [{ token: '0x0000000000000000000000000000000000000001', limit: '0xa' }],
+              },
             },
           },
-        }],
+        ],
       },
       { method: 'wallet_connect' },
     )
@@ -91,7 +106,11 @@ describe('validateSearch', () => {
   test('error: rejects on method mismatch', () => {
     const remote = createMockRemote()
     expect(() =>
-      Remote.validateSearch(remote, { method: 'eth_accounts', id: 1, jsonrpc: '2.0' }, { method: 'eth_chainId' }),
+      Remote.validateSearch(
+        remote,
+        { method: 'eth_accounts', id: 1, jsonrpc: '2.0' },
+        { method: 'eth_chainId' },
+      ),
     ).toThrowErrorMatchingInlineSnapshot(
       `[RpcResponse.InvalidParamsError: Method mismatch: expected "eth_chainId" but got "eth_accounts".]`,
     )
@@ -101,7 +120,11 @@ describe('validateSearch', () => {
   test('error: rejects on invalid base params', () => {
     const remote = createMockRemote()
     expect(() =>
-      Remote.validateSearch(remote, { method: 'not_a_method', id: 1, jsonrpc: '2.0' }, { method: 'eth_accounts' }),
+      Remote.validateSearch(
+        remote,
+        { method: 'not_a_method', id: 1, jsonrpc: '2.0' },
+        { method: 'eth_accounts' },
+      ),
     ).toThrow()
     expect(remote.rejectAll).toHaveBeenCalledOnce()
   })
@@ -135,12 +158,14 @@ describe('validateSearch', () => {
           method: 'wallet_connect',
           id: 6,
           jsonrpc: '2.0',
-          params: [{
-            capabilities: {
-              method: 'register',
-              authorizeAccessKey: { expiry: 100 },
+          params: [
+            {
+              capabilities: {
+                method: 'register',
+                authorizeAccessKey: { expiry: 100 },
+              },
             },
-          }],
+          ],
         },
         { method: 'wallet_connect' },
       ),
