@@ -1,7 +1,7 @@
 import type { SignatureEnvelope } from 'ox/tempo'
 import * as z from 'zod/mini'
 
-import * as Schema from '../Schema.js'
+import * as Schema from '../internal/schema.js'
 import * as u from './utils.js'
 
 export const log = z.object({
