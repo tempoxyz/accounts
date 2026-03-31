@@ -5,7 +5,7 @@ export default defineConfig({
     enabled: true,
   },
   lint: {
-    ignorePatterns: ['package.json', 'dialog', 'embed/**'],
+    ignorePatterns: ['package.json', 'dialog'],
   },
   fmt: {
     semi: false,
@@ -13,7 +13,7 @@ export default defineConfig({
     trailingComma: 'all',
     tabWidth: 2,
     printWidth: 100,
-    ignorePatterns: ['package.json', 'dialog', 'embed/**'],
+    ignorePatterns: ['package.json', 'dialog'],
     experimentalSortImports: {
       groups: [
         ['value-builtin', 'value-external', 'type-import', 'value-internal', 'type-internal'],
