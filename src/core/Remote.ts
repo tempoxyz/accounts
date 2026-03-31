@@ -236,6 +236,14 @@ export function create(options: create.Options): Remote {
         )
         return result
       } catch (e) {
+        // Browser extensions (e.g. Bitwarden) monkey-patch navigator.credentials
+        // and reject WebAuthn calls in cross-origin iframes. Fall back to popup
+        // so the credential ceremony runs in a top-level browsing context.
+        if (e instanceof Error && e.message.includes('sameOriginWithAncestors')) {
+          messenger.send('switch-mode', { mode: 'popup' })
+          return
+        }
+
         const err = e as RpcResponse.BaseError
         messenger.send(
           'rpc-response',
@@ -257,5 +265,34 @@ export declare namespace create {
     provider: CoreProvider.Provider
     /** Hostnames trusted to render the embed in an iframe. */
     trustedHosts?: string[] | undefined
+  }
+}
+
+/** Returns an inert remote context for SSR environments. */
+export function noop(): Remote {
+  const store = createStore<State>(() => ({
+    mode: undefined,
+    origin: undefined,
+    ready: false,
+    requests: [],
+  }))
+  const off = () => () => {}
+  return {
+    messenger: {
+      destroy: () => {},
+      on: () => () => {},
+      ready: () => {},
+      send: () => {},
+      waitForReady: () => Promise.resolve({}),
+    } as unknown as Messenger.Bridge,
+    provider: {} as CoreProvider.Provider,
+    store,
+    trustedHosts: [],
+    onUserRequest: off,
+    onRequests: off,
+    ready: () => {},
+    reject: () => {},
+    rejectAll: () => {},
+    respond: async () => {},
   }
 }
