@@ -67,7 +67,7 @@ export const transactionRequest = z.object({
   ),
   calls: z.optional(z.readonly(z.array(call))),
   chainId: z.optional(u.number()),
-  feePayer: z.optional(z.union([z.boolean(), z.url()])),
+  feePayer: z.optional(z.union([z.boolean(), z.string()])),
   feeToken: z.optional(u.address()),
   from: z.optional(u.address()),
   gas: z.optional(u.bigint()),
@@ -259,13 +259,28 @@ export namespace wallet_authorizeAccessKey {
     publicKey: z.optional(u.hex()),
   })
 
+  const returns = z.object({
+    keyAuthorization,
+    rootAddress: u.address(),
+  })
+
   export const schema = Schema.defineItem({
     method: z.literal('wallet_authorizeAccessKey'),
     params: z.readonly(z.tuple([parameters])),
-    returns: keyAuthorization,
+    returns,
   })
   export type Encoded = Schema.Encoded<typeof schema>
   export type Decoded = Schema.Decoded<typeof schema>
+}
+
+export namespace wallet_authorizeAccessKey_strict {
+  export const parameters = z.object({
+    address: z.optional(u.address()),
+    expiry: z.number(),
+    keyType: z.optional(keyType),
+    limits: z.readonly(z.array(z.object({ token: u.address(), limit: u.bigint() }))),
+    publicKey: z.optional(u.hex()),
+  })
 }
 
 export namespace wallet_revokeAccessKey {
@@ -336,6 +351,33 @@ export namespace wallet_connect {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
+export namespace wallet_connect_strict {
+  const authorizeAccessKey = z.optional(wallet_authorizeAccessKey_strict.parameters)
+
+  export const parameters = z.object({
+    capabilities: z.optional(
+      z.union([
+        z.object({
+          digest: z.optional(u.hex()),
+          authorizeAccessKey,
+          method: z.literal('register'),
+          name: z.optional(z.string()),
+          userId: z.optional(z.string()),
+        }),
+        z.object({
+          digest: z.optional(u.hex()),
+          credentialId: z.optional(z.string()),
+          authorizeAccessKey,
+          method: z.optional(z.literal('login')),
+          selectAccount: z.optional(z.boolean()),
+        }),
+      ]),
+    ),
+    chainId: z.optional(u.number()),
+    version: z.optional(z.string()),
+  })
+}
+
 export namespace wallet_disconnect {
   export const schema = Schema.defineItem({
     method: z.literal('wallet_disconnect'),
@@ -372,3 +414,9 @@ export namespace wallet_switchEthereumChain {
   export type Encoded = Schema.Encoded<typeof schema>
   export type Decoded = Schema.Decoded<typeof schema>
 }
+
+/** Strict parameter schemas keyed by method name. */
+export const strictParameters = {
+  wallet_authorizeAccessKey: wallet_authorizeAccessKey_strict.parameters,
+  wallet_connect: wallet_connect_strict.parameters,
+} satisfies Partial<Record<string, z.ZodMiniType>>

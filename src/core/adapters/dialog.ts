@@ -33,6 +33,13 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     rdns = 'xyz.tempo',
   } = options
 
+  if (typeof window !== 'undefined' && !window.isSecureContext)
+    console.warn(
+      '[accounts] Detected insecure context (HTTP).',
+      `\n\nThe Tempo Wallet iframe dialog is not supported on HTTP origins (${window.location.origin})`,
+      'due to lack of WebAuthn passkey support in non-secure contexts.',
+    )
+
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
     const listeners = new Set<(requestQueue: readonly Store.QueuedRequest[]) => void>()
     const requestStore = ox_RpcRequest.createStore()
@@ -282,7 +289,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             return await account.signTransaction(prepared as never)
           })
           if (result !== undefined) return result
-          return await provider.request(request)
+          return await provider.request({
+            ...request,
+            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
+          })
         },
 
         async signTypedData(_params, request) {
@@ -309,7 +319,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             })
           })
           if (result !== undefined) return result
-          return await provider.request(request)
+          return await provider.request({
+            ...request,
+            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
+          })
         },
 
         async sendTransactionSync(parameters, request) {
@@ -332,7 +345,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             })
           })
           if (result !== undefined) return result
-          return await provider.request(request)
+          return await provider.request({
+            ...request,
+            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
+          })
         },
 
         async authorizeAccessKey(parameters, request) {
@@ -345,7 +361,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
 
           if (accessKey) {
             const account = getAccount({ accessKey: false, signable: false })
-            saveAccessKey(account.address, result, accessKey.keyPair)
+            saveAccessKey(account.address, result.keyAuthorization, accessKey.keyPair)
           }
 
           return result

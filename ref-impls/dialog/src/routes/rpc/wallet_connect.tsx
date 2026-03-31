@@ -1,15 +1,16 @@
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { Remote } from 'accounts/react'
+import { Remote } from 'accounts'
+import { Remote as RemoteReact } from 'accounts/react'
 import { useState } from 'react'
 import { useConnection } from 'wagmi'
 
 import { remote } from '../../lib/config.js'
-import * as Router from '../../lib/router.js'
 
 export const Route = createFileRoute('/rpc/wallet_connect')({
   component: Wrapper,
-  validateSearch: (search) => Router.validateSearch(search, { method: 'wallet_connect' }),
+  validateSearch: (search) =>
+    Remote.validateSearch(remote, search, { method: 'wallet_connect' }),
 })
 
 function Wrapper() {
@@ -62,7 +63,7 @@ type Submit = ReturnType<
 
 function Continue(props: { submit: Submit; onSignUp: () => void }) {
   const { submit, onSignUp } = props
-  const origin = Remote.useState(remote, (s) => s.origin)
+  const origin = RemoteReact.useState(remote, (s) => s.origin)
   const { address } = useConnection()
   const host = origin ? new URL(origin).host : undefined
   const truncated = address ? `${address.slice(0, 8)}...${address.slice(-6)}` : undefined
@@ -91,7 +92,7 @@ function Continue(props: { submit: Submit; onSignUp: () => void }) {
 
 function SignInOrSignUp(props: { submit: Submit; method: string | undefined }) {
   const { submit, method } = props
-  const origin = Remote.useState(remote, (s) => s.origin)
+  const origin = RemoteReact.useState(remote, (s) => s.origin)
   const host = origin ? new URL(origin).host : undefined
 
   return (

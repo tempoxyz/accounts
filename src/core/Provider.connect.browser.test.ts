@@ -309,7 +309,7 @@ describe('wallet_authorizeAccessKey', () => {
         await iframe.getByTestId('confirm').click()
       },
     )
-    expect(result.address).toMatch(/^0x[0-9a-fA-F]{40}$/)
+    expect(result.keyAuthorization.address).toMatch(/^0x[0-9a-fA-F]{40}$/)
   })
 })
 
@@ -318,7 +318,7 @@ describe('wallet_revokeAccessKey', () => {
     provider = getProvider()
     const address = await connectViaIframe(provider)
 
-    const { address: keyAddress } = await interact(
+    const { keyAuthorization } = await interact(
       provider.request({
         method: 'wallet_authorizeAccessKey',
         params: [{ expiry: Expiry.days(1) }],
@@ -331,7 +331,7 @@ describe('wallet_revokeAccessKey', () => {
     await interact(
       provider.request({
         method: 'wallet_revokeAccessKey',
-        params: [{ address, accessKeyAddress: keyAddress }],
+        params: [{ address, accessKeyAddress: keyAuthorization.keyId }],
       }),
       async (iframe) => {
         await iframe.getByTestId('confirm').click()

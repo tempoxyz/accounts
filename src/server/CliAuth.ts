@@ -27,6 +27,7 @@ export const keyAuthorization = z.object({
 /** Request body for `POST /auth/pkce/code`. */
 export const createRequest = z.object({
   account: z.optional(u.address()),
+  chainId: z.optional(u.bigint()),
   codeChallenge: z.string(),
   expiry: z.optional(z.number()),
   keyType: z.optional(keyType),
@@ -345,7 +346,6 @@ export async function createDeviceCode(
   options: createDeviceCode.Options,
 ): Promise<createDeviceCode.ReturnType> {
   const {
-    chainId = BigInt(tempo.id),
     now = Date.now,
     policy = Policy.allow(),
     random = randomBytes,
@@ -353,6 +353,7 @@ export async function createDeviceCode(
     store = Store.memory(),
     ttlMs = 10 * 60 * 1_000,
   } = options
+  const chainId = request.chainId ?? options.chainId ?? BigInt(tempo.id)
   const { account, codeChallenge, pubKey } = request
   const keyType = request.keyType ?? 'secp256k1'
   const approved = await policy.validate({
