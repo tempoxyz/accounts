@@ -157,9 +157,7 @@ function WalletConnect() {
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
 
     const limitToken =
-      'USDC.e' in tokens
-        ? (tokens as { 'USDC.e': `0x${string}` })['USDC.e']
-        : tokens.pathUSD
+      'USDC.e' in tokens ? (tokens as { 'USDC.e': `0x${string}` })['USDC.e'] : tokens.pathUSD
     const authorizeAccessKey = accessKey
       ? {
           expiry: Expiry.days(1),
