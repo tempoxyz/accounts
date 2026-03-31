@@ -4,26 +4,8 @@ import * as z from 'zod/mini'
 
 import * as Rpc from './zod/rpc.js'
 
-/** All provider-handled RPC method definitions. */
-export const schema = from([
-  Rpc.eth_accounts.schema,
-  Rpc.eth_chainId.schema,
-  Rpc.eth_requestAccounts.schema,
-  Rpc.eth_sendTransaction.schema,
-  Rpc.eth_signTransaction.schema,
-  Rpc.eth_sendTransactionSync.schema,
-  Rpc.eth_signTypedData_v4.schema,
-  Rpc.personal_sign.schema,
-  Rpc.wallet_sendCalls.schema,
-  Rpc.wallet_getBalances.schema,
-  Rpc.wallet_getCallsStatus.schema,
-  Rpc.wallet_getCapabilities.schema,
-  Rpc.wallet_connect.schema,
-  Rpc.wallet_disconnect.schema,
-  Rpc.wallet_authorizeAccessKey.schema,
-  Rpc.wallet_revokeAccessKey.schema,
-  Rpc.wallet_switchEthereumChain.schema,
-])
+export { defineItem, from } from './internal/schema.js'
+import { from } from './internal/schema.js'
 
 /**
  * A single JSON-RPC method definition with Zod schemas for
@@ -92,6 +74,27 @@ export type ToViem<schema extends Schema> = {
   }
 }
 
+/** All provider-handled RPC method definitions. */
+export const schema = from([
+  Rpc.eth_accounts.schema,
+  Rpc.eth_chainId.schema,
+  Rpc.eth_requestAccounts.schema,
+  Rpc.eth_sendTransaction.schema,
+  Rpc.eth_signTransaction.schema,
+  Rpc.eth_sendTransactionSync.schema,
+  Rpc.eth_signTypedData_v4.schema,
+  Rpc.personal_sign.schema,
+  Rpc.wallet_sendCalls.schema,
+  Rpc.wallet_getBalances.schema,
+  Rpc.wallet_getCallsStatus.schema,
+  Rpc.wallet_getCapabilities.schema,
+  Rpc.wallet_connect.schema,
+  Rpc.wallet_disconnect.schema,
+  Rpc.wallet_authorizeAccessKey.schema,
+  Rpc.wallet_revokeAccessKey.schema,
+  Rpc.wallet_switchEthereumChain.schema,
+])
+
 /** Ox-compatible RPC schema union for the provider. */
 export type Ox = RpcSchema.Eth | ToOx<typeof schema>
 export const ox = RpcSchema.from<Ox>()
@@ -131,13 +134,3 @@ export const Request: z.ZodMiniType<
   ToRequestInput<typeof schema>
 > = z.discriminatedUnion('method', schema.map(toRequestSchema) as never)
 export type Request = ToRequestOutput<typeof schema>
-
-/** Defines a JSON-RPC method schema item. */
-export function defineItem<const item extends Item>(item: item): item {
-  return item
-}
-
-/** Creates a {@link Schema}. */
-export function from<const schema extends Schema>(schema: schema): schema {
-  return schema
-}
