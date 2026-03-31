@@ -6,7 +6,9 @@ import { createStore } from 'zustand/vanilla'
 
 import type * as Messenger from '../core/Messenger.js'
 import type * as CoreProvider from '../core/Provider.js'
+import * as Schema from '../core/Schema.js'
 import type * as Store from '../core/Store.js'
+import * as Rpc from '../core/zod/rpc.js'
 
 /** State managed by the remote (dialog) side. */
 export type State = {
@@ -258,4 +260,95 @@ export declare namespace create {
     /** Hostnames trusted to render the embed in an iframe. */
     trustedHosts?: string[] | undefined
   }
+}
+
+/**
+ * Validates an RPC request from search params.
+ *
+ * Parses against the `Schema.Request` discriminated union, checks the
+ * method matches, and enforces strict parameter schemas (e.g. required
+ * `limits`). On failure, rejects all pending requests via the messenger
+ * and re-throws so the router can handle the error boundary.
+ */
+export function validateSearch<const method extends Schema.Request['method']>(
+  remote: Remote,
+  search: Record<string, unknown>,
+  parameters: { method: method },
+): validateSearch.ReturnType<method> {
+  const { method } = parameters
+  try {
+    const result = Schema.Request.safeParse(search)
+    if (!result.success)
+      throw new RpcResponse.InvalidParamsError({
+        message: formatZodErrors(method, result.error),
+      })
+    if (result.data.method !== method)
+      throw new RpcResponse.InvalidParamsError({
+        message: `Method mismatch: expected "${method}" but got "${result.data.method}".`,
+      })
+    const strict = Rpc.strictParameters[method as keyof typeof Rpc.strictParameters]
+    const params = (search.params as readonly unknown[] | undefined)?.[0]
+    if (strict && params !== undefined) {
+      const strictResult = strict.safeParse(params)
+      if (!strictResult.success)
+        throw new RpcResponse.InvalidParamsError({
+          message: formatZodErrors(method, strictResult.error),
+        })
+    }
+    return {
+      ...search,
+      _decoded: result.data,
+      id: Number(search.id),
+      jsonrpc: '2.0',
+    } as never
+  } catch (error) {
+    if (error instanceof RpcResponse.BaseError) void remote.rejectAll(error)
+    throw error
+  }
+}
+
+export declare namespace validateSearch {
+  type ReturnType<method extends Schema.Request['method']> = Extract<
+    Schema.Request,
+    { method: method }
+  > & {
+    id: number
+    jsonrpc: '2.0'
+    _decoded: Extract<Schema.Request, { method: method }>
+    _returnType: unknown
+  }
+}
+
+type ZodIssue = {
+  path: readonly PropertyKey[]
+  code: string
+  message: string
+  expected?: string | undefined
+  errors?: readonly (readonly ZodIssue[])[] | undefined
+}
+
+function formatZodErrors(method: string, error: { issues: readonly ZodIssue[] }) {
+  const issues = flattenIssues(error.issues)
+    .map((i) => `  - ${i.path.map(String).join('.')}: ${i.message}`)
+    .join('\n')
+  return `Invalid params for "${method}":\n${issues}`
+}
+
+function flattenIssues(
+  issues: readonly ZodIssue[],
+): { path: readonly PropertyKey[]; message: string }[] {
+  const result: { path: readonly PropertyKey[]; message: string }[] = []
+  for (const issue of issues) {
+    if (issue.errors?.length) {
+      const best = issue.errors.reduce((a, b) => (a.length <= b.length ? a : b))
+      for (const nested of flattenIssues(best))
+        result.push({ path: [...issue.path, ...nested.path], message: nested.message })
+    } else {
+      let message = issue.message
+      if (issue.code === 'invalid_type' && issue.expected) message = `Expected ${issue.expected}`
+      else if (issue.code === 'invalid_value') message = 'Invalid value'
+      result.push({ path: issue.path, message })
+    }
+  }
+  return result
 }
