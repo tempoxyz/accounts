@@ -39,3 +39,5 @@ onlyBuiltDependencies:
 
 overrides:
   accounts: workspace:*
+
+minimumReleaseAge: 1440
