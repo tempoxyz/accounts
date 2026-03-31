@@ -1,10 +1,15 @@
 import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { Base64, Hash, Hex, Provider as core_Provider, RpcResponse } from 'ox'
+import { Base64, Hash, Hex, P256, Provider as core_Provider, RpcResponse } from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
+import { prepareTransactionRequest } from 'viem/actions'
+import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 import * as z from 'zod/mini'
 
+import * as AccessKey from '../core/AccessKey.js'
 import * as Adapter from '../core/Adapter.js'
 import * as CliAuth from '../server/CliAuth.js'
+import * as Keyring from './keyring.js'
 
 /**
  * Creates a CLI bootstrap adapter backed by the device-code protocol.
@@ -12,7 +17,118 @@ import * as CliAuth from '../server/CliAuth.js'
 export function cli(options: cli.Options): Adapter.Adapter {
   const { name = 'Tempo CLI', rdns = 'xyz.tempo.cli' } = options
 
-  return Adapter.define({ name, rdns }, ({ store }) => {
+  return Adapter.define({ name, rdns }, ({ getAccount, getClient, store }) => {
+    async function loadManagedKey(address: Adapter.authorizeAccessKey.ReturnType['rootAddress']) {
+      const { chainId } = store.getState()
+      const entry = await Keyring.find({
+        chainId,
+        ...(options.keysPath ? { path: options.keysPath } : {}),
+        walletAddress: address,
+      })
+      if (!entry) return
+
+      const keyAuthorization = KeyAuthorization.deserialize(entry.keyAuthorization)
+      AccessKey.save({
+        address,
+        keyAuthorization,
+        privateKey: entry.key,
+        store,
+      })
+
+      return entry
+    }
+
+    async function resolveManagedKey(
+      options: {
+        address?: Adapter.authorizeAccessKey.ReturnType['rootAddress'] | undefined
+        keyType?: Adapter.authorizeAccessKey.Parameters['keyType'] | undefined
+      } = {},
+    ) {
+      const { address, keyType } = options
+
+      const entry = address ? await loadManagedKey(address) : undefined
+      if (entry) {
+        const account =
+          entry.keyType === 'p256'
+            ? TempoAccount.fromP256(entry.key, { access: address })
+            : TempoAccount.fromSecp256k1(entry.key, { access: address })
+        return {
+          account,
+          key: entry.key,
+          keyAddress: entry.keyAddress,
+          keyType: entry.keyType,
+          publicKey: account.publicKey,
+        }
+      }
+
+      const nextKeyType = keyType === 'p256' ? 'p256' : 'secp256k1'
+      const key = nextKeyType === 'p256' ? P256.randomPrivateKey() : Secp256k1.randomPrivateKey()
+      const account =
+        nextKeyType === 'p256'
+          ? TempoAccount.fromP256(key, address ? { access: address } : undefined)
+          : TempoAccount.fromSecp256k1(key, address ? { access: address } : undefined)
+
+      return {
+        account,
+        key,
+        keyAddress: account.address,
+        keyType: nextKeyType,
+        publicKey: account.publicKey,
+      }
+    }
+
+    async function saveManagedKey(
+      address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
+      managedKey: Awaited<ReturnType<typeof resolveManagedKey>>,
+      keyAuthorization: z.output<typeof CliAuth.keyAuthorization>,
+    ) {
+      if (!managedKey) return
+
+      const signed = KeyAuthorization.fromRpc(z.encode(CliAuth.keyAuthorization, keyAuthorization))
+      AccessKey.save({
+        address,
+        keyAuthorization: signed,
+        privateKey: managedKey.key,
+        store,
+      })
+
+      await Keyring.upsert(
+        {
+          chainId: Number(keyAuthorization.chainId),
+          expiry: keyAuthorization.expiry ?? 0,
+          key: managedKey.key,
+          keyAddress: managedKey.keyAddress,
+          keyAuthorization: KeyAuthorization.serialize(signed),
+          keyType: managedKey.keyType,
+          ...(keyAuthorization.limits ? { limits: keyAuthorization.limits } : {}),
+          walletAddress: address,
+          walletType: 'passkey',
+        },
+        options.keysPath ? { path: options.keysPath } : {},
+      )
+    }
+
+    async function withManagedAccessKey<result>(
+      fn: (
+        account: TempoAccount.Account,
+        keyAuthorization?: KeyAuthorization.Signed | undefined,
+      ) => Promise<result>,
+    ) {
+      const rootAddress = store.getState().accounts[store.getState().activeAccount]?.address
+      if (rootAddress) await loadManagedKey(rootAddress)
+
+      const account = getAccount({ signable: true })
+      const keyAuthorization = AccessKey.getPending(account, { store })
+      try {
+        const result = await fn(account, keyAuthorization ?? undefined)
+        AccessKey.removePending(account, { store })
+        return result
+      } catch (error) {
+        AccessKey.remove(account, { store })
+        throw error
+      }
+    }
+
     async function authorize(request: {
       account?: Adapter.authorizeAccessKey.ReturnType['rootAddress'] | undefined
       authorizeAccessKey: Adapter.authorizeAccessKey.Parameters | undefined
@@ -26,12 +142,23 @@ export function cli(options: cli.Options): Adapter.Adapter {
       } = options
       const { account, authorizeAccessKey, method } = request
 
-      if (!authorizeAccessKey?.publicKey)
+      const managedKey =
+        authorizeAccessKey && !authorizeAccessKey.publicKey && !authorizeAccessKey.address
+          ? await resolveManagedKey({
+              ...(account ? { address: account } : {}),
+              ...(authorizeAccessKey.keyType ? { keyType: authorizeAccessKey.keyType } : {}),
+            })
+          : undefined
+
+      const publicKey = authorizeAccessKey?.publicKey ?? managedKey?.publicKey
+      const keyType = authorizeAccessKey?.keyType ?? managedKey?.keyType
+
+      if (!publicKey)
         throw new RpcResponse.InvalidParamsError({
           message:
             method === 'wallet_connect'
-              ? '`wallet_connect` on the CLI adapter requires `capabilities.authorizeAccessKey.publicKey`.'
-              : '`wallet_authorizeAccessKey` on the CLI adapter requires `publicKey`.',
+              ? '`wallet_connect` on the CLI adapter requires `capabilities.authorizeAccessKey`.'
+              : '`wallet_authorizeAccessKey` on the CLI adapter requires key parameters.',
         })
 
       const codeVerifier = createCodeVerifier()
@@ -41,12 +168,12 @@ export function cli(options: cli.Options): Adapter.Adapter {
           ...(account ? { account } : {}),
           chainId: BigInt(store.getState().chainId),
           codeChallenge,
-          ...(typeof authorizeAccessKey.expiry !== 'undefined'
+          ...(typeof authorizeAccessKey?.expiry !== 'undefined'
             ? { expiry: authorizeAccessKey.expiry }
             : {}),
-          ...(authorizeAccessKey.keyType ? { keyType: authorizeAccessKey.keyType } : {}),
-          ...(authorizeAccessKey.limits ? { limits: authorizeAccessKey.limits } : {}),
-          pubKey: authorizeAccessKey.publicKey,
+          ...(keyType ? { keyType } : {}),
+          ...(authorizeAccessKey?.limits ? { limits: authorizeAccessKey.limits } : {}),
+          pubKey: publicKey,
         } satisfies z.output<typeof CliAuth.createRequest>,
         request: CliAuth.createRequest,
         response: CliAuth.createResponse,
@@ -79,6 +206,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
         if (result.status === 'expired')
           throw new Error('Device code expired before authorization completed.')
 
+        if (managedKey)
+          await saveManagedKey(result.accountAddress, managedKey, result.keyAuthorization)
+
         return result
       }
 
@@ -95,6 +225,12 @@ export function cli(options: cli.Options): Adapter.Adapter {
             authorizeAccessKey: parameters,
             method: 'wallet_authorizeAccessKey',
           })
+
+          if (!account)
+            store.setState({
+              accounts: [{ address: result.accountAddress }],
+              activeAccount: 0,
+            })
 
           return {
             keyAuthorization: z.encode(CliAuth.keyAuthorization, result.keyAuthorization),
@@ -126,20 +262,74 @@ export function cli(options: cli.Options): Adapter.Adapter {
         async revokeAccessKey() {
           throw unsupported('`wallet_revokeAccessKey` not supported by CLI adapter.')
         },
-        async sendTransaction() {
-          throw unsupported('`eth_sendTransaction` not supported by CLI adapter.')
+        async sendTransaction(parameters) {
+          const { feePayer, ...rest } = parameters
+          const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
+          const { account, prepared } = await withManagedAccessKey(
+            async (account, keyAuthorization) => ({
+              account,
+              prepared: await prepareTransactionRequest(client, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                ...(keyAuthorization ? { keyAuthorization } : {}),
+                type: 'tempo',
+              }),
+            }),
+          )
+          const signed = await account.signTransaction(prepared as never)
+          return await client.request({
+            method: 'eth_sendRawTransaction' as never,
+            params: [signed],
+          })
         },
-        async sendTransactionSync() {
-          throw unsupported('`eth_sendTransactionSync` not supported by CLI adapter.')
+        async sendTransactionSync(parameters) {
+          const { feePayer, ...rest } = parameters
+          const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
+          const { account, prepared } = await withManagedAccessKey(
+            async (account, keyAuthorization) => ({
+              account,
+              prepared: await prepareTransactionRequest(client, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                ...(keyAuthorization ? { keyAuthorization } : {}),
+                type: 'tempo',
+              }),
+            }),
+          )
+          const signed = await account.signTransaction(prepared as never)
+          return await client.request({
+            method: 'eth_sendRawTransactionSync' as never,
+            params: [signed],
+          })
         },
-        async signPersonalMessage() {
-          throw unsupported('`personal_sign` not supported by CLI adapter.')
+        async signPersonalMessage({ address, data }) {
+          await loadManagedKey(address)
+          const account = getAccount({ address, signable: true })
+          return await account.signMessage({ message: { raw: data } })
         },
-        async signTransaction() {
-          throw unsupported('`eth_signTransaction` not supported by CLI adapter.')
+        async signTransaction(parameters) {
+          const { feePayer, ...rest } = parameters
+          const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
+          const { account, prepared } = await withManagedAccessKey(
+            async (account, keyAuthorization) => ({
+              account,
+              prepared: await prepareTransactionRequest(client, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                ...(keyAuthorization ? { keyAuthorization } : {}),
+                type: 'tempo',
+              }),
+            }),
+          )
+          return await account.signTransaction(prepared as never)
         },
-        async signTypedData() {
-          throw unsupported('`eth_signTypedData_v4` not supported by CLI adapter.')
+        async signTypedData({ address, data }) {
+          await loadManagedKey(address)
+          const account = getAccount({ address, signable: true })
+          return await account.signTypedData(JSON.parse(data) as never)
         },
       },
     }
@@ -152,6 +342,8 @@ export declare namespace cli {
     host: string
     /** Provider display name. @default "Tempo CLI" */
     name?: string | undefined
+    /** Path for managed CLI access keys. @default "~/.tempo/wallet/keys.toml" */
+    keysPath?: string | undefined
     /** Browser opener override. */
     open?: ((url: string) => Promise<void> | void) | undefined
     /** Poll interval in milliseconds. @default 2000 */

@@ -1,29 +1,27 @@
 import { parse } from '@bomb.sh/args'
 import Tab from '@bomb.sh/tab'
 import * as Clack from '@clack/prompts'
-import { Provider } from 'accounts/cli'
-import * as CliAuth from 'accounts/server'
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { setTimeout as sleep } from 'node:timers/promises'
-import { Base64, Hex, P256 } from 'ox'
-import { Account as TempoAccount } from 'viem/tempo'
-import * as z from 'zod/mini'
+import { Hex, Json } from 'ox'
 
-type AccessKey = ReturnType<typeof TempoAccount.fromP256>
+import * as CliProvider from '../../src/cli/Provider.js'
+import * as core_Storage from '../../src/core/Storage.js'
 
 // shell completions
 
 const defaultUrl = resolveDefaultUrl()
 
 const connectCmd = Tab.command('connect', 'Sign in / sign up via browser approval')
-connectCmd.option('url', 'Auth service URL', (c) => c(defaultUrl, 'Default'))
-connectCmd.option('key-file', 'Access key file path')
+connectCmd.option('url', 'Wallet URL', (c) => c(defaultUrl, 'Default'))
+connectCmd.option('limit', 'Spend limit (raw token units)', (c) => c('1000', 'Default'))
+connectCmd.option('expiry', 'Authorization lifetime in seconds', (c) => c('3600', 'Default'))
 
 const requestCmd = Tab.command('request', 'Authorize an access key')
-requestCmd.option('url', 'Auth service URL', (c) => c(defaultUrl, 'Default'))
-requestCmd.option('key-file', 'Access key file path')
+requestCmd.option('url', 'Wallet URL', (c) => c(defaultUrl, 'Default'))
+requestCmd.option('limit', 'Spend limit (raw token units)', (c) => c('1000', 'Default'))
+requestCmd.option('expiry', 'Authorization lifetime in seconds', (c) => c('3600', 'Default'))
 
 if (process.argv[2] === 'complete') {
   const [, , , shell] = process.argv
@@ -36,9 +34,9 @@ if (process.argv[2] === 'complete') {
 // args
 
 const args = parse(process.argv.slice(2), {
-  string: ['url', 'key-file'],
+  string: ['url', 'limit', 'expiry'],
   boolean: ['help'],
-  alias: { h: 'help', u: 'url', k: 'key-file' },
+  alias: { h: 'help', u: 'url' },
 })
 
 if (args.help) {
@@ -53,8 +51,9 @@ if (args.help) {
     request       Authorize an access key
 
   Options
-    -u, --url <url>        Auth service URL
-    -k, --key-file <path>  Access key file path
+    -u, --url <url>        Wallet URL
+    --limit <raw>          Spend limit in raw token units
+    --expiry <seconds>     Authorization lifetime in seconds
     -h, --help             Show this help
 
   Shell Completions
@@ -78,31 +77,19 @@ async function main() {
   const setup = await Clack.group(
     {
       serviceUrl: () => resolveServiceUrl(),
-      accessKey: async () => {
-        const keyFile = args['key-file'] ?? 'tmp/cli-auth-demo/access-key.json'
-        return loadAccessKey(keyFile)
-      },
     },
     { onCancel: () => cancel() },
   )
 
   const { serviceUrl } = setup
-  const { account, file } = setup.accessKey
+  const storage = fileStorage('tmp/cli-auth-demo/provider-state.json')
 
-  Clack.box(
-    [
-      `address     ${dim(account.address)}`,
-      `public key  ${dim(truncate(account.publicKey, 24))}`,
-      `key file    ${dim(file)}`,
-      `service     ${dim(serviceUrl)}`,
-    ].join('\n'),
-    'Access Key',
-  )
+  Clack.box(`wallet  ${dim(serviceUrl)}`, 'Wallet')
 
   // Single command mode
   if (command) {
-    if (command === 'connect') await connectFlow(serviceUrl, account)
-    else await authorizeFlow(serviceUrl, account)
+    if (command === 'connect') await connectFlow(serviceUrl, storage)
+    else await authorizeFlow(serviceUrl, storage)
     Clack.outro('Done')
     return
   }
@@ -132,31 +119,21 @@ async function main() {
     }
 
     if (action === 'connect') {
-      await connectFlow(serviceUrl, account)
+      await connectFlow(serviceUrl, storage)
       browserOpened = true
     } else {
-      await authorizeFlow(serviceUrl, account)
+      await authorizeFlow(serviceUrl, storage)
     }
   }
 }
 
 // flows
 
-async function connectFlow(serviceUrl: string, account: AccessKey) {
+async function connectFlow(serviceUrl: string, storage: core_Storage.Storage) {
   const task = Clack.taskLog({ title: 'Sign in' })
+  configureLocalTls(serviceUrl)
 
-  const provider = Provider.create({
-    open(url) {
-      task.message(`Device code created`)
-      task.message(`Opening ${url}`)
-      openBrowser(url)
-      task.message('Waiting for passkey approval…')
-    },
-    pollIntervalMs: 2_000,
-    host: serviceUrl,
-    testnet: true,
-    timeoutMs: 300_000,
-  })
+  const provider = createProvider(serviceUrl, task, storage)
 
   try {
     const result = await provider.request({
@@ -164,7 +141,7 @@ async function connectFlow(serviceUrl: string, account: AccessKey) {
       params: [
         {
           capabilities: {
-            authorizeAccessKey: accessKeyParams(account),
+            authorizeAccessKey: authorizationParams(),
           },
         },
       ],
@@ -180,88 +157,64 @@ async function connectFlow(serviceUrl: string, account: AccessKey) {
   }
 }
 
-async function authorizeFlow(serviceUrl: string, account: AccessKey) {
+async function authorizeFlow(serviceUrl: string, storage: core_Storage.Storage) {
   const task = Clack.taskLog({ title: 'Authorize access key' })
+  configureLocalTls(serviceUrl)
 
-  const codeVerifier = createCodeVerifier()
-  const codeChallenge = await createCodeChallenge(codeVerifier)
+  const provider = createProvider(serviceUrl, task, storage)
 
-  task.message('Creating device code…')
-
-  const created = await post({
-    body: {
-      codeChallenge,
-      expiry: Math.floor(Date.now() / 1000) + 3600,
-      keyType: account.keyType,
-      limits: [{ limit: 1_000n, token: '0x20c0000000000000000000000000000000000001' as const }],
-      pubKey: account.publicKey,
-    } satisfies z.output<typeof CliAuth.CliAuth.createRequest>,
-    request: CliAuth.CliAuth.createRequest,
-    response: CliAuth.CliAuth.createResponse,
-    url: apiUrl(serviceUrl, 'code'),
-  })
-
-  task.message(`Code: ${bold(created.code)}`)
-  task.message(`URL: ${browserUrl(serviceUrl, created.code)}`)
-  task.message('Waiting for passkey approval…')
-
-  const startedAt = Date.now()
-  while (Date.now() - startedAt < 300_000) {
-    const result = await post({
-      body: { codeVerifier } satisfies z.output<typeof CliAuth.CliAuth.pollRequest>,
-      request: CliAuth.CliAuth.pollRequest,
-      response: CliAuth.CliAuth.pollResponse,
-      url: apiUrl(serviceUrl, `poll/${created.code}`),
+  try {
+    const result = await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [authorizationParams()],
     })
 
-    if (result.status === 'pending') {
-      await sleep(2_000)
-      continue
-    }
-
-    if (result.status === 'expired') {
-      task.error('Device code expired.')
-      return
-    }
-
-    task.success(`Authorized by ${result.accountAddress}`)
-    if (result.keyAuthorization) await logKeyAuthorization(result.keyAuthorization)
-    return
+    task.success(`Authorized by ${result.rootAddress}`)
+    await logKeyAuthorization(result.keyAuthorization)
+  } catch (error) {
+    task.error(error instanceof Error ? error.message : String(error))
   }
-
-  task.error('Timed out waiting for approval.')
 }
 
-// access key
+function authorizationParams() {
+  const expiry = Number.parseInt(args.expiry ?? '3600', 10)
+  const limit = BigInt(args.limit ?? '1000')
 
-function accessKeyParams(account: AccessKey) {
+  if (!Number.isFinite(expiry) || expiry <= 0)
+    throw new Error('`--expiry` must be a positive number of seconds.')
+  if (limit <= 0n) throw new Error('`--limit` must be a positive integer.')
+
   return {
-    expiry: Math.floor(Date.now() / 1000) + 3600,
-    keyType: account.keyType,
+    expiry: Math.floor(Date.now() / 1000) + expiry,
     limits: [
       {
-        limit: Hex.fromNumber(1_000),
+        limit: Hex.fromNumber(limit),
         token: '0x20c0000000000000000000000000000000000001' as const,
       },
     ],
-    publicKey: account.publicKey,
   }
 }
 
-async function loadAccessKey(file: string) {
-  await mkdir(dirname(file), { recursive: true })
-
-  let privateKey: `0x${string}`
-  try {
-    const value = JSON.parse(await readFile(file, 'utf8')) as { privateKey?: `0x${string}` }
-    if (!value.privateKey) throw new Error('missing private key')
-    privateKey = value.privateKey
-  } catch {
-    privateKey = P256.randomPrivateKey()
-    await writeFile(file, JSON.stringify({ privateKey }, null, 2) + '\n', 'utf8')
-  }
-
-  return { account: TempoAccount.fromP256(privateKey), file }
+function createProvider(
+  serviceUrl: string,
+  task: ReturnType<typeof Clack.taskLog>,
+  storage: core_Storage.Storage,
+) {
+  return CliProvider.create({
+    // Use local source modules in the example so workspace edits take effect
+    // without rebuilding `dist/`.
+    open(url) {
+      task.message('Device code created')
+      task.message(`Opening ${url}`)
+      openBrowser(url)
+      task.message('Waiting for passkey approval…')
+    },
+    pollIntervalMs: 2_000,
+    host: serviceUrl,
+    storage,
+    testnet: true,
+    timeoutMs: 300_000,
+  })
 }
 
 // url resolution
@@ -270,7 +223,7 @@ async function resolveServiceUrl(): Promise<string> {
   if (args.url) return trimSlash(args.url)
 
   const target = await Clack.select({
-    message: 'Auth service',
+    message: 'Wallet',
     options: [
       { value: 'default', label: defaultUrl, hint: 'default' },
       { value: 'custom', label: 'Custom URL…' },
@@ -281,8 +234,8 @@ async function resolveServiceUrl(): Promise<string> {
   if (target === 'default') return defaultUrl
 
   const input = await Clack.text({
-    message: 'Auth service URL',
-    placeholder: 'https://example.com/cli-auth',
+    message: 'Wallet URL',
+    placeholder: 'https://wallet.example.com/embed/cli-auth',
     validate: (v) => {
       if (!v) return 'URL is required'
       try {
@@ -299,21 +252,17 @@ async function resolveServiceUrl(): Promise<string> {
 }
 
 function resolveDefaultUrl() {
-  const value = process.env.AUTH_URL
+  const value = process.env.WALLET_URL ?? process.env.AUTH_URL
   if (value) {
-    const url = new URL(value)
-    if (!url.pathname || url.pathname === '/') url.pathname = '/cli-auth'
-    url.hash = ''
-    return trimSlash(url.toString())
+    return normalizeWalletUrl(value)
   }
 
-  const protocol = process.env.AUTH_PROTOCOL ?? 'http'
-  const host = process.env.AUTH_HOST ?? 'localhost'
-  const port = process.env.AUTH_PORT ?? '6969'
+  const protocol = process.env.WALLET_PROTOCOL ?? process.env.AUTH_PROTOCOL ?? 'https'
+  const host = process.env.WALLET_HOST ?? process.env.AUTH_HOST ?? 'app.moderato.tempo.local'
+  const port = process.env.WALLET_PORT ?? process.env.AUTH_PORT ?? '3001'
   const url = new URL(`${protocol}://${host}`)
   if (!isDefaultPort(protocol, port)) url.port = port
-  url.pathname = '/cli-auth'
-  return trimSlash(url.toString())
+  return normalizeWalletUrl(url.toString())
 }
 
 // helpers
@@ -323,17 +272,12 @@ function cancel(): never {
   process.exit(0)
 }
 
-function apiUrl(serviceUrl: string, path: string) {
-  const url = new URL(serviceUrl)
-  url.pathname = `${url.pathname.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
+function normalizeWalletUrl(value: string) {
+  const url = new URL(value)
+  if (!url.pathname || url.pathname === '/') url.pathname = '/embed/cli-auth'
+  url.hash = ''
   url.search = ''
-  return url.toString()
-}
-
-function browserUrl(serviceUrl: string, code: string) {
-  const url = new URL(serviceUrl)
-  url.searchParams.set('code', code)
-  return url.toString()
+  return trimSlash(url.toString())
 }
 
 function openBrowser(url: string) {
@@ -355,8 +299,46 @@ function trimSlash(value: string) {
   return value.endsWith('/') ? value.slice(0, -1) : value
 }
 
-function truncate(value: string, length = 20) {
-  return value.length <= length ? value : `${value.slice(0, length)}…${value.slice(-6)}`
+function configureLocalTls(serviceUrl: string) {
+  const { hostname, protocol } = new URL(serviceUrl)
+  if (protocol !== 'https:') return
+  if (!isLocalHostname(hostname)) return
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0') return
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+}
+
+function isLocalHostname(hostname: string) {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.local')
+}
+
+function fileStorage(file: string): core_Storage.Storage {
+  async function read() {
+    try {
+      return Json.parse(await readFile(file, 'utf8')) as Record<string, unknown>
+    } catch {
+      return {}
+    }
+  }
+
+  async function write(value: Record<string, unknown>) {
+    await mkdir(dirname(file), { recursive: true })
+    await writeFile(file, Json.stringify(value, null, 2) + '\n', 'utf8')
+  }
+
+  return {
+    async getItem(name) {
+      const value = (await read())[name]
+      return value === undefined ? null : value
+    },
+    async removeItem(name) {
+      const value = await read()
+      delete value[name]
+      await write(value)
+    },
+    async setItem(name, value) {
+      await write({ ...(await read()), [name]: value })
+    },
+  }
 }
 
 async function logKeyAuthorization(auth: Record<string, unknown>) {
@@ -385,40 +367,8 @@ function jsonStringify(value: unknown) {
   return JSON.stringify(value, (_, v) => (typeof v === 'bigint' ? v.toString() : v), 2)
 }
 
-function bold(value: string) {
-  return `\x1b[1m${value}\x1b[22m`
-}
-
 function dim(value: string) {
   return `\x1b[2m${value}\x1b[22m`
-}
-
-async function createCodeChallenge(codeVerifier: string) {
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier))
-  return Base64.fromBytes(new Uint8Array(hash), { pad: false, url: true })
-}
-
-function createCodeVerifier() {
-  return Base64.fromBytes(crypto.getRandomValues(new Uint8Array(32)), { pad: false, url: true })
-}
-
-async function post<
-  const request extends z.ZodMiniType,
-  const response extends z.ZodMiniType,
->(options: {
-  body: z.output<request>
-  request: request
-  response: response
-  url: string
-}): Promise<z.output<response>> {
-  const result = await fetch(options.url, {
-    body: JSON.stringify(z.encode(options.request, options.body)),
-    headers: { 'content-type': 'application/json' },
-    method: 'POST',
-  })
-  const json = (await result.json().catch(() => ({}))) as z.input<response>
-  if (!result.ok) throw new Error(((json as { error?: string }).error ?? 'Request failed.').trim())
-  return z.decode(options.response, json)
 }
 
 // run

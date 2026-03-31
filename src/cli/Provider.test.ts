@@ -1,5 +1,10 @@
-import { Hex } from 'ox'
+import { mkdtemp, readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Address, Hex, PublicKey } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
+import { type Address as ViemAddress, parseUnits } from 'viem'
+import { Actions, Addresses } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
@@ -7,6 +12,7 @@ import { accounts, chain, getClient } from '../../test/config.js'
 import { createServer } from '../../test/utils.js'
 import * as CliAuth from '../server/CliAuth.js'
 import * as Handler from '../server/Handler.js'
+import * as Keyring from './keyring.js'
 import * as Provider from './Provider.js'
 
 const root = accounts[0]!
@@ -92,6 +98,52 @@ function createHandler() {
     },
   })
 }
+
+async function authorizePending(serverUrl: string, code: string) {
+  const response = await fetch(`${serverUrl}/cli-auth/pending/${code}`)
+  const pending = z.decode(CliAuth.pendingResponse, (await response.json()) as never)
+  const signed = await root.signKeyAuthorization(
+    {
+      accessKeyAddress: Address.fromPublicKey(PublicKey.from(pending.pubKey)),
+      keyType: pending.keyType,
+    },
+    {
+      chainId: pending.chainId,
+      expiry: pending.expiry,
+      ...(pending.limits ? { limits: pending.limits } : {}),
+    },
+  )
+  const keyAuthorization = KeyAuthorization.toRpc(signed)
+
+  return z.encode(CliAuth.authorizeRequest, {
+    accountAddress: root.address,
+    code,
+    keyAuthorization: z.decode(CliAuth.keyAuthorization, {
+      ...keyAuthorization,
+      address: keyAuthorization.keyId,
+    }),
+  })
+}
+
+async function createKeysPath() {
+  return join(await mkdtemp(join(tmpdir(), 'accounts-cli-')), 'keys.toml')
+}
+
+async function fund(address: ViemAddress) {
+  await Actions.token.transferSync(getClient(), {
+    account: root,
+    feeToken: Addresses.pathUsd,
+    to: address,
+    token: Addresses.pathUsd,
+    amount: parseUnits('10', 6),
+  })
+}
+
+const transferCall = Actions.token.transfer.call({
+  to: '0x0000000000000000000000000000000000000001',
+  token: Addresses.pathUsd,
+  amount: parseUnits('1', 6),
+})
 
 describe('Provider.create', () => {
   test('default: bootstraps wallet_connect through the device-code flow', async () => {
@@ -247,7 +299,7 @@ describe('Provider.create', () => {
               headers: { 'content-type': 'application/json' },
               method: 'POST',
             })
-          } catch (error) {}
+          } catch {}
         },
         host: `${server.url}/cli-auth`,
       })
@@ -389,6 +441,101 @@ describe('Provider.create', () => {
       ).rejects.toThrowErrorMatchingInlineSnapshot(
         `[Provider.UnsupportedMethodError: \`wallet_revokeAccessKey\` not supported by CLI adapter.]`,
       )
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('behavior: generates, persists, and uses a managed key during wallet_connect', async () => {
+    const handler = createHandler()
+    const server = await createServer(handler.listener)
+    const keysPath = await createKeysPath()
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        keysPath,
+        open: async (url) => {
+          const code = new URL(url).searchParams.get('code')!
+          await fetch(`${server.url}/cli-auth`, {
+            body: JSON.stringify(await authorizePending(server.url, code)),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          })
+        },
+        host: `${server.url}/cli-auth`,
+      })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { authorizeAccessKey: { expiry: expiry_2 } } }],
+      })
+      const account = result.accounts[0]!
+      await fund(account.address)
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      const [entry] = await Keyring.load({ path: keysPath })
+      const { key, keyAuthorization, ...persisted } = entry!
+
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+      expect({
+        ...persisted,
+        keyAddress: persisted.keyAddress.toLowerCase(),
+      }).toMatchInlineSnapshot(`
+        {
+          "chainId": ${chain.id},
+          "expiry": ${expiry_2},
+          "keyAddress": "${account.capabilities.keyAuthorization!.keyId.toLowerCase()}",
+          "keyType": "secp256k1",
+          "walletAddress": "${root.address}",
+          "walletType": "passkey",
+        }
+      `)
+      expect(key).toMatch(/^0x[0-9a-f]{64}$/i)
+      expect(keyAuthorization).toMatch(/^0x[0-9a-f]+$/i)
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('behavior: generates a managed key for wallet_authorizeAccessKey without publicKey', async () => {
+    const handler = createHandler()
+    const server = await createServer(handler.listener)
+    const keysPath = await createKeysPath()
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        keysPath,
+        open: async (url) => {
+          const code = new URL(url).searchParams.get('code')!
+          await fetch(`${server.url}/cli-auth`, {
+            body: JSON.stringify(await authorizePending(server.url, code)),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          })
+        },
+        host: `${server.url}/cli-auth`,
+      })
+
+      const result = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: expiry_2 }],
+      })
+      await fund(result.rootAddress)
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      const toml = await readFile(keysPath, 'utf8')
+
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+      expect(toml).toContain(`wallet_address = "${root.address}"`)
+      expect(toml).toContain(`chain_id = ${chain.id}`)
     } finally {
       await server.closeAsync()
     }

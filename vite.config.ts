@@ -4,13 +4,16 @@ export default defineConfig({
   devtools: {
     enabled: true,
   },
+  lint: {
+    ignorePatterns: ['package.json', 'dialog', 'embed/**'],
+  },
   fmt: {
     semi: false,
     singleQuote: true,
     trailingComma: 'all',
     tabWidth: 2,
     printWidth: 100,
-    ignorePatterns: ['package.json', 'dialog'],
+    ignorePatterns: ['package.json', 'dialog', 'embed/**'],
     experimentalSortImports: {
       groups: [
         ['value-builtin', 'value-external', 'type-import', 'value-internal', 'type-internal'],
