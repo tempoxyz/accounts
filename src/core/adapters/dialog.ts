@@ -26,7 +26,7 @@ import * as Rpc from '../zod/rpc.js'
  */
 export function dialog(options: dialog.Options = {}): Adapter.Adapter {
   const {
-    dialog = Dialog.isSafari() ? Dialog.popup() : Dialog.iframe(),
+    dialog = Dialog.isSafari() || Dialog.isInsecureContext() ? Dialog.popup() : Dialog.iframe(),
     host = 'https://wallet.tempo.xyz/embed',
     icon,
     name = 'Tempo',
@@ -381,7 +381,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
 
 export declare namespace dialog {
   type Options = {
-    /** Dialog to use for the embed app. @default `Dialog.iframe()` (or `Dialog.popup()` in Safari) */
+    /** Dialog to use for the embed app. @default `Dialog.iframe()` (or `Dialog.popup()` in Safari/insecure contexts) */
     dialog?: Dialog.Dialog | undefined
     /** URL of the embed app. @default `'https://wallet.tempo.xyz/embed'` */
     host?: string | undefined
