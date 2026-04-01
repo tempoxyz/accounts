@@ -32,6 +32,8 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     store: Store.Store
   }
 
+const announced = new Set<string>()
+
 /**
  * Creates an EIP-1193 provider with a pluggable adapter.
  *
@@ -499,17 +501,21 @@ export function create(options: create.Options = {}): create.ReturnType {
   )
 
   if (typeof window !== 'undefined') {
-    announceProvider({
-      info: {
-        icon: adapter.icon ?? defaultIcon,
-        name: adapter.name ?? 'Injected Wallet',
-        rdns:
-          adapter.rdns ??
-          `com.${(adapter.name ?? 'Injected Wallet').toLowerCase().replace(/\s+/g, '')}`,
-        uuid: crypto.randomUUID(),
-      },
-      provider,
-    } as never)
+    const rdns =
+      adapter.rdns ?? `com.${(adapter.name ?? 'Injected Wallet').toLowerCase().replace(/\s+/g, '')}`
+
+    if (!announced.has(rdns)) {
+      announced.add(rdns)
+      announceProvider({
+        info: {
+          icon: adapter.icon ?? defaultIcon,
+          name: adapter.name ?? 'Injected Wallet',
+          rdns,
+          uuid: crypto.randomUUID(),
+        },
+        provider,
+      } as never)
+    }
   }
 
   if (options.mpp)
