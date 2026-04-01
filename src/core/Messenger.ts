@@ -23,7 +23,7 @@ export type Messenger = {
 /** Options sent with the `ready` signal from the remote frame. */
 export type ReadyOptions = {
   /** Hostnames trusted by the remote embed to render in an iframe. */
-  trustedHosts?: string[] | undefined
+  trustedHosts?: readonly string[] | undefined
 }
 
 /** Bridge messenger that waits for a `ready` signal from the remote frame. */

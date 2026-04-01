@@ -266,7 +266,7 @@ export declare namespace create {
     /** Provider to execute RPC requests against. */
     provider: CoreProvider.Provider
     /** Hostnames trusted to render the embed in an iframe. */
-    trustedHosts?: string[] | undefined
+    trustedHosts?: readonly string[] | undefined
   }
 }
 
