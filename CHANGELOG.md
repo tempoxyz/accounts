@@ -1,5 +1,13 @@
 # accounts
 
+## 0.4.8
+
+### Patch Changes
+
+- 5795462: Broke circular dependency between `Schema` and `rpc` modules that caused runtime errors when bundled with esbuild.
+- a622e07: Defaulted to popup dialog on insecure (HTTP) contexts where iframes cannot use WebAuthn.
+- a622e07: Stripped `www.` prefix when checking trusted hosts for dialog origin validation.
+
 ## 0.4.7
 
 ### Patch Changes
