@@ -917,9 +917,9 @@ function WalletAuthorizeAccessKey() {
         onSubmit={(e) => {
           e.preventDefault()
           const form = new FormData(e.currentTarget)
-          const expiry = form.get('expiry') as string
+          const expiry = (form.get('expiry') as string) || '3600'
           const limitToken = form.get('limitToken') as string
-          const limitAmount = form.get('limitAmount') as string
+          const limitAmount = (form.get('limitAmount') as string) || '100'
 
           const params: Record<string, unknown> = {}
           if (expiry) params.expiry = Math.floor(Date.now() / 1000) + Number(expiry)
@@ -942,7 +942,7 @@ function WalletAuthorizeAccessKey() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Limit Token</label>
-          <select name="limitToken" style={{ flex: 1 }}>
+          <select name="limitToken" defaultValue={Object.values(tokens)[0]} style={{ flex: 1 }}>
             <option value="">None</option>
             {Object.entries(tokens).map(([name, addr]) => (
               <option key={addr} value={addr}>
