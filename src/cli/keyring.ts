@@ -3,26 +3,28 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Address, Hex } from 'ox'
 
+import type { AccessKey } from '../core/Store.js'
+
 /** Managed CLI access key persisted in `~/.tempo/wallet/keys.toml`. */
 export type Entry = {
   /** Wallet type that approved the key. */
   walletType: 'passkey'
   /** Root wallet address. */
-  walletAddress: Address
+  walletAddress: AccessKey['access']
   /** Chain ID for the authorization. */
   chainId: number
   /** Authorized access-key type. */
-  keyType: 'secp256k1' | 'p256'
+  keyType: Extract<AccessKey['keyType'], 'secp256k1' | 'p256'>
   /** Derived access-key address. */
-  keyAddress: Address
+  keyAddress: AccessKey['address']
   /** Exported private key for the managed access key. */
   key: Hex
   /** Serialized key authorization payload. */
   keyAuthorization: Hex
   /** Authorization expiry timestamp. */
-  expiry: number
+  expiry: NonNullable<AccessKey['expiry']>
   /** TIP-20 spending limits. */
-  limits?: readonly { token: Address; limit: bigint }[] | undefined
+  limits?: AccessKey['limits']
 }
 
 /** Returns the default managed-key file path. */
