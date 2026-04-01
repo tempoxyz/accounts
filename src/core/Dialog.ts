@@ -34,7 +34,7 @@ export declare namespace SetupFn {
   }
 }
 
-export const defaultSize = { height: 440, width: 360 }
+export const defaultSize = { height: 440, width: 504 }
 
 /** Creates a dialog from metadata and a setup function. */
 export function define(meta: Meta, fn: SetupFn): Dialog {
