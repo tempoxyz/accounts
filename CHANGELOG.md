@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.9
+
+### Patch Changes
+
+- e006f99: Fixed duplicate EIP-6963 provider announcements for the same wallet rdns.
+
 ## 0.4.8
 
 ### Patch Changes
