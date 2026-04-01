@@ -275,7 +275,8 @@ export function iframe(): Dialog {
         const secure = await (async () => {
           const { trustedHosts } = await messenger.waitForReady()
           const ioSupported = IO.supported()
-          const trusted = Boolean(trustedHosts?.includes(window.location.hostname))
+          const hostname = window.location.hostname.replace(/^www\./, '')
+          const trusted = Boolean(trustedHosts?.includes(hostname))
           return ioSupported || trusted
         })()
 

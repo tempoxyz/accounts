@@ -16,7 +16,7 @@ export function useEnsureVisibility(
   const trusted = useMemo(() => {
     if (!origin) return false
     try {
-      const hostname = new URL(origin).hostname
+      const hostname = new URL(origin).hostname.replace(/^www\./, '')
       return remote.trustedHosts.includes(hostname)
     } catch {
       return false
