@@ -70,7 +70,7 @@
   "name": "accounts",
   "description": "Tempo Accounts SDK",
   "type": "module",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "dependencies": {
     "@remix-run/fetch-router": "~0.17.0",
     "idb-keyval": "^6.2.2",
