@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import type { Address, Hex } from 'ox'
+import { Address, Hex } from 'ox'
 
 import type { AccessKey } from '../core/Store.js'
 
@@ -18,9 +18,9 @@ export type Entry = {
   /** Derived access-key address. */
   keyAddress: AccessKey['address']
   /** Exported private key for the managed access key. */
-  key: Hex
+  key: Hex.Hex
   /** Serialized key authorization payload. */
-  keyAuthorization: Hex
+  keyAuthorization: Hex.Hex
   /** Authorization expiry timestamp. */
   expiry: NonNullable<AccessKey['expiry']>
   /** TIP-20 spending limits. */
@@ -68,7 +68,7 @@ export declare namespace find {
     /** Override path for the managed-key TOML file. */
     path?: string | undefined
     /** Root wallet address. */
-    walletAddress: Address
+    walletAddress: Address.Address
   }
 }
 
@@ -102,7 +102,7 @@ export declare namespace upsert {
 function parse(text: string): readonly Entry[] {
   const keys: Entry[] = []
   let key: Partial<Entry> | undefined
-  let limit: Partial<{ token: Address; limit: bigint }> | undefined
+  let limit: Partial<{ token: Address.Address; limit: bigint }> | undefined
 
   function flushLimit() {
     if (!key || !limit?.token || typeof limit.limit === 'undefined') return
@@ -158,18 +158,18 @@ function parse(text: string): readonly Entry[] {
     const value = rawValue!.trim()
 
     if (limit) {
-      if (name === 'currency') limit.token = stripQuotes(value) as Address
+      if (name === 'currency') limit.token = stripQuotes(value) as Address.Address
       if (name === 'limit') limit.limit = BigInt(stripQuotes(value))
       continue
     }
 
     if (!key) continue
-    if (name === 'wallet_address') key.walletAddress = stripQuotes(value) as Address
+    if (name === 'wallet_address') key.walletAddress = stripQuotes(value) as Address.Address
     if (name === 'chain_id') key.chainId = Number.parseInt(value, 10)
     if (name === 'key_type') key.keyType = stripQuotes(value) as Entry['keyType']
-    if (name === 'key_address') key.keyAddress = stripQuotes(value) as Address
-    if (name === 'key') key.key = stripQuotes(value) as Hex
-    if (name === 'key_authorization') key.keyAuthorization = stripQuotes(value) as Hex
+    if (name === 'key_address') key.keyAddress = stripQuotes(value) as Address.Address
+    if (name === 'key') key.key = stripQuotes(value) as Hex.Hex
+    if (name === 'key_authorization') key.keyAuthorization = stripQuotes(value) as Hex.Hex
     if (name === 'expiry') key.expiry = Number.parseInt(value, 10)
   }
 
