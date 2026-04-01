@@ -4,7 +4,7 @@
   "compatibility_date": "2026-03-09",
   "compatibility_flags": ["nodejs_compat"],
   "main": "./worker/index.ts",
-  "routes": [{ "pattern": "playground.accounts.tempo.xyz", "custom_domain": true }],
+  "routes": [{ "pattern": "accounts-pg.tempo.xyz", "custom_domain": true }],
   "assets": {
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/cli-auth/*", "/webauthn/*", "/fee-payer", "/fortune"],
