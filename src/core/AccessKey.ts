@@ -93,18 +93,42 @@ export declare namespace revoke {
 export function save(options: save.Options): void {
   const { address, keyAuthorization, keyPair, privateKey, store } = options
 
-  store.setState((state) => ({
-    accessKeys: [
-      {
+  const accessKey: Store.AccessKey = privateKey
+    ? {
         address: keyAuthorization.address,
         access: address,
         expiry: keyAuthorization.expiry ?? undefined,
         keyAuthorization,
         keyType: keyAuthorization.type,
         limits: keyAuthorization.limits as { token: Address.Address; limit: bigint }[] | undefined,
-        ...(privateKey ? { privateKey } : {}),
-        ...(keyPair ? { keyPair } : {}),
-      },
+        privateKey,
+      }
+    : keyPair
+      ? {
+          address: keyAuthorization.address,
+          access: address,
+          expiry: keyAuthorization.expiry ?? undefined,
+          keyAuthorization,
+          keyType: keyAuthorization.type,
+          limits: keyAuthorization.limits as
+            | { token: Address.Address; limit: bigint }[]
+            | undefined,
+          keyPair,
+        }
+      : {
+          address: keyAuthorization.address,
+          access: address,
+          expiry: keyAuthorization.expiry ?? undefined,
+          keyAuthorization,
+          keyType: keyAuthorization.type,
+          limits: keyAuthorization.limits as
+            | { token: Address.Address; limit: bigint }[]
+            | undefined,
+        }
+
+  store.setState((state) => ({
+    accessKeys: [
+      accessKey,
       ...state.accessKeys.filter(
         (entry) => entry.address.toLowerCase() !== keyAuthorization.address.toLowerCase(),
       ),

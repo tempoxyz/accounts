@@ -18,7 +18,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
   const { name = 'Tempo CLI', rdns = 'xyz.tempo.cli' } = options
 
   return Adapter.define({ name, rdns }, ({ getAccount, getClient, store }) => {
-    async function loadManagedKey(address: Adapter.authorizeAccessKey.ReturnType['rootAddress']) {
+    async function loadManagedKey(
+      address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
+    ): Promise<Keyring.Entry | undefined> {
       const { chainId } = store.getState()
       const entry = await Keyring.find({
         chainId,
@@ -27,7 +29,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
       })
       if (!entry) return
 
-      const keyAuthorization = KeyAuthorization.deserialize(entry.keyAuthorization)
+      const deserialized = KeyAuthorization.deserialize(entry.keyAuthorization)
+      if (!deserialized.signature) throw new Error('Managed access key is missing a signature.')
+      const keyAuthorization = deserialized as KeyAuthorization.Signed
       AccessKey.save({
         address,
         keyAuthorization,
@@ -43,7 +47,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
         address?: Adapter.authorizeAccessKey.ReturnType['rootAddress'] | undefined
         keyType?: Adapter.authorizeAccessKey.Parameters['keyType'] | undefined
       } = {},
-    ) {
+    ): Promise<resolveManagedKey.ReturnType> {
       const { address, keyType } = options
 
       const entry = address ? await loadManagedKey(address) : undefined
@@ -100,7 +104,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
           keyAddress: managedKey.keyAddress,
           keyAuthorization: KeyAuthorization.serialize(signed),
           keyType: managedKey.keyType,
-          ...(keyAuthorization.limits ? { limits: keyAuthorization.limits } : {}),
+          ...(keyAuthorization.limits
+            ? { limits: keyAuthorization.limits.map((limit) => ({ ...limit })) }
+            : {}),
           walletAddress: address,
           walletType: 'passkey',
         },
@@ -163,18 +169,19 @@ export function cli(options: cli.Options): Adapter.Adapter {
 
       const codeVerifier = createCodeVerifier()
       const codeChallenge = createCodeChallenge(codeVerifier)
+      const body: z.output<typeof CliAuth.createRequest> = {
+        ...(account ? { account } : {}),
+        chainId: BigInt(store.getState().chainId),
+        codeChallenge,
+        ...(typeof authorizeAccessKey?.expiry !== 'undefined'
+          ? { expiry: authorizeAccessKey.expiry }
+          : {}),
+        ...(keyType ? { keyType } : {}),
+        ...(authorizeAccessKey?.limits ? { limits: authorizeAccessKey.limits } : {}),
+        pubKey: publicKey,
+      }
       const created = await post({
-        body: {
-          ...(account ? { account } : {}),
-          chainId: BigInt(store.getState().chainId),
-          codeChallenge,
-          ...(typeof authorizeAccessKey?.expiry !== 'undefined'
-            ? { expiry: authorizeAccessKey.expiry }
-            : {}),
-          ...(keyType ? { keyType } : {}),
-          ...(authorizeAccessKey?.limits ? { limits: authorizeAccessKey.limits } : {}),
-          pubKey: publicKey,
-        } satisfies z.output<typeof CliAuth.createRequest>,
+        body,
         request: CliAuth.createRequest,
         response: CliAuth.createResponse,
         url: getApiUrl(host, 'code'),
@@ -352,6 +359,16 @@ export declare namespace cli {
     rdns?: string | undefined
     /** Poll timeout in milliseconds. @default 300000 */
     timeoutMs?: number | undefined
+  }
+}
+
+declare namespace resolveManagedKey {
+  type ReturnType = {
+    account: TempoAccount.Account
+    key: Hex.Hex
+    keyAddress: Keyring.Entry['keyAddress']
+    keyType: Keyring.Entry['keyType']
+    publicKey: Hex.Hex
   }
 }
 
