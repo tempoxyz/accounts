@@ -3,6 +3,7 @@ import { useStore } from 'zustand'
 
 import * as IO from '../core/IntersectionObserver.js'
 import type * as CoreRemote from '../core/Remote.js'
+import * as TrustedHosts from '../core/TrustedHosts.js'
 
 /** Monitors element visibility using IntersectionObserver v2. */
 export function useEnsureVisibility(
@@ -17,7 +18,7 @@ export function useEnsureVisibility(
     if (!origin) return false
     try {
       const hostname = new URL(origin).hostname.replace(/^www\./, '')
-      return remote.trustedHosts.includes(hostname)
+      return TrustedHosts.match(remote.trustedHosts, hostname)
     } catch {
       return false
     }

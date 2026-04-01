@@ -1,6 +1,7 @@
 import * as IO from './IntersectionObserver.js'
 import * as Messenger from './Messenger.js'
 import type * as Store from './Store.js'
+import * as TrustedHosts from './TrustedHosts.js'
 
 /** Dialog interface — manages the iframe/popup lifecycle for cross-origin auth. */
 export type Dialog = SetupFn & Meta
@@ -282,7 +283,7 @@ export function iframe(): Dialog {
           const { trustedHosts } = await messenger.waitForReady()
           const ioSupported = IO.supported()
           const hostname = window.location.hostname.replace(/^www\./, '')
-          const trusted = Boolean(trustedHosts?.includes(hostname))
+          const trusted = Boolean(trustedHosts && TrustedHosts.match(trustedHosts, hostname))
           return ioSupported || trusted
         })()
 
