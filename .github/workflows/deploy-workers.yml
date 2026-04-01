@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Playground
+    name: Deploy
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -34,13 +34,12 @@ jobs:
         run: pnpm build
 
       - name: Deploy to Cloudflare Workers
-        id: deploy
+        if: github.event_name != 'pull_request'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: playground
-          command: ${{ github.event_name == 'pull_request' && format('deploy --name accounts-playground-pr-{0}', github.event.pull_request.number) || 'deploy' }}
           secrets: |
             ORIGIN
             RP_ID
@@ -51,6 +50,16 @@ jobs:
           RP_ID: tempo.xyz
           MPP_SECRET_KEY: ${{ secrets.MPP_SECRET_KEY }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+
+      - name: Upload preview version
+        id: deploy
+        if: github.event_name == 'pull_request'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: playground
+          command: versions upload
 
       - name: Preview URL
         if: github.event_name == 'pull_request'
