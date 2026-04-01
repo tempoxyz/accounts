@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.10
+
+### Patch Changes
+
+- 3854ee4: Added `TrustedHosts` module with per-dialog-host trusted origin mappings. Accepted `readonly string[]` for `trustedHosts` in `Remote.create`.
+
 ## 0.4.9
 
 ### Patch Changes
