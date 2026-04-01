@@ -40,16 +40,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: playground
-          secrets: |
-            ORIGIN
-            RP_ID
-            MPP_SECRET_KEY
-            PRIVATE_KEY
-        env:
-          ORIGIN: https://playground.accounts.tempo.xyz
-          RP_ID: tempo.xyz
-          MPP_SECRET_KEY: ${{ secrets.MPP_SECRET_KEY }}
-          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
 
       - name: Upload preview version
         id: deploy
