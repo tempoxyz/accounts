@@ -60,7 +60,8 @@
       "react": "catalog:",
       "react-dom": "catalog:",
       "accounts": "workspace:*",
-      "viem": "catalog:"
+      "viem": "catalog:",
+      "wrangler": "catalog:"
     }
   },
   "imports": {
