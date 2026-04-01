@@ -8,6 +8,7 @@
 export const hosts = {
   'tempo.xyz': [
     'localhost',
+    '*.tempo.xyz',
     'promptgolf.sh',
     'app.polyhedge.capital',
     'tempodex.vercel.app',
