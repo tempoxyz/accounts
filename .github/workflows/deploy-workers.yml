@@ -6,18 +6,29 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-playground-${{ github.event.pull_request.number || 'production' }}
+  group: deploy-workers-${{ github.event.pull_request.number || 'production' }}
   cancel-in-progress: true
 
 jobs:
   deploy:
-    name: Deploy
+    name: ${{ matrix.worker.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       deployments: write
       pull-requests: write
+
+    strategy:
+      matrix:
+        worker:
+          - name: Playground
+            directory: playground
+            build-env: |
+              VITE_WALLET_DIALOG_HOST=https://wallet.tempo.xyz/embed
+              VITE_ENV=mainnet
+          - name: Wagmi
+            directory: examples/wagmi
 
     steps:
       - name: Clone repository
@@ -26,37 +37,40 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies
 
-      - name: Build playground
-        working-directory: playground
+      - name: Build
+        working-directory: ${{ matrix.worker.directory }}
+        run: |
+          if [ -n "$BUILD_ENV" ]; then
+            export ${BUILD_ENV}
+          fi
+          pnpm build
         env:
-          VITE_WALLET_DIALOG_HOST: https://wallet.tempo.xyz/embed
-          VITE_ENV: mainnet
-        run: pnpm build
+          BUILD_ENV: ${{ matrix.worker.build-env }}
 
-      - name: Deploy to Cloudflare Workers
+      - name: Deploy
         if: github.event_name != 'pull_request'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: playground
+          workingDirectory: ${{ matrix.worker.directory }}
 
-      - name: Upload preview version
-        id: deploy
+      - name: Preview
+        id: preview
         if: github.event_name == 'pull_request'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: playground
+          workingDirectory: ${{ matrix.worker.directory }}
           command: versions upload
 
       - name: Preview URL
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          header: deploy-workers
+          header: deploy-${{ matrix.worker.name }}
           message: |
             | Worker | Preview |
             |--------|---------|
-            | Playground | ${{ steps.deploy.outputs.deployment-url }} |
+            | ${{ matrix.worker.name }} | ${{ steps.preview.outputs.deployment-url }} |
