@@ -1,0 +1,63 @@
+name: Deploy Workers
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-playground-${{ github.event.pull_request.number || 'production' }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Playground
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
+
+      - name: Build playground
+        working-directory: playground
+        env:
+          VITE_WALLET_DIALOG_HOST: https://wallet.tempo.xyz/embed
+          VITE_ENV: mainnet
+        run: pnpm build
+
+      - name: Deploy to Cloudflare Workers
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: playground
+          command: ${{ github.event_name == 'pull_request' && format('deploy --name accounts-playground-pr-{0}', github.event.pull_request.number) || 'deploy' }}
+          secrets: |
+            ORIGIN
+            RP_ID
+            MPP_SECRET_KEY
+            PRIVATE_KEY
+        env:
+          ORIGIN: https://playground.accounts.tempo.xyz
+          RP_ID: tempo.xyz
+          MPP_SECRET_KEY: ${{ secrets.MPP_SECRET_KEY }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+
+      - name: Preview URL
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: deploy-workers
+          message: |
+            | Worker | Preview |
+            |--------|---------|
+            | Playground | ${{ steps.deploy.outputs.deployment-url }} |
