@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.11
+
+### Patch Changes
+
+- 7341ffc: Added `TrustedHosts.match()` with wildcard pattern support (e.g. `*.porto.workers.dev`).
+
 ## 0.4.10
 
 ### Patch Changes
