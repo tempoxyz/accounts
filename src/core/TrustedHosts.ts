@@ -8,6 +8,7 @@
 export const hosts = {
   'tempo.xyz': [
     'localhost',
+    '*.localhost',
     '*.tempo.xyz',
     'promptgolf.sh',
     'app.polyhedge.capital',
@@ -16,6 +17,7 @@ export const hosts = {
     'tempai.town',
     'print-a-tshirt.com',
     '*.porto.workers.dev',
+    'benedict.dev',
   ],
 } as const satisfies Record<string, readonly string[]>
 
