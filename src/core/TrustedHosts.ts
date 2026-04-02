@@ -1,4 +1,4 @@
-import _hosts from '../../trusted-hosts.json' with { type: 'json' }
+import _hosts from '../trusted-hosts.json' with { type: 'json' }
 
 /**
  * Trusted host mappings for dialog adapters.
