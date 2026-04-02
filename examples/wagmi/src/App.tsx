@@ -1,9 +1,8 @@
 import { Expiry } from 'accounts'
 import { useState } from 'react'
 import { formatUnits, parseUnits, stringify, type Hex } from 'viem'
-import { Actions, Addresses } from 'viem/tempo'
+import { Actions } from 'viem/tempo'
 import {
-  useChains,
   useConnect,
   useConnection,
   useConnectors,
@@ -11,9 +10,10 @@ import {
   useSendTransactionSync,
   useSignMessage,
   useSignTypedData,
-  useSwitchChain,
 } from 'wagmi'
 import { Hooks } from 'wagmi/tempo'
+
+import { testnet, tokens } from './config.js'
 
 export default function App() {
   const { address, chainId, status } = useConnection()
@@ -31,9 +31,6 @@ export default function App() {
 
       {status === 'connected' && (
         <>
-          <h2>Switch Chain</h2>
-          <SwitchChain />
-
           <h2>Balance</h2>
           <Balance />
 
@@ -81,7 +78,7 @@ function Connect() {
                           expiry: Expiry.minutes(5),
                           limits: [
                             {
-                              token: Addresses.pathUsd,
+                              token: testnet ? tokens.pathUSD : tokens['USDC.e'],
                               limit: parseUnits('5', 6),
                             },
                           ],
@@ -101,7 +98,7 @@ function Connect() {
                 checked={accessKey}
                 onChange={(e) => setAccessKey(e.target.checked)}
               />{' '}
-              Authorize Access Key ($5 aUSD, 5 minutes)
+              Authorize Access Key ($5 USD, 5 minutes)
             </label>
           </div>
         </>
@@ -112,38 +109,21 @@ function Connect() {
   )
 }
 
-function SwitchChain() {
-  const { chainId } = useConnection()
-  const chains = useChains()
-  const { mutate: switchChain, error, isPending } = useSwitchChain()
-  return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      {chains.map((chain) => (
-        <button
-          key={chain.id}
-          type="button"
-          disabled={isPending || chain.id === chainId}
-          onClick={() => switchChain({ chainId: chain.id })}
-        >
-          {chain.name}
-          {chain.id === chainId && ' ✓'}
-        </button>
-      ))}
-      {error && <pre style={{ color: 'red' }}>{error.message}</pre>}
-    </div>
-  )
-}
-
 function Balance() {
   const { address } = useConnection()
   const { data, isLoading } = Hooks.token.useGetBalance({
     account: address,
-    token: Addresses.pathUsd,
+    token: testnet ? tokens.pathUSD : tokens['USDC.e'],
     query: {
       refetchInterval: 1_000,
     },
   })
-  return <div>{isLoading ? 'Loading...' : data !== undefined ? formatUnits(data, 6) : '—'}</div>
+  return (
+    <div>
+      {isLoading ? 'Loading...' : data !== undefined ? formatUnits(data, 6) : '—'}{' '}
+      {testnet ? 'pathUSD' : 'USDC.e'}
+    </div>
+  )
 }
 
 function SendTransaction() {
@@ -158,7 +138,7 @@ function SendTransaction() {
             calls: [
               Actions.token.transfer.call({
                 to: form.get('to') as string as Hex,
-                token: Addresses.pathUsd,
+                token: form.get('token') as Hex,
                 amount: parseUnits((form.get('amount') as string) || '0', 6),
               }),
             ],
@@ -172,6 +152,13 @@ function SendTransaction() {
           placeholder="To (0x...)"
           style={{ flex: 1, fontFamily: 'monospace' }}
         />
+        <select name="token" defaultValue={tokens.pathUSD}>
+          {Object.entries(tokens).map(([name, addr]) => (
+            <option key={addr} value={addr}>
+              {name}
+            </option>
+          ))}
+        </select>
         <input name="amount" defaultValue="1" placeholder="Amount" style={{ width: 80 }} />
         <button type="submit" disabled={isPending}>
           Send
