@@ -1,6 +1,15 @@
 import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { Address, Base64, Hash, Hex, P256, Provider as core_Provider, PublicKey, RpcResponse } from 'ox'
+import {
+  Address,
+  Base64,
+  Hash,
+  Hex,
+  P256,
+  Provider as core_Provider,
+  PublicKey,
+  RpcResponse,
+} from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { prepareTransactionRequest } from 'viem/actions'
 import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
