@@ -29,7 +29,7 @@ export function App() {
     <div style={{ maxWidth: 640 }}>
       <h1>accounts playground</h1>
 
-      <h2>Adapter</h2>
+      <h2>Configuration</h2>
       <select value={adapterType} onChange={(e) => onSwitch(e.target.value as AdapterType)}>
         <option value="tempoWallet">tempoWallet</option>
         <option value="dialogRefImpl">dialogRefImpl</option>
@@ -53,8 +53,6 @@ export function App() {
           <OcclusionSimulator />
         </>
       )}
-
-      <h2>State</h2>
       <ProviderState />
 
       <h2>Events</h2>
@@ -64,32 +62,32 @@ export function App() {
       <WalletConnect />
       <EthRequestAccounts />
       <WalletDisconnect />
-      <Faucet />
 
       <h2>Accounts &amp; Chain</h2>
       <EthAccounts />
       <EthChainId />
       <WalletSwitchChain />
 
-      <h2>Access Keys</h2>
-      <WalletAuthorizeAccessKey />
-      <WalletRevokeAccessKey />
-
-      <h2>Balances</h2>
+      <h2>Balances &amp; Funding</h2>
       <WalletGetBalances />
+      <Faucet />
 
       <h2>Transactions</h2>
       <Transactions />
 
-      <h2>Signing</h2>
+      <h2>Receipts &amp; Status</h2>
+      <EthGetTransactionReceipt />
+      <WalletGetCallsStatus />
+
+      <h2>Access Keys</h2>
+      <WalletAuthorizeAccessKey />
+      <WalletRevokeAccessKey />
+
+      <h2>Signing &amp; Verification</h2>
       <PersonalSign />
       <VerifyMessage />
       <EthSignTypedData />
       <VerifyTypedData />
-
-      <h2>Receipts</h2>
-      <EthGetTransactionReceipt />
-      <WalletGetCallsStatus />
 
       <h2>MPP</h2>
       <Fortune />
@@ -1097,11 +1095,6 @@ function OcclusionSimulator() {
   useEffect(() => {
     if (!active) return
 
-    // The iframe lives inside a native <dialog> rendered via showModal(),
-    // which sits in the top layer. No external z-index can cover it.
-    // To simulate occlusion we inject an overlay *inside* the dialog.
-    // The dialog may not exist yet (created lazily), so we observe the
-    // body for it to appear, then watch its hidden attribute.
     let overlay: HTMLDivElement | null = null
 
     function inject(dialog: Element) {
@@ -1133,7 +1126,6 @@ function OcclusionSimulator() {
       inject(dialog)
     }
 
-    // Watch body for dialog appearing/disappearing.
     const bodyObserver = new MutationObserver(sync)
     bodyObserver.observe(document.body, { childList: true, subtree: true, attributes: true })
     sync()
