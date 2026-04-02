@@ -1,5 +1,12 @@
 # accounts
 
+## 0.4.12
+
+### Patch Changes
+
+- 867b9ae: Fixed Safari using popup instead of iframe for non-WebAuthn requests (e.g. `sendTransaction`).
+- dfb552b: Added `*.tempo.xyz` to trusted hosts.
+
 ## 0.4.11
 
 ### Patch Changes
