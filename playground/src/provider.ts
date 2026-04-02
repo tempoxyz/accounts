@@ -7,6 +7,29 @@ export type AdapterType = 'secp256k1' | 'webAuthn' | 'tempoWallet' | 'dialogRefI
 export type DialogMode = 'iframe' | 'popup'
 export type ProviderValue = ReturnType<typeof Provider.create>
 
+export const testnet = (() => {
+  const param = new URLSearchParams(window.location.search).get('testnet')
+  if (param !== null) return param !== 'false'
+  if (window.location.hostname.startsWith('testnet.')) return true
+  return import.meta.env.VITE_ENV === 'testnet'
+})()
+
+export const tokensMap = {
+  testnet: {
+    pathUSD: '0x20c0000000000000000000000000000000000000',
+    alphaUSD: '0x20c0000000000000000000000000000000000001',
+    betaUSD: '0x20c0000000000000000000000000000000000002',
+    thetaUSD: '0x20c0000000000000000000000000000000000003',
+    'USDC.e': '0x20c0000000000000000000009e8d7eb59b783726',
+  },
+  mainnet: {
+    pathUSD: '0x20c0000000000000000000000000000000000000',
+    'USDC.e': '0x20C000000000000000000000b9537d11c60E8b50',
+  },
+} as const
+
+export const tokens = testnet ? tokensMap.testnet : tokensMap.mainnet
+
 export let dialogMode: DialogMode = 'iframe'
 export let provider: ProviderValue = createProvider('tempoWallet')
 
@@ -17,7 +40,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host: import.meta.env.VITE_WALLET_DIALOG_HOST,
       }),
-      testnet: import.meta.env.VITE_ENV === 'testnet',
+      testnet,
     })
 
   if (adapterType === 'dialogRefImpl')
@@ -26,7 +49,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host: import.meta.env.VITE_REF_DIALOG_HOST,
       }),
-      testnet: import.meta.env.VITE_ENV === 'testnet',
+      testnet,
     })
 
   if (adapterType === 'webAuthn') {
@@ -34,7 +57,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: webAuthn({ ceremony }),
       feePayerUrl: '/fee-payer',
-      testnet: import.meta.env.VITE_ENV === 'testnet',
+      testnet,
     })
   }
 
@@ -50,7 +73,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       },
     }),
     feePayerUrl: '/fee-payer',
-    testnet: import.meta.env.VITE_ENV === 'testnet',
+    testnet,
   })
 }
 

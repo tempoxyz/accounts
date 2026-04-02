@@ -14,7 +14,11 @@ export default defineConfig({
     cloudflare(),
     mkcert({
       force: true,
-      hosts: [process.env.VITE_HOST ?? 'localhost', 'untrusted.localhost'],
+      hosts: [
+        process.env.VITE_HOST ?? 'localhost',
+        `testnet.${process.env.VITE_HOST ?? 'localhost'}`,
+        'untrusted.localhost',
+      ],
     }),
   ],
 })
