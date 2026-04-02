@@ -17,8 +17,7 @@ export async function handleAccessKeys(request: Request): Promise<Response | und
     return Response.json({ error: 'TIDX_BASIC_AUTH not configured' }, { status: 500 })
   }
 
-  const isTestnet = process.env.VITE_ENV === 'testnet'
-  const chainId = isTestnet ? 42431 : 4217
+  const chainId = process.env.VITE_ENV === 'testnet' ? 42431 : 4217
   const tidx = Tidx.create({ basicAuth, chainId })
   const QB = QueryBuilder.from(tidx)
 
