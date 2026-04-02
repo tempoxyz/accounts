@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.13
+
+### Patch Changes
+
+- 0df27dd: Added `*.localhost` and `benedict.dev` to trusted hosts.
+
 ## 0.4.12
 
 ### Patch Changes
