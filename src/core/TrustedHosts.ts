@@ -1,3 +1,5 @@
+import _hosts from '../../trusted-hosts.json' with { type: 'json' }
+
 /**
  * Trusted host mappings for dialog adapters.
  *
@@ -5,21 +7,7 @@
  * list of third-party origins that the dialog trusts to embed it.
  * Supports wildcard patterns (e.g. `*.workers.dev`).
  */
-export const hosts = {
-  'tempo.xyz': [
-    'localhost',
-    '*.localhost',
-    '*.tempo.xyz',
-    'promptgolf.sh',
-    'app.polyhedge.capital',
-    'tempodex.vercel.app',
-    'currencycompetition.com',
-    'tempai.town',
-    'print-a-tshirt.com',
-    '*.porto.workers.dev',
-    'benedict.dev',
-  ],
-} as const satisfies Record<string, readonly string[]>
+export const hosts: Record<string, readonly string[]> = _hosts
 
 /**
  * Returns `true` if `hostname` matches any pattern in `trustedHosts`.
