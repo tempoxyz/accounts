@@ -53,18 +53,24 @@ export declare namespace load {
 
 /** Finds a managed key by wallet address and chain ID. */
 export async function find(options: find.Options): Promise<Entry | undefined> {
-  const { chainId, path, walletAddress } = options
+  const { chainId, keyType, path, walletAddress } = options
   const keys = await load(path ? { path } : {})
-  return keys.find(
-    (key) =>
-      key.chainId === chainId && key.walletAddress.toLowerCase() === walletAddress.toLowerCase(),
-  )
+
+  for (let i = keys.length - 1; i >= 0; i--) {
+    const key = keys[i]!
+    if (key.chainId !== chainId) continue
+    if (key.walletAddress.toLowerCase() !== walletAddress.toLowerCase()) continue
+    if (keyType && key.keyType !== keyType) continue
+    return key
+  }
 }
 
 export declare namespace find {
   export type Options = {
     /** Chain ID for the managed key. */
     chainId: number
+    /** Restrict results to a specific managed-key type. */
+    keyType?: Entry['keyType'] | undefined
     /** Override path for the managed-key TOML file. */
     path?: string | undefined
     /** Root wallet address. */

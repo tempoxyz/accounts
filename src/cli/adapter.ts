@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { Base64, Hash, Hex, P256, Provider as core_Provider, RpcResponse } from 'ox'
+import { Address, Base64, Hash, Hex, P256, Provider as core_Provider, PublicKey, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { prepareTransactionRequest } from 'viem/actions'
 import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
@@ -20,10 +20,13 @@ export function cli(options: cli.Options): Adapter.Adapter {
   return Adapter.define({ name, rdns }, ({ getAccount, getClient, store }) => {
     async function loadManagedKey(
       address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
+      options: loadManagedKey.Options = {},
     ): Promise<Keyring.Entry | undefined> {
+      const { keyType } = options
       const { chainId } = store.getState()
       const entry = await Keyring.find({
         chainId,
+        ...(keyType ? { keyType } : {}),
         ...(options.keysPath ? { path: options.keysPath } : {}),
         walletAddress: address,
       })
@@ -50,7 +53,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
     ): Promise<resolveManagedKey.ReturnType> {
       const { address, keyType } = options
 
-      const entry = address ? await loadManagedKey(address) : undefined
+      const entry = address ? await loadManagedKey(address, keyType ? { keyType } : {}) : undefined
       if (entry) {
         const account =
           entry.keyType === 'p256'
@@ -75,7 +78,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
       return {
         account,
         key,
-        keyAddress: account.address,
+        keyAddress: Address.fromPublicKey(PublicKey.from(account.publicKey)),
         keyType: nextKeyType,
         publicKey: account.publicKey,
       }
@@ -369,6 +372,12 @@ declare namespace resolveManagedKey {
     keyAddress: Keyring.Entry['keyAddress']
     keyType: Keyring.Entry['keyType']
     publicKey: Hex.Hex
+  }
+}
+
+declare namespace loadManagedKey {
+  type Options = {
+    keyType?: Keyring.Entry['keyType'] | undefined
   }
 }
 

@@ -540,4 +540,81 @@ describe('Provider.create', () => {
       await server.closeAsync()
     }
   })
+
+  test('behavior: regenerates a managed key when the requested key type changes', async () => {
+    const handler = createHandler()
+    const server = await createServer(handler.listener)
+    const keysPath = await createKeysPath()
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        keysPath,
+        open: async (url) => {
+          const code = new URL(url).searchParams.get('code')!
+          await fetch(`${server.url}/cli-auth`, {
+            body: JSON.stringify(await authorizePending(server.url, code)),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          })
+        },
+        host: `${server.url}/cli-auth`,
+      })
+
+      const first = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry }],
+      })
+      const second = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: expiry_2, keyType: 'p256' }],
+      })
+      await fund(second.rootAddress)
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      const keys = await Keyring.load({ path: keysPath })
+
+      expect({
+        first: {
+          keyId: first.keyAuthorization.keyId,
+          keyType: first.keyAuthorization.keyType,
+        },
+        second: {
+          keyId: second.keyAuthorization.keyId,
+          keyType: second.keyAuthorization.keyType,
+        },
+        stored: keys.map((key) => ({
+          keyAddress: key.keyAddress.toLowerCase(),
+          keyType: key.keyType,
+        })),
+      }).toMatchInlineSnapshot(`
+        {
+          "first": {
+            "keyId": "${first.keyAuthorization.keyId}",
+            "keyType": "secp256k1",
+          },
+          "second": {
+            "keyId": "${second.keyAuthorization.keyId}",
+            "keyType": "p256",
+          },
+          "stored": [
+            {
+              "keyAddress": "${first.keyAuthorization.keyId}",
+              "keyType": "secp256k1",
+            },
+            {
+              "keyAddress": "${second.keyAuthorization.keyId}",
+              "keyType": "p256",
+            },
+          ],
+        }
+      `)
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+    } finally {
+      await server.closeAsync()
+    }
+  })
 })
