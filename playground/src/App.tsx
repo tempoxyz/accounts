@@ -1,5 +1,5 @@
 import { Expiry } from 'accounts'
-import { Hex, Json, P256 } from 'ox'
+import { Address, Hex, Json, P256 } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
@@ -84,6 +84,7 @@ export function App() {
       <h2>Access Keys</h2>
       <WalletAuthorizeAccessKey />
       <WalletRevokeAccessKey />
+      <AccessKeysList />
 
       <h2>Signing &amp; Verification</h2>
       <PersonalSign />
@@ -978,6 +979,128 @@ function WalletRevokeAccessKey() {
         </div>
         <button type="submit">Revoke</button>
       </form>
+    </Method>
+  )
+}
+
+type AccessKeyEntry = { address: string; source: 'store' | 'chain' | 'both'; pending: boolean }
+
+function AccessKeysList() {
+  const [keys, setKeys] = useState<AccessKeyEntry[]>([])
+  const [result, error, execute] = useRequest()
+  const [revoking, setRevoking] = useState(false)
+
+  const p = provider as {
+    store: {
+      getState: () => { accessKeys: readonly { address: string; keyAuthorization?: unknown }[] }
+      setState: (fn: (state: { accessKeys: readonly { address: string }[] }) => { accessKeys: readonly { address: string }[] }) => void
+    }
+  }
+
+  async function fetchKeys() {
+    const accounts = await provider.request({ method: 'eth_accounts' })
+    if (accounts.length === 0) return 'No accounts connected'
+
+    const storeKeys = p.store.getState().accessKeys
+    const storeMap = new Map(
+      storeKeys.map((k) => [k.address.toLowerCase(), Boolean(k.keyAuthorization)]),
+    )
+
+    let chainKeys: string[] = []
+    try {
+      const res = await fetch(`/access-keys/${accounts[0]}`)
+      if (res.ok) {
+        const data = (await res.json()) as { keys?: string[] }
+        chainKeys = data.keys ?? []
+      }
+    } catch {}
+
+    const chainSet = new Set(chainKeys.map((k) => k.toLowerCase()))
+    const allAddresses = new Set([...storeMap.keys(), ...chainSet])
+
+    const merged: AccessKeyEntry[] = [...allAddresses].map((addr) => {
+      const inStore = storeMap.has(addr)
+      const onChain = chainSet.has(addr)
+      return {
+        address: addr,
+        source: inStore && onChain ? 'both' : inStore ? 'store' : 'chain',
+        pending: inStore ? (storeMap.get(addr) ?? false) : false,
+      }
+    })
+
+    setKeys(merged)
+    return `${merged.length} key(s) (${chainKeys.length} on chain, ${storeKeys.length} in store)`
+  }
+
+  async function revokeAll() {
+    const accounts = await provider.request({ method: 'eth_accounts' })
+    if (accounts.length === 0) throw new Error('No accounts connected')
+    const onChainKeys = keys.filter((k) => k.source === 'chain' || k.source === 'both')
+    if (onChainKeys.length === 0) throw new Error('No on-chain keys to revoke')
+    setRevoking(true)
+    try {
+      for (const key of onChainKeys) {
+        await provider.request({
+          method: 'wallet_revokeAccessKey',
+          params: [{ address: accounts[0], accessKeyAddress: Address.from(key.address) }],
+        })
+      }
+      setKeys((prev) => prev.filter((k) => k.source === 'store'))
+      return `Revoked ${onChainKeys.length} key(s)`
+    } finally {
+      setRevoking(false)
+    }
+  }
+
+  function removeFromStore(addr: string) {
+    p.store.setState((state: { accessKeys: readonly { address: string }[] }) => ({
+      accessKeys: state.accessKeys.filter(
+        (k) => k.address.toLowerCase() !== addr.toLowerCase(),
+      ),
+    }))
+    setKeys((prev) => prev.filter((k) => k.address !== addr || k.source === 'chain'))
+  }
+
+  function clearStore() {
+    p.store.setState(() => ({ accessKeys: [] }))
+    setKeys((prev) => prev.filter((k) => k.source === 'chain'))
+  }
+
+  const onChainCount = keys.filter((k) => k.source === 'chain' || k.source === 'both').length
+  const storeCount = keys.filter((k) => k.source === 'store' || k.source === 'both').length
+
+  return (
+    <Method method="Access Keys (list & revoke all)" result={result} error={error}>
+      <button onClick={() => execute(fetchKeys)}>Fetch Access Keys</button>
+      {keys.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <ul style={{ fontFamily: 'monospace', fontSize: 12, listStyle: 'none', padding: 0 }}>
+            {keys.map((k) => (
+              <li key={k.address} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
+                <span>
+                  {k.address}{' '}
+                  <span style={{ color: '#888' }}>
+                    [{k.source}{k.pending ? ', pending' : ''}]
+                  </span>
+                </span>
+                {(k.source === 'store' || k.source === 'both') && (
+                  <button onClick={() => removeFromStore(k.address)} style={{ fontSize: 10 }}>×</button>
+                )}
+              </li>
+            ))}
+          </ul>
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            {storeCount > 0 && (
+              <button onClick={clearStore}>Clear Store ({storeCount})</button>
+            )}
+            {onChainCount > 0 && (
+              <button onClick={() => execute(revokeAll)} disabled={revoking}>
+                {revoking ? 'Revoking…' : `Revoke All On-Chain (${onChainCount})`}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </Method>
   )
 }

@@ -2,6 +2,7 @@ import { Handler, Kv } from 'accounts/server'
 import { Mppx, tempo } from 'mppx/server'
 import { privateKeyToAccount } from 'viem/accounts'
 
+import { handleAccessKeys } from './access-keys.js'
 import { handler as cliAuth } from './cli-auth.js'
 
 const payment = Mppx.create({
@@ -32,6 +33,11 @@ const handler = Handler.compose([
 export default {
   async fetch(request) {
     const url = new URL(request.url)
+
+    if (url.pathname.startsWith('/access-keys/')) {
+      const res = await handleAccessKeys(request)
+      if (res) return res
+    }
 
     if (url.pathname === '/fortune') {
       const result = await payment.charge({
