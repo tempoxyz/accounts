@@ -6,7 +6,14 @@ import { cli } from './adapter.js'
  * device-code flow.
  */
 export function create(options: create.Options): create.ReturnType {
-  const { host, keysPath, open, pollIntervalMs, timeoutMs, ...rest } = options
+  const {
+    host = 'https://wallet.tempo.xyz/embed/cli-auth',
+    keysPath,
+    open,
+    pollIntervalMs,
+    timeoutMs,
+    ...rest
+  } = options
 
   return CoreProvider.create({
     ...rest,
@@ -21,7 +28,12 @@ export function create(options: create.Options): create.ReturnType {
 }
 
 export declare namespace create {
-  export type Options = Omit<CoreProvider.create.Options, 'adapter' | 'authorizeAccessKey'> &
-    cli.Options
+  export type Options = Omit<
+    CoreProvider.create.Options & cli.Options,
+    'adapter' | 'authorizeAccessKey' | 'host'
+  > & {
+    /** Host URL for the device-code flow. @default "https://wallet.tempo.xyz/embed/cli-auth" */
+    host?: string | undefined
+  }
   export type ReturnType = CoreProvider.create.ReturnType
 }
