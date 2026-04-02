@@ -313,7 +313,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         const value = Number(balance) / 10 ** metadata.decimals
                         const display = new Intl.NumberFormat('en-US', {
                           style: 'currency',
-                          currency: metadata.currency,
+                          currency: 'USD',
                         }).format(value)
                         return {
                           address: token,

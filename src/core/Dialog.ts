@@ -274,10 +274,15 @@ export function iframe(): Dialog {
       },
       async syncRequests(requests) {
         // Safari does not support WebAuthn credential creation in iframes.
-        // Fall back to popup dialog.
-        const unsupported =
+        // Fall back to popup dialog synchronously to preserve the user-gesture
+        // context (iOS Safari blocks `window.open` after an `await`).
+        if (
           isSafari() &&
           requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
+        ) {
+          fallback.syncRequests(requests)
+          return
+        }
 
         const secure = await (async () => {
           const { trustedHosts } = await messenger.waitForReady()
@@ -287,16 +292,15 @@ export function iframe(): Dialog {
           return ioSupported || trusted
         })()
 
-        if (unsupported || !secure) {
-          if (!secure)
-            console.warn(
-              [
-                `[accounts] Browser does not support IntersectionObserver v2 and "${window.location.hostname}" is not a trusted host.`,
-                'Falling back to popup dialog.',
-                '',
-                'To enable the iframe dialog, add your hostname to the trusted hosts list.',
-              ].join('\n'),
-            )
+        if (!secure) {
+          console.warn(
+            [
+              `[accounts] Browser does not support IntersectionObserver v2 and "${window.location.hostname}" is not a trusted host.`,
+              'Falling back to popup dialog.',
+              '',
+              'To enable the iframe dialog, add your hostname to the trusted hosts list.',
+            ].join('\n'),
+          )
           fallback.syncRequests(requests)
         } else {
           const requiresConfirm = requests.some((x) => x.status === 'pending')

@@ -435,6 +435,7 @@ const tokens =
         alphaUSD: '0x20c0000000000000000000000000000000000001',
         betaUSD: '0x20c0000000000000000000000000000000000002',
         thetaUSD: '0x20c0000000000000000000000000000000000003',
+        'USDC.e': '0x20c0000000000000000000009e8d7eb59b783726',
       } as const satisfies Record<string, `0x${string}`>)
     : ({
         pathUSD: '0x20c0000000000000000000000000000000000000',
@@ -1084,6 +1085,7 @@ function useRequest() {
       setError(undefined)
       setResult(await fn())
     } catch (e) {
+      console.trace(e)
       setResult(undefined)
       setError(e instanceof Error ? e : new Error(String(e)))
     }
