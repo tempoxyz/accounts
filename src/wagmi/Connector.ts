@@ -47,7 +47,7 @@ export function setup(parameters: setup.Parameters = {} as setup.Parameters) {
 
     return {
       async connect(params: Parameters<Properties['connect']>[0] = {}) {
-        const { isReconnecting, withCapabilities } = params
+        const { chainId, isReconnecting, withCapabilities } = params
         const capabilities = 'capabilities' in params ? params.capabilities : undefined
 
         let accounts: readonly { address: Address; capabilities: Record<string, unknown> }[] = []
@@ -65,11 +65,17 @@ export function setup(parameters: setup.Parameters = {} as setup.Parameters) {
             const res = await provider.request({
               method: 'wallet_connect',
               params: [
-                capabilities
-                  ? {
-                      capabilities: z.encode(Rpc.wallet_connect.capabilities.request, capabilities),
-                    }
-                  : {},
+                {
+                  ...(chainId ? { chainId } : {}),
+                  ...(capabilities
+                    ? {
+                        capabilities: z.encode(
+                          Rpc.wallet_connect.capabilities.request,
+                          capabilities,
+                        ),
+                      }
+                    : {}),
+                },
               ] as never,
             })
             accounts = res.accounts
