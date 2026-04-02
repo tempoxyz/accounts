@@ -84,7 +84,7 @@ function parseLimit(value: string) {
 }
 
 function resolveWalletUrl(value: string | undefined) {
-  const url = new URL(value ?? 'https://app.moderato.tempo.local:3001')
+  const url = new URL(value ?? 'https://wallet.tempo.xyz')
   if (!url.pathname || url.pathname === '/') url.pathname = '/embed/cli-auth'
   url.hash = ''
   url.search = ''
