@@ -181,7 +181,7 @@ function WalletConnect() {
     execute(() =>
       provider.request({
         method: 'wallet_connect',
-        params: [{ capabilities, chainId: testnet ? tempoModerato.id : tempo.id }],
+        params: [{ capabilities, chainId: Hex.fromNumber(testnet ? tempoModerato.id : tempo.id) }],
       }),
     )
   }
