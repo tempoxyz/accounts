@@ -1,4 +1,4 @@
-import { Address, WebCryptoP256 } from 'ox'
+import { Address, Hex, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { Account as TempoAccount } from 'viem/tempo'
 
@@ -91,20 +91,47 @@ export declare namespace revoke {
 
 /** Saves an access key to the store with its one-time key authorization. */
 export function save(options: save.Options): void {
-  const { address, keyAuthorization, keyPair, store } = options
+  const { address, keyAuthorization, keyPair, privateKey, store } = options
 
-  store.setState((state) => ({
-    accessKeys: [
-      {
+  const accessKey: Store.AccessKey = privateKey
+    ? {
         address: keyAuthorization.address,
         access: address,
         expiry: keyAuthorization.expiry ?? undefined,
         keyAuthorization,
         keyType: keyAuthorization.type,
         limits: keyAuthorization.limits as { token: Address.Address; limit: bigint }[] | undefined,
-        ...(keyPair ? { keyPair } : {}),
-      },
-      ...state.accessKeys,
+        privateKey,
+      }
+    : keyPair
+      ? {
+          address: keyAuthorization.address,
+          access: address,
+          expiry: keyAuthorization.expiry ?? undefined,
+          keyAuthorization,
+          keyType: keyAuthorization.type,
+          limits: keyAuthorization.limits as
+            | { token: Address.Address; limit: bigint }[]
+            | undefined,
+          keyPair,
+        }
+      : {
+          address: keyAuthorization.address,
+          access: address,
+          expiry: keyAuthorization.expiry ?? undefined,
+          keyAuthorization,
+          keyType: keyAuthorization.type,
+          limits: keyAuthorization.limits as
+            | { token: Address.Address; limit: bigint }[]
+            | undefined,
+        }
+
+  store.setState((state) => ({
+    accessKeys: [
+      accessKey,
+      ...state.accessKeys.filter(
+        (entry) => entry.address.toLowerCase() !== keyAuthorization.address.toLowerCase(),
+      ),
     ],
   }))
 }
@@ -115,6 +142,8 @@ export declare namespace save {
     address: Address.Address
     /** Signed key authorization to attach to the first transaction. */
     keyAuthorization: KeyAuthorization.Signed
+    /** The exported private key backing the access key. */
+    privateKey?: Hex.Hex | undefined
     /** The WebCrypto key pair backing the access key. Only present for locally-generated keys. */
     keyPair?: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
     /** Reactive state store. */
