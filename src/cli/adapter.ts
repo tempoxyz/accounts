@@ -29,9 +29,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
   return Adapter.define({ name, rdns }, ({ getAccount, getClient, store }) => {
     async function loadManagedKey(
       address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
-      options: loadManagedKey.Options = {},
+      parameters: loadManagedKey.Options = {},
     ): Promise<Keyring.Entry | undefined> {
-      const { keyType } = options
+      const { keyType } = parameters
       const { chainId } = store.getState()
       const entry = await Keyring.find({
         chainId,
@@ -62,7 +62,10 @@ export function cli(options: cli.Options): Adapter.Adapter {
     ): Promise<resolveManagedKey.ReturnType> {
       const { address, keyType } = options
 
-      const entry = address ? await loadManagedKey(address, keyType ? { keyType } : {}) : undefined
+      const requestedKeyType = keyType === 'p256' || keyType === 'secp256k1' ? keyType : undefined
+      const entry = address
+        ? await loadManagedKey(address, requestedKeyType ? { keyType: requestedKeyType } : {})
+        : undefined
       if (entry) {
         const account =
           entry.keyType === 'p256'
@@ -77,7 +80,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
         }
       }
 
-      const nextKeyType = keyType === 'p256' ? 'p256' : 'secp256k1'
+      const nextKeyType = requestedKeyType === 'p256' ? 'p256' : 'secp256k1'
       const key = nextKeyType === 'p256' ? P256.randomPrivateKey() : Secp256k1.randomPrivateKey()
       const account =
         nextKeyType === 'p256'
