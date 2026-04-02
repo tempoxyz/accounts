@@ -273,9 +273,9 @@ export function iframe(): Dialog {
         activateDialog()
       },
       async syncRequests(requests) {
+        const { trustedHosts } = await messenger.waitForReady()
+
         // Safari does not support WebAuthn credential creation in iframes.
-        // Fall back to popup dialog synchronously to preserve the user-gesture
-        // context (iOS Safari blocks `window.open` after an `await`).
         if (
           isSafari() &&
           requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
@@ -284,13 +284,10 @@ export function iframe(): Dialog {
           return
         }
 
-        const secure = await (async () => {
-          const { trustedHosts } = await messenger.waitForReady()
-          const ioSupported = IO.supported()
-          const hostname = window.location.hostname.replace(/^www\./, '')
-          const trusted = Boolean(trustedHosts && TrustedHosts.match(trustedHosts, hostname))
-          return ioSupported || trusted
-        })()
+        const ioSupported = IO.supported()
+        const hostname = window.location.hostname.replace(/^www\./, '')
+        const trusted = Boolean(trustedHosts && TrustedHosts.match(trustedHosts, hostname))
+        const secure = ioSupported || trusted
 
         if (!secure) {
           console.warn(

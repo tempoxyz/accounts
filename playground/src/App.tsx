@@ -156,10 +156,7 @@ function WalletConnect() {
     const accessKey = form.get('accessKey') === 'on'
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
 
-    const limitToken: `0x${string}` =
-      'USDC.e' in tokens
-        ? (tokens as never as { 'USDC.e': `0x${string}` })['USDC.e']
-        : (tokens as never as { pathUSD: `0x${string}` }).pathUSD
+    const limitToken = import.meta.env.VITE_ENV === 'testnet' ? tokens.pathUSD : tokens['USDC.e']
     const authorizeAccessKey = accessKey
       ? {
           expiry: Expiry.days(1),
@@ -1087,7 +1084,6 @@ function useRequest() {
       setError(undefined)
       setResult(await fn())
     } catch (e) {
-      console.trace(e)
       setResult(undefined)
       setError(e instanceof Error ? e : new Error(String(e)))
     }
