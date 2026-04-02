@@ -152,7 +152,7 @@ function SendTransaction() {
           placeholder="To (0x...)"
           style={{ flex: 1, fontFamily: 'monospace' }}
         />
-        <select name="token" defaultValue={tokens.pathUSD}>
+        <select name="token" defaultValue={testnet ? tokens.pathUSD : tokens['USDC.e']}>
           {Object.entries(tokens).map(([name, addr]) => (
             <option key={addr} value={addr}>
               {name}
