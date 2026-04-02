@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.15
+
+### Patch Changes
+
+- 715d830: Moved trusted hosts list to `trusted-hosts.json` at the project root.
+
 ## 0.4.14
 
 ### Patch Changes
