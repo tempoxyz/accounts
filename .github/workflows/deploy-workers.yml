@@ -23,7 +23,7 @@ jobs:
       matrix:
         worker:
           - name: Playground
-            directory: playground
+            directory: playgrounds/web
             build-env: |
               VITE_WALLET_DIALOG_HOST=https://wallet.tempo.xyz/embed
               VITE_ENV=mainnet

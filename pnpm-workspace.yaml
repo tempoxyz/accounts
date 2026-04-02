@@ -2,7 +2,7 @@ packages:
   - .
   - dialog
   - examples/*
-  - playground
+  - playgrounds/*
   - ref-impls/*
 
 catalog:

@@ -17,7 +17,7 @@
     "noImplicitReturns": true,
     "noImplicitThis": true,
     "noImplicitAny": true,
-    "types": ["node", "typed-query-selector/strict"]
+    "types": ["node"]
   },
   "exclude": ["node_modules", "dist", "tmp", "**/_/**"]
 }
