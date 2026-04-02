@@ -33,7 +33,7 @@ jobs:
     strategy:
       matrix:
         tag:
-          - sha-a5ea176
+          - latest
           - https://rpc.moderato.tempo.xyz
 
     steps:
@@ -48,13 +48,20 @@ jobs:
       - name: Setup Docker
         uses: docker/setup-docker-action@v4
 
+      - name: Resolve Tempo image digest
+        if: "!startsWith(matrix.tag, 'http')"
+        id: tempo-digest
+        run: |
+          digest=$(docker manifest inspect ghcr.io/tempoxyz/tempo:${{ matrix.tag }} -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .Descriptor.digest' 2>/dev/null || docker buildx imagetools inspect ghcr.io/tempoxyz/tempo:${{ matrix.tag }} --format '{{.Manifest.Digest}}')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
       - name: Cache Tempo Docker image
         if: "!startsWith(matrix.tag, 'http')"
         uses: actions/cache@v4
         id: docker-cache
         with:
           path: /tmp/tempo-image.tar
-          key: tempo-image-${{ matrix.tag }}
+          key: tempo-image-${{ steps.tempo-digest.outputs.digest }}
 
       - name: Load cached Tempo image
         if: "!startsWith(matrix.tag, 'http') && steps.docker-cache.outputs.cache-hit == 'true'"
