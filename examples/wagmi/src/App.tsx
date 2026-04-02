@@ -11,6 +11,7 @@ import {
   useSignMessage,
   useSignTypedData,
 } from 'wagmi'
+import { tempoModerato, tempo } from 'wagmi/chains'
 import { Hooks } from 'wagmi/tempo'
 
 import { testnet, tokens } from './config.js'
@@ -71,6 +72,7 @@ function Connect() {
             onClick={() =>
               connect({
                 connector,
+                chainId: testnet ? tempoModerato.id : tempo.id,
                 ...(accessKey
                   ? {
                       capabilities: {

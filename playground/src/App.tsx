@@ -3,6 +3,7 @@ import { Hex, Json, P256 } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
+import { tempo, tempoModerato } from 'viem/chains'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
 
 import { CliAuth } from './CliAuth.js'
@@ -180,7 +181,7 @@ function WalletConnect() {
     execute(() =>
       provider.request({
         method: 'wallet_connect',
-        params: [{ capabilities }],
+        params: [{ capabilities, chainId: testnet ? tempoModerato.id : tempo.id }],
       }),
     )
   }
