@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.14
+
+### Patch Changes
+
+- b7151af: Added `chainId` in `wallet_connect` to set the active chain before the dialog opens.
+
 ## 0.4.13
 
 ### Patch Changes
