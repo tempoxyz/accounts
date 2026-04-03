@@ -16,11 +16,11 @@ jobs:
         include:
           - browser: chrome
             build-cmd: pnpm --filter extension zip
-            zip-glob: ref-impls/extension/.output/*-chrome-mv3.zip
+            zip-glob: ref-impls/extension/.output/*-chrome.zip
             asset-name: tempo-wallet-chrome-mv3.zip
           - browser: firefox
             build-cmd: pnpm --filter extension zip:firefox
-            zip-glob: ref-impls/extension/.output/*-firefox-mv2.zip
+            zip-glob: ref-impls/extension/.output/*-firefox.zip
             asset-name: tempo-wallet-firefox-mv2.zip
 
     steps:
