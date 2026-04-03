@@ -1,12 +1,11 @@
 import { Expiry } from 'accounts'
-import { Hex, Json, P256 } from 'ox'
+import { Hex, Json } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { tempo, tempoModerato } from 'viem/chains'
-import { Account as TempoAccount, Actions } from 'viem/tempo'
+import { Actions } from 'viem/tempo'
 
-import { CliAuth } from './CliAuth.js'
 import {
   type AdapterType,
   type DialogMode,
@@ -97,10 +96,6 @@ export function App() {
 
       <h2>RPC Proxy (fallthrough)</h2>
       <EthBlockNumber />
-
-      <h2 id="cli-auth">CLI Auth</h2>
-      <CliAuth />
-      <CliAuthExamples />
     </div>
   )
 }
@@ -215,142 +210,6 @@ function WalletConnect() {
       </form>
     </Method>
   )
-}
-
-function CliAuthExamples() {
-  const [result, error, execute] = useRequest()
-  const [account] = useState(() => TempoAccount.fromP256(P256.randomPrivateKey()))
-  const serviceUrl = `${window.location.origin}/cli-auth`
-
-  return (
-    <Method method="cli_auth examples" result={result} error={error}>
-      <p>Seed a pending CLI auth request with one of these example `wallet_connect` payloads.</p>
-      <p>
-        These buttons are browser-side demo helpers for the approval UI. They are not the same as
-        running <code>playgrounds/web/scripts/cli-auth.ts</code>, which creates its own device code
-        and PKCE verifier from the terminal.
-      </p>
-      <button
-        type="button"
-        onClick={() =>
-          execute(() =>
-            startCliAuthExample({
-              account,
-              label: 'public key only',
-              serviceUrl,
-            }),
-          )
-        }
-      >
-        Public Key Only
-      </button>{' '}
-      <button
-        type="button"
-        onClick={() =>
-          execute(() =>
-            startCliAuthExample({
-              account,
-              expiry: Math.floor(Date.now() / 1000) + 60 * 60,
-              label: 'public key + expiry',
-              serviceUrl,
-            }),
-          )
-        }
-      >
-        Public Key + Expiry
-      </button>{' '}
-      <button
-        type="button"
-        onClick={() =>
-          execute(() =>
-            startCliAuthExample({
-              account,
-              expiry: Math.floor(Date.now() / 1000) + 60 * 60,
-              label: 'public key + expiry + limits',
-              limits: [
-                {
-                  limit: Hex.fromNumber(1_000),
-                  token: '0x20c0000000000000000000000000000000000001',
-                },
-              ],
-              serviceUrl,
-            }),
-          )
-        }
-      >
-        Public Key + Expiry + Limits
-      </button>
-    </Method>
-  )
-}
-
-async function startCliAuthExample(options: {
-  account: ReturnType<typeof TempoAccount.fromP256>
-  expiry?: number | undefined
-  label: string
-  limits?: readonly { limit: `0x${string}`; token: `0x${string}` }[] | undefined
-  serviceUrl: string
-}) {
-  const codeVerifier = 'playground-cli-auth-demo'
-  const request = {
-    codeChallenge: await createCodeChallenge(codeVerifier),
-    ...(typeof options.expiry !== 'undefined' ? { expiry: options.expiry } : {}),
-    ...(options.limits ? { limits: options.limits } : {}),
-    key_type: options.account.keyType,
-    pub_key: options.account.publicKey,
-  }
-
-  const response = await fetch(`${options.serviceUrl}/device-code`, {
-    body: JSON.stringify(request),
-    headers: { 'content-type': 'application/json' },
-    method: 'POST',
-  })
-  const body = (await response.json().catch(() => ({}))) as { code?: unknown; error?: unknown }
-
-  if (!response.ok) {
-    const error =
-      typeof body.error === 'string'
-        ? body.error
-        : `CLI auth example failed with ${response.status}.`
-    throw new Error(error)
-  }
-  if (typeof body.code !== 'string') throw new Error('CLI auth example did not return a code.')
-
-  const url = new URL(window.location.href)
-  url.searchParams.set('code', body.code)
-  url.hash = 'cli-auth'
-  window.history.replaceState({}, '', url.toString())
-  window.dispatchEvent(new CustomEvent('cli-auth:code', { detail: { code: body.code } }))
-
-  return {
-    code: body.code,
-    note: 'Browser-side playground demo only. Use playgrounds/web/scripts/cli-auth.ts for the real terminal bootstrap flow.',
-    label: options.label,
-    request: {
-      method: 'wallet_connect',
-      params: [
-        {
-          capabilities: {
-            authorizeAccessKey: {
-              ...(typeof options.expiry !== 'undefined' ? { expiry: options.expiry } : {}),
-              ...(options.limits ? { limits: options.limits } : {}),
-              keyType: options.account.keyType,
-              publicKey: options.account.publicKey,
-            },
-          },
-        },
-      ],
-    },
-    url: url.toString(),
-  }
-}
-
-async function createCodeChallenge(codeVerifier: string) {
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier))
-  return btoa(String.fromCharCode(...new Uint8Array(hash)))
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replace(/=+$/, '')
 }
 
 function EthRequestAccounts() {

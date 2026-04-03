@@ -27,5 +27,8 @@
   "files.associations": {
     ".env.*": "properties"
   },
-  "typescript.tsdk": "node_modules/typescript/lib"
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "files.exclude": {
+    "**/*.tsbuildinfo": true
+  }
 }
