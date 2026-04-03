@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["DOM", "ESNext", "DOM.Iterable"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "jsx": "preserve",
+    "paths": {
+      "@@/*": ["./.wxt/*"]
+    }
+  },
+  "include": ["**/*.ts"],
+  "exclude": [".output", "node_modules"]
+}
