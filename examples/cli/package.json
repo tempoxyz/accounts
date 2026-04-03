@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "start": "tsx cli.ts",
+    "start": "node --import tsx cli.ts",
     "check:types": "tsc -b"
   },
   "dependencies": {
