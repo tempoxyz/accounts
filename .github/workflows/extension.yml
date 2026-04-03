@@ -1,0 +1,80 @@
+name: Extension
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: extension-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      matrix:
+        include:
+          - browser: chrome
+            build-cmd: pnpm --filter extension build
+            artifact-path: ref-impls/extension/.output/chrome-mv3
+            artifact-name: tempo-wallet-chrome-mv3
+          - browser: firefox
+            build-cmd: pnpm --filter extension build:firefox
+            artifact-path: ref-impls/extension/.output/firefox-mv2
+            artifact-name: tempo-wallet-firefox-mv2
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
+
+      - name: Build extension
+        run: ${{ matrix.build-cmd }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+
+  comment:
+    name: PR Comment
+    if: github.event_name == 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Comment on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: extension-builds
+          message: |
+            ### 🧩 Extension Builds
+
+            | Browser | Artifact |
+            |---------|----------|
+            | Chrome MV3 | [tempo-wallet-chrome-mv3](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts) |
+            | Firefox MV2 | [tempo-wallet-firefox-mv2](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts) |
+
+            <details>
+            <summary>Install instructions</summary>
+
+            **Chrome:**
+            1. Download and unzip `tempo-wallet-chrome-mv3`
+            2. Go to `chrome://extensions`
+            3. Enable "Developer mode"
+            4. Click "Load unpacked" and select the unzipped folder
+
+            **Firefox:**
+            1. Download and unzip `tempo-wallet-firefox-mv2`
+            2. Go to `about:debugging#/runtime/this-firefox`
+            3. Click "Load Temporary Add-on"
+            4. Select any file in the unzipped folder
+            </details>
