@@ -1,0 +1,21 @@
+{
+  "name": "cli-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node --import tsx cli.ts",
+    "check:types": "tsc -b"
+  },
+  "dependencies": {
+    "accounts": "latest",
+    "incur": "latest",
+    "ox": "latest",
+    "viem": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "~5.9.3"
+  }
+}
