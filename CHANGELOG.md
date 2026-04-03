@@ -1,5 +1,24 @@
 # accounts
 
+## 0.4.16
+
+### Patch Changes
+
+- 46cd976: Made CLI use wallet.tempo.xyz as server and keys.toml
+- 00de151: Added provider transport to `getClient()` so viem actions route through the provider adapter. Accepted standard `to`/`data` fields in `eth_sendTransaction` and converted them to Tempo `calls` format.
+
+## 0.4.15
+
+### Patch Changes
+
+- 715d830: Moved trusted hosts list to `trusted-hosts.json` at the project root.
+
+## 0.4.14
+
+### Patch Changes
+
+- b7151af: Added `chainId` in `wallet_connect` to set the active chain before the dialog opens.
+
 ## 0.4.13
 
 ### Patch Changes

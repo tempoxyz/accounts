@@ -3,6 +3,7 @@ import { Address, Hex, Json, P256 } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
+import { tempo, tempoModerato } from 'viem/chains'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
 
 import { CliAuth } from './CliAuth.js'
@@ -181,7 +182,7 @@ function WalletConnect() {
     execute(() =>
       provider.request({
         method: 'wallet_connect',
-        params: [{ capabilities }],
+        params: [{ capabilities, chainId: Hex.fromNumber(testnet ? tempoModerato.id : tempo.id) }],
       }),
     )
   }
@@ -227,8 +228,8 @@ function CliAuthExamples() {
       <p>Seed a pending CLI auth request with one of these example `wallet_connect` payloads.</p>
       <p>
         These buttons are browser-side demo helpers for the approval UI. They are not the same as
-        running <code>playground/scripts/cli-auth.ts</code>, which creates its own device code and
-        PKCE verifier from the terminal.
+        running <code>playgrounds/web/scripts/cli-auth.ts</code>, which creates its own device code
+        and PKCE verifier from the terminal.
       </p>
       <button
         type="button"
@@ -324,7 +325,7 @@ async function startCliAuthExample(options: {
 
   return {
     code: body.code,
-    note: 'Browser-side playground demo only. Use playground/scripts/cli-auth.ts for the real terminal bootstrap flow.',
+    note: 'Browser-side playground demo only. Use playgrounds/web/scripts/cli-auth.ts for the real terminal bootstrap flow.',
     label: options.label,
     request: {
       method: 'wallet_connect',

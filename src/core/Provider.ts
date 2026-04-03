@@ -66,6 +66,10 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const getAccount: Account.Find = (options = {}) => Account.find({ ...options, store }) as never
 
+  // Lazy reference — assigned after the provider is created so the client
+  // transport can route provider methods (wallet_connect, etc.) through it.
+  let providerRef: ox_Provider.Provider | undefined
+
   function getClient(
     options: { chainId?: number | undefined; feePayer?: string | undefined } = {},
   ) {
@@ -193,9 +197,13 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'eth_sendTransaction': {
                     assertConnected()
                     const [decoded] = request._decoded.params
+                    const { to, data, ...rest } = decoded
+                    const calls =
+                      decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
                     return (await actions.sendTransaction(
                       {
-                        ...decoded,
+                        ...rest,
+                        ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
                       request,
@@ -205,9 +213,13 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'eth_signTransaction': {
                     assertConnected()
                     const [decoded] = request._decoded.params
+                    const { to, data, ...rest } = decoded
+                    const calls =
+                      decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
                     return (await actions.signTransaction(
                       {
-                        ...decoded,
+                        ...rest,
+                        ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
                       request,
@@ -217,9 +229,13 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'eth_sendTransactionSync': {
                     assertConnected()
                     const [decoded] = request._decoded.params
+                    const { to, data, ...rest } = decoded
+                    const calls =
+                      decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
                     return (await actions.sendTransactionSync(
                       {
-                        ...decoded,
+                        ...rest,
+                        ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
                       request,
@@ -386,6 +402,9 @@ export function create(options: create.Options = {}): create.ReturnType {
                   }
 
                   case 'wallet_connect': {
+                    const chainId = request._decoded.params?.[0]?.chainId
+                    if (chainId) store.setState((x) => ({ ...x, chainId }))
+
                     const capabilities = request._decoded.params?.[0]?.capabilities
                     const authorizeAccessKey =
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
@@ -497,7 +516,20 @@ export function create(options: create.Options = {}): create.ReturnType {
       },
       { schema: Schema.ox },
     ),
-    { chains, getAccount, getClient, store },
+    {
+      chains,
+      getAccount(options = {}) {
+        const account = getAccount(options)
+        if (!(options as any).signable)
+          return { address: account.address, type: 'json-rpc' } as never
+        return account as never
+      },
+      getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
+        const { chainId, feePayer } = options
+        return Client.fromChainId(chainId, { chains, feePayer, provider: providerRef, store })
+      },
+      store,
+    },
   )
 
   if (typeof window !== 'undefined') {
@@ -530,6 +562,8 @@ export function create(options: create.Options = {}): create.ReturnType {
         }),
       ],
     })
+
+  providerRef = provider
 
   return provider
 }

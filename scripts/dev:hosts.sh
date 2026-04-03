@@ -40,11 +40,11 @@ echo ""
 
 pnpm dev:dialog &
 
-cd "$ROOT/playground"
+cd "$ROOT/playgrounds/web"
 PORT="$PLAYGROUND_PORT_A" VITE_HOST="$PLAYGROUND_A_HOST" pnpm dev &
 PLAYGROUND_A_PID=$!
 
-cd "$ROOT/playground"
+cd "$ROOT/playgrounds/web"
 PORT="$PLAYGROUND_PORT_B" VITE_HOST="$PLAYGROUND_B_HOST" pnpm dev &
 PLAYGROUND_B_PID=$!
 

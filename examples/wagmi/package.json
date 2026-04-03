@@ -26,6 +26,6 @@
     "typescript": "~5.9.3",
     "vite-plugin-mkcert": "^1.17.10",
     "vite-plus": "latest",
-    "wrangler": "latest"
+    "wrangler": "catalog:"
   }
 }

@@ -96,12 +96,12 @@ const { accounts } = await provider.request({
 ## Development
 
 ```sh
-pnpm dev              # start dialog + dialog-ref + playground dev servers
-pnpm demo:cli-auth    # run the CLI smoke-test client from playground/scripts
+pnpm dev              # start dialog + dialog-ref + web playground dev servers
+pnpm playground:cli   # run the CLI playground client
 pnpm dev:dialog       # start Tempo Wallet dialog only
 pnpm dev:dialog-ref   # start reference dialog implementation only (port 5174)
-pnpm dev:playground   # start playground app only
-pnpm dev:hosts        # start dialog + playground instances on different TLDs
+pnpm dev:playground   # start web playground only
+pnpm dev:hosts        # start dialog + web playground instances on different TLDs
 pnpm build            # build library
 pnpm check            # lint + format
 pnpm check:types      # type checks
@@ -118,10 +118,10 @@ pnpm test             # run tests
 
 The `ref-impls/` directory contains reference implementations for building on the Account SDK:
 
-| Directory             | Description                                                                                                                                                                          |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ref-impls/dialog/`   | Minimal, unstyled embed dialog app demonstrating how to build a custom embed using the `Remote` API. Select `dialogRefImpl` in the playground's adapter dropdown to test against it. |
-| `ref-impls/cli-auth/` | Cloudflare Workers server demonstrating device-code based CLI authentication and access key authorization.                                                                           |
+| Directory             | Description                                                                                                                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ref-impls/dialog/`   | Minimal, unstyled embed dialog app demonstrating how to build a custom embed using the `Remote` API. Select `dialogRefImpl` in the web playground's adapter dropdown to test against it. |
+| `ref-impls/cli-auth/` | Cloudflare Workers server demonstrating device-code based CLI authentication and access key authorization.                                                                               |
 
 ## License
 

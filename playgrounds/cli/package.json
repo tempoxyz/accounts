@@ -1,0 +1,20 @@
+{
+    "name": "cli",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+        "connect": "tsx cli.ts connect",
+        "request": "tsx cli.ts request"
+    },
+    "dependencies": {
+        "accounts": "workspace:*",
+        "viem": "catalog:",
+        "ox": "catalog:"
+    },
+    "devDependencies": {
+        "tsx": "catalog:",
+        "typescript": "catalog:",
+        "@types/node": "catalog:"
+    }
+}

@@ -39,13 +39,21 @@ export type AccessKey = {
   expiry?: number | undefined
   /** Signed key authorization to attach to the first transaction. Consumed on use. */
   keyAuthorization?: KeyAuthorization.Signed | undefined
-  /** The WebCrypto key pair backing the access key. Only present for locally-generated keys. */
-  keyPair?: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
   /** Key type. */
   keyType: 'secp256k1' | 'p256' | 'webAuthn' | 'webCrypto'
   /** TIP-20 spending limits for the access key. */
   limits?: { token: Address; limit: bigint }[] | undefined
-}
+} & OneOf<
+  | {}
+  | {
+      /** The exported private key backing the access key. */
+      privateKey: Hex
+    }
+  | {
+      /** The WebCrypto key pair backing the access key. */
+      keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>
+    }
+>
 
 /** Resolves a viem Account from the store by address (or active account). */
 export function find(options: find.Options & { signable: true }): TempoAccount.Account
@@ -66,7 +74,9 @@ export function find(options: find.Options): TempoAccount.Account | JsonRpcAccou
   // When accessKey is requested, prefer a locally-signable access key for this address.
   if (accessKey) {
     const key = accessKeys.find(
-      (a) => a.access.toLowerCase() === root.address.toLowerCase() && a.keyPair,
+      (a) =>
+        a.access.toLowerCase() === root.address.toLowerCase() &&
+        (('keyPair' in a && !!a.keyPair) || ('privateKey' in a && !!a.privateKey)),
     )
     if (key) {
       // Remove expired access keys.
@@ -100,11 +110,19 @@ export type Find = {
 
 /** Hydrates an access key entry to a viem Account. Only works for locally-generated keys with a `keyPair`. */
 export function hydrateAccessKey(accessKey: AccessKey): TempoAccount.Account {
-  if (!accessKey.keyPair)
-    throw new Provider.UnauthorizedError({
-      message: 'External access key cannot be hydrated for signing.',
-    })
-  return TempoAccount.fromWebCryptoP256(accessKey.keyPair, { access: accessKey.access })
+  if ('keyPair' in accessKey && accessKey.keyPair)
+    return TempoAccount.fromWebCryptoP256(accessKey.keyPair, { access: accessKey.access })
+  if ('privateKey' in accessKey && accessKey.privateKey) {
+    switch (accessKey.keyType) {
+      case 'secp256k1':
+        return TempoAccount.fromSecp256k1(accessKey.privateKey, { access: accessKey.access })
+      case 'p256':
+        return TempoAccount.fromP256(accessKey.privateKey, { access: accessKey.access })
+    }
+  }
+  throw new Provider.UnauthorizedError({
+    message: 'External access key cannot be hydrated for signing.',
+  })
 }
 
 /** Hydrates a store account to a viem Account. */
