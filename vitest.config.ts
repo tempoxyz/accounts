@@ -16,11 +16,7 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          include: [
-            './src/**/*.test.ts',
-            './examples/**/*.test.ts',
-            '!./src/**/*.browser.test.ts',
-          ],
+          include: ['./src/**/*.test.ts', './examples/**/*.test.ts', '!./src/**/*.browser.test.ts'],
           name: 'lib',
           globalSetup: [join(import.meta.dirname, './test/setup.global.ts')],
           setupFiles: [join(import.meta.dirname, './test/setup.ts')],

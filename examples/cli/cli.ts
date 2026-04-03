@@ -1,5 +1,5 @@
 import { Expiry } from 'accounts'
-import { Cli, z } from 'incur'
+import { Cli } from 'incur'
 import { Hex } from 'ox'
 import { parseUnits } from 'viem'
 import { connect } from 'viem/experimental/erc7846'
