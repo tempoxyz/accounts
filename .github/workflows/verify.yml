@@ -28,6 +28,8 @@ jobs:
     name: 'Test Runtime (env: localnet, tag: ${{ matrix.tag }})'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      TESTCONTAINERS_RYUK_DISABLED: true
     strategy:
       matrix:
         tag:
@@ -45,6 +47,31 @@ jobs:
 
       - name: Setup Docker
         uses: docker/setup-docker-action@v4
+
+      - name: Resolve Tempo image digest
+        if: "!startsWith(matrix.tag, 'http')"
+        id: tempo-digest
+        run: |
+          digest=$(docker manifest inspect ghcr.io/tempoxyz/tempo:${{ matrix.tag }} -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .Descriptor.digest' 2>/dev/null || docker buildx imagetools inspect ghcr.io/tempoxyz/tempo:${{ matrix.tag }} --format '{{.Manifest.Digest}}')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Tempo Docker image
+        if: "!startsWith(matrix.tag, 'http')"
+        uses: actions/cache@v4
+        id: docker-cache
+        with:
+          path: /tmp/tempo-image.tar
+          key: tempo-image-${{ steps.tempo-digest.outputs.digest }}
+
+      - name: Load cached Tempo image
+        if: "!startsWith(matrix.tag, 'http') && steps.docker-cache.outputs.cache-hit == 'true'"
+        run: docker load -i /tmp/tempo-image.tar
+
+      - name: Pull and cache Tempo image
+        if: "!startsWith(matrix.tag, 'http') && steps.docker-cache.outputs.cache-hit != 'true'"
+        run: |
+          docker pull ghcr.io/tempoxyz/tempo:${{ matrix.tag }}
+          docker save ghcr.io/tempoxyz/tempo:${{ matrix.tag }} -o /tmp/tempo-image.tar
 
       - name: Run tests
         run: pnpm test --bail=1

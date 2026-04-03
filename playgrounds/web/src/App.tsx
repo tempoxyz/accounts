@@ -3,6 +3,7 @@ import { Hex, Json, P256 } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
+import { tempo, tempoModerato } from 'viem/chains'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
 
 import { CliAuth } from './CliAuth.js'
@@ -13,6 +14,8 @@ import {
   provider,
   switchAdapter,
   switchDialogMode,
+  testnet,
+  tokens,
 } from './provider.js'
 
 export function App() {
@@ -29,7 +32,7 @@ export function App() {
     <div style={{ maxWidth: 640 }}>
       <h1>accounts playground</h1>
 
-      <h2>Adapter</h2>
+      <h2>Configuration</h2>
       <select value={adapterType} onChange={(e) => onSwitch(e.target.value as AdapterType)}>
         <option value="tempoWallet">tempoWallet</option>
         <option value="dialogRefImpl">dialogRefImpl</option>
@@ -53,8 +56,6 @@ export function App() {
           <OcclusionSimulator />
         </>
       )}
-
-      <h2>State</h2>
       <ProviderState />
 
       <h2>Events</h2>
@@ -64,32 +65,32 @@ export function App() {
       <WalletConnect />
       <EthRequestAccounts />
       <WalletDisconnect />
-      <Faucet />
 
       <h2>Accounts &amp; Chain</h2>
       <EthAccounts />
       <EthChainId />
       <WalletSwitchChain />
 
-      <h2>Access Keys</h2>
-      <WalletAuthorizeAccessKey />
-      <WalletRevokeAccessKey />
-
-      <h2>Balances</h2>
+      <h2>Balances &amp; Funding</h2>
       <WalletGetBalances />
+      <Faucet />
 
       <h2>Transactions</h2>
       <Transactions />
 
-      <h2>Signing</h2>
+      <h2>Receipts &amp; Status</h2>
+      <EthGetTransactionReceipt />
+      <WalletGetCallsStatus />
+
+      <h2>Access Keys</h2>
+      <WalletAuthorizeAccessKey />
+      <WalletRevokeAccessKey />
+
+      <h2>Signing &amp; Verification</h2>
       <PersonalSign />
       <VerifyMessage />
       <EthSignTypedData />
       <VerifyTypedData />
-
-      <h2>Receipts</h2>
-      <EthGetTransactionReceipt />
-      <WalletGetCallsStatus />
 
       <h2>MPP</h2>
       <Fortune />
@@ -156,8 +157,7 @@ function WalletConnect() {
     const accessKey = form.get('accessKey') === 'on'
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
 
-    const limitToken =
-      'USDC.e' in tokens ? (tokens as { 'USDC.e': `0x${string}` })['USDC.e'] : tokens.pathUSD
+    const limitToken = testnet ? tokens.pathUSD : tokens['USDC.e']
     const authorizeAccessKey = accessKey
       ? {
           expiry: Expiry.days(1),
@@ -181,7 +181,7 @@ function WalletConnect() {
     execute(() =>
       provider.request({
         method: 'wallet_connect',
-        params: [{ capabilities }],
+        params: [{ capabilities, chainId: Hex.fromNumber(testnet ? tempoModerato.id : tempo.id) }],
       }),
     )
   }
@@ -227,8 +227,8 @@ function CliAuthExamples() {
       <p>Seed a pending CLI auth request with one of these example `wallet_connect` payloads.</p>
       <p>
         These buttons are browser-side demo helpers for the approval UI. They are not the same as
-        running <code>playground/scripts/cli-auth.ts</code>, which creates its own device code and
-        PKCE verifier from the terminal.
+        running <code>playgrounds/web/scripts/cli-auth.ts</code>, which creates its own device code
+        and PKCE verifier from the terminal.
       </p>
       <button
         type="button"
@@ -324,7 +324,7 @@ async function startCliAuthExample(options: {
 
   return {
     code: body.code,
-    note: 'Browser-side playground demo only. Use playground/scripts/cli-auth.ts for the real terminal bootstrap flow.',
+    note: 'Browser-side playground demo only. Use playgrounds/web/scripts/cli-auth.ts for the real terminal bootstrap flow.',
     label: options.label,
     request: {
       method: 'wallet_connect',
@@ -1119,11 +1119,6 @@ function OcclusionSimulator() {
   useEffect(() => {
     if (!active) return
 
-    // The iframe lives inside a native <dialog> rendered via showModal(),
-    // which sits in the top layer. No external z-index can cover it.
-    // To simulate occlusion we inject an overlay *inside* the dialog.
-    // The dialog may not exist yet (created lazily), so we observe the
-    // body for it to appear, then watch its hidden attribute.
     let overlay: HTMLDivElement | null = null
 
     function inject(dialog: Element) {
@@ -1155,7 +1150,6 @@ function OcclusionSimulator() {
       inject(dialog)
     }
 
-    // Watch body for dialog appearing/disappearing.
     const bodyObserver = new MutationObserver(sync)
     bodyObserver.observe(document.body, { childList: true, subtree: true, attributes: true })
     sync()

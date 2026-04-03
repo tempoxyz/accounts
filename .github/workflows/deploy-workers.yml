@@ -1,0 +1,79 @@
+name: Deploy Workers
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-workers-${{ github.event.pull_request.number || 'production' }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: ${{ matrix.worker.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
+
+    strategy:
+      matrix:
+        worker:
+          - name: Playground
+            directory: playgrounds/web
+            build-env: |
+              VITE_WALLET_DIALOG_HOST=https://wallet.tempo.xyz/embed
+              VITE_ENV=mainnet
+          - name: Wagmi
+            directory: examples/wagmi
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
+
+      - name: Build accounts
+        run: pnpm build
+
+      - name: Build
+        working-directory: ${{ matrix.worker.directory }}
+        run: |
+          if [ -n "$BUILD_ENV" ]; then
+            export ${BUILD_ENV}
+          fi
+          pnpm build
+        env:
+          BUILD_ENV: ${{ matrix.worker.build-env }}
+
+      - name: Deploy
+        if: github.event_name != 'pull_request'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: ${{ matrix.worker.directory }}
+
+      - name: Preview
+        id: preview
+        if: github.event_name == 'pull_request'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: ${{ matrix.worker.directory }}
+          command: versions upload
+
+      - name: Preview URL
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: deploy-${{ matrix.worker.name }}
+          message: |
+            | Worker | Preview |
+            |--------|---------|
+            | ${{ matrix.worker.name }} | ${{ steps.preview.outputs.deployment-url }} |

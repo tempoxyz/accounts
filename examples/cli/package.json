@@ -1,26 +1,21 @@
 {
-    "name": "cli",
-    "private": true,
-    "version": "0.0.0",
-    "type": "module",
-    "scripts": {
-        "connect": "tsx cli.ts connect",
-        "request": "tsx cli.ts request"
-    },
-    "dependencies": {
-        "accounts": "workspace:*",
-        "@bomb.sh/args": "^0.3.1",
-        "@bomb.sh/tab": "^0.0.14",
-        "@clack/prompts": "^1.1.0",
-        "viem": "catalog:",
-        "ox": "catalog:",
-        "zod": "catalog:"
-    },
-    "devDependencies": {
-        "tsx": "catalog:",
-        "typescript": "catalog:",
-        "vp": "catalog:",
-        "typed-query-selector": "catalog:",
-        "@types/node": "catalog:"
-    }
+  "name": "cli-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node --import tsx cli.ts",
+    "check:types": "tsc -b"
+  },
+  "dependencies": {
+    "accounts": "latest",
+    "incur": "latest",
+    "ox": "latest",
+    "viem": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "~5.9.3"
+  }
 }

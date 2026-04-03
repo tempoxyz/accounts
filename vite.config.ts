@@ -4,6 +4,9 @@ export default defineConfig({
   devtools: {
     enabled: true,
   },
+  lint: {
+    ignorePatterns: ['package.json', 'dialog'],
+  },
   fmt: {
     semi: false,
     singleQuote: true,

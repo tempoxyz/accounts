@@ -1,6 +1,7 @@
 import * as IO from './IntersectionObserver.js'
 import * as Messenger from './Messenger.js'
 import type * as Store from './Store.js'
+import * as TrustedHosts from './TrustedHosts.js'
 
 /** Dialog interface — manages the iframe/popup lifecycle for cross-origin auth. */
 export type Dialog = SetupFn & Meta
@@ -272,30 +273,31 @@ export function iframe(): Dialog {
         activateDialog()
       },
       async syncRequests(requests) {
+        const { trustedHosts } = await messenger.waitForReady()
+
         // Safari does not support WebAuthn credential creation in iframes.
-        // Fall back to popup dialog.
-        const unsupported =
+        if (
           isSafari() &&
           requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
+        ) {
+          fallback.syncRequests(requests)
+          return
+        }
 
-        const secure = await (async () => {
-          const { trustedHosts } = await messenger.waitForReady()
-          const ioSupported = IO.supported()
-          const hostname = window.location.hostname.replace(/^www\./, '')
-          const trusted = Boolean(trustedHosts?.includes(hostname))
-          return ioSupported || trusted
-        })()
+        const ioSupported = IO.supported()
+        const hostname = window.location.hostname.replace(/^www\./, '')
+        const trusted = Boolean(trustedHosts && TrustedHosts.match(trustedHosts, hostname))
+        const secure = ioSupported || trusted
 
-        if (unsupported || !secure) {
-          if (!secure)
-            console.warn(
-              [
-                `[accounts] Browser does not support IntersectionObserver v2 and "${window.location.hostname}" is not a trusted host.`,
-                'Falling back to popup dialog.',
-                '',
-                'To enable the iframe dialog, add your hostname to the trusted hosts list.',
-              ].join('\n'),
-            )
+        if (!secure) {
+          console.warn(
+            [
+              `[accounts] Browser does not support IntersectionObserver v2 and "${window.location.hostname}" is not a trusted host.`,
+              'Falling back to popup dialog.',
+              '',
+              'To enable the iframe dialog, add your hostname to the trusted hosts list.',
+            ].join('\n'),
+          )
           fallback.syncRequests(requests)
         } else {
           const requiresConfirm = requests.some((x) => x.status === 'pending')
