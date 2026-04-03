@@ -356,6 +356,20 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(hash).toMatch(/^0x[0-9a-f]{64}$/)
     })
 
+    test('behavior: accepts standard to/data fields', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{ to: transferCall.to, data: transferCall.data }],
+      })
+
+      expect(hash).toMatch(/^0x[0-9a-f]{64}$/)
+    })
+
     test('behavior: transaction is confirmed on-chain', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
