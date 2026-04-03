@@ -1,5 +1,12 @@
 # accounts
 
+## 0.4.16
+
+### Patch Changes
+
+- 46cd976: Made CLI use wallet.tempo.xyz as server and keys.toml
+- 00de151: Added provider transport to `getClient()` so viem actions route through the provider adapter. Accepted standard `to`/`data` fields in `eth_sendTransaction` and converted them to Tempo `calls` format.
+
 ## 0.4.15
 
 ### Patch Changes
