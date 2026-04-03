@@ -20,11 +20,11 @@ jobs:
           - browser: chrome
             build-cmd: pnpm --filter extension build
             artifact-path: ref-impls/extension/.output/chrome-mv3
-            artifact-name: tempo-wallet-chrome-mv3
+            artifact-name: tempo-wallet-chrome
           - browser: firefox
             build-cmd: pnpm --filter extension build:firefox
             artifact-path: ref-impls/extension/.output/firefox-mv2
-            artifact-name: tempo-wallet-firefox-mv2
+            artifact-name: tempo-wallet-firefox
 
     steps:
       - name: Clone repository
@@ -60,20 +60,20 @@ jobs:
 
             | Browser | Artifact |
             |---------|----------|
-            | Chrome MV3 | [tempo-wallet-chrome-mv3](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts) |
-            | Firefox MV2 | [tempo-wallet-firefox-mv2](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts) |
+            | Chrome | [tempo-wallet-chrome](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts) |
+            | Firefox | [tempo-wallet-firefox](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts) |
 
             <details>
             <summary>Install instructions</summary>
 
             **Chrome:**
-            1. Download and unzip `tempo-wallet-chrome-mv3`
+            1. Download and unzip `tempo-wallet-chrome`
             2. Go to `chrome://extensions`
             3. Enable "Developer mode"
             4. Click "Load unpacked" and select the unzipped folder
 
             **Firefox:**
-            1. Download and unzip `tempo-wallet-firefox-mv2`
+            1. Download and unzip `tempo-wallet-firefox`
             2. Go to `about:debugging#/runtime/this-firefox`
             3. Click "Load Temporary Add-on"
             4. Select any file in the unzipped folder
