@@ -1,36 +1,16 @@
 {
-  "schema": "https://json.schemastore.org/tsconfig.json",
   "compilerOptions": {
-    "strict": true,
-    "noEmit": true,
-    "allowJs": true,
-    "checkJs": true,
-    "lib": ["DOM", "ESNext", "DOM.Iterable"],
-    "target": "ESNext",
+    "target": "ES2022",
     "module": "ESNext",
-    "skipLibCheck": true,
-    "alwaysStrict": true,
-    "esModuleInterop": true,
-    "isolatedModules": true,
-    "strictNullChecks": true,
-    "resolveJsonModule": true,
-    "verbatimModuleSyntax": true,
+    "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    "jsxImportSource": "hono/jsx",
-    "moduleResolution": "Bundler",
-    "useDefineForClassFields": true,
-    "allowArbitraryExtensions": true,
-    "noUncheckedIndexedAccess": true,
-    "resolvePackageJsonImports": true,
-    "resolvePackageJsonExports": true,
-    "useUnknownInCatchVariables": true,
-    "allowImportingTsExtensions": true,
-    "noFallthroughCasesInSwitch": true,
-    "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true,
-    "types": ["node", "@cloudflare/workers-types", "typed-query-selector/strict"]
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["vp/client", "node", "typed-query-selector/strict"],
+    "paths": {
+      "accounts": ["../src/index.ts"],
+      "accounts/*": ["../src/*"]
+    }
   },
-  "include": ["src/**/*"],
-  "files": ["env.d.ts", "reset.d.ts", "vite.config.ts", "worker-configuration.d.ts"],
-  "exclude": ["_", "dist", "node_modules"]
+  "include": ["src", "worker", "worker-configuration.d.ts"]
 }

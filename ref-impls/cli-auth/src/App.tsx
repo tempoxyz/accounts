@@ -1,0 +1,224 @@
+import * as React from 'react'
+
+type Pending = {
+  account?: string | undefined
+  accessKeyAddress: string
+  chainId: string
+  code: string
+  expiry: number
+  keyType: string
+  limits?: readonly { limit: string; token: string }[] | undefined
+}
+
+type Approved = {
+  accountAddress: string
+  status: 'authorized'
+}
+
+type PendingState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { pending: Pending; status: 'ready' }
+  | { error: string; status: 'error' }
+
+type ApproveState =
+  | { status: 'idle' }
+  | { approved: Approved; code: string; status: 'approved' }
+  | { error: string; status: 'error' }
+
+const assets = {
+  '0x20c0000000000000000000000000000000000000': { decimals: 6, symbol: 'pathUSD' },
+  '0x20c0000000000000000000000000000000000001': { decimals: 6, symbol: 'alphaUSD' },
+  '0x20c0000000000000000000000000000000000002': { decimals: 6, symbol: 'betaUSD' },
+  '0x20c0000000000000000000000000000000000003': { decimals: 6, symbol: 'thetaUSD' },
+  '0x20c0000000000000000000009e8d7eb59b783726': { decimals: 6, symbol: 'USDC.e' },
+  '0x20c000000000000000000000b9537d11c60e8b50': { decimals: 6, symbol: 'USDC.e' },
+} as const
+
+function formatAmount(value: bigint, decimals: number) {
+  if (decimals === 0) return new Intl.NumberFormat().format(value)
+
+  const negative = value < 0n
+  const base = 10n ** BigInt(decimals)
+  const whole = negative ? -value / base : value / base
+  const fraction = negative ? (-value % base).toString() : (value % base).toString()
+  const trimmed = fraction.padStart(decimals, '0').replace(/0+$/, '')
+  const wholeText = new Intl.NumberFormat().format(whole)
+
+  if (!trimmed) return negative ? `-${wholeText}` : wholeText
+  return `${negative ? '-' : ''}${wholeText}.${trimmed}`
+}
+
+function formatLimit(limit: { limit: string; token: string }) {
+  const token = limit.token.toLowerCase()
+  const asset = assets[token as keyof typeof assets]
+  const amount = BigInt(limit.limit)
+
+  if (!asset) return `${new Intl.NumberFormat().format(amount)} max on asset ${limit.token}`
+
+  return `${formatAmount(amount, asset.decimals)} ${asset.symbol} max on asset ${limit.token}`
+}
+
+function formatExpiry(expiry: number) {
+  return new Date(expiry * 1000).toISOString().replace('T', ' ').replace('.000Z', ' UTC')
+}
+
+function formatTimeLeft(expiry: number, now: number) {
+  const total = Math.max(0, expiry - Math.floor(now / 1000))
+  const days = Math.floor(total / 86_400)
+  const hours = Math.floor((total % 86_400) / 3_600)
+  const minutes = Math.floor((total % 3_600) / 60)
+  const seconds = total % 60
+  const parts = [
+    ...(days ? [`${days}d`] : []),
+    ...(days || hours ? [`${hours}h`] : []),
+    ...(days || hours || minutes ? [`${minutes}m`] : []),
+    `${seconds}s`,
+  ]
+
+  return parts.join(' ')
+}
+
+async function loadPending(code: string): Promise<PendingState> {
+  try {
+    return {
+      pending: await fetch(`/cli-auth/pending/${code}`).then((response) => response.json()),
+      status: 'ready',
+    }
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : 'Request failed.',
+      status: 'error',
+    }
+  }
+}
+
+/** Minimal approval page for the CLI auth reference implementation. */
+export function App() {
+  const current = new URLSearchParams(window.location.search).get('code')
+  const code = current ? current : ''
+  const [now, setNow] = React.useState(Date.now())
+  const [pending, setPending] = React.useState<PendingState>(
+    code ? { status: 'loading' } : { status: 'idle' },
+  )
+  const [approveState, approve, approving] = React.useActionState(
+    async (_: ApproveState, formData: FormData): Promise<ApproveState> => {
+      try {
+        return {
+          approved: await fetch('/cli-auth/approve', {
+            body: JSON.stringify({ code: String(formData.get('code') ?? '') }),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          }).then((response) => response.json()),
+          code: String(formData.get('code') ?? ''),
+          status: 'approved',
+        }
+      } catch (error) {
+        return {
+          error: error instanceof Error ? error.message : 'Request failed.',
+          status: 'error',
+        }
+      }
+    },
+    { status: 'idle' },
+  )
+
+  React.useEffect(() => {
+    if (!code) {
+      setPending({ status: 'idle' })
+      return
+    }
+
+    let cancelled = false
+    setPending({ status: 'loading' })
+
+    void loadPending(code).then((result) => {
+      if (!cancelled) setPending(result)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [code])
+
+  React.useEffect(() => {
+    if (pending.status !== 'ready') return
+
+    const interval = window.setInterval(() => {
+      setNow(Date.now())
+    }, 1_000)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [pending.status])
+
+  return (
+    <main>
+      <h1>CLI auth</h1>
+      <p>Approve the device code generated by your CLI.</p>
+
+      <form action="/cli-auth" method="get">
+        <label htmlFor="code">Device code</label>
+        <input defaultValue={code} id="code" name="code" />
+        <button type="submit">Load request</button>
+      </form>
+
+      {pending.status === 'idle' && <p>Paste a device code to load the pending request.</p>}
+      {pending.status === 'loading' && <p>Loading request...</p>}
+      {pending.status === 'error' && <p>{pending.error}</p>}
+      {approveState.status === 'approved' && (
+        <>
+          <h2>Approved</h2>
+          <p>
+            Device code <strong>{approveState.code}</strong> was authorized by{' '}
+            <code>{approveState.approved.accountAddress}</code>.
+          </p>
+          <p>You can return to the CLI.</p>
+        </>
+      )}
+      {approveState.status !== 'approved' && pending.status === 'ready' && (
+        <>
+          <h2>Pending request</h2>
+          <dl>
+            <dt>Device code</dt>
+            <dd>{pending.pending.code}</dd>
+            <dt>Access key</dt>
+            <dd>{pending.pending.accessKeyAddress}</dd>
+            {pending.pending.account && (
+              <>
+                <dt>Requested account</dt>
+                <dd>{pending.pending.account}</dd>
+              </>
+            )}
+            <dt>Chain ID</dt>
+            <dd>{pending.pending.chainId}</dd>
+            <dt>Key type</dt>
+            <dd>{pending.pending.keyType}</dd>
+            <dt>Expires</dt>
+            <dd>{formatExpiry(pending.pending.expiry)}</dd>
+            <dt>Time left</dt>
+            <dd>{formatTimeLeft(pending.pending.expiry, now)}</dd>
+            {pending.pending.limits && pending.pending.limits.length > 0 && (
+              <>
+                <dt>Max spend</dt>
+                <dd>
+                  <ul>
+                    {pending.pending.limits.map((limit) => (
+                      <li key={`${limit.token}:${limit.limit}`}>{formatLimit(limit)}</li>
+                    ))}
+                  </ul>
+                </dd>
+              </>
+            )}
+          </dl>
+          {approveState.status === 'error' && <p>{approveState.error}</p>}
+          <form action={approve}>
+            <input name="code" type="hidden" value={pending.pending.code} />
+            <button type="submit">{approving ? 'Approving...' : 'Approve'}</button>
+          </form>
+        </>
+      )}
+    </main>
+  )
+}

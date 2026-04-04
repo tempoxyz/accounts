@@ -78,6 +78,8 @@
 ## Learned Workspace Facts
 
 - **Playground `run_worker_first`** — `playgrounds/web/wrangler.jsonc` `assets.run_worker_first` must list all API route patterns (e.g. `/cli-auth/**`). POST requests to unlisted paths fall through to the static assets / SPA layer and return 405.
+- **Shared UI/API base paths need exact matches** — when an SPA page and API share a base path like `/cli-auth`, `assets.run_worker_first` must include both the exact base path (`/cli-auth`) and the wildcard children (`/cli-auth/*`) so the worker can handle `POST /cli-auth` while still delegating `GET /cli-auth` back to assets.
+- **Avoid `React.use()` for local API fetches in Cloudflare/Vite approval pages** — in the `ref-impls/cli-auth` setup, using `use()` on a promise that fetches `/cli-auth/pending/:code` pulled the request into the Cloudflare/Vite server-render path and triggered `fetch failed` loops in dev. Keep the pending-request load client-side with a normal effect or equivalent.
 - **CLI scripts tooling** — playground CLI scripts (`playgrounds/web/scripts/`) use `@clack/prompts` (interactive UI), `@bomb.sh/args` (flag parsing), and `@bomb.sh/tab` (shell completions).
 - **Wallet app exposes `/embed/cli-auth/*` aliases** — when targeting the real wallet from provider-driven examples, point the CLI host at `/embed/cli-auth`; the browser route and device-code API aliases live under the same base path there.
 - **Workspace examples may need source imports** — when an example must reflect unpublished local SDK changes immediately, import the local `src/*` modules instead of the package entrypoint so it does not silently use stale `dist/*` output.

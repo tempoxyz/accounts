@@ -1,35 +1,31 @@
 {
-  "name": "cli-auth",
+  "name": "cli-auth-ref",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "imports": {
-    "#*": "./src/*",
-    "#package.json": "./package.json",
-    "#wrangler.json": "./wrangler.json"
-  },
   "scripts": {
-    "dev": "vp dev",
-    "build": "vp build",
-    "preview": "vp preview",
+    "connect": "tsx ./scripts/cli.ts connect",
+    "dev": "test -f .env || cp .env.example .env && vp dev",
+    "build": "tsc --noEmit && vp build",
     "check:types": "tsc --noEmit",
-    "postinstall": "wrangler types --env-interface='CloudflareBindings'"
+    "postinstall": "wrangler types --env-interface='CloudflareBindings' --env-file .env.example",
+    "preview": "vp preview",
+    "request": "tsx ./scripts/cli.ts request"
   },
   "dependencies": {
-    "hono": "catalog:",
-    "viem": "catalog:",
-    "zod": "catalog:",
-    "accounts": "workspace:*"
+    "accounts": "workspace:*",
+    "react": "catalog:default",
+    "react-dom": "catalog:default"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "catalog:",
-    "@cloudflare/workers-types": "catalog:",
+    "@types/react": "catalog:default",
+    "@types/react-dom": "catalog:default",
     "@types/node": "catalog:",
-    "@vitejs/devtools": "catalog:",
-    "@total-typescript/ts-reset": "catalog:",
+    "@vitejs/plugin-react": "catalog:default",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:",
+    "vp": "catalog:",
     "typed-query-selector": "catalog:",
     "wrangler": "catalog:"
   }
