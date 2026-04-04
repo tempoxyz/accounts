@@ -40,6 +40,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host: import.meta.env.VITE_WALLET_DIALOG_HOST,
       }),
+      mpp: true,
       testnet,
     })
 
@@ -49,6 +50,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host: import.meta.env.VITE_REF_DIALOG_HOST,
       }),
+      mpp: true,
       testnet,
     })
 
@@ -57,6 +59,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: webAuthn({ ceremony }),
       feePayerUrl: '/fee-payer',
+      mpp: true,
       testnet,
     })
   }
@@ -73,6 +76,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       },
     }),
     feePayerUrl: '/fee-payer',
+    mpp: true,
     testnet,
   })
 }

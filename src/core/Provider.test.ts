@@ -1212,6 +1212,110 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
     })
   })
 
+  describe('eth_fillTransaction', () => {
+    const fillTx = { to: transferCall.to, data: transferCall.data } as const
+
+    test('default: proxies to the node without modification', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const address = await connect(provider)
+      await fund(address)
+
+      const result = await provider.request({
+        method: 'eth_fillTransaction',
+        params: [{ from: address, ...fillTx }],
+      })
+      expect(result.tx.gas).toBeDefined()
+      expect(result.tx.to).toBeDefined()
+    })
+
+    test('behavior: injects pending keyAuthorization for access key accounts', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      const { accessKeys } = provider.store.getState()
+      expect(accessKeys).toHaveLength(1)
+      expect(accessKeys[0]!.keyAuthorization).toBeDefined()
+
+      const result = await provider.request({
+        method: 'eth_fillTransaction',
+        params: [{ from: address, ...fillTx }],
+      })
+      expect(result.tx.gas).toBeDefined()
+
+      // Pending keyAuthorization should be consumed after successful fill.
+      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
+    })
+
+    test('behavior: removes stale access key and retries on error', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      expect(provider.store.getState().accessKeys).toHaveLength(1)
+
+      // Revoke the access key on-chain so the node will reject it.
+      const { accessKeys } = provider.store.getState()
+      const accessKeyAddress = accessKeys[0]!.address
+      await provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [{ address, accessKeyAddress }],
+      })
+
+      // Re-add a fake pending keyAuthorization to simulate stale local state.
+      provider.store.setState({
+        accessKeys: provider.store.getState().accessKeys.map((k) => ({
+          ...k,
+          keyAuthorization: accessKeys[0]!.keyAuthorization,
+        })),
+      })
+
+      // eth_fillTransaction should fail with the stale key, remove it, and retry successfully.
+      const result = await provider.request({
+        method: 'eth_fillTransaction',
+        params: [{ from: address, ...fillTx }],
+      })
+      expect(result.tx.gas).toBeDefined()
+      expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+    })
+
+    test('behavior: does not inject keyAuthorization when already on params', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      const { accessKeys } = provider.store.getState()
+      const keyAuth = accessKeys[0]!.keyAuthorization!
+      const rpcKeyAuth = KeyAuthorization.toRpc(keyAuth)
+
+      const result = await provider.request({
+        method: 'eth_fillTransaction',
+        params: [
+          {
+            from: address,
+            ...fillTx,
+            keyAuthorization: { ...rpcKeyAuth, address: rpcKeyAuth.keyId },
+          },
+        ],
+      })
+      expect(result.tx.gas).toBeDefined()
+    })
+  })
+
   describe('wallet_connect with authorizeAccessKey', () => {
     test('default: grants access key during register', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })

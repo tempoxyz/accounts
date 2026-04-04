@@ -296,7 +296,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
                 ...(feePayer ? { feePayer: true } : {}),
                 ...(keyAuthorization ? { keyAuthorization } : {}),
                 type: 'tempo',
-              }),
+              } as never),
             }),
           )
           const signed = await account.signTransaction(prepared as never)
@@ -317,7 +317,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
                 ...(feePayer ? { feePayer: true } : {}),
                 ...(keyAuthorization ? { keyAuthorization } : {}),
                 type: 'tempo',
-              }),
+              } as never),
             }),
           )
           const signed = await account.signTransaction(prepared as never)
@@ -343,7 +343,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
                 ...(feePayer ? { feePayer: true } : {}),
                 ...(keyAuthorization ? { keyAuthorization } : {}),
                 type: 'tempo',
-              }),
+              } as never),
             }),
           )
           return await account.signTransaction(prepared as never)
