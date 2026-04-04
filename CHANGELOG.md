@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.18
+
+### Patch Changes
+
+- 0a3396c: Handle `eth_fillTransaction` in Provider to inject pending `keyAuthorization` for access key accounts.
+
 ## 0.4.17
 
 ### Patch Changes
