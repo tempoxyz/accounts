@@ -105,7 +105,11 @@ export default {
     }
 
     if (request.method === 'GET' && url.pathname === path) {
-      if (env.ASSETS) return env.ASSETS.fetch(new Request(new URL('/', request.url)))
+      if (env.ASSETS) {
+        const assetUrl = new URL('/', request.url)
+        assetUrl.search = url.search
+        return env.ASSETS.fetch(new Request(assetUrl, request))
+      }
 
       const redirect = new URL('/', request.url)
       redirect.search = url.search
