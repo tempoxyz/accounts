@@ -594,6 +594,19 @@ function Transactions() {
         >
           wallet_sendCalls (sync)
         </button>
+
+        <button
+          onClick={() =>
+            send('eth_signTransaction', () =>
+              provider.request({
+                method: 'eth_signTransaction',
+                params: [{ calls, ...(useFeePayer ? { feePayer: true } : {}) }],
+              }),
+            )
+          }
+        >
+          eth_signTransaction
+        </button>
       </div>
 
       {method && <h4>{method}</h4>}

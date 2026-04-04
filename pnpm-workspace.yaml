@@ -17,7 +17,7 @@ catalog:
   react: ^19.1.1
   react-dom: ^19.1.1
   typescript: ^5.9.3
-  viem: https://pkg.pr.new/viem@19dd6e5
+  viem: https://pkg.pr.new/viem@87c04ee
   tsx: ^4.21.0
   vp: npm:vite-plus@~0.1.14
   wagmi: ^3.5.0
