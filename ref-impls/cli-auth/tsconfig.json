@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["vp/client", "node", "typed-query-selector/strict"],
+    "paths": {
+      "accounts": ["../src/index.ts"],
+      "accounts/*": ["../src/*"]
+    }
+  },
+  "include": ["src", "worker", "worker-configuration.d.ts"]
+}

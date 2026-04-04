@@ -121,7 +121,7 @@ The `ref-impls/` directory contains reference implementations for building on th
 | Directory             | Description                                                                                                                                                                              |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ref-impls/dialog/`   | Minimal, unstyled embed dialog app demonstrating how to build a custom embed using the `Remote` API. Select `dialogRefImpl` in the web playground's adapter dropdown to test against it. |
-| `ref-impls/cli-auth/` | Cloudflare Workers server demonstrating device-code based CLI authentication and access key authorization.                                                                               |
+| `ref-impls/cli-auth/` | Minimal React + Cloudflare/Vite host reference for device-code CLI auth: built-in code-auth endpoints plus a single unstyled approval screen and local smoke client.                     |
 
 ## License
 

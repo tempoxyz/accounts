@@ -1,0 +1,32 @@
+{
+  "name": "cli-auth-ref",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "connect": "tsx ./scripts/cli.ts connect",
+    "dev": "test -f .env || cp .env.example .env && vp dev",
+    "build": "tsc --noEmit && vp build",
+    "check:types": "tsc --noEmit",
+    "postinstall": "wrangler types --env-interface='CloudflareBindings' --env-file .env.example",
+    "preview": "vp preview",
+    "request": "tsx ./scripts/cli.ts request"
+  },
+  "dependencies": {
+    "accounts": "workspace:*",
+    "react": "catalog:default",
+    "react-dom": "catalog:default"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "catalog:",
+    "@types/react": "catalog:default",
+    "@types/react-dom": "catalog:default",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-react": "catalog:default",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vp": "catalog:",
+    "typed-query-selector": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

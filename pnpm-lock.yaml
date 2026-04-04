@@ -39,6 +39,9 @@ catalogs:
     tsx:
       specifier: ^4.21.0
       version: 4.21.0
+    typed-query-selector:
+      specifier: ^2.12.1
+      version: 2.12.1
     typescript:
       specifier: ^5.9.3
       version: 5.9.3
@@ -550,6 +553,46 @@ importers:
       wrangler:
         specifier: ^4.80.0
         version: 4.80.0(@cloudflare/workers-types@4.20260329.1)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+
+  ref-impls/cli-auth:
+    dependencies:
+      accounts:
+        specifier: workspace:*
+        version: link:../..
+      react:
+        specifier: ^19.1.1
+        version: 19.2.0
+      react-dom:
+        specifier: ^19.1.1
+        version: 19.2.0(react@19.2.0)
+    devDependencies:
+      '@cloudflare/vite-plugin':
+        specifier: 'catalog:'
+        version: 1.30.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.1)(workerd@1.20260401.1)(wrangler@4.79.0(@cloudflare/workers-types@4.20260329.1)(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.5.0
+      '@types/react':
+        specifier: catalog:default
+        version: 19.2.2
+      '@types/react-dom':
+        specifier: catalog:default
+        version: 19.2.2(@types/react@19.2.2)
+      '@vitejs/plugin-react':
+        specifier: catalog:default
+        version: 5.1.0(vite@8.0.1)
+      typed-query-selector:
+        specifier: 'catalog:'
+        version: 2.12.1
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vp:
+        specifier: 'catalog:'
+        version: vite-plus@0.1.14(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(@vitejs/devtools@0.1.11)(bufferutil@4.0.9)(esbuild@0.27.4)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.1)(yaml@2.8.2)
+      wrangler:
+        specifier: ^4.79.0
+        version: 4.79.0(@cloudflare/workers-types@4.20260329.1)(bufferutil@4.0.9)(utf-8-validate@5.0.10)
 
   ref-impls/dialog:
     dependencies:
