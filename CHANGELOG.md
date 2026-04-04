@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.17
+
+### Patch Changes
+
+- ba93170: Enabled MPP on provider with pull mode by default.
+
 ## 0.4.16
 
 ### Patch Changes
