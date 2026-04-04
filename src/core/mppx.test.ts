@@ -9,13 +9,12 @@ import { accounts, chain, getClient } from '../../test/config.js'
 import { type Server, createServer } from '../../test/utils.js'
 import * as Provider from './Provider.js'
 
-const recipient = accounts[1]!.address
 const client = getClient()
 
 const payment = ServerMppx.create({
   methods: [
     tempo({
-      recipient,
+      account: accounts[1]!,
       currency: Addresses.pathUsd,
       getClient: () => client,
     }),
