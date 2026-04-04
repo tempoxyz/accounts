@@ -1,11 +1,13 @@
 import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
 import type { Chain, Client as ViemClient, Transport } from 'viem'
 import { tempo, tempoModerato } from 'viem/chains'
 import { Actions } from 'viem/tempo'
 import * as z from 'zod/mini'
 
+import * as AccessKey from './AccessKey.js'
 import * as Account from './Account.js'
 import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
@@ -208,6 +210,50 @@ export function create(options: create.Options = {}): create.ReturnType {
                       },
                       request,
                     )) satisfies Rpc.eth_sendTransaction.Encoded['returns']
+                  }
+
+                  case 'eth_fillTransaction': {
+                    const [parameters] = request.params
+                    const chainId = parameters.chainId
+                      ? Hex.toNumber(parameters.chainId)
+                      : undefined
+
+                    const fill = (params: typeof parameters) =>
+                      getClient({ chainId }).request({
+                        method: 'eth_fillTransaction',
+                        params: [params],
+                      })
+
+                    // Inject pending keyAuthorization so the node accounts for
+                    // key authorization gas during estimation.
+                    if (!parameters.keyAuthorization) {
+                      const account = (() => {
+                        try {
+                          return getAccount({ signable: true })
+                        } catch {
+                          return undefined
+                        }
+                      })()
+                      if (account?.source === 'accessKey') {
+                        const keyAuth = AccessKey.getPending(account, { store })
+                        if (keyAuth) {
+                          try {
+                            const result = await fill({
+                              ...parameters,
+                              // @ts-expect-error - TODO: fix
+                              keyAuthorization: KeyAuthorization.toRpc(keyAuth),
+                            })
+                            AccessKey.removePending(account, { store })
+                            return result
+                          } catch {
+                            AccessKey.remove(account, { store })
+                            return await fill(parameters)
+                          }
+                        }
+                      }
+                    }
+
+                    return await fill(parameters)
                   }
 
                   case 'eth_signTransaction': {
@@ -518,12 +564,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     ),
     {
       chains,
-      getAccount(options = {}) {
-        const account = getAccount(options)
-        if (!(options as any).signable)
-          return { address: account.address, type: 'json-rpc' } as never
-        return account as never
-      },
+      getAccount,
       getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
         const { chainId, feePayer } = options
         return Client.fromChainId(chainId, { chains, feePayer, provider: providerRef, store })
@@ -555,8 +596,8 @@ export function create(options: create.Options = {}): create.ReturnType {
       methods: [
         mppx_tempo({
           getClient: ({ chainId }) => {
-            const client = Client.fromChainId(chainId, { chains, store })
-            const account = Account.find({ store, signable: true })
+            const client = provider.getClient({ chainId })
+            const account = provider.getAccount()
             return Object.assign(client, { account })
           },
           mode: 'pull',

@@ -80,6 +80,7 @@ export const schema = from([
   Rpc.eth_chainId.schema,
   Rpc.eth_requestAccounts.schema,
   Rpc.eth_sendTransaction.schema,
+  Rpc.eth_fillTransaction.schema,
   Rpc.eth_signTransaction.schema,
   Rpc.eth_sendTransactionSync.schema,
   Rpc.eth_signTypedData_v4.schema,

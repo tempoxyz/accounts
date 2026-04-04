@@ -72,6 +72,7 @@ export const transactionRequest = z.object({
   feeToken: z.optional(u.address()),
   from: z.optional(u.address()),
   gas: z.optional(u.bigint()),
+  keyAuthorization: z.optional(keyAuthorization),
   maxFeePerGas: z.optional(u.bigint()),
   maxPriorityFeePerGas: z.optional(u.bigint()),
   nonce: z.optional(u.number()),
@@ -117,6 +118,16 @@ export namespace eth_sendTransaction {
     method: z.literal('eth_sendTransaction'),
     params: z.readonly(z.tuple([transactionRequest])),
     returns: u.hex(),
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
+export namespace eth_fillTransaction {
+  export const schema = Schema.defineItem({
+    method: z.literal('eth_fillTransaction'),
+    params: z.readonly(z.tuple([transactionRequest])),
+    returns: z.any(),
   })
   export type Encoded = Schema.Encoded<typeof schema>
   export type Decoded = Schema.Decoded<typeof schema>
