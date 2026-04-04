@@ -559,6 +559,7 @@ export function create(options: create.Options = {}): create.ReturnType {
             const account = Account.find({ store, signable: true })
             return Object.assign(client, { account })
           },
+          mode: 'pull',
         }),
       ],
     })
