@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.19
+
+### Patch Changes
+
+- 54a9395: Added `wallet_deposit` RPC method for requesting funds. On testnet, shows a faucet UI. On mainnet, shows a bridge deposit flow. Fixed `Remote.respond` to correctly handle void return types.
+
 ## 0.4.18
 
 ### Patch Changes
