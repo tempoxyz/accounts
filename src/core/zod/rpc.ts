@@ -428,6 +428,25 @@ export namespace wallet_switchEthereumChain {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
+export namespace wallet_deposit {
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_deposit'),
+    params: z.readonly(
+      z.tuple([
+        z.object({
+          address: z.optional(u.address()),
+          chainId: z.optional(u.number()),
+          token: z.optional(u.address()),
+          value: z.optional(z.string()),
+        }),
+      ]),
+    ),
+    returns: z.void(),
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
 /** Strict parameter schemas keyed by method name. */
 export const strictParameters = {
   wallet_authorizeAccessKey: wallet_authorizeAccessKey_strict.parameters,

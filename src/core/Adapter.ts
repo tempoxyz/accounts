@@ -46,6 +46,13 @@ export type Instance = {
       params: createAccount.Parameters,
       request: EncodedRequest<Rpc.wallet_connect.Encoded>,
     ) => Promise<createAccount.ReturnType>
+    /** Deposit funds into the account. */
+    deposit?:
+      | ((
+          params: deposit.Parameters,
+          request: EncodedRequest<Rpc.wallet_deposit.Encoded>,
+        ) => Promise<deposit.ReturnType>)
+      | undefined
     /** Disconnect hook for adapter-specific cleanup. */
     disconnect?: (() => Promise<void>) | undefined
     /** Discover existing accounts (e.g. WebAuthn assertion). */
@@ -149,6 +156,11 @@ export declare namespace createAccount {
     /** Signature over the digest, if one was provided. */
     signature?: Hex | undefined
   }
+}
+
+export declare namespace deposit {
+  type Parameters = ActionRequest<typeof Rpc.wallet_deposit.schema>
+  type ReturnType = Rpc.wallet_deposit.Encoded['returns']
 }
 
 export declare namespace loadAccounts {
