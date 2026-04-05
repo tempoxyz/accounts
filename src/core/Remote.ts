@@ -230,7 +230,8 @@ export function create(options: create.Options): Remote {
       }
 
       try {
-        let result = 'result' in options ? options.result : (await provider?.request(request as never))
+        let result =
+          'result' in options ? options.result : await provider?.request(request as never)
         if (selector) result = selector(result)
         messenger.send(
           'rpc-response',
