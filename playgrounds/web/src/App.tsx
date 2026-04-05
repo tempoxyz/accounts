@@ -73,6 +73,7 @@ export function App() {
       <h2>Balances &amp; Funding</h2>
       <WalletGetBalances />
       <Faucet />
+      <WalletAddFunds />
 
       <h2>Transactions</h2>
       <Transactions />
@@ -117,6 +118,38 @@ function Faucet() {
         }
       >
         Fund Account
+      </button>
+    </Method>
+  )
+}
+
+function WalletAddFunds() {
+  const [result, error, execute] = useRequest()
+  return (
+    <Method method="wallet_addFunds" result={result} error={error}>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_addFunds',
+              params: [{}],
+            }),
+          )
+        }
+      >
+        Add Funds
+      </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_addFunds',
+              params: [{ value: '50' }],
+            }),
+          )
+        }
+      >
+        Add Funds ($50)
       </button>
     </Method>
   )
