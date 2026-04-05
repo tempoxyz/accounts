@@ -428,9 +428,9 @@ export namespace wallet_switchEthereumChain {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
-export namespace wallet_addFunds {
+export namespace wallet_deposit {
   export const schema = Schema.defineItem({
-    method: z.literal('wallet_addFunds'),
+    method: z.literal('wallet_deposit'),
     params: z.readonly(
       z.tuple([
         z.object({
@@ -441,7 +441,7 @@ export namespace wallet_addFunds {
         }),
       ]),
     ),
-    returns: z.object({ id: u.hex() }),
+    returns: z.void(),
   })
   export type Encoded = Schema.Encoded<typeof schema>
   export type Decoded = Schema.Decoded<typeof schema>

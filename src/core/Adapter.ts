@@ -34,13 +34,6 @@ export type Meta = {
 export type Instance = {
   /** Adapter actions dispatched by the provider's `request()` method. */
   actions: {
-    /** Add funds to the account (e.g. via bridge deposit). */
-    addFunds?:
-      | ((
-          params: addFunds.Parameters,
-          request: EncodedRequest<Rpc.wallet_addFunds.Encoded>,
-        ) => Promise<addFunds.ReturnType>)
-      | undefined
     /** Grant an access key for the active account. */
     authorizeAccessKey?:
       | ((
@@ -53,6 +46,13 @@ export type Instance = {
       params: createAccount.Parameters,
       request: EncodedRequest<Rpc.wallet_connect.Encoded>,
     ) => Promise<createAccount.ReturnType>
+    /** Deposit funds into the account. */
+    deposit?:
+      | ((
+          params: deposit.Parameters,
+          request: EncodedRequest<Rpc.wallet_deposit.Encoded>,
+        ) => Promise<deposit.ReturnType>)
+      | undefined
     /** Disconnect hook for adapter-specific cleanup. */
     disconnect?: (() => Promise<void>) | undefined
     /** Discover existing accounts (e.g. WebAuthn assertion). */
@@ -158,6 +158,11 @@ export declare namespace createAccount {
   }
 }
 
+export declare namespace deposit {
+  type Parameters = ActionRequest<typeof Rpc.wallet_deposit.schema>
+  type ReturnType = Rpc.wallet_deposit.Encoded['returns']
+}
+
 export declare namespace loadAccounts {
   type Parameters = {
     /** Grant an access key during the ceremony. */
@@ -241,11 +246,6 @@ export declare namespace sendTransactionSync {
 export declare namespace signTransaction {
   type Parameters = ActionRequest<typeof Rpc.eth_signTransaction.schema>
   type ReturnType = Hex
-}
-
-export declare namespace addFunds {
-  type Parameters = ActionRequest<typeof Rpc.wallet_addFunds.schema>
-  type ReturnType = Rpc.wallet_addFunds.Encoded['returns']
 }
 
 export declare namespace switchChain {
