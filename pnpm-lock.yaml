@@ -192,13 +192,13 @@ importers:
         specifier: ^10.42.0
         version: 10.47.0(react@19.2.0)
       '@tanstack/query-sync-storage-persister':
-        specifier: ^5.90.22
+        specifier: ^5.95.2
         version: 5.96.1
       '@tanstack/react-query':
-        specifier: ^5.90.20
+        specifier: ^5.95.2
         version: 5.96.1(react@19.2.0)
       '@tanstack/react-query-persist-client':
-        specifier: ^5.90.22
+        specifier: ^5.95.2
         version: 5.96.1(@tanstack/react-query@5.96.1(react@19.2.0))(react@19.2.0)
       '@tanstack/react-router':
         specifier: ^1.167.4
