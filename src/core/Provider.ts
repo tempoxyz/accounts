@@ -538,6 +538,17 @@ export function create(options: create.Options = {}): create.ReturnType {
                     return
                   }
 
+                  case 'wallet_addFunds': {
+                    if (!actions.addFunds)
+                      throw new ox_Provider.UnsupportedMethodError({
+                        message: '`addFunds` not supported by adapter.',
+                      })
+                    return (await actions.addFunds(
+                      request._decoded.params[0],
+                      request,
+                    )) satisfies Rpc.wallet_addFunds.Encoded['returns']
+                  }
+
                   case 'wallet_switchEthereumChain': {
                     const { chainId } = request._decoded.params[0]
                     if (!chains.some((c) => c.id === chainId))

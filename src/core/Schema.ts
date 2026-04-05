@@ -89,6 +89,7 @@ export const schema = from([
   Rpc.wallet_getBalances.schema,
   Rpc.wallet_getCallsStatus.schema,
   Rpc.wallet_getCapabilities.schema,
+  Rpc.wallet_addFunds.schema,
   Rpc.wallet_connect.schema,
   Rpc.wallet_disconnect.schema,
   Rpc.wallet_authorizeAccessKey.schema,

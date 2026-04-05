@@ -34,6 +34,13 @@ export type Meta = {
 export type Instance = {
   /** Adapter actions dispatched by the provider's `request()` method. */
   actions: {
+    /** Add funds to the account (e.g. via bridge deposit). */
+    addFunds?:
+      | ((
+          params: addFunds.Parameters,
+          request: EncodedRequest<Rpc.wallet_addFunds.Encoded>,
+        ) => Promise<addFunds.ReturnType>)
+      | undefined
     /** Grant an access key for the active account. */
     authorizeAccessKey?:
       | ((
@@ -234,6 +241,11 @@ export declare namespace sendTransactionSync {
 export declare namespace signTransaction {
   type Parameters = ActionRequest<typeof Rpc.eth_signTransaction.schema>
   type ReturnType = Hex
+}
+
+export declare namespace addFunds {
+  type Parameters = ActionRequest<typeof Rpc.wallet_addFunds.schema>
+  type ReturnType = Rpc.wallet_addFunds.Encoded['returns']
 }
 
 export declare namespace switchChain {
