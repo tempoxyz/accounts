@@ -1,5 +1,12 @@
 # accounts
 
+## 0.4.21
+
+### Patch Changes
+
+- e892698: Renamed `Ceremony` to `WebAuthnCeremony`.
+- 59d5d90: Renamed `Handler.webauthn` to `Handler.webAuthn`.
+
 ## 0.4.20
 
 ### Patch Changes
