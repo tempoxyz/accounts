@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.24
+
+### Patch Changes
+
+- 825ece0: Added `dangerous_secp256k1` wagmi connector.
+
 ## 0.4.23
 
 ### Patch Changes
