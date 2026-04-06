@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.20
+
+### Patch Changes
+
+- f7929e2: Added `onError` option to `Remote.respond`. Return `true` from the callback to suppress the error response to the parent, allowing the dialog to show a recovery UI instead of rejecting.
+
 ## 0.4.19
 
 ### Patch Changes
