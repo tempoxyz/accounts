@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.23
+
+### Patch Changes
+
+- 88ff46d: Added `tempo-docs-git-jxom-accounts-sdk-docs-tempoxyz.vercel.app` to trusted hosts.
+
 ## 0.4.22
 
 ### Patch Changes
