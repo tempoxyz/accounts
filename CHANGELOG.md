@@ -1,5 +1,11 @@
 # accounts
 
+## 0.4.22
+
+### Patch Changes
+
+- 0289ff0: Renamed `Handler.webauthn` to `Handler.webAuthn`.
+
 ## 0.4.21
 
 ### Patch Changes
