@@ -105,6 +105,12 @@ export declare namespace respond {
   type Options = {
     /** Error to respond with (takes precedence over result). */
     error?: { code: number; message: string } | undefined
+    /**
+     * Called when `provider.request()` throws. Return `true` to suppress the
+     * error response to the parent — the dialog stays open and can show a
+     * recovery UI. The error is still re-thrown to the caller.
+     */
+    onError?: ((error: Error) => boolean | void) | undefined
     /** Explicit result — if omitted, calls `provider.request(request)`. */
     result?: unknown | undefined
     /** Transform the result before sending. */
@@ -216,7 +222,7 @@ export function create(options: create.Options): Remote {
     },
 
     async respond(request, options = {}) {
-      const { error, selector } = options
+      const { error, onError, selector } = options
       const shared = { id: request.id, jsonrpc: '2.0' } as const
 
       if (error) {
@@ -246,6 +252,8 @@ export function create(options: create.Options): Remote {
           messenger.send('switch-mode', { mode: 'popup' })
           return
         }
+
+        if (e instanceof Error && onError?.(e)) throw e
 
         const err = e as RpcResponse.BaseError
         messenger.send(
