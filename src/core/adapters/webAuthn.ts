@@ -5,14 +5,14 @@ import { Authentication, Registration } from 'webauthx/client'
 
 import type { OneOf } from '../../internal/types.js'
 import * as Adapter from '../Adapter.js'
-import * as Ceremony from '../Ceremony.js'
+import * as WebAuthnCeremony from '../WebAuthnCeremony.js'
 import { local } from './local.js'
 
 /**
  * Creates a WebAuthn adapter backed by real passkey ceremonies.
  *
  * Wraps the {@link local} adapter with WebAuthn registration and authentication flows,
- * using the provided {@link Ceremony} for challenge generation and verification.
+ * using the provided {@link WebAuthnCeremony} for challenge generation and verification.
  *
  * @example
  * ```ts
@@ -31,7 +31,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
 
     const ceremony =
       options.ceremony ??
-      (authUrl ? Ceremony.server({ url: authUrl }) : Ceremony.local({ storage }))
+      (authUrl ? WebAuthnCeremony.server({ url: authUrl }) : WebAuthnCeremony.local({ storage }))
 
     const base = local({
       async createAccount(parameters) {
@@ -111,11 +111,11 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
 export declare namespace webAuthn {
   type Options = OneOf<
     | {
-        /** Ceremony strategy for WebAuthn registration and authentication. @default Ceremony.local() */
-        ceremony?: Ceremony.Ceremony | undefined
+        /** Ceremony strategy for WebAuthn registration and authentication. @default WebAuthnCeremony.local() */
+        ceremony?: WebAuthnCeremony.WebAuthnCeremony | undefined
       }
     | {
-        /** URL of a WebAuthn handler (shorthand for `Ceremony.server({ url })`). */
+        /** URL of a WebAuthn handler (shorthand for `WebAuthnCeremony.server({ url })`). */
         authUrl?: string | undefined
       }
   > & {

@@ -1,4 +1,4 @@
-import { Ceremony, dialog, Dialog, local, Provider, webAuthn } from 'accounts'
+import { WebAuthnCeremony, dialog, Dialog, local, Provider, webAuthn } from 'accounts'
 import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
@@ -55,7 +55,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     })
 
   if (adapterType === 'webAuthn') {
-    const ceremony = Ceremony.server({ url: '/webauthn' })
+    const ceremony = WebAuthnCeremony.server({ url: '/webauthn' })
     return Provider.create({
       adapter: webAuthn({ ceremony }),
       feePayerUrl: '/fee-payer',

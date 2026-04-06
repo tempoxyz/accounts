@@ -13,9 +13,8 @@ export const wagmiConfig = createConfig({
   chains: [tempo, tempoModerato],
   connectors: [
     webAuthn({
-      // WARNING: A server ceremony must be passed in production.
-      // Uncomment this to use the server ceremony for webauthn.
-      // ceremony: Ceremony.server({ url: '/webauthn' }),
+      // WARNING: An `authUrl` must be passed in production.
+      // authUrl: '/webauthn',
       persistCredentials: false,
       storage: Storage.combine(Storage.cookie(), Storage.localStorage()),
     }),

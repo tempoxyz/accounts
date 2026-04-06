@@ -1,7 +1,7 @@
 import { dangerous_secp256k1 } from '../src/core/adapters/dangerous_secp256k1.js'
 import { local as core_local } from '../src/core/adapters/local.js'
 import { webAuthn as core_webAuthn } from '../src/core/adapters/webAuthn.js'
-import * as Ceremony from '../src/core/Ceremony.js'
+import * as WebAuthnCeremony from '../src/core/WebAuthnCeremony.js'
 import type * as Store from '../src/core/Store.js'
 import { privateKeys, webAuthnAccounts } from './config.js'
 import { url as webauthnUrl } from './webauthn.constants.js'
@@ -30,8 +30,8 @@ export function secp256k1() {
   return dangerous_secp256k1()
 }
 
-/** Creates a WebAuthn adapter backed by a server-side ceremony via {@link Ceremony.server}. */
+/** Creates a WebAuthn adapter backed by a server-side ceremony via {@link WebAuthnCeremony.server}. */
 export function webAuthn() {
-  const ceremony = Ceremony.server({ url: webauthnUrl })
+  const ceremony = WebAuthnCeremony.server({ url: webauthnUrl })
   return core_webAuthn({ ceremony })
 }

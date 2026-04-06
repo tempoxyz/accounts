@@ -8,12 +8,12 @@ import { describe, expect, test } from 'vp/test'
 import { accounts, chain, getClient } from '../../test/config.js'
 import { url as webauthnUrl } from '../../test/webauthn.constants.js'
 import { webAuthn } from './adapters/webAuthn.js'
-import * as Ceremony from './Ceremony.js'
+import * as WebAuthnCeremony from './WebAuthnCeremony.js'
 import * as Expiry from './Expiry.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 
-const ceremony = Ceremony.server({ url: webauthnUrl })
+const ceremony = WebAuthnCeremony.server({ url: webauthnUrl })
 
 function getProvider(options: Partial<Provider.create.Options> = {}) {
   return Provider.create({

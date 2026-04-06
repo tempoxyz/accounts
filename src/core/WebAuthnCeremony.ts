@@ -5,7 +5,7 @@ import { Authentication, Registration } from 'webauthx/server'
 import * as Storage from './Storage.js'
 
 /** Pluggable strategy for WebAuthn registration and authentication ceremonies. */
-export type Ceremony = {
+export type WebAuthnCeremony = {
   /** Get credential creation options for `navigator.credentials.create()`. */
   getRegistrationOptions: (
     params: getRegistrationOptions.Parameters,
@@ -75,8 +75,8 @@ export declare namespace verifyAuthentication {
   }
 }
 
-/** Creates a {@link Ceremony} from a custom implementation. */
-export function from(ceremony: Ceremony): Ceremony {
+/** Creates a {@link WebAuthnCeremony} from a custom implementation. */
+export function from(ceremony: WebAuthnCeremony): WebAuthnCeremony {
   return ceremony
 }
 
@@ -88,12 +88,12 @@ export function from(ceremony: Ceremony): Ceremony {
  *
  * @example
  * ```ts
- * import { Ceremony } from 'accounts'
+ * import { WebAuthnCeremony } from 'accounts'
  *
- * const ceremony = Ceremony.local()
+ * const ceremony = WebAuthnCeremony.local()
  * ```
  */
-export function local(options: local.Options = {}): Ceremony {
+export function local(options: local.Options = {}): WebAuthnCeremony {
   const rpId = options.rpId ?? (typeof location !== 'undefined' ? location.hostname : 'localhost')
   const storage =
     options.storage ?? (typeof window !== 'undefined' ? Storage.idb() : Storage.memory())
@@ -155,12 +155,12 @@ export declare namespace local {
  *
  * @example
  * ```ts
- * import { Ceremony } from 'accounts'
+ * import { WebAuthnCeremony } from 'accounts'
  *
- * const ceremony = Ceremony.server({ url: 'https://example.com/webauthn' })
+ * const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
  * ```
  */
-export function server(options: server.Options): Ceremony {
+export function server(options: server.Options): WebAuthnCeremony {
   const { url } = options
 
   async function request<returnType>(path: string, body: unknown): Promise<returnType> {

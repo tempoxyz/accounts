@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, chain, getClient, http } from '../../test/config.js'
 import { createServer, type Server } from '../../test/utils.js'
-import * as Ceremony from '../core/Ceremony.js'
+import * as WebAuthnCeremony from '../core/WebAuthnCeremony.js'
 import * as Handler from './Handler.js'
 import * as Kv from './Kv.js'
 
@@ -849,7 +849,7 @@ describe('feePayer', () => {
 
 describe('webauthn', () => {
   let server: Server
-  let ceremony: Ceremony.Ceremony
+  let ceremony: WebAuthnCeremony.WebAuthnCeremony
 
   beforeAll(async () => {
     server = await createServer(
@@ -859,7 +859,7 @@ describe('webauthn', () => {
         rpId: 'localhost',
       }).listener,
     )
-    ceremony = Ceremony.server({ url: server.url })
+    ceremony = WebAuthnCeremony.server({ url: server.url })
   })
 
   afterAll(async () => {

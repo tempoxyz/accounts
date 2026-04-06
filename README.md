@@ -66,7 +66,7 @@ Use the `accounts/cli` entrypoint when an external CLI already owns the local ke
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
-  serviceUrl: 'https://wallet.example.com/cli-auth',
+  host: 'https://wallet.example.com/cli-auth',
 })
 
 const { accounts } = await provider.request({
