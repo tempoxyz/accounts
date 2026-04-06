@@ -17,7 +17,7 @@ const payment = Mppx.create({
 
 const handler = Handler.compose([
   cliAuth,
-  Handler.webauthn({
+  Handler.webAuthn({
     kv: Kv.memory(),
     origin: process.env.ORIGIN,
     path: '/webauthn',

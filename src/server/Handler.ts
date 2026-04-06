@@ -490,7 +490,7 @@ export declare namespace codeAuth {
  * ```ts
  * import { Handler, Kv } from 'accounts/server'
  *
- * const handler = Handler.webauthn({
+ * const handler = Handler.webAuthn({
  *   kv: Kv.memory(),
  *   origin: 'https://example.com',
  *   rpId: 'example.com',
@@ -502,7 +502,7 @@ export declare namespace codeAuth {
  * @param options - Options.
  * @returns Request handler.
  */
-export function webauthn(options: webauthn.Options): Handler {
+export function webAuthn(options: webAuthn.Options): Handler {
   const { challengeTtl = 300, kv, onAuthenticate, onRegister, path = '', rpId, ...rest } = options
   const origin = options.origin as string | string[]
 
@@ -637,7 +637,7 @@ export function webauthn(options: webauthn.Options): Handler {
   return router
 }
 
-export declare namespace webauthn {
+export declare namespace webAuthn {
   type Options = from.Options & {
     /** Maximum age of a challenge in seconds before it expires. @default 300 */
     challengeTtl?: number | undefined

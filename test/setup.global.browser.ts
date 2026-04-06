@@ -17,11 +17,11 @@ export default async function () {
   }
 
   const server = await createServer(
-    Handler.webauthn({ kv: Kv.memory(), origin: 'http://localhost', rpId: 'localhost' }).listener,
+    Handler.webAuthn({ kv: Kv.memory(), origin: 'http://localhost', rpId: 'localhost' }).listener,
     { port },
   )
   const hooksServer = await createServer(
-    Handler.webauthn({
+    Handler.webAuthn({
       cors: { exposeHeaders: 'x-custom' },
       kv: Kv.memory(),
       origin: 'http://localhost',

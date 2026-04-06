@@ -9,13 +9,13 @@ export default async function () {
   const server = Http.createServer((req, res) => {
     // Origin varies per Playwright run; extract from request header.
     const origin = req.headers.origin ?? 'http://localhost'
-    Handler.webauthn({ kv, origin, rpId: 'localhost' }).listener(req, res)
+    Handler.webAuthn({ kv, origin, rpId: 'localhost' }).listener(req, res)
   })
 
   const hooksKv = Kv.memory()
   const hooksServer = Http.createServer((req, res) => {
     const origin = req.headers.origin ?? 'http://localhost'
-    Handler.webauthn({
+    Handler.webAuthn({
       cors: { exposeHeaders: 'x-custom' },
       kv: hooksKv,
       origin,

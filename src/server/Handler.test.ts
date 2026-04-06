@@ -853,7 +853,7 @@ describe('webauthn', () => {
 
   beforeAll(async () => {
     server = await createServer(
-      Handler.webauthn({
+      Handler.webAuthn({
         kv: Kv.memory(),
         origin: 'http://localhost',
         rpId: 'localhost',
@@ -953,7 +953,7 @@ describe('webauthn', () => {
     test('behavior: onRegister error does not call hook', async () => {
       let called = false
       const hookServer = await createServer(
-        Handler.webauthn({
+        Handler.webAuthn({
           kv: Kv.memory(),
           origin: 'http://localhost',
           rpId: 'localhost',
@@ -978,7 +978,7 @@ describe('webauthn', () => {
     test('behavior: onAuthenticate error does not call hook', async () => {
       let called = false
       const hookServer = await createServer(
-        Handler.webauthn({
+        Handler.webAuthn({
           kv: Kv.memory(),
           origin: 'http://localhost',
           rpId: 'localhost',

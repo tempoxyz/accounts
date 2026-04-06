@@ -148,7 +148,7 @@ export declare namespace local {
 }
 
 /**
- * Creates a server-backed ceremony that delegates to a remote {@link Handler.webauthn} endpoint.
+ * Creates a server-backed ceremony that delegates to a remote {@link Handler.webAuthn} endpoint.
  *
  * All challenge generation, verification, and credential storage happen server-side.
  * The client uses `fetch()` to communicate with 4 POST endpoints derived from the base URL.
