@@ -8,6 +8,7 @@ import {
 } from 'viem'
 import * as z from 'zod/mini'
 
+import { dangerous_secp256k1 as dangerous_secp256k1_adapter } from '../core/adapters/dangerous_secp256k1.js'
 import { dialog as core_dialog } from '../core/adapters/dialog.js'
 import { webAuthn as webAuthn_adapter } from '../core/adapters/webAuthn.js'
 import * as Provider from '../core/Provider.js'
@@ -291,4 +292,35 @@ export function dialog(options: dialog.Options = {}) {
 
 export declare namespace dialog {
   type Options = core_dialog.Options & Omit<setup.Parameters, 'adapter'>
+}
+
+/**
+ * Creates a wagmi connector backed by a secp256k1 adapter.
+ *
+ * @deprecated Private keys are stored in plaintext via the provider's storage adapter.
+ * Use only for development, testing, or when the threat model allows it.
+ *
+ * @example
+ * ```ts
+ * import { createConfig, http } from 'wagmi'
+ * import { tempoModerato } from 'wagmi/chains'
+ * import { dangerous_secp256k1 } from 'accounts/wagmi'
+ *
+ * const config = createConfig({
+ *   chains: [tempoModerato],
+ *   connectors: [dangerous_secp256k1()],
+ *   transports: { [tempoModerato.id]: http() },
+ * })
+ * ```
+ */
+export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}) {
+  const { icon, name, rdns, ...rest } = options
+  return setup({
+    ...rest,
+    adapter: dangerous_secp256k1_adapter({ icon, name, rdns }),
+  })
+}
+
+export declare namespace dangerous_secp256k1 {
+  type Options = dangerous_secp256k1_adapter.Options & Omit<setup.Parameters, 'adapter'>
 }
