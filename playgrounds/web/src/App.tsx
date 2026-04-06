@@ -94,6 +94,7 @@ export function App() {
 
       <h2>MPP</h2>
       <Fortune />
+      <MppZeroDollarAuth />
 
       <h2>RPC Proxy (fallthrough)</h2>
       <EthBlockNumber />
@@ -894,6 +895,50 @@ function Fortune() {
     <Method method="fetch /fortune" result={result} error={error}>
       <button onClick={() => execute(() => fetch('/fortune').then((r) => r.json()))}>
         Get Fortune (0.01 pathUSD)
+      </button>
+    </Method>
+  )
+}
+
+function MppZeroDollarAuth() {
+  const [result, error, execute] = useRequest()
+  return (
+    <Method method="auth" result={result} error={error}>
+      <button
+        onClick={() =>
+          execute(async () => {
+            const accounts = await provider.request({ method: 'eth_accounts' })
+            if (accounts.length === 0) return 'No accounts connected'
+            const chainId = await provider.request({ method: 'eth_chainId' })
+            return provider.request({
+              method: 'eth_signTypedData_v4',
+              params: [
+                accounts[0],
+                Json.stringify({
+                  types: {
+                    EIP712Domain: [
+                      { name: 'name', type: 'string' },
+                      { name: 'version', type: 'string' },
+                      { name: 'chainId', type: 'uint256' },
+                    ],
+                    Proof: [{ name: 'challengeId', type: 'string' }],
+                  },
+                  primaryType: 'Proof',
+                  domain: {
+                    name: 'MPP',
+                    version: '1',
+                    chainId: Number(chainId),
+                  },
+                  message: {
+                    challengeId: crypto.randomUUID(),
+                  },
+                }),
+              ],
+            })
+          })
+        }
+      >
+        Sign MPP Proof
       </button>
     </Method>
   )
