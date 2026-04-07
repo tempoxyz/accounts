@@ -391,17 +391,16 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
 
   const defaultChainId = chainId ?? client?.chain?.id ?? chains.at(0)?.id
 
-  function assertConfiguredChain(chainId: bigint | number | undefined) {
-    if (client || !chainId) return
-    if (!clients.has(Number(chainId))) throw new Error(`Chain ${chainId} not configured`)
-  }
-
   function resolveClient(chainId: bigint | number | undefined): Client {
     if (client) return client
     const id = Number(chainId ?? defaultChainId)
-    if (typeof id === 'undefined') throw new Error('No chain configured')
+    if (!Number.isFinite(id)) throw new Error('No chain configured')
     const resolved = clients.get(id)
-    if (!resolved) throw new Error(`Chain ${id} not configured`)
+    if (!resolved)
+      return createClient({
+        chain: { ...tempo, id },
+        transport: http(),
+      })
     return resolved
   }
 
@@ -426,7 +425,6 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
   router.post(`${path}/code`, async ({ request: req }) => {
     try {
       const request = z.decode(CliAuth.createRequest, await req.json())
-      assertConfiguredChain(request.chainId ?? defaultChainId)
       const result = await CliAuth.createDeviceCode({
         chainId: defaultChainId,
         ...(now ? { now } : {}),
