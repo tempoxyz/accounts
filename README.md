@@ -36,7 +36,7 @@ For documentation and guides, visit [docs.tempo.xyz/accounts](https://docs.tempo
 
 Have questions or building something cool with the Accounts SDK?
 
-Join the Telegram group to chat with the team and other devs: [@porto_devs](https://t.me/porto_devs)
+Join the Telegram group to chat with the team and other devs: [@mpp_devs](https://t.me/mpp_devs)
 
 ## Examples
 
