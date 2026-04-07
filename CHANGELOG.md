@@ -1,5 +1,11 @@
 # accounts
 
+## 0.5.0
+
+### Minor Changes
+
+- 5b4ce03: Public release.
+
 ## 0.4.25
 
 ### Patch Changes
