@@ -1,12 +1,24 @@
 import { Handler, Kv } from 'accounts/server'
+import * as Bun from 'bun'
 import { http } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { tempoModerato } from 'viem/chains'
+import { tempoTestnet } from 'viem/chains'
 import { Account } from 'viem/tempo'
 
+await Bun.build({
+  outdir: './dist',
+  entrypoints: ['./src/main.tsx'],
+})
+
+const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Private Fee Payer</title></head>
+<body><div id="root"></div><script type="module" src="/main.js"></script></body>
+</html>`
+
+const localKv = Kv.memory()
 const sessionCookie = 'fp_session'
 const sessionTtlMs = 15 * 60 * 1_000
-const localKv = Kv.memory()
 
 type Session = {
   credentialId: string
@@ -15,11 +27,17 @@ type Session = {
   expiresAt: number
 }
 
-export default {
-  async fetch(request, env) {
+const server = Bun.serve({
+  port: Number.parseInt(Bun.env.PORT ?? 88_88),
+  development: true,
+  routes: {
+    '/': new Response(html, { headers: { 'content-type': 'text/html' } }),
+    '/main.js': new Response(Bun.file('./dist/main.js')),
+  },
+  async fetch(request, _server) {
     const url = new URL(request.url)
-    const kv = env.KV ? Kv.cloudflare(env.KV) : localKv
-    const rpcUrl = getRpcUrl(url)
+    const kv = localKv
+    const rpcUrl = tempoTestnet.rpcUrls.default.http[0]
 
     if (url.pathname === '/debug/fetch') {
       try {
@@ -57,7 +75,7 @@ export default {
     const handler = Handler.compose(
       [
         Handler.feePayer({
-          account: privateKeyToAccount(env.FEE_PAYER_PRIVATE_KEY),
+          account: privateKeyToAccount(Bun.env.FEE_PAYER_PRIVATE_KEY),
           async authorize(parameters) {
             try {
               const session = await requireSession({ kv, request: parameters.request })
@@ -68,7 +86,7 @@ export default {
                 tx: parameters.transaction,
               })
               assertAllowedCalls({
-                allowedTargets: parseAddressList(env.ALLOWED_FEE_PAYER_TARGETS),
+                allowedTargets: parseAddressList(Bun.env.ALLOWED_FEE_PAYER_TARGETS),
                 requestId: parameters.rpcRequest.id,
                 tx: parameters.transaction,
               })
@@ -81,11 +99,11 @@ export default {
               throw error
             }
           },
-          chains: [tempoModerato],
+          chains: [tempoTestnet],
           path: '/fee-payer',
           cors: false,
           transports: {
-            [tempoModerato.id]: http(rpcUrl),
+            [tempoTestnet.id]: http(rpcUrl),
           },
         }),
         Handler.webAuthn({
@@ -119,7 +137,9 @@ export default {
 
     return handler.fetch(request)
   },
-} satisfies ExportedHandler<Cloudflare.Env>
+})
+
+if (server.development) console.info(`Server is running on ${server.url}`)
 
 async function createSessionResponse(parameters: {
   credentialId: string
@@ -176,6 +196,7 @@ async function requireSession(parameters: { kv: Kv.Kv; request: Request }) {
 
   return session
 }
+
 function assertAuthorizedSender(parameters: {
   requestId: number
   session: Session
@@ -296,10 +317,4 @@ function rpcErrorResponse(parameters: {
       status: parameters.status,
     },
   )
-}
-
-function getRpcUrl(url: URL) {
-  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
-    return `http://127.0.0.1:${url.port}/rpc`
-  return tempoModerato.rpcUrls.default.http[0]
 }

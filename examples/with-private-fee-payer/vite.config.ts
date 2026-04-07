@@ -1,18 +1,15 @@
-import { cloudflare } from '@cloudflare/vite-plugin'
+// import { cloudflare } from '@cloudflare/vite-plugin'
 import react from '@vitejs/plugin-react'
-import { tempoModerato } from 'viem/chains'
 import { defineConfig } from 'vp'
 
 export default defineConfig({
-  plugins: [react(), cloudflare()],
+  plugins: [react()],
   server: {
-    host: '0.0.0.0',
-    proxy: {
-      '/rpc': {
-        changeOrigin: true,
-        rewrite: () => '',
-        target: tempoModerato.rpcUrls.default.http[0],
-      },
+    allowedHosts: ['o.bun-alewife.ts.net'],
+  },
+  build: {
+    rolldownOptions: {
+      output: { format: 'esm', entryFileNames: 'main.js' },
     },
   },
 })
