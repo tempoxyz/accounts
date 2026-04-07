@@ -70,7 +70,7 @@ export type Remote = {
    * Signals readiness to the host and begins accepting requests.
    * Call this after the remote context is fully initialized.
    */
-  ready: () => void
+  ready: (options?: Messenger.ReadyOptions | undefined) => void
   /**
    * Reject an RPC request.
    */
@@ -182,8 +182,8 @@ export function create(options: create.Options): Remote {
       })
     },
 
-    ready() {
-      messenger.ready({ trustedHosts })
+    ready(options) {
+      messenger.ready({ ...options, trustedHosts })
 
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search)
