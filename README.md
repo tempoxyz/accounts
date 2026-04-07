@@ -9,10 +9,18 @@
 <p align="center"><b>Accounts SDK for Apps and Wallets building on Tempo.</b></p>
 
 <p align="center">
-  <a href="#install">Install</a> · <a href="#documentation">Documentation</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a> · <a href="#license">License</a>
+  <a href="#quick-prompt">Quick Prompt</a> · <a href="#install">Install</a> · <a href="#documentation">Documentation</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a> · <a href="#license">License</a>
 </p>
 
 ---
+
+## Quick Prompt
+
+Prompt your agent:
+
+```
+Read docs.tempo.xyz/accounts and integrate Tempo Wallet into my application
+```
 
 ## Install
 
