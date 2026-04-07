@@ -28,7 +28,7 @@ jobs:
               VITE_WALLET_DIALOG_HOST=https://wallet.tempo.xyz/embed
               VITE_ENV=mainnet
           - name: Wagmi
-            directory: examples/wagmi
+            directory: playgrounds/wagmi
 
     steps:
       - name: Clone repository
