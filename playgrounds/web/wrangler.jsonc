@@ -6,6 +6,12 @@
   "main": "./worker/index.ts",
   "assets": {
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/cli-auth/*", "/webauthn/*", "/fee-payer", "/fortune", "/zero-dollar-auth"],
+    "run_worker_first": [
+      "/cli-auth/*",
+      "/webauthn/*",
+      "/fee-payer",
+      "/fortune",
+      "/zero-dollar-auth",
+    ],
   },
 }

@@ -1,5 +1,0 @@
----
-"accounts": minor
----
-
-Public release.
