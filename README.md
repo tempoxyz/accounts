@@ -82,6 +82,14 @@ The `ref-impls/` directory contains reference implementations for building on th
 | `ref-impls/dialog/`   | Minimal, unstyled embed dialog app demonstrating how to build a custom embed using the `Remote` API. Select `dialogRefImpl` in the web playground's adapter dropdown to test against it. |
 | `ref-impls/cli-auth/` | Minimal React + Cloudflare/Vite host reference for device-code CLI auth: built-in code-auth endpoints plus a single unstyled approval screen and local smoke client.                     |
 
+## Getting Help
+
+Have questions or building something cool with Accounts?
+
+Join the Telegram group to chat with the team and other devs: [@porto_devs](https://t.me/porto_devs)
+
 ## License
 
-MIT
+Licensed under either of [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0) or [MIT license](https://opensource.org/licenses/MIT) at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in these packages by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
