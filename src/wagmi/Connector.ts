@@ -255,10 +255,14 @@ export declare namespace setup {
  * ```
  */
 export function webAuthn(options: webAuthn.Options = {}) {
-  const { ceremony, icon, name, rdns, ...rest } = options
+  const { authUrl, ceremony, icon, name, rdns, ...rest } = options
+  const adapter = ceremony
+    ? webAuthn_adapter({ ceremony, icon, name, rdns })
+    : webAuthn_adapter({ authUrl, icon, name, rdns })
+
   return setup({
     ...rest,
-    adapter: webAuthn_adapter({ ceremony, icon, name, rdns }),
+    adapter,
   })
 }
 
