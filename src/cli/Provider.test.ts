@@ -81,8 +81,7 @@ function createHandler() {
 
   return Handler.codeAuth({
     path: '/cli-auth',
-    chainId: chain.id,
-    client: getClient({ chain }),
+    chains: [chain],
     policy: {
       validate({ expiry: requestedExpiry, limits }) {
         return {

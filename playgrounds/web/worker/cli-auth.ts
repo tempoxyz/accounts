@@ -134,8 +134,7 @@ page.post(`${path}/approve`, async ({ request }) => {
 export const handler = Handler.compose([
   page,
   Handler.codeAuth({
-    chainId: tempoTestnet.id,
-    client,
+    chains: [tempoTestnet],
     path,
     store,
   }),

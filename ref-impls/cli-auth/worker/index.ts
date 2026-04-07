@@ -3,7 +3,7 @@ import { type Hex } from 'ox'
 import { tempoModerato } from 'viem/chains'
 
 import { approve } from './approve.js'
-import { client, store } from './deps.js'
+import { store } from './deps.js'
 
 const path = '/cli-auth'
 
@@ -17,8 +17,7 @@ type Bindings = CloudflareBindings & {
 }
 
 const cliAuth = Handler.codeAuth({
-  chainId: tempoModerato.id,
-  client,
+  chains: [tempoModerato],
   path,
   store,
 })

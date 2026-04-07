@@ -1,4 +1,4 @@
-import { createClient, http, type Chain, type Transport } from 'viem'
+import { http, type Chain, type Transport } from 'viem'
 import { tempo, tempoModerato } from 'viem/chains'
 import { describe, expectTypeOf, test } from 'vp/test'
 
@@ -19,12 +19,6 @@ describe('codeAuth options', () => {
         [tempo.id]: http('https://rpc.tempo.xyz'),
         [tempoModerato.id]: http('https://rpc.moderato.tempo.xyz'),
       },
-    })
-  })
-
-  test('keeps explicit client option support', () => {
-    void Handler.codeAuth({
-      client: createClient({ chain: tempo, transport: http('https://rpc.tempo.xyz') }),
     })
   })
 })
