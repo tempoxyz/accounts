@@ -8,7 +8,6 @@ needed — WebAuthn works on `localhost` and the fee-payer runs same-origin.
 
 ```bash
 npx gitpick tempoxyz/accounts/examples/with-fee-payer-and-webauthn
-cp .env.example .dev.vars
 pnpm i
 npx wrangler kv namespace create KV
 ```

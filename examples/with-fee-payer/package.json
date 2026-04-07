@@ -7,7 +7,7 @@
     "check:types": "tsc -b",
     "dev": "vp dev",
     "gen:types": "wrangler types",
-    "postinstall": "pnpm gen:types",
+    "postinstall": "pnpm gen:types && [ -f .env ] || cp .env.example .env && [ -f .dev.vars ] || cp .env.example .dev.vars",
     "build": "tsc -b && vp build",
     "preview": "vp preview"
   },

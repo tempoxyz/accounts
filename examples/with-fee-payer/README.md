@@ -6,7 +6,6 @@ Demonstrates sponsored transactions using `Handler.feePayer` from `accounts/serv
 
 ```bash
 npx gitpick tempoxyz/accounts/examples/with-fee-payer
-cp .env.example .dev.vars
 pnpm i
 pnpm dev
 ```
