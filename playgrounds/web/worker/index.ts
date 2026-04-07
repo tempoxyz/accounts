@@ -33,6 +33,16 @@ export default {
   async fetch(request) {
     const url = new URL(request.url)
 
+    if (url.pathname === '/zero-dollar-auth') {
+      const result = await payment.charge({
+        amount: '0',
+      })(request)
+
+      if (result.status === 402) return result.challenge
+
+      return result.withReceipt(Response.json({ authenticated: true }))
+    }
+
     if (url.pathname === '/fortune') {
       const result = await payment.charge({
         amount: '0.01',

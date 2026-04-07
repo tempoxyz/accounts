@@ -94,6 +94,7 @@ export function App() {
 
       <h2>MPP</h2>
       <Fortune />
+      <MppZeroDollarAuth />
 
       <h2>RPC Proxy (fallthrough)</h2>
       <EthBlockNumber />
@@ -894,6 +895,17 @@ function Fortune() {
     <Method method="fetch /fortune" result={result} error={error}>
       <button onClick={() => execute(() => fetch('/fortune').then((r) => r.json()))}>
         Get Fortune (0.01 pathUSD)
+      </button>
+    </Method>
+  )
+}
+
+function MppZeroDollarAuth() {
+  const [result, error, execute] = useRequest()
+  return (
+    <Method method="fetch /zero-dollar-auth" result={result} error={error}>
+      <button onClick={() => execute(() => fetch('/zero-dollar-auth').then((r) => r.json()))}>
+        Zero-Dollar Auth
       </button>
     </Method>
   )
