@@ -16,6 +16,11 @@ The frontend stays simple: it uses the normal `webAuthn({ authUrl, feePayerUrl }
 connector, and the browser automatically sends the same-origin session cookie to
 `/fee-payer`.
 
+This demo intentionally keeps the connector's local state in memory instead of
+persisting it across reloads. The fee-payer authorization lives in an HttpOnly
+cookie, so persisting the account separately can otherwise leave the UI looking
+connected even though `/fee-payer` no longer has a valid session.
+
 ## Setup
 
 ```bash

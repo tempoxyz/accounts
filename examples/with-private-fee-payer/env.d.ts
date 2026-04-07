@@ -1,7 +1,10 @@
-declare namespace Cloudflare {
-  interface Env {
-    ALLOWED_FEE_PAYER_TARGETS: string | undefined
-    FEE_PAYER_PRIVATE_KEY: `0x${string}`
-    KV: KVNamespace
-  }
+interface Env {
+  PORT: string
+  ALLOWED_FEE_PAYER_TARGETS: string
+  FEE_PAYER_PRIVATE_KEY: `0x${string}`
+  KV: KVNamespace
+}
+
+declare namespace NodeJS {
+  interface ProcessEnv extends Env {}
 }

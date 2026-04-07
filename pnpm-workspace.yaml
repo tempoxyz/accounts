@@ -6,7 +6,7 @@ packages:
   - ref-impls/*
 
 catalog:
-  '@cloudflare/vite-plugin': ^1.30.2
+  '@cloudflare/vite-plugin': 1.30.3
   '@cloudflare/workers-types': ^4.20260317.1
   '@tanstack/react-query': 5.90.5
   '@tanstack/react-router': ^1.166.7
@@ -29,7 +29,7 @@ catalog:
   vite: ^8.0.1
   vp: npm:vite-plus@~0.1.14
   wagmi: ^3.5.0
-  wrangler: ^4.80.0
+  wrangler: 4.79.0
   zod: ^4.3.6
 
 minimumReleaseAge: 1440
@@ -43,6 +43,8 @@ onlyBuiltDependencies:
   - simple-git-hooks
   - workerd
   - cloudflared
+  - utf-8-validate
+  - bufferutil
 
 ignoredBuiltDependencies:
   - '@central-icons-react/round-outlined-radius-2-stroke-1.5'

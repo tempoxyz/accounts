@@ -5,28 +5,25 @@
   "type": "module",
   "scripts": {
     "check:types": "tsc -b",
-    "dev": "vp dev",
-    "gen:types": "wrangler types",
-    "postinstall": "[ -f .env ] || cp .env.example .env && pnpm gen:types",
+    "dev": "bun x --bun vite dev",
     "build": "tsc -b && vp build",
     "preview": "vp preview"
   },
   "dependencies": {
-    "@tanstack/react-query": "latest",
-    "accounts": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "viem": "latest",
-    "wagmi": "latest"
+    "@tanstack/react-query": "catalog:",
+    "accounts": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "viem": "catalog:",
+    "wagmi": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "latest",
-    "@types/node": "25.5.2",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@vitejs/plugin-react": "latest",
-    "typescript": "~5.9.3",
-    "vite-plus": "latest",
-    "wrangler": "catalog:"
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/bun":"^1.3.11",
+    "@vitejs/plugin-react": "catalog:",
+    "typescript": "catalog:",
+    "vp": "catalog:"
   }
 }
