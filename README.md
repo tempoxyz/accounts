@@ -9,7 +9,7 @@
 <p align="center"><b>Accounts SDK for Apps and Wallets building on Tempo.</b></p>
 
 <p align="center">
-  <a href="#install">Install</a> · <a href="#usage">Usage</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a> · <a href="#license">License</a>
+  <a href="#install">Install</a> · <a href="#documentation">Documentation</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a> · <a href="#license">License</a>
 </p>
 
 ---
@@ -28,79 +28,9 @@ pnpm i accounts
 bun i accounts
 ```
 
-## Usage
+## Documentation
 
-### Vanilla JS
-
-You can get set up with the Accounts SDK with pure JavaScript by using the
-`Provider` instance.
-
-Internally, the `Provider` utilizes [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963) to inject it's provider instance into
-the page so it can be picked up by wallet connection dialogs on external web applications.
-
-```ts
-import { Provider } from 'accounts'
-
-const provider = Provider.create()
-
-const { accounts } = await provider.request({
-  method: 'wallet_connect',
-})
-```
-
-### Viem
-
-The Provider provides a Viem Client instance via the `getClient` accessor.
-
-```ts
-import { Provider } from 'accounts'
-
-const provider = Provider.create()
-
-const client = provider.getClient()
-```
-
-### Wagmi
-
-Use the `tempoWallet` Wagmi connector to allow your Wagmi application to enable the Tempo Wallet dialog.
-
-```ts
-import { createConfig, http } from 'wagmi'
-import { tempo } from 'wagmi/chains'
-import { tempoWallet } from 'accounts/wagmi'
-
-export const wagmiConfig = createConfig({
-  chains: [tempo],
-  connectors: [tempoWallet()],
-  transports: {
-    [tempo.id]: http(),
-  },
-})
-```
-
-### CLI
-
-Use the `accounts/cli` entrypoint when an external CLI already owns the local key material and only needs the Tempo Wallet browser flow to authenticate the user and authorize that key.
-
-```ts
-import { Provider } from 'accounts/cli'
-
-const provider = Provider.create()
-
-const { accounts } = await provider.request({
-  method: 'wallet_connect',
-  params: [
-    {
-      capabilities: {
-        authorizeAccessKey: {
-          expiry: Math.floor(Date.now() / 1000) + 3600,
-          publicKey: '0x...',
-        },
-      },
-    },
-  ],
-})
-```
+For documentation and guides, visit [docs.tempo.xyz/accounts](https://docs.tempo.xyz/accounts).
 
 ## Examples
 
