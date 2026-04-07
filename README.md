@@ -12,6 +12,8 @@
   <a href="#install">Install</a> · <a href="#usage">Usage</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a> · <a href="#license">License</a>
 </p>
 
+---
+
 ## Install
 
 ```bash
