@@ -47,6 +47,8 @@ export function define(meta: Meta, fn: SetupFn): Dialog {
 /** Detects an insecure context (e.g. HTTP) where iframes lack WebAuthn support. */
 export function isInsecureContext(): boolean {
   if (typeof window === 'undefined') return false
+  // `http://localhost` is a secure context but WebAuthn still requires HTTPS.
+  if (window.location.protocol === 'http:') return true
   return !window.isSecureContext
 }
 
