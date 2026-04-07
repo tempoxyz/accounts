@@ -26,9 +26,10 @@ export const id =
 export const nodeEnv = import.meta.env.VITE_NODE_ENV || 'localnet'
 
 export const rpcUrl = (() => {
+  const rpcPort = process.env.VITE_RPC_PORT ?? import.meta.env.VITE_RPC_PORT ?? '8545'
   if (nodeEnv === 'testnet') return tempoModerato.rpcUrls.default.http[0]
   if (nodeEnv === 'devnet') return tempoDevnet.rpcUrls.default.http[0]
-  return `http://localhost:${import.meta.env.VITE_RPC_PORT ?? '8545'}/${id}`
+  return `http://localhost:${rpcPort}/${id}`
 })()
 
 const accountsMnemonic = (() => {

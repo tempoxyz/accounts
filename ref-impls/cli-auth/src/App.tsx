@@ -167,19 +167,20 @@ export function App() {
       {pending.status === 'idle' && <p>Paste a device code to load the pending request.</p>}
       {pending.status === 'loading' && <p>Loading request...</p>}
       {pending.status === 'error' && <p>{pending.error}</p>}
-      {approveState.status === 'approved' && (
+      {pending.status === 'ready' && (
         <>
-          <h2>Approved</h2>
-          <p>
-            Device code <strong>{approveState.code}</strong> was authorized by{' '}
-            <code>{approveState.approved.accountAddress}</code>.
-          </p>
-          <p>You can return to the CLI.</p>
-        </>
-      )}
-      {approveState.status !== 'approved' && pending.status === 'ready' && (
-        <>
-          <h2>Pending request</h2>
+          {approveState.status === 'approved' ? (
+            <>
+              <h2>Approved</h2>
+              <p>
+                Device code <strong>{approveState.code}</strong> was authorized by{' '}
+                <code>{approveState.approved.accountAddress}</code>.
+              </p>
+              <p>You can return to the CLI.</p>
+            </>
+          ) : (
+            <h2>Pending request</h2>
+          )}
           <dl>
             <dt>Device code</dt>
             <dd>{pending.pending.code}</dd>
@@ -212,11 +213,15 @@ export function App() {
               </>
             )}
           </dl>
-          {approveState.status === 'error' && <p>{approveState.error}</p>}
-          <form action={approve}>
-            <input name="code" type="hidden" value={pending.pending.code} />
-            <button type="submit">{approving ? 'Approving...' : 'Approve'}</button>
-          </form>
+          {approveState.status !== 'approved' && (
+            <>
+              {approveState.status === 'error' && <p>{approveState.error}</p>}
+              <form action={approve}>
+                <input name="code" type="hidden" value={pending.pending.code} />
+                <button type="submit">{approving ? 'Approving...' : 'Approve'}</button>
+              </form>
+            </>
+          )}
         </>
       )}
     </main>

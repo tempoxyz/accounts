@@ -356,7 +356,7 @@ describe('pending', () => {
   test('behavior: handler returns 400 for a completed code', async () => {
     const store = CliAuth.Store.memory()
     const handler = Handler.codeAuth({
-      chainId: chain.id,
+      chains: [chain],
       store,
     })
     const { codeVerifier, request } = await createRequest()
@@ -397,7 +397,7 @@ describe('pending', () => {
   test('behavior: handler accepts a hyphenated code', async () => {
     const store = CliAuth.Store.memory()
     const handler = Handler.codeAuth({
-      chainId: chain.id,
+      chains: [chain],
       store,
     })
     const { request } = await createRequest()
@@ -463,7 +463,7 @@ describe('poll', () => {
 
   test('behavior: rejects a PKCE mismatch', async () => {
     const handler = Handler.codeAuth({
-      chainId: chain.id,
+      chains: [chain],
       store: CliAuth.Store.memory(),
     })
     const { request } = await createRequest()

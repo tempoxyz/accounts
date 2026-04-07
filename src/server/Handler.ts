@@ -370,16 +370,32 @@ export declare namespace feePayer {
  */
 export function codeAuth(options: codeAuth.Options = {}): Handler {
   const {
-    chainId,
-    client,
+    chains = [tempo, tempoModerato],
     now,
     path = '/auth/pkce',
     policy,
     random,
     store = CliAuth.Store.memory(),
+    transports = {},
     ttlMs,
     ...rest
   } = options
+
+  const clients = new Map<number, Client>()
+  for (const chain of chains) {
+    const transport = transports[chain.id] ?? http()
+    clients.set(chain.id, createClient({ chain, transport }))
+  }
+
+  function getClient(chainId?: bigint | number): Client {
+    if (typeof chainId !== 'undefined') {
+      const id = Number(chainId)
+      const client = clients.get(id)
+      if (!client) throw new Error(`Chain ${id} not configured`)
+      return client
+    }
+    return clients.get(chains[0]!.id)!
+  }
 
   const router = from(rest)
 
@@ -402,8 +418,10 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
   router.post(`${path}/code`, async ({ request: req }) => {
     try {
       const request = z.decode(CliAuth.createRequest, await req.json())
+      const chainId = request.chainId ?? chains[0]!.id
+      getClient(chainId)
       const result = await CliAuth.createDeviceCode({
-        ...(typeof chainId !== 'undefined' ? { chainId } : {}),
+        chainId,
         ...(now ? { now } : {}),
         ...(policy ? { policy } : {}),
         ...(random ? { random } : {}),
@@ -439,8 +457,7 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     try {
       const request = z.decode(CliAuth.authorizeRequest, await req.json())
       const result = await CliAuth.authorize({
-        ...(typeof chainId !== 'undefined' ? { chainId } : {}),
-        ...(client ? { client } : {}),
+        client: getClient(request.keyAuthorization.chainId),
         ...(now ? { now } : {}),
         request,
         store,
@@ -457,10 +474,12 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
 
 export declare namespace codeAuth {
   export type Options = from.Options & {
-    /** Chain ID embedded into authorized access keys. Defaults to the client chain or tempo.id. */
-    chainId?: bigint | number | undefined
-    /** Client used to verify signed key authorizations. */
-    client?: Client<Transport, Chain | undefined> | undefined
+    /**
+     * Supported chains. The handler resolves the client based on chain IDs carried
+     * by device-code requests and key authorizations.
+     * @default [tempo, tempoModerato]
+     */
+    chains?: readonly [Chain, ...Chain[]] | undefined
     /** Time source used for TTL evaluation. */
     now?: (() => number) | undefined
     /** Path prefix for the code auth endpoints. @default "/auth/pkce" */
@@ -471,6 +490,8 @@ export declare namespace codeAuth {
     random?: ((size: number) => Uint8Array) | undefined
     /** Device-code store. */
     store?: CliAuth.Store | undefined
+    /** Transports keyed by chain ID. Defaults to `http()` for each chain. */
+    transports?: Record<number, Transport> | undefined
     /** Pending entry TTL in milliseconds. @default 600000 */
     ttlMs?: number | undefined
   }
