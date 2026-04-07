@@ -90,6 +90,15 @@ Join the Telegram group to chat with the team and other devs: [@porto_devs](http
 
 ## License
 
-Licensed under either of [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0) or [MIT license](https://opensource.org/licenses/MIT) at your option.
+<sup>
+Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
+2.0</a> or <a href="LICENSE-MIT">MIT license</a> at your option.
+</sup>
 
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in these packages by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+<br>
+
+<sub>
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in these packages by you, as defined in the Apache-2.0 license,
+shall be dual licensed as above, without any additional terms or conditions.
+</sub>
