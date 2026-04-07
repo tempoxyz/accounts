@@ -1,5 +1,12 @@
 # accounts
 
+## 0.4.25
+
+### Patch Changes
+
+- 0228a50: Fixed `Dialog.isInsecureContext()` to return `true` for `http:` protocol — `http://localhost` is a secure context but WebAuthn still requires HTTPS, so the dialog now correctly defaults to popup.
+- 0228a50: Fixed `feePayerUrl` to be used by default when configured — previously required `feePayer: true` on each transaction, now auto-applies unless explicitly opted out with `feePayer: false`.
+
 ## 0.4.24
 
 ### Patch Changes

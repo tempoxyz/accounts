@@ -159,7 +159,7 @@ describe('Ox', () => {
 describe('Viem', () => {
   test('is a tuple of all provider methods', () => {
     expectTypeOf<Schema.Viem[0]['Method']>().toEqualTypeOf<'eth_accounts'>()
-    expectTypeOf<Schema.Viem[16]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
+    expectTypeOf<Schema.Viem[18]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
   })
 })
 
@@ -167,23 +167,25 @@ describe('Request', () => {
   test('is a discriminated union of all methods', () => {
     type Methods = Schema.Request['method']
     expectTypeOf<Methods>().toEqualTypeOf<
-      | 'eth_accounts'
       | 'eth_chainId'
+      | 'eth_fillTransaction'
+      | 'eth_accounts'
       | 'eth_requestAccounts'
       | 'eth_sendTransaction'
       | 'eth_signTransaction'
-      | 'eth_sendTransactionSync'
       | 'eth_signTypedData_v4'
       | 'personal_sign'
-      | 'wallet_sendCalls'
-      | 'wallet_getBalances'
-      | 'wallet_getCallsStatus'
-      | 'wallet_getCapabilities'
       | 'wallet_connect'
       | 'wallet_disconnect'
-      | 'wallet_authorizeAccessKey'
-      | 'wallet_revokeAccessKey'
+      | 'wallet_getCallsStatus'
+      | 'wallet_getCapabilities'
+      | 'wallet_sendCalls'
       | 'wallet_switchEthereumChain'
+      | 'wallet_authorizeAccessKey'
+      | 'eth_sendTransactionSync'
+      | 'wallet_deposit'
+      | 'wallet_getBalances'
+      | 'wallet_revokeAccessKey'
     >()
   })
 
