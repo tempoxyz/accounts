@@ -1,11 +1,29 @@
-# Tempo Accounts SDK
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".github/logo-light.svg">
+    <img alt="accounts" src=".github/logo-light.svg" width="auto" height="40">
+  </picture>
+</p>
 
-Accounts SDK for Tempo Wallets & Apps.
+<p align="center"><b>Accounts SDK for Apps and Wallets building on Tempo.</b></p>
+
+<p align="center">
+  <a href="#install">Install</a> · <a href="#usage">Usage</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a> · <a href="#license">License</a>
+</p>
 
 ## Install
 
-```sh
+```bash
+npm i accounts
+```
+
+```bash
 pnpm i accounts
+```
+
+```bash
+bun i accounts
 ```
 
 ## Usage
@@ -18,7 +36,7 @@ You can get set up with the Accounts SDK with pure JavaScript by using the
 Internally, the `Provider` utilizes [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963) to inject it's provider instance into
 the page so it can be picked up by wallet connection dialogs on external web applications.
 
-```tsx
+```ts
 import { Provider } from 'accounts'
 
 const provider = Provider.create()
@@ -32,7 +50,7 @@ const { accounts } = await provider.request({
 
 The Provider provides a Viem Client instance via the `getClient` accessor.
 
-```tsx
+```ts
 import { Provider } from 'accounts'
 
 const provider = Provider.create()
@@ -44,7 +62,7 @@ const client = provider.getClient()
 
 Use the `tempoWallet` Wagmi connector to allow your Wagmi application to enable the Tempo Wallet dialog.
 
-```tsx
+```ts
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
 import { tempoWallet } from 'accounts/wagmi'
@@ -65,9 +83,7 @@ Use the `accounts/cli` entrypoint when an external CLI already owns the local ke
 ```ts
 import { Provider } from 'accounts/cli'
 
-const provider = Provider.create({
-  host: 'https://wallet.example.com/cli-auth',
-})
+const provider = Provider.create()
 
 const { accounts } = await provider.request({
   method: 'wallet_connect',
@@ -84,20 +100,23 @@ const { accounts } = await provider.request({
 })
 ```
 
-## Adapters
+## Examples
 
-| Adapter                  | Description                                                                        |
-| ------------------------ | ---------------------------------------------------------------------------------- |
-| `dialog` / `tempoWallet` | Adapter for the Tempo Wallet dialog (an embedded iframe/popup dialog).             |
-| `webAuthn`               | App-bound passkey accounts using WebAuthn registration and authentication flows.   |
-| `cli`                    | Device-code based adapter for CLI authentication and access key authorization.     |
-| `local`                  | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
+| Example                                                                 | Description                                                                       |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| [basic](./examples/basic)                                               | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallets.  |
+| [cli](./examples/cli)                                                   | Minimal CLI setup to connect and authorize local keys using Tempo Wallets.        |
+| [domain-bound-webauthn](./examples/domain-bound-webauthn)               | Domain-bound passkey example using Wagmi and the `webAuthn` connector.            |
+| [with-access-key](./examples/with-access-key)                           | Authorize access keys using Tempo Wallets to submit transactions without prompts. |
+| [with-access-key-and-webauthn](./examples/with-access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                                |
+| [with-fee-payer](./examples/with-fee-payer)                             | Sponsor transactions via Tempo Wallets.                                           |
+| [with-fee-payer-and-webauthn](./examples/with-fee-payer-and-webauthn)   | Sponsor transactions using a Cloudflare Worker with domain-bound Passkeys.        |
 
 ## Development
 
 ```sh
 pnpm dev              # start dialog + dialog-ref + web playground dev servers
-pnpm playground:cli   # run the CLI playground client
+pnpm dev:cli          # start the CLI playground client
 pnpm dev:dialog       # start Tempo Wallet dialog only
 pnpm dev:dialog-ref   # start reference dialog implementation only (port 5174)
 pnpm dev:playground   # start web playground only
@@ -113,6 +132,14 @@ pnpm test             # run tests
 > - `https://app.moderato.tempo.local:3001`
 > - `https://playground.a:5173`
 > - `https://playground.b:5175`
+
+### Playgrounds
+
+| Playground                   | Command          | Description                                  |
+| ---------------------------- | ---------------- | -------------------------------------------- |
+| [web](./playgrounds/web)     | `pnpm dev`       | Web playground for dialog + adapter testing. |
+| [wagmi](./playgrounds/wagmi) | `pnpm dev:wagmi` | Wagmi-based playground with connectors.      |
+| [cli](./playgrounds/cli)     | `pnpm dev:cli`   | CLI playground for device-code auth flow.    |
 
 ### Reference Implementations
 
