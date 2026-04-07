@@ -235,6 +235,10 @@ export function iframe(): Dialog {
       }
     }
 
+    messenger.waitForReady().then(({ colorScheme }) => {
+      if (colorScheme) frame.style.colorScheme = colorScheme
+    })
+
     messenger.on('switch-mode', () => {
       hideDialog()
       activatePage()

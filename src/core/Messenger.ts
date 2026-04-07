@@ -22,6 +22,8 @@ export type Messenger = {
 
 /** Options sent with the `ready` signal from the remote frame. */
 export type ReadyOptions = {
+  /** CSS `color-scheme` used by the remote embed (e.g. `'dark'`). */
+  colorScheme?: string | undefined
   /** Hostnames trusted by the remote embed to render in an iframe. */
   trustedHosts?: readonly string[] | undefined
 }
