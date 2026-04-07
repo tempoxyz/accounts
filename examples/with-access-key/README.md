@@ -8,8 +8,8 @@ transactions are signed locally without the wallet popup.
 
 ```bash
 npx gitpick tempoxyz/accounts/examples/with-access-key
-pnpm i
-pnpm dev
+npm i
+npm dev
 ```
 
 > [!NOTE]

@@ -8,7 +8,7 @@ locally without further prompts.
 
 ```bash
 npx gitpick tempoxyz/accounts/examples/with-access-key-and-webauthn
-pnpm i
+npm i
 npx wrangler kv namespace create KV
-pnpm dev
+npm dev
 ```

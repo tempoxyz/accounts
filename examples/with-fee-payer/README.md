@@ -6,8 +6,8 @@ Demonstrates sponsored transactions using `Handler.feePayer` from `accounts/serv
 
 ```bash
 npx gitpick tempoxyz/accounts/examples/with-fee-payer
-pnpm i
-pnpm dev
+npm i
+npm dev
 ```
 
 A [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)

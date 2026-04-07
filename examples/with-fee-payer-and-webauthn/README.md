@@ -8,15 +8,7 @@ needed — WebAuthn works on `localhost` and the fee-payer runs same-origin.
 
 ```bash
 npx gitpick tempoxyz/accounts/examples/with-fee-payer-and-webauthn
-pnpm i
+npm i
 npx wrangler kv namespace create KV
+npm dev
 ```
-
-Paste the returned `id` into `wrangler.jsonc`, then start the dev server:
-
-```bash
-pnpm dev
-```
-
-> [!NOTE]
-> In production, set `authUrl` and `feePayerUrl` to your deployed worker URL.

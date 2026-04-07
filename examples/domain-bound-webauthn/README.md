@@ -7,9 +7,9 @@ handling via `Handler.webAuthn`. Passkeys are bound to your domain without a thi
 
 ```bash
 npx gitpick tempoxyz/accounts/examples/domain-bound-webauthn
-pnpm i
+npm i
 npx wrangler kv namespace create KV
-pnpm dev
+npm dev
 ```
 
 > [!NOTE]
