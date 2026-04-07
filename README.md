@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/logo-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset=".github/logo-light.svg">
-    <img alt="accounts" src=".github/logo-light.svg" width="auto" height="40">
+    <img alt="accounts" src=".github/logo-light.svg" width="auto" height="100">
   </picture>
 </p>
 
