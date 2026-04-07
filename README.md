@@ -1,103 +1,60 @@
-# Tempo Accounts SDK
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".github/logo-light.svg">
+    <img alt="accounts" src=".github/logo-light.svg" width="auto" height="100">
+  </picture>
+</p>
 
-Accounts SDK for Tempo Wallets & Apps.
+<p align="center"><b>Accounts SDK for Apps and Wallets building on Tempo.</b></p>
+
+<p align="center">
+  <a href="#install">Install</a> · <a href="#documentation">Documentation</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a> · <a href="#license">License</a>
+</p>
+
+---
 
 ## Install
 
-```sh
+```bash
+npm i accounts
+```
+
+```bash
 pnpm i accounts
 ```
 
-## Usage
-
-### Vanilla JS
-
-You can get set up with the Accounts SDK with pure JavaScript by using the
-`Provider` instance.
-
-Internally, the `Provider` utilizes [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963) to inject it's provider instance into
-the page so it can be picked up by wallet connection dialogs on external web applications.
-
-```tsx
-import { Provider } from 'accounts'
-
-const provider = Provider.create()
-
-const { accounts } = await provider.request({
-  method: 'wallet_connect',
-})
+```bash
+bun i accounts
 ```
 
-### Viem
+## Documentation
 
-The Provider provides a Viem Client instance via the `getClient` accessor.
+For documentation and guides, visit [docs.tempo.xyz/accounts](https://docs.tempo.xyz/accounts).
 
-```tsx
-import { Provider } from 'accounts'
+## Getting Help
 
-const provider = Provider.create()
+Have questions or building something cool with the Accounts SDK?
 
-const client = provider.getClient()
-```
+Join the Telegram group to chat with the team and other devs: [@porto_devs](https://t.me/porto_devs)
 
-### Wagmi
+## Examples
 
-Use the `tempoWallet` Wagmi connector to allow your Wagmi application to enable the Tempo Wallet dialog.
-
-```tsx
-import { createConfig, http } from 'wagmi'
-import { tempo } from 'wagmi/chains'
-import { tempoWallet } from 'accounts/wagmi'
-
-export const wagmiConfig = createConfig({
-  chains: [tempo],
-  connectors: [tempoWallet()],
-  transports: {
-    [tempo.id]: http(),
-  },
-})
-```
-
-### CLI
-
-Use the `accounts/cli` entrypoint when an external CLI already owns the local key material and only needs the Tempo Wallet browser flow to authenticate the user and authorize that key.
-
-```ts
-import { Provider } from 'accounts/cli'
-
-const provider = Provider.create({
-  host: 'https://wallet.example.com/cli-auth',
-})
-
-const { accounts } = await provider.request({
-  method: 'wallet_connect',
-  params: [
-    {
-      capabilities: {
-        authorizeAccessKey: {
-          expiry: Math.floor(Date.now() / 1000) + 3600,
-          publicKey: '0x...',
-        },
-      },
-    },
-  ],
-})
-```
-
-## Adapters
-
-| Adapter                  | Description                                                                        |
-| ------------------------ | ---------------------------------------------------------------------------------- |
-| `dialog` / `tempoWallet` | Adapter for the Tempo Wallet dialog (an embedded iframe/popup dialog).             |
-| `webAuthn`               | App-bound passkey accounts using WebAuthn registration and authentication flows.   |
-| `cli`                    | Device-code based adapter for CLI authentication and access key authorization.     |
-| `local`                  | Key agnostic adapter to define arbitrary account/key types and signing mechanisms. |
+| Example                                                                 | Description                                                                       |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| [basic](./examples/basic)                                               | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallets.  |
+| [cli](./examples/cli)                                                   | Minimal CLI setup to connect and authorize local keys using Tempo Wallets.        |
+| [domain-bound-webauthn](./examples/domain-bound-webauthn)               | Domain-bound passkey example using Wagmi and the `webAuthn` connector.            |
+| [with-access-key](./examples/with-access-key)                           | Authorize access keys using Tempo Wallets to submit transactions without prompts. |
+| [with-access-key-and-webauthn](./examples/with-access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                                |
+| [with-fee-payer](./examples/with-fee-payer)                             | Sponsor transactions via Tempo Wallets.                                           |
+| [with-fee-payer-and-webauthn](./examples/with-fee-payer-and-webauthn)   | Sponsor transactions using a Cloudflare Worker with domain-bound Passkeys.        |
 
 ## Development
 
 ```sh
 pnpm dev              # start dialog + dialog-ref + web playground dev servers
-pnpm playground:cli   # run the CLI playground client
+pnpm dev:cli          # start the CLI playground client
 pnpm dev:dialog       # start Tempo Wallet dialog only
 pnpm dev:dialog-ref   # start reference dialog implementation only (port 5174)
 pnpm dev:playground   # start web playground only
@@ -114,6 +71,14 @@ pnpm test             # run tests
 > - `https://playground.a:5173`
 > - `https://playground.b:5175`
 
+### Playgrounds
+
+| Playground                   | Command          | Description                                  |
+| ---------------------------- | ---------------- | -------------------------------------------- |
+| [web](./playgrounds/web)     | `pnpm dev`       | Web playground for dialog + adapter testing. |
+| [wagmi](./playgrounds/wagmi) | `pnpm dev:wagmi` | Wagmi-based playground with connectors.      |
+| [cli](./playgrounds/cli)     | `pnpm dev:cli`   | CLI playground for device-code auth flow.    |
+
 ### Reference Implementations
 
 The `ref-impls/` directory contains reference implementations for building on the Account SDK:
@@ -125,4 +90,15 @@ The `ref-impls/` directory contains reference implementations for building on th
 
 ## License
 
-MIT
+<sup>
+Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
+2.0</a> or <a href="LICENSE-MIT">MIT license</a> at your option.
+</sup>
+
+<br>
+
+<sub>
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in these packages by you, as defined in the Apache-2.0 license,
+shall be dual licensed as above, without any additional terms or conditions.
+</sub>
