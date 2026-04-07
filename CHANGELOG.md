@@ -1,5 +1,11 @@
 # accounts
 
+## 0.5.1
+
+### Patch Changes
+
+- 6c80aba: Fixed dialog backdrop appearing black on macOS Light mode.
+
 ## 0.5.0
 
 ### Minor Changes
