@@ -1,0 +1,28 @@
+{
+  "name": "@examples/with-access-key",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "check:types": "tsc -b",
+    "dev": "vp dev",
+    "build": "tsc -b && vp build",
+    "preview": "vp preview"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "latest",
+    "accounts": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "viem": "latest",
+    "wagmi": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "typescript": "~5.9.3",
+    "vite-plugin-mkcert": "^1.17.10",
+    "vite-plus": "latest"
+  }
+}
