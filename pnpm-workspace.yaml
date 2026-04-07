@@ -42,8 +42,18 @@ onlyBuiltDependencies:
   - esbuild
   - simple-git-hooks
   - workerd
+  - cloudflared
+
+ignoredBuiltDependencies:
+  - '@central-icons-react/round-outlined-radius-2-stroke-1.5'
+  - '@j178/prek'
+  - protobufjs
+  - sharp
 
 overrides:
   accounts: workspace:*
   react: catalog:default
   react-dom: catalog:default
+  ox: '~0.14.7'
+  viem: catalog:default
+  wrangler: catalog:default

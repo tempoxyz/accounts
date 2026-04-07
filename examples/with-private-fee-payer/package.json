@@ -1,0 +1,32 @@
+{
+  "name": "@examples/with-private-fee-payer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "check:types": "tsc -b",
+    "dev": "vp dev",
+    "gen:types": "wrangler types",
+    "postinstall": "[ -f .env ] || cp .env.example .env && pnpm gen:types",
+    "build": "tsc -b && vp build",
+    "preview": "vp preview"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "latest",
+    "accounts": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "viem": "latest",
+    "wagmi": "latest"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "latest",
+    "@types/node": "25.5.2",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "typescript": "~5.9.3",
+    "vite-plus": "latest",
+    "wrangler": "catalog:"
+  }
+}

@@ -228,7 +228,7 @@ export declare namespace from {
  *   chains: [tempo, tempoModerato],
  *   transports: {
  *     [tempo.id]: http('https://rpc.tempo.xyz'),
- *     [tempoModerato.id]: http('https://rpc.moderato.tempo.xyz'),
+ *     [tempoModerato.id]: http('https://rpc.testnet.tempo.xyz'),
  *   },
  * })
  * ```
@@ -239,6 +239,7 @@ export declare namespace from {
 export function feePayer(options: feePayer.Options) {
   const {
     account,
+    authorize,
     chains = [tempo, tempoModerato],
     onRequest,
     path = '/',
@@ -300,6 +301,14 @@ export function feePayer(options: feePayer.Options) {
         })
 
       const client = getClient(transaction.chainId)
+      const response = await authorize?.({
+        client,
+        request: req,
+        rpcRequest: request,
+        transaction,
+      })
+      if (response) return response
+
       const serializedTransaction = await signTransaction(client, {
         ...transaction,
         account,
@@ -333,9 +342,28 @@ export function feePayer(options: feePayer.Options) {
 }
 
 export declare namespace feePayer {
+  /** Parameters passed to {@link authorize}. */
+  export type AuthorizeParameters = {
+    /** Client resolved from the transaction's `chainId`. */
+    client: Client
+    /** Raw HTTP request for cookies, headers, and other request metadata. */
+    request: Request
+    /** Parsed JSON-RPC request. */
+    rpcRequest: RpcRequest.RpcRequest
+    /** Deserialized Tempo transaction after sender-signature validation. */
+    transaction: ReturnType<typeof Transaction.deserialize>
+  }
+
   export type Options = from.Options & {
     /** Account to use as the fee payer. */
     account: LocalAccount
+    /**
+     * Called after the request is parsed and the Tempo transaction is deserialized,
+     * but before the fee payer signs it. Return a `Response` to reject the request.
+     */
+    authorize?:
+      | ((parameters: AuthorizeParameters) => Promise<Response | void> | Response | void)
+      | undefined
     /**
      * Supported chains. The handler resolves the client based on the
      * `chainId` in the incoming transaction.
