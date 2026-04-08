@@ -64,8 +64,7 @@ export function from(options: from.Options = {}): Handler {
   const app = new Hono()
 
   app.use(async (c, next) => {
-    if (c.req.method === 'OPTIONS')
-      return new Response(null, { headers: mergedHeaders })
+    if (c.req.method === 'OPTIONS') return new Response(null, { headers: mergedHeaders })
     await next()
     for (const [key, value] of mergedHeaders.entries()) c.res.headers.set(key, value)
   })
@@ -721,5 +720,3 @@ function corsToHeaders(cors?: boolean | from.Cors): Headers {
 
   return headers
 }
-
-

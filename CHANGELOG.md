@@ -1,5 +1,11 @@
 # accounts
 
+## 0.5.3
+
+### Patch Changes
+
+- 7134f07: Updated internal dependencies.
+
 ## 0.5.2
 
 ### Patch Changes
