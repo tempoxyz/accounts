@@ -30,6 +30,14 @@ describe('Dialog.iframe', () => {
     expect(iframe).not.toBeNull()
   })
 
+  test('behavior: multiple calls tear down previous — no duplicate iframes', () => {
+    setup()
+    setup()
+    setup()
+    const dialogs = document.querySelectorAll('dialog[data-tempo-wallet]')
+    expect(dialogs.length).toBe(1)
+  })
+
   test('behavior: iframe has correct sandbox attributes', () => {
     setup()
     const iframe = document.querySelector('dialog[data-tempo-wallet] iframe')!

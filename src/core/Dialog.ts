@@ -59,11 +59,16 @@ export function isSafari(): boolean {
   return ua.includes('safari') && !ua.includes('chrome')
 }
 
+/** Tracks the active iframe instance so a new setup tears down the previous one. */
+let _previousIframe: Instance | undefined
+
 /** Creates an iframe dialog that embeds the auth app in a `<dialog>` element. */
 export function iframe(): Dialog {
   if (typeof window === 'undefined') return noop()
 
   return define({ name: 'iframe' }, (parameters) => {
+    _previousIframe?.destroy()
+
     const { host, store } = parameters
 
     const fallback = popup()(parameters)
@@ -153,7 +158,7 @@ export function iframe(): Dialog {
 
     // Re-mount if removed (e.g. React hydration clears non-server-rendered elements).
     // The iframe reloads on re-append, so the messenger must be re-established.
-    new MutationObserver((mutations) => {
+    const remountObserver = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         for (const node of mutation.removedNodes) {
           if (node !== root) continue
@@ -163,7 +168,8 @@ export function iframe(): Dialog {
           return
         }
       }
-    }).observe(document.body, { childList: true })
+    })
+    remountObserver.observe(document.body, { childList: true })
 
     let savedOverflow = ''
     let opener: HTMLElement | null = null
@@ -252,7 +258,7 @@ export function iframe(): Dialog {
       if (pending.length > 0) fallback.syncRequests(pending)
     })
 
-    return {
+    const instance: Instance = {
       close() {
         fallback.close()
         open = false
@@ -261,6 +267,8 @@ export function iframe(): Dialog {
         activatePage()
       },
       destroy() {
+        if (_previousIframe === instance) _previousIframe = undefined
+
         fallback.close()
         open = false
 
@@ -269,6 +277,7 @@ export function iframe(): Dialog {
 
         fallback.destroy()
         messenger.destroy()
+        remountObserver.disconnect()
         root.remove()
         inertObserver.disconnect()
       },
@@ -317,6 +326,9 @@ export function iframe(): Dialog {
         }
       },
     }
+
+    _previousIframe = instance
+    return instance
   })
 }
 
