@@ -60,32 +60,32 @@ export function isSafari(): boolean {
 }
 
 /** Cached iframe singleton — keyed by host, reused across setup calls. */
-let _cached: { host: string; instance: Instance } | undefined
+let cached: { host: string; instance: Instance } | undefined
 
 /** Mutable refs swapped on re-entry so the singleton always uses the latest caller's state. */
-let _store: Store.Store | undefined
-let _fallback: Instance | undefined
+let store: Store.Store | undefined
+let fallback: Instance | undefined
 
 /** Creates an iframe dialog that embeds the auth app in a `<dialog>` element. */
 export function iframe(): Dialog {
   if (typeof window === 'undefined') return noop()
 
   return define({ name: 'iframe' }, (parameters) => {
-    const { host, store } = parameters
+    const { host } = parameters
 
     // Reuse existing iframe if the host matches — just swap the store/fallback refs.
-    if (_cached && _cached.host === host) {
-      _store = store
-      _fallback?.destroy()
-      _fallback = popup()(parameters)
-      return _cached.instance
+    if (cached && cached.host === host) {
+      store = parameters.store
+      fallback?.destroy()
+      fallback = popup()(parameters)
+      return cached.instance
     }
 
     // Different host — tear down old iframe and create fresh.
-    _cached?.instance.destroy()
+    cached?.instance.destroy()
 
-    _store = store
-    _fallback = popup()(parameters)
+    store = parameters.store
+    fallback = popup()(parameters)
 
     let open = false
 
@@ -163,7 +163,7 @@ export function iframe(): Dialog {
         }),
         waitForReady: true,
       })
-      m.on('rpc-response', (response) => handleResponse(_store!, response))
+      m.on('rpc-response', (response) => handleResponse(store!, response))
       return m
     }
 
@@ -187,7 +187,7 @@ export function iframe(): Dialog {
     let savedOverflow = ''
     let opener: HTMLElement | null = null
 
-    const onBlur = () => handleBlur(_store!)
+    const onBlur = () => handleBlur(store!)
 
     // 1Password extension adds `inert` attribute to `dialog` rendering it unusable.
     const inertObserver = new MutationObserver((mutations) => {
@@ -263,38 +263,38 @@ export function iframe(): Dialog {
       activatePage()
       open = false
 
-      const pending = _store!
+      const pending = store!
         .getState()
         .requestQueue.filter(
           (x): x is Store.QueuedRequest & { status: 'pending' } => x.status === 'pending',
         )
-      if (pending.length > 0) _fallback!.syncRequests(pending)
+      if (pending.length > 0) fallback!.syncRequests(pending)
     })
 
     const instance: Instance = {
       close() {
-        _fallback!.close()
+        fallback!.close()
         open = false
 
         hideDialog()
         activatePage()
       },
       destroy() {
-        if (_cached?.instance === instance) _cached = undefined
+        if (cached?.instance === instance) cached = undefined
 
-        _fallback?.close()
+        fallback?.close()
         open = false
 
         activatePage()
         hideDialog()
 
-        _fallback?.destroy()
+        fallback?.destroy()
         messenger.destroy()
         root.remove()
         inertObserver.disconnect()
 
-        _store = undefined
-        _fallback = undefined
+        store = undefined
+        fallback = undefined
       },
       open() {
         if (open) return
@@ -311,7 +311,7 @@ export function iframe(): Dialog {
           isSafari() &&
           requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
         ) {
-          _fallback!.syncRequests(requests)
+          fallback!.syncRequests(requests)
           return
         }
 
@@ -329,20 +329,20 @@ export function iframe(): Dialog {
               'To enable the iframe dialog, add your hostname to the trusted hosts list.',
             ].join('\n'),
           )
-          _fallback!.syncRequests(requests)
+          fallback!.syncRequests(requests)
         } else {
           const requiresConfirm = requests.some((x) => x.status === 'pending')
           if (!open && requiresConfirm) this.open()
           messenger.send('rpc-requests', {
-            account: getAccount(_store!),
-            chainId: _store!.getState().chainId,
+            account: getAccount(store!),
+            chainId: store!.getState().chainId,
             requests,
           })
         }
       },
     }
 
-    _cached = { host, instance }
+    cached = { host, instance }
     return instance
   })
 }
