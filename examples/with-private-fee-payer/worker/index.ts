@@ -276,7 +276,13 @@ function assertAllowedCalls(parameters: {
   allowedTargets: ReadonlySet<string>
 }) {
   const { allowedTargets, requestId, tx } = parameters
-  const calls = tx.calls ?? (tx.to ? [{ to: tx.to, data: tx.data }] : [])
+  const calls = tx.calls ?? (tx.to ? [{ to: tx.to, data: tx.data }] : undefined)
+  if (!calls?.length)
+    throw rpcErrorResponse({
+      id: requestId,
+      message: 'Transaction target is not sponsored by this fee payer.',
+      status: 403,
+    })
 
   for (const call of calls)
     if (!call.to || !allowedTargets.has(call.to.toLowerCase()))
