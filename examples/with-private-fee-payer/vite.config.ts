@@ -4,10 +4,6 @@ import { defineConfig } from 'vp'
 
 export default defineConfig({
   plugins: [react()],
-  server: {
-    allowedHosts: ['o.bun-alewife.ts.net'],
-  },
-
   build: {
     rolldownOptions: {
       output: { format: 'esm', entryFileNames: 'main.js' },

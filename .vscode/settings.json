@@ -1,5 +1,5 @@
 {
-  "editor.hover.enabled": "on",
+  "editor.hover.enabled": true,
   "typescript.validate.enable": true,
   "javascript.validate.enable": true,
   "editor.defaultFormatter": "oxc.oxc-vscode",

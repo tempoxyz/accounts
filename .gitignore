@@ -1,5 +1,7 @@
 .attest
 .env
+.env.*
+!.env.example
 .wrangler
 data
 dist
