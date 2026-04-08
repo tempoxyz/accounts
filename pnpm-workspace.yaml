@@ -34,6 +34,10 @@ catalog:
 
 minimumReleaseAge: 1440
 
+minimumReleaseAgeExclude:
+  - incur
+  - mppx
+
 onlyBuiltDependencies:
   - esbuild
   - simple-git-hooks
