@@ -1,20 +1,10 @@
 import { Handler, Kv } from 'accounts/server'
-import * as Bun from 'bun'
+import { env } from 'cloudflare:workers'
+import { RpcRequest } from 'ox'
 import { http } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { tempoMainnet, tempoTestnet } from 'viem/chains'
-import { Account } from 'viem/tempo'
-
-await Bun.build({
-  outdir: './dist',
-  entrypoints: ['./src/main.tsx'],
-})
-
-const html = /* html */ `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Private Fee Payer</title></head>
-<body><div id="root"></div><script type="module" src="/main.js"></script></body>
-</html>`
+import { Account, Transaction } from 'viem/tempo'
 
 const localKv = Kv.memory()
 const sessionCookie = 'fp_session'
@@ -27,14 +17,8 @@ type Session = {
   expiresAt: number
 }
 
-const server = Bun.serve({
-  port: Number.parseInt(Bun.env.PORT ?? 88_88, 10),
-  development: true,
-  routes: {
-    '/': new Response(html, { headers: { 'content-type': 'text/html' } }),
-    '/main.js': new Response(Bun.file('./dist/main.js')),
-  },
-  async fetch(request, _server) {
+export default {
+  fetch: async (request, _env, _context) => {
     const url = new URL(request.url)
     const kv = localKv
     const rpcUrls = {
@@ -76,33 +60,37 @@ const server = Bun.serve({
       }
     }
 
+    if (url.pathname === '/fee-payer/probe' && request.method === 'POST') {
+      const response = await authorizeFeePayerRequest({
+        allowedTargets: parseAddressList(env.ALLOWED_FEE_PAYER_TARGETS),
+        kv,
+        request,
+      })
+      if (!response) return Response.json({ ok: true, status: 200 })
+
+      return Response.json(
+        {
+          body: await response.json(),
+          ok: false,
+          status: response.status,
+        },
+        { status: 200 },
+      )
+    }
+
+    if (url.pathname === '/fee-payer' && request.method === 'POST') {
+      const response = await authorizeFeePayerRequest({
+        allowedTargets: parseAddressList(env.ALLOWED_FEE_PAYER_TARGETS),
+        kv,
+        request,
+      })
+      if (response) return response
+    }
+
     const handler = Handler.compose(
       [
         Handler.feePayer({
-          account: privateKeyToAccount(Bun.env.FEE_PAYER_PRIVATE_KEY),
-          async authorize(parameters) {
-            try {
-              const session = await requireSession({ kv, request: parameters.request })
-
-              assertAuthorizedSender({
-                requestId: parameters.rpcRequest.id,
-                session,
-                tx: parameters.transaction,
-              })
-              assertAllowedCalls({
-                allowedTargets: parseAddressList(Bun.env.ALLOWED_FEE_PAYER_TARGETS),
-                requestId: parameters.rpcRequest.id,
-                tx: parameters.transaction,
-              })
-              assertNoValueTransfers({
-                requestId: parameters.rpcRequest.id,
-                tx: parameters.transaction,
-              })
-            } catch (error) {
-              if (error instanceof Response) return error
-              throw error
-            }
-          },
+          account: privateKeyToAccount(env.FEE_PAYER_PRIVATE_KEY),
           chains: [tempoMainnet, tempoTestnet],
           path: '/fee-payer',
           cors: false,
@@ -142,9 +130,68 @@ const server = Bun.serve({
 
     return handler.fetch(request)
   },
-})
+} satisfies ExportedHandler<Cloudflare.Env>
 
-if (server.development) console.info(`Server is running on ${server.url}`)
+async function authorizeFeePayerRequest(parameters: {
+  allowedTargets: ReadonlySet<string>
+  kv: Kv.Kv
+  request: Request
+}) {
+  const { allowedTargets, kv, request } = parameters
+
+  let rpcRequest: RpcRequest.RpcRequest
+  try {
+    rpcRequest = RpcRequest.from((await request.clone().json()) as never)
+  } catch {
+    return undefined
+  }
+
+  const method = rpcRequest.method as string
+  if (
+    method !== 'eth_signRawTransaction' &&
+    method !== 'eth_sendRawTransaction' &&
+    method !== 'eth_sendRawTransactionSync'
+  )
+    return undefined
+
+  const serialized = (rpcRequest.params as readonly unknown[] | undefined)?.[0]
+  if (
+    typeof serialized !== 'string' ||
+    (!serialized.startsWith('0x76') && !serialized.startsWith('0x78'))
+  )
+    return undefined
+
+  let transaction: ReturnType<typeof Transaction.deserialize>
+  try {
+    transaction = Transaction.deserialize(serialized as `0x76${string}`) as never
+  } catch {
+    return undefined
+  }
+
+  try {
+    const session = await requireSession({ kv, request })
+
+    assertAuthorizedSender({
+      requestId: rpcRequest.id,
+      session,
+      tx: transaction,
+    })
+    assertAllowedCalls({
+      allowedTargets,
+      requestId: rpcRequest.id,
+      tx: transaction,
+    })
+    assertNoValueTransfers({
+      requestId: rpcRequest.id,
+      tx: transaction,
+    })
+  } catch (error) {
+    if (isResponse(error)) return error
+    throw error
+  }
+
+  return undefined
+}
 
 async function createSessionResponse(parameters: {
   credentialId: string
@@ -270,6 +317,18 @@ function parseAddressList(value: string | undefined) {
       .split(',')
       .map((x) => x.trim().toLowerCase())
       .filter(Boolean),
+  )
+}
+
+function isResponse(error: unknown): error is Response {
+  return (
+    error instanceof Response ||
+    (typeof error === 'object' &&
+      error !== null &&
+      'status' in error &&
+      'headers' in error &&
+      'json' in error &&
+      typeof (error as Response).json === 'function')
   )
 }
 

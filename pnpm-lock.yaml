@@ -719,9 +719,9 @@ importers:
         specifier: 'catalog:'
         version: 3.6.0(@tanstack/query-core@5.96.2)(@tanstack/react-query@5.90.5(react@19.2.4))(@types/react@19.2.14)(immer@11.1.4)(ox@0.14.10(typescript@5.9.3)(zod@4.3.6))(react@19.2.4)(typescript@5.9.3)(viem@2.47.10(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
     devDependencies:
-      '@types/bun':
-        specifier: ^1.3.11
-        version: 1.3.11
+      '@cloudflare/vite-plugin':
+        specifier: 'catalog:'
+        version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.7)(workerd@1.20260405.1)(wrangler@4.80.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))
       '@types/node':
         specifier: 'catalog:'
         version: 25.5.2
@@ -740,6 +740,9 @@ importers:
       vp:
         specifier: 'catalog:'
         version: vite-plus@0.1.15(@opentelemetry/api@1.9.1)(@types/node@25.5.2)(@vitejs/devtools@0.1.11)(bufferutil@4.0.9)(esbuild@0.27.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.7)(yaml@2.8.2)
+      wrangler:
+        specifier: 4.80.0
+        version: 4.80.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
 
   playgrounds/cli:
     dependencies:
@@ -11374,6 +11377,7 @@ snapshots:
   '@types/bun@1.3.11':
     dependencies:
       bun-types: 1.3.11
+    optional: true
 
   '@types/chai@5.2.2':
     dependencies:
@@ -12470,6 +12474,7 @@ snapshots:
   bun-types@1.3.11:
     dependencies:
       '@types/node': 25.5.2
+    optional: true
 
   bundle-name@4.1.0:
     dependencies:

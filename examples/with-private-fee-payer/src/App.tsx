@@ -1,5 +1,7 @@
+import { Hex, Json } from 'ox'
 import * as React from 'react'
-import { formatUnits, parseUnits, stringify, type Hex } from 'viem'
+import { useState } from 'react'
+import { formatUnits, parseUnits, stringify } from 'viem'
 import { Actions } from 'viem/tempo'
 import {
   useChains,
@@ -19,44 +21,62 @@ export default function App() {
   const { address, chainId, status } = useConnection()
 
   return (
-    <div>
+    <div
+      style={{
+        fontFamily: 'SF-Pro, -apple-system, BlinkMacSystemFont, sans-serif',
+        minHeight: '100vh',
+        paddingTop: '5px',
+        paddingBottom: '25px',
+        paddingLeft: 'max(10vw, 1em)',
+        paddingRight: 'max(10vw, 1em)',
+        backgroundColor: '#fff',
+      }}
+    >
       <h1>Private Fee Payer Example</h1>
       <p>
-        This demo keeps the fee payer same-origin with WebAuthn, mints an HttpOnly session cookie on
-        register or login, and only sponsors allowlisted contract calls.
+        this demo keeps the fee payer <InlineCode>same-origin</InlineCode> with WebAuthn,
+        <br />
+        mints an
+        <InlineCode>HttpOnly</InlineCode> session cookie on register or login, and only sponsors
+        allowlisted contract calls.
       </p>
 
-      <h2>Connection</h2>
+      <h3>Connection</h3>
       <CodeBlock>
         {stringify({ address: address ?? null, chainId: chainId ?? null, status }, null, 2)}
       </CodeBlock>
 
-      <h2>Policy</h2>
+      <h3>Policy</h3>
       <ul>
-        <li>The fee payer requires a valid same-origin session cookie.</li>
+        <li>
+          The fee payer requires a valid <InlineCode>same-origin</InlineCode> session cookie.
+        </li>
         <li>The transaction sender must match the session address.</li>
-        <li>The demo only sponsors calls to the allowlisted pathUsd token contract.</li>
+        <li>
+          The demo only sponsors calls to the allowlisted <InlineCode>pathUSD</InlineCode> token
+          contract.
+        </li>
         <li>Direct value transfers are rejected.</li>
       </ul>
 
-      <h2>Account</h2>
+      <h3>Account</h3>
       <Connect />
 
-      <h2>Auth Probe</h2>
+      <h3>Auth Probe</h3>
       <AuthProbe />
 
       {status === 'connected' && (
         <>
-          <h2>Switch Chain</h2>
+          <h3>Switch Chain</h3>
           <SwitchChain />
 
-          <h2>Faucet</h2>
+          <h3>Faucet</h3>
           <Faucet />
 
-          <h2>Balance</h2>
+          <h3>Balance</h3>
           <Balance />
 
-          <h2>Send Transaction</h2>
+          <h3>Send Transaction</h3>
           <p>
             This uses <InlineCode>Actions.token.transfer.call()</InlineCode>, so the transaction
             target is the allowlisted token contract instead of the recipient address below.
@@ -72,10 +92,9 @@ function InlineCode(props: { children: React.ReactNode }) {
   return (
     <code
       style={{
-        backgroundColor: '#eee',
-        fontSize: '0.95em',
+        fontWeight: '500',
+        backgroundColor: '#f9f9f9',
         padding: '0.2em 0.4em',
-        borderRadius: '4px',
       }}
       {...props}
     />
@@ -86,11 +105,11 @@ function CodeBlock(props: { children: React.ReactNode }) {
   return (
     <pre
       style={{
-        backgroundColor: '#eee',
-        fontSize: '0.95em',
-        padding: '1em',
-        borderRadius: '4px',
+        fontWeight: '500',
+        backgroundColor: '#f9f9f9',
+        padding: '0.5em',
         overflowX: 'auto',
+        // width: "auto",
       }}
       {...props}
     />
@@ -114,7 +133,12 @@ function Connect() {
         </button>
       ) : (
         <div>
-          <input ref={nameRef} defaultValue="My Wallet" placeholder="Passkey name" required />{' '}
+          <input
+            ref={nameRef}
+            defaultValue="private-fee-payer-demo"
+            placeholder="Passkey name"
+            required
+          />{' '}
           <button type="button" onClick={() => connect({ connector })}>
             Login
           </button>{' '}
@@ -125,7 +149,7 @@ function Connect() {
                 connector,
                 capabilities: {
                   method: 'register' as const,
-                  name: nameRef.current?.value || 'My Wallet',
+                  name: nameRef.current?.value || 'private-fee-payer-demo',
                 },
               })
             }
@@ -141,33 +165,54 @@ function Connect() {
 }
 
 function AuthProbe() {
-  const [result, setResult] = React.useState<string>()
-  const [status, setStatus] = React.useState<number>()
-  const [pending, setPending] = React.useState(false)
+  const { address, chainId } = useConnection()
+  const [connector] = useConnectors()
+  const [result, setResult] = useState<string>()
+  const [status, setStatus] = useState<number>()
+  const [pending, setPending] = useState(false)
 
-  async function probe() {
+  async function probe(form: FormData) {
+    if (!address || !connector) return
+
     setPending(true)
 
     try {
-      const response = await fetch('/fee-payer', {
-        body: JSON.stringify({
+      const call = getTransferCall(form)
+      const provider = await connector.getProvider()
+      const signed = await provider.request({
+        method: 'eth_signTransaction',
+        params: [
+          {
+            ...(chainId ? { chainId } : {}),
+            calls: [call],
+            from: address,
+          },
+        ],
+      } as never)
+      const response = await fetch('/fee-payer/probe', {
+        body: Json.stringify({
           id: 1,
           jsonrpc: '2.0',
           method: 'eth_signRawTransaction',
-          params: ['0x00'],
+          params: [signed],
         }),
         credentials: 'omit',
         headers: { 'content-type': 'application/json' },
         method: 'POST',
       })
 
-      setStatus(response.status)
       const text = await response.text()
       try {
-        setResult(JSON.stringify(JSON.parse(text), null, 2))
+        const data = Json.parse(text) as { status?: number | undefined }
+        setStatus(typeof data.status === 'number' ? data.status : response.status)
+        setResult(Json.stringify(data, null, 2))
       } catch {
+        setStatus(response.status)
         setResult(text)
       }
+    } catch (error) {
+      setStatus(undefined)
+      setResult(error instanceof Error ? error.message : String(error))
     } finally {
       setPending(false)
     }
@@ -176,16 +221,18 @@ function AuthProbe() {
   return (
     <div>
       <p>
-        This sends a raw request to <InlineCode>/fee-payer</InlineCode> with{' '}
-        <InlineCode>credentials: 'omit'</InlineCode>. It should return <InlineCode>401</InlineCode>{' '}
-        even after you log in.
+        This first signs the same Tempo transaction shape, then posts the raw transaction to{' '}
+        <InlineCode>/fee-payer/probe</InlineCode> with <InlineCode>credentials: 'omit'</InlineCode>.
       </p>
       <p>
-        <button type="button" disabled={pending} onClick={() => void probe()}>
-          {pending ? 'Probing...' : 'Probe unauthenticated request'}
-        </button>
+        It should report <InlineCode>401</InlineCode> even after you log in.
       </p>
-      {status !== undefined && <p>HTTP status: {status}</p>}
+      <TransferForm
+        disabled={pending || !address}
+        onSubmit={(form) => void probe(form)}
+        submitLabel={pending ? 'Probing...' : 'Probe unauthenticated request'}
+      />
+      {status !== undefined && <p>Probe status: {status}</p>}
       {result && <CodeBlock>{result}</CodeBlock>}
     </div>
   )
@@ -243,7 +290,9 @@ function Balance() {
   })
 
   return (
-    <div>{isLoading ? 'Loading...' : data !== undefined ? formatUnits(data, 6) : '—'} pathUsd</div>
+    <InlineCode>
+      {isLoading ? 'Loading...' : data !== undefined ? formatUnits(data, 6) : '—'} pathUSD
+    </InlineCode>
   )
 }
 
@@ -253,32 +302,15 @@ function SendTransaction() {
 
   return (
     <div>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault()
-          const form = new FormData(event.currentTarget)
+      <TransferForm
+        disabled={isPending}
+        onSubmit={(form) => {
           sendTransactionSync({
-            calls: [
-              Actions.token.transfer.call({
-                amount: parseUnits((form.get('amount') as string) || '0', 6),
-                to: form.get('to') as Hex,
-                token: pathUsd,
-              }),
-            ],
-          } as never)
+            calls: [getTransferCall(form)],
+          })
         }}
-      >
-        <input
-          defaultValue="0x0000000000000000000000000000000000000001"
-          name="to"
-          placeholder="To (0x...)"
-          size={42}
-        />{' '}
-        <input defaultValue="1" name="amount" placeholder="Amount" size={6} />{' '}
-        <button type="submit" disabled={isPending}>
-          Send
-        </button>
-      </form>
+        submitLabel="Send"
+      />
 
       {error && <CodeBlock>{`${error.name}: ${error.message}`}</CodeBlock>}
       {data !== undefined && (
@@ -300,4 +332,46 @@ function SendTransaction() {
       )}
     </div>
   )
+}
+
+function TransferForm(props: {
+  disabled: boolean
+  onSubmit: (form: FormData) => void
+  submitLabel: string
+}) {
+  const { disabled, onSubmit, submitLabel } = props
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault()
+        onSubmit(new FormData(event.currentTarget))
+      }}
+    >
+      <input
+        defaultValue="0x0000000000000000000000000000000000000001"
+        name="to"
+        placeholder="To (0x...)"
+        size={42}
+      />{' '}
+      <input defaultValue="1" name="amount" placeholder="Amount" size={6} />{' '}
+      <button type="submit" disabled={disabled}>
+        {submitLabel}
+      </button>
+    </form>
+  )
+}
+
+function getTransferCall(form: FormData) {
+  const to = form.get('to')
+  Hex.assert(to)
+
+  const amount = form.get('amount')
+  if (!amount || Number.isNaN(Number(amount))) throw new Error('Amount must be a number.')
+
+  return Actions.token.transfer.call({
+    to,
+    token: pathUsd,
+    amount: parseUnits(amount.toString(), 6),
+  })
 }

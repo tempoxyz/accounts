@@ -45,7 +45,7 @@ The default allowlist target is the pathUSD token contract used by the demo's
 ## Demo Flow
 
 1. Register or log in with a passkey.
-2. Use the auth probe button to verify that `credentials: 'omit'` still gets a `401` from `/fee-payer`.
+2. Use the auth probe button to sign a real sender transaction, then verify that posting it to `/fee-payer/probe` with `credentials: 'omit'` reports a `401` auth failure.
 3. Fund the account.
 4. Send a sponsored token transfer.
 
