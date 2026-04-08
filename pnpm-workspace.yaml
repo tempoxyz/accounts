@@ -6,7 +6,7 @@ packages:
   - ref-impls/*
 
 catalog:
-  '@cloudflare/vite-plugin': 1.30.3
+  '@cloudflare/vite-plugin': 1.31.0
   '@cloudflare/workers-types': ^4.20260317.1
   '@tanstack/react-query': 5.90.5
   '@tanstack/react-router': ^1.166.7
@@ -29,7 +29,7 @@ catalog:
   vite: ^8.0.1
   vp: npm:vite-plus@~0.1.14
   wagmi: ^3.5.0
-  wrangler: 4.79.0
+  wrangler: 4.80.0
   zod: ^4.3.6
 
 minimumReleaseAge: 1440

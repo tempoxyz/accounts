@@ -5,9 +5,8 @@
   "type": "module",
   "scripts": {
     "check:types": "tsc -b",
-    "dev": "bun x --bun vite dev",
-    "build": "tsc -b && vp build",
-    "preview": "vp preview"
+    "dev": "bun x --bunx vite dev",
+    "build": "tsc -b && vp build"
   },
   "dependencies": {
     "@tanstack/react-query": "catalog:",
