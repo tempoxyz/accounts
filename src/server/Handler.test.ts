@@ -355,7 +355,7 @@ describe('compose', () => {
 
     test('hono', async () => {
       const app = new Hono()
-      app.use((c) => handler.fetch(c.req.raw))
+      app.all('*', (c) => handler.fetch(c.req.raw))
 
       {
         const response = await app.request('/api/foo')
@@ -622,7 +622,7 @@ describe('from', () => {
 
     test('hono', async () => {
       const app = new Hono()
-      app.use((c) => handler.fetch(c.req.raw))
+      app.all('*', (c) => handler.fetch(c.req.raw))
 
       {
         const response = await app.request('/foo')

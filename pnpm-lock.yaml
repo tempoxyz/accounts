@@ -64,9 +64,9 @@ importers:
 
   .:
     dependencies:
-      '@remix-run/fetch-router':
-        specifier: ~0.17.0
-        version: 0.17.0
+      hono:
+        specifier: ^4.12.4
+        version: 4.12.4
       idb-keyval:
         specifier: ^6.2.2
         version: 6.2.2
@@ -131,9 +131,6 @@ importers:
       express:
         specifier: ^5.2.1
         version: 5.2.1
-      hono:
-        specifier: ^4.12.4
-        version: 4.12.4
       node:
         specifier: runtime:^24.14.1
         version: runtime:24.14.1
@@ -2006,9 +2003,6 @@ packages:
   '@remix-run/fetch-proxy@0.7.1':
     resolution: {integrity: sha512-rPLfOpAaCXtm1dLI45uIPKERNbXbrh0P9AJc1sliz8pWd/McaFYjdr5KzB4QrFSfPvEt/Wmy6F2521qB1kK0ug==}
 
-  '@remix-run/fetch-router@0.17.0':
-    resolution: {integrity: sha512-3FeJGrTqrKKCvZdQWijbCXTEHKcdttkLFbI2ogfpZ+iDYSNZ9036wgDXuuoZqg6d+D0E8Unhk5ZwrLKDCd/hOw==}
-
   '@remix-run/headers@0.19.0':
     resolution: {integrity: sha512-+62NbkXuXm9r/NdG6KfH9OCKofCWm8VjkrVPICiHKtRl8Gf2Vi6eFTN4mGgBlZRhd5mmEVRV4hTIn/JUSHDAOw==}
 
@@ -2017,9 +2011,6 @@ packages:
 
   '@remix-run/route-pattern@0.19.0':
     resolution: {integrity: sha512-RXKaIJ2Lx01uyZc0iw+yLzowFCa1/NuB8jN7QTo4QUe2CaUGtvPGdhgrTUp75lyNNCSJIrM9SaAJ6c1pjZdmoA==}
-
-  '@remix-run/session@0.4.1':
-    resolution: {integrity: sha512-Bm6aKYgutb/raHZ3laloz8g/Qu7f3CeK3o4gUVDMxtEiAdWCzJamwHoTpGOc5+g1Kuy7z85v4M6nGrF06MFDSg==}
 
   '@rolldown/binding-android-arm64@1.0.0-rc.12':
     resolution: {integrity: sha512-pv1y2Fv0JybcykuiiD3qBOBdz6RteYojRFY1d+b95WVuzx211CRh+ytI/+9iVyWQ6koTh5dawe4S/yRfOFjgaA==}
@@ -6481,18 +6472,11 @@ snapshots:
     dependencies:
       '@remix-run/headers': 0.19.0
 
-  '@remix-run/fetch-router@0.17.0':
-    dependencies:
-      '@remix-run/route-pattern': 0.19.0
-      '@remix-run/session': 0.4.1
-
   '@remix-run/headers@0.19.0': {}
 
   '@remix-run/node-fetch-server@0.13.0': {}
 
   '@remix-run/route-pattern@0.19.0': {}
-
-  '@remix-run/session@0.4.1': {}
 
   '@rolldown/binding-android-arm64@1.0.0-rc.12':
     optional: true

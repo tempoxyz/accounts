@@ -35,17 +35,17 @@ const authCodeSchema = z.pipe(
   }),
 )
 
-page.get(path, ({ request }) => {
-  const requestUrl = new URL(request.url)
-  const url = new URL('/', request.url)
+page.get(path, (c) => {
+  const requestUrl = new URL(c.req.url)
+  const url = new URL('/', c.req.url)
   const code = requestUrl.searchParams.get('code')
   if (code) url.searchParams.set('code', code)
   url.hash = 'cli-auth'
   return Response.redirect(url.toString(), 302)
 })
 
-page.get(`${path}/pending/:code`, async ({ params }) => {
-  const parsed = z.safeParse(authCodeSchema, params.code)
+page.get(`${path}/pending/:code`, async (c) => {
+  const parsed = z.safeParse(authCodeSchema, c.req.param('code'))
   if (!parsed.success) return Response.json({ error: parsed.error.message }, { status: 400 })
 
   const code = parsed.data
@@ -76,9 +76,9 @@ page.get(`${path}/pending/:code`, async ({ params }) => {
   })
 })
 
-page.post(`${path}/approve`, async ({ request }) => {
+page.post(`${path}/approve`, async (c) => {
   try {
-    const body = z.safeParse(z.object({ code: authCodeSchema }), await request.json())
+    const body = z.safeParse(z.object({ code: authCodeSchema }), await c.req.raw.json())
     if (!body.success) return Response.json({ error: body.error.message }, { status: 400 })
 
     const code = body.data.code

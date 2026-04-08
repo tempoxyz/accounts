@@ -1,9 +1,4 @@
-import {
-  createRouter,
-  type Middleware,
-  type Router,
-  type RouterOptions,
-} from '@remix-run/fetch-router'
+import { Hono } from 'hono'
 import { Base64, Bytes, Hex, RpcRequest, RpcResponse } from 'ox'
 import { Credential } from 'ox/webauthn'
 import { type Chain, type Client, createClient, http, type Transport } from 'viem'
@@ -22,29 +17,29 @@ import * as CliAuth from './CliAuth.js'
 import * as RequestListener from './internal/requestListener.js'
 import type { Kv } from './Kv.js'
 
-export type Handler = Omit<Router, 'fetch'> & {
-  fetch: (input: string | URL | Request, ...args: any[]) => Promise<Response>
+export type Handler = Hono & {
   listener: (req: any, res: any) => void
 }
 
 export function compose(handlers: Array<Handler>, options: compose.Options = {}): Handler {
   const path = options.path ?? '/'
 
-  return from({
-    ...options,
-    async defaultHandler(context) {
-      const url = new URL(context.request.url)
-      if (!url.pathname.startsWith(path)) return new Response('Not Found', { status: 404 })
+  const app = from(options)
 
-      url.pathname = url.pathname.replace(path, '')
-      for (const handler of handlers) {
-        const request = new Request(url, context.request.clone() as RequestInit)
-        const response = await handler.fetch(request)
-        if (response.status !== 404) return response
-      }
-      return new Response('Not Found', { status: 404 })
-    },
+  app.all('*', async (c) => {
+    const url = new URL(c.req.url)
+    if (!url.pathname.startsWith(path)) return new Response('Not Found', { status: 404 })
+
+    url.pathname = url.pathname.replace(path, '')
+    for (const handler of handlers) {
+      const request = new Request(url, c.req.raw.clone() as RequestInit)
+      const response = await handler.fetch(request)
+      if (response.status !== 404) return response
+    }
+    return new Response('Not Found', { status: 404 })
   })
+
+  return app
 }
 
 export declare namespace compose {
@@ -66,21 +61,22 @@ export function from(options: from.Options = {}): Handler {
   for (const [key, value] of normalizeHeaders(options.headers).entries())
     mergedHeaders.set(key, value)
 
-  const router = createRouter({
-    ...options,
-    middleware: [headers(mergedHeaders), preflight(mergedHeaders)],
+  const app = new Hono()
+
+  app.use(async (c, next) => {
+    if (c.req.method === 'OPTIONS')
+      return new Response(null, { headers: mergedHeaders })
+    await next()
+    for (const [key, value] of mergedHeaders.entries()) c.res.headers.set(key, value)
   })
 
-  return {
-    ...router,
-    listener: RequestListener.fromFetchHandler((request) => {
-      return router.fetch(request)
-    }),
-  }
+  return Object.assign(app, {
+    listener: RequestListener.fromFetchHandler((request) => app.fetch(request)),
+  }) as never
 }
 
 export declare namespace from {
-  export type Options = RouterOptions & {
+  export type Options = {
     /**
      * CORS configuration.
      * - `true` (default): Allow all origins with default methods/headers
@@ -267,8 +263,8 @@ export function feePayer(options: feePayer.Options) {
 
   const router = from(options)
 
-  router.post(path, async ({ request: req }) => {
-    const request = RpcRequest.from((await req.json()) as any)
+  router.post(path, async (c) => {
+    const request = RpcRequest.from((await c.req.raw.json()) as any)
 
     try {
       await onRequest?.(request)
@@ -399,9 +395,9 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
 
   const router = from(rest)
 
-  router.get(`${path}/pending/:code`, async ({ params }) => {
+  router.get(`${path}/pending/:code`, async (c) => {
     try {
-      const { code } = params as { code: string }
+      const code = c.req.param('code')
       const result = await CliAuth.pending({
         code,
         ...(now ? { now } : {}),
@@ -415,9 +411,9 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     }
   })
 
-  router.post(`${path}/code`, async ({ request: req }) => {
+  router.post(`${path}/code`, async (c) => {
     try {
-      const request = z.decode(CliAuth.createRequest, await req.json())
+      const request = z.decode(CliAuth.createRequest, await c.req.raw.json())
       const chainId = request.chainId ?? chains[0]!.id
       getClient(chainId)
       const result = await CliAuth.createDeviceCode({
@@ -436,10 +432,10 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     }
   })
 
-  router.post(`${path}/poll/:code`, async ({ params, request: req }) => {
+  router.post(`${path}/poll/:code`, async (c) => {
     try {
-      const request = z.decode(CliAuth.pollRequest, await req.json())
-      const { code } = params as { code: string }
+      const request = z.decode(CliAuth.pollRequest, await c.req.raw.json())
+      const code = c.req.param('code')
       const result = await CliAuth.poll({
         code,
         ...(now ? { now } : {}),
@@ -453,9 +449,9 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     }
   })
 
-  router.post(path, async ({ request: req }) => {
+  router.post(path, async (c) => {
     try {
-      const request = z.decode(CliAuth.authorizeRequest, await req.json())
+      const request = z.decode(CliAuth.authorizeRequest, await c.req.raw.json())
       const result = await CliAuth.authorize({
         client: getClient(request.keyAuthorization.chainId),
         ...(now ? { now } : {}),
@@ -529,9 +525,9 @@ export function webAuthn(options: webAuthn.Options): Handler {
 
   const router = from(rest)
 
-  router.post(`${path}/register/options`, async ({ request: req }) => {
+  router.post(`${path}/register/options`, async (c) => {
     try {
-      const body = await req.json()
+      const body = await c.req.raw.json()
       const { excludeCredentialIds, name, userId } = body as {
         excludeCredentialIds?: string[]
         name: string
@@ -553,9 +549,9 @@ export function webAuthn(options: webAuthn.Options): Handler {
     }
   })
 
-  router.post(`${path}/register`, async ({ request: req }) => {
+  router.post(`${path}/register`, async (c) => {
     try {
-      const credential = (await req.json()) as Registration_Types.Credential
+      const credential = (await c.req.raw.json()) as Registration_Types.Credential
       const deserialized = Credential.deserialize(credential)
 
       const clientData = JSON.parse(
@@ -579,16 +575,16 @@ export function webAuthn(options: webAuthn.Options): Handler {
       await kv.set(`credential:${credentialId}`, { publicKey })
 
       const json = { credentialId, publicKey }
-      const hook = await onRegister?.({ credentialId, publicKey, request: req })
+      const hook = await onRegister?.({ credentialId, publicKey, request: c.req.raw })
       return mergeResponse(json, hook)
     } catch (error) {
       return Response.json({ error: (error as Error).message }, { status: 400 })
     }
   })
 
-  router.post(`${path}/login/options`, async ({ request: req }) => {
+  router.post(`${path}/login/options`, async (c) => {
     try {
-      const body = await req.json()
+      const body = await c.req.raw.json()
       const {
         allowCredentialIds,
         challenge: requestChallenge,
@@ -616,9 +612,9 @@ export function webAuthn(options: webAuthn.Options): Handler {
     }
   })
 
-  router.post(`${path}/login`, async ({ request: req }) => {
+  router.post(`${path}/login`, async (c) => {
     try {
-      const response = (await req.json()) as Authentication.Response
+      const response = (await c.req.raw.json()) as Authentication.Response
 
       const clientData = JSON.parse(response.metadata.clientDataJSON) as {
         challenge: string
@@ -648,7 +644,7 @@ export function webAuthn(options: webAuthn.Options): Handler {
         publicKey: credentialData.publicKey,
         ...(userHandle && userHandle.length > 0 ? { userId: userHandle } : undefined),
       }
-      const hook = await onAuthenticate?.({ ...json, request: req })
+      const hook = await onAuthenticate?.({ ...json, request: c.req.raw })
       return mergeResponse(json, hook)
     } catch (error) {
       return Response.json({ error: (error as Error).message }, { status: 400 })
@@ -726,23 +722,4 @@ function corsToHeaders(cors?: boolean | from.Cors): Headers {
   return headers
 }
 
-/** @internal */
-function headers(headers: Headers): Middleware {
-  return async (_, next) => {
-    const response = await next()
-    const responseHeaders = new Headers(response.headers)
-    for (const [key, value] of headers.entries()) responseHeaders.set(key, value)
-    return new Response(response.body, {
-      headers: responseHeaders,
-      status: response.status,
-      statusText: response.statusText,
-    })
-  }
-}
 
-/** @internal */
-function preflight(headers: Headers): Middleware {
-  return async (context) => {
-    if (context.request.method === 'OPTIONS') return new Response(null, { headers })
-  }
-}
