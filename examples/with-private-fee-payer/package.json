@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "check:types": "tsc -b",
-    "dev": "bun x --bunx vite dev",
+    "dev": "vp dev",
+    "gen:types": "wrangler types",
+    "postinstall": "[ -f .env ] || cp .env.example .env && pnpm gen:types",
     "build": "tsc -b && vp build"
   },
   "dependencies": {
@@ -17,10 +19,11 @@
     "wagmi": "catalog:"
   },
   "devDependencies": {
+    "wrangler": "catalog:",
+    "@cloudflare/vite-plugin": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@types/bun":"^1.3.11",
     "@vitejs/plugin-react": "catalog:",
     "typescript": "catalog:",
     "vp": "catalog:"
