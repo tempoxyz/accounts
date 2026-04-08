@@ -1,7 +1,7 @@
 import { Storage } from 'accounts'
 import { webAuthn } from 'accounts/wagmi'
 import { createConfig, http } from 'wagmi'
-import { tempoModerato } from 'wagmi/chains'
+import { tempoMainnet, tempoTestnet } from 'wagmi/chains'
 
 /**
  * Wagmi config for the private fee-payer demo.
@@ -11,7 +11,7 @@ import { tempoModerato } from 'wagmi/chains'
  * without a valid `/fee-payer` session.
  */
 export const config = createConfig({
-  chains: [tempoModerato],
+  chains: [tempoMainnet, tempoTestnet],
   connectors: [
     webAuthn({
       testnet: true,
@@ -22,7 +22,8 @@ export const config = createConfig({
   ],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempoModerato.id]: http(),
+    [tempoMainnet.id]: http(),
+    [tempoTestnet.id]: http(),
   },
 })
 

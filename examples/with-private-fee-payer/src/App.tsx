@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import * as React from 'react'
 import { formatUnits, parseUnits, stringify, type Hex } from 'viem'
 import { Actions } from 'viem/tempo'
 import {
@@ -19,68 +19,81 @@ export default function App() {
   const { address, chainId, status } = useConnection()
 
   return (
-    <main>
+    <div>
       <h1>Private Fee Payer Example</h1>
       <p>
         This demo keeps the fee payer same-origin with WebAuthn, mints an HttpOnly session cookie on
         register or login, and only sponsors allowlisted contract calls.
       </p>
 
-      <section>
-        <h2>Connection</h2>
-        <pre>
-          {stringify({ address: address ?? null, chainId: chainId ?? null, status }, null, 2)}
-        </pre>
-      </section>
+      <h2>Connection</h2>
+      <CodeBlock>
+        {stringify({ address: address ?? null, chainId: chainId ?? null, status }, null, 2)}
+      </CodeBlock>
 
-      <section>
-        <h2>Policy</h2>
-        <ul>
-          <li>The fee payer requires a valid same-origin session cookie.</li>
-          <li>The transaction sender must match the session address.</li>
-          <li>The demo only sponsors calls to the allowlisted pathUSD token contract.</li>
-          <li>Direct value transfers are rejected.</li>
-        </ul>
-      </section>
+      <h2>Policy</h2>
+      <ul>
+        <li>The fee payer requires a valid same-origin session cookie.</li>
+        <li>The transaction sender must match the session address.</li>
+        <li>The demo only sponsors calls to the allowlisted pathUsd token contract.</li>
+        <li>Direct value transfers are rejected.</li>
+      </ul>
 
-      <section>
-        <h2>Account</h2>
-        <Connect />
-      </section>
+      <h2>Account</h2>
+      <Connect />
 
-      <section>
-        <h2>Auth Probe</h2>
-        <AuthProbe />
-      </section>
+      <h2>Auth Probe</h2>
+      <AuthProbe />
 
       {status === 'connected' && (
         <>
-          <section>
-            <h2>Switch Chain</h2>
-            <SwitchChain />
-          </section>
+          <h2>Switch Chain</h2>
+          <SwitchChain />
 
-          <section>
-            <h2>Faucet</h2>
-            <Faucet />
-          </section>
+          <h2>Faucet</h2>
+          <Faucet />
 
-          <section>
-            <h2>Balance</h2>
-            <Balance />
-          </section>
+          <h2>Balance</h2>
+          <Balance />
 
-          <section>
-            <h2>Send Sponsored Token Transfer</h2>
-            <p>
-              This uses <code>Actions.token.transfer.call()</code>, so the transaction target is the
-              allowlisted token contract instead of the recipient address below.
-            </p>
-            <SendTransaction />
-          </section>
+          <h2>Send Transaction</h2>
+          <p>
+            This uses <InlineCode>Actions.token.transfer.call()</InlineCode>, so the transaction
+            target is the allowlisted token contract instead of the recipient address below.
+          </p>
+          <SendTransaction />
         </>
       )}
-    </main>
+    </div>
+  )
+}
+
+function InlineCode(props: { children: React.ReactNode }) {
+  return (
+    <code
+      style={{
+        backgroundColor: '#eee',
+        fontSize: '0.95em',
+        padding: '0.2em 0.4em',
+        borderRadius: '4px',
+      }}
+      {...props}
+    />
+  )
+}
+
+function CodeBlock(props: { children: React.ReactNode }) {
+  return (
+    <pre
+      style={{
+        backgroundColor: '#eee',
+        fontSize: '0.95em',
+        padding: '1em',
+        borderRadius: '4px',
+        overflowX: 'auto',
+      }}
+      {...props}
+    />
   )
 }
 
@@ -88,59 +101,49 @@ function Connect() {
   const { mutate: connect, status, error } = useConnect()
   const { mutate: disconnect } = useDisconnect()
   const { address } = useConnection()
-  const connectors = useConnectors()
-  const connector = connectors[0]
-  const nameRef = useRef<HTMLInputElement>(null)
+  const [connector] = useConnectors()
+  const nameRef = React.useRef<HTMLInputElement>(null)
 
   if (!connector) return null
 
   return (
     <div>
       {address ? (
-        <p>
-          <button type="button" onClick={() => disconnect()}>
-            Disconnect
-          </button>
-        </p>
+        <button type="button" onClick={() => disconnect()}>
+          Disconnect
+        </button>
       ) : (
-        <>
-          <p>
-            <label>
-              Passkey name{' '}
-              <input ref={nameRef} defaultValue="My Wallet" placeholder="Passkey name" required />
-            </label>
-          </p>
-          <p>
-            <button type="button" onClick={() => connect({ connector })}>
-              Login
-            </button>{' '}
-            <button
-              type="button"
-              onClick={() =>
-                connect({
-                  connector,
-                  capabilities: {
-                    method: 'register' as const,
-                    name: nameRef.current?.value || 'My Wallet',
-                  },
-                })
-              }
-            >
-              Register
-            </button>
-          </p>
-        </>
+        <div>
+          <input ref={nameRef} defaultValue="My Wallet" placeholder="Passkey name" required />{' '}
+          <button type="button" onClick={() => connect({ connector })}>
+            Login
+          </button>{' '}
+          <button
+            type="button"
+            onClick={() =>
+              connect({
+                connector,
+                capabilities: {
+                  method: 'register' as const,
+                  name: nameRef.current?.value || 'My Wallet',
+                },
+              })
+            }
+          >
+            Register
+          </button>
+        </div>
       )}
-      <p>Status: {status}</p>
-      {error && <pre>{error.message}</pre>}
+      <div>{status}</div>
+      {error && <CodeBlock>{error.message}</CodeBlock>}
     </div>
   )
 }
 
 function AuthProbe() {
-  const [result, setResult] = useState<string>()
-  const [status, setStatus] = useState<number>()
-  const [pending, setPending] = useState(false)
+  const [result, setResult] = React.useState<string>()
+  const [status, setStatus] = React.useState<number>()
+  const [pending, setPending] = React.useState(false)
 
   async function probe() {
     setPending(true)
@@ -159,7 +162,12 @@ function AuthProbe() {
       })
 
       setStatus(response.status)
-      setResult(await response.text())
+      const text = await response.text()
+      try {
+        setResult(JSON.stringify(JSON.parse(text), null, 2))
+      } catch {
+        setResult(text)
+      }
     } finally {
       setPending(false)
     }
@@ -168,8 +176,9 @@ function AuthProbe() {
   return (
     <div>
       <p>
-        This sends a raw request to <code>/fee-payer</code> with <code>credentials: 'omit'</code>.
-        It should return <code>401</code> even after you log in.
+        This sends a raw request to <InlineCode>/fee-payer</InlineCode> with{' '}
+        <InlineCode>credentials: 'omit'</InlineCode>. It should return <InlineCode>401</InlineCode>{' '}
+        even after you log in.
       </p>
       <p>
         <button type="button" disabled={pending} onClick={() => void probe()}>
@@ -177,20 +186,7 @@ function AuthProbe() {
         </button>
       </p>
       {status !== undefined && <p>HTTP status: {status}</p>}
-      {result && (
-        <pre
-          style={{
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            height: '200px',
-            overflow: 'auto',
-            backgroundColor: '#f0f0f0',
-            padding: '1em',
-          }}
-        >
-          {result}
-        </pre>
-      )}
+      {result && <CodeBlock>{result}</CodeBlock>}
     </div>
   )
 }
@@ -201,19 +197,18 @@ function SwitchChain() {
   const { mutate: switchChain } = useSwitchChain()
 
   return (
-    <ul>
+    <div>
       {chains.map((chain) => (
-        <li key={chain.id}>
-          <button
-            type="button"
-            disabled={chain.id === chainId}
-            onClick={() => switchChain({ chainId: chain.id })}
-          >
-            {chain.name}
-          </button>
-        </li>
+        <button
+          key={chain.id}
+          type="button"
+          disabled={chain.id === chainId}
+          onClick={() => switchChain({ chainId: chain.id })}
+        >
+          {chain.name}
+        </button>
       ))}
-    </ul>
+    </div>
   )
 }
 
@@ -223,17 +218,18 @@ function Faucet() {
 
   return (
     <div>
-      <p>
-        <button
-          type="button"
-          disabled={isPending || !address}
-          onClick={() => fund({ account: address! })}
-        >
-          {isPending ? 'Funding...' : 'Fund Account'}
-        </button>
-      </p>
-      {data && <p>Funded.</p>}
-      {error && <pre>{error.message}</pre>}
+      <button
+        type="button"
+        disabled={isPending || !address}
+        onClick={() => {
+          if (!address) return
+          fund({ account: address })
+        }}
+      >
+        {isPending ? 'Funding...' : 'Fund Account'}
+      </button>
+      {data && <p>✅ Funded!</p>}
+      {error && <CodeBlock>{error.message}</CodeBlock>}
     </div>
   )
 }
@@ -247,12 +243,13 @@ function Balance() {
   })
 
   return (
-    <pre>{isLoading ? 'Loading...' : data !== undefined ? formatUnits(data, 6) : '—'} pathUSD</pre>
+    <div>{isLoading ? 'Loading...' : data !== undefined ? formatUnits(data, 6) : '—'} pathUsd</div>
   )
 }
 
 function SendTransaction() {
   const { mutate: sendTransactionSync, data, error, isPending } = useSendTransactionSync()
+  const feePayer = (data as { feePayer?: string | undefined } | undefined)?.feePayer
 
   return (
     <div>
@@ -271,43 +268,33 @@ function SendTransaction() {
           } as never)
         }}
       >
-        <p>
-          <label>
-            Recipient{' '}
-            <input
-              defaultValue="0x0000000000000000000000000000000000000001"
-              name="to"
-              placeholder="To (0x...)"
-              style={{ width: '350px' }}
-            />
-          </label>
-        </p>
-        <p>
-          <label>
-            Amount <input defaultValue="1" name="amount" placeholder="Amount" />
-          </label>
-        </p>
-        <p>
-          <button type="submit" disabled={isPending}>
-            {isPending ? 'Sending...' : 'Send'}
-          </button>
-        </p>
+        <input
+          defaultValue="0x0000000000000000000000000000000000000001"
+          name="to"
+          placeholder="To (0x...)"
+          size={42}
+        />{' '}
+        <input defaultValue="1" name="amount" placeholder="Amount" size={6} />{' '}
+        <button type="submit" disabled={isPending}>
+          Send
+        </button>
       </form>
 
-      {error && <pre>{`${error.name}: ${error.message}`}</pre>}
+      {error && <CodeBlock>{`${error.name}: ${error.message}`}</CodeBlock>}
       {data !== undefined && (
         <>
           <p>
-            Transaction success.{' '}
-            {(data as { feePayer?: string | undefined }).feePayer && (
+            ✅ Transaction success!
+            {feePayer && (
               <>
-                Fees paid by <code>{(data as { feePayer?: string | undefined }).feePayer}</code>.
+                {' '}
+                Fees paid by: <InlineCode>{feePayer}</InlineCode>
               </>
             )}
           </p>
           <details>
             <summary>Receipt</summary>
-            <pre>{stringify(data, null, 2)}</pre>
+            <CodeBlock>{stringify(data, null, 2)}</CodeBlock>
           </details>
         </>
       )}

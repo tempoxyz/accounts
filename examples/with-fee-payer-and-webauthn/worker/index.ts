@@ -10,7 +10,7 @@ export default {
         path: '/fee-payer',
       }),
       Handler.webAuthn({
-        kv: Kv.cloudflare(env.KV),
+        kv: Kv.memory(),
         origin: url.origin,
         rpId: url.hostname,
         path: '/auth',

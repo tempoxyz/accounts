@@ -2,7 +2,7 @@ import { Handler, Kv } from 'accounts/server'
 import * as Bun from 'bun'
 import { http } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { tempoTestnet } from 'viem/chains'
+import { tempoMainnet, tempoTestnet } from 'viem/chains'
 import { Account } from 'viem/tempo'
 
 await Bun.build({
@@ -10,7 +10,7 @@ await Bun.build({
   entrypoints: ['./src/main.tsx'],
 })
 
-const html = `<!DOCTYPE html>
+const html = /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Private Fee Payer</title></head>
 <body><div id="root"></div><script type="module" src="/main.js"></script></body>
@@ -28,7 +28,7 @@ type Session = {
 }
 
 const server = Bun.serve({
-  port: Number.parseInt(Bun.env.PORT ?? 88_88),
+  port: Number.parseInt(Bun.env.PORT ?? 88_88, 10),
   development: true,
   routes: {
     '/': new Response(html, { headers: { 'content-type': 'text/html' } }),
@@ -37,7 +37,11 @@ const server = Bun.serve({
   async fetch(request, _server) {
     const url = new URL(request.url)
     const kv = localKv
-    const rpcUrl = tempoTestnet.rpcUrls.default.http[0]
+    const rpcUrls = {
+      [tempoMainnet.id]: tempoMainnet.rpcUrls.default.http[0],
+      [tempoTestnet.id]: tempoTestnet.rpcUrls.default.http[0],
+    } as const
+    const rpcUrl = rpcUrls[tempoTestnet.id]
 
     if (url.pathname === '/debug/fetch') {
       try {
@@ -99,11 +103,12 @@ const server = Bun.serve({
               throw error
             }
           },
-          chains: [tempoTestnet],
+          chains: [tempoMainnet, tempoTestnet],
           path: '/fee-payer',
           cors: false,
           transports: {
-            [tempoTestnet.id]: http(rpcUrl),
+            [tempoMainnet.id]: http(rpcUrls[tempoMainnet.id]),
+            [tempoTestnet.id]: http(rpcUrls[tempoTestnet.id]),
           },
         }),
         Handler.webAuthn({
