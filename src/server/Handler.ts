@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
-import { Base64, Bytes, Hex, RpcRequest, RpcResponse } from 'ox'
+import { Base64, Bytes, Hex, RpcRequest, RpcResponse, Signature } from 'ox'
+import { Transaction as core_Transaction, TxEnvelopeTempo } from 'ox/tempo'
 import { Credential } from 'ox/webauthn'
 import { type Chain, type Client, createClient, http, type Transport } from 'viem'
 import type { LocalAccount } from 'viem/accounts'
@@ -15,7 +16,7 @@ import * as z from 'zod/mini'
 
 import * as CliAuth from './CliAuth.js'
 import * as RequestListener from './internal/requestListener.js'
-import type { Kv } from './Kv.js'
+import * as Kv from './Kv.js'
 
 export type Handler = Hono & {
   listener: (req: any, res: any) => void
@@ -241,9 +242,12 @@ export function feePayer(options: feePayer.Options) {
     account,
     authorize,
     chains = [tempo, tempoModerato],
+    name,
     onRequest,
     path = '/',
     transports = {},
+    url,
+    ...rest
   } = options
 
   const clients = new Map<number, Client>()
@@ -261,7 +265,13 @@ export function feePayer(options: feePayer.Options) {
     return clients.get(chains[0]!.id)!
   }
 
-  const router = from(options)
+  const sponsor = {
+    address: account.address,
+    ...(name ? { name } : {}),
+    ...(url ? { url } : {}),
+  }
+
+  const router = from(rest)
 
   router.post(path, async (c) => {
     const request = RpcRequest.from((await c.req.raw.json()) as any)
@@ -271,6 +281,7 @@ export function feePayer(options: feePayer.Options) {
 
       const method = request.method as string
       if (
+        method !== 'eth_fillTransaction' &&
         method !== 'eth_signRawTransaction' &&
         method !== 'eth_sendRawTransaction' &&
         method !== 'eth_sendRawTransactionSync'
@@ -286,6 +297,68 @@ export function feePayer(options: feePayer.Options) {
           ),
         )
 
+      if (method === 'eth_fillTransaction') {
+        const [parameters] = z
+          .readonly(z.tuple([z.record(z.string(), z.unknown())]))
+          .parse(request.params as never) as [Record<string, unknown>]
+        const chainId = resolveChainId(parameters.chainId)
+        const client = getClient(chainId)
+        const transaction: NonNullable<ReturnType<typeof core_Transaction.fromRpc>> =
+          await (async () => {
+            if (isPreparedFeePayerTransaction(parameters))
+              return normalizeTempoTransaction(parameters)
+
+            const request = formatFillTransactionRequest(client, {
+              ...normalizeFillTransactionRequest(parameters),
+              ...(typeof chainId !== 'undefined' ? { chainId } : {}),
+              feePayer: true,
+            })
+            const result = (await client.request({
+              method: 'eth_fillTransaction',
+              params: [request] as never,
+            })) as { tx?: Record<string, unknown> | undefined }
+            return normalizeTempoTransaction(result.tx)
+          })()
+
+        const tx = transaction as Record<string, unknown> & { from?: `0x${string}` | undefined }
+        const prepared = omitSenderSignature({
+          ...tx,
+          ...(!tx.from && typeof parameters.from === 'string' ? { from: parameters.from } : {}),
+        }) as
+          | (NonNullable<ReturnType<typeof core_Transaction.fromRpc>> & { from?: `0x${string}` })
+          | null
+
+        if (!prepared?.from)
+          throw new RpcResponse.InvalidParamsError({
+            message: 'Transaction sender must be provided before fee payer signing.',
+          })
+        if (!account.sign) throw new Error('Fee payer account cannot sign transactions.')
+
+        const response = await authorize?.({
+          client,
+          request: req,
+          rpcRequest: request,
+          transaction: prepared,
+        })
+        if (response) return response
+
+        const feePayerSignature = Signature.from(
+          await account.sign({
+            hash: TxEnvelopeTempo.getFeePayerSignPayload(TxEnvelopeTempo.from(prepared as never), {
+              sender: prepared.from,
+            }),
+          }),
+        )
+
+        return rpcResult(request, {
+          sponsor,
+          tx: core_Transaction.toRpc({
+            ...prepared,
+            feePayerSignature,
+          } as never),
+        })
+      }
+
       const serialized = request.params?.[0] as `0x76${string}`
 
       if (!serialized?.startsWith('0x76') && !serialized?.startsWith('0x78'))
@@ -293,7 +366,9 @@ export function feePayer(options: feePayer.Options) {
           message: 'Only Tempo (0x76/0x78) transactions are supported.',
         })
 
-      const transaction = Transaction.deserialize(serialized) as any
+      const transaction = Transaction.deserialize(serialized) as ReturnType<
+        typeof Transaction.deserialize
+      >
 
       if (!transaction.signature || !transaction.from)
         throw new RpcResponse.InvalidParamsError({
@@ -309,11 +384,13 @@ export function feePayer(options: feePayer.Options) {
       })
       if (response) return response
 
-      const serializedTransaction = await signTransaction(client, {
-        ...transaction,
-        account,
-        feePayer: account,
-      })
+      const serializedTransaction = toSerializedTransaction(
+        await signTransaction(client, {
+          ...transaction,
+          account,
+          feePayer: account,
+        }),
+      )
 
       if (method === 'eth_signRawTransaction')
         return Response.json(RpcResponse.from({ result: serializedTransaction }, { request }))
@@ -325,16 +402,7 @@ export function feePayer(options: feePayer.Options) {
 
       return Response.json(RpcResponse.from({ result }, { request }))
     } catch (error) {
-      return Response.json(
-        RpcResponse.from(
-          {
-            error: new RpcResponse.InternalError({
-              message: (error as Error).message,
-            }),
-          },
-          { request },
-        ),
-      )
+      return rpcError(request, error)
     }
   })
 
@@ -350,8 +418,10 @@ export declare namespace feePayer {
     request: Request
     /** Parsed JSON-RPC request. */
     rpcRequest: RpcRequest.RpcRequest
-    /** Deserialized Tempo transaction after sender-signature validation. */
-    transaction: ReturnType<typeof Transaction.deserialize>
+    /** Deserialized Tempo transaction for the current request. */
+    transaction:
+      | ReturnType<typeof Transaction.deserialize>
+      | NonNullable<ReturnType<typeof core_Transaction.fromRpc>>
   }
 
   export type Options = from.Options & {
@@ -374,8 +444,12 @@ export declare namespace feePayer {
     onRequest?: (request: RpcRequest.RpcRequest) => Promise<void>
     /** Path to use for the handler. */
     path?: string | undefined
+    /** Sponsor display name returned from `eth_fillTransaction`. */
+    name?: string | undefined
     /** Transports keyed by chain ID. Defaults to `http()` for each chain. */
     transports?: Record<number, Transport> | undefined
+    /** Sponsor URL returned from `eth_fillTransaction`. */
+    url?: string | undefined
   }
 }
 
@@ -686,7 +760,7 @@ export declare namespace webAuthn {
     /** Maximum age of a challenge in seconds before it expires. @default 300 */
     challengeTtl?: number | undefined
     /** Key-value store for challenges and credentials. */
-    kv: Kv
+    kv: Kv.Kv
     /** Called after a successful registration. The returned response is merged onto the default JSON response. */
     onRegister?: (parameters: {
       credentialId: string
@@ -707,6 +781,112 @@ export declare namespace webAuthn {
     /** Relying Party ID (e.g. `"example.com"`). */
     rpId: string
   }
+}
+
+/** @internal */
+function resolveChainId(value: unknown) {
+  if (typeof value === 'number') return value
+  if (typeof value === 'bigint') return Number(value)
+  if (typeof value === 'string' && value.startsWith('0x')) return Hex.toNumber(value as Hex.Hex)
+  return undefined
+}
+
+/** @internal */
+function isPreparedFeePayerTransaction(value: Record<string, unknown>) {
+  return (
+    typeof value.from === 'string' &&
+    typeof resolveChainId(value.chainId) === 'number' &&
+    typeof value.gas !== 'undefined' &&
+    typeof value.nonce !== 'undefined' &&
+    (typeof value.maxFeePerGas !== 'undefined' || typeof value.gasPrice !== 'undefined')
+  )
+}
+
+/** @internal */
+function formatFillTransactionRequest(client: Client, value: Record<string, unknown>) {
+  const format = client.chain?.formatters?.transactionRequest?.format
+  if (!format) return value
+  return format({ ...value } as never, 'fillTransaction') as Record<string, unknown>
+}
+
+/** @internal */
+function normalizeFillTransactionRequest(value: Record<string, unknown>) {
+  if (typeof value.to !== 'undefined' || typeof value.data !== 'undefined') return value
+  if (!Array.isArray(value.calls) || value.calls.length !== 1) return value
+  const [call] = value.calls as Array<Record<string, unknown>>
+  const { calls: _, ...rest } = value
+  return {
+    ...rest,
+    ...(typeof call?.data !== 'undefined' ? { data: call.data } : {}),
+    ...(typeof call?.to !== 'undefined' ? { to: call.to } : {}),
+    ...(typeof call?.value !== 'undefined' ? { value: normalizeFillValue(call.value) } : {}),
+  }
+}
+
+/** @internal */
+function normalizeFillValue(value: unknown) {
+  if (typeof value !== 'string' || !value.startsWith('0x')) return value
+  return BigInt(value === '0x' ? '0x0' : value)
+}
+
+/** @internal */
+function normalizeTempoTransaction(value: Record<string, unknown> | undefined) {
+  if (!value) throw new Error('Expected `tx` in eth_fillTransaction response.')
+  return core_Transaction.fromRpc({
+    type: '0x76',
+    ...value,
+  } as never)
+}
+
+/** @internal */
+function omitSenderSignature(transaction: Record<string, unknown>) {
+  const { signature: _, ...rest } = transaction
+  return rest
+}
+
+/** @internal */
+function rpcError(request: RpcRequest.RpcRequest, error: unknown) {
+  if (error instanceof RpcResponse.InvalidParamsError)
+    return Response.json(RpcResponse.from({ error }, { request }))
+
+  if (error instanceof RpcResponse.MethodNotSupportedError)
+    return Response.json(RpcResponse.from({ error }, { request }))
+
+  if ((error as { name?: string | undefined }).name === 'ZodError')
+    return Response.json(
+      RpcResponse.from(
+        {
+          error: new RpcResponse.InvalidParamsError({
+            message: (error as Error).message,
+          }),
+        },
+        { request },
+      ),
+    )
+
+  return Response.json(
+    RpcResponse.from(
+      {
+        error: new RpcResponse.InternalError({
+          message: (error as Error).message,
+        }),
+      },
+      { request },
+    ),
+  )
+}
+
+/** @internal */
+function rpcResult(request: RpcRequest.RpcRequest, result: unknown) {
+  return Response.json(RpcResponse.from({ result }, { request }))
+}
+
+/** @internal */
+function toSerializedTransaction(value: unknown) {
+  if (typeof value === 'string') return value
+  if (value && typeof value === 'object' && 'raw' in value && typeof value.raw === 'string')
+    return value.raw
+  throw new Error('Expected a serialized transaction result.')
 }
 
 /** @internal */

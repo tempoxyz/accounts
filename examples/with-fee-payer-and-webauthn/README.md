@@ -1,8 +1,9 @@
 # Fee Payer + WebAuthn Example
 
-Combines sponsored transactions (`Handler.feePayer`) with domain-bound
-WebAuthn authentication (`Handler.webAuthn`). No tunnel or HTTPS setup
-needed — WebAuthn works on `localhost` and the fee-payer runs same-origin.
+Combines sponsor-first transaction preparation (`Handler.feePayer`) with
+domain-bound WebAuthn authentication (`Handler.webAuthn`). No tunnel or HTTPS
+setup needed — WebAuthn works on `localhost` and the fee-payer runs
+same-origin.
 
 ## Setup
 

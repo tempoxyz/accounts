@@ -1,13 +1,15 @@
 import { Elysia } from 'elysia'
 import express from 'express'
 import { Hono } from 'hono'
-import type { RpcRequest } from 'ox'
+import { Json, type RpcRequest } from 'ox'
+import { Transaction as core_Transaction } from 'ox/tempo'
 import { prepareTransactionRequest, sendTransactionSync } from 'viem/actions'
 import { withFeePayer } from 'viem/tempo'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, chain, getClient, http } from '../../test/config.js'
 import { createServer, type Server } from '../../test/utils.js'
+import { signTempoTransaction } from '../core/internal/signTempoTransaction.js'
 import * as WebAuthnCeremony from '../core/WebAuthnCeremony.js'
 import * as Handler from './Handler.js'
 import * as Kv from './Kv.js'
@@ -732,7 +734,89 @@ describe('feePayer', () => {
     requests = []
   })
 
+  async function rpc(request: Record<string, unknown>) {
+    return await fetch(server.url, {
+      body: Json.stringify(request),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    }).then((response) => response.json())
+  }
+
   describe('POST /', () => {
+    test('default: eth_fillTransaction returns a sponsor-bound transaction the sender can broadcast', async () => {
+      const response = (await rpc({
+        id: 1,
+        jsonrpc: '2.0',
+        method: 'eth_fillTransaction',
+        params: [
+          {
+            chainId: chain.id,
+            feePayer: true,
+            from: userAccount.address,
+            to: '0x0000000000000000000000000000000000000000',
+          },
+        ],
+      })) as {
+        result: {
+          sponsor: { address: string }
+          tx: Record<string, unknown>
+        }
+      }
+      const prepared = core_Transaction.fromRpc(response.result.tx as never) as {
+        feePayerSignature?: unknown
+      }
+      const signed = await signTempoTransaction({ account: userAccount, transaction: prepared })
+      const receipt = (await getClient().request({
+        method: 'eth_sendRawTransactionSync',
+        params: [signed],
+      })) as { feePayer?: string | undefined }
+
+      expect(response.result.sponsor.address).toBe(feePayerAccount.address)
+      expect(prepared?.feePayerSignature).toBeDefined()
+      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+      expect(requests.map(({ method }) => method)).toMatchInlineSnapshot(`
+        [
+          "eth_fillTransaction",
+        ]
+      `)
+    })
+
+    test('behavior: mutating a sponsor-bound transaction invalidates the fee payer binding', async () => {
+      const response = (await rpc({
+        id: 1,
+        jsonrpc: '2.0',
+        method: 'eth_fillTransaction',
+        params: [
+          {
+            chainId: chain.id,
+            feePayer: true,
+            from: userAccount.address,
+            to: '0x0000000000000000000000000000000000000000',
+          },
+        ],
+      })) as {
+        result: { tx: Record<string, unknown> }
+      }
+      const prepared = core_Transaction.fromRpc(response.result.tx as never) as {
+        gas?: bigint | undefined
+        feePayerSignature?: unknown
+      }
+      const signed = await signTempoTransaction({
+        account: userAccount,
+        transaction: {
+          ...prepared,
+          gas: (prepared?.gas ?? 0n) + 1n,
+        },
+      })
+
+      await expect(
+        getClient().request({
+          method: 'eth_sendRawTransactionSync',
+          params: [signed],
+        }),
+      ).rejects.toThrowError()
+    })
+
     test('behavior: eth_signRawTransaction', async () => {
       const client = getClient({
         account: userAccount,
@@ -835,8 +919,8 @@ describe('feePayer', () => {
       expect(data).toMatchInlineSnapshot(`
         {
           "error": {
-            "code": -32603,
-            "name": "RpcResponse.InternalError",
+            "code": -32602,
+            "name": "RpcResponse.InvalidParamsError",
             "stack": "",
           },
           "id": 1,

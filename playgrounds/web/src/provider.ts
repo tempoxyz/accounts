@@ -40,6 +40,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host: import.meta.env.VITE_WALLET_DIALOG_HOST,
       }),
+      feePayerUrl: '/fee-payer',
       mpp: true,
       testnet,
     })
@@ -50,6 +51,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host: import.meta.env.VITE_REF_DIALOG_HOST,
       }),
+      feePayerUrl: '/fee-payer',
       mpp: true,
       testnet,
     })

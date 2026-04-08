@@ -1,6 +1,11 @@
 # Fee Payer Example
 
-Demonstrates sponsored transactions using `Handler.feePayer` from `accounts/server`.
+Demonstrates sponsor-first transaction preparation using `Handler.feePayer` from
+`accounts/server`.
+
+The wallet asks `/fee-payer` to fill the transaction, the service attaches its
+`feePayerSignature`, the user signs that exact prepared transaction, and the
+wallet broadcasts it directly to the chain.
 
 ## Setup
 

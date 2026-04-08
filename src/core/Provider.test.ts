@@ -1642,6 +1642,20 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(signed).toMatch(/^0x/)
     })
 
+    test('behavior: feePayer URL on eth_fillTransaction', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const result = await provider.request({
+        method: 'eth_fillTransaction',
+        params: [{ calls: [transferCall], feePayer: server.url, from: connected }],
+      })
+
+      expect((result.tx as { feePayerSignature?: unknown }).feePayerSignature).toBeDefined()
+    })
+
     test('behavior: feePayer: true uses default from Provider.create', async () => {
       const provider = Provider.create({
         adapter: adapter(),

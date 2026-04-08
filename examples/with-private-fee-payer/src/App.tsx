@@ -21,97 +21,74 @@ export default function App() {
   const { address, chainId, status } = useConnection()
 
   return (
-    <div
-      style={{
-        fontFamily: 'SF-Pro, -apple-system, BlinkMacSystemFont, sans-serif',
-        minHeight: '100vh',
-        paddingTop: '5px',
-        paddingBottom: '25px',
-        paddingLeft: 'max(10vw, 1em)',
-        paddingRight: 'max(10vw, 1em)',
-        backgroundColor: '#fff',
-      }}
-    >
+    <main>
       <h1>Private Fee Payer Example</h1>
       <p>
-        this demo keeps the fee payer <InlineCode>same-origin</InlineCode> with WebAuthn,
+        This demo keeps the fee payer <code>same-origin</code> with WebAuthn,
         <br />
-        mints an
-        <InlineCode>HttpOnly</InlineCode> session cookie on register or login, and only sponsors
+        mints an <code>HttpOnly</code> session cookie on register or login, and only sponsors
         allowlisted contract calls.
       </p>
 
-      <h3>Connection</h3>
-      <CodeBlock>
-        {stringify({ address: address ?? null, chainId: chainId ?? null, status }, null, 2)}
-      </CodeBlock>
+      <section>
+        <h2>Connection</h2>
+        <pre>
+          {stringify({ address: address ?? null, chainId: chainId ?? null, status }, null, 2)}
+        </pre>
+      </section>
 
-      <h3>Policy</h3>
-      <ul>
-        <li>
-          The fee payer requires a valid <InlineCode>same-origin</InlineCode> session cookie.
-        </li>
-        <li>The transaction sender must match the session address.</li>
-        <li>
-          The demo only sponsors calls to the allowlisted <InlineCode>pathUSD</InlineCode> token
-          contract.
-        </li>
-        <li>Direct value transfers are rejected.</li>
-      </ul>
+      <section>
+        <h2>Policy</h2>
+        <ul>
+          <li>
+            The fee payer requires a valid <code>same-origin</code> session cookie.
+          </li>
+          <li>The transaction sender must match the session address.</li>
+          <li>
+            The demo only sponsors calls to the allowlisted <code>pathUSD</code> token contract.
+          </li>
+          <li>Direct value transfers are rejected.</li>
+        </ul>
+      </section>
 
-      <h3>Account</h3>
-      <Connect />
+      <section>
+        <h2>Account</h2>
+        <Connect />
+      </section>
 
-      <h3>Auth Probe</h3>
-      <AuthProbe />
+      <section>
+        <h2>Auth Probe</h2>
+        <AuthProbe />
+      </section>
 
       {status === 'connected' && (
         <>
-          <h3>Switch Chain</h3>
-          <SwitchChain />
+          <section>
+            <h2>Switch Chain</h2>
+            <SwitchChain />
+          </section>
 
-          <h3>Faucet</h3>
-          <Faucet />
+          <section>
+            <h2>Faucet</h2>
+            <Faucet />
+          </section>
 
-          <h3>Balance</h3>
-          <Balance />
+          <section>
+            <h2>Balance</h2>
+            <Balance />
+          </section>
 
-          <h3>Send Transaction</h3>
-          <p>
-            This uses <InlineCode>Actions.token.transfer.call()</InlineCode>, so the transaction
-            target is the allowlisted token contract instead of the recipient address below.
-          </p>
-          <SendTransaction />
+          <section>
+            <h2>Send Transaction</h2>
+            <p>
+              This uses <code>Actions.token.transfer.call()</code>, so the transaction target is the
+              allowlisted token contract instead of the recipient address below.
+            </p>
+            <SendTransaction />
+          </section>
         </>
       )}
-    </div>
-  )
-}
-
-function InlineCode(props: { children: React.ReactNode }) {
-  return (
-    <code
-      style={{
-        fontWeight: '500',
-        backgroundColor: '#f9f9f9',
-        padding: '0.2em 0.4em',
-      }}
-      {...props}
-    />
-  )
-}
-
-function CodeBlock(props: { children: React.ReactNode }) {
-  return (
-    <pre
-      style={{
-        fontWeight: '500',
-        backgroundColor: '#f9f9f9',
-        padding: '0.5em',
-        overflowX: 'auto',
-      }}
-      {...props}
-    />
+    </main>
   )
 }
 
@@ -158,42 +135,37 @@ function Connect() {
         </div>
       )}
       <div>{status}</div>
-      {error && <CodeBlock>{error.message}</CodeBlock>}
+      {error && <pre>{error.message}</pre>}
     </div>
   )
 }
 
 function AuthProbe() {
   const { address, chainId } = useConnection()
-  const [connector] = useConnectors()
   const [result, setResult] = useState<string>()
   const [status, setStatus] = useState<number>()
   const [pending, setPending] = useState(false)
 
   async function probe(form: FormData) {
-    if (!address || !connector) return
+    if (!address) return
 
     setPending(true)
 
     try {
       const call = getTransferCall(form)
-      const provider = await connector.getProvider()
-      const signed = await provider.request({
-        method: 'eth_signTransaction',
-        params: [
-          {
-            ...(chainId ? { chainId } : {}),
-            calls: [call],
-            from: address,
-          },
-        ],
-      } as never)
-      const response = await fetch('/fee-payer/probe', {
+      const response = await fetch('/fee-payer', {
         body: Json.stringify({
           id: 1,
           jsonrpc: '2.0',
-          method: 'eth_signRawTransaction',
-          params: [signed],
+          method: 'eth_fillTransaction',
+          params: [
+            {
+              ...(chainId ? { chainId } : {}),
+              calls: [call],
+              feePayer: true,
+              from: address,
+            },
+          ],
         }),
         credentials: 'omit',
         headers: { 'content-type': 'application/json' },
@@ -220,11 +192,11 @@ function AuthProbe() {
   return (
     <div>
       <p>
-        This first signs the same Tempo transaction shape, then posts the raw transaction to{' '}
-        <InlineCode>/fee-payer/probe</InlineCode> with <InlineCode>credentials: 'omit'</InlineCode>.
+        This posts the same sponsor-first <code>eth_fillTransaction</code> request to{' '}
+        <code>/fee-payer</code> with <code>credentials: 'omit'</code>.
       </p>
       <p>
-        It should report <InlineCode>401</InlineCode> even after you log in.
+        It should report <code>401</code> even after you log in.
       </p>
       <TransferForm
         disabled={pending || !address}
@@ -232,7 +204,7 @@ function AuthProbe() {
         submitLabel={pending ? 'Probing...' : 'Probe unauthenticated request'}
       />
       {status !== undefined && <p>Probe status: {status}</p>}
-      {result && <CodeBlock>{result}</CodeBlock>}
+      {result && <pre>{result}</pre>}
     </div>
   )
 }
@@ -275,7 +247,7 @@ function Faucet() {
         {isPending ? 'Funding...' : 'Fund Account'}
       </button>
       {data && <p>✅ Funded!</p>}
-      {error && <CodeBlock>{error.message}</CodeBlock>}
+      {error && <pre>{error.message}</pre>}
     </div>
   )
 }
@@ -289,9 +261,9 @@ function Balance() {
   })
 
   return (
-    <InlineCode>
+    <code>
       {isLoading ? 'Loading...' : data !== undefined ? formatUnits(data, 6) : '—'} pathUSD
-    </InlineCode>
+    </code>
   )
 }
 
@@ -311,7 +283,7 @@ function SendTransaction() {
         submitLabel="Send"
       />
 
-      {error && <CodeBlock>{`${error.name}: ${error.message}`}</CodeBlock>}
+      {error && <pre>{`${error.name}: ${error.message}`}</pre>}
       {data !== undefined && (
         <>
           <p>
@@ -319,13 +291,13 @@ function SendTransaction() {
             {feePayer && (
               <>
                 {' '}
-                Fees paid by: <InlineCode>{feePayer}</InlineCode>
+                Fees paid by: <code>{feePayer}</code>
               </>
             )}
           </p>
           <details>
             <summary>Receipt</summary>
-            <CodeBlock>{stringify(data, null, 2)}</CodeBlock>
+            <pre>{stringify(data, null, 2)}</pre>
           </details>
         </>
       )}

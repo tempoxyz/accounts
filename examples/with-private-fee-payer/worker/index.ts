@@ -1,125 +1,79 @@
 import { Handler, Kv } from 'accounts/server'
-import { env } from 'cloudflare:workers'
-import { RpcRequest } from 'ox'
-import { http } from 'viem'
+import { Base64, Hex, type RpcRequest } from 'ox'
 import { privateKeyToAccount } from 'viem/accounts'
-import { tempoMainnet, tempoTestnet } from 'viem/chains'
-import { Account, Transaction } from 'viem/tempo'
+import { Account } from 'viem/tempo'
+import * as z from 'zod/mini'
 
 const localKv = Kv.memory()
 const sessionCookie = 'fp_session'
 const sessionTtlMs = 15 * 60 * 1_000
 
 type Session = {
-  credentialId: string
-  publicKey: string
   address: `0x${string}`
   expiresAt: number
 }
 
+const sessionValue = z.object({
+  address: z.string(),
+  expiresAt: z.number(),
+})
+
 export default {
-  fetch: async (request, _env, _context) => {
+  fetch: async (request, env) => {
     const url = new URL(request.url)
-    const kv = localKv
-    const rpcUrls = {
-      [tempoMainnet.id]: tempoMainnet.rpcUrls.default.http[0],
-      [tempoTestnet.id]: tempoTestnet.rpcUrls.default.http[0],
-    } as const
-    const rpcUrl = rpcUrls[tempoTestnet.id]
-
-    if (url.pathname === '/debug/fetch') {
-      try {
-        const response = await fetch(rpcUrl, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'eth_chainId',
-            params: [],
-          }),
-        })
-
-        return new Response(await response.text(), {
-          status: response.status,
-          headers: { 'content-type': 'application/json' },
-        })
-      } catch (error) {
-        const cause =
-          error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined
-        return Response.json(
-          {
-            cause,
-            message: error instanceof Error ? error.message : String(error),
-            name: error instanceof Error ? error.name : 'UnknownError',
-            rpcUrl,
-            stack: error instanceof Error ? error.stack : undefined,
-          },
-          { status: 500 },
-        )
-      }
-    }
-
-    if (url.pathname === '/fee-payer/probe' && request.method === 'POST') {
-      const response = await authorizeFeePayerRequest({
-        allowedTargets: parseAddressList(env.ALLOWED_FEE_PAYER_TARGETS),
-        kv,
-        request,
-      })
-      if (!response) return Response.json({ ok: true, status: 200 })
-
-      return Response.json(
-        {
-          body: await response.json(),
-          ok: false,
-          status: response.status,
-        },
-        { status: 200 },
-      )
-    }
-
-    if (url.pathname === '/fee-payer' && request.method === 'POST') {
-      const response = await authorizeFeePayerRequest({
-        allowedTargets: parseAddressList(env.ALLOWED_FEE_PAYER_TARGETS),
-        kv,
-        request,
-      })
-      if (response) return response
-    }
+    const allowedTargets = parseAddressList(env.ALLOWED_FEE_PAYER_TARGETS)
+    const secret = env.FEE_PAYER_PRIVATE_KEY
 
     const handler = Handler.compose(
       [
         Handler.feePayer({
-          account: privateKeyToAccount(env.FEE_PAYER_PRIVATE_KEY),
-          chains: [tempoMainnet, tempoTestnet],
-          path: '/fee-payer',
-          cors: false,
-          transports: {
-            [tempoMainnet.id]: http(rpcUrls[tempoMainnet.id]),
-            [tempoTestnet.id]: http(rpcUrls[tempoTestnet.id]),
+          account: privateKeyToAccount(secret),
+          async authorize(parameters) {
+            try {
+              const session = await requireSession({ request: parameters.request, secret })
+              assertAuthorizedSender({
+                requestId: parameters.rpcRequest.id,
+                session,
+                tx: parameters.transaction,
+              })
+              assertAllowedCalls({
+                allowedTargets,
+                requestId: parameters.rpcRequest.id,
+                tx: parameters.transaction,
+              })
+              assertNoValueTransfers({
+                requestId: parameters.rpcRequest.id,
+                tx: parameters.transaction,
+              })
+            } catch (error) {
+              if (isResponse(error)) return error
+              throw error
+            }
           },
+          cors: false,
+          path: '/fee-payer',
         }),
         Handler.webAuthn({
-          kv,
+          kv: localKv,
           origin: url.origin,
           rpId: url.hostname,
           path: '/auth',
           cors: false,
-          onRegister(parameters) {
-            return createSessionResponse({
-              credentialId: parameters.credentialId,
-              publicKey: parameters.publicKey as never,
-              kv,
-              rpId: url.hostname,
-              url,
-            })
-          },
           onAuthenticate(parameters) {
             return createSessionResponse({
               credentialId: parameters.credentialId,
               publicKey: parameters.publicKey as never,
-              kv,
               rpId: url.hostname,
+              secret,
+              url,
+            })
+          },
+          onRegister(parameters) {
+            return createSessionResponse({
+              credentialId: parameters.credentialId,
+              publicKey: parameters.publicKey as never,
+              rpId: url.hostname,
+              secret,
               url,
             })
           },
@@ -132,86 +86,21 @@ export default {
   },
 } satisfies ExportedHandler<Cloudflare.Env>
 
-async function authorizeFeePayerRequest(parameters: {
-  allowedTargets: ReadonlySet<string>
-  kv: Kv.Kv
-  request: Request
-}) {
-  const { allowedTargets, kv, request } = parameters
-
-  let rpcRequest: RpcRequest.RpcRequest
-  try {
-    rpcRequest = RpcRequest.from((await request.clone().json()) as never)
-  } catch {
-    return undefined
-  }
-
-  const method = rpcRequest.method as string
-  if (
-    method !== 'eth_signRawTransaction' &&
-    method !== 'eth_sendRawTransaction' &&
-    method !== 'eth_sendRawTransactionSync'
-  )
-    return undefined
-
-  const serialized = (rpcRequest.params as readonly unknown[] | undefined)?.[0]
-  if (
-    typeof serialized !== 'string' ||
-    (!serialized.startsWith('0x76') && !serialized.startsWith('0x78'))
-  )
-    return undefined
-
-  let transaction: ReturnType<typeof Transaction.deserialize>
-  try {
-    transaction = Transaction.deserialize(serialized as `0x76${string}`) as never
-  } catch {
-    return undefined
-  }
-
-  try {
-    const session = await requireSession({ kv, request })
-
-    assertAuthorizedSender({
-      requestId: rpcRequest.id,
-      session,
-      tx: transaction,
-    })
-    assertAllowedCalls({
-      allowedTargets,
-      requestId: rpcRequest.id,
-      tx: transaction,
-    })
-    assertNoValueTransfers({
-      requestId: rpcRequest.id,
-      tx: transaction,
-    })
-  } catch (error) {
-    if (isResponse(error)) return error
-    throw error
-  }
-
-  return undefined
-}
-
 async function createSessionResponse(parameters: {
   credentialId: string
   publicKey: `0x${string}`
-  kv: Kv.Kv
   rpId: string
+  secret: `0x${string}`
   url: URL
 }) {
-  const { credentialId, publicKey, kv, rpId, url } = parameters
+  const { credentialId, publicKey, rpId, secret, url } = parameters
   const account = Account.fromWebAuthnP256({ id: credentialId, publicKey }, { rpId })
 
-  const id = crypto.randomUUID()
   const session: Session = {
-    credentialId,
-    publicKey,
     address: account.address,
     expiresAt: Date.now() + sessionTtlMs,
   }
-
-  await kv.set(`session:${id}`, session)
+  const value = await signValue(sessionValue, session, secret)
 
   return new Response(
     JSON.stringify({
@@ -222,7 +111,7 @@ async function createSessionResponse(parameters: {
         'content-type': 'application/json',
         'set-cookie': serializeCookie({
           name: sessionCookie,
-          value: id,
+          value,
           maxAge: Math.floor(sessionTtlMs / 1_000),
           secure: url.protocol === 'https:',
         }),
@@ -231,28 +120,32 @@ async function createSessionResponse(parameters: {
   )
 }
 
-async function requireSession(parameters: { kv: Kv.Kv; request: Request }) {
-  const id = parseCookie(parameters.request.headers.get('cookie') ?? '')[sessionCookie]
-  if (!id)
+async function getSession(parameters: { request: Request; secret: `0x${string}` }) {
+  const value = parseCookie(parameters.request.headers.get('cookie') ?? '')[sessionCookie]
+  if (!value) return undefined
+
+  try {
+    return await loadValue(sessionValue, value, parameters.secret)
+  } catch {
+    return undefined
+  }
+}
+
+async function requireSession(parameters: { request: Request; secret: `0x${string}` }) {
+  const session = await getSession(parameters)
+  if (!session)
     throw rpcErrorResponse({
       message: 'Missing fee payer session.',
       status: 401,
     })
 
-  const session = await parameters.kv.get<Session>(`session:${id}`)
-  if (!session || session.expiresAt < Date.now())
-    throw rpcErrorResponse({
-      message: 'Expired fee payer session.',
-      status: 401,
-    })
-
-  return session
+  return session as Session
 }
 
 function assertAuthorizedSender(parameters: {
-  requestId: number
+  requestId: RpcRequest.RpcRequest['id']
   session: Session
-  tx: { from?: `0x${string}` }
+  tx: { from?: `0x${string}` | undefined }
 }) {
   const { requestId, session, tx } = parameters
   if (!tx.from || tx.from.toLowerCase() !== session.address.toLowerCase())
@@ -264,19 +157,19 @@ function assertAuthorizedSender(parameters: {
 }
 
 function assertAllowedCalls(parameters: {
-  requestId: number
-  tx: {
-    to?: `0x${string}`
-    data?: `0x${string}`
-    calls?: readonly {
-      to?: `0x${string}`
-      data?: `0x${string}`
-    }[]
-  }
   allowedTargets: ReadonlySet<string>
+  requestId: RpcRequest.RpcRequest['id']
+  tx: {
+    calls?: readonly {
+      data?: `0x${string}` | undefined
+      to?: `0x${string}` | undefined
+    }[]
+    data?: `0x${string}` | undefined
+    to?: `0x${string}` | undefined
+  }
 }) {
   const { allowedTargets, requestId, tx } = parameters
-  const calls = tx.calls ?? (tx.to ? [{ to: tx.to, data: tx.data }] : undefined)
+  const calls = tx.calls ?? (tx.to ? [{ data: tx.data, to: tx.to }] : undefined)
   if (!calls?.length)
     throw rpcErrorResponse({
       id: requestId,
@@ -294,10 +187,10 @@ function assertAllowedCalls(parameters: {
 }
 
 function assertNoValueTransfers(parameters: {
-  requestId: number
+  requestId: RpcRequest.RpcRequest['id']
   tx: {
-    value?: bigint
-    calls?: readonly { value?: bigint }[]
+    calls?: readonly { value?: bigint | undefined }[]
+    value?: bigint | undefined
   }
 }) {
   const { requestId, tx } = parameters
@@ -353,10 +246,10 @@ function parseCookie(value: string) {
 }
 
 function serializeCookie(parameters: {
-  name: string
-  value: string
   maxAge: number
+  name: string
   secure: boolean
+  value: string
 }) {
   return [
     `${parameters.name}=${encodeURIComponent(parameters.value)}`,
@@ -368,8 +261,58 @@ function serializeCookie(parameters: {
   ].join('; ')
 }
 
+async function loadValue<schema extends z.ZodMiniType>(
+  schema: schema,
+  value: string,
+  secret: `0x${string}`,
+): Promise<z.output<schema>> {
+  const [body, signature] = value.split('.')
+  if (!body || !signature) throw new Error('Invalid signed value.')
+
+  const bodyBytes = Uint8Array.from(Base64.toBytes(body))
+  const signatureBytes = Uint8Array.from(Base64.toBytes(signature))
+  const key = await signingKey(secret)
+
+  const valid = await crypto.subtle.verify('HMAC', key, signatureBytes, bodyBytes)
+  if (!valid) throw new Error('Invalid signature.')
+
+  const parsed = schema.parse(
+    JSON.parse(new TextDecoder().decode(bodyBytes)),
+  ) as z.output<schema> & {
+    expiresAt: number
+  }
+  if (parsed.expiresAt < Date.now()) throw new Error('Signed value expired.')
+
+  return parsed
+}
+
+async function signValue<schema extends z.ZodMiniType>(
+  schema: schema,
+  value: z.output<schema>,
+  secret: `0x${string}`,
+) {
+  const bodyBytes = new TextEncoder().encode(JSON.stringify(schema.parse(value)))
+  const key = await signingKey(secret)
+  const signature = new Uint8Array(await crypto.subtle.sign('HMAC', key, bodyBytes))
+
+  return [
+    Base64.fromBytes(bodyBytes, { pad: false, url: true }),
+    Base64.fromBytes(signature, { pad: false, url: true }),
+  ].join('.')
+}
+
+async function signingKey(secret: `0x${string}`) {
+  return await crypto.subtle.importKey(
+    'raw',
+    Uint8Array.from(Hex.toBytes(secret)),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign', 'verify'],
+  )
+}
+
 function rpcErrorResponse(parameters: {
-  id?: number | null | undefined
+  id?: RpcRequest.RpcRequest['id'] | undefined
   message: string
   status: number
 }) {
