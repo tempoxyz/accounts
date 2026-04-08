@@ -1,5 +1,11 @@
 # accounts
 
+## 0.5.2
+
+### Patch Changes
+
+- 1450dd5: Fixed the wagmi WebAuthn connector to forward authUrl so server-backed WebAuthn flows correctly called /auth/\* instead of falling back to local-only mode.
+
 ## 0.5.1
 
 ### Patch Changes
