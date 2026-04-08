@@ -13,10 +13,15 @@ function setup() {
   })
   const dialog = Dialog.iframe()
   const handle = dialog({ host, store })
+  lastHandle = handle
   return { handle, store }
 }
 
+let lastHandle: Dialog.Instance | undefined
+
 afterEach(() => {
+  lastHandle?.destroy()
+  lastHandle = undefined
   document.querySelectorAll('dialog[data-tempo-wallet]').forEach((el) => el.remove())
   document.body.style.overflow = ''
 })
@@ -28,6 +33,16 @@ describe('Dialog.iframe', () => {
     expect(dialog).not.toBeNull()
     const iframe = dialog!.querySelector('iframe')
     expect(iframe).not.toBeNull()
+  })
+
+  test('behavior: singleton — multiple calls reuse same iframe', () => {
+    const { handle: a } = setup()
+    const { handle: b } = setup()
+    const { handle: c } = setup()
+    expect(a).toBe(b)
+    expect(b).toBe(c)
+    const dialogs = document.querySelectorAll('dialog[data-tempo-wallet]')
+    expect(dialogs.length).toBe(1)
   })
 
   test('behavior: iframe has correct sandbox attributes', () => {
