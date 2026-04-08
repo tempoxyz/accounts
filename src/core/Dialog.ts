@@ -35,7 +35,7 @@ export declare namespace SetupFn {
   }
 }
 
-export const defaultSize = { height: 440, width: 360 }
+export const defaultSize = { height: 600, width: 480 }
 
 /** Creates a dialog from metadata and a setup function. */
 export function define(meta: Meta, fn: SetupFn): Dialog {
@@ -331,10 +331,6 @@ export function popup(options: popup.Options = {}): Dialog {
 
     let win: Window | null = null
 
-    function onBlur() {
-      if (win) handleBlur(store)
-    }
-
     const offDetectClosed = (() => {
       const timer = setInterval(() => {
         if (win?.closed) handleBlur(store)
@@ -352,7 +348,6 @@ export function popup(options: popup.Options = {}): Dialog {
       },
       destroy() {
         this.close()
-        window.removeEventListener('focus', onBlur)
         messenger?.destroy()
         offDetectClosed()
       },
@@ -387,9 +382,6 @@ export function popup(options: popup.Options = {}): Dialog {
         })
 
         messenger.on('rpc-response', (response) => handleResponse(store, response))
-
-        window.removeEventListener('focus', onBlur)
-        window.addEventListener('focus', onBlur)
       },
       async syncRequests(requests) {
         const requiresConfirm = requests.some((x) => x.status === 'pending')
@@ -409,7 +401,7 @@ export function popup(options: popup.Options = {}): Dialog {
 
 export declare namespace popup {
   type Options = {
-    /** Popup window dimensions. @default `{ width: 360, height: 440 }` */
+    /** Popup window dimensions. @default `{ width: 480, height: 600 }` */
     size?: { width: number; height: number } | undefined
   }
 }
