@@ -15,7 +15,6 @@
     "accounts": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "hono":"catalog:",
     "viem": "catalog:",
     "wagmi": "catalog:"
   },
