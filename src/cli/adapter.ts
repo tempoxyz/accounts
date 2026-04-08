@@ -10,13 +10,14 @@ import {
   PublicKey,
   RpcResponse,
 } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { KeyAuthorization, Transaction as core_Transaction } from 'ox/tempo'
 import { prepareTransactionRequest } from 'viem/actions'
-import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
+import { Account as TempoAccount, Secp256k1, Transaction } from 'viem/tempo'
 import * as z from 'zod/mini'
 
 import * as AccessKey from '../core/AccessKey.js'
 import * as Adapter from '../core/Adapter.js'
+import { signTempoTransaction } from '../core/internal/signTempoTransaction.js'
 import * as CliAuth from '../server/CliAuth.js'
 import * as Keyring from './keyring.js'
 
@@ -147,6 +148,56 @@ export function cli(options: cli.Options): Adapter.Adapter {
       } catch (error) {
         AccessKey.remove(account, { store })
         throw error
+      }
+    }
+
+    async function prepareSponsorableTransaction(
+      parameters:
+        | Adapter.sendTransaction.Parameters
+        | Adapter.sendTransactionSync.Parameters
+        | Adapter.signTransaction.Parameters,
+    ) {
+      const { feePayer, ...rest } = parameters
+      const client = getClient()
+      const prepared = await withManagedAccessKey(async (account, keyAuthorization) => ({
+        account,
+        prepared: await (async () => {
+          if (typeof feePayer === 'string') {
+            const result = (await getClient({ feePayer }).request({
+              method: 'eth_fillTransaction',
+              params: [
+                {
+                  ...rest,
+                  chainId: rest.chainId ?? client.chain.id,
+                  feePayer: true,
+                  from: account.address,
+                  ...(keyAuthorization ? { keyAuthorization } : {}),
+                  type: 'tempo',
+                },
+              ] as never,
+            })) as {
+              tx: Record<string, unknown>
+            }
+
+            return Transaction.deserialize(
+              await Transaction.serialize(core_Transaction.fromRpc(result.tx as never) as never),
+            ) as never
+          }
+
+          return await prepareTransactionRequest(client, {
+            account,
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+            ...(keyAuthorization ? { keyAuthorization } : {}),
+            type: 'tempo',
+          } as never)
+        })(),
+      }))
+
+      return {
+        client,
+        prepared: prepared.prepared,
+        account: prepared.account,
       }
     }
 
@@ -285,42 +336,16 @@ export function cli(options: cli.Options): Adapter.Adapter {
           throw unsupported('`wallet_revokeAccessKey` not supported by CLI adapter.')
         },
         async sendTransaction(parameters) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { account, prepared } = await withManagedAccessKey(
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                ...(keyAuthorization ? { keyAuthorization } : {}),
-                type: 'tempo',
-              } as never),
-            }),
-          )
-          const signed = await account.signTransaction(prepared as never)
+          const { account, client, prepared } = await prepareSponsorableTransaction(parameters)
+          const signed = await signTempoTransaction({ account, transaction: prepared as never })
           return await client.request({
             method: 'eth_sendRawTransaction' as never,
             params: [signed],
           })
         },
         async sendTransactionSync(parameters) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { account, prepared } = await withManagedAccessKey(
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                ...(keyAuthorization ? { keyAuthorization } : {}),
-                type: 'tempo',
-              } as never),
-            }),
-          )
-          const signed = await account.signTransaction(prepared as never)
+          const { account, client, prepared } = await prepareSponsorableTransaction(parameters)
+          const signed = await signTempoTransaction({ account, transaction: prepared as never })
           return await client.request({
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],
@@ -332,21 +357,8 @@ export function cli(options: cli.Options): Adapter.Adapter {
           return await account.signMessage({ message: { raw: data } })
         },
         async signTransaction(parameters) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { account, prepared } = await withManagedAccessKey(
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                ...(keyAuthorization ? { keyAuthorization } : {}),
-                type: 'tempo',
-              } as never),
-            }),
-          )
-          return await account.signTransaction(prepared as never)
+          const { account, prepared } = await prepareSponsorableTransaction(parameters)
+          return await signTempoTransaction({ account, transaction: prepared as never })
         },
         async signTypedData({ address, data }) {
           await loadManagedKey(address)

@@ -3,13 +3,15 @@ set -euo pipefail
 
 PLAYGROUND_A_HOST="playground.a"
 PLAYGROUND_B_HOST="playground.b"
+WALLET_HOST="app.tempo.local"
+WALLET_MODERATO_HOST="app.moderato.tempo.local"
 
 PLAYGROUND_PORT_A="${PLAYGROUND_PORT_A:-5173}"
 PLAYGROUND_PORT_B="${PLAYGROUND_PORT_B:-5175}"
 
 # Check /etc/hosts entries.
 MISSING=()
-for host in "$PLAYGROUND_A_HOST" "$PLAYGROUND_B_HOST"; do
+for host in "$PLAYGROUND_A_HOST" "$PLAYGROUND_B_HOST" "$WALLET_HOST" "$WALLET_MODERATO_HOST"; do
   if ! grep -qE "127\.0\.0\.1\s+$host" /etc/hosts; then
     MISSING+=("$host")
   fi
@@ -36,6 +38,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 echo ""
 echo "Playground A: https://$PLAYGROUND_A_HOST:$PLAYGROUND_PORT_A"
 echo "Playground B: https://$PLAYGROUND_B_HOST:$PLAYGROUND_PORT_B"
+echo "Wallet: https://$WALLET_MODERATO_HOST:3001"
 echo ""
 
 pnpm dev:dialog &

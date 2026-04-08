@@ -216,16 +216,35 @@ export function create(options: create.Options = {}): create.ReturnType {
                   }
 
                   case 'eth_fillTransaction': {
-                    const [parameters] = request.params
+                    const [decoded] = request._decoded.params
+                    const parameters = { ...decoded }
                     const chainId = parameters.chainId
-                      ? Hex.toNumber(parameters.chainId)
-                      : undefined
+                    const feePayer = resolveFeePayer(
+                      typeof parameters.feePayer === 'boolean' ||
+                        typeof parameters.feePayer === 'string'
+                        ? parameters.feePayer
+                        : undefined,
+                    )
 
-                    const fill = (params: typeof parameters) =>
-                      getClient({ chainId }).request({
+                    const fill = (params: Record<string, unknown>) => {
+                      const client = getClient({ chainId, feePayer })
+                      const request = {
+                        ...params,
+                        chainId: params.chainId ?? client.chain?.id,
+                        ...(feePayer ? { feePayer: true } : {}),
+                      } as Record<string, unknown> & {
+                        keyAuthorization?: unknown
+                      }
+                      const formatter = client.chain?.formatters?.transactionRequest
+                      return client.request({
                         method: 'eth_fillTransaction',
-                        params: [params],
+                        params: [
+                          (formatter && !request.keyAuthorization
+                            ? formatter.format({ ...request } as never, 'fillTransaction')
+                            : request) as never,
+                        ],
                       })
+                    }
 
                     // Inject pending keyAuthorization so the node accounts for
                     // key authorization gas during estimation.
@@ -242,21 +261,23 @@ export function create(options: create.Options = {}): create.ReturnType {
                         if (keyAuth) {
                           try {
                             const result = await fill({
-                              ...parameters,
-                              // @ts-expect-error - TODO: fix
-                              keyAuthorization: KeyAuthorization.toRpc(keyAuth),
+                              ...(parameters as Record<string, unknown>),
+                              keyAuthorization: {
+                                address: keyAuth.address,
+                                ...KeyAuthorization.toRpc(keyAuth),
+                              } as never,
                             })
                             AccessKey.removePending(account, { store })
                             return result
                           } catch {
                             AccessKey.remove(account, { store })
-                            return await fill(parameters)
+                            return await fill(parameters as Record<string, unknown>)
                           }
                         }
                       }
                     }
 
-                    return await fill(parameters)
+                    return await fill(parameters as Record<string, unknown>)
                   }
 
                   case 'eth_signTransaction': {

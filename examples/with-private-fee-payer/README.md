@@ -1,10 +1,10 @@
 # Private Fee Payer Example
 
-Demonstrates a minimal private fee payer built from the existing
-`Handler.feePayer` and `Handler.webAuthn` primitives.
+Demonstrates a private sponsor-first fee payer built from `Handler.feePayer`
+plus `Handler.webAuthn`.
 
 Unlike the public fee-payer example, this worker does not sponsor every valid
-sender-signed Tempo transaction. It adds a small policy layer before delegation:
+transaction. It adds a small policy layer before sponsor-assisted fill:
 
 - successful register/login mints an HttpOnly same-origin session cookie
 - `/fee-payer` requires that session before sponsoring anything
@@ -15,6 +15,9 @@ sender-signed Tempo transaction. It adds a small policy layer before delegation:
 The frontend stays simple: it uses the normal `webAuthn({ authUrl, feePayerUrl })`
 connector, and the browser automatically sends the same-origin session cookie to
 `/fee-payer`.
+
+The fee-payer route is fully stateless: it signs the session cookie instead of
+storing sponsor/session state in Wrangler KV.
 
 This demo intentionally keeps the connector's local state in memory instead of
 persisting it across reloads. The fee-payer authorization lives in an HttpOnly
@@ -29,8 +32,11 @@ npm i
 npm run dev
 ```
 
-For local dev, the worker uses an in-memory KV fallback, so you do not need to
-create a Cloudflare KV namespace just to run the example.
+No Wrangler KV setup is required for the fee-payer flow.
+
+The example still uses in-memory storage for the WebAuthn handler's local
+challenge and credential state, so restarting the dev server clears that state.
+If that happens, just register again.
 
 ## Environment
 
@@ -47,9 +53,9 @@ The default allowlist target is the pathUSD token contract used by the demo's
 ## Demo Flow
 
 1. Register or log in with a passkey.
-2. Use the auth probe button to sign a real sender transaction, then verify that posting it to `/fee-payer/probe` with `credentials: 'omit'` returns JSON reporting `status: 401`.
+2. Use the auth probe button, which posts a real `eth_fillTransaction` request to `/fee-payer` with `credentials: 'omit'`, and verify that it reports `401`.
 3. Fund the account.
 4. Send a sponsored token transfer.
 
 If you change the worker allowlist or try to send a direct value transfer, the
-fee payer rejects the request before co-signing.
+fee payer rejects the request before the user signs.

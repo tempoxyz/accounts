@@ -1,12 +1,13 @@
 import { Address, Provider as ox_Provider, RpcRequest as ox_RpcRequest } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { KeyAuthorization, Transaction as core_Transaction } from 'ox/tempo'
 import { prepareTransactionRequest } from 'viem/actions'
-import { Account as TempoAccount } from 'viem/tempo'
+import { Account as TempoAccount, Transaction } from 'viem/tempo'
 import { z } from 'zod/mini'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
+import { signTempoTransaction } from '../internal/signTempoTransaction.js'
 import * as Schema from '../Schema.js'
 import type * as Store from '../Store.js'
 import * as Rpc from '../zod/rpc.js'
@@ -169,6 +170,57 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       }
     }
 
+    async function prepareSponsorableTransaction(
+      parameters:
+        | Adapter.sendTransaction.Parameters
+        | Adapter.sendTransactionSync.Parameters
+        | Adapter.signTransaction.Parameters,
+    ) {
+      const { feePayer, ...rest } = parameters
+      const client = getClient()
+      const prepared = await withAccessKey(async (account, keyAuthorization) => ({
+        account,
+        prepared: await (async () => {
+          if (typeof feePayer === 'string') {
+            const result = (await getClient({ feePayer }).request({
+              method: 'eth_fillTransaction',
+              params: [
+                {
+                  ...rest,
+                  chainId: rest.chainId ?? client.chain.id,
+                  feePayer: true,
+                  from: account.address,
+                  ...(keyAuthorization ? { keyAuthorization } : {}),
+                  type: 'tempo',
+                },
+              ] as never,
+            })) as {
+              tx: Record<string, unknown>
+            }
+
+            return Transaction.deserialize(
+              await Transaction.serialize(core_Transaction.fromRpc(result.tx as never) as never),
+            ) as never
+          }
+
+          return await prepareTransactionRequest(client, {
+            account,
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+            keyAuthorization,
+            type: 'tempo',
+          })
+        })(),
+      }))
+      if (!prepared) return undefined
+
+      return {
+        client,
+        prepared: prepared.prepared,
+        account: prepared.account,
+      }
+    }
+
     const dialogInstance = dialog({ host, store })
 
     // Sync store → dialog: whenever the request queue changes, notify
@@ -274,20 +326,13 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async signTransaction(parameters, request) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
-            const { feePayer, ...rest } = parameters
-            const client = getClient({
-              feePayer: typeof feePayer === 'string' ? feePayer : undefined,
-            })
-            const prepared = await prepareTransactionRequest(client, {
-              account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
-            })
-            return await account.signTransaction(prepared as never)
-          })
+          const prepared = await prepareSponsorableTransaction(parameters)
+          const result = prepared
+            ? await signTempoTransaction({
+                account: prepared.account,
+                transaction: prepared.prepared as never,
+              })
+            : undefined
           if (result !== undefined) return result
           return await provider.request({
             ...request,
@@ -300,24 +345,19 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async sendTransaction(parameters, request) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
-            const { feePayer, ...rest } = parameters
-            const client = getClient({
-              feePayer: typeof feePayer === 'string' ? feePayer : undefined,
-            })
-            const prepared = await prepareTransactionRequest(client, {
-              account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
-            })
-            const signed = await account.signTransaction(prepared as never)
-            return await client.request({
-              method: 'eth_sendRawTransaction' as never,
-              params: [signed],
-            })
-          })
+          const prepared = await prepareSponsorableTransaction(parameters)
+          const result = prepared
+            ? await (async () => {
+                const signed = await signTempoTransaction({
+                  account: prepared.account,
+                  transaction: prepared.prepared as never,
+                })
+                return await prepared.client.request({
+                  method: 'eth_sendRawTransaction' as never,
+                  params: [signed],
+                })
+              })()
+            : undefined
           if (result !== undefined) return result
           return await provider.request({
             ...request,
@@ -326,24 +366,19 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async sendTransactionSync(parameters, request) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
-            const { feePayer, ...rest } = parameters
-            const client = getClient({
-              feePayer: typeof feePayer === 'string' ? feePayer : undefined,
-            })
-            const prepared = await prepareTransactionRequest(client, {
-              account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
-            })
-            const signed = await account.signTransaction(prepared as never)
-            return await client.request({
-              method: 'eth_sendRawTransactionSync' as never,
-              params: [signed],
-            })
-          })
+          const prepared = await prepareSponsorableTransaction(parameters)
+          const result = prepared
+            ? await (async () => {
+                const signed = await signTempoTransaction({
+                  account: prepared.account,
+                  transaction: prepared.prepared as never,
+                })
+                return await prepared.client.request({
+                  method: 'eth_sendRawTransactionSync' as never,
+                  params: [signed],
+                })
+              })()
+            : undefined
           if (result !== undefined) return result
           return await provider.request({
             ...request,

@@ -33,6 +33,9 @@ catalogs:
     '@wagmi/core':
       specifier: ^3.1.0
       version: 3.4.0
+    hono:
+      specifier: ^4.12.9
+      version: 4.12.10
     prool:
       specifier: ~0.2.3
       version: 0.2.3
@@ -706,6 +709,9 @@ importers:
       accounts:
         specifier: workspace:*
         version: link:../..
+      hono:
+        specifier: 'catalog:'
+        version: 4.12.10
       react:
         specifier: ^19.2.4
         version: 19.2.4
