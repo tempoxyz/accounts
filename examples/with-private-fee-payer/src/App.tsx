@@ -109,7 +109,6 @@ function CodeBlock(props: { children: React.ReactNode }) {
         backgroundColor: '#f9f9f9',
         padding: '0.5em',
         overflowX: 'auto',
-        // width: "auto",
       }}
       {...props}
     />
