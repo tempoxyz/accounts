@@ -88,4 +88,3 @@
 - **Deduplicate `vp` in Vitest config** — in this workspace, mixed peer resolution (for example different `@types/node` versions across packages) can load two `vp` instances and break suite initialization; set `resolve.dedupe` to include `vp`.
 - **CLI auth example URL inputs** — the example CLI flow is expected to support both `--url` and `AUTH_URL`-based defaults, and should avoid hardcoded personal hostnames in source.
 - **Test RPC port selection should auto-fallback** — localnet test setup should start from `VITE_RPC_PORT` (or `8545`) and select the next available port to avoid `EADDRINUSE` collisions.
-- **Private fee-payer example is stateless on the sponsor path** — `examples/with-private-fee-payer` now uses a signed `HttpOnly` session cookie plus a signed expiry-bound sponsorship ticket instead of KV-backed sponsor/session storage; `Kv.memory()` remains only for the local `Handler.webAuthn` challenge/credential state.
