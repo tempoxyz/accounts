@@ -26,9 +26,11 @@ connected even though `/fee-payer` no longer has a valid session.
 ```bash
 npx gitpick tempoxyz/accounts/examples/with-private-fee-payer
 npm i
-npx wrangler kv namespace create KV
-npm dev
+npm run dev
 ```
+
+For local dev, the worker uses an in-memory KV fallback, so you do not need to
+create a Cloudflare KV namespace just to run the example.
 
 ## Environment
 
@@ -45,7 +47,7 @@ The default allowlist target is the pathUSD token contract used by the demo's
 ## Demo Flow
 
 1. Register or log in with a passkey.
-2. Use the auth probe button to sign a real sender transaction, then verify that posting it to `/fee-payer/probe` with `credentials: 'omit'` reports a `401` auth failure.
+2. Use the auth probe button to sign a real sender transaction, then verify that posting it to `/fee-payer/probe` with `credentials: 'omit'` returns JSON reporting `status: 401`.
 3. Fund the account.
 4. Send a sponsored token transfer.
 
