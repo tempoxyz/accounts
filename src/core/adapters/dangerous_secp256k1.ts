@@ -54,12 +54,12 @@ export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}): 
 
 export declare namespace dangerous_secp256k1 {
   type Options = {
-    /** Fixed private key to expose instead of generating/loading one from storage. */
-    privateKey?: Hex | undefined
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */
     name?: string | undefined
+    /** Fixed private key to expose instead of generating/loading one from storage. */
+    privateKey?: Hex | undefined
     /** Reverse DNS identifier. @default `com.{lowercase name}` */
     rdns?: string | undefined
   }
