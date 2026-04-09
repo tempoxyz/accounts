@@ -11,7 +11,8 @@ jobs:
   verify:
     name: Verify
     uses: ./.github/workflows/verify.yml
-    secrets: inherit
+    secrets:
+      VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}
 
   changesets:
     name: Changesets
@@ -26,6 +27,8 @@ jobs:
     steps:
       - name: Clone repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies
