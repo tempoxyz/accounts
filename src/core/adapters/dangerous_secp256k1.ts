@@ -1,4 +1,4 @@
-import { Account, Secp256k1 } from 'viem/tempo'
+import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 
 import * as Adapter from '../Adapter.js'
 import type * as Store from '../Store.js'
@@ -32,7 +32,7 @@ export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}): 
         if (account) return { accounts: [account] }
 
         const privateKey = Secp256k1.randomPrivateKey()
-        const generated = Account.fromSecp256k1(privateKey)
+        const generated = TempoAccount.fromSecp256k1(privateKey)
         return {
           accounts: [{ address: generated.address, keyType: 'secp256k1' as const, privateKey }],
         }
@@ -46,9 +46,11 @@ export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}): 
 }
 
 export declare namespace dangerous_secp256k1 {
+  type Account = TempoAccount.RootAccount | Extract<Store.Account, { keyType: 'secp256k1' }>
+
   type Options = {
     /** Fixed account to expose instead of generating/loading one from storage. Use non-persistent storage when passing a live signer object. */
-    account?: Store.Account | undefined
+    account?: Account | undefined
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */
