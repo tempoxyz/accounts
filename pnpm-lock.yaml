@@ -64,9 +64,9 @@ importers:
 
   .:
     dependencies:
-      '@remix-run/fetch-router':
-        specifier: ~0.17.0
-        version: 0.17.0
+      hono:
+        specifier: ^4.12.4
+        version: 4.12.4
       idb-keyval:
         specifier: ^6.2.2
         version: 6.2.2
@@ -74,14 +74,11 @@ importers:
         specifier: ^0.0.7
         version: 0.0.7(typescript@5.9.3)
       mppx:
-        specifier: ^0.5.5
-        version: 0.5.5(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(@types/bun@1.3.11)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.4)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.10(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
+        specifier: ^0.5.9
+        version: 0.5.9(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(@types/bun@1.3.11)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.4)(typescript@5.9.3)(viem@2.47.10(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
       ox:
         specifier: ~0.14.7
         version: 0.14.7(typescript@5.9.3)(zod@4.3.6)
-      tsx:
-        specifier: ^4.21.0
-        version: 4.21.0
       webauthx:
         specifier: ~0.1.0
         version: 0.1.0(typescript@5.9.3)(zod@4.3.6)
@@ -134,9 +131,6 @@ importers:
       express:
         specifier: ^5.2.1
         version: 5.2.1
-      hono:
-        specifier: ^4.12.4
-        version: 4.12.4
       node:
         specifier: runtime:^24.14.1
         version: runtime:24.14.1
@@ -158,6 +152,9 @@ importers:
       testcontainers:
         specifier: ^11.12.0
         version: 11.12.0
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -228,11 +225,11 @@ importers:
         specifier: 0.0.3
         version: 0.0.3(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       drizzle-orm:
-        specifier: 0.45.1
-        version: 0.45.1(@opentelemetry/api@1.9.1)(@types/pg@8.18.0)(bun-types@1.3.11)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.8)
+        specifier: 0.45.2
+        version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.18.0)(bun-types@1.3.11)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.8)
       hono:
-        specifier: 4.12.10
-        version: 4.12.10
+        specifier: 4.12.12
+        version: 4.12.12
       jose:
         specifier: 6.1.3
         version: 6.1.3
@@ -450,7 +447,7 @@ importers:
         version: link:../..
       incur:
         specifier: latest
-        version: 0.3.13(openapi-types@12.1.3)
+        version: 0.3.13(@cfworker/json-schema@4.1.1)(openapi-types@12.1.3)
       ox:
         specifier: ~0.14.7
         version: 0.14.10(typescript@5.9.3)(zod@4.3.6)
@@ -825,7 +822,7 @@ importers:
         version: link:../..
       mppx:
         specifier: ^0.5.5
-        version: 0.5.5(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(@types/bun@1.3.11)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.10)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.10(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
+        version: 0.5.5(@cfworker/json-schema@4.1.1)(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(@types/bun@1.3.11)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.12)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.10(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
       react:
         specifier: ^19.2.4
         version: 19.2.4
@@ -1152,6 +1149,9 @@ packages:
     resolution: {integrity: sha512-D8y973/S2eNzkkJ0QiMgsIBL/4QSYIrCPQb8hv1yysFGfBYpSMMYcHSkvtmXbNHiTyBZhxuJqsfUHc/LI/v5cA==}
     peerDependencies:
       react: ^19.2.4
+
+  '@cfworker/json-schema@4.1.1':
+    resolution: {integrity: sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==}
 
   '@changesets/apply-release-plan@7.1.0':
     resolution: {integrity: sha512-yq8ML3YS7koKQ/9bk1PqO0HMzApIFNwjlwCnwFEXMzNe8NpzeeYYKCmnhWJGkN8g7E51MnWaSbqRcTcdIxUgnQ==}
@@ -2454,6 +2454,15 @@ packages:
       '@cfworker/json-schema':
         optional: true
 
+  '@modelcontextprotocol/server@2.0.0-alpha.2':
+    resolution: {integrity: sha512-gmLgdHzlYM8L7Aw/+VE0kxjT25WKamtUSLNhdOgrJq5CrESvqVSoAfWSJJeNPUXNTluQ+dYDGFbKVitdsJtbPA==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@cfworker/json-schema': ^4.1.1
+    peerDependenciesMeta:
+      '@cfworker/json-schema':
+        optional: true
+
   '@napi-rs/wasm-runtime@1.1.2':
     resolution: {integrity: sha512-sNXv5oLJ7ob93xkZ1XnxisYhGYXfaG9f65/ZgYuAu3qt7b3NadcOEhLvx28hv31PgX8SZJRYrAIPQilQmFpLVw==}
     peerDependencies:
@@ -3278,9 +3287,6 @@ packages:
   '@remix-run/fetch-proxy@0.7.1':
     resolution: {integrity: sha512-rPLfOpAaCXtm1dLI45uIPKERNbXbrh0P9AJc1sliz8pWd/McaFYjdr5KzB4QrFSfPvEt/Wmy6F2521qB1kK0ug==}
 
-  '@remix-run/fetch-router@0.17.0':
-    resolution: {integrity: sha512-3FeJGrTqrKKCvZdQWijbCXTEHKcdttkLFbI2ogfpZ+iDYSNZ9036wgDXuuoZqg6d+D0E8Unhk5ZwrLKDCd/hOw==}
-
   '@remix-run/headers@0.19.0':
     resolution: {integrity: sha512-+62NbkXuXm9r/NdG6KfH9OCKofCWm8VjkrVPICiHKtRl8Gf2Vi6eFTN4mGgBlZRhd5mmEVRV4hTIn/JUSHDAOw==}
 
@@ -3289,9 +3295,6 @@ packages:
 
   '@remix-run/route-pattern@0.19.0':
     resolution: {integrity: sha512-RXKaIJ2Lx01uyZc0iw+yLzowFCa1/NuB8jN7QTo4QUe2CaUGtvPGdhgrTUp75lyNNCSJIrM9SaAJ6c1pjZdmoA==}
-
-  '@remix-run/session@0.4.1':
-    resolution: {integrity: sha512-Bm6aKYgutb/raHZ3laloz8g/Qu7f3CeK3o4gUVDMxtEiAdWCzJamwHoTpGOc5+g1Kuy7z85v4M6nGrF06MFDSg==}
 
   '@rolldown/binding-android-arm64@1.0.0-beta.53':
     resolution: {integrity: sha512-Ok9V8o7o6YfSdTTYA/uHH30r3YtOxLD6G3wih/U9DO0ucBBFq8WPt/DslU53OgfteLRHITZny9N/qCUxMf9kjQ==}
@@ -5356,8 +5359,8 @@ packages:
     resolution: {integrity: sha512-O9EC/miwdnRDY10qRxM8P3Pg8hXe3LyU4ZipReKOgTwn4OqANmftj8XJz1UPUAS6NMHf0E2htjsbQujUTkncCg==}
     hasBin: true
 
-  drizzle-orm@0.45.1:
-    resolution: {integrity: sha512-Te0FOdKIistGNPMq2jscdqngBRfBpC8uMFVwqjf6gtTVJHIQ/dosgV/CLBU2N4ZJBsXL5savCba9b0YJskKdcA==}
+  drizzle-orm@0.45.2:
+    resolution: {integrity: sha512-kY0BSaTNYWnoDMVoyY8uxmyHjpJW1geOmBMdSSicKo9CIIWkSxMIj2rkeSR51b8KAPB7m+qysjuHme5nKP+E5Q==}
     peerDependencies:
       '@aws-sdk/client-rds-data': '>=3'
       '@cloudflare/workers-types': '>=4'
@@ -5893,8 +5896,8 @@ packages:
   hmac-drbg@1.0.1:
     resolution: {integrity: sha512-Tti3gMqLdZfhOQY1Mzf/AanLiqh1WTiJgEj26ZuYQ9fbkLomzGchCws4FyrSd4VkpBfiNhaE1On+lOz894jvXg==}
 
-  hono@4.12.10:
-    resolution: {integrity: sha512-mx/p18PLy5og9ufies2GOSUqep98Td9q4i/EF6X7yJgAiIopxqdfIO3jbqsi3jRgTgw88jMDEzVKi+V2EF+27w==}
+  hono@4.12.12:
+    resolution: {integrity: sha512-p1JfQMKaceuCbpJKAPKVqyqviZdS0eUxH9v82oWo1kb9xjQ5wA6iP3FNVAPDFlz5/p7d45lO+BpSk1tuSZMF4Q==}
     engines: {node: '>=16.9.0'}
 
   hono@4.12.4:
@@ -5971,6 +5974,11 @@ packages:
 
   incur@0.3.13:
     resolution: {integrity: sha512-ypjWHtDSS8h6TPz+elg9cmQMe7gZu6YpUSAcv4HGIppdQ47VYHXZdho7P4I08CPSzz9VV4tVsWej2pfzXl8jgg==}
+    hasBin: true
+
+  incur@0.3.25:
+    resolution: {integrity: sha512-jrSkzauM42ilbQJ6THVkAY6dTulkyVW0sZpVHdA8gfiBwrLrLnLUf8U3bAOegAKBIMSOFgk1idchgu9xm9HMng==}
+    engines: {node: '>=22'}
     hasBin: true
 
   index-to-position@1.2.0:
@@ -6502,6 +6510,25 @@ packages:
 
   mppx@0.5.5:
     resolution: {integrity: sha512-HKGlnnLpRu6zXZCY17rbZNUC786aook9R5Eul5aafePAigpfK8ytlZ68QeRr11J21iR6je6rIztTk46qKcV79Q==}
+    hasBin: true
+    peerDependencies:
+      '@modelcontextprotocol/sdk': '>=1.25.0'
+      elysia: '>=1'
+      express: '>=5'
+      hono: '>=4'
+      viem: ^2.47.1
+    peerDependenciesMeta:
+      '@modelcontextprotocol/sdk':
+        optional: true
+      elysia:
+        optional: true
+      express:
+        optional: true
+      hono:
+        optional: true
+
+  mppx@0.5.9:
+    resolution: {integrity: sha512-j8k8nARqa/C19biw2WA33iY9789GuwjDUFAIugukXwTh1c+BUDiNbviDEbxfticomomeztKJ514x+8M/OWX99g==}
     hasBin: true
     peerDependencies:
       '@modelcontextprotocol/sdk': '>=1.25.0'
@@ -8739,6 +8766,8 @@ snapshots:
     dependencies:
       react: 19.2.4
 
+  '@cfworker/json-schema@4.1.1': {}
+
   '@changesets/apply-release-plan@7.1.0':
     dependencies:
       '@changesets/config': 3.1.3
@@ -9508,9 +9537,9 @@ snapshots:
 
   '@gwhitney/detect-indent@7.0.1': {}
 
-  '@hono/node-server@1.19.11(hono@4.12.10)':
+  '@hono/node-server@1.19.11(hono@4.12.12)':
     dependencies:
-      hono: 4.12.10
+      hono: 4.12.12
 
   '@humanwhocodes/momoa@2.0.4': {}
 
@@ -9694,9 +9723,9 @@ snapshots:
       globby: 11.1.0
       read-yaml-file: 1.1.0
 
-  '@modelcontextprotocol/sdk@1.27.1(zod@4.3.6)':
+  '@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6)':
     dependencies:
-      '@hono/node-server': 1.19.11(hono@4.12.10)
+      '@hono/node-server': 1.19.11(hono@4.12.12)
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
       content-type: 1.0.5
@@ -9706,15 +9735,23 @@ snapshots:
       eventsource-parser: 3.0.6
       express: 5.2.1
       express-rate-limit: 8.3.1(express@5.2.1)
-      hono: 4.12.10
+      hono: 4.12.12
       jose: 6.1.3
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
       zod: 4.3.6
       zod-to-json-schema: 3.25.1(zod@4.3.6)
+    optionalDependencies:
+      '@cfworker/json-schema': 4.1.1
     transitivePeerDependencies:
       - supports-color
+
+  '@modelcontextprotocol/server@2.0.0-alpha.2(@cfworker/json-schema@4.1.1)':
+    dependencies:
+      zod: 4.3.6
+    optionalDependencies:
+      '@cfworker/json-schema': 4.1.1
 
   '@napi-rs/wasm-runtime@1.1.2(@emnapi/core@1.9.0)(@emnapi/runtime@1.8.1)':
     dependencies:
@@ -10260,18 +10297,11 @@ snapshots:
     dependencies:
       '@remix-run/headers': 0.19.0
 
-  '@remix-run/fetch-router@0.17.0':
-    dependencies:
-      '@remix-run/route-pattern': 0.19.0
-      '@remix-run/session': 0.4.1
-
   '@remix-run/headers@0.19.0': {}
 
   '@remix-run/node-fetch-server@0.13.0': {}
 
   '@remix-run/route-pattern@0.19.0': {}
-
-  '@remix-run/session@0.4.1': {}
 
   '@rolldown/binding-android-arm64@1.0.0-beta.53':
     optional: true
@@ -12432,7 +12462,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.45.1(@opentelemetry/api@1.9.1)(@types/pg@8.18.0)(bun-types@1.3.11)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.8):
+  drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.18.0)(bun-types@1.3.11)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.8):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/pg': 8.18.0
@@ -13043,7 +13073,7 @@ snapshots:
       minimalistic-assert: 1.0.1
       minimalistic-crypto-utils: 1.0.1
 
-  hono@4.12.10: {}
+  hono@4.12.12: {}
 
   hono@4.12.4: {}
 
@@ -13126,9 +13156,9 @@ snapshots:
 
   imurmurhash@0.1.4: {}
 
-  incur@0.3.13(openapi-types@12.1.3):
+  incur@0.3.13(@cfworker/json-schema@4.1.1)(openapi-types@12.1.3):
     dependencies:
-      '@modelcontextprotocol/sdk': 1.27.1(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6)
       '@readme/openapi-parser': 6.0.0(openapi-types@12.1.3)
       '@toon-format/toon': 2.1.0
       tokenx: 1.3.0
@@ -13138,6 +13168,15 @@ snapshots:
       - '@cfworker/json-schema'
       - openapi-types
       - supports-color
+
+  incur@0.3.25:
+    dependencies:
+      '@cfworker/json-schema': 4.1.1
+      '@modelcontextprotocol/server': 2.0.0-alpha.2(@cfworker/json-schema@4.1.1)
+      '@toon-format/toon': 2.1.0
+      tokenx: 1.3.0
+      yaml: 2.8.2
+      zod: 4.3.6
 
   index-to-position@1.2.0: {}
 
@@ -13564,42 +13603,39 @@ snapshots:
       pkg-types: 1.3.1
       ufo: 1.6.3
 
-  mppx@0.5.5(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(@types/bun@1.3.11)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.10)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.10(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)):
+  mppx@0.5.5(@cfworker/json-schema@4.1.1)(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(@types/bun@1.3.11)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.12)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.10(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)):
     dependencies:
       '@remix-run/fetch-proxy': 0.7.1
       '@remix-run/node-fetch-server': 0.13.0
-      incur: 0.3.13(openapi-types@12.1.3)
+      incur: 0.3.13(@cfworker/json-schema@4.1.1)(openapi-types@12.1.3)
       ox: 0.14.10(typescript@5.9.3)(zod@4.3.6)
       viem: 2.47.10(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       zod: 4.3.6
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.27.1(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6)
       elysia: 1.4.27(@sinclair/typebox@0.34.41)(@types/bun@1.3.11)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3)
       express: 5.2.1
-      hono: 4.12.10
+      hono: 4.12.12
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - openapi-types
       - supports-color
       - typescript
 
-  mppx@0.5.5(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(@types/bun@1.3.11)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.4)(openapi-types@12.1.3)(typescript@5.9.3)(viem@2.47.10(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)):
+  mppx@0.5.9(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6))(elysia@1.4.27(@sinclair/typebox@0.34.41)(@types/bun@1.3.11)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.4)(typescript@5.9.3)(viem@2.47.10(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)):
     dependencies:
       '@remix-run/fetch-proxy': 0.7.1
       '@remix-run/node-fetch-server': 0.13.0
-      incur: 0.3.13(openapi-types@12.1.3)
+      incur: 0.3.25
       ox: 0.14.10(typescript@5.9.3)(zod@4.3.6)
       viem: 2.47.10(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       zod: 4.3.6
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.27.1(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6)
       elysia: 1.4.27(@sinclair/typebox@0.34.41)(@types/bun@1.3.11)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3)
       express: 5.2.1
       hono: 4.12.4
     transitivePeerDependencies:
-      - '@cfworker/json-schema'
-      - openapi-types
-      - supports-color
       - typescript
 
   mri@1.2.0: {}
