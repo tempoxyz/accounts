@@ -8,7 +8,7 @@ import {
   type Transport,
 } from 'viem'
 import type { tempo } from 'viem/chains'
-import { withFeePayer } from 'viem/tempo'
+import { Transaction } from 'viem/tempo'
 
 import type * as Store from './Store.js'
 
@@ -21,12 +21,13 @@ export function fromChainId(
 ): Client<Transport, typeof tempo> {
   const { chains, feePayer, provider, store } = options
   const id = chainId ?? store.getState().chainId
-  const key = `${id}:${feePayer ?? ''}:${provider ? 'p' : ''}`
+  const key = `${id}:${provider ? 'p' : ''}:${feePayer ?? ''}`
   let client = clients.get(key)
   if (!client) {
     const chain = chains.find((c) => c.id === id) ?? chains[0]!
-    const base = feePayer ? withFeePayer(http(), http(feePayer)) : http()
-    const transport = provider ? providerTransport(provider, base) : base
+    const base = http()
+    const transport_base = provider ? providerTransport(provider, base) : base
+    const transport = feePayer ? feePayerTransport(transport_base, feePayer) : transport_base
     client = createClient({ chain, transport, pollingInterval: 1000 })
     clients.set(key, client)
   }
@@ -37,7 +38,7 @@ export declare namespace fromChainId {
   type Options = {
     /** Supported chains. */
     chains: readonly [Chain, ...Chain[]]
-    /** Fee payer service URL. When set, the transport routes fee-payer RPC calls to this URL. */
+    /** Sponsor service URL. When set, the transport routes sponsored RPC calls to this URL. */
     feePayer?: string | undefined
     /** Provider instance. When set, the transport routes requests through the provider first, falling back to HTTP for unknown methods. */
     provider?: ox_Provider.Provider | undefined
@@ -60,6 +61,53 @@ function providerTransport(provider: ox_Provider.Provider, base: Transport): Tra
           method,
           params: reqParams,
         } as any)
+      },
+    } as ReturnType<Transport>
+  }
+}
+
+function feePayerTransport(base: Transport, url: string): Transport {
+  return (params) => {
+    const baseTransport = base(params)
+    const sponsor = http(url)(params)
+
+    return {
+      ...baseTransport,
+      async request({ method, params: rpcParams }: { method: string; params?: unknown }) {
+        const args = rpcParams as readonly unknown[] | undefined
+
+        if (method === 'eth_fillTransaction') {
+          const request = args?.[0]
+          if (
+            request &&
+            typeof request === 'object' &&
+            'feePayer' in request &&
+            (request.feePayer === true || typeof request.feePayer === 'string')
+          )
+            return sponsor.request({
+              method,
+              params: [{ ...request, feePayer: true }],
+            })
+        }
+
+        if (method === 'eth_sendRawTransaction' || method === 'eth_sendRawTransactionSync') {
+          const serialized = args?.[0]
+          if (
+            typeof serialized === 'string' &&
+            (serialized.startsWith('0x76') || serialized.startsWith('0x78'))
+          ) {
+            const deserialized = Transaction.deserialize(serialized as `0x76${string}`)
+            if ('feePayerSignature' in deserialized && deserialized.feePayerSignature === null) {
+              const signed = await sponsor.request({
+                method: 'eth_signRawTransaction',
+                params: [serialized],
+              })
+              return await baseTransport.request({ method, params: [signed] })
+            }
+          }
+        }
+
+        return await baseTransport.request({ method, params: rpcParams })
       },
     } as ReturnType<Transport>
   }

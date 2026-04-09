@@ -216,16 +216,31 @@ export function create(options: create.Options = {}): create.ReturnType {
                   }
 
                   case 'eth_fillTransaction': {
-                    const [parameters] = request.params
+                    const [decoded] = request._decoded.params
+                    const parameters = { ...decoded }
                     const chainId = parameters.chainId
-                      ? Hex.toNumber(parameters.chainId)
-                      : undefined
+                    const feePayer = resolveFeePayer(parameters.feePayer)
 
-                    const fill = (params: typeof parameters) =>
-                      getClient({ chainId }).request({
+                    type FillParams = z.output<typeof Rpc.transactionRequest> & {
+                      keyAuthorization?: unknown
+                    }
+                    const fill = (params: FillParams) => {
+                      const client = getClient({ chainId, feePayer })
+                      const fillRequest = {
+                        ...params,
+                        chainId: params.chainId ?? client.chain?.id,
+                        ...(feePayer ? { feePayer: true } : {}),
+                      }
+                      const formatter = client.chain?.formatters?.transactionRequest
+                      const formatted =
+                        formatter && !fillRequest.keyAuthorization
+                          ? formatter.format({ ...fillRequest } as never, 'fillTransaction')
+                          : fillRequest
+                      return client.request({
                         method: 'eth_fillTransaction',
-                        params: [params],
+                        params: [formatted as never],
                       })
+                    }
 
                     // Inject pending keyAuthorization so the node accounts for
                     // key authorization gas during estimation.
@@ -243,8 +258,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                           try {
                             const result = await fill({
                               ...parameters,
-                              // @ts-expect-error - TODO: fix
-                              keyAuthorization: KeyAuthorization.toRpc(keyAuth),
+                              keyAuthorization: {
+                                address: keyAuth.address,
+                                ...KeyAuthorization.toRpc(keyAuth),
+                              } as never,
                             })
                             AccessKey.removePending(account, { store })
                             return result

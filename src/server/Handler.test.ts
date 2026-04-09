@@ -1,9 +1,10 @@
 import { Elysia } from 'elysia'
 import express from 'express'
 import { Hono } from 'hono'
-import type { RpcRequest } from 'ox'
+import { Json, type RpcRequest } from 'ox'
+import { SignatureEnvelope, Transaction as core_Transaction, TxEnvelopeTempo } from 'ox/tempo'
 import { sendTransactionSync } from 'viem/actions'
-import { withFeePayer } from 'viem/tempo'
+import { Transaction, withFeePayer } from 'viem/tempo'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, chain, getClient, http } from '../../test/config.js'
@@ -732,7 +733,98 @@ describe('feePayer', () => {
     requests = []
   })
 
+  async function rpc(request: Record<string, unknown>) {
+    return await fetch(server.url, {
+      body: Json.stringify(request),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    }).then((response) => response.json())
+  }
+
+  /** Signs a sponsor-bound Tempo transaction, preserving the feePayerSignature. */
+  async function signSponsoredTx(account: (typeof accounts)[number], transaction: object) {
+    const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
+    const envelope = TxEnvelopeTempo.deserialize(serialized)
+    const signature = await account.sign({
+      hash: TxEnvelopeTempo.getSignPayload(envelope),
+    })
+    return TxEnvelopeTempo.serialize(envelope, {
+      signature: SignatureEnvelope.from(signature),
+    })
+  }
+
   describe('POST /', () => {
+    test('default: eth_fillTransaction returns a sponsor-bound transaction the sender can broadcast', async () => {
+      const response = (await rpc({
+        id: 1,
+        jsonrpc: '2.0',
+        method: 'eth_fillTransaction',
+        params: [
+          {
+            chainId: chain.id,
+            feePayer: true,
+            from: userAccount.address,
+            to: '0x0000000000000000000000000000000000000000',
+          },
+        ],
+      })) as {
+        result: {
+          sponsor: { address: string }
+          tx: Record<string, unknown>
+        }
+      }
+      const prepared = core_Transaction.fromRpc(response.result.tx as never) as {
+        feePayerSignature?: unknown
+      }
+      const signed = await signSponsoredTx(userAccount, prepared)
+      const receipt = (await getClient().request({
+        method: 'eth_sendRawTransactionSync',
+        params: [signed],
+      })) as { feePayer?: string | undefined }
+
+      expect(response.result.sponsor.address).toBe(feePayerAccount.address)
+      expect(prepared?.feePayerSignature).toBeDefined()
+      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+      expect(requests.map(({ method }) => method)).toMatchInlineSnapshot(`
+        [
+          "eth_fillTransaction",
+        ]
+      `)
+    })
+
+    test('behavior: mutating a sponsor-bound transaction invalidates the fee payer binding', async () => {
+      const response = (await rpc({
+        id: 1,
+        jsonrpc: '2.0',
+        method: 'eth_fillTransaction',
+        params: [
+          {
+            chainId: chain.id,
+            feePayer: true,
+            from: userAccount.address,
+            to: '0x0000000000000000000000000000000000000000',
+          },
+        ],
+      })) as {
+        result: { tx: Record<string, unknown> }
+      }
+      const prepared = core_Transaction.fromRpc(response.result.tx as never) as {
+        gas?: bigint | undefined
+        feePayerSignature?: unknown
+      }
+      const signed = await signSponsoredTx(userAccount, {
+        ...prepared,
+        gas: (prepared?.gas ?? 0n) + 1n,
+      })
+
+      await expect(
+        getClient().request({
+          method: 'eth_sendRawTransactionSync',
+          params: [signed],
+        }),
+      ).rejects.toThrowError()
+    })
+
     test('behavior: eth_signRawTransaction', async () => {
       const client = getClient({
         account: userAccount,
@@ -835,8 +927,8 @@ describe('feePayer', () => {
       expect(data).toMatchInlineSnapshot(`
         {
           "error": {
-            "code": -32603,
-            "name": "RpcResponse.InternalError",
+            "code": -32602,
+            "name": "RpcResponse.InvalidParamsError",
             "stack": "",
           },
           "id": 1,
