@@ -56,6 +56,16 @@
   "simple-git-hooks": {
     "pre-commit": "pnpm check"
   },
+  "pnpm": {
+    "overrides": {
+      "ox": "~0.14.7",
+      "react": "catalog:",
+      "react-dom": "catalog:",
+      "accounts": "workspace:*",
+      "viem": "catalog:",
+      "wrangler": "catalog:"
+    }
+  },
   "imports": {
     "#*": "./src/*"
   },

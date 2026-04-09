@@ -6,7 +6,7 @@ packages:
   - ref-impls/*
 
 catalog:
-  '@cloudflare/vite-plugin': 1.31.0
+  '@cloudflare/vite-plugin': ^1.30.2
   '@cloudflare/workers-types': ^4.20260317.1
   '@tanstack/react-query': 5.90.5
   '@tanstack/react-router': ^1.166.7
@@ -29,7 +29,7 @@ catalog:
   vite: ^8.0.1
   vp: npm:vite-plus@~0.1.14
   wagmi: ^3.5.0
-  wrangler: 4.81.0
+  wrangler: ^4.80.0
   zod: ^4.3.6
 
 minimumReleaseAge: 1440
@@ -37,26 +37,13 @@ minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - incur
   - mppx
-  - webauthx
 
 onlyBuiltDependencies:
   - esbuild
   - simple-git-hooks
   - workerd
-  - cloudflared
-  - utf-8-validate
-  - bufferutil
-
-ignoredBuiltDependencies:
-  - '@central-icons-react/round-outlined-radius-2-stroke-1.5'
-  - '@j178/prek'
-  - protobufjs
-  - sharp
 
 overrides:
   accounts: workspace:*
   react: catalog:default
   react-dom: catalog:default
-  ox: '~0.14.7'
-  viem: catalog:default
-  wrangler: catalog:default
