@@ -98,6 +98,15 @@
     },
     "viem": {
       "optional": true
+    },
+    "expo-web-browser": {
+      "optional": true
+    },
+    "expo-secure-store": {
+      "optional": true
+    },
+    "@react-native-async-storage/async-storage": {
+      "optional": true
     }
   },
   "repository": {
@@ -138,6 +147,11 @@
       "types": "./dist/wagmi/index.d.ts",
       "src": "./src/wagmi/index.ts",
       "default": "./dist/wagmi/index.js"
+    },
+    "./react-native": {
+      "types": "./dist/react-native/index.d.ts",
+      "src": "./src/react-native/index.ts",
+      "default": "./dist/react-native/index.js"
     }
   }
 }
