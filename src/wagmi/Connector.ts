@@ -12,7 +12,6 @@ import { dangerous_secp256k1 as dangerous_secp256k1_adapter } from '../core/adap
 import { dialog as core_dialog } from '../core/adapters/dialog.js'
 import { webAuthn as webAuthn_adapter } from '../core/adapters/webAuthn.js'
 import * as Provider from '../core/Provider.js'
-import * as Storage from '../core/Storage.js'
 import * as Rpc from '../core/zod/rpc.js'
 
 /**
@@ -304,7 +303,6 @@ export declare namespace dialog {
  *
  * @deprecated Private keys are stored in plaintext via the provider's storage adapter.
  * Use only for development, testing, or when the threat model allows it.
- * When `account` is provided, the connector defaults the provider storage to in-memory so live signer objects are not persisted.
  *
  * @example
  * ```ts
@@ -320,11 +318,10 @@ export declare namespace dialog {
  * ```
  */
 export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}) {
-  const { account, icon, name, rdns, storage, ...rest } = options
+  const { icon, name, privateKey, rdns, ...rest } = options
   return setup({
     ...rest,
-    storage: storage ?? (account ? Storage.memory() : undefined),
-    adapter: dangerous_secp256k1_adapter({ account, icon, name, rdns }),
+    adapter: dangerous_secp256k1_adapter({ icon, name, privateKey, rdns }),
   })
 }
 

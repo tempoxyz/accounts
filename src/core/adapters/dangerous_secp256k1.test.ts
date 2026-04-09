@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'vp/test'
 
-import { accounts } from '../../../test/config.js'
+import { accounts, privateKeys } from '../../../test/config.js'
 import * as Provider from '../Provider.js'
 import * as Storage from '../Storage.js'
 import { dangerous_secp256k1 } from './dangerous_secp256k1.js'
 
 describe('dangerous_secp256k1', () => {
-  test('behavior: account option pins the connected account', async () => {
+  test('behavior: privateKey option pins the connected account', async () => {
     const account = accounts[1]!
     const provider = Provider.create({
-      adapter: dangerous_secp256k1({ account }),
-      storage: Storage.memory({ key: 'dangerous-secp256k1-account' }),
+      adapter: dangerous_secp256k1({ privateKey: privateKeys[1]! }),
+      storage: Storage.memory({ key: 'dangerous-secp256k1-private-key' }),
     })
 
     const result = await provider.request({ method: 'wallet_connect' })

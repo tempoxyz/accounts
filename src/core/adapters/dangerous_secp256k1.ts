@@ -1,7 +1,7 @@
+import type { Hex } from 'viem'
 import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 
 import * as Adapter from '../Adapter.js'
-import type * as Store from '../Store.js'
 import { local } from './local.js'
 
 /**
@@ -22,14 +22,21 @@ import { local } from './local.js'
  * ```
  */
 export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}): Adapter.Adapter {
-  const { account, icon, name, rdns } = options
+  const { icon, name, privateKey, rdns } = options
+  const fixed = privateKey
+    ? {
+        address: TempoAccount.fromSecp256k1(privateKey).address,
+        keyType: 'secp256k1' as const,
+        privateKey,
+      }
+    : undefined
 
   return Adapter.define({ icon, name, rdns }, (config) => {
     const { store } = config
 
     return local({
       async createAccount() {
-        if (account) return { accounts: [account] }
+        if (fixed) return { accounts: [fixed] }
 
         const privateKey = Secp256k1.randomPrivateKey()
         const generated = TempoAccount.fromSecp256k1(privateKey)
@@ -38,7 +45,7 @@ export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}): 
         }
       },
       async loadAccounts() {
-        if (account) return { accounts: [account] }
+        if (fixed) return { accounts: [fixed] }
         return { accounts: [...store.getState().accounts] }
       },
     })(config)
@@ -46,11 +53,9 @@ export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}): 
 }
 
 export declare namespace dangerous_secp256k1 {
-  type Account = TempoAccount.RootAccount | Extract<Store.Account, { keyType: 'secp256k1' }>
-
   type Options = {
-    /** Fixed account to expose instead of generating/loading one from storage. Use non-persistent storage when passing a live signer object. */
-    account?: Account | undefined
+    /** Fixed private key to expose instead of generating/loading one from storage. */
+    privateKey?: Hex | undefined
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */
