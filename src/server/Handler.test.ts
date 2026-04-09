@@ -928,7 +928,6 @@ describe('feePayer', () => {
         }
       `)
     })
-
   })
 })
 
