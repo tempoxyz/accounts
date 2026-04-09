@@ -10,7 +10,6 @@
       "/cli-auth/*",
       "/webauthn/*",
       "/fee-payer",
-      "/fee-payer/*",
       "/fortune",
       "/zero-dollar-auth",
     ],
