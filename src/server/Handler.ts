@@ -240,7 +240,6 @@ export declare namespace from {
 export function feePayer(options: feePayer.Options) {
   const {
     account,
-    authorize,
     chains = [tempo, tempoModerato],
     name,
     onRequest,
@@ -334,14 +333,6 @@ export function feePayer(options: feePayer.Options) {
           })
         if (!account.sign) throw new Error('Fee payer account cannot sign transactions.')
 
-        const response = await authorize?.({
-          client,
-          request: req,
-          rpcRequest: request,
-          transaction: prepared,
-        })
-        if (response) return response
-
         const feePayerSignature = Signature.from(
           await account.sign({
             hash: TxEnvelopeTempo.getFeePayerSignPayload(TxEnvelopeTempo.from(prepared as never), {
@@ -376,14 +367,6 @@ export function feePayer(options: feePayer.Options) {
         })
 
       const client = getClient(transaction.chainId)
-      const response = await authorize?.({
-        client,
-        request: req,
-        rpcRequest: request,
-        transaction,
-      })
-      if (response) return response
-
       const serializedTransaction = toSerializedTransaction(
         await signTransaction(client, {
           ...transaction,
@@ -410,30 +393,9 @@ export function feePayer(options: feePayer.Options) {
 }
 
 export declare namespace feePayer {
-  /** Parameters passed to {@link authorize}. */
-  export type AuthorizeParameters = {
-    /** Client resolved from the transaction's `chainId`. */
-    client: Client
-    /** Raw HTTP request for cookies, headers, and other request metadata. */
-    request: Request
-    /** Parsed JSON-RPC request. */
-    rpcRequest: RpcRequest.RpcRequest
-    /** Deserialized Tempo transaction for the current request. */
-    transaction:
-      | ReturnType<typeof Transaction.deserialize>
-      | NonNullable<ReturnType<typeof core_Transaction.fromRpc>>
-  }
-
   export type Options = from.Options & {
     /** Account to use as the fee payer. */
     account: LocalAccount
-    /**
-     * Called after the request is parsed and the Tempo transaction is deserialized,
-     * but before the fee payer signs it. Return a `Response` to reject the request.
-     */
-    authorize?:
-      | ((parameters: AuthorizeParameters) => Promise<Response | void> | Response | void)
-      | undefined
     /**
      * Supported chains. The handler resolves the client based on the
      * `chainId` in the incoming transaction.

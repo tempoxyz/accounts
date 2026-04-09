@@ -3,7 +3,7 @@ import express from 'express'
 import { Hono } from 'hono'
 import { Json, type RpcRequest } from 'ox'
 import { Transaction as core_Transaction } from 'ox/tempo'
-import { prepareTransactionRequest, sendTransactionSync } from 'viem/actions'
+import { sendTransactionSync } from 'viem/actions'
 import { withFeePayer } from 'viem/tempo'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
@@ -929,81 +929,6 @@ describe('feePayer', () => {
       `)
     })
 
-    test('behavior: authorize can reject before sponsorship', async () => {
-      const seen: {
-        from?: string
-        header?: string | null
-        method?: string
-      } = {}
-
-      const authorizeServer = await createServer(
-        Handler.feePayer({
-          account: feePayerAccount,
-          chains: [chain],
-          transports: { [chain.id]: http() },
-          async authorize(parameters) {
-            seen.from = parameters.transaction.from
-            seen.header = parameters.request.headers.get('x-test-auth')
-            seen.method = parameters.rpcRequest.method as string
-
-            return Response.json(
-              {
-                error: {
-                  code: 1234,
-                  message: 'blocked by authorize',
-                },
-                id: parameters.rpcRequest.id,
-                jsonrpc: '2.0',
-              },
-              { status: 403 },
-            )
-          },
-        }).listener,
-      )
-
-      const client = getClient({ account: userAccount })
-      const prepared = await prepareTransactionRequest(client, {
-        account: userAccount,
-        feePayer: true,
-        to: '0x0000000000000000000000000000000000000000',
-      })
-      const serialized = await userAccount.signTransaction(prepared as never)
-
-      const response = await fetch(authorizeServer.url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-test-auth': 'present',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'eth_signRawTransaction',
-          params: [serialized],
-        }),
-      })
-
-      expect(response.status).toBe(403)
-      await expect(response.json()).resolves.toMatchInlineSnapshot(`
-        {
-          "error": {
-            "code": 1234,
-            "message": "blocked by authorize",
-          },
-          "id": 1,
-          "jsonrpc": "2.0",
-        }
-      `)
-      expect(seen).toMatchInlineSnapshot(`
-        {
-          "from": "0x9ac4fdc8e5d72aaade30f9ff52d392d60c68a64a",
-          "header": "present",
-          "method": "eth_signRawTransaction",
-        }
-      `)
-
-      await authorizeServer.closeAsync()
-    })
   })
 })
 
