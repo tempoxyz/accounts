@@ -69,42 +69,44 @@ function providerTransport(provider: ox_Provider.Provider, base: Transport): Tra
 function feePayerTransport(base: Transport, url: string): Transport {
   return (params) => {
     const baseTransport = base(params)
-    const feePayerTransport = http(url)(params)
+    const sponsor = http(url)(params)
 
     return {
       ...baseTransport,
-      async request({ method, params: reqParams }) {
+      async request({ method, params: rpcParams }) {
+        const args = rpcParams as readonly unknown[] | undefined
+
         if (method === 'eth_fillTransaction') {
-          const request = (reqParams as readonly unknown[] | undefined)?.[0] as
+          const request = args?.[0] as
             | (Record<string, unknown> & { feePayer?: unknown })
             | undefined
           if (request && (request.feePayer === true || typeof request.feePayer === 'string'))
-            return feePayerTransport.request({
+            return sponsor.request({
               method,
-              params: [{ ...request, feePayer: true }] as never,
+              params: [{ ...request, feePayer: true }],
             })
         }
 
         if (method === 'eth_sendRawTransaction' || method === 'eth_sendRawTransactionSync') {
-          const serialized = (reqParams as readonly unknown[] | undefined)?.[0]
+          const serialized = args?.[0]
           if (
             typeof serialized === 'string' &&
             (serialized.startsWith('0x76') || serialized.startsWith('0x78'))
           ) {
-            const transaction = Transaction.deserialize(serialized as never) as {
-              feePayerSignature?: null | unknown
-            }
-            if (transaction.feePayerSignature === null) {
-              const signedTransaction = await feePayerTransport.request({
+            const { feePayerSignature } = Transaction.deserialize(
+              serialized as `0x76${string}`,
+            ) as { feePayerSignature?: null | unknown }
+            if (feePayerSignature === null) {
+              const signed = await sponsor.request({
                 method: 'eth_signRawTransaction',
                 params: [serialized],
               })
-              return await baseTransport.request({ method, params: [signedTransaction] })
+              return await baseTransport.request({ method, params: [signed] })
             }
           }
         }
 
-        return await baseTransport.request({ method, params: reqParams })
+        return await baseTransport.request({ method, params: rpcParams })
       },
     } as ReturnType<Transport>
   }

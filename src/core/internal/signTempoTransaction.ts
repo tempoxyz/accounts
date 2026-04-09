@@ -11,12 +11,15 @@ export async function signTempoTransaction(
 ): signTempoTransaction.ReturnType {
   const { account, transaction } = parameters
 
-  if (typeof transaction.feePayerSignature === 'undefined')
-    return await account.signTransaction(transaction as never)
+  const tx = transaction as Transaction.TransactionSerializableTempo & {
+    feePayerSignature?: unknown
+  }
 
-  const envelope = TxEnvelopeTempo.deserialize(
-    (await Transaction.serialize(transaction as never)) as never,
-  )
+  if (typeof tx.feePayerSignature === 'undefined')
+    return await account.signTransaction(tx as never)
+
+  const serialized = (await Transaction.serialize(tx)) as `0x76${string}`
+  const envelope = TxEnvelopeTempo.deserialize(serialized)
 
   const signature = await account.sign({
     hash: TxEnvelopeTempo.getSignPayload(envelope),
@@ -30,9 +33,8 @@ export async function signTempoTransaction(
 export declare namespace signTempoTransaction {
   type Parameters = {
     account: TempoAccount.Account
-    transaction: Record<string, unknown> & {
-      feePayerSignature?: unknown
-    }
+    /** A prepared Tempo transaction (from `prepareTransactionRequest` or `Transaction.deserialize`). */
+    transaction: object
   }
 
   type ReturnType = Promise<Hex.Hex>

@@ -183,7 +183,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         prepared: await (async () => {
           if (typeof feePayer === 'string') {
             const result = (await getClient({ feePayer }).request({
-              method: 'eth_fillTransaction',
+              method: 'eth_fillTransaction' as never,
               params: [
                 {
                   ...rest,
@@ -193,14 +193,13 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
                   ...(keyAuthorization ? { keyAuthorization } : {}),
                   type: 'tempo',
                 },
-              ] as never,
-            })) as {
-              tx: Record<string, unknown>
-            }
+              ],
+            })) as { tx: core_Transaction.Rpc }
 
+            const tx = core_Transaction.fromRpc(result.tx)!
             return Transaction.deserialize(
-              await Transaction.serialize(core_Transaction.fromRpc(result.tx as never) as never),
-            ) as never
+              await Transaction.serialize(tx as Transaction.TransactionSerializable),
+            )
           }
 
           return await prepareTransactionRequest(client, {
@@ -330,7 +329,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const result = prepared
             ? await signTempoTransaction({
                 account: prepared.account,
-                transaction: prepared.prepared as never,
+                transaction: prepared.prepared,
               })
             : undefined
           if (result !== undefined) return result
@@ -350,7 +349,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             ? await (async () => {
                 const signed = await signTempoTransaction({
                   account: prepared.account,
-                  transaction: prepared.prepared as never,
+                  transaction: prepared.prepared,
                 })
                 return await prepared.client.request({
                   method: 'eth_sendRawTransaction' as never,
@@ -371,7 +370,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             ? await (async () => {
                 const signed = await signTempoTransaction({
                   account: prepared.account,
-                  transaction: prepared.prepared as never,
+                  transaction: prepared.prepared,
                 })
                 return await prepared.client.request({
                   method: 'eth_sendRawTransactionSync' as never,

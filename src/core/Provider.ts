@@ -226,23 +226,24 @@ export function create(options: create.Options = {}): create.ReturnType {
                         : undefined,
                     )
 
-                    const fill = (params: Record<string, unknown>) => {
+                    type FillParams = z.output<typeof Rpc.transactionRequest> & {
+                      keyAuthorization?: unknown
+                    }
+                    const fill = (params: FillParams) => {
                       const client = getClient({ chainId, feePayer })
-                      const request = {
+                      const fillRequest = {
                         ...params,
                         chainId: params.chainId ?? client.chain?.id,
                         ...(feePayer ? { feePayer: true } : {}),
-                      } as Record<string, unknown> & {
-                        keyAuthorization?: unknown
                       }
                       const formatter = client.chain?.formatters?.transactionRequest
+                      const formatted =
+                        formatter && !fillRequest.keyAuthorization
+                          ? formatter.format({ ...fillRequest } as never, 'fillTransaction')
+                          : fillRequest
                       return client.request({
                         method: 'eth_fillTransaction',
-                        params: [
-                          (formatter && !request.keyAuthorization
-                            ? formatter.format({ ...request } as never, 'fillTransaction')
-                            : request) as never,
-                        ],
+                        params: [formatted as never],
                       })
                     }
 
@@ -261,23 +262,23 @@ export function create(options: create.Options = {}): create.ReturnType {
                         if (keyAuth) {
                           try {
                             const result = await fill({
-                              ...(parameters as Record<string, unknown>),
+                              ...parameters,
                               keyAuthorization: {
                                 address: keyAuth.address,
                                 ...KeyAuthorization.toRpc(keyAuth),
-                              } as never,
+                              },
                             })
                             AccessKey.removePending(account, { store })
                             return result
                           } catch {
                             AccessKey.remove(account, { store })
-                            return await fill(parameters as Record<string, unknown>)
+                            return await fill(parameters)
                           }
                         }
                       }
                     }
 
-                    return await fill(parameters as Record<string, unknown>)
+                    return await fill(parameters)
                   }
 
                   case 'eth_signTransaction': {

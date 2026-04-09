@@ -123,7 +123,7 @@ export function local(options: local.Options): Adapter.Adapter {
         prepared: await (async () => {
           if (typeof feePayer === 'string') {
             const result = (await getClient({ feePayer }).request({
-              method: 'eth_fillTransaction',
+              method: 'eth_fillTransaction' as never,
               params: [
                 {
                   ...rest,
@@ -133,14 +133,13 @@ export function local(options: local.Options): Adapter.Adapter {
                   ...(keyAuthorization ? { keyAuthorization } : {}),
                   type: 'tempo',
                 },
-              ] as never,
-            })) as {
-              tx: Record<string, unknown>
-            }
+              ],
+            })) as { tx: core_Transaction.Rpc }
 
+            const tx = core_Transaction.fromRpc(result.tx)!
             return Transaction.deserialize(
-              await Transaction.serialize(core_Transaction.fromRpc(result.tx as never) as never),
-            ) as never
+              await Transaction.serialize(tx as Transaction.TransactionSerializable),
+            )
           }
 
           return await prepareTransactionRequest(client, {
@@ -244,7 +243,7 @@ export function local(options: local.Options): Adapter.Adapter {
         },
         async signTransaction(parameters) {
           const { account, prepared } = await prepareSponsorableTransaction(parameters)
-          return await signTempoTransaction({ account, transaction: prepared as never })
+          return await signTempoTransaction({ account, transaction: prepared })
         },
         async signTypedData({ data, address }) {
           const account = getAccount({ address, signable: true })
@@ -258,7 +257,7 @@ export function local(options: local.Options): Adapter.Adapter {
         },
         async sendTransaction(parameters) {
           const { account, client, prepared } = await prepareSponsorableTransaction(parameters)
-          const signed = await signTempoTransaction({ account, transaction: prepared as never })
+          const signed = await signTempoTransaction({ account, transaction: prepared })
           return await client.request({
             method: 'eth_sendRawTransaction' as never,
             params: [signed],
@@ -266,7 +265,7 @@ export function local(options: local.Options): Adapter.Adapter {
         },
         async sendTransactionSync(parameters) {
           const { account, client, prepared } = await prepareSponsorableTransaction(parameters)
-          const signed = await signTempoTransaction({ account, transaction: prepared as never })
+          const signed = await signTempoTransaction({ account, transaction: prepared })
           return await client.request({
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],
