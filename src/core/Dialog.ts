@@ -59,14 +59,33 @@ export function isSafari(): boolean {
   return ua.includes('safari') && !ua.includes('chrome')
 }
 
+/** Cached iframe singleton — keyed by host, reused across setup calls. */
+let cached: { host: string; instance: Instance } | undefined
+
+/** Mutable refs swapped on re-entry so the singleton always uses the latest caller's state. */
+let store: Store.Store | undefined
+let fallback: Instance | undefined
+
 /** Creates an iframe dialog that embeds the auth app in a `<dialog>` element. */
 export function iframe(): Dialog {
   if (typeof window === 'undefined') return noop()
 
   return define({ name: 'iframe' }, (parameters) => {
-    const { host, store } = parameters
+    const { host } = parameters
 
-    const fallback = popup()(parameters)
+    // Reuse existing iframe if the host matches — just swap the store/fallback refs.
+    if (cached && cached.host === host) {
+      store = parameters.store
+      fallback?.destroy()
+      fallback = popup()(parameters)
+      return cached.instance
+    }
+
+    // Different host — tear down old iframe and create fresh.
+    cached?.instance.destroy()
+
+    store = parameters.store
+    fallback = popup()(parameters)
 
     let open = false
 
@@ -149,7 +168,7 @@ export function iframe(): Dialog {
         }),
         waitForReady: true,
       })
-      m.on('rpc-response', (response) => handleResponse(store, response))
+      m.on('rpc-response', (response) => handleResponse(store!, response))
       m.waitForReady().then((result) => {
         readyResult = result
         if (result.colorScheme) frame.style.colorScheme = result.colorScheme
@@ -161,11 +180,11 @@ export function iframe(): Dialog {
         switchedToPopup = true
 
         const pending = store
-          .getState()
+          ?.getState()
           .requestQueue.filter(
             (x): x is Store.QueuedRequest & { status: 'pending' } => x.status === 'pending',
           )
-        if (pending.length > 0) fallback.syncRequests(pending)
+        if (pending && pending.length > 0) fallback?.syncRequests(pending)
       })
       return m
     }
@@ -190,7 +209,7 @@ export function iframe(): Dialog {
     let savedOverflow = ''
     let opener: HTMLElement | null = null
 
-    const onBlur = () => handleBlur(store)
+    const onBlur = () => handleBlur(store!)
 
     // 1Password extension adds `inert` attribute to `dialog` rendering it unusable.
     const inertObserver = new MutationObserver((mutations) => {
@@ -257,25 +276,30 @@ export function iframe(): Dialog {
       }
     }
 
-    return {
+    const instance: Instance = {
       close() {
-        fallback.close()
+        fallback!.close()
         open = false
 
         hideDialog()
         activatePage()
       },
       destroy() {
-        fallback.close()
+        if (cached?.instance === instance) cached = undefined
+
+        fallback?.close()
         open = false
 
         activatePage()
         hideDialog()
 
-        fallback.destroy()
+        fallback?.destroy()
         messenger.destroy()
         root.remove()
         inertObserver.disconnect()
+
+        store = undefined
+        fallback = undefined
       },
       open() {
         if (open) return
@@ -297,7 +321,7 @@ export function iframe(): Dialog {
           isSafari() &&
           requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
         ) {
-          fallback.syncRequests(requests)
+          fallback!.syncRequests(requests)
           return
         }
 
@@ -315,18 +339,21 @@ export function iframe(): Dialog {
               'To enable the iframe dialog, add your hostname to the trusted hosts list.',
             ].join('\n'),
           )
-          fallback.syncRequests(requests)
+          fallback!.syncRequests(requests)
         } else {
           const requiresConfirm = requests.some((x) => x.status === 'pending')
           if (!open && requiresConfirm) this.open()
           messenger.send('rpc-requests', {
-            account: getAccount(store),
-            chainId: store.getState().chainId,
+            account: getAccount(store!),
+            chainId: store!.getState().chainId,
             requests,
           })
         }
       },
     }
+
+    cached = { host, instance }
+    return instance
   })
 }
 

@@ -321,10 +321,12 @@ function WalletSwitchChain() {
   )
 }
 
-type CallRow = { to: `0x${string}`; token: `0x${string}`; amount: string }
+type CallType = 'transfer' | 'approve'
+type CallRow = { type: CallType; to: `0x${string}`; token: `0x${string}`; amount: string }
 
 function defaultRow(i: number): CallRow {
   return {
+    type: 'transfer',
     to: `0x${(i + 1).toString(16).padStart(40, '0')}` as `0x${string}`,
     token: tokens.pathUSD,
     amount: '1',
@@ -332,13 +334,21 @@ function defaultRow(i: number): CallRow {
 }
 
 function buildCalls(rows: CallRow[]) {
-  return rows.map((r) =>
-    Actions.token.transfer.call({
+  return rows.map((r) => {
+    const amount = parseUnits(r.amount || '0', 6)
+    if (r.type === 'approve') {
+      return Actions.token.approve.call({
+        spender: r.to,
+        token: r.token,
+        amount,
+      })
+    }
+    return Actions.token.transfer.call({
       to: r.to,
       token: r.token,
-      amount: parseUnits(r.amount || '0', 6),
-    }),
-  )
+      amount,
+    })
+  })
 }
 
 function Transactions() {
@@ -370,14 +380,16 @@ function Transactions() {
       <h3>Calls</h3>
       <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
         <colgroup>
-          <col style={{ width: '55%' }} />
-          <col style={{ width: '25%' }} />
-          <col style={{ width: '12%' }} />
+          <col style={{ width: '15%' }} />
+          <col style={{ width: '40%' }} />
+          <col style={{ width: '22%' }} />
+          <col style={{ width: '15%' }} />
           <col style={{ width: '8%' }} />
         </colgroup>
         <thead>
           <tr>
-            <th style={{ textAlign: 'left' }}>To</th>
+            <th style={{ textAlign: 'left' }}>Type</th>
+            <th style={{ textAlign: 'left' }}>To / Spender</th>
             <th style={{ textAlign: 'left' }}>Token</th>
             <th style={{ textAlign: 'left' }}>Amount</th>
             <th />
@@ -386,6 +398,16 @@ function Transactions() {
         <tbody>
           {rows.map((row, i) => (
             <tr key={i}>
+              <td>
+                <select
+                  value={row.type}
+                  onChange={(e) => updateRow(i, 'type', e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  <option value="transfer">transfer</option>
+                  <option value="approve">approve</option>
+                </select>
+              </td>
               <td>
                 <input
                   value={row.to}

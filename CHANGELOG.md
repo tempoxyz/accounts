@@ -1,5 +1,17 @@
 # accounts
 
+## 0.5.4
+
+### Patch Changes
+
+- 4936c12: Fixed `Dialog.iframe()` injecting duplicate iframes by caching the instance as a singleton keyed by host.
+
+## 0.5.3
+
+### Patch Changes
+
+- 7134f07: Updated internal dependencies.
+
 ## 0.5.2
 
 ### Patch Changes
