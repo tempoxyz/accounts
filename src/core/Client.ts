@@ -38,7 +38,7 @@ export declare namespace fromChainId {
   type Options = {
     /** Supported chains. */
     chains: readonly [Chain, ...Chain[]]
-    /** Sponsor service URL used for sponsor-assisted `eth_fillTransaction` requests. */
+    /** Sponsor service URL. When set, the transport routes sponsored RPC calls to this URL. */
     feePayer?: string | undefined
     /** Provider instance. When set, the transport routes requests through the provider first, falling back to HTTP for unknown methods. */
     provider?: ox_Provider.Provider | undefined

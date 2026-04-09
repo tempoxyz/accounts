@@ -219,12 +219,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const [decoded] = request._decoded.params
                     const parameters = { ...decoded }
                     const chainId = parameters.chainId
-                    const feePayer = resolveFeePayer(
-                      typeof parameters.feePayer === 'boolean' ||
-                        typeof parameters.feePayer === 'string'
-                        ? parameters.feePayer
-                        : undefined,
-                    )
+                    const feePayer = resolveFeePayer(parameters.feePayer)
 
                     type FillParams = z.output<typeof Rpc.transactionRequest> & {
                       keyAuthorization?: unknown

@@ -110,6 +110,10 @@ export function local(options: local.Options): Adapter.Adapter {
       }
     }
 
+    // When feePayer is a URL, we call `eth_fillTransaction` on the sponsor
+    // directly instead of going through `prepareTransactionRequest`. This is
+    // necessary because `prepareTransactionRequest` drops sponsor-injected
+    // fields (like `feePayerSignature`) from the fill result.
     async function prepareSponsorableTransaction(
       parameters:
         | Adapter.sendTransaction.Parameters
