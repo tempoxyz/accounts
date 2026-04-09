@@ -8,6 +8,7 @@ export default defineConfig({
     host: process.env.VITE_HOST ?? 'localhost',
     port: Number(process.env.PORT ?? 5173),
     strictPort: true,
+    cors: true,
   },
   plugins: [
     react(),

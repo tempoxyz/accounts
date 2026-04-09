@@ -5,6 +5,8 @@ packages:
   - playgrounds/*
   - ref-impls/*
 
+blockExoticSubdeps: true
+
 catalog:
   '@cloudflare/vite-plugin': ^1.30.2
   '@cloudflare/workers-types': ^4.20260317.1
@@ -25,15 +27,12 @@ catalog:
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: ^2.47.1
+  viem: ^2.47.10
   vite: ^8.0.5
   vp: npm:vite-plus@~0.1.14
   wagmi: ^3.5.0
   wrangler: ^4.80.0
   zod: ^4.3.6
-
-blockExoticSubdeps: true
-trustPolicy: no-downgrade
 minimumReleaseAge: 1440
 
 minimumReleaseAgeExclude:
@@ -49,3 +48,4 @@ overrides:
   accounts: workspace:*
   react: catalog:default
   react-dom: catalog:default
+trustPolicy: permissive
