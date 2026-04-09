@@ -1,5 +1,11 @@
 # accounts
 
+## 0.5.7
+
+### Patch Changes
+
+- cc334ff: Injected active `chainId` into transaction requests when the consumer does not provide one.
+
 ## 0.5.6
 
 ### Patch Changes
