@@ -33,12 +33,11 @@ catalog:
   zod: ^4.3.6
 
 minimumReleaseAge: 1440
-minimumReleaseAgeExclude:
-  - webauthx
 
 minimumReleaseAgeExclude:
   - incur
   - mppx
+  - webauthx
 
 onlyBuiltDependencies:
   - esbuild
