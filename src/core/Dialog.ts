@@ -310,7 +310,7 @@ export function iframe(): Dialog {
       },
       async syncRequests(requests) {
         if (switchedToPopup) {
-          fallback.syncRequests(requests)
+          fallback!.syncRequests(requests)
           return
         }
 
