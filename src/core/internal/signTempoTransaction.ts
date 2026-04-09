@@ -15,8 +15,7 @@ export async function signTempoTransaction(
     feePayerSignature?: unknown
   }
 
-  if (typeof tx.feePayerSignature === 'undefined')
-    return await account.signTransaction(tx as never)
+  if (typeof tx.feePayerSignature === 'undefined') return await account.signTransaction(tx as never)
 
   const serialized = (await Transaction.serialize(tx)) as `0x76${string}`
   const envelope = TxEnvelopeTempo.deserialize(serialized)
