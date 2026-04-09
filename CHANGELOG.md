@@ -1,5 +1,11 @@
 # accounts
 
+## 0.5.6
+
+### Patch Changes
+
+- 6eff229: Added `privateKey` support to `dangerous_secp256k1()` so wagmi configs could pin distinct signers per connector.
+
 ## 0.5.5
 
 ### Patch Changes
