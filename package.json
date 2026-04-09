@@ -7,7 +7,7 @@
     "check:types": "tsc -b && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types",
     "dev": "pnpm dev:dialog & pnpm dev:dialog-ref & pnpm dev:playground",
     "dev:cli": "pnpm --filter './playgrounds/cli' connect",
-    "dev:dialog": "pnpm --filter tempo-app dev:ssl",
+    "dev:dialog": "pnpm --filter tempo-app dev",
     "dev:dialog-ref": "pnpm --filter dialog-ref dev",
     "dev:hosts": "./scripts/dev:hosts.sh",
     "dev:playground": "pnpm --filter './playgrounds/web' dev",
