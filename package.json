@@ -40,6 +40,8 @@
     "@vitejs/plugin-react": "catalog:",
     "@wagmi/core": "catalog:",
     "elysia": "^1.4.27",
+    "expo-secure-store": "^55.0.12",
+    "expo-web-browser": "^55.0.13",
     "express": "^5.2.1",
     "playwright-core": "^1.58.2",
     "prool": "catalog:",
@@ -85,7 +87,10 @@
     "zustand": "^5.0.11"
   },
   "peerDependencies": {
+    "@react-native-async-storage/async-storage": "^3.0.2",
     "@wagmi/core": ">=2",
+    "expo-secure-store": "^55.0.12",
+    "expo-web-browser": "^55.0.13",
     "react": ">=18",
     "viem": ">=2.43.3"
   },
