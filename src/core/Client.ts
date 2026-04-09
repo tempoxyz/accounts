@@ -73,14 +73,17 @@ function feePayerTransport(base: Transport, url: string): Transport {
 
     return {
       ...baseTransport,
-      async request({ method, params: rpcParams }) {
+      async request({ method, params: rpcParams }: { method: string; params?: unknown }) {
         const args = rpcParams as readonly unknown[] | undefined
 
         if (method === 'eth_fillTransaction') {
-          const request = args?.[0] as
-            | (Record<string, unknown> & { feePayer?: unknown })
-            | undefined
-          if (request && (request.feePayer === true || typeof request.feePayer === 'string'))
+          const request = args?.[0]
+          if (
+            request &&
+            typeof request === 'object' &&
+            'feePayer' in request &&
+            (request.feePayer === true || typeof request.feePayer === 'string')
+          )
             return sponsor.request({
               method,
               params: [{ ...request, feePayer: true }],
@@ -93,10 +96,8 @@ function feePayerTransport(base: Transport, url: string): Transport {
             typeof serialized === 'string' &&
             (serialized.startsWith('0x76') || serialized.startsWith('0x78'))
           ) {
-            const { feePayerSignature } = Transaction.deserialize(
-              serialized as `0x76${string}`,
-            ) as { feePayerSignature?: null | unknown }
-            if (feePayerSignature === null) {
+            const deserialized = Transaction.deserialize(serialized as `0x76${string}`)
+            if ('feePayerSignature' in deserialized && deserialized.feePayerSignature === null) {
               const signed = await sponsor.request({
                 method: 'eth_signRawTransaction',
                 params: [serialized],
