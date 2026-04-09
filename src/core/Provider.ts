@@ -261,7 +261,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                               keyAuthorization: {
                                 address: keyAuth.address,
                                 ...KeyAuthorization.toRpc(keyAuth),
-                              },
+                              } as never,
                             })
                             AccessKey.removePending(account, { store })
                             return result

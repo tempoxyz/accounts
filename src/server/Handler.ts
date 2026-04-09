@@ -332,10 +332,9 @@ export function feePayer(options: feePayer.Options) {
 
         const feePayerSignature = Signature.from(
           await account.sign({
-            hash: TxEnvelopeTempo.getFeePayerSignPayload(
-              TxEnvelopeTempo.from(prepared as core_Transaction.Transaction),
-              { sender: prepared.from },
-            ),
+            hash: TxEnvelopeTempo.getFeePayerSignPayload(TxEnvelopeTempo.from(prepared as never), {
+              sender: prepared.from,
+            }),
           }),
         )
 
@@ -368,7 +367,7 @@ export function feePayer(options: feePayer.Options) {
           ...transaction,
           account,
           feePayer: account,
-        }),
+        } as never),
       )
 
       if (method === 'eth_signRawTransaction')

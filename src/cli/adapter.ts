@@ -168,7 +168,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
         prepared: await (async () => {
           if (typeof feePayer === 'string') {
             const result = (await getClient({ feePayer }).request({
-              method: 'eth_fillTransaction' as never,
+              method: 'eth_fillTransaction',
               params: [
                 {
                   ...rest,
@@ -179,12 +179,10 @@ export function cli(options: cli.Options): Adapter.Adapter {
                   type: 'tempo',
                 },
               ],
-            })) as { tx: core_Transaction.Rpc }
+            } as never)) as { tx: core_Transaction.Rpc }
 
             const tx = core_Transaction.fromRpc(result.tx)!
-            return Transaction.deserialize(
-              await Transaction.serialize(tx as Transaction.TransactionSerializable),
-            )
+            return Transaction.deserialize(await Transaction.serialize(tx as never))
           }
 
           return await prepareTransactionRequest(client, {
