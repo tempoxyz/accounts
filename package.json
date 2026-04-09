@@ -126,6 +126,7 @@
     ".": {
       "types": "./dist/index.d.ts",
       "src": "./src/index.ts",
+      "react-native": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./server": {
@@ -151,6 +152,7 @@
     "./react-native": {
       "types": "./dist/react-native/index.d.ts",
       "src": "./src/react-native/index.ts",
+      "react-native": "./dist/react-native/index.js",
       "default": "./dist/react-native/index.js"
     }
   }

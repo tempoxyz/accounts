@@ -587,7 +587,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     },
   )
 
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && typeof CustomEvent !== 'undefined') {
     const rdns =
       adapter.rdns ?? `com.${(adapter.name ?? 'Injected Wallet').toLowerCase().replace(/\s+/g, '')}`
 
