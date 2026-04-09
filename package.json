@@ -29,6 +29,7 @@
   "devDependencies": {
     "@changesets/changelog-github": "^0.6.0",
     "@changesets/cli": "^2.30.0",
+    "@react-native-async-storage/async-storage": "^3.0.2",
     "@remix-run/route-pattern": "^0.19.0",
     "@types/express": "^5.0.6",
     "@types/http-proxy": "^1.17.17",
@@ -40,6 +41,8 @@
     "@vitejs/plugin-react": "catalog:",
     "@wagmi/core": "catalog:",
     "elysia": "^1.4.27",
+    "expo-secure-store": "^55.0.12",
+    "expo-web-browser": "^55.0.13",
     "express": "^5.2.1",
     "playwright-core": "^1.58.2",
     "prool": "catalog:",
