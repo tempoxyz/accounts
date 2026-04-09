@@ -32,7 +32,6 @@ catalog:
   wrangler: ^4.80.0
   zod: ^4.3.6
 
-strictDepBuilds: true
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
 minimumReleaseAge: 1440
