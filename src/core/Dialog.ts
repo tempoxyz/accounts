@@ -436,7 +436,10 @@ export function popup(options: popup.Options = {}): Dialog {
       },
       async syncRequests(requests) {
         const requiresConfirm = requests.some((x) => x.status === 'pending')
-        if (requiresConfirm && (!win || win.closed)) this.open()
+        if (requiresConfirm) {
+          if (!win || win.closed) this.open()
+          else win.focus()
+        }
         messenger?.send('rpc-requests', {
           account: getAccount(store),
           chainId: store.getState().chainId,
