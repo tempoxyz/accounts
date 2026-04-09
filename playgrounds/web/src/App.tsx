@@ -463,7 +463,7 @@ function Transactions() {
             send('eth_sendTransaction', () =>
               provider.request({
                 method: 'eth_sendTransaction',
-                params: [{ calls, ...(useFeePayer ? { feePayer: true } : {}) }],
+                params: [{ calls, ...(useFeePayer ? { feePayer: '/fee-payer' } : {}) }],
               }),
             )
           }
@@ -476,7 +476,7 @@ function Transactions() {
             send('eth_sendTransactionSync', () =>
               provider.request({
                 method: 'eth_sendTransactionSync',
-                params: [{ calls, ...(useFeePayer ? { feePayer: true } : {}) }],
+                params: [{ calls, ...(useFeePayer ? { feePayer: '/fee-payer' } : {}) }],
               }),
             )
           }
@@ -515,7 +515,7 @@ function Transactions() {
             send('eth_signTransaction', () =>
               provider.request({
                 method: 'eth_signTransaction',
-                params: [{ calls, ...(useFeePayer ? { feePayer: true } : {}) }],
+                params: [{ calls, ...(useFeePayer ? { feePayer: '/fee-payer' } : {}) }],
               }),
             )
           }

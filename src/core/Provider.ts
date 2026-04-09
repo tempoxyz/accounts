@@ -208,6 +208,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     return (await actions.sendTransaction(
                       {
                         ...rest,
+                        chainId: decoded.chainId ?? store.getState().chainId,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
@@ -285,6 +286,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     return (await actions.signTransaction(
                       {
                         ...rest,
+                        chainId: decoded.chainId ?? store.getState().chainId,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
@@ -301,6 +303,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     return (await actions.sendTransactionSync(
                       {
                         ...rest,
+                        chainId: decoded.chainId ?? store.getState().chainId,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
