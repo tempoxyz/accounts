@@ -1,4 +1,5 @@
-import { Account, Secp256k1 } from 'viem/tempo'
+import type { Hex } from 'viem'
+import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 
 import * as Adapter from '../Adapter.js'
 import { local } from './local.js'
@@ -21,20 +22,30 @@ import { local } from './local.js'
  * ```
  */
 export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}): Adapter.Adapter {
-  const { icon, name, rdns } = options
+  const { icon, name, privateKey, rdns } = options
+  const fixed = privateKey
+    ? {
+        address: TempoAccount.fromSecp256k1(privateKey).address,
+        keyType: 'secp256k1' as const,
+        privateKey,
+      }
+    : undefined
 
   return Adapter.define({ icon, name, rdns }, (config) => {
     const { store } = config
 
     return local({
       async createAccount() {
+        if (fixed) return { accounts: [fixed] }
+
         const privateKey = Secp256k1.randomPrivateKey()
-        const account = Account.fromSecp256k1(privateKey)
+        const generated = TempoAccount.fromSecp256k1(privateKey)
         return {
-          accounts: [{ address: account.address, keyType: 'secp256k1' as const, privateKey }],
+          accounts: [{ address: generated.address, keyType: 'secp256k1' as const, privateKey }],
         }
       },
       async loadAccounts() {
+        if (fixed) return { accounts: [fixed] }
         return { accounts: [...store.getState().accounts] }
       },
     })(config)
@@ -47,6 +58,8 @@ export declare namespace dangerous_secp256k1 {
     icon?: `data:image/${string}` | undefined
     /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */
     name?: string | undefined
+    /** Fixed private key to expose instead of generating/loading one from storage. */
+    privateKey?: Hex | undefined
     /** Reverse DNS identifier. @default `com.{lowercase name}` */
     rdns?: string | undefined
   }

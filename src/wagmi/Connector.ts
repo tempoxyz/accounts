@@ -318,10 +318,10 @@ export declare namespace dialog {
  * ```
  */
 export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}) {
-  const { icon, name, rdns, ...rest } = options
+  const { icon, name, privateKey, rdns, ...rest } = options
   return setup({
     ...rest,
-    adapter: dangerous_secp256k1_adapter({ icon, name, rdns }),
+    adapter: dangerous_secp256k1_adapter({ icon, name, privateKey, rdns }),
   })
 }
 
