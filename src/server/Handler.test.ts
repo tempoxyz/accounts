@@ -2,14 +2,13 @@ import { Elysia } from 'elysia'
 import express from 'express'
 import { Hono } from 'hono'
 import { Json, type RpcRequest } from 'ox'
-import { Transaction as core_Transaction } from 'ox/tempo'
+import { SignatureEnvelope, Transaction as core_Transaction, TxEnvelopeTempo } from 'ox/tempo'
 import { sendTransactionSync } from 'viem/actions'
-import { withFeePayer } from 'viem/tempo'
+import { Transaction, withFeePayer } from 'viem/tempo'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, chain, getClient, http } from '../../test/config.js'
 import { createServer, type Server } from '../../test/utils.js'
-import { signTempoTransaction } from '../core/internal/signTempoTransaction.js'
 import * as WebAuthnCeremony from '../core/WebAuthnCeremony.js'
 import * as Handler from './Handler.js'
 import * as Kv from './Kv.js'
@@ -742,6 +741,18 @@ describe('feePayer', () => {
     }).then((response) => response.json())
   }
 
+  /** Signs a sponsor-bound Tempo transaction, preserving the feePayerSignature. */
+  async function signSponsoredTx(account: (typeof accounts)[number], transaction: object) {
+    const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
+    const envelope = TxEnvelopeTempo.deserialize(serialized)
+    const signature = await account.sign({
+      hash: TxEnvelopeTempo.getSignPayload(envelope),
+    })
+    return TxEnvelopeTempo.serialize(envelope, {
+      signature: SignatureEnvelope.from(signature),
+    })
+  }
+
   describe('POST /', () => {
     test('default: eth_fillTransaction returns a sponsor-bound transaction the sender can broadcast', async () => {
       const response = (await rpc({
@@ -765,7 +776,7 @@ describe('feePayer', () => {
       const prepared = core_Transaction.fromRpc(response.result.tx as never) as {
         feePayerSignature?: unknown
       }
-      const signed = await signTempoTransaction({ account: userAccount, transaction: prepared })
+      const signed = await signSponsoredTx(userAccount, prepared)
       const receipt = (await getClient().request({
         method: 'eth_sendRawTransactionSync',
         params: [signed],
@@ -801,12 +812,9 @@ describe('feePayer', () => {
         gas?: bigint | undefined
         feePayerSignature?: unknown
       }
-      const signed = await signTempoTransaction({
-        account: userAccount,
-        transaction: {
-          ...prepared,
-          gas: (prepared?.gas ?? 0n) + 1n,
-        },
+      const signed = await signSponsoredTx(userAccount, {
+        ...prepared,
+        gas: (prepared?.gas ?? 0n) + 1n,
       })
 
       await expect(
