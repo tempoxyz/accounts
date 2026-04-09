@@ -136,7 +136,12 @@ export function iframe(): Dialog {
     root.appendChild(style)
     root.appendChild(frame)
 
+    let readyResult: Messenger.ReadyOptions | undefined
+    let switchedToPopup = false
+
     function createMessenger() {
+      readyResult = undefined
+
       const m = Messenger.bridge({
         from: Messenger.fromWindow(window, { targetOrigin: hostUrl.origin }),
         to: Messenger.fromWindow(frame.contentWindow!, {
@@ -145,6 +150,23 @@ export function iframe(): Dialog {
         waitForReady: true,
       })
       m.on('rpc-response', (response) => handleResponse(store, response))
+      m.waitForReady().then((result) => {
+        readyResult = result
+        if (result.colorScheme) frame.style.colorScheme = result.colorScheme
+      })
+      m.on('switch-mode', () => {
+        hideDialog()
+        activatePage()
+        open = false
+        switchedToPopup = true
+
+        const pending = store
+          .getState()
+          .requestQueue.filter(
+            (x): x is Store.QueuedRequest & { status: 'pending' } => x.status === 'pending',
+          )
+        if (pending.length > 0) fallback.syncRequests(pending)
+      })
       return m
     }
 
@@ -235,23 +257,6 @@ export function iframe(): Dialog {
       }
     }
 
-    messenger.waitForReady().then(({ colorScheme }) => {
-      if (colorScheme) frame.style.colorScheme = colorScheme
-    })
-
-    messenger.on('switch-mode', () => {
-      hideDialog()
-      activatePage()
-      open = false
-
-      const pending = store
-        .getState()
-        .requestQueue.filter(
-          (x): x is Store.QueuedRequest & { status: 'pending' } => x.status === 'pending',
-        )
-      if (pending.length > 0) fallback.syncRequests(pending)
-    })
-
     return {
       close() {
         fallback.close()
@@ -280,7 +285,12 @@ export function iframe(): Dialog {
         activateDialog()
       },
       async syncRequests(requests) {
-        const { trustedHosts } = await messenger.waitForReady()
+        if (switchedToPopup) {
+          fallback.syncRequests(requests)
+          return
+        }
+
+        const { trustedHosts } = readyResult ?? (await messenger.waitForReady())
 
         // Safari does not support WebAuthn credential creation in iframes.
         if (
@@ -331,10 +341,6 @@ export function popup(options: popup.Options = {}): Dialog {
 
     let win: Window | null = null
 
-    function onBlur() {
-      if (win) handleBlur(store)
-    }
-
     const offDetectClosed = (() => {
       const timer = setInterval(() => {
         if (win?.closed) handleBlur(store)
@@ -344,19 +350,57 @@ export function popup(options: popup.Options = {}): Dialog {
 
     let messenger: Messenger.Bridge | undefined
 
+    const overlay = document.createElement('div')
+    Object.assign(overlay.style, {
+      alignItems: 'center',
+      background: 'rgba(0, 0, 0, 0.5)',
+      color: 'white',
+      display: 'none',
+      flexDirection: 'column',
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '16px',
+      gap: '12px',
+      inset: '0',
+      justifyContent: 'center',
+      position: 'fixed',
+      zIndex: '2147483647',
+    })
+    const overlayMessage = document.createElement('p')
+    Object.assign(overlayMessage.style, { margin: '0' })
+    overlayMessage.textContent = 'Continue in the popup window'
+    const overlayClose = document.createElement('button')
+    Object.assign(overlayClose.style, {
+      background: 'none',
+      border: 'none',
+      color: 'white',
+      cursor: 'pointer',
+      font: 'inherit',
+      padding: '0',
+      textDecoration: 'underline',
+    })
+    overlayClose.textContent = 'Close'
+    overlayClose.addEventListener('click', () => handleBlur(store))
+    overlay.appendChild(overlayMessage)
+    overlay.appendChild(overlayClose)
+    document.body.appendChild(overlay)
+
     return {
       close() {
+        overlay.style.display = 'none'
         if (!win) return
         win.close()
         win = null
       },
       destroy() {
         this.close()
-        window.removeEventListener('focus', onBlur)
         messenger?.destroy()
         offDetectClosed()
+        overlay.remove()
       },
       open() {
+        messenger?.destroy()
+        win?.close()
+
         const referrer = getReferrer()
 
         const hostUrl = new URL(host)
@@ -388,15 +432,11 @@ export function popup(options: popup.Options = {}): Dialog {
 
         messenger.on('rpc-response', (response) => handleResponse(store, response))
 
-        window.removeEventListener('focus', onBlur)
-        window.addEventListener('focus', onBlur)
+        overlay.style.display = 'flex'
       },
       async syncRequests(requests) {
         const requiresConfirm = requests.some((x) => x.status === 'pending')
-        if (requiresConfirm) {
-          if (!win || win.closed) this.open()
-          win?.focus()
-        }
+        if (requiresConfirm && (!win || win.closed)) this.open()
         messenger?.send('rpc-requests', {
           account: getAccount(store),
           chainId: store.getState().chainId,
