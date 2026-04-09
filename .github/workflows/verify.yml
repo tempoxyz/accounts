@@ -6,7 +6,8 @@ on:
         required: false
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   checks:
