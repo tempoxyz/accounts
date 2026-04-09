@@ -1,5 +1,11 @@
 # accounts
 
+## 0.5.5
+
+### Patch Changes
+
+- b03c228: Bumped deps
+
 ## 0.5.4
 
 ### Patch Changes
