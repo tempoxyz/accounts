@@ -17,7 +17,7 @@ export const keyType = z.union([z.literal('secp256k1'), z.literal('p256'), z.lit
 export const keyAuthorization = z.object({
   address: u.address(),
   chainId: u.bigint(),
-  expiry: z.nullish(u.number()),
+  expiry: z.union([u.number(), z.null(), z.undefined()]),
   keyId: u.address(),
   keyType,
   limits: z.optional(z.readonly(z.array(z.object({ token: u.address(), limit: u.bigint() })))),
@@ -29,7 +29,7 @@ export const createRequest = z.object({
   account: z.optional(u.address()),
   chainId: z.optional(u.bigint()),
   codeChallenge: z.string(),
-  expiry: z.optional(z.number()),
+  expiry: z.nullish(z.number()),
   keyType: z.optional(keyType),
   limits: z.optional(z.readonly(z.array(z.object({ token: u.address(), limit: u.bigint() })))),
   pubKey: u.hex(),
@@ -204,7 +204,7 @@ export declare namespace Policy {
       /** Requested root account restriction. */
       account?: Address | undefined
       /** Requested access-key expiry timestamp. Omit to let the server choose one. */
-      expiry?: number | undefined
+      expiry?: number | null | undefined
       /** Requested key type. */
       keyType: z.output<typeof keyType>
       /** Requested spending limits. */
