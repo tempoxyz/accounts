@@ -1,5 +1,11 @@
 # accounts
 
+## 0.5.9
+
+### Patch Changes
+
+- 901cfee: Fixed iframe dialog getting stuck on "Check prompt" when the store is swapped during React re-renders.
+
 ## 0.5.8
 
 ### Patch Changes

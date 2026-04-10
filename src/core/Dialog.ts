@@ -512,11 +512,9 @@ function findStoreForResponse(
   previous: Store.Store[],
   id: number,
 ): Store.Store {
-  if (current.getState().requestQueue.some((q) => q.request.id === id))
-    return current
+  if (current.getState().requestQueue.some((q) => q.request.id === id)) return current
   for (const s of previous) {
-    if (s.getState().requestQueue.some((q) => q.request.id === id))
-      return s
+    if (s.getState().requestQueue.some((q) => q.request.id === id)) return s
   }
   return current
 }
