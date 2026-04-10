@@ -80,9 +80,7 @@ export function iframe(): Dialog {
 
       // Migrate in-flight requests so responses land in the current store.
       if (oldStore && oldStore !== store) {
-        const pending = oldStore
-          .getState()
-          .requestQueue.filter((q) => q.status === 'pending')
+        const pending = oldStore.getState().requestQueue.filter((q) => q.status === 'pending')
         if (pending.length > 0)
           store.setState((x) => ({
             ...x,
