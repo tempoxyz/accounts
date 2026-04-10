@@ -65,6 +65,8 @@ let cached: { host: string; instance: Instance } | undefined
 /** Mutable refs swapped on re-entry so the singleton always uses the latest caller's state. */
 let store: Store.Store | undefined
 let fallback: Instance | undefined
+/** Previous stores kept alive so in-flight responses find their matching request. */
+let previousStores: Store.Store[] = []
 
 /** Creates an iframe dialog that embeds the auth app in a `<dialog>` element. */
 export function iframe(): Dialog {
@@ -78,15 +80,9 @@ export function iframe(): Dialog {
       const oldStore = store
       store = parameters.store
 
-      // Migrate in-flight requests so responses land in the current store.
-      if (oldStore && oldStore !== store) {
-        const pending = oldStore.getState().requestQueue.filter((q) => q.status === 'pending')
-        if (pending.length > 0)
-          store.setState((x) => ({
-            ...x,
-            requestQueue: [...x.requestQueue, ...pending],
-          }))
-      }
+      // Keep the old store so in-flight responses can find their matching request.
+      if (oldStore && oldStore !== store && !previousStores.includes(oldStore))
+        previousStores.push(oldStore)
 
       fallback?.destroy()
       fallback = popup()(parameters)
@@ -180,7 +176,10 @@ export function iframe(): Dialog {
         }),
         waitForReady: true,
       })
-      m.on('rpc-response', (response) => handleResponse(store!, response))
+      m.on('rpc-response', (response) => {
+        const targetStore = findStoreForResponse(store!, previousStores, response.id)
+        handleResponse(targetStore, response)
+      })
       m.waitForReady().then((result) => {
         readyResult = result
         if (result.colorScheme) frame.style.colorScheme = result.colorScheme
@@ -312,6 +311,7 @@ export function iframe(): Dialog {
 
         store = undefined
         fallback = undefined
+        previousStores = []
       },
       open() {
         if (open) return
@@ -504,6 +504,21 @@ export function noop(): Dialog {
     destroy() {},
     async syncRequests() {},
   }))
+}
+
+/** Finds the store that owns the request matching the given response id. */
+function findStoreForResponse(
+  current: Store.Store,
+  previous: Store.Store[],
+  id: number,
+): Store.Store {
+  if (current.getState().requestQueue.some((q) => q.request.id === id))
+    return current
+  for (const s of previous) {
+    if (s.getState().requestQueue.some((q) => q.request.id === id))
+      return s
+  }
+  return current
 }
 
 /** Updates the store with an RPC response from the remote auth app. */
