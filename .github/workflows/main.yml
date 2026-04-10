@@ -18,7 +18,7 @@ jobs:
 
   changesets:
     name: Changesets
-    # needs: verify
+    needs: verify
     permissions:
       contents: write
       id-token: write
@@ -39,6 +39,7 @@ jobs:
         id: changesets
         uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # 06245a4e0a36c064a573d4150030f5ec548e4fcc
         with:
+          commitMode: github-api
           title: 'chore: version packages'
           commit: 'chore: version packages'
           publish: pnpm changeset:publish
