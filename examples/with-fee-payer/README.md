@@ -16,4 +16,4 @@ local fee-payer endpoint (required due to Chrome's
 [Private Network Access](https://developer.chrome.com/blog/private-network-access-preflight/) policy).
 
 > [!NOTE]
-> In production, set `feePayerUrl` to your deployed worker URL — no tunnel needed.
+> In production, set `feePayer` to your deployed worker URL — no tunnel needed.

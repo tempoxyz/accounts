@@ -1660,7 +1660,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        feePayerUrl: server.url,
+        feePayer: server.url,
       })
 
       const connected = await connect(provider)
@@ -1682,7 +1682,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        feePayerUrl: server.url,
+        feePayer: server.url,
       })
 
       const connected = await connect(provider)
