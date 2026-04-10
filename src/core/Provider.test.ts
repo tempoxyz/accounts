@@ -2008,9 +2008,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         ],
       })
 
-      expect(result.receipts?.[0]?.feePayer).toBe(
-        feePayerAccount.address.toLowerCase(),
-      )
+      expect(result.receipts?.[0]?.feePayer).toBe(feePayerAccount.address.toLowerCase())
     })
   })
 })

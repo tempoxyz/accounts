@@ -1,5 +1,12 @@
 # accounts
 
+## 0.6.1
+
+### Patch Changes
+
+- 1aa18fe: Added `feePayer` to `wallet_sendCalls` capabilities and `wallet_getCapabilities` response.
+- 1aa18fe: Support `feePayer: false` to opt out of fee payers on a per-transaction basis when a provider-level fee payer is configured.
+
 ## 0.6.0
 
 ### Minor Changes

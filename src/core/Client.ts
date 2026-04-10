@@ -31,7 +31,7 @@ export function fromChainId(
     return 'fee-payer-first'
   })()
   const id = chainId ?? store.getState().chainId
-  const key = `${id}:${provider ? 'p' : ''}:${feePayerOption === false ? 'no-fp' : feePayerUrl ?? ''}:${precedence}`
+  const key = `${id}:${provider ? 'p' : ''}:${feePayerOption === false ? 'no-fp' : (feePayerUrl ?? '')}:${precedence}`
   let client = clients.get(key)
   if (!client) {
     const chain = chains.find((c) => c.id === id) ?? chains[0]!
