@@ -1,5 +1,12 @@
 # accounts
 
+## 0.5.8
+
+### Patch Changes
+
+- b4c87a3: Fixed iframe dialog getting stuck on "Check prompt" when the store is swapped during React re-renders.
+- 567bf0a: Added `accounts/react-native` entrypoint with React Native adapter and storage implementation.
+
 ## 0.5.7
 
 ### Patch Changes
