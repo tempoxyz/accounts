@@ -50,11 +50,20 @@ export function create(options: create.Options = {}): create.ReturnType {
   const {
     adapter = dialog(),
     chains = [tempo, tempoModerato],
-    feePayerUrl,
     persistCredentials,
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
   } = options
+
+  const feePayerConfig = (() => {
+    if (!options.feePayer) return undefined
+    if (typeof options.feePayer === 'string')
+      return { precedence: 'fee-payer-first' as const, url: options.feePayer }
+    return {
+      precedence: options.feePayer.precedence ?? ('fee-payer-first' as const),
+      url: options.feePayer.url,
+    }
+  })()
 
   const defaultChain = testnet
     ? (chains.find((c) => c.testnet) ?? chains[chains.length - 1]!)
@@ -76,7 +85,11 @@ export function create(options: create.Options = {}): create.ReturnType {
     options: { chainId?: number | undefined; feePayer?: string | undefined } = {},
   ) {
     const { chainId, feePayer } = options
-    return Client.fromChainId(chainId, { chains, feePayer, store })
+    return Client.fromChainId(chainId, {
+      chains,
+      feePayer: feePayer ? { url: feePayer, precedence: feePayerConfig?.precedence } : undefined,
+      store,
+    })
   }
 
   const instance = adapter({ getAccount, getClient, storage, store })
@@ -125,7 +138,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     const url = (() => {
       if (typeof feePayer === 'string') return feePayer
       if (feePayer === false) return undefined
-      return feePayerUrl
+      return feePayerConfig?.url
     })()
     if (!url) return undefined
     if (url.startsWith('http://') || url.startsWith('https://')) return url
@@ -340,7 +353,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const decoded = request._decoded.params?.[0]
                     const { calls = [], capabilities, chainId, from } = decoded ?? {}
                     const sync = capabilities?.sync
-                    const feePayer = resolveFeePayer(feePayerUrl ? true : undefined)
+                    const feePayer = resolveFeePayer(feePayerConfig ? true : undefined)
                     const txRequest = {
                       calls,
                       chainId,
@@ -663,11 +676,8 @@ export declare namespace create {
      * @default [tempo, tempoModerato]
      */
     chains?: readonly [Chain, ...Chain[]] | undefined
-    /**
-     * Fee payer URL for interacting with a service running `Handler.feePayer`
-     * from `accounts/server`.
-     */
-    feePayerUrl?: string | undefined
+    /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */
+    feePayer?: Client.fromChainId.Options['feePayer']
     /** Enable Machine Payment Protocol (mppx) support. @default false */
     mpp?: boolean | undefined
     /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */

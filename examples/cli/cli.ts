@@ -8,7 +8,7 @@ import { Actions } from 'viem/tempo'
 import { Provider } from '../../src/cli/index.js'
 
 const provider = Provider.create({
-  feePayerUrl: 'https://sponsor.moderato.tempo.xyz',
+  feePayer: 'https://sponsor.moderato.tempo.xyz',
   mpp: true,
   testnet: true,
 })

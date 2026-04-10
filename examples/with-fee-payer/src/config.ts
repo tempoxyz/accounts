@@ -12,7 +12,7 @@ const feePayerUrl = await (async () => {
 
 export const config = createConfig({
   chains: [tempo, tempoModerato],
-  connectors: [tempoWallet({ testnet: true, feePayerUrl })],
+  connectors: [tempoWallet({ testnet: true, feePayer: feePayerUrl })],
   multiInjectedProviderDiscovery: false,
   transports: {
     [tempo.id]: http(),

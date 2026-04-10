@@ -19,15 +19,17 @@ export function fromChainId(
   chainId: number | undefined,
   options: fromChainId.Options,
 ): Client<Transport, typeof tempo> {
-  const { chains, feePayer, provider, store } = options
+  const { chains, feePayer: feePayerOption, provider, store } = options
+  const feePayerUrl = typeof feePayerOption === 'string' ? feePayerOption : feePayerOption?.url
+  const precedence = (typeof feePayerOption === 'object' ? feePayerOption?.precedence : undefined) ?? 'fee-payer-first'
   const id = chainId ?? store.getState().chainId
-  const key = `${id}:${provider ? 'p' : ''}:${feePayer ?? ''}`
+  const key = `${id}:${provider ? 'p' : ''}:${feePayerUrl ?? ''}:${precedence}`
   let client = clients.get(key)
   if (!client) {
     const chain = chains.find((c) => c.id === id) ?? chains[0]!
     const base = http()
     const transport_base = provider ? providerTransport(provider, base) : base
-    const transport = feePayer ? feePayerTransport(transport_base, feePayer) : transport_base
+    const transport = feePayerUrl ? feePayerTransport(transport_base, feePayerUrl, precedence) : transport_base
     client = createClient({ chain, transport, pollingInterval: 1000 })
     clients.set(key, client)
   }
@@ -38,8 +40,13 @@ export declare namespace fromChainId {
   type Options = {
     /** Supported chains. */
     chains: readonly [Chain, ...Chain[]]
-    /** Sponsor service URL. When set, the transport routes sponsored RPC calls to this URL. */
-    feePayer?: string | undefined
+    /** Fee payer configuration. A URL string or config object with `url` and `precedence`. */
+    feePayer?: string | {
+      /** Fee payer service URL. */
+      url: string
+      /** Signing precedence. @default 'fee-payer-first' */
+      precedence?: 'fee-payer-first' | 'user-first' | undefined
+    } | undefined
     /** Provider instance. When set, the transport routes requests through the provider first, falling back to HTTP for unknown methods. */
     provider?: ox_Provider.Provider | undefined
     /** Reactive state store. */
@@ -66,7 +73,7 @@ function providerTransport(provider: ox_Provider.Provider, base: Transport): Tra
   }
 }
 
-function feePayerTransport(base: Transport, url: string): Transport {
+function feePayerTransport(base: Transport, url: string, precedence: 'fee-payer-first' | 'user-first'): Transport {
   return (params) => {
     const baseTransport = base(params)
     const sponsor = http(url)(params)
@@ -76,7 +83,7 @@ function feePayerTransport(base: Transport, url: string): Transport {
       async request({ method, params: rpcParams }: { method: string; params?: unknown }) {
         const args = rpcParams as readonly unknown[] | undefined
 
-        if (method === 'eth_fillTransaction') {
+        if (precedence === 'fee-payer-first' && method === 'eth_fillTransaction') {
           const request = args?.[0]
           if (
             request &&
