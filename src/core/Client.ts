@@ -21,7 +21,9 @@ export function fromChainId(
 ): Client<Transport, typeof tempo> {
   const { chains, feePayer: feePayerOption, provider, store } = options
   const feePayerUrl = typeof feePayerOption === 'string' ? feePayerOption : feePayerOption?.url
-  const precedence = (typeof feePayerOption === 'object' ? feePayerOption?.precedence : undefined) ?? 'fee-payer-first'
+  const precedence =
+    (typeof feePayerOption === 'object' ? feePayerOption?.precedence : undefined) ??
+    'fee-payer-first'
   const id = chainId ?? store.getState().chainId
   const key = `${id}:${provider ? 'p' : ''}:${feePayerUrl ?? ''}:${precedence}`
   let client = clients.get(key)
@@ -29,7 +31,9 @@ export function fromChainId(
     const chain = chains.find((c) => c.id === id) ?? chains[0]!
     const base = http()
     const transport_base = provider ? providerTransport(provider, base) : base
-    const transport = feePayerUrl ? feePayerTransport(transport_base, feePayerUrl, precedence) : transport_base
+    const transport = feePayerUrl
+      ? feePayerTransport(transport_base, feePayerUrl, precedence)
+      : transport_base
     client = createClient({ chain, transport, pollingInterval: 1000 })
     clients.set(key, client)
   }
@@ -41,12 +45,15 @@ export declare namespace fromChainId {
     /** Supported chains. */
     chains: readonly [Chain, ...Chain[]]
     /** Fee payer configuration. A URL string or config object with `url` and `precedence`. */
-    feePayer?: string | {
-      /** Fee payer service URL. */
-      url: string
-      /** Signing precedence. @default 'fee-payer-first' */
-      precedence?: 'fee-payer-first' | 'user-first' | undefined
-    } | undefined
+    feePayer?:
+      | string
+      | {
+          /** Fee payer service URL. */
+          url: string
+          /** Signing precedence. @default 'fee-payer-first' */
+          precedence?: 'fee-payer-first' | 'user-first' | undefined
+        }
+      | undefined
     /** Provider instance. When set, the transport routes requests through the provider first, falling back to HTTP for unknown methods. */
     provider?: ox_Provider.Provider | undefined
     /** Reactive state store. */
@@ -73,7 +80,11 @@ function providerTransport(provider: ox_Provider.Provider, base: Transport): Tra
   }
 }
 
-function feePayerTransport(base: Transport, url: string, precedence: 'fee-payer-first' | 'user-first'): Transport {
+function feePayerTransport(
+  base: Transport,
+  url: string,
+  precedence: 'fee-payer-first' | 'user-first',
+): Transport {
   return (params) => {
     const baseTransport = base(params)
     const sponsor = http(url)(params)

@@ -1,5 +1,11 @@
 # accounts
 
+## 0.6.0
+
+### Minor Changes
+
+- 36db0d9: **Breaking:** Renamed `feePayerUrl` to `feePayer`.
+
 ## 0.5.9
 
 ### Patch Changes
