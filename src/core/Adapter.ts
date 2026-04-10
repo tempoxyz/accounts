@@ -133,8 +133,8 @@ export declare namespace getClient {
   type Options = {
     /** Chain ID. Defaults to the active chain. */
     chainId?: number | undefined
-    /** Fee payer service URL. */
-    feePayer?: string | undefined
+    /** Fee payer service URL, or `false` to opt out of fee payers for this transaction if set globally. */
+    feePayer?: string | false | undefined
   }
 }
 

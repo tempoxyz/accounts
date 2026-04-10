@@ -727,6 +727,27 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(Object.keys(result).length).toMatchInlineSnapshot(`2`)
       expect(result[Hex.fromNumber(tempo.id)]!.atomic.status).toMatchInlineSnapshot(`"supported"`)
     })
+
+    test('behavior: includes feePayer when configured', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        feePayer: 'https://fee-payer.example.com',
+      })
+
+      const result = await provider.request({ method: 'wallet_getCapabilities' })
+      expect(result[Hex.fromNumber(tempo.id)]!.feePayer).toMatchInlineSnapshot(`
+        {
+          "status": "supported",
+        }
+      `)
+    })
+
+    test('behavior: excludes feePayer when not configured', async () => {
+      const provider = Provider.create({ adapter: adapter() })
+
+      const result = await provider.request({ method: 'wallet_getCapabilities' })
+      expect(result[Hex.fromNumber(tempo.id)]!.feePayer).toBeUndefined()
+    })
   })
 
   describe('wallet_getBalances', () => {
@@ -1717,6 +1738,279 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const client = provider.getClient()
       const receipt = await waitForTransactionReceipt(client, { hash })
       expect(receipt.feePayer).not.toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: precedence fee-payer-first (default) on eth_sendTransaction', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        feePayer: server.url,
+      })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{ calls: [transferCall], feePayer: true }],
+      })
+
+      const client = provider.getClient()
+      const receipt = await waitForTransactionReceipt(client, { hash })
+      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: precedence fee-payer-first (default) on eth_sendTransactionSync', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        feePayer: server.url,
+      })
+
+      const connected = await connect(provider)
+      await fund(connected)
+      const syncTransferCall = Actions.token.transfer.call({
+        to: '0x0000000000000000000000000000000000000001',
+        token: Addresses.pathUsd,
+        amount: parseUnits('5', 6),
+      })
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [syncTransferCall], feePayer: true }],
+      })
+
+      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: precedence user-first on eth_sendTransaction', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        feePayer: { url: server.url, precedence: 'user-first' },
+      })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{ calls: [transferCall], feePayer: true }],
+      })
+
+      const client = provider.getClient()
+      const receipt = await waitForTransactionReceipt(client, { hash })
+      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: precedence user-first on eth_sendTransactionSync', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        feePayer: { url: server.url, precedence: 'user-first' },
+      })
+
+      const connected = await connect(provider)
+      await fund(connected)
+      const syncTransferCall = Actions.token.transfer.call({
+        to: '0x0000000000000000000000000000000000000001',
+        token: Addresses.pathUsd,
+        amount: parseUnits('6', 6),
+      })
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [syncTransferCall], feePayer: true }],
+      })
+
+      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: precedence user-first on eth_signTransaction', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        feePayer: { url: server.url, precedence: 'user-first' },
+      })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const signed = await provider.request({
+        method: 'eth_signTransaction',
+        params: [{ calls: [transferCall], feePayer: true }],
+      })
+
+      expect(signed).toMatch(/^0x78/)
+    })
+
+    test('behavior: feePayer: false opts out on eth_sendTransaction', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        feePayer: server.url,
+      })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{ calls: [transferCall], feePayer: false }],
+      })
+
+      expect(hash).toMatch(/^0x[0-9a-f]{64}$/)
+
+      const client = provider.getClient()
+      const receipt = await waitForTransactionReceipt(client, { hash })
+      expect(receipt.feePayer).not.toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: feePayer: false opts out on eth_sendTransactionSync', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        feePayer: server.url,
+      })
+
+      const connected = await connect(provider)
+      await fund(connected)
+      const syncTransferCall = Actions.token.transfer.call({
+        to: '0x0000000000000000000000000000000000000001',
+        token: Addresses.pathUsd,
+        amount: parseUnits('4', 6),
+      })
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [syncTransferCall], feePayer: false }],
+      })
+
+      expect(receipt.feePayer).not.toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: feePayer: false opts out on eth_signTransaction', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        feePayer: server.url,
+      })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const signed = await provider.request({
+        method: 'eth_signTransaction',
+        params: [{ calls: [transferCall], feePayer: false }],
+      })
+
+      expect(signed).toMatch(/^0x76/)
+    })
+
+    test('behavior: wallet_sendCalls with feePayer capability', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const result = await provider.request({
+        method: 'wallet_sendCalls',
+        params: [
+          {
+            calls: [transferCall],
+            capabilities: { feePayer: server.url },
+          },
+        ],
+      })
+
+      expect(result.id).toMatch(/^0x[0-9a-f]+$/)
+
+      const hash = result.id.slice(0, 66) as `0x${string}`
+      const client = provider.getClient()
+      const receipt = await waitForTransactionReceipt(client, { hash })
+      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: wallet_sendCalls with feePayer: true uses provider default', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        feePayer: server.url,
+      })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const result = await provider.request({
+        method: 'wallet_sendCalls',
+        params: [
+          {
+            calls: [transferCall],
+            capabilities: { feePayer: true },
+          },
+        ],
+      })
+
+      expect(result.id).toMatch(/^0x[0-9a-f]+$/)
+
+      const hash = result.id.slice(0, 66) as `0x${string}`
+      const client = provider.getClient()
+      const receipt = await waitForTransactionReceipt(client, { hash })
+      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: wallet_sendCalls with feePayer: false opts out', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        feePayer: server.url,
+      })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const result = await provider.request({
+        method: 'wallet_sendCalls',
+        params: [
+          {
+            calls: [transferCall],
+            capabilities: { feePayer: false },
+          },
+        ],
+      })
+
+      expect(result.id).toMatch(/^0x[0-9a-f]+$/)
+
+      const hash = result.id.slice(0, 66) as `0x${string}`
+      const client = provider.getClient()
+      const receipt = await waitForTransactionReceipt(client, { hash })
+      expect(receipt.feePayer).not.toBe(feePayerAccount.address.toLowerCase())
+    })
+
+    test('behavior: wallet_sendCalls with sync and feePayer capability', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+
+      const connected = await connect(provider)
+      await fund(connected)
+      const syncTransferCall = Actions.token.transfer.call({
+        to: '0x0000000000000000000000000000000000000001',
+        token: Addresses.pathUsd,
+        amount: parseUnits('7', 6),
+      })
+
+      const result = await provider.request({
+        method: 'wallet_sendCalls',
+        params: [
+          {
+            calls: [syncTransferCall],
+            capabilities: { feePayer: server.url, sync: true },
+          },
+        ],
+      })
+
+      expect(result.receipts?.[0]?.feePayer).toBe(
+        feePayerAccount.address.toLowerCase(),
+      )
     })
   })
 })

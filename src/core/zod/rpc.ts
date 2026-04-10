@@ -173,7 +173,12 @@ export namespace personal_sign {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
-const sendCallsCapabilities = z.optional(z.object({ sync: z.optional(z.boolean()) }))
+const sendCallsCapabilities = z.optional(
+  z.object({
+    feePayer: z.optional(z.union([z.boolean(), z.string()])),
+    sync: z.optional(z.boolean()),
+  }),
+)
 
 export namespace wallet_sendCalls {
   export const schema = Schema.defineItem({
@@ -256,6 +261,11 @@ export namespace wallet_getCapabilities {
         atomic: z.object({
           status: z.union([z.literal('supported'), z.literal('ready'), z.literal('unsupported')]),
         }),
+        feePayer: z.optional(
+          z.object({
+            status: z.union([z.literal('supported'), z.literal('unsupported')]),
+          }),
+        ),
       }),
     ),
   })

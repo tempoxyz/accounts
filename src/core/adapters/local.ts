@@ -194,7 +194,11 @@ export function local(options: local.Options): Adapter.Adapter {
         async signTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient({
-            feePayer: typeof feePayer === 'string' ? feePayer : undefined,
+            feePayer: (() => {
+              if (feePayer === false) return false
+              if (typeof feePayer === 'string') return feePayer
+              return undefined
+            })(),
           })
           const { account, prepared } = await withAccessKey(async (account, keyAuthorization) => ({
             account,
@@ -221,7 +225,11 @@ export function local(options: local.Options): Adapter.Adapter {
         async sendTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient({
-            feePayer: typeof feePayer === 'string' ? feePayer : undefined,
+            feePayer: (() => {
+              if (feePayer === false) return false
+              if (typeof feePayer === 'string') return feePayer
+              return undefined
+            })(),
           })
           const { account, prepared } = await withAccessKey(async (account, keyAuthorization) => ({
             account,
@@ -242,7 +250,11 @@ export function local(options: local.Options): Adapter.Adapter {
         async sendTransactionSync(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient({
-            feePayer: typeof feePayer === 'string' ? feePayer : undefined,
+            feePayer: (() => {
+              if (feePayer === false) return false
+              if (typeof feePayer === 'string') return feePayer
+              return undefined
+            })(),
           })
           const { account, prepared } = await withAccessKey(async (account, keyAuthorization) => ({
             account,

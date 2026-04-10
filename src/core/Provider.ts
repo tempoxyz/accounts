@@ -82,12 +82,16 @@ export function create(options: create.Options = {}): create.ReturnType {
   let providerRef: ox_Provider.Provider | undefined
 
   function getClient(
-    options: { chainId?: number | undefined; feePayer?: string | undefined } = {},
+    options: { chainId?: number | undefined; feePayer?: string | false | undefined } = {},
   ) {
     const { chainId, feePayer } = options
     return Client.fromChainId(chainId, {
       chains,
-      feePayer: feePayer ? { url: feePayer, precedence: feePayerConfig?.precedence } : undefined,
+      feePayer: (() => {
+        if (feePayer === false) return false
+        if (feePayer) return { url: feePayer, precedence: feePayerConfig?.precedence }
+        return undefined
+      })(),
       store,
     })
   }
@@ -353,7 +357,9 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const decoded = request._decoded.params?.[0]
                     const { calls = [], capabilities, chainId, from } = decoded ?? {}
                     const sync = capabilities?.sync
-                    const feePayer = resolveFeePayer(feePayerConfig ? true : undefined)
+                    const feePayer = resolveFeePayer(
+                      capabilities?.feePayer ?? (feePayerConfig ? true : undefined),
+                    )
                     const txRequest = {
                       calls,
                       chainId,
@@ -473,12 +479,14 @@ export function create(options: create.Options = {}): create.ReturnType {
                       {
                         accessKeys: { status: 'supported' }
                         atomic: { status: 'supported' }
+                        feePayer?: { status: 'supported' } | undefined
                       }
                     > = {}
                     for (const chain of filtered)
                       result[Hex.fromNumber(chain.id)] = {
                         accessKeys: { status: 'supported' },
                         atomic: { status: 'supported' },
+                        ...(feePayerConfig ? { feePayer: { status: 'supported' } } : {}),
                       }
                     return result as Rpc.wallet_getCapabilities.Encoded['returns']
                   }

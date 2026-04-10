@@ -20,12 +20,18 @@ export function fromChainId(
   options: fromChainId.Options,
 ): Client<Transport, typeof tempo> {
   const { chains, feePayer: feePayerOption, provider, store } = options
-  const feePayerUrl = typeof feePayerOption === 'string' ? feePayerOption : feePayerOption?.url
-  const precedence =
-    (typeof feePayerOption === 'object' ? feePayerOption?.precedence : undefined) ??
-    'fee-payer-first'
+  const feePayerUrl = (() => {
+    if (feePayerOption === false) return undefined
+    if (typeof feePayerOption === 'string') return feePayerOption
+    return feePayerOption?.url
+  })()
+  const precedence = (() => {
+    if (typeof feePayerOption === 'object' && feePayerOption !== null)
+      return feePayerOption.precedence ?? 'fee-payer-first'
+    return 'fee-payer-first'
+  })()
   const id = chainId ?? store.getState().chainId
-  const key = `${id}:${provider ? 'p' : ''}:${feePayerUrl ?? ''}:${precedence}`
+  const key = `${id}:${provider ? 'p' : ''}:${feePayerOption === false ? 'no-fp' : feePayerUrl ?? ''}:${precedence}`
   let client = clients.get(key)
   if (!client) {
     const chain = chains.find((c) => c.id === id) ?? chains[0]!
@@ -44,9 +50,10 @@ export declare namespace fromChainId {
   type Options = {
     /** Supported chains. */
     chains: readonly [Chain, ...Chain[]]
-    /** Fee payer configuration. A URL string or config object with `url` and `precedence`. */
+    /** Fee payer configuration. A URL string, config object, or `false` to opt out. */
     feePayer?:
       | string
+      | false
       | {
           /** Fee payer service URL. */
           url: string

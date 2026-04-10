@@ -277,7 +277,11 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const result = await withAccessKey(async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
-              feePayer: typeof feePayer === 'string' ? feePayer : undefined,
+              feePayer: (() => {
+                if (feePayer === false) return false
+                if (typeof feePayer === 'string') return feePayer
+                return undefined
+              })(),
             })
             const prepared = await prepareTransactionRequest(client, {
               account,
@@ -303,7 +307,11 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const result = await withAccessKey(async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
-              feePayer: typeof feePayer === 'string' ? feePayer : undefined,
+              feePayer: (() => {
+                if (feePayer === false) return false
+                if (typeof feePayer === 'string') return feePayer
+                return undefined
+              })(),
             })
             const prepared = await prepareTransactionRequest(client, {
               account,
@@ -329,7 +337,11 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const result = await withAccessKey(async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
-              feePayer: typeof feePayer === 'string' ? feePayer : undefined,
+              feePayer: (() => {
+                if (feePayer === false) return false
+                if (typeof feePayer === 'string') return feePayer
+                return undefined
+              })(),
             })
             const prepared = await prepareTransactionRequest(client, {
               account,
