@@ -16,8 +16,6 @@ main().catch((error) => {
 })
 
 async function main() {
-  configureLocalTls(host)
-
   const provider = Provider.create({
     host,
     keysPath: 'tmp/cli-auth-demo/keys.toml',
@@ -88,16 +86,4 @@ function openBrowser(url: string) {
         : { command: 'xdg-open', args: [url] }
   const child = spawn(cmd.command, cmd.args, { detached: true, stdio: 'ignore' })
   child.unref()
-}
-
-function configureLocalTls(value: string) {
-  const url = new URL(value)
-  if (url.protocol !== 'https:') return
-  if (
-    url.hostname !== 'localhost' &&
-    url.hostname !== '127.0.0.1' &&
-    !url.hostname.endsWith('.local')
-  )
-    return
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 }

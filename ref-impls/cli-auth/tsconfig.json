@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2024",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "strict": true,
     "skipLibCheck": true,
+    "lib": ["DOM", "DOM.Iterable", "ES2024"],
     "types": ["vp/client", "node", "typed-query-selector/strict"],
     "paths": {
       "accounts": ["../src/index.ts"],
