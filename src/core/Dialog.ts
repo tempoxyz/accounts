@@ -75,7 +75,21 @@ export function iframe(): Dialog {
 
     // Reuse existing iframe if the host matches — just swap the store/fallback refs.
     if (cached && cached.host === host) {
+      const oldStore = store
       store = parameters.store
+
+      // Migrate in-flight requests so responses land in the current store.
+      if (oldStore && oldStore !== store) {
+        const pending = oldStore
+          .getState()
+          .requestQueue.filter((q) => q.status === 'pending')
+        if (pending.length > 0)
+          store.setState((x) => ({
+            ...x,
+            requestQueue: [...x.requestQueue, ...pending],
+          }))
+      }
+
       fallback?.destroy()
       fallback = popup()(parameters)
       return cached.instance
