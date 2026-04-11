@@ -1,8 +1,8 @@
 import { createRootRoute, Outlet, useRouterState } from '@tanstack/react-router'
 import { reconnect } from '@wagmi/core'
+import { Remote } from 'accounts/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Remote } from 'accounts/react'
 
 import { remote, wagmiConfig } from '../lib/config.js'
 import * as Mode from '../lib/mode.js'
@@ -133,8 +133,7 @@ function Frame(props: { children: ReactNode; mode: Mode.Mode }) {
   const { children, mode } = props
 
   // Popup: no card chrome — the OS window is the chrome.
-  if (mode === 'popup')
-    return <div>{children}</div>
+  if (mode === 'popup') return <div>{children}</div>
 
   // Iframe + standalone: bordered card.
   return (

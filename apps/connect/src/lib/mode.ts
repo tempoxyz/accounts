@@ -11,8 +11,5 @@ export function get(search: Record<string, unknown>): Mode {
 
 /** Whether the window is framed (iframe or `window !== window.parent`). */
 export function ensureFramed(mode: Mode) {
-  return (
-    mode === 'iframe' ||
-    (typeof window !== 'undefined' && window !== window.parent)
-  )
+  return mode === 'iframe' || (typeof window !== 'undefined' && window !== window.parent)
 }
