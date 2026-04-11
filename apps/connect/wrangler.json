@@ -4,9 +4,7 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-02-13",
   "compatibility_flags": ["nodejs_compat"],
-  "kv_namespaces": [
-    { "binding": "KV", "id": "0bf8c7740a1e46e38f22cdee1ffc9a0b" }
-  ],
+  "kv_namespaces": [{ "binding": "KV", "id": "0bf8c7740a1e46e38f22cdee1ffc9a0b" }],
   "observability": {
     "enabled": true
   },

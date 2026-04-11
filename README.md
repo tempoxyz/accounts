@@ -74,8 +74,8 @@ pnpm test             # run tests
 
 ### Services
 
-| Service    | OrbStack URL                            |
-| ---------- | --------------------------------------- |
+| Service    | OrbStack URL                     |
+| ---------- | -------------------------------- |
 | playground | `https://playground.tempo.local` |
 | connect    | `https://connect.tempo.local`    |
 | dialog-ref | `https://dialog-ref.tempo.local` |

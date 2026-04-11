@@ -16,6 +16,7 @@
 - **Options default `= {}`** — use `options: Options = {}` not `options?: Options`.
 - **Namespace params and return types** — place function parameter and return types in a `declare namespace` matching the function name (e.g. `local.Options`, `createAccount.ReturnType`).
 - **Minimal variable names** — prefer short, obvious names. Use `options` not `serveOptions`, `fn` not `callbackFunction`, etc. Context makes meaning clear.
+- **Don't repeat the module name in exports** — if the module is `mode.ts`, export `get` not `getMode`. Callers write `Mode.get()` which already reads clearly.
 - **No redundant type annotations** — if the return type of a function already covers it, don't annotate intermediate variables. Let the return type do the work (e.g. `const cli = { ... }` not `const cli: ReturnType = { ... }`).
 - **Return directly** — don't declare a variable just to return it. Use `return { ... }` unless the variable is needed (e.g. self-reference for chaining).
 - **Skip braces for single-statement blocks** — omit `{}` for single-statement `if`, `for`, etc.
@@ -68,6 +69,12 @@
 ## Git Conventions
 
 - **Conventional commits** — use `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:` prefixes. Scope is optional (e.g. `feat(parser): add array coercion`).
+- **No section separator comments** — don't use `// ---` or `// ===` divider comments. Let JSDoc and whitespace provide structure.
+
+## React Component Conventions
+
+- **Colocate components in the file** — don't extract into separate component files until reusability is needed. Place helper components at the bottom of the file that uses them.
+- **Comment non-obvious intent** — add short inline comments next to code whose purpose isn't immediately clear from the code itself (e.g. mode branches, workarounds, why something is conditional). Don't comment what the code does — comment why.
 
 ## Learned User Preferences
 
