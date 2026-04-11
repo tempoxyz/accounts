@@ -60,7 +60,7 @@ Join the Telegram group to chat with the team and other devs: [@mpp_devs](https:
 
 ## Development
 
-Requires [Docker](https://docs.docker.com/get-docker/) and [OrbStack](https://orbstack.dev/) (recommended on macOS for automatic HTTPS `.orb.local` domains).
+Requires [Docker](https://docs.docker.com/get-docker/) and [OrbStack](https://orbstack.dev/) (recommended on macOS for automatic HTTPS `.tempo.local` domains).
 
 ```sh
 pnpm dev              # start all dev services via docker compose
@@ -76,10 +76,10 @@ pnpm test             # run tests
 
 | Service    | OrbStack URL                            |
 | ---------- | --------------------------------------- |
-| playground | `https://playground.accounts.orb.local` |
-| connect    | `https://connect.accounts.orb.local`    |
-| dialog-ref | `https://dialog-ref.accounts.orb.local` |
-| wagmi      | `https://wagmi.accounts.orb.local`      |
+| playground | `https://playground.tempo.local` |
+| connect    | `https://connect.tempo.local`    |
+| dialog-ref | `https://dialog-ref.tempo.local` |
+| wagmi      | `https://wagmi.tempo.local`      |
 
 ### Playgrounds
 

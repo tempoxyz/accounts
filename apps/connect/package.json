@@ -7,6 +7,8 @@
     "check:types": "tsc --noEmit",
     "deploy": "wrangler deploy",
     "dev": "vp dev",
+    "gen:types": "wrangler types",
+    "postinstall": "pnpm gen:types",
     "preview": "vp preview"
   },
   "dependencies": {

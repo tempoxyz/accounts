@@ -12,8 +12,7 @@ export const wagmiConfig = createConfig({
   chains: [tempo, tempoModerato],
   connectors: [
     webAuthn({
-      // WARNING: An `authUrl` must be passed in production.
-      // authUrl: '/webauthn',
+      authUrl: '/webauthn',
       storage: Storage.combine(Storage.cookie(), Storage.localStorage()),
     }),
   ],
