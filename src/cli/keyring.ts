@@ -185,7 +185,7 @@ function parse(text: string): readonly Entry[] {
 
 function stringify(keys: readonly Entry[]) {
   return [
-    '# Tempo wallet keys — managed by `tempo wallet`',
+    '# Tempo connect keys — managed by `tempo connect`',
     '# Do not edit manually.',
     '',
     ...keys.flatMap((key) => [

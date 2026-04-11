@@ -1,0 +1,35 @@
+{
+  "name": "connect",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vp build",
+    "check:types": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "dev": "vp dev",
+    "preview": "vp preview"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "catalog:",
+    "@tanstack/react-router": "catalog:",
+    "accounts": "workspace:*",
+    "hono": "catalog:",
+    "ox": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "viem": "catalog:",
+    "wagmi": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "catalog:",
+    "@tanstack/router-plugin": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vp": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

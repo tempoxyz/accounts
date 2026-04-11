@@ -18,7 +18,7 @@ import {
 } from './provider.js'
 
 export function App() {
-  const [adapterType, setAdapterType] = useState<AdapterType>('tempoWallet')
+  const [adapterType, setAdapterType] = useState<AdapterType>('tempoConnect')
   const [, rerender] = useState(0)
 
   function onSwitch(type: AdapterType) {
@@ -33,12 +33,12 @@ export function App() {
 
       <h2>Configuration</h2>
       <select value={adapterType} onChange={(e) => onSwitch(e.target.value as AdapterType)}>
-        <option value="tempoWallet">tempoWallet</option>
+        <option value="tempoConnect">tempoConnect</option>
         <option value="dialogRefImpl">dialogRefImpl</option>
         <option value="webAuthn">webAuthn</option>
         <option value="secp256k1">secp256k1</option>
       </select>
-      {(adapterType === 'tempoWallet' || adapterType === 'dialogRefImpl') && (
+      {(adapterType === 'tempoConnect' || adapterType === 'dialogRefImpl') && (
         <>
           {' '}
           <select
@@ -1045,7 +1045,7 @@ function OcclusionSimulator() {
     }
 
     function sync() {
-      const dialog = document.querySelector('dialog[data-tempo-wallet][open]')
+      const dialog = document.querySelector('dialog[data-tempo-connect][open]')
       if (!dialog) {
         overlay?.remove()
         overlay = null

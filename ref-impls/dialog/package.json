@@ -20,7 +20,6 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "typescript": "catalog:",
-    "vp": "catalog:",
-    "vite-plugin-mkcert": "^1.17.10"
+    "vp": "catalog:"
   }
 }

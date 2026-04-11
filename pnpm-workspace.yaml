@@ -1,5 +1,6 @@
 packages:
   - .
+  - apps/*
   - dialog
   - examples/*
   - playgrounds/*
@@ -10,9 +11,11 @@ blockExoticSubdeps: true
 catalog:
   '@cloudflare/vite-plugin': ^1.31.2
   '@cloudflare/workers-types': ^4.20260317.1
-  '@tanstack/react-query': 5.90.5
-  '@tanstack/react-router': ^1.166.7
-  '@tanstack/react-start': ^1.166.7
+  '@tanstack/react-query': 5.97.0
+  '@tanstack/react-router': 1.168.10
+  '@tanstack/react-start': ^1.167.24
+  '@tanstack/router-plugin': ^1.167.12
+  '@tailwindcss/vite': ^4.2.1
   '@total-typescript/ts-reset': ^0.6.1
   '@types/node': ^25.5.0
   '@types/react': ^19.1.16
@@ -21,16 +24,18 @@ catalog:
   '@vitejs/plugin-react': ^5.0.4
   '@wagmi/core': ^3.1.0
   hono: ^4.12.12
+  ox: ~0.14.15
   prool: ~0.2.3
   react: ^19.2.4
   react-dom: ^19.2.4
   tsx: ^4.21.0
+  tailwindcss: ^4.2.1
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
   viem: ^2.47.18
   vite: ^8.0.5
-  vp: npm:vite-plus@~0.1.14
-  wagmi: ^3.5.0
+  vp: npm:vite-plus@~0.1.16
+  wagmi: ^3.6.1
   wrangler: ^4.81.1
   zod: ^4.3.6
 minimumReleaseAge: 1440
@@ -39,6 +44,7 @@ minimumReleaseAgeExclude:
   - incur
   - mppx
   - viem
+  - ox
 
 onlyBuiltDependencies:
   - esbuild

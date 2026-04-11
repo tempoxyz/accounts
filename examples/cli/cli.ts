@@ -19,7 +19,7 @@ Cli.create('example', {
   async run() {
     const client = provider.getClient()
 
-    // 1. Connect Tempo Wallet and authorize an access key with limits + expiry.
+    // 1. Connect Tempo Connect and authorize an access key with limits + expiry.
     await connect(client, {
       capabilities: {
         authorizeAccessKey: {

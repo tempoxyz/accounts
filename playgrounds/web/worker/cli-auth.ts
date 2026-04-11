@@ -95,6 +95,7 @@ page.post(`${path}/approve`, async (c) => {
       {
         chainId: current.chainId,
         expiry: current.expiry,
+        scopes: [],
         ...(current.limits ? { limits: current.limits } : {}),
       },
     )

@@ -61,7 +61,7 @@ afterEach(() => {
     window.localStorage.clear()
     window.sessionStorage.clear()
   }
-  document.querySelectorAll('dialog[data-tempo-wallet]').forEach((el) => el.remove())
+  document.querySelectorAll('dialog[data-tempo-connect]').forEach((el) => el.remove())
   provider = undefined
 })
 
@@ -398,7 +398,7 @@ describe('edge cases', () => {
           params: [Hex.fromString('hello'), provider.store.getState().accounts[0]!.address],
         }),
         async () => {
-          const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
+          const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
           dialog.dispatchEvent(new Event('cancel'))
         },
       ),

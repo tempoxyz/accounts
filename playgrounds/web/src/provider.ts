@@ -3,7 +3,7 @@ import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
-export type AdapterType = 'secp256k1' | 'webAuthn' | 'tempoWallet' | 'dialogRefImpl'
+export type AdapterType = 'secp256k1' | 'webAuthn' | 'tempoConnect' | 'dialogRefImpl'
 export type DialogMode = 'iframe' | 'popup'
 export type ProviderValue = ReturnType<typeof Provider.create>
 
@@ -31,14 +31,14 @@ export const tokensMap = {
 export const tokens = testnet ? tokensMap.testnet : tokensMap.mainnet
 
 export let dialogMode: DialogMode = 'iframe'
-export let provider: ProviderValue = createProvider('tempoWallet')
+export let provider: ProviderValue = createProvider('tempoConnect')
 
 export function createProvider(adapterType: AdapterType): ProviderValue {
-  if (adapterType === 'tempoWallet')
+  if (adapterType === 'tempoConnect')
     return Provider.create({
       adapter: dialog({
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
-        host: import.meta.env.VITE_WALLET_DIALOG_HOST,
+        host: import.meta.env.VITE_CONNECT_HOST,
       }),
       mpp: true,
       testnet,
@@ -84,7 +84,7 @@ export function switchAdapter(adapterType: AdapterType) {
   provider = createProvider(adapterType)
 }
 
-export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 'tempoWallet') {
+export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 'tempoConnect') {
   dialogMode = mode
   Mppx.restore()
   provider = createProvider(adapterType)

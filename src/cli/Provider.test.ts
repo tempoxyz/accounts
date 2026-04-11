@@ -38,6 +38,7 @@ async function authorize(
     {
       chainId: BigInt(chain.id),
       expiry: expiry_,
+      scopes: [],
     },
   )
   const keyAuthorization = KeyAuthorization.toRpc(signed)
@@ -109,6 +110,7 @@ async function authorizePending(serverUrl: string, code: string) {
     {
       chainId: pending.chainId,
       expiry: pending.expiry,
+      scopes: [],
       ...(pending.limits ? { limits: pending.limits } : {}),
     },
   )

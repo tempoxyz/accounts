@@ -18,7 +18,7 @@ export default function App() {
   const { address, chainId, status } = useConnection()
   return (
     <div>
-      <h1>Wagmi + Tempo Wallet</h1>
+      <h1>Wagmi + Tempo Connect</h1>
 
       <h2>Connection</h2>
       <pre>

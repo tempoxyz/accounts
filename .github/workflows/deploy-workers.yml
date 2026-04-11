@@ -25,7 +25,7 @@ jobs:
           - name: Playground
             directory: playgrounds/web
             build-env: |
-              VITE_WALLET_DIALOG_HOST=https://wallet.tempo.xyz/embed
+              VITE_CONNECT_HOST=https://connect.tempo.xyz
               VITE_ENV=mainnet
           - name: Wagmi
             directory: playgrounds/wagmi

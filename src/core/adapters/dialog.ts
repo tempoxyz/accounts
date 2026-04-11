@@ -27,16 +27,16 @@ import * as Rpc from '../zod/rpc.js'
 export function dialog(options: dialog.Options = {}): Adapter.Adapter {
   const {
     dialog = Dialog.isInsecureContext() ? Dialog.popup() : Dialog.iframe(),
-    host = 'https://wallet.tempo.xyz/embed',
+    host = 'https://connect.tempo.xyz',
     icon = 'data:image/svg+xml,<svg width="269" height="269" viewBox="0 0 269 269" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="269" height="269" fill="black"/><path d="M123.273 190.794H93.445L121.09 105.318H85.7334L93.445 80.2642H191.95L184.238 105.318H150.773L123.273 190.794Z" fill="white"/></svg>',
-    name = 'Tempo Wallet',
+    name = 'Tempo Connect',
     rdns = 'xyz.tempo',
   } = options
 
   if (typeof window !== 'undefined' && !window.isSecureContext)
     console.warn(
       '[accounts] Detected insecure context (HTTP).',
-      `\n\nThe Tempo Wallet iframe dialog is not supported on HTTP origins (${window.location.origin})`,
+      `\n\nThe Tempo Connect iframe dialog is not supported on HTTP origins (${window.location.origin})`,
       'due to lack of WebAuthn passkey support in non-secure contexts.',
     )
 
@@ -404,7 +404,7 @@ export declare namespace dialog {
   type Options = {
     /** Dialog to use for the embed app. @default `Dialog.iframe()` (or `Dialog.popup()` in Safari/insecure contexts) */
     dialog?: Dialog.Dialog | undefined
-    /** URL of the embed app. @default `'https://wallet.tempo.xyz/embed'` */
+    /** URL of the embed app. @default `'https://connect.tempo.xyz'` */
     host?: string | undefined
     /** Data URI of the provider icon. */
     icon?: `data:image/${string}` | undefined
