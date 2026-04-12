@@ -1,4 +1,13 @@
+import { cx } from 'cva'
+import ArrowRightLeft from '~icons/lucide/arrow-right-left'
+import Fingerprint from '~icons/lucide/fingerprint'
+import ArrowUpRight from '~icons/lucide/arrow-up-right'
+import Copy from '~icons/lucide/copy'
+import LogIn from '~icons/lucide/log-in'
+import Shield from '~icons/lucide/shield-check'
+import Terminal from '~icons/lucide/terminal'
 import { Button } from '#/ui/Button.js'
+import { Frame } from '#/ui/Frame.js'
 import { Input } from '#/ui/Input.js'
 import { ThemeToggle } from '#/ui/ThemeToggle.js'
 import { createFileRoute } from '@tanstack/react-router'
@@ -16,6 +25,7 @@ const sidebar = [
   { id: 'typography', label: 'Typography' },
   { id: 'button-component', label: 'Button' },
   { id: 'input-component', label: 'Input' },
+  { id: 'frame-component', label: 'Frame' },
 ] as const
 
 function useActiveSection(ids: readonly string[]) {
@@ -292,8 +302,275 @@ function Design() {
               </div>
             </div>
           </div>
+
+          <GroupHeading id="frame-component">Frame</GroupHeading>
+          <p className="text-copy-14 text-foreground-secondary">
+            Card shell for dialog screens with header, body, footer, and action buttons.
+          </p>
+
+          <div className="mt-6 space-y-6">
+            <div>
+              <p className="text-heading-16 mb-3">Transaction Request</p>
+              <div className="w-[360px] rounded-lg border border-border bg-primary">
+                <Frame>
+                  <Frame.Header
+                    icon={<ArrowUpRight className="size-5" />}
+                    subtitle="Some description of the transaction might go here and could stretch onto two or even three lines."
+                    title="Review Transaction"
+                  />
+                  <Frame.Body>
+                    <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+                      <BalanceDiff addressLabel="to" addressValue="0x1a2b…9e8f" detail="50 USDC" label="Send USDC" type="debit" value="−$50.00" />
+                      <BalanceDiff addressLabel="from" addressValue="0xab12…34cd" detail="49.85 USDC.e" label="Receive USDC.e" type="credit" value="+$49.85" />
+                    </div>
+
+                    <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+                      <ScopeRow label="Fee" value="$0.01" />
+                    </div>
+                  </Frame.Body>
+                  <Frame.Footer>
+                    <Frame.ActionButtons
+                      primaryLabel="Approve"
+                      secondaryLabel="Reject"
+                    />
+                  </Frame.Footer>
+                </Frame>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-heading-16 mb-3">Direct Payment</p>
+              <div className="w-[360px] rounded-lg border border-border bg-primary">
+                <Frame>
+                  <Frame.Header
+                    icon={<ArrowUpRight className="size-5" />}
+                    subtitle="acmeswap.xyz"
+                    title="Transaction Request"
+                  />
+                  <Frame.Body>
+                    <div className="flex flex-col items-center gap-1 rounded-xl bg-gray-1 px-4 py-5 text-center">
+                      <p className="text-heading-32 tabular-nums">$50.00</p>
+                      <p className="text-label-13 text-foreground-secondary">to acmeswap.xyz</p>
+                    </div>
+
+                    <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+                      <ScopeRow label="Recipient" value="0x1a2b…9e8f" />
+                      <ScopeRow label="Currency" value="USDC.e" />
+                      <ScopeRow label="Fee" value="$0.01" />
+                    </div>
+                  </Frame.Body>
+                  <Frame.Footer>
+                    <Frame.ActionButtons
+                      primaryLabel="Pay $50.00"
+                      secondaryLabel="Reject"
+                    />
+                  </Frame.Footer>
+                </Frame>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-heading-16 mb-3">Authorize</p>
+              <div className="w-[360px] rounded-lg border border-border bg-primary">
+                <Frame>
+                  <Frame.Header
+                    icon={<Terminal className="size-5" />}
+                    subtitle="Some description of the authorization might go here and could stretch onto two or even three lines."
+                    title="Authorize Device"
+                  />
+                  <Frame.Body>
+                    <div className="rounded-xl bg-gray-1 px-4 py-5 text-center">
+                      <p className="text-label-12 text-foreground-secondary">
+                        Confirm this code matches your terminal
+                      </p>
+                      <p className="font-mono text-heading-32 tracking-[0.3em]">
+                        TRMK-92QF
+                      </p>
+                    </div>
+
+                    <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+                      <ScopeRow label="Spend USDC.e" suffix="/ hour" value="$100.00" />
+                      <ScopeRow label="Spend USDC" suffix="/ hour" value="$50.00" />
+                      <ScopeRow label="Expires" value="24 hours" />
+                    </div>
+                  </Frame.Body>
+                  <Frame.Footer>
+                    <Frame.ActionButtons
+                      primaryLabel="Approve"
+                      secondaryLabel="Reject"
+                    />
+                  </Frame.Footer>
+                </Frame>
+              </div>
+            </div>
+            <div>
+              <p className="text-heading-16 mb-3">Sign In</p>
+              <div className="w-[360px] rounded-lg border border-border bg-primary">
+                <Frame>
+                  <Frame.Header
+                    icon={<LogIn className="size-5" />}
+                    subtitle="Sign in or create your wallet."
+                    title="Sign in with Tempo"
+                  />
+                  <Frame.Body>
+                    <Input placeholder="Email address…" size="large" type="email" />
+                    <Button size="large" variant="primary">
+                      Continue
+                    </Button>
+
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-border" />
+                      <p className="text-label-12 text-foreground-secondary">or</p>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+
+                    <Button
+                      prefix={<Fingerprint className="size-4" />}
+                      size="large"
+                      variant="muted"
+                    >
+                      Continue with passkey
+                    </Button>
+
+                    <p className="text-center text-label-12 text-foreground-secondary">
+                      By continuing, you agree to the Terms of Service.
+                    </p>
+                  </Frame.Body>
+                </Frame>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-heading-16 mb-3">Logged In</p>
+              <div className="w-[360px] rounded-lg border border-border bg-primary">
+                <Frame>
+                  <Frame.Header
+                    icon={<LogIn className="size-5" />}
+                    subtitle="You're signing in to acmeswap.xyz"
+                    title="Welcome Back"
+                  />
+                  <Frame.Body>
+                    <div className="flex items-center gap-3 rounded-xl border border-border px-4 py-3">
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-2 text-label-14 font-medium text-blue-9">
+                        JD
+                      </div>
+                      <div className="flex min-w-0 flex-col">
+                        <p className="truncate text-copy-14 font-medium">jane@tempo.dev</p>
+                        <p className="truncate font-mono text-label-12 text-foreground-secondary">0x1a2b…9e8f</p>
+                      </div>
+                    </div>
+
+                  </Frame.Body>
+                  <Frame.Footer>
+                    <div className="flex flex-col gap-3">
+                      <Button prefix={<Fingerprint className="size-4" />} size="large" variant="primary">
+                        Continue with passkey
+                      </Button>
+                      <p className="text-center text-label-13 text-foreground-secondary">
+                        <button className="cursor-pointer transition-colors hover:text-foreground" type="button">
+                          Use a different account
+                        </button>
+                        {' · '}
+                        <button className="cursor-pointer transition-colors hover:text-foreground" type="button">
+                          Sign up
+                        </button>
+                      </p>
+                    </div>
+                  </Frame.Footer>
+                </Frame>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-heading-16 mb-3">Authorize Spend</p>
+              <div className="w-[360px] rounded-lg border border-border bg-primary">
+                <Frame>
+                  <Frame.Header
+                    icon={<Shield className="size-5" />}
+                    subtitle="acmeswap.xyz is requesting access to your wallet."
+                    title="Authorize Spend"
+                  />
+                  <Frame.Body>
+                    <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+                      <ScopeRow label="Spend USDC.e" suffix="/ hour" value="$100.00" />
+                      <ScopeRow label="Spend USDC" suffix="/ hour" value="$50.00" />
+                      <ScopeRow label="Expires" value="24 hours" />
+                    </div>
+                  </Frame.Body>
+                  <Frame.Footer>
+                    <Frame.ActionButtons
+                      primaryLabel="Approve"
+                      secondaryLabel="Reject"
+                    />
+                  </Frame.Footer>
+                </Frame>
+              </div>
+            </div>
+          </div>
         </div>
       </main>
+    </div>
+  )
+}
+
+function ScopeRow(props: { label: string; suffix?: string | undefined; value: string }) {
+  return (
+    <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
+      <p className="text-foreground-secondary">{props.label}</p>
+      <p>
+        <span className="font-medium">{props.value}</span>
+        {props.suffix && <span className="text-foreground-secondary"> {props.suffix}</span>}
+      </p>
+    </div>
+  )
+}
+
+function BalanceDiff(props: {
+  addressLabel?: string | undefined
+  addressValue?: string | undefined
+  detail: string
+  label: string
+  type: 'credit' | 'debit'
+  value: string
+}) {
+  const [showDetail, setShowDetail] = useState(false)
+  const color = props.type === 'credit' ? 'text-green-9' : 'text-red-9'
+
+  return (
+    <div className="flex items-center justify-between px-4 py-2.5">
+      <div className="flex flex-col">
+        <p className="text-label-14 font-medium">{props.label}</p>
+        {props.addressValue && (
+          <p className="flex items-center gap-1 text-[0.6875rem] text-foreground-secondary">
+            {props.addressLabel && <span>{props.addressLabel} </span>}
+            <span className="font-mono">{props.addressValue}</span>
+            <button
+              className="cursor-pointer opacity-40 transition-opacity hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation()
+                navigator.clipboard.writeText(props.addressValue!)
+              }}
+              type="button"
+            >
+              <Copy className="size-2.5" />
+            </button>
+          </p>
+        )}
+      </div>
+      <button
+        className={cx(
+          '-mr-1.5 flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 text-copy-14 font-medium tabular-nums transition-colors hover:bg-gray-1',
+          color,
+        )}
+        onClick={() => setShowDetail((s) => !s)}
+        type="button"
+      >
+        <span className="relative inline-grid items-center justify-items-end [&>span]:col-start-1 [&>span]:row-start-1 [&>span]:transition-opacity [&>span]:duration-150">
+          <span className={showDetail ? 'opacity-0' : 'opacity-100'}>{props.value}</span>
+          <span className={showDetail ? 'opacity-100' : 'opacity-0'}>{props.detail}</span>
+        </span>
+        <ArrowRightLeft className="size-3 opacity-50" />
+      </button>
     </div>
   )
 }

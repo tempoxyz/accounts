@@ -81,6 +81,7 @@
 - **`data-` attributes over ternaries** — express boolean/enum states as `data-*` attributes on the element and target them with Tailwind's `data-*:` variants instead of ternary expressions in `className`. For example, `data-active={active}` with `data-active:bg-gray-2` instead of `${active ? 'bg-gray-2' : ''}`.
 - **`cx` for class composition** — use `cx` from `cva` to merge class strings. Prefer `cx` over template literals for conditional classes.
 - **Alphabetize props** — order destructured props, type properties, and JSX attributes alphabetically.
+- **No margin for spacing** — use `gap` on the parent or `padding` instead of `mt-*`/`mb-*`/`ml-*`/`mr-*`. Margin creates invisible coupling between siblings; gap and padding keep spacing ownership clear.
 
 ## Dark Mode
 

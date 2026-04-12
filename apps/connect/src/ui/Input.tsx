@@ -35,7 +35,7 @@ export function Input(props: Input.Props) {
         )}
       </div>
 
-      {typeof error === 'string' && <p className="-mt-0.5 text-label-13 text-red-9">{error}</p>}
+      {typeof error === 'string' && <p className="text-label-13 text-red-9">{error}</p>}
     </div>
   )
 }

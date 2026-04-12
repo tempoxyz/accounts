@@ -95,6 +95,11 @@
   --pink-10: light-dark(oklch(26% 0.0977 359), oklch(95.74% 0.0326 350.08));
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @layer base {
   html {
     @apply bg-secondary text-foreground;
