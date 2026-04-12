@@ -2,6 +2,9 @@
   "name": "connect",
   "private": true,
   "type": "module",
+  "imports": {
+    "#/*": "./src/*"
+  },
   "scripts": {
     "build": "vp build",
     "check:types": "tsc --noEmit",
@@ -15,6 +18,7 @@
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "accounts": "workspace:*",
+    "cva": "1.0.0-beta.1",
     "hono": "catalog:",
     "ox": "catalog:",
     "react": "catalog:",
@@ -24,13 +28,17 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "catalog:",
-    "@tanstack/router-plugin": "catalog:",
+    "@iconify/json": "^2.2.461",
+    "@svgr/core": "^8.1.0",
+    "@svgr/plugin-jsx": "^8.1.0",
     "@tailwindcss/vite": "catalog:",
+    "@tanstack/router-plugin": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
+    "unplugin-icons": "^23.0.1",
     "vp": "catalog:",
     "wrangler": "catalog:"
   }

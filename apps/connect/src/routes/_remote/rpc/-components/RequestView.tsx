@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query'
 import type { Store } from 'accounts'
 import { Json } from 'ox'
 
-import { remote } from '../lib/config.js'
+import { remote } from '#/lib/config.js'
 
 /** Generic confirm/reject UI for an RPC request. */
 export function RequestView(props: RequestView.Props) {

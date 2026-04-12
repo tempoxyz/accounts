@@ -75,6 +75,108 @@
 
 - **Colocate components in the file** — don't extract into separate component files until reusability is needed. Place helper components at the bottom of the file that uses them.
 - **Comment non-obvious intent** — add short inline comments next to code whose purpose isn't immediately clear from the code itself (e.g. mode branches, workarounds, why something is conditional). Don't comment what the code does — comment why.
+- **Prefer Tailwind over style attributes** — use Tailwind utility classes instead of inline `style` props. Only use `style` for truly dynamic values that can't be expressed as utilities.
+- **Update the design reference page** — when altering the Tailwind theme (colors, typography tokens) or adding/changing shared UI components, update `apps/connect/src/routes/design.tsx` to reflect the changes.
+- **CVA for variant styles** — use `cva` for any component with visual variants (size, intent, state). Define variants declaratively instead of hand-rolling conditional class logic.
+- **`data-` attributes over ternaries** — express boolean/enum states as `data-*` attributes on the element and target them with Tailwind's `data-*:` variants instead of ternary expressions in `className`. For example, `data-active={active}` with `data-active:bg-gray-2` instead of `${active ? 'bg-gray-2' : ''}`.
+- **`cx` for class composition** — use `cx` from `cva` to merge class strings. Prefer `cx` over template literals for conditional classes.
+- **Alphabetize props** — order destructured props, type properties, and JSX attributes alphabetically.
+
+## Dark Mode
+
+- **No `dark:` prefix** — never use Tailwind's `dark:` variant. It uses `prefers-color-scheme` media query which ignores the `color-scheme` property set by the theme toggle. Instead, use `light-dark()` CSS custom properties in `styles.css` and reference them as Tailwind color tokens. All color tokens already adapt via `light-dark()`.
+
+## Color System
+
+The color system follows the Geist design system with 8 chromatic scales (gray, blue, red, amber, green, teal, purple, pink) and 10 steps per scale. Colors are defined in `apps/connect/src/styles.css` using `oklch` P3 values inside `light-dark()`.
+
+### Backgrounds
+
+- **Background 1** (`--bg-100`): default page/element background. Use in most cases — especially when color sits on top.
+- **Background 2** (`--bg-200`): secondary/recessed background. Use sparingly for subtle differentiation.
+
+### Scale Steps
+
+- **Steps 1–3 (Component Backgrounds)**: UI component fills. Step 1 = default, 2 = hover, 3 = active. If the component's default bg is Background 1, shift up: 1 = hover, 2 = active. Use 2–3 for small elements like badges.
+- **Steps 4–6 (Borders)**: UI component borders. Step 4 = default, 5 = hover, 6 = active.
+- **Steps 7–8 (High Contrast Backgrounds)**: solid fills for high-contrast components (buttons, toggles, progress bars). Step 7 = default, 8 = hover. Same value in light and dark mode — use these for button fills, not steps 9–10.
+- **Steps 9–10 (Text & Icons)**: accessible foreground colors. Step 9 = secondary text/icons, 10 = primary text/icons. These invert lightness between themes (dark in light mode, light in dark mode) — never use them for backgrounds or fills.
+
+### Usage Rules
+
+- **Solid button fills** use steps 7–8 (same in both themes). Never use 9–10 for fills — they flip lightness across themes.
+- **Text on colored backgrounds** must contrast: use `text-white` or `text-black` on 7–8 fills, not scale text colors.
+- **Gray scale** is achromatic (`oklch(L% 0 0)`). All chromatic scales use P3 oklch values.
+- **Semantic aliases**: `--color-foreground` = gray-10, `--color-foreground-secondary` = gray-9, `--color-border` = gray-4, `--color-border-hover` = gray-5, `--color-border-active` = gray-6.
+
+## Design Guidelines
+
+Reference when building, reviewing, or refactoring UI components and interactions.
+
+### Interactions
+
+- **Keyboard works everywhere.** All flows are keyboard-operable & follow WAI-ARIA Authoring Patterns.
+- **Clear focus.** Use `:focus-visible` (not `:focus`). Add `:focus-within` for grouped controls.
+- **Match visual & hit targets.** If visual target < 24px, expand hit target to ≥ 24px. On mobile, minimum is 44px.
+- **Loading buttons.** Show a loading indicator **and** keep the original label visible.
+- **Minimum loading-state duration.** Add a show-delay (~150–300ms) and a minimum visible time (~300–500ms) to avoid flicker.
+- **URL as state.** Persist filters, tabs, pagination, expanded panels in the URL so share, refresh, and Back/Forward work.
+- **Optimistic updates.** Update UI immediately when success is likely. On failure, show an error & roll back or offer Undo.
+- **Ellipsis for further input & loading.** Menu items that open follow-up dialogs end with `…` (e.g., "Rename…"). Loading labels end with `…` (e.g., "Saving…").
+- **Confirm destructive actions.** Require confirmation or provide Undo with a safe window.
+- **Tooltip timing.** Delay the first tooltip in a group; subsequent peer tooltips show with no delay.
+- **Autofocus for speed.** On desktop screens with a single primary input, autofocus it. Avoid on mobile (keyboard causes layout shift).
+- **Links are links.** Use `<a>` (or framework `<Link>`) for navigation — never `<button>` or `<div>`.
+- **Don't block paste.** Never disable paste in `<input>` or `<textarea>`.
+- **Mobile input size.** `<input>` font size ≥ 16px on mobile to prevent iOS Safari auto-zoom.
+
+### Animations
+
+- **Honor `prefers-reduced-motion`.** Always provide a reduced-motion variant.
+- **Implementation preference.** CSS → Web Animations API → JS libraries (e.g., `motion`).
+- **GPU-accelerated properties.** Stick to `transform` and `opacity`. Avoid `width`, `height`, `top`, `left`.
+- **Never `transition: all`.** Explicitly list only the properties you animate.
+- **Interruptible.** Animations are cancelable by user input.
+
+### Layout
+
+- **Optical alignment.** Adjust ±1px when perception beats geometry.
+- **Responsive coverage.** Verify on mobile, laptop, and ultra-wide.
+- **Let the browser size things.** Prefer flex/grid/intrinsic layout over JS measuring.
+
+### Content
+
+- **Inline help first.** Prefer inline explanations; use tooltips as a last resort.
+- **Stable skeletons.** Skeletons mirror final content exactly to avoid layout shift.
+- **All states designed.** Empty, sparse, dense, and error states.
+- **Tabular numbers for comparisons.** Use `font-variant-numeric: tabular-nums` for numeric columns.
+- **Icons have labels.** `aria-label` on icon-only buttons.
+- **Semantics before ARIA.** Prefer native elements (`button`, `a`, `label`, `table`) before `aria-*`.
+- **No dead ends.** Every screen offers a next step or recovery path.
+
+### Forms
+
+- **Enter submits.** When a text input is focused, Enter submits. In `<textarea>`, ⌘/⌃+Enter submits.
+- **Labels everywhere.** Every control has a `<label>` or is associated with one.
+- **Don't block typing.** Even number-only fields allow any input and show validation feedback.
+- **Don't pre-disable submit.** Allow submitting incomplete forms to surface validation feedback.
+- **Error placement.** Show errors next to their fields. On submit, focus the first error.
+- **Placeholder with ellipsis.** End placeholders with `…`. Set an example value (e.g., `sk-012345679…`).
+
+### Design
+
+- **Layered shadows.** Mimic ambient + direct light with at least two shadow layers.
+- **Crisp borders.** Combine borders and shadows; semi-transparent borders improve edge clarity.
+- **Nested radii.** Child radius ≤ parent radius, concentric so curves align.
+- **Interactions increase contrast.** `:hover`, `:active`, `:focus` states have more contrast than rest.
+- **Minimum contrast.** Prefer APCA over WCAG 2 for perceptual accuracy.
+
+### Performance
+
+- **Minimize re-renders.** Track with React DevTools or React Scan.
+- **Network latency budgets.** `POST`/`PATCH`/`DELETE` complete in < 500ms.
+- **Virtualize large lists.** Use virtualization or `content-visibility: auto`.
+- **No image-caused CLS.** Set explicit image dimensions and reserve space.
 
 ## Learned User Preferences
 

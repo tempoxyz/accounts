@@ -145,7 +145,6 @@ export function iframe(): Dialog {
     Object.assign(frame.style, {
       backgroundColor: 'transparent',
       border: '0',
-      colorScheme: 'normal',
       height: '100%',
       left: '0',
       position: 'fixed',

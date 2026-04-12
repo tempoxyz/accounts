@@ -5,9 +5,9 @@ import { Remote as RemoteReact } from 'accounts/react'
 import { useState } from 'react'
 import { useConnection } from 'wagmi'
 
-import { remote } from '../../lib/config.js'
+import { remote } from '#/lib/config.js'
 
-export const Route = createFileRoute('/rpc/wallet_connect')({
+export const Route = createFileRoute('/_remote/rpc/wallet_connect')({
   component: Wrapper,
   validateSearch: (search) => Remote.validateSearch(remote, search, { method: 'wallet_connect' }),
 })

@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Remote } from 'accounts'
 
-import { RequestView } from '../../components/RequestView.js'
-import { remote } from '../../lib/config.js'
+import { RequestView } from './-components/RequestView.js'
+import { remote } from '#/lib/config.js'
 
-export const Route = createFileRoute('/rpc/eth_signTransaction')({
+export const Route = createFileRoute('/_remote/rpc/eth_sendTransaction')({
   component: Component,
   validateSearch: (search) =>
-    Remote.validateSearch(remote, search, { method: 'eth_signTransaction' }),
+    Remote.validateSearch(remote, search, { method: 'eth_sendTransaction' }),
 })
 
 function Component() {
