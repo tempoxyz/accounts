@@ -1,10 +1,16 @@
 import { remote } from '#/lib/config.js'
+import { Button } from '#/ui/Button.js'
+import { Frame } from '#/ui/Frame.js'
+import { Input } from '#/ui/Input.js'
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Remote } from 'accounts'
 import { Remote as RemoteReact } from 'accounts/react'
 import { useState } from 'react'
 import { useConnection } from 'wagmi'
+import ChevronRight from '~icons/lucide/chevron-right'
+import Fingerprint from '~icons/lucide/fingerprint'
+import LogIn from '~icons/lucide/log-in'
 
 export const Route = createFileRoute('/_remote/rpc/wallet_connect')({
   component: Wrapper,
@@ -15,6 +21,14 @@ function Wrapper() {
   const search = Route.useSearch()
   return <Component key={search.id} />
 }
+
+type Submit = ReturnType<
+  typeof useMutation<
+    unknown,
+    Error,
+    { method?: string | undefined; name?: string | undefined } | undefined
+  >
+>
 
 function Component() {
   const search = Route.useSearch()
@@ -47,24 +61,17 @@ function Component() {
   })
 
   if (screen === 'continue')
-    return <Continue submit={submit} onSignUp={() => setScreen('sign-in-sign-up')} />
-  return <SignInOrSignUp submit={submit} method={method} />
+    return <Continue onSignUp={() => setScreen('sign-in-sign-up')} submit={submit} />
+  return <SignInOrSignUp method={method} submit={submit} />
 }
 
-type Submit = ReturnType<
-  typeof useMutation<
-    unknown,
-    Error,
-    { method?: string | undefined; name?: string | undefined } | undefined
-  >
->
-
-function Continue(props: { submit: Submit; onSignUp: () => void }) {
-  const { submit, onSignUp } = props
+function Continue(props: { onSignUp: () => void; submit: Submit }) {
+  const { onSignUp, submit } = props
   const origin = RemoteReact.useState(remote, (s) => s.origin)
   const { address } = useConnection()
   const host = origin ? new URL(origin).host : undefined
-  const truncated = address ? `${address.slice(0, 8)}...${address.slice(-6)}` : undefined
+  const truncated = address ? `${address.slice(0, 8)}…${address.slice(-6)}` : undefined
+  const initials = 'U'
 
   return (
     <form
@@ -73,23 +80,54 @@ function Continue(props: { submit: Submit; onSignUp: () => void }) {
         submit.mutate({})
       }}
     >
-      <h2>Sign in</h2>
-      <p>
-        Continue as <code>{truncated}</code> on {host}
-      </p>
-      <button type="submit" disabled={submit.isPending}>
-        Continue with Passkey
-      </button>{' '}
-      <button type="button" onClick={onSignUp}>
-        Sign up
-      </button>
-      {submit.isError && <p style={{ color: 'red' }}>{submit.error.message}</p>}
+      <Frame>
+        <Frame.Header
+          icon={<LogIn className="size-5" />}
+          subtitle={host ? `You're signing in to ${host}` : 'Sign in to continue.'}
+          title="Welcome Back"
+        />
+        <Frame.Footer>
+          <div className="flex flex-col gap-2.5">
+            <button
+              className="flex h-[38px] w-full cursor-pointer items-center gap-3 rounded-lg border border-border px-3 transition-colors hover:bg-gray-1"
+              onClick={onSignUp}
+              type="button"
+            >
+              <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-2 text-label-12 font-medium text-blue-9">
+                {initials}
+              </div>
+              <p className="min-w-0 flex-1 truncate text-left font-mono text-label-13">
+                {truncated}
+              </p>
+              <ChevronRight className="size-4 shrink-0 text-foreground-secondary" />
+            </button>
+            <Button
+              loading={submit.isPending}
+              prefix={<Fingerprint className="size-4" />}
+              type="submit"
+              variant="primary"
+            >
+              Continue with passkey
+            </Button>
+            {submit.isError && (
+              <p className="text-label-13 text-red-9">{submit.error.message}</p>
+            )}
+            <button
+              className="cursor-pointer text-label-13 text-foreground-secondary transition-colors hover:text-foreground"
+              onClick={onSignUp}
+              type="button"
+            >
+              Create another account
+            </button>
+          </div>
+        </Frame.Footer>
+      </Frame>
     </form>
   )
 }
 
-function SignInOrSignUp(props: { submit: Submit; method: string | undefined }) {
-  const { submit, method } = props
+function SignInOrSignUp(props: { method: string | undefined; submit: Submit }) {
+  const { method, submit } = props
   const origin = RemoteReact.useState(remote, (s) => s.origin)
   const host = origin ? new URL(origin).host : undefined
 
@@ -101,15 +139,42 @@ function SignInOrSignUp(props: { submit: Submit; method: string | undefined }) {
         submit.mutate({ method: method ?? 'register', ...(email ? { name: email } : {}) })
       }}
     >
-      <h2>Sign in</h2>
-      <p>Sign in to {host}</p>
-      <div>
-        <input type="email" name="email" required placeholder="example@tempo.xyz" />
-      </div>
-      <button type="submit" disabled={submit.isPending}>
-        Continue
-      </button>
-      {submit.isError && <p style={{ color: 'red' }}>{submit.error.message}</p>}
+      <Frame>
+        <Frame.Header
+          icon={<LogIn className="size-5" />}
+          subtitle={host ? `Sign in to ${host}` : 'Sign in or create your wallet.'}
+          title="Sign in with Tempo"
+        />
+        <Frame.Body>
+          <Input name="email" placeholder="Email address…" required type="email" />
+          <Button loading={submit.isPending} type="submit" variant="primary">
+            Continue
+          </Button>
+
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <p className="text-label-12 text-foreground-secondary">or</p>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <Button
+            onClick={() => submit.mutate({ method: 'login' })}
+            prefix={<Fingerprint className="size-4" />}
+            type="button"
+            variant="muted"
+          >
+            Continue with passkey
+          </Button>
+
+          {submit.isError && (
+            <p className="text-label-13 text-red-9">{submit.error.message}</p>
+          )}
+
+          <p className="text-center text-label-12 text-foreground-secondary">
+            By continuing, you agree to the Terms of Service.
+          </p>
+        </Frame.Body>
+      </Frame>
     </form>
   )
 }

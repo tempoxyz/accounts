@@ -73,7 +73,13 @@ function Page(props: { children: ReactNode; mode: Mode.Mode }) {
     return () => window.removeEventListener('keydown', handler)
   }, [framed, mode, rejectAll])
 
-  // Iframe: fixed overlay with semi-transparent backdrop.
+  // Iframe: make html transparent so the backdrop shows through.
+  useEffect(() => {
+    if (!framed) return
+    document.documentElement.style.backgroundColor = 'transparent'
+    return () => { document.documentElement.style.backgroundColor = '' }
+  }, [framed])
+
   if (framed)
     return (
       <div

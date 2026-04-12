@@ -27,7 +27,7 @@ export namespace Frame {
           )}
           <h2 className="text-heading-20">{title}</h2>
         </div>
-        {subtitle && <p className="text-copy-14 text-foreground-secondary">{subtitle}</p>}
+        {subtitle && <p className="text-copy-15 text-foreground-secondary">{subtitle}</p>}
       </div>
     )
   }

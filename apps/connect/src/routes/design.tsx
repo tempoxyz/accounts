@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import ArrowRightLeft from '~icons/lucide/arrow-right-left'
 import ArrowUpRight from '~icons/lucide/arrow-up-right'
 import ChevronDown from '~icons/lucide/chevron-down'
+import ChevronRight from '~icons/lucide/chevron-right'
 import CirclePlus from '~icons/lucide/circle-plus'
 import Copy from '~icons/lucide/copy'
 import Fingerprint from '~icons/lucide/fingerprint'
@@ -472,39 +473,29 @@ function Design() {
                     subtitle="You're signing in to acmeswap.xyz"
                     title="Welcome Back"
                   />
-                  <Frame.Body>
-                    <div className="flex items-center gap-3 rounded-xl border border-border px-4 py-3">
-                      <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-2 text-label-14 font-medium text-blue-9">
-                        JD
-                      </div>
-                      <div className="flex min-w-0 flex-col">
-                        <p className="truncate text-copy-14 font-medium">jane@tempo.dev</p>
-                        <p className="truncate font-mono text-label-12 text-foreground-secondary">
+                  <Frame.Footer>
+                    <div className="flex flex-col gap-2.5">
+                      <button
+                        className="flex h-[38px] w-full cursor-pointer items-center gap-3 rounded-lg border border-border px-3 transition-colors hover:bg-gray-1"
+                        type="button"
+                      >
+                        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-2 text-label-12 font-medium text-blue-9">
+                          JD
+                        </div>
+                        <p className="min-w-0 flex-1 truncate text-left font-mono text-label-13">
                           0x1a2b…9e8f
                         </p>
-                      </div>
-                    </div>
-                  </Frame.Body>
-                  <Frame.Footer>
-                    <div className="flex flex-col gap-3">
+                        <ChevronRight className="size-4 shrink-0 text-foreground-secondary" />
+                      </button>
                       <Button prefix={<Fingerprint className="size-4" />} variant="primary">
                         Continue with passkey
                       </Button>
-                      <p className="text-center text-label-13 text-foreground-secondary">
-                        <button
-                          className="cursor-pointer transition-colors hover:text-foreground"
-                          type="button"
-                        >
-                          Use a different account
-                        </button>
-                        {' · '}
-                        <button
-                          className="cursor-pointer transition-colors hover:text-foreground"
-                          type="button"
-                        >
-                          Sign up
-                        </button>
-                      </p>
+                      <button
+                        className="cursor-pointer text-label-13 text-foreground-secondary transition-colors hover:text-foreground"
+                        type="button"
+                      >
+                        Create another account
+                      </button>
                     </div>
                   </Frame.Footer>
                 </Frame>

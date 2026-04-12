@@ -3,7 +3,7 @@
 :root {
   color-scheme: light dark;
 
-  --bg-100: light-dark(#ffffff, #0a0a0a);
+  --bg-100: light-dark(#ffffff, #141414);
   --bg-200: light-dark(#fafafa, #000000);
 
   --gray-1: light-dark(oklch(96.19% 0 0), oklch(21.56% 0 0));
@@ -294,6 +294,11 @@
   --text-copy-16--line-height: 1.6;
   --text-copy-16--letter-spacing: 0em;
   --text-copy-16--font-weight: 400;
+
+  --text-copy-15: 0.9375rem;
+  --text-copy-15--line-height: 1.6;
+  --text-copy-15--letter-spacing: 0em;
+  --text-copy-15--font-weight: 400;
 
   --text-copy-14: 0.875rem;
   --text-copy-14--line-height: 1.6;
