@@ -1,11 +1,10 @@
+import { remote } from '#/lib/config.js'
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Remote } from 'accounts'
 import { Remote as RemoteReact } from 'accounts/react'
 import { useState } from 'react'
 import { useConnection } from 'wagmi'
-
-import { remote } from '#/lib/config.js'
 
 export const Route = createFileRoute('/_remote/rpc/wallet_connect')({
   component: Wrapper,

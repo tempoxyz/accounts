@@ -23,11 +23,7 @@ export function Button(props: Button.Props) {
       disabled={disabled || loading}
       {...rest}
     >
-      {loading ? (
-        <SpinnerIcon />
-      ) : prefix ? (
-        <span className="shrink-0">{prefix}</span>
-      ) : null}
+      {loading ? <SpinnerIcon /> : prefix ? <span className="shrink-0">{prefix}</span> : null}
       {children}
       {suffix && !loading ? <span className="shrink-0">{suffix}</span> : null}
     </button>
@@ -56,30 +52,12 @@ export namespace Button {
     ],
     variants: {
       variant: {
-        primary: [
-          'bg-blue-7 text-white border-transparent',
-          'hover:bg-blue-8',
-        ],
-        secondary: [
-          'bg-primary text-foreground border-border',
-          'hover:bg-gray-1',
-        ],
-        muted: [
-          'bg-gray-2 text-foreground border-transparent',
-          'hover:bg-gray-3',
-        ],
-        invert: [
-          'bg-invert text-invert-foreground border-transparent',
-          'hover:opacity-80',
-        ],
-        error: [
-          'bg-red-7 text-white border-transparent',
-          'hover:bg-red-8',
-        ],
-        warning: [
-          'bg-amber-7 text-black border-transparent',
-          'hover:bg-amber-8',
-        ],
+        primary: ['bg-blue-7 text-white border-transparent', 'hover:bg-blue-8'],
+        secondary: ['bg-primary text-foreground border-border', 'hover:bg-gray-1'],
+        muted: ['bg-gray-2 text-foreground border-transparent', 'hover:bg-gray-3'],
+        invert: ['bg-invert text-invert-foreground border-transparent', 'hover:opacity-80'],
+        error: ['bg-red-7 text-white border-transparent', 'hover:bg-red-8'],
+        warning: ['bg-amber-7 text-black border-transparent', 'hover:bg-amber-8'],
       },
       size: {
         small: 'h-8 text-button-12 gap-1.5 rounded-md px-3',
@@ -111,7 +89,12 @@ export namespace Button {
 
 function SpinnerIcon() {
   return (
-    <svg className="size-4 animate-[spin_1.2s_steps(12)_infinite]" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg
+      className="size-4 animate-[spin_1.2s_steps(12)_infinite]"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
       {Array.from({ length: 12 }, (_, i) => (
         <line
           key={i}

@@ -3,16 +3,7 @@ import type { ReactNode } from 'react'
 
 /** Styled text input with optional prefix/suffix, error state, and label. */
 export function Input(props: Input.Props) {
-  const {
-    className,
-    disabled,
-    error,
-    label,
-    prefix,
-    size,
-    suffix,
-    ...rest
-  } = props
+  const { className, disabled, error, label, prefix, size, suffix, ...rest } = props
 
   return (
     <div className="grid gap-2">
@@ -44,9 +35,7 @@ export function Input(props: Input.Props) {
         )}
       </div>
 
-      {typeof error === 'string' && (
-        <p className="-mt-0.5 text-label-13 text-red-9">{error}</p>
-      )}
+      {typeof error === 'string' && <p className="-mt-0.5 text-label-13 text-red-9">{error}</p>}
     </div>
   )
 }

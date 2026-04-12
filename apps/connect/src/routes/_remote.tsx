@@ -6,15 +6,14 @@
  * Also supports standalone visits (e.g. payment links, cli auth, etc) without a parent.
  */
 
+import { remote, wagmiConfig } from '#/lib/config.js'
+import * as Mode from '#/lib/mode.js'
+import { router } from '#/router.js'
 import { createFileRoute, Outlet, useRouterState } from '@tanstack/react-router'
 import { reconnect } from '@wagmi/core'
 import { Remote } from 'accounts/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-
-import { remote, wagmiConfig } from '#/lib/config.js'
-import * as Mode from '#/lib/mode.js'
-import { router } from '#/router.js'
 
 export const Route = createFileRoute('/_remote')({
   component: RemoteLayout,
@@ -89,11 +88,7 @@ function Page(props: { children: ReactNode; mode: Mode.Mode }) {
   if (mode === 'popup') return <PopupPage>{children}</PopupPage>
 
   // Standalone: full-page centered layout (e.g. payment link).
-  return (
-    <div className="min-h-screen flex items-start justify-center py-12">
-      {children}
-    </div>
-  )
+  return <div className="min-h-screen flex items-start justify-center py-12">{children}</div>
 }
 
 function PopupPage(props: { children: ReactNode }) {

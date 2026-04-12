@@ -1,9 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
-
 import { Button } from '#/ui/Button.js'
 import { Input } from '#/ui/Input.js'
 import { ThemeToggle } from '#/ui/ThemeToggle.js'
+import { createFileRoute } from '@tanstack/react-router'
+import { useEffect, useState } from 'react'
 
 export const Route = createFileRoute('/design')({
   component: Design,
@@ -28,8 +27,7 @@ function useActiveSection(ids: readonly string[]) {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        for (const entry of entries)
-          if (entry.isIntersecting) setActive(entry.target.id)
+        for (const entry of entries) if (entry.isIntersecting) setActive(entry.target.id)
       },
       { rootMargin: '0px 0px -60% 0px', threshold: 0 },
     )
@@ -92,14 +90,22 @@ function Design() {
           </p>
 
           <div className="mt-6 grid grid-cols-2 gap-4">
-            <BackgroundCard color="var(--bg-100)" label="Background 1" description="Default element background" />
-            <BackgroundCard color="var(--bg-200)" label="Background 2" description="Secondary background" />
+            <BackgroundCard
+              color="var(--bg-100)"
+              label="Background 1"
+              description="Default element background"
+            />
+            <BackgroundCard
+              color="var(--bg-200)"
+              label="Background 2"
+              description="Secondary background"
+            />
           </div>
 
-          <SectionHeading id="component-backgrounds">Colors 1–3: Component Backgrounds</SectionHeading>
-          <p className="text-copy-14 text-foreground-secondary">
-            UI component backgrounds.
-          </p>
+          <SectionHeading id="component-backgrounds">
+            Colors 1–3: Component Backgrounds
+          </SectionHeading>
+          <p className="text-copy-14 text-foreground-secondary">UI component backgrounds.</p>
 
           <div className="mt-6 grid grid-cols-3 gap-4">
             <TokenCard step={1} label="Color 1" description="Default background" />
@@ -108,9 +114,7 @@ function Design() {
           </div>
 
           <SectionHeading id="borders">Colors 4–6: Borders</SectionHeading>
-          <p className="text-copy-14 text-foreground-secondary">
-            UI component borders.
-          </p>
+          <p className="text-copy-14 text-foreground-secondary">UI component borders.</p>
 
           <div className="mt-6 grid grid-cols-3 gap-4">
             <TokenCard step={4} label="Color 4" description="Default border" />
@@ -129,9 +133,7 @@ function Design() {
           </div>
 
           <SectionHeading id="text-icons">Colors 9–10: Text and Icons</SectionHeading>
-          <p className="text-copy-14 text-foreground-secondary">
-            Accessible text and icons.
-          </p>
+          <p className="text-copy-14 text-foreground-secondary">Accessible text and icons.</p>
 
           <div className="mt-6 grid grid-cols-2 gap-4">
             <TokenCard step={9} label="Color 9" description="Secondary text and icons" />
@@ -140,7 +142,8 @@ function Design() {
 
           <GroupHeading id="typography">Typography</GroupHeading>
           <p className="text-copy-14 text-foreground-secondary">
-            Type scale using Geist. Each class sets font-size, line-height, letter-spacing, and font-weight.
+            Type scale using Geist. Each class sets font-size, line-height, letter-spacing, and
+            font-weight.
           </p>
 
           <SectionHeading id="headings">Headings</SectionHeading>
@@ -155,11 +158,31 @@ function Design() {
 
           <SectionHeading id="copy">Copy</SectionHeading>
           <div className="space-y-0 divide-y divide-black/5 dark:divide-white/5">
-            <TypeRow className="text-copy-24" label="Copy 24" sample="Build, scale, and secure a faster, personalized web." />
-            <TypeRow className="text-copy-20" label="Copy 20" sample="Build, scale, and secure a faster, personalized web." />
-            <TypeRow className="text-copy-16" label="Copy 16" sample="Build, scale, and secure a faster, personalized web." />
-            <TypeRow className="text-copy-14" label="Copy 14" sample="Build, scale, and secure a faster, personalized web." />
-            <TypeRow className="text-copy-13" label="Copy 13" sample="Build, scale, and secure a faster, personalized web." />
+            <TypeRow
+              className="text-copy-24"
+              label="Copy 24"
+              sample="Build, scale, and secure a faster, personalized web."
+            />
+            <TypeRow
+              className="text-copy-20"
+              label="Copy 20"
+              sample="Build, scale, and secure a faster, personalized web."
+            />
+            <TypeRow
+              className="text-copy-16"
+              label="Copy 16"
+              sample="Build, scale, and secure a faster, personalized web."
+            />
+            <TypeRow
+              className="text-copy-14"
+              label="Copy 14"
+              sample="Build, scale, and secure a faster, personalized web."
+            />
+            <TypeRow
+              className="text-copy-13"
+              label="Copy 13"
+              sample="Build, scale, and secure a faster, personalized web."
+            />
           </div>
 
           <SectionHeading id="labels">Labels</SectionHeading>
@@ -210,8 +233,12 @@ function Design() {
               <div className="flex flex-wrap items-center gap-3">
                 <Button shape="default">Default</Button>
                 <Button shape="rounded">Rounded</Button>
-                <Button shape="square" aria-label="Star">★</Button>
-                <Button shape="circle" aria-label="Star">★</Button>
+                <Button shape="square" aria-label="Star">
+                  ★
+                </Button>
+                <Button shape="circle" aria-label="Star">
+                  ★
+                </Button>
               </div>
             </div>
 
@@ -272,11 +299,22 @@ function Design() {
 }
 
 function GroupHeading(props: { children: React.ReactNode; id: string }) {
-  return <h2 id={props.id} className="text-heading-24 mt-16 mb-2 pb-4 border-b border-border scroll-mt-8">{props.children}</h2>
+  return (
+    <h2
+      id={props.id}
+      className="text-heading-24 mt-16 mb-2 pb-4 border-b border-border scroll-mt-8"
+    >
+      {props.children}
+    </h2>
+  )
 }
 
 function SectionHeading(props: { children: React.ReactNode; id: string }) {
-  return <h3 id={props.id} className="text-heading-20 mt-10 mb-3 scroll-mt-8">{props.children}</h3>
+  return (
+    <h3 id={props.id} className="text-heading-20 mt-10 mb-3 scroll-mt-8">
+      {props.children}
+    </h3>
+  )
 }
 
 function ScaleRow(props: { name: string }) {
@@ -330,7 +368,9 @@ function TokenCard(props: { step: number; label: string; description: string }) 
 function TypeRow(props: { className: string; label: string; sample?: string | undefined }) {
   return (
     <div className="flex items-baseline gap-4 py-4">
-      <p className="text-label-12 text-foreground-secondary w-24 shrink-0 tabular-nums">{props.label}</p>
+      <p className="text-label-12 text-foreground-secondary w-24 shrink-0 tabular-nums">
+        {props.label}
+      </p>
       <p className={props.className}>{props.sample ?? 'The quick brown fox'}</p>
     </div>
   )
