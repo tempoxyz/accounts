@@ -1,7 +1,7 @@
-import { Hex } from 'ox'
+import { Hex, WebCryptoP256 } from 'ox'
 import { type Address, createClient, defineChain, parseUnits } from 'viem'
 import { tempoLocalnet, tempoModerato } from 'viem/chains'
-import { Actions, Addresses } from 'viem/tempo'
+import { Account as TempoAccount, Actions, Addresses } from 'viem/tempo'
 import { afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, http } from '../../test/config.js'
@@ -310,6 +310,27 @@ describe('wallet_authorizeAccessKey', () => {
       },
     )
     expect(result.keyAuthorization.address).toMatch(/^0x[0-9a-fA-F]{40}$/)
+  })
+
+  test('behavior: authorizes an external p256 access key via iframe confirm', async () => {
+    provider = getProvider()
+    await connectViaIframe(provider)
+
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKeyAccount = TempoAccount.fromWebCryptoP256(keyPair)
+
+    const result = await interact(
+      provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ ...accessKeyAccount, expiry: Expiry.days(1) }],
+      }),
+      async (iframe) => {
+        await iframe.getByTestId('confirm').click()
+      },
+    )
+
+    expect(result.keyAuthorization.keyId).toBe(accessKeyAccount.address)
+    expect(result.keyAuthorization.keyType).toMatchInlineSnapshot(`"p256"`)
   })
 })
 
