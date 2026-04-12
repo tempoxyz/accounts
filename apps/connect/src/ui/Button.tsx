@@ -61,7 +61,7 @@ export namespace Button {
       },
       size: {
         small: 'h-8 text-button-12 gap-1.5 rounded-md px-3',
-        medium: 'h-9 text-button-14 gap-2 rounded-lg px-4',
+        medium: 'h-[38px] text-button-14 gap-2 rounded-lg px-4',
         large: 'h-11 text-button-16 gap-2 rounded-[0.625rem] px-5.5',
       },
       shape: {
@@ -73,10 +73,10 @@ export namespace Button {
     },
     compoundVariants: [
       { shape: 'square', size: 'small', class: 'w-8' },
-      { shape: 'square', size: 'medium', class: 'w-9' },
+      { shape: 'square', size: 'medium', class: 'w-[38px]' },
       { shape: 'square', size: 'large', class: 'w-11' },
       { shape: 'circle', size: 'small', class: 'w-8' },
-      { shape: 'circle', size: 'medium', class: 'w-9' },
+      { shape: 'circle', size: 'medium', class: 'w-[38px]' },
       { shape: 'circle', size: 'large', class: 'w-11' },
     ],
     defaultVariants: {

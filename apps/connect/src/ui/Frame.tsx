@@ -1,16 +1,11 @@
+import { Button } from '#/ui/Button.js'
 import { cx } from 'cva'
 import type { ReactNode } from 'react'
-
-import { Button } from '#/ui/Button.js'
 
 /** Card shell for dialog screens (iframe, popup, standalone). */
 export function Frame(props: Frame.Props) {
   const { children, className } = props
-  return (
-    <div className={cx('flex flex-col gap-2', className)}>
-      {children}
-    </div>
-  )
+  return <div className={cx('flex flex-col gap-2', className)}>{children}</div>
 }
 
 export namespace Frame {
@@ -32,9 +27,7 @@ export namespace Frame {
           )}
           <h2 className="text-heading-20">{title}</h2>
         </div>
-        {subtitle && (
-          <p className="text-copy-14 text-foreground-secondary">{subtitle}</p>
-        )}
+        {subtitle && <p className="text-copy-14 text-foreground-secondary">{subtitle}</p>}
       </div>
     )
   }
@@ -53,11 +46,7 @@ export namespace Frame {
   /** Scrollable content area between header and footer. */
   export function Body(props: Body.Props) {
     const { children, className } = props
-    return (
-      <div className={cx('flex flex-col gap-4 px-4 pb-4', className)}>
-        {children}
-      </div>
-    )
+    return <div className={cx('flex flex-col gap-4 px-4 pb-4', className)}>{children}</div>
   }
 
   export namespace Body {
@@ -70,11 +59,7 @@ export namespace Frame {
   /** Sticky footer area for actions. */
   export function Footer(props: Footer.Props) {
     const { children, className } = props
-    return (
-      <div className={cx('px-4 pb-4', className)}>
-        {children}
-      </div>
-    )
+    return <div className={cx('px-4 pb-4', className)}>{children}</div>
   }
 
   export namespace Footer {
@@ -97,19 +82,14 @@ export namespace Frame {
     } = props
     return (
       <div className="flex gap-3">
-        <Button
-          className="flex-1"
-          onClick={onSecondary}
-          size="large"
-          variant={secondaryVariant}
-        >
+        <Button className="flex-1" onClick={onSecondary} size="medium" variant={secondaryVariant}>
           {secondaryLabel}
         </Button>
         <Button
           className="flex-1"
           loading={primaryLoading}
           onClick={onPrimary}
-          size="large"
+          size="medium"
           variant={primaryVariant}
         >
           {primaryLabel}
