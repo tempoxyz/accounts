@@ -1,20 +1,20 @@
-import { Cuer } from 'cuer'
-import { cx } from 'cva'
-import ArrowRightLeft from '~icons/lucide/arrow-right-left'
-import ChevronDown from '~icons/lucide/chevron-down'
-import CirclePlus from '~icons/lucide/circle-plus'
-import Fingerprint from '~icons/lucide/fingerprint'
-import ArrowUpRight from '~icons/lucide/arrow-up-right'
-import Copy from '~icons/lucide/copy'
-import LogIn from '~icons/lucide/log-in'
-import Shield from '~icons/lucide/shield-check'
-import Terminal from '~icons/lucide/terminal'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
 import { Input } from '#/ui/Input.js'
 import { ThemeToggle } from '#/ui/ThemeToggle.js'
 import { createFileRoute } from '@tanstack/react-router'
+import { Cuer } from 'cuer'
+import { cx } from 'cva'
 import { useEffect, useState } from 'react'
+import ArrowRightLeft from '~icons/lucide/arrow-right-left'
+import ArrowUpRight from '~icons/lucide/arrow-up-right'
+import ChevronDown from '~icons/lucide/chevron-down'
+import CirclePlus from '~icons/lucide/circle-plus'
+import Copy from '~icons/lucide/copy'
+import Fingerprint from '~icons/lucide/fingerprint'
+import LogIn from '~icons/lucide/log-in'
+import Shield from '~icons/lucide/shield-check'
+import Terminal from '~icons/lucide/terminal'
 
 export const Route = createFileRoute('/design')({
   component: Design,
@@ -323,7 +323,8 @@ function Design() {
                   />
                   <Frame.Body>
                     <p className="text-copy-14 text-foreground-secondary">
-                      Body content goes here. This could be details, a form, or any other content relevant to the request.
+                      Body content goes here. This could be details, a form, or any other content
+                      relevant to the request.
                     </p>
                   </Frame.Body>
                   <Frame.Footer>
@@ -344,8 +345,22 @@ function Design() {
                   />
                   <Frame.Body>
                     <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-                      <BalanceDiff addressLabel="to" addressValue="0x1a2b…9e8f" detail="50 USDC" label="Send USDC" type="debit" value="−$50.00" />
-                      <BalanceDiff addressLabel="from" addressValue="0xab12…34cd" detail="49.85 USDC.e" label="Receive USDC.e" type="credit" value="+$49.85" />
+                      <BalanceDiff
+                        addressLabel="to"
+                        addressValue="0x1a2b…9e8f"
+                        detail="50 USDC"
+                        label="Send USDC"
+                        type="debit"
+                        value="−$50.00"
+                      />
+                      <BalanceDiff
+                        addressLabel="from"
+                        addressValue="0xab12…34cd"
+                        detail="49.85 USDC.e"
+                        label="Receive USDC.e"
+                        type="credit"
+                        value="+$49.85"
+                      />
                     </div>
 
                     <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
@@ -353,10 +368,7 @@ function Design() {
                     </div>
                   </Frame.Body>
                   <Frame.Footer>
-                    <Frame.ActionButtons
-                      primaryLabel="Approve"
-                      secondaryLabel="Reject"
-                    />
+                    <Frame.ActionButtons primaryLabel="Approve" secondaryLabel="Reject" />
                   </Frame.Footer>
                 </Frame>
               </div>
@@ -374,7 +386,9 @@ function Design() {
                   <Frame.Body>
                     <div className="flex flex-col items-center gap-1 rounded-xl bg-gray-1 px-4 py-5 text-center">
                       <p className="text-heading-32 tabular-nums">$50.00</p>
-                      <p className="font-mono text-label-13 text-foreground-secondary">to 0x1a2b…9e8f</p>
+                      <p className="font-mono text-label-13 text-foreground-secondary">
+                        to 0x1a2b…9e8f
+                      </p>
                     </div>
 
                     <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
@@ -383,10 +397,7 @@ function Design() {
                     </div>
                   </Frame.Body>
                   <Frame.Footer>
-                    <Frame.ActionButtons
-                      primaryLabel="Pay $50.00"
-                      secondaryLabel="Reject"
-                    />
+                    <Frame.ActionButtons primaryLabel="Pay $50.00" secondaryLabel="Reject" />
                   </Frame.Footer>
                 </Frame>
               </div>
@@ -406,9 +417,7 @@ function Design() {
                       <p className="text-label-12 text-foreground-secondary">
                         Confirm this code matches your terminal
                       </p>
-                      <p className="font-mono text-heading-32 tracking-[0.3em]">
-                        TRMK-92QF
-                      </p>
+                      <p className="font-mono text-heading-32 tracking-[0.3em]">TRMK-92QF</p>
                     </div>
 
                     <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
@@ -418,10 +427,7 @@ function Design() {
                     </div>
                   </Frame.Body>
                   <Frame.Footer>
-                    <Frame.ActionButtons
-                      primaryLabel="Approve"
-                      secondaryLabel="Reject"
-                    />
+                    <Frame.ActionButtons primaryLabel="Approve" secondaryLabel="Reject" />
                   </Frame.Footer>
                 </Frame>
               </div>
@@ -437,9 +443,7 @@ function Design() {
                   />
                   <Frame.Body>
                     <Input placeholder="Email address…" type="email" />
-                    <Button variant="primary">
-                      Continue
-                    </Button>
+                    <Button variant="primary">Continue</Button>
 
                     <div className="flex items-center gap-3">
                       <div className="h-px flex-1 bg-border" />
@@ -447,10 +451,7 @@ function Design() {
                       <div className="h-px flex-1 bg-border" />
                     </div>
 
-                    <Button
-                      prefix={<Fingerprint className="size-4" />}
-                      variant="muted"
-                    >
+                    <Button prefix={<Fingerprint className="size-4" />} variant="muted">
                       Continue with passkey
                     </Button>
 
@@ -478,10 +479,11 @@ function Design() {
                       </div>
                       <div className="flex min-w-0 flex-col">
                         <p className="truncate text-copy-14 font-medium">jane@tempo.dev</p>
-                        <p className="truncate font-mono text-label-12 text-foreground-secondary">0x1a2b…9e8f</p>
+                        <p className="truncate font-mono text-label-12 text-foreground-secondary">
+                          0x1a2b…9e8f
+                        </p>
                       </div>
                     </div>
-
                   </Frame.Body>
                   <Frame.Footer>
                     <div className="flex flex-col gap-3">
@@ -489,11 +491,17 @@ function Design() {
                         Continue with passkey
                       </Button>
                       <p className="text-center text-label-13 text-foreground-secondary">
-                        <button className="cursor-pointer transition-colors hover:text-foreground" type="button">
+                        <button
+                          className="cursor-pointer transition-colors hover:text-foreground"
+                          type="button"
+                        >
                           Use a different account
                         </button>
                         {' · '}
-                        <button className="cursor-pointer transition-colors hover:text-foreground" type="button">
+                        <button
+                          className="cursor-pointer transition-colors hover:text-foreground"
+                          type="button"
+                        >
                           Sign up
                         </button>
                       </p>
@@ -520,10 +528,7 @@ function Design() {
                     </div>
                   </Frame.Body>
                   <Frame.Footer>
-                    <Frame.ActionButtons
-                      primaryLabel="Approve"
-                      secondaryLabel="Reject"
-                    />
+                    <Frame.ActionButtons primaryLabel="Approve" secondaryLabel="Reject" />
                   </Frame.Footer>
                 </Frame>
               </div>
@@ -551,7 +556,9 @@ function Design() {
                         <Cuer value="0x9f8e7d6c5b4a39281e0f3c21d7a4b6" size="140px" />
                       </div>
                       <div className="flex items-center justify-center gap-1.5">
-                        <p className="font-mono text-label-13 text-foreground-secondary">0x9f8e…3c21d7a4b6</p>
+                        <p className="font-mono text-label-13 text-foreground-secondary">
+                          0x9f8e…3c21d7a4b6
+                        </p>
                         <button
                           className="cursor-pointer text-foreground-secondary opacity-60 transition-opacity hover:opacity-100"
                           type="button"
@@ -562,12 +569,29 @@ function Design() {
                     </div>
 
                     <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-                      <ScopeRow label="Network" value={<>Base<ChevronDown className="size-3.5 text-foreground-secondary" /></>} />
-                      <ScopeRow label="Token" value={<>USDC<ChevronDown className="size-3.5 text-foreground-secondary" /></>} />
+                      <ScopeRow
+                        label="Network"
+                        value={
+                          <>
+                            Base
+                            <ChevronDown className="size-3.5 text-foreground-secondary" />
+                          </>
+                        }
+                      />
+                      <ScopeRow
+                        label="Token"
+                        value={
+                          <>
+                            USDC
+                            <ChevronDown className="size-3.5 text-foreground-secondary" />
+                          </>
+                        }
+                      />
                     </div>
 
                     <div className="rounded-lg bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
-                      ⚠ Only send USDC on Base network. Sending other tokens or using a different network may result in permanent loss.
+                      ⚠ Only send USDC on Base network. Sending other tokens or using a different
+                      network may result in permanent loss.
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -596,7 +620,9 @@ function ScopeRow(props: { label: string; suffix?: string | undefined; value: Re
       <p className="text-foreground-secondary">{props.label}</p>
       <p className="flex items-center gap-1.5 font-medium">
         {props.value}
-        {props.suffix && <span className="font-normal text-foreground-secondary"> {props.suffix}</span>}
+        {props.suffix && (
+          <span className="font-normal text-foreground-secondary"> {props.suffix}</span>
+        )}
       </p>
     </div>
   )
