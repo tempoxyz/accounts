@@ -77,7 +77,9 @@ function Page(props: { children: ReactNode; mode: Mode.Mode }) {
   useEffect(() => {
     if (!framed) return
     document.documentElement.style.backgroundColor = 'transparent'
-    return () => { document.documentElement.style.backgroundColor = '' }
+    return () => {
+      document.documentElement.style.backgroundColor = ''
+    }
   }, [framed])
 
   if (framed)

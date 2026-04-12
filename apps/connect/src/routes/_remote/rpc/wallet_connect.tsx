@@ -109,9 +109,7 @@ function Continue(props: { onSignUp: () => void; submit: Submit }) {
             >
               Continue with passkey
             </Button>
-            {submit.isError && (
-              <p className="text-label-13 text-red-9">{submit.error.message}</p>
-            )}
+            {submit.isError && <p className="text-label-13 text-red-9">{submit.error.message}</p>}
             <button
               className="cursor-pointer text-label-13 text-foreground-secondary transition-colors hover:text-foreground"
               onClick={onSignUp}
@@ -166,9 +164,7 @@ function SignInOrSignUp(props: { method: string | undefined; submit: Submit }) {
             Continue with passkey
           </Button>
 
-          {submit.isError && (
-            <p className="text-label-13 text-red-9">{submit.error.message}</p>
-          )}
+          {submit.isError && <p className="text-label-13 text-red-9">{submit.error.message}</p>}
 
           <p className="text-center text-label-12 text-foreground-secondary">
             By continuing, you agree to the Terms of Service.
