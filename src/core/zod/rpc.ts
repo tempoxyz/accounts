@@ -124,10 +124,58 @@ export namespace eth_sendTransaction {
 }
 
 export namespace eth_fillTransaction {
+  const balanceDiff = z.object({
+    address: u.address(),
+    decimals: z.number(),
+    direction: z.enum(['incoming', 'outgoing']),
+    formatted: z.string(),
+    name: z.string(),
+    recipients: z.readonly(z.array(u.address())),
+    symbol: z.string(),
+    value: u.hex(),
+  })
+
+  const swapAmount = z.object({
+    decimals: z.number(),
+    formatted: z.string(),
+    name: z.string(),
+    symbol: z.string(),
+    token: u.address(),
+    value: u.hex(),
+  })
+
   export const schema = Schema.defineItem({
     method: z.literal('eth_fillTransaction'),
     params: z.readonly(z.tuple([transactionRequest])),
-    returns: z.any(),
+    returns: z.object({
+      meta: z.object({
+        balanceDiffs: z.optional(z.record(u.address(), z.readonly(z.array(balanceDiff)))),
+        fee: z.nullable(
+          z.object({
+            amount: u.hex(),
+            decimals: z.number(),
+            formatted: z.string(),
+            symbol: z.string(),
+          }),
+        ),
+        autoSwap: z.optional(
+          z.object({
+            maxIn: swapAmount,
+            minOut: swapAmount,
+            slippage: z.number(),
+          }),
+        ),
+        sponsor: z.optional(
+          z.object({
+            address: u.address(),
+            name: z.optional(z.string()),
+            url: z.optional(z.string()),
+          }),
+        ),
+        sponsored: z.boolean(),
+      }),
+      tx: z.record(z.string(), z.unknown()),
+    }),
   })
   export type Encoded = Schema.Encoded<typeof schema>
   export type Decoded = Schema.Decoded<typeof schema>

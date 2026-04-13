@@ -405,17 +405,17 @@ describe('behavior: AMM resolution', () => {
     expect(diffs[0]!.symbol).toBe('SWBASE')
     expect(diffs[0]!.address.toLowerCase()).toBe(base.toLowerCase())
 
-    // feeSwap reports the injected AMM swap.
-    expect(m.feeSwap?.slippage).toBe(0.05)
-    expect(m.feeSwap?.maxIn.formatted).toBe('5.25')
-    expect(m.feeSwap?.maxIn.symbol).toBe('AlphaUSD')
-    expect(m.feeSwap?.maxIn.token.toLowerCase()).toBe(addresses.alphaUsd.toLowerCase())
-    expect(m.feeSwap?.minOut.formatted).toBe('5')
-    expect(m.feeSwap?.minOut.symbol).toBe('SWBASE')
-    expect(m.feeSwap?.minOut.token.toLowerCase()).toBe(base.toLowerCase())
+    // autoSwap reports the injected AMM swap.
+    expect(m.autoSwap?.slippage).toBe(0.05)
+    expect(m.autoSwap?.maxIn.formatted).toBe('5.25')
+    expect(m.autoSwap?.maxIn.symbol).toBe('AlphaUSD')
+    expect(m.autoSwap?.maxIn.token.toLowerCase()).toBe(addresses.alphaUsd.toLowerCase())
+    expect(m.autoSwap?.minOut.formatted).toBe('5')
+    expect(m.autoSwap?.minOut.symbol).toBe('SWBASE')
+    expect(m.autoSwap?.minOut.token.toLowerCase()).toBe(base.toLowerCase())
   })
 
-  test('behavior: custom slippage is applied to feeSwap', async () => {
+  test('behavior: custom slippage is applied to autoSwap', async () => {
     const sender = accounts[2]!
 
     // Set up token pair + DEX liquidity.
@@ -472,7 +472,7 @@ describe('behavior: AMM resolution', () => {
       relay({
         chains: [chain],
         transports: { [chain.id]: http() },
-        feeSwap: { slippage: 0.02 },
+        autoSwap: { slippage: 0.02 },
       }).listener,
     )
     const customClient = getClient({ transport: http(customServer.url) })
@@ -488,10 +488,76 @@ describe('behavior: AMM resolution', () => {
     customServer.close()
 
     const m = result.meta as relay.Meta
-    expect(m.feeSwap?.slippage).toBe(0.02)
+    expect(m.autoSwap?.slippage).toBe(0.02)
     // 10 + 2% = 10.2
-    expect(m.feeSwap?.maxIn.formatted).toBe('10.2')
-    expect(m.feeSwap?.minOut.formatted).toBe('10')
+    expect(m.autoSwap?.maxIn.formatted).toBe('10.2')
+    expect(m.autoSwap?.minOut.formatted).toBe('10')
+  })
+
+  test('behavior: autoSwap disabled throws InsufficientBalance instead of swapping', async () => {
+    const sender = accounts[3]!
+
+    // Set up token pair + DEX liquidity.
+    const rpc = getClient({ account: accounts[0]! })
+    const { token: base } = await Actions.token.createSync(rpc, {
+      name: 'No Swap Base',
+      symbol: 'NSWBASE',
+      currency: 'USD',
+      quoteToken: addresses.alphaUsd,
+    })
+    await sendTransactionSync(rpc, {
+      calls: [
+        Actions.token.grantRoles.call({ token: base, role: 'issuer', to: rpc.account!.address }),
+        Actions.token.mint.call({
+          token: base,
+          to: rpc.account!.address,
+          amount: parseUnits('10000', 6),
+        }),
+        Actions.token.approve.call({
+          token: base,
+          spender: Addresses.stablecoinDex,
+          amount: parseUnits('10000', 6),
+        }),
+      ],
+    })
+    await Actions.dex.createPairSync(rpc, { base })
+    await Actions.dex.placeSync(rpc, {
+      token: base,
+      amount: parseUnits('500', 6),
+      type: 'sell',
+      tick: Tick.fromPrice('1.001'),
+    })
+
+    // Give sender alphaUsd but NO base tokens.
+    await Actions.token.mintSync(rpc, {
+      token: addresses.alphaUsd,
+      amount: parseUnits('1000', 6),
+      to: sender.address,
+    })
+    await Actions.fee.setUserToken(getClient({ account: sender }), { token: addresses.alphaUsd })
+
+    // Create relay with autoSwap disabled.
+    const customServer = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+        autoSwap: false,
+      }).listener,
+    )
+    const customClient = getClient({ transport: http(customServer.url) })
+
+    // Should throw InsufficientBalance instead of auto-swapping.
+    await expect(
+      fillTransaction(customClient, {
+        account: sender.address,
+        ...Actions.token.transfer.call({
+          token: base,
+          to: accounts[7]!.address,
+          amount: parseUnits('5', 6),
+        }),
+      }),
+    ).rejects.toThrow(/InsufficientBalance/)
+    customServer.close()
   })
 })
 

@@ -67,7 +67,6 @@ export function relay(options: relay.Options = {}): Handler {
   const {
     chains = [tempo, tempoModerato],
     feePayer: feePayerOptions,
-    feeSwap: feeSwapOptions,
     onRequest,
     path = '/',
     resolveTokens = (chainId) =>
@@ -75,7 +74,11 @@ export function relay(options: relay.Options = {}): Handler {
     transports = {},
     ...rest
   } = options
-  const slippage = feeSwapOptions?.slippage ?? 0.05
+
+  const autoSwap = (() => {
+    if (options.autoSwap === false) return undefined
+    return { slippage: options.autoSwap?.slippage ?? 0.05 }
+  })()
 
   const clients = new Map<number, Client>()
   for (const chain of chains) {
@@ -141,7 +144,7 @@ export function relay(options: relay.Options = {}): Handler {
         ...(feePayerOptions ? { feePayer: true } : {}),
         ...(feeToken ? { feeToken } : {}),
       }
-      let filled = await fill(client, withOverrides, { feeToken, slippage })
+      let filled = await fill(client, { autoSwap, feeToken, transaction: withOverrides })
 
       // 3. Check if the fee payer approves this transaction.
       const sponsored =
@@ -157,17 +160,17 @@ export function relay(options: relay.Options = {}): Handler {
       // gas estimate and nonce are correct for a self-paid transaction.
       if (feePayerOptions && !sponsored) {
         const { feePayer: _, ...withoutFeePayer } = withOverrides
-        filled = await fill(client, withoutFeePayer, { feeToken, slippage })
+        filled = await fill(client, { autoSwap, feeToken, transaction: withoutFeePayer })
       }
 
-      const { transaction, swap: feeSwap } = filled
+      const { transaction, swap } = filled
 
       // 4. Simulate and compute balance diffs + fee.
       const calls = extractCalls(transaction)
       const { balanceDiffs, fee } = await simulateAndParseDiffs(client, {
         account: sender,
         calls,
-        swap: feeSwap,
+        swap,
         feeToken: (transaction as { feeToken?: Address | undefined }).feeToken,
         gas: (transaction as { gas?: bigint | undefined }).gas,
         maxFeePerGas: (transaction as { maxFeePerGas?: bigint | undefined }).maxFeePerGas,
@@ -190,28 +193,28 @@ export function relay(options: relay.Options = {}): Handler {
           }
         : undefined
 
-      // 6. Resolve feeSwap metadata (when AMM path was taken).
-      const feeSwapMeta = await (async (): Promise<relay.Meta['feeSwap']> => {
-        if (!feeSwap) return undefined
+      // 6. Resolve autoSwap metadata (when AMM path was taken).
+      const autoSwapMeta = await (async (): Promise<relay.Meta['autoSwap']> => {
+        if (!swap) return undefined
         const [inMeta, outMeta] = await Promise.all([
-          resolveTokenMetadata(client, feeSwap.tokenIn).catch(() => undefined),
-          resolveTokenMetadata(client, feeSwap.tokenOut).catch(() => undefined),
+          resolveTokenMetadata(client, swap.tokenIn).catch(() => undefined),
+          resolveTokenMetadata(client, swap.tokenOut).catch(() => undefined),
         ])
         if (!inMeta || !outMeta) return undefined
         return {
-          slippage,
+          slippage: autoSwap!.slippage,
           maxIn: {
-            token: feeSwap.tokenIn,
-            value: Hex.fromNumber(feeSwap.maxAmountIn) as `0x${string}`,
-            formatted: formatUnits(feeSwap.maxAmountIn, inMeta.decimals),
+            token: swap.tokenIn,
+            value: Hex.fromNumber(swap.maxAmountIn) as `0x${string}`,
+            formatted: formatUnits(swap.maxAmountIn, inMeta.decimals),
             decimals: inMeta.decimals,
             symbol: inMeta.symbol,
             name: inMeta.name,
           },
           minOut: {
-            token: feeSwap.tokenOut,
-            value: Hex.fromNumber(feeSwap.amountOut) as `0x${string}`,
-            formatted: formatUnits(feeSwap.amountOut, outMeta.decimals),
+            token: swap.tokenOut,
+            value: Hex.fromNumber(swap.amountOut) as `0x${string}`,
+            formatted: formatUnits(swap.amountOut, outMeta.decimals),
             decimals: outMeta.decimals,
             symbol: outMeta.symbol,
             name: outMeta.name,
@@ -226,7 +229,7 @@ export function relay(options: relay.Options = {}): Handler {
           fee,
           sponsored: !!sponsor,
           ...(sponsor ? { sponsor } : {}),
-          ...(feeSwapMeta ? { feeSwap: feeSwapMeta } : {}),
+          ...(autoSwapMeta ? { autoSwap: autoSwapMeta } : {}),
         },
       })
     } catch (error) {
@@ -239,10 +242,13 @@ export function relay(options: relay.Options = {}): Handler {
 
 async function fill(
   client: Client,
-  request: Record<string, unknown>,
-  options: { feeToken?: Address | undefined; slippage?: number | undefined } = {},
+  options: {
+    autoSwap?: { slippage: number } | undefined
+    feeToken?: Address | undefined
+    transaction: Record<string, unknown>
+  },
 ) {
-  const { feeToken, slippage = 0.05 } = options
+  const { autoSwap, feeToken, transaction: request } = options
 
   // Skip re-formatting if already in RPC format (e.g. from viem's fillTransaction).
   const format = (value: Record<string, unknown>) =>
@@ -257,11 +263,11 @@ async function fill(
   } catch (error) {
     if (!(error instanceof Error)) throw error
     const parsed = parseInsufficientBalance(error)
-    if (!parsed || !feeToken) throw error
+    if (!parsed || !feeToken || !autoSwap) throw error
     if (parsed.token.toLowerCase() === feeToken.toLowerCase()) throw error
 
     const deficit = parsed.required - parsed.available
-    const maxAmountIn = deficit + (deficit * BigInt(Math.round(slippage * 1000))) / 1000n
+    const maxAmountIn = deficit + (deficit * BigInt(Math.round(autoSwap.slippage * 1000))) / 1000n
     const swapCalls = buildSwapCalls(feeToken, parsed.token, deficit, maxAmountIn)
     const existingCalls = request.calls as Call[] | undefined
     // If the request was normalized to top-level to/data/value (single call),
@@ -347,8 +353,12 @@ export namespace relay {
     feePayer?:
       | Omit<FeePayer.feePayer.Options, 'chains' | 'transports' | 'path' | 'onRequest'>
       | undefined
-    /** AMM swap options for automatic InsufficientBalance resolution. */
-    feeSwap?:
+    /**
+     * AMM swap options for automatic insufficient balance resolution.
+     * Set to `false` to disable. @default {}
+     */
+    autoSwap?:
+      | false
       | {
           /** Slippage tolerance (e.g. 0.05 = 5%). @default 0.05 */
           slippage?: number | undefined
@@ -379,7 +389,7 @@ export namespace relay {
     /** Sponsor details (when sponsored). */
     sponsor?: { address: Address; name: string; url: string } | undefined
     /** AMM swap injected by the relay to cover an InsufficientBalance. */
-    feeSwap?:
+    autoSwap?:
       | {
           /** Max input amount with slippage. */
           maxIn: SwapAmount
