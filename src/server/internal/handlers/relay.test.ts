@@ -73,6 +73,26 @@ describe('behavior: without feePayer', () => {
     const chainId = await client.request({ method: 'eth_chainId' })
     expect(Number(chainId)).toMatchInlineSnapshot(`${chain.id}`)
   })
+
+  test('behavior: handles JSON-RPC batch requests', async () => {
+    const response = await fetch(server.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([
+        { jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] },
+        { jsonrpc: '2.0', id: 2, method: 'eth_chainId', params: [] },
+      ]),
+    })
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { id: number; result: string }[]
+    expect(Array.isArray(body)).toBe(true)
+    expect(body).toHaveLength(2)
+    expect(body[0]!.id).toBe(1)
+    expect(body[1]!.id).toBe(2)
+    expect(Number(body[0]!.result)).toBe(chain.id)
+    expect(Number(body[1]!.result)).toBe(chain.id)
+  })
 })
 
 describe('behavior: capabilities', () => {

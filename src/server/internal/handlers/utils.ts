@@ -39,37 +39,38 @@ export function normalizeTempoTransaction(value: Record<string, unknown> | undef
   return core_Transaction.fromRpc({ type: '0x76', ...value } as core_Transaction.Rpc)!
 }
 
-export function rpcError(request: RpcRequest.RpcRequest, error: unknown) {
+/** Returns a raw JSON-RPC error response object (not wrapped in a `Response`). */
+export function rpcErrorJson(request: RpcRequest.RpcRequest, error: unknown) {
   if (error instanceof RpcResponse.InvalidParamsError)
-    return Response.json(RpcResponse.from({ error }, { request }))
+    return RpcResponse.from({ error }, { request })
 
   if (error instanceof RpcResponse.MethodNotSupportedError)
-    return Response.json(RpcResponse.from({ error }, { request }))
+    return RpcResponse.from({ error }, { request })
 
   if ((error as { name?: string | undefined }).name === 'ZodError')
-    return Response.json(
-      RpcResponse.from(
-        {
-          error: new RpcResponse.InvalidParamsError({
-            message: (error as Error).message,
-          }),
-        },
-        { request },
-      ),
+    return RpcResponse.from(
+      {
+        error: new RpcResponse.InvalidParamsError({
+          message: (error as Error).message,
+        }),
+      },
+      { request },
     )
 
   const inner = resolveError(error)
   const message = inner.message ?? (error as Error).message
   const code = inner.code ?? -32603
   const data = inner.data
-  return Response.json(
-    RpcResponse.from(
-      {
-        error: { code, message, ...(data ? { data } : {}) },
-      },
-      { request },
-    ),
+  return RpcResponse.from(
+    {
+      error: { code, message, ...(data ? { data } : {}) },
+    },
+    { request },
   )
+}
+
+export function rpcError(request: RpcRequest.RpcRequest, error: unknown) {
+  return Response.json(rpcErrorJson(request, error))
 }
 
 export function rpcResult(request: RpcRequest.RpcRequest, result: unknown) {
