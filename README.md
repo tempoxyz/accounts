@@ -78,8 +78,7 @@ pnpm test             # run tests
 | ---------- | -------------------------------- |
 | playground | `https://playground.tempo.local` |
 | connect    | `https://connect.tempo.local`    |
-| dialog-ref | `https://dialog-ref.tempo.local` |
-| wagmi      | `https://wagmi.tempo.local`      |
+| manager    | `https://manager.tempo.local`    |
 
 ### Playgrounds
 
