@@ -1,6 +1,8 @@
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
+import { Identicon } from '#/ui/Identicon.js'
 import { Input } from '#/ui/Input.js'
+import { Otp } from '#/ui/Otp.js'
 import { ThemeToggle } from '#/ui/ThemeToggle.js'
 import { createFileRoute } from '@tanstack/react-router'
 import { Cuer } from 'cuer'
@@ -14,6 +16,7 @@ import CirclePlus from '~icons/lucide/circle-plus'
 import Copy from '~icons/lucide/copy'
 import Fingerprint from '~icons/lucide/fingerprint'
 import LogIn from '~icons/lucide/log-in'
+import Mail from '~icons/lucide/mail'
 import Shield from '~icons/lucide/shield-check'
 import Terminal from '~icons/lucide/terminal'
 
@@ -29,7 +32,9 @@ const sidebar = [
   { id: 'typography', label: 'Typography' },
   { id: 'button-component', label: 'Button' },
   { id: 'input-component', label: 'Input' },
+  { id: 'otp-component', label: 'OTP' },
   { id: 'frame-component', label: 'Frame' },
+  { id: 'identicon-component', label: 'Identicon' },
 ] as const
 
 function useActiveSection(ids: readonly string[]) {
@@ -307,6 +312,35 @@ function Design() {
             </div>
           </div>
 
+          <GroupHeading id="otp-component">OTP</GroupHeading>
+          <p className="text-copy-14 text-foreground-secondary">
+            Numeric one-time-password input with individual digit cells.
+          </p>
+
+          <div className="mt-6 space-y-6">
+            <div>
+              <p className="text-heading-16 mb-3">Default</p>
+              <OtpDemo />
+            </div>
+
+            <div>
+              <p className="text-heading-16 mb-3">Sizes</p>
+              <div className="space-y-3">
+                <OtpDemo size="small" />
+                <OtpDemo size="medium" />
+                <OtpDemo size="large" />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-heading-16 mb-3">States</p>
+              <div className="space-y-3">
+                <Otp error="Invalid code. Please try again." value="123456" />
+                <Otp disabled value="123456" />
+              </div>
+            </div>
+          </div>
+
           <GroupHeading id="frame-component">Frame</GroupHeading>
           <p className="text-copy-14 text-foreground-secondary">
             Card shell for dialog screens with header, body, footer, and action buttons.
@@ -475,6 +509,41 @@ function Design() {
             </div>
 
             <div>
+              <p className="text-heading-16 mb-3">Verify OTP</p>
+              <div className="w-[360px] rounded-lg border border-border bg-primary">
+                <Frame>
+                  <Frame.Header
+                    icon={<Mail className="size-5" />}
+                    subtitle={
+                      <>
+                        Enter the 6-digit code we sent to{' '}
+                        <span className="text-foreground">j***@example.com</span>
+                      </>
+                    }
+                    title="Check your email"
+                  />
+                  <Frame.Body>
+                    <OtpDemo size="large" />
+                  </Frame.Body>
+                  <Frame.Footer>
+                    <div className="flex flex-col gap-4">
+                      <Button className="w-full" variant="primary">Verify</Button>
+                      <p className="text-center text-label-13 text-foreground-secondary">
+                        Didn't receive a code?{' '}
+                        <button
+                          className="cursor-pointer text-foreground underline underline-offset-2 transition-colors hover:text-blue-9"
+                          type="button"
+                        >
+                          Resend
+                        </button>
+                      </p>
+                    </div>
+                  </Frame.Footer>
+                </Frame>
+              </div>
+            </div>
+
+            <div>
               <p className="text-heading-16 mb-3">Logged In</p>
               <div className="w-[360px] rounded-lg border border-border bg-primary">
                 <Frame>
@@ -493,11 +562,9 @@ function Design() {
                         className="flex h-[38px] w-full cursor-pointer items-center gap-3 rounded-lg border border-border px-3 transition-colors hover:bg-gray-1"
                         type="button"
                       >
-                        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-2 text-label-12 font-medium text-blue-9">
-                          JD
-                        </div>
-                        <p className="min-w-0 flex-1 truncate text-left font-mono text-label-13">
-                          0x1a2b…9e8f
+                        <Identicon address="0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9e8f" className="size-6 shrink-0 rounded-full" size={24} />
+                        <p className="min-w-0 flex-1 truncate text-left text-label-13">
+                          john@example.com
                         </p>
                         <ChevronRight className="size-4 shrink-0 text-foreground-secondary" />
                       </button>
@@ -621,6 +688,30 @@ function Design() {
                 </Frame>
               </div>
             </div>
+          </div>
+
+          <GroupHeading id="identicon-component">Identicon</GroupHeading>
+          <p className="text-copy-15 text-foreground-secondary">
+            Deterministic address identicons using design system colors.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-8">
+            {[
+              '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
+              '0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B',
+              '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984',
+              '0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8',
+            ].map((addr) => (
+              <div key={addr} className="flex flex-col items-center gap-2">
+                <Identicon
+                  address={addr as `0x${string}`}
+                  className="rounded-full"
+                  size={48}
+                />
+                <p className="font-mono text-label-11 text-foreground-secondary">
+                  {addr.slice(0, 6)}…{addr.slice(-4)}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </main>
@@ -768,6 +859,10 @@ function TypeRow(props: { className: string; label: string; sample?: string | un
       <p className={props.className}>{props.sample ?? 'The quick brown fox'}</p>
     </div>
   )
+}
+
+function OtpDemo(props: { size?: 'large' | 'medium' | 'small' | undefined }) {
+  return <Otp size={props.size} />
 }
 
 function ApplePayMark() {

@@ -1,6 +1,7 @@
 import { remote } from '#/lib/config.js'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
+import { Identicon } from '#/ui/Identicon.js'
 import { Input } from '#/ui/Input.js'
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
@@ -70,8 +71,7 @@ function Continue(props: { onSignUp: () => void; submit: Submit }) {
   const origin = RemoteReact.useState(remote, (s) => s.origin)
   const { address } = useConnection()
   const host = origin ? new URL(origin).host : undefined
-  const truncated = address ? `${address.slice(0, 8)}…${address.slice(-6)}` : undefined
-  const initials = 'U'
+  const label = address ? `${address.slice(0, 8)}…${address.slice(-6)}` : undefined
 
   return (
     <form
@@ -83,7 +83,15 @@ function Continue(props: { onSignUp: () => void; submit: Submit }) {
       <Frame>
         <Frame.Header
           icon={<LogIn className="size-5" />}
-          subtitle={host ? `You're signing in to ${host}` : 'Sign in to continue.'}
+          subtitle={
+            host ? (
+              <>
+                You're signing in to <span className="text-foreground">{host}</span>
+              </>
+            ) : (
+              'Sign in to continue.'
+            )
+          }
           title="Welcome Back"
         />
         <Frame.Footer>
@@ -93,12 +101,10 @@ function Continue(props: { onSignUp: () => void; submit: Submit }) {
               onClick={onSignUp}
               type="button"
             >
-              <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-2 text-label-12 font-medium text-blue-9">
-                {initials}
-              </div>
-              <p className="min-w-0 flex-1 truncate text-left font-mono text-label-13">
-                {truncated}
-              </p>
+              {address && (
+                <Identicon address={address} className="size-6 shrink-0 rounded-full" size={24} />
+              )}
+              <p className="min-w-0 flex-1 truncate text-left text-label-13">{label}</p>
               <ChevronRight className="size-4 shrink-0 text-foreground-secondary" />
             </button>
             <Button

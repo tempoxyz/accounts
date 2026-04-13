@@ -41,6 +41,8 @@ catalog:
 minimumReleaseAge: 1440
 
 minimumReleaseAgeExclude:
+  - '@base-ui/react'
+  - '@base-ui/utils'
   - incur
   - mppx
   - viem

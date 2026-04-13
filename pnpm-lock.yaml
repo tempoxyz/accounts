@@ -191,6 +191,9 @@ importers:
 
   apps/connect:
     dependencies:
+      '@base-ui/react':
+        specifier: ^1.4.0
+        version: 1.4.0(@date-fns/tz@1.4.1)(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@tanstack/react-query':
         specifier: 'catalog:'
         version: 5.97.0(react@19.2.4)
@@ -206,6 +209,9 @@ importers:
       cva:
         specifier: 1.0.0-beta.1
         version: 1.0.0-beta.1(typescript@5.9.3)
+      geist:
+        specifier: ^1.7.0
+        version: 1.7.0(next@16.2.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))
       hono:
         specifier: 'catalog:'
         version: 4.12.12
@@ -227,7 +233,18 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: 'catalog:'
+<<<<<<< HEAD
         version: 1.32.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+<<<<<<< HEAD
+<<<<<<< HEAD
+        version: 1.31.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+        version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260401.1)(wrangler@4.80.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+        version: 1.31.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.3)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
+>>>>>>> ed22025 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
       '@iconify/json':
         specifier: ^2.2.461
         version: 2.2.462
@@ -356,7 +373,15 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: latest
+<<<<<<< HEAD
         version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260410.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+<<<<<<< HEAD
+        version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+        version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.3)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
+>>>>>>> ed22025 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
       '@types/node':
         specifier: latest
         version: 25.5.2
@@ -445,7 +470,15 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: latest
+<<<<<<< HEAD
         version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260410.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+<<<<<<< HEAD
+        version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+        version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.3)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
+>>>>>>> ed22025 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
       '@types/node':
         specifier: latest
         version: 25.5.2
@@ -494,7 +527,15 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: latest
+<<<<<<< HEAD
         version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260410.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+<<<<<<< HEAD
+        version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+        version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.3)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
+>>>>>>> ed22025 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
       '@types/node':
         specifier: latest
         version: 25.5.2
@@ -543,7 +584,15 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: latest
+<<<<<<< HEAD
         version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260410.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+<<<<<<< HEAD
+        version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+        version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.3)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
+>>>>>>> ed22025 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
       '@types/node':
         specifier: latest
         version: 25.5.2
@@ -565,6 +614,31 @@ importers:
       wrangler:
         specifier: ^4.81.1
         version: 4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+<<<<<<< HEAD
+=======
+
+  playgrounds/cli:
+    dependencies:
+      accounts:
+        specifier: workspace:*
+        version: link:../..
+      ox:
+        specifier: ~0.14.15
+        version: 0.14.15(typescript@5.9.3)(zod@4.3.6)
+      viem:
+        specifier: ^2.47.15
+        version: 2.47.15(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.6.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
 
   playgrounds/wagmi:
     dependencies:
@@ -589,7 +663,15 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: latest
+<<<<<<< HEAD
         version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260410.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+<<<<<<< HEAD
+        version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+        version: 1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.3)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
+>>>>>>> ed22025 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
       '@types/node':
         specifier: latest
         version: 25.5.2
@@ -641,7 +723,15 @@ importers:
         version: 1.1.0
       '@cloudflare/vite-plugin':
         specifier: 'catalog:'
+<<<<<<< HEAD
         version: 1.32.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260410.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+<<<<<<< HEAD
+        version: 1.31.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+        version: 1.31.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.3)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
+>>>>>>> ed22025 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
       '@types/react':
         specifier: catalog:default
         version: 19.2.14
@@ -681,7 +771,15 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: 'catalog:'
+<<<<<<< HEAD
         version: 1.32.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260410.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+<<<<<<< HEAD
+        version: 1.31.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+=======
+        version: 1.31.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.3)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
+>>>>>>> ed22025 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
       '@types/node':
         specifier: 'catalog:'
         version: 25.6.0
@@ -1182,8 +1280,8 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
 
-  '@babel/runtime@7.28.4':
-    resolution: {integrity: sha512-Q/N6JNWvIvPnLDvjlE1OUBLPQHH6l3CltCEsHIujp45zQUSSh8K+gHnaEX45yAT1nyngnINhvWtzN+Nb9D8RAQ==}
+  '@babel/runtime@7.29.2':
+    resolution: {integrity: sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g==}
     engines: {node: '>=6.9.0'}
 
   '@babel/runtime@7.29.2':
@@ -1204,6 +1302,29 @@ packages:
 
   '@balena/dockerignore@1.0.2':
     resolution: {integrity: sha512-wMue2Sy4GAVTk6Ic4tJVcnfdau+gx2EnG7S+uAEe+TWJFqE4YoWN4/H8MSLj4eYJKxGg26lZwboEniNiNwZQ6Q==}
+
+  '@base-ui/react@1.4.0':
+    resolution: {integrity: sha512-QcqdVbr/+ba2/RAKJIV1PV6S02Q5+r6a4Eym8ndBw+ZbBILkkmQAyRxXCg/pArrHnkrGeU8goe26aw0h6eE8pg==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      '@date-fns/tz': ^1.2.0
+      '@types/react': ^17 || ^18 || ^19
+      date-fns: ^4.0.0
+      react: ^19.2.4
+      react-dom: ^19.2.4
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+
+  '@base-ui/utils@0.2.7':
+    resolution: {integrity: sha512-nXYKhiL/0JafyJE8PfcflipGftOftlIwKd72rU15iZ1M5yqgg5J9P8NHU71GReDuXco5MJA/eVQqUT5WRqX9sA==}
+    peerDependencies:
+      '@types/react': ^17 || ^18 || ^19
+      react: ^19.2.4
+      react-dom: ^19.2.4
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
 
   '@bomb.sh/args@0.3.1':
     resolution: {integrity: sha512-CwxKrfgcorUPP6KfYD59aRdBYWBTsfsxT+GmoLVnKo5Tmyoqbpo0UNcjngRMyU+6tiPbd18RuIYxhgAn44wU/Q==}
@@ -1455,8 +1576,16 @@ packages:
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
 
+<<<<<<< HEAD
   '@emnapi/core@1.9.2':
     resolution: {integrity: sha512-UC+ZhH3XtczQYfOlu3lNEkdW/p4dsJ1r/bP7H8+rhao3TTTMO1ATq/4DdIi23XuGoFY+Cz0JmCbdVl0hz9jZcA==}
+=======
+  '@date-fns/tz@1.4.1':
+    resolution: {integrity: sha512-P5LUNhtbj6YfI3iJjw5EL9eUAG6OitD0W3fWQcpQjDRc/QIsL0tRNuO1PcDvPccWL1fSTXXdE1ds+l95DV/OFA==}
+
+  '@emnapi/core@1.9.0':
+    resolution: {integrity: sha512-0DQ98G9ZQZOxfUcQn1waV2yS8aWdZ6kJMbYCJB3oUBecjWYO1fqJ+a1DRfPF3O5JEkwqwP1A9QEN/9mYm2Yd0w==}
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
 
   '@emnapi/runtime@1.8.1':
     resolution: {integrity: sha512-mehfKSMWjjNol8659Z8KxEMrdSJDDot5SXMq00dM8BN4o+CLNXQ0xH2V7EchNHV4RmbZLmmPdEaXZc5H2FXmDg==}
@@ -1948,6 +2077,12 @@ packages:
   '@floating-ui/dom@1.7.6':
     resolution: {integrity: sha512-9gZSAI5XM36880PPMm//9dfiEngYoC6Am2izES1FF406YFsjvyBMmeJ2g4SAju3xWwtuynNRFL2s9hgxpLI5SQ==}
 
+  '@floating-ui/react-dom@2.1.8':
+    resolution: {integrity: sha512-cC52bHwM/n/CxS87FH0yWdngEZrjdtLW/qVruo68qg+prK7ZQ4YGdut2GyDVpoGeAYe/h899rVeOVm6Oi40k2A==}
+    peerDependencies:
+      react: ^19.2.4
+      react-dom: ^19.2.4
+
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
 
@@ -2229,11 +2364,68 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
+<<<<<<< HEAD
   '@napi-rs/wasm-runtime@1.1.3':
     resolution: {integrity: sha512-xK9sGVbJWYb08+mTJt3/YV24WxvxpXcXtP6B172paPZ+Ts69Re9dAr7lKwJoeIx8OoeuimEiRZ7umkiUVClmmQ==}
     peerDependencies:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
+=======
+  '@next/env@16.2.3':
+    resolution: {integrity: sha512-ZWXyj4uNu4GCWQw9cjRxWlbD+33mcDszIo9iQxFnBX3Wmgq9ulaSJcl6VhuWx5pCWqqD+9W6Wfz7N0lM5lYPMA==}
+
+  '@next/swc-darwin-arm64@16.2.3':
+    resolution: {integrity: sha512-u37KDKTKQ+OQLvY+z7SNXixwo4Q2/IAJFDzU1fYe66IbCE51aDSAzkNDkWmLN0yjTUh4BKBd+hb69jYn6qqqSg==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@next/swc-darwin-x64@16.2.3':
+    resolution: {integrity: sha512-gHjL/qy6Q6CG3176FWbAKyKh9IfntKZTB3RY/YOJdDFpHGsUDXVH38U4mMNpHVGXmeYW4wj22dMp1lTfmu/bTQ==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@next/swc-linux-arm64-gnu@16.2.3':
+    resolution: {integrity: sha512-U6vtblPtU/P14Y/b/n9ZY0GOxbbIhTFuaFR7F4/uMBidCi2nSdaOFhA0Go81L61Zd6527+yvuX44T4ksnf8T+Q==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@next/swc-linux-arm64-musl@16.2.3':
+    resolution: {integrity: sha512-/YV0LgjHUmfhQpn9bVoGc4x4nan64pkhWR5wyEV8yCOfwwrH630KpvRg86olQHTwHIn1z59uh6JwKvHq1h4QEw==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@next/swc-linux-x64-gnu@16.2.3':
+    resolution: {integrity: sha512-/HiWEcp+WMZ7VajuiMEFGZ6cg0+aYZPqCJD3YJEfpVWQsKYSjXQG06vJP6F1rdA03COD9Fef4aODs3YxKx+RDQ==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@next/swc-linux-x64-musl@16.2.3':
+    resolution: {integrity: sha512-Kt44hGJfZSefebhk/7nIdivoDr3Ugp5+oNz9VvF3GUtfxutucUIHfIO0ZYO8QlOPDQloUVQn4NVC/9JvHRk9hw==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@next/swc-win32-arm64-msvc@16.2.3':
+    resolution: {integrity: sha512-O2NZ9ie3Tq6xj5Z5CSwBT3+aWAMW2PIZ4egUi9MaWLkwaehgtB7YZjPm+UpcNpKOme0IQuqDcor7BsW6QBiQBw==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@next/swc-win32-x64-msvc@16.2.3':
+    resolution: {integrity: sha512-Ibm29/GgB/ab5n7XKqlStkm54qqZE8v2FnijUPBgrd67FWrac45o/RsNlaOWjme/B5UqeWt/8KM4aWBwA1D2Kw==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [win32]
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
 
   '@noble/ciphers@1.3.0':
     resolution: {integrity: sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw==}
@@ -3078,6 +3270,9 @@ packages:
     engines: {node: '>=14'}
     peerDependencies:
       '@svgr/core': '*'
+
+  '@swc/helpers@0.5.15':
+    resolution: {integrity: sha512-JQ5TuMi45Owi4/BIMAJBoSQoOJu12oOk/gADqlcUL9JEdHB8vyjUSsxqeNXnmXHjYKMi2WcYtezGEEhqUI/E2g==}
 
   '@tailwindcss/node@4.2.1':
     resolution: {integrity: sha512-jlx6sLk4EOwO6hHe1oCGm1Q4AN/s0rSrTTPBGPM0/RQ6Uylwq17FuU8IeJJKEjtc6K6O07zsvP+gDO6MMWo7pg==}
@@ -4264,6 +4459,9 @@ packages:
     resolution: {integrity: sha512-ywqV+5MmyL4E7ybXgKys4DugZbX0FC6LnwrhjuykIjnK9k8OQacQ7axGKnjDXWNhns0xot3bZI5h55H8yo9cJg==}
     engines: {node: '>=6'}
 
+  client-only@0.0.1:
+    resolution: {integrity: sha512-IV3Ou0jSMzZrd3pZ48nLkT9DA7Ag1pnPzaiQhpW7c3RbcqqzvzzVu+L8gfqMp/8IM2MQtSiqaCxrrcfu8I8rMA==}
+
   cliui@8.0.1:
     resolution: {integrity: sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ==}
     engines: {node: '>=12'}
@@ -4444,6 +4642,9 @@ packages:
 
   dataloader@1.4.0:
     resolution: {integrity: sha512-68s5jYdlvasItOJnCuI2Q9s4q98g0pCyL3HrcKJu8KNugUl8ahgmZYg38ysLTgQjjXX3H8CJLkAvWrclWfcalw==}
+
+  date-fns@4.1.0:
+    resolution: {integrity: sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg==}
 
   debug@2.6.9:
     resolution: {integrity: sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA==}
@@ -4957,6 +5158,11 @@ packages:
 
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
+
+  geist@1.7.0:
+    resolution: {integrity: sha512-ZaoiZwkSf0DwwB1ncdLKp+ggAldqxl5L1+SXaNIBGkPAqcu+xjVJLxlf3/S8vLt9UHx1xu5fz3lbzKCj5iOVdQ==}
+    peerDependencies:
+      next: '>=13.2.0'
 
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
@@ -5903,6 +6109,27 @@ packages:
   neo-async@2.6.2:
     resolution: {integrity: sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==}
 
+  next@16.2.3:
+    resolution: {integrity: sha512-9V3zV4oZFza3PVev5/poB9g0dEafVcgNyQ8eTRop8GvxZjV2G15FC5ARuG1eFD42QgeYkzJBJzHghNP8Ad9xtA==}
+    engines: {node: '>=20.9.0'}
+    hasBin: true
+    peerDependencies:
+      '@opentelemetry/api': ^1.1.0
+      '@playwright/test': ^1.51.1
+      babel-plugin-react-compiler: '*'
+      react: ^19.2.4
+      react-dom: ^19.2.4
+      sass: ^1.3.0
+    peerDependenciesMeta:
+      '@opentelemetry/api':
+        optional: true
+      '@playwright/test':
+        optional: true
+      babel-plugin-react-compiler:
+        optional: true
+      sass:
+        optional: true
+
   no-case@3.0.4:
     resolution: {integrity: sha512-fgAN3jGAh+RoxUGZHTSOLJIqUc2wmoBwGR4tbpNAKmmovFoWq0OdRkb0VkldReO2a2iBT/OEulG9XSUc10r3zg==}
 
@@ -6278,6 +6505,10 @@ packages:
     resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
     engines: {node: '>=14.19.0'}
 
+  postcss@8.4.31:
+    resolution: {integrity: sha512-PS08Iboia9mts/2ygV3eLpY5ghnUcfLV/EXTOW1E2qYxJKGGBUtNjN76FYHnMs36RmARn41bC0AZmn+rR0OVpQ==}
+    engines: {node: ^10 || ^12 || >=14}
+
   postcss@8.4.49:
     resolution: {integrity: sha512-OCVPnIObs4N29kxTjzLfUryOkvZEq+pf8jTF0lg8E7uETuWHA+v7j3c/xJmiqpX450191LlmZfUKkXxkTry7nA==}
     engines: {node: ^10 || ^12 || >=14}
@@ -6505,6 +6736,9 @@ packages:
 
   requires-port@1.0.0:
     resolution: {integrity: sha512-KigOCHcocU3XODJxsu8i/j8T9tzT4adHiecwORRQ0ZZFcp7ahwXuRU1m+yuO90C5ZUyGeGfocHDI14M3L3yDAQ==}
+
+  reselect@5.1.1:
+    resolution: {integrity: sha512-K/BG6eIky/SBpzfHZv/dd+9JBFiS4SWV7FIujVyJRux6e45+73RaUHXLmIR1f7WOMaQ0U1km6qwklRQxpJJY0w==}
 
   resolve-from@4.0.0:
     resolution: {integrity: sha512-pb/MYmXstAkysRFx8piNI1tGFNQIFA3vkE3Gq4EuA1dF6gHp/+vgZqsCGJapvy8N3Q+4o7FwvquPJcnZ7RYy4g==}
@@ -6816,6 +7050,19 @@ packages:
 
   structured-headers@0.4.1:
     resolution: {integrity: sha512-0MP/Cxx5SzeeZ10p/bZI0S6MpgD+yxAhi1BOQ34jgnMXsCq3j1t6tQnZu+KdlL7dvJTLT3g9xN8tl10TqgFMcg==}
+
+  styled-jsx@5.1.6:
+    resolution: {integrity: sha512-qSVyDTeMotdvQYoHWLNGwRFJHC+i+ZvdBRYosOFgC+Wg1vx4frN2/RG/NA7SYqqvKNLf39P2LSRA2pu6n0XYZA==}
+    engines: {node: '>= 12.0.0'}
+    peerDependencies:
+      '@babel/core': '*'
+      babel-plugin-macros: '*'
+      react: ^19.2.4
+    peerDependenciesMeta:
+      '@babel/core':
+        optional: true
+      babel-plugin-macros:
+        optional: true
 
   supports-color@10.2.2:
     resolution: {integrity: sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g==}
@@ -8195,7 +8442,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/runtime@7.28.4': {}
+  '@babel/runtime@7.29.2': {}
 
   '@babel/runtime@7.29.2': {}
 
@@ -8223,6 +8470,31 @@ snapshots:
       '@babel/helper-validator-identifier': 7.28.5
 
   '@balena/dockerignore@1.0.2': {}
+
+  '@base-ui/react@1.4.0(@date-fns/tz@1.4.1)(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+    dependencies:
+      '@babel/runtime': 7.29.2
+      '@base-ui/utils': 0.2.7(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@date-fns/tz': 1.4.1
+      '@floating-ui/react-dom': 2.1.8(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@floating-ui/utils': 0.2.11
+      date-fns: 4.1.0
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
+      use-sync-external-store: 1.6.0(react@19.2.4)
+    optionalDependencies:
+      '@types/react': 19.2.14
+
+  '@base-ui/utils@0.2.7(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+    dependencies:
+      '@babel/runtime': 7.29.2
+      '@floating-ui/utils': 0.2.11
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
+      reselect: 5.1.1
+      use-sync-external-store: 1.6.0(react@19.2.4)
+    optionalDependencies:
+      '@types/react': 19.2.14
 
   '@bomb.sh/args@0.3.1': {}
 
@@ -8414,7 +8686,15 @@ snapshots:
     optionalDependencies:
       workerd: 1.20260409.1
 
+<<<<<<< HEAD
   '@cloudflare/unenv-preset@2.16.0(unenv@2.0.0-rc.24)(workerd@1.20260410.1)':
+=======
+<<<<<<< HEAD
+  '@cloudflare/vite-plugin@1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))':
+=======
+  '@cloudflare/vite-plugin@1.31.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.3)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))':
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
+>>>>>>> ed22025 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
     dependencies:
       unenv: 2.0.0-rc.24
     optionalDependencies:
@@ -8425,7 +8705,11 @@ snapshots:
       '@cloudflare/unenv-preset': 2.16.0(unenv@2.0.0-rc.24)(workerd@1.20260410.1)
       miniflare: 4.20260401.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       unenv: 2.0.0-rc.24
+<<<<<<< HEAD
       vite: 8.0.8(@types/node@25.5.2)(@vitejs/devtools@0.1.11)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.2)
+=======
+      vite: 8.0.3(@emnapi/core@1.9.0)(@emnapi/runtime@1.8.1)(@types/node@25.5.2)(@vitejs/devtools@0.1.11)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.2)
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
       wrangler: 4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       ws: 8.18.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
     transitivePeerDependencies:
@@ -8433,7 +8717,15 @@ snapshots:
       - utf-8-validate
       - workerd
 
+<<<<<<< HEAD
   '@cloudflare/vite-plugin@1.32.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))':
+=======
+<<<<<<< HEAD
+  '@cloudflare/vite-plugin@1.31.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))':
+=======
+  '@cloudflare/vite-plugin@1.31.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.3)(workerd@1.20260409.1)(wrangler@4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))':
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
+>>>>>>> ed22025 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
     dependencies:
       '@cloudflare/unenv-preset': 2.16.0(unenv@2.0.0-rc.24)(workerd@1.20260409.1)
       miniflare: 4.20260410.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
@@ -8451,7 +8743,11 @@ snapshots:
       '@cloudflare/unenv-preset': 2.16.0(unenv@2.0.0-rc.24)(workerd@1.20260410.1)
       miniflare: 4.20260410.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       unenv: 2.0.0-rc.24
+<<<<<<< HEAD
       vite: 8.0.8(@types/node@25.6.0)(@vitejs/devtools@0.1.11)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.2)
+=======
+      vite: 8.0.3(@emnapi/core@1.9.0)(@emnapi/runtime@1.8.1)(@types/node@25.6.0)(@vitejs/devtools@0.1.11)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.2)
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
       wrangler: 4.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       ws: 8.18.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
     transitivePeerDependencies:
@@ -8538,7 +8834,13 @@ snapshots:
   '@csstools/css-tokenizer@4.0.0':
     optional: true
 
+<<<<<<< HEAD
   '@emnapi/core@1.9.2':
+=======
+  '@date-fns/tz@1.4.1': {}
+
+  '@emnapi/core@1.9.0':
+>>>>>>> aeef0c4 (feat(connect): add Identicon component, Geist Mono font, and UI refinements)
     dependencies:
       '@emnapi/wasi-threads': 1.2.1
       tslib: 2.8.1
@@ -9054,6 +9356,12 @@ snapshots:
       '@floating-ui/core': 1.7.5
       '@floating-ui/utils': 0.2.11
 
+  '@floating-ui/react-dom@2.1.8(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+    dependencies:
+      '@floating-ui/dom': 1.7.6
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
+
   '@floating-ui/utils@0.2.11': {}
 
   '@grpc/grpc-js@1.14.2':
@@ -9266,14 +9574,14 @@ snapshots:
 
   '@manypkg/find-root@1.1.0':
     dependencies:
-      '@babel/runtime': 7.28.4
+      '@babel/runtime': 7.29.2
       '@types/node': 12.20.55
       find-up: 4.1.0
       fs-extra: 8.1.0
 
   '@manypkg/get-packages@1.1.3':
     dependencies:
-      '@babel/runtime': 7.28.4
+      '@babel/runtime': 7.29.2
       '@changesets/types': 4.1.0
       '@manypkg/find-root': 1.1.0
       fs-extra: 8.1.0
@@ -9322,6 +9630,32 @@ snapshots:
       '@emnapi/core': 1.9.2
       '@emnapi/runtime': 1.9.2
       '@tybys/wasm-util': 0.10.1
+    optional: true
+
+  '@next/env@16.2.3': {}
+
+  '@next/swc-darwin-arm64@16.2.3':
+    optional: true
+
+  '@next/swc-darwin-x64@16.2.3':
+    optional: true
+
+  '@next/swc-linux-arm64-gnu@16.2.3':
+    optional: true
+
+  '@next/swc-linux-arm64-musl@16.2.3':
+    optional: true
+
+  '@next/swc-linux-x64-gnu@16.2.3':
+    optional: true
+
+  '@next/swc-linux-x64-musl@16.2.3':
+    optional: true
+
+  '@next/swc-win32-arm64-msvc@16.2.3':
+    optional: true
+
+  '@next/swc-win32-x64-msvc@16.2.3':
     optional: true
 
   '@noble/ciphers@1.3.0': {}
@@ -9772,7 +10106,7 @@ snapshots:
   '@readme/better-ajv-errors@2.4.0(ajv@8.18.0)':
     dependencies:
       '@babel/code-frame': 7.29.0
-      '@babel/runtime': 7.28.4
+      '@babel/runtime': 7.29.2
       '@humanwhocodes/momoa': 2.0.4
       ajv: 8.18.0
       jsonpointer: 5.0.1
@@ -10006,6 +10340,10 @@ snapshots:
       svg-parser: 2.0.4
     transitivePeerDependencies:
       - supports-color
+
+  '@swc/helpers@0.5.15':
+    dependencies:
+      tslib: 2.8.1
 
   '@tailwindcss/node@4.2.1':
     dependencies:
@@ -11552,6 +11890,8 @@ snapshots:
 
   cli-spinners@2.9.2: {}
 
+  client-only@0.0.1: {}
+
   cliui@8.0.1:
     dependencies:
       string-width: 4.2.3
@@ -11729,6 +12069,8 @@ snapshots:
     optional: true
 
   dataloader@1.4.0: {}
+
+  date-fns@4.1.0: {}
 
   debug@2.6.9:
     dependencies:
@@ -12304,6 +12646,10 @@ snapshots:
     optional: true
 
   function-bind@1.1.2: {}
+
+  geist@1.7.0(next@16.2.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)):
+    dependencies:
+      next: 16.2.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
 
   gensync@1.0.0-beta.2: {}
 
@@ -13415,6 +13761,32 @@ snapshots:
   neo-async@2.6.2:
     optional: true
 
+  next@16.2.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
+    dependencies:
+      '@next/env': 16.2.3
+      '@swc/helpers': 0.5.15
+      baseline-browser-mapping: 2.10.13
+      caniuse-lite: 1.0.30001784
+      postcss: 8.4.31
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
+      styled-jsx: 5.1.6(@babel/core@7.29.0)(react@19.2.4)
+    optionalDependencies:
+      '@next/swc-darwin-arm64': 16.2.3
+      '@next/swc-darwin-x64': 16.2.3
+      '@next/swc-linux-arm64-gnu': 16.2.3
+      '@next/swc-linux-arm64-musl': 16.2.3
+      '@next/swc-linux-x64-gnu': 16.2.3
+      '@next/swc-linux-x64-musl': 16.2.3
+      '@next/swc-win32-arm64-msvc': 16.2.3
+      '@next/swc-win32-x64-msvc': 16.2.3
+      '@opentelemetry/api': 1.9.1
+      babel-plugin-react-compiler: 1.0.0
+      sharp: 0.34.5
+    transitivePeerDependencies:
+      - '@babel/core'
+      - babel-plugin-macros
+
   no-case@3.0.4:
     dependencies:
       lower-case: 2.0.2
@@ -13719,6 +14091,12 @@ snapshots:
 
   pngjs@7.0.0: {}
 
+  postcss@8.4.31:
+    dependencies:
+      nanoid: 3.3.11
+      picocolors: 1.1.1
+      source-map-js: 1.2.1
+
   postcss@8.4.49:
     dependencies:
       nanoid: 3.3.11
@@ -14002,6 +14380,8 @@ snapshots:
   require-from-string@2.0.2: {}
 
   requires-port@1.0.0: {}
+
+  reselect@5.1.1: {}
 
   resolve-from@4.0.0: {}
 
@@ -14389,6 +14769,13 @@ snapshots:
   structured-clone-es@2.0.0: {}
 
   structured-headers@0.4.1: {}
+
+  styled-jsx@5.1.6(@babel/core@7.29.0)(react@19.2.4):
+    dependencies:
+      client-only: 0.0.1
+      react: 19.2.4
+    optionalDependencies:
+      '@babel/core': 7.29.0
 
   supports-color@10.2.2: {}
 

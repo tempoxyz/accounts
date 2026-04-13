@@ -1,4 +1,6 @@
 @import 'tailwindcss';
+@import 'geist/dist/sans.css';
+@import 'geist/dist/mono.css';
 
 :root {
   color-scheme: light dark;
