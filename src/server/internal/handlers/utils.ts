@@ -58,12 +58,14 @@ export function rpcError(request: RpcRequest.RpcRequest, error: unknown) {
       ),
     )
 
+  const inner = resolveError(error)
+  const message = inner.message ?? (error as Error).message
+  const code = inner.code ?? -32603
+  const data = inner.data
   return Response.json(
     RpcResponse.from(
       {
-        error: new RpcResponse.InternalError({
-          message: (error as Error).message,
-        }),
+        error: { code, message, ...(data ? { data } : {}) },
       },
       { request },
     ),
@@ -75,3 +77,20 @@ export function rpcResult(request: RpcRequest.RpcRequest, result: unknown) {
 }
 
 export const parseParams = z.readonly(z.tuple([z.record(z.string(), z.unknown())]))
+
+function resolveError(error: unknown): {
+  message?: string | undefined
+  code?: number | undefined
+  data?: unknown
+} {
+  if (!error || typeof error !== 'object') return {}
+  const e = error as Record<string, unknown>
+  // Walk to the innermost cause with a numeric code (raw RPC error).
+  if (e.cause && typeof e.cause === 'object') {
+    const inner = resolveError(e.cause)
+    if (inner.message) return inner
+  }
+  if (typeof e.code === 'number' && typeof e.message === 'string')
+    return { message: e.message, code: e.code, data: e.data }
+  return {}
+}

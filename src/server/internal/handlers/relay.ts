@@ -14,6 +14,7 @@ import {
   parseEventLogs,
   type Transport,
 } from 'viem'
+import { simulateCalls } from 'viem/actions'
 import { tempo, tempoLocalnet, tempoMainnet, tempoModerato } from 'viem/chains'
 import { Abis, Actions, Addresses, Transaction } from 'viem/tempo'
 
@@ -77,7 +78,10 @@ export function relay(options: relay.Options = {}): Handler {
   const clients = new Map<number, Client>()
   for (const chain of chains) {
     const transport = transports[chain.id] ?? http()
-    clients.set(chain.id, createClient({ chain, transport }))
+    clients.set(
+      chain.id,
+      createClient({ chain, batch: { multicall: { deployless: true } }, transport }),
+    )
   }
 
   function getClient(chainId?: number): Client {
@@ -135,11 +139,7 @@ export function relay(options: relay.Options = {}): Handler {
         ...(feePayerOptions ? { feePayer: true } : {}),
         ...(feeToken ? { feeToken } : {}),
       }
-      // Skip re-formatting if already in RPC format (e.g. from viem's fillTransaction).
-      const formatRequest = (value: Record<string, unknown>) =>
-        normalized.type === '0x76' ? value : Utils.formatFillTransactionRequest(client, value)
-
-      let transaction = await fill(client, withOverrides, { formatRequest, feeToken })
+      let transaction = await fill(client, withOverrides, { feeToken })
 
       // 3. Check if the fee payer approves this transaction.
       const sponsored =
@@ -155,7 +155,7 @@ export function relay(options: relay.Options = {}): Handler {
       // gas estimate and nonce are correct for a self-paid transaction.
       if (feePayerOptions && !sponsored) {
         const { feePayer: _, ...withoutFeePayer } = withOverrides
-        transaction = await fill(client, withoutFeePayer, { formatRequest, feeToken })
+        transaction = await fill(client, withoutFeePayer, { feeToken })
       }
 
       // 4. Simulate and compute balance diffs + fee.
@@ -205,16 +205,18 @@ export function relay(options: relay.Options = {}): Handler {
 async function fill(
   client: Client,
   request: Record<string, unknown>,
-  options: {
-    formatRequest: (value: Record<string, unknown>) => Record<string, unknown>
-    feeToken?: Address | undefined
-  },
+  options: { feeToken?: Address | undefined } = {},
 ) {
-  const { formatRequest, feeToken } = options
+  const { feeToken } = options
+
+  // Skip re-formatting if already in RPC format (e.g. from viem's fillTransaction).
+  const format = (value: Record<string, unknown>) =>
+    value.type === '0x76' ? value : Utils.formatFillTransactionRequest(client, value)
+
   try {
     const result = await client.request({
       method: 'eth_fillTransaction',
-      params: [formatRequest(request) as never],
+      params: [format(request) as never],
     })
     return Utils.normalizeTempoTransaction(result.tx)
   } catch (error) {
@@ -224,13 +226,27 @@ async function fill(
     if (parsed.token.toLowerCase() === feeToken.toLowerCase()) throw error
 
     const swapCalls = buildSwapCalls(feeToken, parsed.token, parsed.required - parsed.available)
-    const calls = request.calls as Call[] | undefined
+    const existingCalls = request.calls as Call[] | undefined
+    // If the request was normalized to top-level to/data/value (single call),
+    // convert back to a calls array so we can prepend swap calls.
+    const originalCalls: Call[] = existingCalls
+      ? [...existingCalls]
+      : request.to
+        ? [
+            {
+              to: request.to as Address,
+              data: request.data as `0x${string}`,
+              value: (request.value as bigint) ?? 0n,
+            },
+          ]
+        : []
+    const { to: _, data: __, value: ___, calls: ____, ...rest } = request
     const result = await client.request({
       method: 'eth_fillTransaction',
       params: [
-        formatRequest({
-          ...request,
-          calls: [...swapCalls, ...(calls ?? [])],
+        format({
+          ...rest,
+          calls: [...swapCalls, ...originalCalls],
         }) as never,
       ],
     })
@@ -303,7 +319,7 @@ export namespace relay {
   /** Metadata returned alongside the filled transaction. */
   export type Meta = {
     /** Per-account balance diffs keyed by address. */
-    balanceDiffs: Record<Address, readonly BalanceDiff[]>
+    balanceDiffs?: Record<Address, readonly BalanceDiff[]> | undefined
     /** Fee estimate for the transaction. */
     fee: { amount: Hex.Hex; decimals: number; formatted: string; symbol: string } | null
     /** Whether the transaction is sponsored by a fee payer. */
@@ -387,38 +403,58 @@ async function resolveFeeToken(
   return Addresses.pathUsd as Address
 }
 
-function extractCalls(transaction: Record<string, unknown>) {
-  const calls = transaction.calls as
-    | readonly {
-        to?: Address | undefined
-        data?: `0x${string}` | undefined
-        value?: bigint | undefined
-      }[]
-    | undefined
+function extractCalls(transaction: Record<string, unknown>): readonly Call[] {
+  const calls = transaction.calls as readonly Call[] | undefined
   if (calls && calls.length > 0)
     return calls.map((c) => ({
       ...(c.to ? { to: c.to } : {}),
       ...(c.data ? { data: c.data } : {}),
       ...(c.value ? { value: c.value } : {}),
-    }))
+    })) as readonly Call[]
   return [
     {
       ...(transaction.to ? { to: transaction.to as Address } : {}),
       ...(transaction.data ? { data: transaction.data as `0x${string}` } : {}),
       ...(transaction.value ? { value: transaction.value as bigint } : {}),
     },
-  ]
+  ] as readonly Call[]
+}
+
+async function simulate(
+  client: Client,
+  options: {
+    account?: Address | undefined
+    calls: readonly Call[]
+  },
+) {
+  const { account, calls } = options
+  try {
+    return await Actions.simulate.simulateCalls(client, {
+      ...(account ? { account } : {}),
+      calls: calls as Call[],
+      traceTransfers: true,
+    })
+  } catch (error) {
+    // TODO: Remove fallback once all nodes support tempo_simulateV1.
+    // Fall back to viem's simulateCalls (eth_simulateV1) if the Tempo
+    // method (tempo_simulateV1) is not supported.
+    const code =
+      (error as { code?: number | undefined }).code ??
+      (error as { cause?: { code?: number | undefined } | undefined }).cause?.code
+    if (code !== -32601) throw error
+    const { results } = await simulateCalls(client, {
+      ...(account ? { account } : {}),
+      calls: calls as Call[],
+    })
+    return { results, tokenMetadata: undefined }
+  }
 }
 
 async function simulateAndParseDiffs(
   client: Client,
   options: {
     account?: Address | undefined
-    calls: readonly {
-      to?: Address | undefined
-      data?: `0x${string}` | undefined
-      value?: bigint | undefined
-    }[]
+    calls: readonly Call[]
     feeToken?: Address | undefined
     gas?: bigint | undefined
     maxFeePerGas?: bigint | undefined
@@ -427,11 +463,7 @@ async function simulateAndParseDiffs(
   const { account, calls, feeToken, gas, maxFeePerGas } = options
 
   try {
-    const { results, tokenMetadata } = await Actions.simulate.simulateCalls(client, {
-      ...(account ? { account } : {}),
-      calls: calls as Call[],
-      traceTransfers: true,
-    })
+    const { results, tokenMetadata } = await simulate(client, { account, calls })
 
     // Collect all logs across all call results.
     const logs: (typeof results)[number]['logs'] = []
@@ -460,7 +492,7 @@ async function simulateAndParseDiffs(
     // Simulation failures should not block the fill response —
     // return empty diffs with fee computed from transaction fields.
     const fee = await computeFee(client, { feeToken, gas, maxFeePerGas })
-    return { balanceDiffs: {}, fee }
+    return { balanceDiffs: undefined, fee }
   }
 }
 
@@ -539,16 +571,14 @@ async function buildBalanceDiffs(
   })
   if (entries.length === 0) return {}
 
-  // Resolve decimals for all tokens in parallel (simulation metadata first, RPC fallback).
-  const decimalsMap = new Map<string, number>()
+  // Resolve metadata for all tokens in parallel (simulation metadata first, RPC fallback).
+  const metadataMap = new Map<string, { decimals: number; symbol: string; name: string }>()
   await Promise.all(
     entries.map(async (entry) => {
       try {
         const metadata = await resolveTokenMetadata(client, entry.token, tokenMetadata)
-        decimalsMap.set(entry.token.toLowerCase(), metadata.decimals)
-      } catch {
-        decimalsMap.set(entry.token.toLowerCase(), 0)
-      }
+        metadataMap.set(entry.token.toLowerCase(), metadata)
+      } catch {}
     }),
   )
 
@@ -561,8 +591,8 @@ async function buildBalanceDiffs(
         : entry.incoming - entry.outgoing
 
     const direction = entry.outgoing > entry.incoming ? 'outgoing' : 'incoming'
-    const meta = tokenMetadata[entry.token] ?? tokenMetadata[entry.token.toLowerCase() as Address]
-    const decimals = decimalsMap.get(entry.token.toLowerCase()) ?? 0
+    const meta = metadataMap.get(entry.token.toLowerCase())
+    const decimals = meta?.decimals ?? 0
     diffs.push({
       address: entry.token,
       decimals,
@@ -587,8 +617,8 @@ async function resolveTokenMetadata(
   const fallback = await Actions.token.getMetadata(client, { token })
   return {
     decimals: fallback.decimals ?? 6,
-    symbol: meta?.symbol ?? fallback.symbol,
-    name: meta?.name ?? fallback.name,
+    symbol: meta?.symbol || fallback.symbol,
+    name: meta?.name || fallback.name,
   }
 }
 
@@ -666,17 +696,19 @@ function extractRevertData(error: unknown): `0x${string}` | null {
 
 function buildSwapCalls(sourceToken: Address, targetToken: Address, deficit: bigint) {
   const maxAmountIn = deficit + deficit / 10n
+  const approve = Actions.token.approve.call({
+    token: sourceToken,
+    spender: Addresses.stablecoinDex,
+    amount: maxAmountIn,
+  })
+  const buy = Actions.dex.buy.call({
+    tokenIn: sourceToken,
+    tokenOut: targetToken,
+    amountOut: deficit,
+    maxAmountIn,
+  })
   return [
-    Actions.token.approve.call({
-      token: sourceToken,
-      spender: Addresses.stablecoinDex,
-      amount: maxAmountIn,
-    }),
-    Actions.dex.buy.call({
-      tokenIn: sourceToken,
-      tokenOut: targetToken,
-      amountOut: deficit,
-      maxAmountIn,
-    }),
+    { to: approve.to, data: approve.data, value: 0n },
+    { to: buy.to, data: buy.data, value: 0n },
   ] as const
 }
