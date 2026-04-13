@@ -67,6 +67,7 @@ export function relay(options: relay.Options = {}): Handler {
   const {
     chains = [tempo, tempoModerato],
     feePayer: feePayerOptions,
+    feeSwap: feeSwapOptions,
     onRequest,
     path = '/',
     resolveTokens = (chainId) =>
@@ -74,6 +75,7 @@ export function relay(options: relay.Options = {}): Handler {
     transports = {},
     ...rest
   } = options
+  const slippage = feeSwapOptions?.slippage ?? 0.05
 
   const clients = new Map<number, Client>()
   for (const chain of chains) {
@@ -139,7 +141,7 @@ export function relay(options: relay.Options = {}): Handler {
         ...(feePayerOptions ? { feePayer: true } : {}),
         ...(feeToken ? { feeToken } : {}),
       }
-      let transaction = await fill(client, withOverrides, { feeToken })
+      let filled = await fill(client, withOverrides, { feeToken, slippage })
 
       // 3. Check if the fee payer approves this transaction.
       const sponsored =
@@ -147,7 +149,7 @@ export function relay(options: relay.Options = {}): Handler {
         (!feePayerOptions.validate ||
           // @ts-expect-error - TODO: Convert to `TransactionRequest` properly.
           (await feePayerOptions.validate({
-            ...transaction,
+            ...filled.transaction,
             from: sender,
           } as Transaction.TransactionRequest)))
 
@@ -155,14 +157,17 @@ export function relay(options: relay.Options = {}): Handler {
       // gas estimate and nonce are correct for a self-paid transaction.
       if (feePayerOptions && !sponsored) {
         const { feePayer: _, ...withoutFeePayer } = withOverrides
-        transaction = await fill(client, withoutFeePayer, { feeToken })
+        filled = await fill(client, withoutFeePayer, { feeToken, slippage })
       }
+
+      const { transaction, swap: feeSwap } = filled
 
       // 4. Simulate and compute balance diffs + fee.
       const calls = extractCalls(transaction)
       const { balanceDiffs, fee } = await simulateAndParseDiffs(client, {
         account: sender,
         calls,
+        swap: feeSwap,
         feeToken: (transaction as { feeToken?: Address | undefined }).feeToken,
         gas: (transaction as { gas?: bigint | undefined }).gas,
         maxFeePerGas: (transaction as { maxFeePerGas?: bigint | undefined }).maxFeePerGas,
@@ -185,6 +190,35 @@ export function relay(options: relay.Options = {}): Handler {
           }
         : undefined
 
+      // 6. Resolve feeSwap metadata (when AMM path was taken).
+      const feeSwapMeta = await (async (): Promise<relay.Meta['feeSwap']> => {
+        if (!feeSwap) return undefined
+        const [inMeta, outMeta] = await Promise.all([
+          resolveTokenMetadata(client, feeSwap.tokenIn).catch(() => undefined),
+          resolveTokenMetadata(client, feeSwap.tokenOut).catch(() => undefined),
+        ])
+        if (!inMeta || !outMeta) return undefined
+        return {
+          slippage,
+          maxIn: {
+            token: feeSwap.tokenIn,
+            value: Hex.fromNumber(feeSwap.maxAmountIn) as `0x${string}`,
+            formatted: formatUnits(feeSwap.maxAmountIn, inMeta.decimals),
+            decimals: inMeta.decimals,
+            symbol: inMeta.symbol,
+            name: inMeta.name,
+          },
+          minOut: {
+            token: feeSwap.tokenOut,
+            value: Hex.fromNumber(feeSwap.amountOut) as `0x${string}`,
+            formatted: formatUnits(feeSwap.amountOut, outMeta.decimals),
+            decimals: outMeta.decimals,
+            symbol: outMeta.symbol,
+            name: outMeta.name,
+          },
+        }
+      })()
+
       return Utils.rpcResult(request, {
         tx: core_Transaction.toRpc(tx as core_Transaction.Transaction),
         meta: {
@@ -192,6 +226,7 @@ export function relay(options: relay.Options = {}): Handler {
           fee,
           sponsored: !!sponsor,
           ...(sponsor ? { sponsor } : {}),
+          ...(feeSwapMeta ? { feeSwap: feeSwapMeta } : {}),
         },
       })
     } catch (error) {
@@ -205,9 +240,9 @@ export function relay(options: relay.Options = {}): Handler {
 async function fill(
   client: Client,
   request: Record<string, unknown>,
-  options: { feeToken?: Address | undefined } = {},
+  options: { feeToken?: Address | undefined; slippage?: number | undefined } = {},
 ) {
-  const { feeToken } = options
+  const { feeToken, slippage = 0.05 } = options
 
   // Skip re-formatting if already in RPC format (e.g. from viem's fillTransaction).
   const format = (value: Record<string, unknown>) =>
@@ -218,14 +253,16 @@ async function fill(
       method: 'eth_fillTransaction',
       params: [format(request) as never],
     })
-    return Utils.normalizeTempoTransaction(result.tx)
+    return { transaction: Utils.normalizeTempoTransaction(result.tx) }
   } catch (error) {
     if (!(error instanceof Error)) throw error
     const parsed = parseInsufficientBalance(error)
     if (!parsed || !feeToken) throw error
     if (parsed.token.toLowerCase() === feeToken.toLowerCase()) throw error
 
-    const swapCalls = buildSwapCalls(feeToken, parsed.token, parsed.required - parsed.available)
+    const deficit = parsed.required - parsed.available
+    const maxAmountIn = deficit + (deficit * BigInt(Math.round(slippage * 1000))) / 1000n
+    const swapCalls = buildSwapCalls(feeToken, parsed.token, deficit, maxAmountIn)
     const existingCalls = request.calls as Call[] | undefined
     // If the request was normalized to top-level to/data/value (single call),
     // convert back to a calls array so we can prepend swap calls.
@@ -250,7 +287,15 @@ async function fill(
         }) as never,
       ],
     })
-    return Utils.normalizeTempoTransaction(result.tx)
+    return {
+      transaction: Utils.normalizeTempoTransaction(result.tx),
+      swap: {
+        tokenIn: feeToken,
+        tokenOut: parsed.token,
+        amountOut: deficit,
+        maxAmountIn,
+      },
+    }
   }
 }
 
@@ -302,6 +347,13 @@ export namespace relay {
     feePayer?:
       | Omit<FeePayer.feePayer.Options, 'chains' | 'transports' | 'path' | 'onRequest'>
       | undefined
+    /** AMM swap options for automatic InsufficientBalance resolution. */
+    feeSwap?:
+      | {
+          /** Slippage tolerance (e.g. 0.05 = 5%). @default 0.05 */
+          slippage?: number | undefined
+        }
+      | undefined
     /**
      * Returns token addresses to check balances for during fee token resolution.
      * The relay checks `balanceOf` for each token and picks the one with the
@@ -326,6 +378,33 @@ export namespace relay {
     sponsored: boolean
     /** Sponsor details (when sponsored). */
     sponsor?: { address: Address; name: string; url: string } | undefined
+    /** AMM swap injected by the relay to cover an InsufficientBalance. */
+    feeSwap?:
+      | {
+          /** Max input amount with slippage. */
+          maxIn: SwapAmount
+          /** Deficit amount that triggered the swap. */
+          minOut: SwapAmount
+          /** Slippage tolerance (e.g. 0.1 = 10%). */
+          slippage: number
+        }
+      | undefined
+  }
+
+  /** Token amount in a fee swap. */
+  export type SwapAmount = {
+    /** Token address. */
+    token: Address
+    /** Amount (hex-encoded). */
+    value: Hex.Hex
+    /** Human-readable formatted amount. */
+    formatted: string
+    /** Token decimals. */
+    decimals: number
+    /** Token symbol (e.g. "USDC.e"). */
+    symbol: string
+    /** Token name (e.g. "USDC.e"). */
+    name: string
   }
 
   /** Balance diff for a single token relative to the user account. */
@@ -455,12 +534,13 @@ async function simulateAndParseDiffs(
   options: {
     account?: Address | undefined
     calls: readonly Call[]
+    swap?: { tokenIn: Address; tokenOut: Address } | undefined
     feeToken?: Address | undefined
     gas?: bigint | undefined
     maxFeePerGas?: bigint | undefined
   },
 ) {
-  const { account, calls, feeToken, gas, maxFeePerGas } = options
+  const { account, calls, swap, feeToken, gas, maxFeePerGas } = options
 
   try {
     const { results, tokenMetadata } = await simulate(client, { account, calls })
@@ -475,6 +555,7 @@ async function simulateAndParseDiffs(
       ? await buildBalanceDiffs(client, {
           account,
           logs,
+          swap,
           tokenMetadata: tokenMetadata as never,
         })
       : {}
@@ -501,11 +582,15 @@ async function buildBalanceDiffs(
   options: {
     account: Address
     logs: Log[]
+    swap?: { tokenIn: Address; tokenOut: Address } | undefined
     tokenMetadata: Record<Address, { name: string; symbol: string; currency: string }>
   },
 ) {
-  const { account, logs, tokenMetadata } = options
+  const { account, logs, swap, tokenMetadata } = options
   const accountLower = account.toLowerCase()
+  const dexLower = Addresses.stablecoinDex.toLowerCase()
+  const swapTokenIn = swap?.tokenIn.toLowerCase()
+  const swapTokenOut = swap?.tokenOut.toLowerCase()
 
   const transferLogs = parseEventLogs({
     abi: [AbiEvent.fromAbi(Abis.tip20, 'Transfer')],
@@ -529,19 +614,28 @@ async function buildBalanceDiffs(
 
   for (const log of transferLogs) {
     const token = log.address.toLowerCase()
+    const fromLower = log.args.from.toLowerCase()
+    const toLower = log.args.to.toLowerCase()
+
+    // Skip swap-related transfers (reported in meta.feeSwap instead).
+    if (swap) {
+      if (token === swapTokenIn && fromLower === accountLower && toLower === dexLower) continue
+      if (token === swapTokenOut && fromLower === dexLower && toLower === accountLower) continue
+    }
+
     const entry = tokenMap.get(token) ?? {
       incoming: 0n,
       outgoing: 0n,
       recipients: new Set<Address>(),
       token: log.address,
     }
-    if (log.args.from.toLowerCase() === accountLower) {
+    if (fromLower === accountLower) {
       entry.outgoing += log.args.amount
       entry.recipients.add(log.args.to)
-      const key = `${token}:${log.args.to.toLowerCase()}`
+      const key = `${token}:${toLower}`
       transferredBySpender.set(key, (transferredBySpender.get(key) ?? 0n) + log.args.amount)
     }
-    if (log.args.to.toLowerCase() === accountLower) entry.incoming += log.args.amount
+    if (toLower === accountLower) entry.incoming += log.args.amount
     tokenMap.set(token, entry)
   }
 
@@ -549,6 +643,10 @@ async function buildBalanceDiffs(
   for (const log of approvalLogs) {
     if (log.args.owner.toLowerCase() !== accountLower) continue
     const token = log.address.toLowerCase()
+
+    // Skip swap-related approvals (reported in meta.feeSwap instead).
+    if (swap && token === swapTokenIn && log.args.spender.toLowerCase() === dexLower) continue
+
     const spenderKey = `${token}:${log.args.spender.toLowerCase()}`
     const transferred = transferredBySpender.get(spenderKey) ?? 0n
     if (log.args.amount <= transferred) continue
@@ -636,7 +734,8 @@ async function computeFee(
 
   try {
     const metadata = await resolveTokenMetadata(client, feeToken, tokenMetadata)
-    const amount = gas * maxFeePerGas
+    const raw = gas * maxFeePerGas
+    const amount = raw / 10n ** BigInt(18 - metadata.decimals)
     return {
       amount: Hex.fromNumber(amount) as `0x${string}`,
       decimals: metadata.decimals,
@@ -694,8 +793,12 @@ function extractRevertData(error: unknown): `0x${string}` | null {
   return null
 }
 
-function buildSwapCalls(sourceToken: Address, targetToken: Address, deficit: bigint) {
-  const maxAmountIn = deficit + deficit / 10n
+function buildSwapCalls(
+  sourceToken: Address,
+  targetToken: Address,
+  deficit: bigint,
+  maxAmountIn: bigint,
+) {
   const approve = Actions.token.approve.call({
     token: sourceToken,
     spender: Addresses.stablecoinDex,

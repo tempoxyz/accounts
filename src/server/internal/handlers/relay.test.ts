@@ -386,8 +386,112 @@ describe('behavior: AMM resolution', () => {
     })
 
     // Should succeed — relay auto-swapped quote → base.
-    expect(result.transaction.gas).toBeDefined()
-    expect(result.transaction.nonce).toBeDefined()
+    const { transaction, meta } = result
+    expect(transaction.gas).toBeDefined()
+    expect(transaction.nonce).toBeDefined()
+    expect(transaction.feeToken).toBe(addresses.alphaUsd)
+    expect(transaction.calls).toHaveLength(3) // approve + swap + transfer
+
+    const m = meta as relay.Meta
+    expect(m.sponsored).toBe(false)
+    expect(m.fee?.decimals).toBe(6)
+    expect(m.fee?.symbol).toBe('AlphaUSD')
+
+    // Balance diffs exclude swap tokens — only the user's transfer shows.
+    const diffs = findDiffs(m.balanceDiffs, sender.address)!
+    expect(diffs).toHaveLength(1)
+    expect(diffs[0]!.direction).toBe('outgoing')
+    expect(diffs[0]!.formatted).toBe('5')
+    expect(diffs[0]!.symbol).toBe('SWBASE')
+    expect(diffs[0]!.address.toLowerCase()).toBe(base.toLowerCase())
+
+    // feeSwap reports the injected AMM swap.
+    expect(m.feeSwap?.slippage).toBe(0.05)
+    expect(m.feeSwap?.maxIn.formatted).toBe('5.25')
+    expect(m.feeSwap?.maxIn.symbol).toBe('AlphaUSD')
+    expect(m.feeSwap?.maxIn.token.toLowerCase()).toBe(addresses.alphaUsd.toLowerCase())
+    expect(m.feeSwap?.minOut.formatted).toBe('5')
+    expect(m.feeSwap?.minOut.symbol).toBe('SWBASE')
+    expect(m.feeSwap?.minOut.token.toLowerCase()).toBe(base.toLowerCase())
+  })
+
+  test('behavior: custom slippage is applied to feeSwap', async () => {
+    const sender = accounts[2]!
+
+    // Set up token pair + DEX liquidity.
+    const rpc = getClient({ account: accounts[0]! })
+    const { token: base } = await Actions.token.createSync(rpc, {
+      name: 'Slippage Base',
+      symbol: 'SLPBASE',
+      currency: 'USD',
+      quoteToken: addresses.alphaUsd,
+    })
+    await sendTransactionSync(rpc, {
+      calls: [
+        Actions.token.grantRoles.call({ token: base, role: 'issuer', to: rpc.account!.address }),
+        Actions.token.mint.call({
+          token: base,
+          to: rpc.account!.address,
+          amount: parseUnits('10000', 6),
+        }),
+        Actions.token.mint.call({
+          token: addresses.alphaUsd,
+          to: rpc.account!.address,
+          amount: parseUnits('10000', 6),
+        }),
+        Actions.token.approve.call({
+          token: base,
+          spender: Addresses.stablecoinDex,
+          amount: parseUnits('10000', 6),
+        }),
+        Actions.token.approve.call({
+          token: addresses.alphaUsd,
+          spender: Addresses.stablecoinDex,
+          amount: parseUnits('10000', 6),
+        }),
+      ],
+    })
+    await Actions.dex.createPairSync(rpc, { base })
+    await Actions.dex.placeSync(rpc, {
+      token: base,
+      amount: parseUnits('500', 6),
+      type: 'sell',
+      tick: Tick.fromPrice('1.001'),
+    })
+
+    // Give sender alphaUsd but NO base tokens.
+    await Actions.token.mintSync(rpc, {
+      token: addresses.alphaUsd,
+      amount: parseUnits('1000', 6),
+      to: sender.address,
+    })
+    await Actions.fee.setUserToken(getClient({ account: sender }), { token: addresses.alphaUsd })
+
+    // Create relay with custom 2% slippage.
+    const customServer = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+        feeSwap: { slippage: 0.02 },
+      }).listener,
+    )
+    const customClient = getClient({ transport: http(customServer.url) })
+
+    const result = await fillTransaction(customClient, {
+      account: sender.address,
+      ...Actions.token.transfer.call({
+        token: base,
+        to: accounts[7]!.address,
+        amount: parseUnits('10', 6),
+      }),
+    })
+    customServer.close()
+
+    const m = result.meta as relay.Meta
+    expect(m.feeSwap?.slippage).toBe(0.02)
+    // 10 + 2% = 10.2
+    expect(m.feeSwap?.maxIn.formatted).toBe('10.2')
+    expect(m.feeSwap?.minOut.formatted).toBe('10')
   })
 })
 
