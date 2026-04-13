@@ -414,7 +414,7 @@ function Design() {
                     title="Authorize Device"
                   />
                   <Frame.Body>
-                    <div className="rounded-xl bg-gray-1 px-4 py-5 text-center">
+                    <div className="flex flex-col gap-3 rounded-xl bg-gray-1 px-4 py-5 text-center">
                       <p className="text-label-12 text-foreground-secondary">
                         Confirm this code matches your terminal
                       </p>
@@ -474,7 +474,7 @@ function Design() {
                     title="Welcome Back"
                   />
                   <Frame.Footer>
-                    <div className="flex flex-col gap-2.5">
+                    <div className="flex flex-col gap-4">
                       <button
                         className="flex h-[38px] w-full cursor-pointer items-center gap-3 rounded-lg border border-border px-3 transition-colors hover:bg-gray-1"
                         type="button"
