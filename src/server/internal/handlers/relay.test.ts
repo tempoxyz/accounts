@@ -831,6 +831,6 @@ describe('behavior: fee token resolution', () => {
       ],
     })
 
-    expect(transaction.feeToken).toBe('0x20c0000000000000000000000000000000000000')
+    expect(transaction.feeToken).toBeUndefined()
   })
 })
