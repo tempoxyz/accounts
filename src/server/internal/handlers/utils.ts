@@ -1,6 +1,6 @@
 import { Hex, RpcRequest, RpcResponse } from 'ox'
 import { Transaction as core_Transaction } from 'ox/tempo'
-import type { Client } from 'viem'
+import { type Client, BaseError } from 'viem'
 import * as z from 'zod/mini'
 
 export function resolveChainId(value: unknown) {
@@ -85,12 +85,13 @@ function resolveError(error: unknown): {
 } {
   if (!error || typeof error !== 'object') return {}
   const e = error as Record<string, unknown>
-  // Walk to the innermost cause/error with a numeric code (raw RPC error).
-  for (const key of ['cause', 'error'] as const) {
-    if (e[key] && typeof e[key] === 'object') {
-      const inner = resolveError(e[key])
-      if (inner.message) return inner
-    }
+  // Use viem's walk() to find the innermost error with a numeric code.
+  if (error instanceof BaseError) {
+    const inner = error.walk(
+      (e) => typeof (e as Record<string, unknown>).code === 'number',
+    ) as Record<string, unknown> | null
+    if (inner && typeof inner.code === 'number' && typeof inner.message === 'string')
+      return { message: inner.message, code: inner.code, data: inner.data }
   }
   if (typeof e.code === 'number' && typeof e.message === 'string')
     return { message: e.message, code: e.code, data: e.data }
