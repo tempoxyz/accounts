@@ -27,7 +27,7 @@ catalog:
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: ^2.47.10
+  viem: https://pkg.pr.new/viem@1a3f0dc
   vite: ^8.0.5
   vp: npm:vite-plus@~0.1.14
   wagmi: ^3.5.0
@@ -46,6 +46,7 @@ onlyBuiltDependencies:
 
 overrides:
   accounts: workspace:*
+  ox: ~0.14.15
   react: catalog:default
   react-dom: catalog:default
 trustPolicy: permissive

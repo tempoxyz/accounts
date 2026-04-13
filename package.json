@@ -60,7 +60,7 @@
   },
   "pnpm": {
     "overrides": {
-      "ox": "~0.14.7",
+      "ox": "~0.14.15",
       "react": "catalog:",
       "react-dom": "catalog:",
       "accounts": "workspace:*",
@@ -81,7 +81,8 @@
     "idb-keyval": "^6.2.2",
     "mipd": "^0.0.7",
     "mppx": "^0.5.10",
-    "ox": "~0.14.7",
+    "ox": "~0.14.15",
+    "tidx.ts": "^0.1.0",
     "webauthx": "~0.1.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"
