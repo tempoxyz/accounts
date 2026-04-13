@@ -1,5 +1,13 @@
 # accounts
 
+## 0.6.3
+
+### Patch Changes
+
+- e12d57c: Added `autoSwap: false` to disable automatic AMM resolution on `Handler.relay`.
+- e12d57c: Renamed `feeSwap` to `autoSwap` on `Handler.relay` options and response metadata.
+- 60e0f5f: Renamed `meta` to `capabilities` in `eth_fillTransaction` response.
+
 ## 0.6.2
 
 ### Patch Changes
