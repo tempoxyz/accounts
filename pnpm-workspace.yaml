@@ -27,7 +27,7 @@ catalog:
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: https://pkg.pr.new/viem@1a3f0dc
+  viem: https://pkg.pr.new/viem@edb1198
   vite: ^8.0.5
   vp: npm:vite-plus@~0.1.14
   wagmi: ^3.5.0
