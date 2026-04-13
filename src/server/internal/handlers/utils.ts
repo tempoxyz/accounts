@@ -85,10 +85,12 @@ function resolveError(error: unknown): {
 } {
   if (!error || typeof error !== 'object') return {}
   const e = error as Record<string, unknown>
-  // Walk to the innermost cause with a numeric code (raw RPC error).
-  if (e.cause && typeof e.cause === 'object') {
-    const inner = resolveError(e.cause)
-    if (inner.message) return inner
+  // Walk to the innermost cause/error with a numeric code (raw RPC error).
+  for (const key of ['cause', 'error'] as const) {
+    if (e[key] && typeof e[key] === 'object') {
+      const inner = resolveError(e[key])
+      if (inner.message) return inner
+    }
   }
   if (typeof e.code === 'number' && typeof e.message === 'string')
     return { message: e.message, code: e.code, data: e.data }
