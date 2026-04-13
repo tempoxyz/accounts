@@ -5,7 +5,6 @@ interface ImportMetaEnv {
   readonly VITE_NODE_ENV: 'localnet' | 'testnet' | 'devnet'
   readonly VITE_NODE_TAG: string
   readonly VITE_RPC_CREDENTIALS: string
-  readonly VITE_INDEXER_URL: string
 }
 
 interface ImportMeta {
