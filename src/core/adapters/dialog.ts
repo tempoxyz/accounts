@@ -368,7 +368,12 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
 
           const result = await provider.request({
             ...request,
-            params: [z.encode(Rpc.wallet_connect.authorizeAccessKey, accessKey!.request)!],
+            params: [
+              z.encode(
+                Rpc.wallet_connect.authorizeAccessKey,
+                accessKey ? accessKey.request : parameters,
+              )!,
+            ],
           })
 
           if (accessKey) {

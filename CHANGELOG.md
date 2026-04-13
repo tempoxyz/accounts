@@ -1,5 +1,13 @@
 # accounts
 
+## 0.6.2
+
+### Patch Changes
+
+- 3f2ce93: Fixed external access key authorisation in dialog adapter.
+- 3f2ce93: Added `validate` callback to `Handler.feePayer` and `Handler.relay` for conditional sponsorship.
+- 3f2ce93: Added `Handler.relay` with fee token resolution, simulation, AMM auto-swap, and sponsoring.
+
 ## 0.6.1
 
 ### Patch Changes
