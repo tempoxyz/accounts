@@ -1,6 +1,5 @@
 @import 'tailwindcss';
-@import 'geist/dist/sans.css';
-@import 'geist/dist/mono.css';
+@import '@fontsource-variable/geist-mono/index.css';
 
 :root {
   color-scheme: light dark;
