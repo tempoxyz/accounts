@@ -1,5 +1,11 @@
 # accounts
 
+## 0.6.4
+
+### Patch Changes
+
+- a5f538a: Added `calls` to `capabilities.autoSwap` containing the injected swap calls (approve + buy).
+
 ## 0.6.3
 
 ### Patch Changes
