@@ -10,6 +10,17 @@ services:
     command: >
       sh -c "corepack enable && pnpm install --frozen-lockfile"
 
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tempo
+      POSTGRES_PASSWORD: tempo
+      POSTGRES_DB: tempo
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
   playground:
     image: node:24-slim
     working_dir: /app
@@ -43,6 +54,7 @@ services:
         condition: service_completed_successfully
 
   dialog-ref:
+    profiles: [ref]
     image: node:24-slim
     working_dir: /app
     volumes:
@@ -58,7 +70,32 @@ services:
       install:
         condition: service_completed_successfully
 
+  manager:
+    image: node:24-slim
+    working_dir: /app/apps/manager
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    ports:
+      - '5177:5177'
+    environment:
+      ALLOWED_HOSTS: manager.tempo.local
+      DATABASE_URL: postgres://tempo:tempo@postgres:5432/tempo
+      DEV_PORT: '5177'
+      DEV_SUBDOMAIN: manager
+      NO_SSL: '1'
+    labels:
+      dev.orbstack.domains: manager.tempo.local
+    command: >
+      sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm drizzle-kit migrate && LOG_LEVEL=warn CLOUDFLARE=1 pnpm exec vite dev --port 5177 --host"
+    depends_on:
+      install:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_started
+
   wagmi:
+    profiles: [wagmi]
     image: node:24-slim
     working_dir: /app
     volumes:
@@ -76,3 +113,4 @@ services:
 
 volumes:
   node_modules:
+  pgdata:

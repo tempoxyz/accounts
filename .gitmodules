@@ -1,0 +1,3 @@
+[submodule "apps/manager"]
+	path = apps/manager
+	url = git@github.com:tempoxyz/app.git

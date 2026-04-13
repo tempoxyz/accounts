@@ -43,8 +43,13 @@ minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - '@base-ui/react'
   - '@base-ui/utils'
+  - '@j178/prek'
+  - '@secretlint/*'
+  - '@tanstack/*'
   - incur
   - mppx
+  - ox
+  - secretlint
   - viem
   - ox
 

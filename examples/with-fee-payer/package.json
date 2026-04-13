@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "check:types": "tsc -b",
+    "check:types": "tsc -b --noEmit",
     "dev": "vp dev",
     "gen:types": "wrangler types",
     "postinstall": "[ -f .env ] || cp .env.example .env && pnpm gen:types",
