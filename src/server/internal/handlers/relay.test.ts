@@ -15,7 +15,7 @@ const recipient = accounts[7]!
 
 /** Case-insensitive lookup into balanceDiffs keyed by address. */
 function findDiffs(balanceDiffs: relay.Meta['balanceDiffs'], address: string) {
-  return Object.entries(balanceDiffs).find(
+  return Object.entries(balanceDiffs ?? {}).find(
     ([addr]) => addr.toLowerCase() === address.toLowerCase(),
   )?.[1]
 }
