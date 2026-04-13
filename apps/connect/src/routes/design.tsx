@@ -385,6 +385,8 @@ function Design() {
                     title="Payment Request"
                   />
                   <Frame.Body>
+                    <p className="text-copy-15 text-foreground-secondary">Some description of the transaction might go here and could stretch onto two or even three lines.</p>
+
                     <div className="flex flex-col items-center gap-1 rounded-xl bg-gray-1 px-4 py-5 text-center">
                       <p className="text-heading-32 tabular-nums">$50.00</p>
                       <p className="font-mono text-label-13 text-foreground-secondary">
@@ -439,7 +441,7 @@ function Design() {
                 <Frame>
                   <Frame.Header
                     icon={<LogIn className="size-5" />}
-                    subtitle="Sign in or create your wallet."
+                    subtitle={<>Sign into <span className="text-foreground">example.com</span> using your email address or passkey.</>}
                     title="Sign in with Tempo"
                   />
                   <Frame.Body>
@@ -470,7 +472,7 @@ function Design() {
                 <Frame>
                   <Frame.Header
                     icon={<LogIn className="size-5" />}
-                    subtitle="You're signing in to acmeswap.xyz"
+                    subtitle={<>You're signing in to <span className="text-foreground">example.com</span></>}
                     title="Welcome Back"
                   />
                   <Frame.Footer>
@@ -508,7 +510,7 @@ function Design() {
                 <Frame>
                   <Frame.Header
                     icon={<Shield className="size-5" />}
-                    subtitle="acmeswap.xyz is requesting access to your wallet."
+                    subtitle={<><span className="text-foreground">example.com</span> is requesting to spend from your account.</>}
                     title="Authorize Spend"
                   />
                   <Frame.Body>
@@ -531,7 +533,7 @@ function Design() {
                 <Frame>
                   <Frame.Header
                     icon={<CirclePlus className="size-5" />}
-                    subtitle="Deposit $50.00 (50 USDC) to continue."
+                    subtitle={<>Deposit <span className="text-foreground">$50.00</span> to continue.</>}
                     title="Add Funds"
                   />
                   <Frame.Body>
