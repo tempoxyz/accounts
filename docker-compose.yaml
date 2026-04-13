@@ -94,7 +94,7 @@ services:
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     command: >
-      sh -c "apt-get update -qq && apt-get install -y -qq socat >/dev/null 2>&1; socat TCP-LISTEN:5432,fork,reuseaddr TCP:postgres:5432 & corepack enable && pnpm install --frozen-lockfile && pnpm drizzle-kit push --force && LOG_LEVEL=warn CLOUDFLARE=1 pnpm exec vite dev --port 5177 --host"
+      sh -c "apt-get update -qq && apt-get install -y -qq socat ca-certificates >/dev/null 2>&1; socat TCP-LISTEN:5432,fork,reuseaddr TCP:postgres:5432 & corepack enable && pnpm install --frozen-lockfile && pnpm drizzle-kit push --force && LOG_LEVEL=warn CLOUDFLARE=1 pnpm exec vite dev --port 5177 --host"
     depends_on:
       install:
         condition: service_completed_successfully
