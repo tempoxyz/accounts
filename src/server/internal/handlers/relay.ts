@@ -1,4 +1,4 @@
-import { AbiEvent, Hex, RpcRequest } from 'ox'
+import { AbiEvent, Hex, RpcRequest, RpcResponse } from 'ox'
 import { Transaction as core_Transaction } from 'ox/tempo'
 import {
   type Address,
@@ -18,6 +18,7 @@ import { simulateCalls } from 'viem/actions'
 import { tempo, tempoLocalnet, tempoMainnet, tempoModerato } from 'viem/chains'
 import { Abis, Actions, Addresses, Capabilities, Transaction } from 'viem/tempo'
 
+import * as Schema from '../../../core/Schema.js'
 import { type Handler, from } from '../../Handler.js'
 import * as FeePayer from './feePayer.js'
 import * as Utils from './utils.js'
@@ -101,210 +102,150 @@ export function relay(options: relay.Options = {}): Handler {
   const router = from(rest)
 
   router.post(path, async (c) => {
-    const request = RpcRequest.from((await c.req.raw.json()) as never)
+    const request = RpcRequest.from(await c.req.raw.json()) as RpcRequest.RpcRequest<Schema.Ox>
 
-    try {
-      await onRequest?.(request)
+    await onRequest?.(request)
 
-      const method = request.method as string
-
-      // Resolve chainId + client from the first param object (if present).
-      const params = Array.isArray(request.params) ? request.params : []
-      const firstParam =
-        typeof params[0] === 'object' && params[0]
-          ? (params[0] as Record<string, unknown>)
-          : undefined
-      const chainId = Utils.resolveChainId(firstParam?.chainId) ?? chains[0]!.id
-      const client = getClient(chainId)
-
-      // Proxy non-fill methods directly to the RPC node.
-      if (method !== 'eth_fillTransaction') {
-        const result = await client.request({
-          method: method as never,
-          params: params as never,
-        })
-        return Utils.rpcResult(request, result)
-      }
-
-      const [parameters] = Utils.parseParams.parse(request.params) as [Record<string, unknown>]
-      const sender = typeof parameters.from === 'string' ? (parameters.from as Address) : undefined
-
-      // 1. Resolve fee token.
-      const feeToken = await resolveFeeToken(client, {
-        feeToken: parameters.feeToken as Address | undefined,
-        account: sender,
-        tokens: resolveTokens(chainId),
-      })
-
-      // 2. Fill transaction via RPC node (with AMM resolution on InsufficientBalance).
-      const normalized = Utils.normalizeFillTransactionRequest(parameters)
-      const withOverrides = {
-        ...normalized,
-        ...(typeof chainId !== 'undefined' ? { chainId } : {}),
-        ...(feePayerOptions ? { feePayer: true } : {}),
-        ...(feeToken ? { feeToken } : {}),
-      }
-      let filled = await fill(client, { autoSwap, feeToken, transaction: withOverrides })
-
-      // 3. Check if the fee payer approves this transaction.
-      const sponsored =
-        feePayerOptions &&
-        (!feePayerOptions.validate ||
-          // @ts-expect-error - TODO: Convert to `TransactionRequest` properly.
-          (await feePayerOptions.validate({
-            ...filled.transaction,
-            from: sender,
-          } as Transaction.TransactionRequest)))
-
-      // Re-fill without feePayer when sponsorship is rejected so the
-      // gas estimate and nonce are correct for a self-paid transaction.
-      if (feePayerOptions && !sponsored) {
-        const { feePayer: _, ...withoutFeePayer } = withOverrides
-        filled = await fill(client, { autoSwap, feeToken, transaction: withoutFeePayer })
-      }
-
-      const { transaction, swap } = filled
-
-      // 4. Simulate and compute balance diffs + fee.
-      const calls = extractCalls(transaction)
-      const { balanceDiffs, fee } = await simulateAndParseDiffs(client, {
-        account: sender,
-        calls,
-        swap,
-        feeToken: (transaction as { feeToken?: Address | undefined }).feeToken,
-        gas: (transaction as { gas?: bigint | undefined }).gas,
-        maxFeePerGas: (transaction as { maxFeePerGas?: bigint | undefined }).maxFeePerGas,
-      })
-
-      // 5. Sign as fee payer (when approved).
-      const tx = sponsored
-        ? await FeePayer.sign({
-            account: feePayerOptions.account,
-            transaction,
-            sender,
-          })
-        : transaction
-
-      const sponsor = sponsored
-        ? {
-            address: feePayerOptions.account.address,
-            ...(feePayerOptions.name ? { name: feePayerOptions.name } : {}),
-            ...(feePayerOptions.url ? { url: feePayerOptions.url } : {}),
-          }
+    // Resolve chainId + client from the first param object (if present).
+    const params = 'params' in request && Array.isArray(request.params) ? request.params : []
+    const first =
+      typeof params[0] === 'object' && params[0]
+        ? (params[0] as Record<string, unknown>)
         : undefined
+    const chainId = Utils.resolveChainId(first?.chainId) ?? chains[0]!.id
+    const client = getClient(chainId)
 
-      // 6. Resolve autoSwap metadata (when AMM path was taken).
-      const autoSwap_ = await (async () => {
-        if (!swap) return undefined
-        const [inMeta, outMeta] = await Promise.all([
-          resolveTokenMetadata(client, swap.tokenIn).catch(() => undefined),
-          resolveTokenMetadata(client, swap.tokenOut).catch(() => undefined),
-        ])
-        if (!inMeta || !outMeta) return undefined
-        return {
-          calls: swap.calls.map((c) => ({ to: c.to, data: c.data })),
-          slippage: autoSwap!.slippage,
-          maxIn: {
-            token: swap.tokenIn,
-            value: Hex.fromNumber(swap.maxAmountIn) as `0x${string}`,
-            formatted: formatUnits(swap.maxAmountIn, inMeta.decimals),
-            decimals: inMeta.decimals,
-            symbol: inMeta.symbol,
-            name: inMeta.name,
-          },
-          minOut: {
-            token: swap.tokenOut,
-            value: Hex.fromNumber(swap.amountOut) as `0x${string}`,
-            formatted: formatUnits(swap.amountOut, outMeta.decimals),
-            decimals: outMeta.decimals,
-            symbol: outMeta.symbol,
-            name: outMeta.name,
-          },
+    switch (request.method) {
+      case 'eth_fillTransaction': {
+        try {
+          const parameters = request.params[0]
+
+          // 1. Resolve fee token.
+          const feeToken = await resolveFeeToken(client, {
+            account: parameters.from,
+            feeToken: parameters.feeToken,
+            tokens: resolveTokens(chainId),
+          })
+
+          // 2. Fill transaction via RPC node (with AMM resolution on InsufficientBalance).
+          const normalized = Utils.normalizeFillTransactionRequest(parameters)
+          const transaction = {
+            ...normalized,
+            ...(typeof chainId !== 'undefined' ? { chainId } : {}),
+            ...(feePayerOptions ? { feePayer: true } : {}),
+            ...(feeToken ? { feeToken } : {}),
+          }
+          let filled = await fill(client, { autoSwap, feeToken, transaction })
+
+          // 3. Check if the fee payer approves this transaction.
+          const sponsored =
+            feePayerOptions &&
+            (!feePayerOptions.validate ||
+              // @ts-expect-error - TODO: Convert to `TransactionRequest` properly.
+              (await feePayerOptions.validate({
+                ...filled.transaction,
+                from: parameters.from,
+              } as Transaction.TransactionRequest)))
+
+          // Re-fill without feePayer when sponsorship is rejected so the
+          // gas estimate and nonce are correct for a self-paid transaction.
+          if (feePayerOptions && !sponsored) {
+            const { feePayer: _, ...tx } = transaction
+            filled = await fill(client, { autoSwap, feeToken, transaction: tx })
+          }
+
+          const { transaction: transaction_filled, swap } = filled
+
+          // 4. Simulate and compute balance diffs + fee.
+          const calls = extractCalls(transaction_filled)
+          const { balanceDiffs, fee } = await simulateAndParseDiffs(client, {
+            account: parameters.from,
+            calls,
+            swap,
+            feeToken: transaction_filled.feeToken,
+            gas: transaction_filled.gas,
+            maxFeePerGas: transaction_filled.maxFeePerGas,
+          })
+
+          // 5. Sign as fee payer (if sponsored).
+          const transaction_final = await (async () => {
+            if (!sponsored) return transaction_filled
+            return await FeePayer.sign({
+              account: feePayerOptions.account,
+              sender: parameters.from,
+              transaction: transaction_filled,
+            })
+          })()
+
+          const sponsor = (() => {
+            if (!sponsored) return undefined
+            return {
+              address: feePayerOptions.account.address,
+              ...(feePayerOptions.name ? { name: feePayerOptions.name } : {}),
+              ...(feePayerOptions.url ? { url: feePayerOptions.url } : {}),
+            }
+          })()
+
+          // 6. Resolve autoSwap metadata (when AMM path was taken).
+          const autoSwap_ = await (async () => {
+            if (!swap) return undefined
+            const [inMeta, outMeta] = await Promise.all([
+              resolveTokenMetadata(client, swap.tokenIn).catch(() => undefined),
+              resolveTokenMetadata(client, swap.tokenOut).catch(() => undefined),
+            ])
+            if (!inMeta || !outMeta) return undefined
+            return {
+              calls: swap.calls.map((c) => ({ to: c.to, data: c.data })),
+              slippage: autoSwap!.slippage,
+              maxIn: {
+                token: swap.tokenIn,
+                value: Hex.fromNumber(swap.maxAmountIn) as `0x${string}`,
+                formatted: formatUnits(swap.maxAmountIn, inMeta.decimals),
+                decimals: inMeta.decimals,
+                symbol: inMeta.symbol,
+                name: inMeta.name,
+              },
+              minOut: {
+                token: swap.tokenOut,
+                value: Hex.fromNumber(swap.amountOut) as `0x${string}`,
+                formatted: formatUnits(swap.amountOut, outMeta.decimals),
+                decimals: outMeta.decimals,
+                symbol: outMeta.symbol,
+                name: outMeta.name,
+              },
+            }
+          })()
+
+          return Response.json(
+            RpcResponse.from(
+              {
+                result: {
+                  tx: core_Transaction.toRpc(transaction_final as core_Transaction.Transaction),
+                  capabilities: {
+                    balanceDiffs,
+                    fee,
+                    sponsored: !!sponsor,
+                    ...(sponsor ? { sponsor } : {}),
+                    ...(autoSwap_ ? { autoSwap: autoSwap_ } : {}),
+                  },
+                },
+              },
+              { request },
+            ),
+          )
+        } catch (error) {
+          return Utils.rpcError(request, error)
         }
-      })()
+      }
 
-      return Utils.rpcResult(request, {
-        tx: core_Transaction.toRpc(tx as core_Transaction.Transaction),
-        capabilities: {
-          balanceDiffs,
-          fee,
-          sponsored: !!sponsor,
-          ...(sponsor ? { sponsor } : {}),
-          ...(autoSwap_ ? { autoSwap: autoSwap_ } : {}),
-        },
-      })
-    } catch (error) {
-      return Utils.rpcError(request, error)
+      default: {
+        const result = await client.request(request as never)
+        return Response.json(RpcResponse.from({ result }, { request }))
+      }
     }
   })
 
   return router
-}
-
-async function fill(
-  client: Client,
-  options: {
-    autoSwap?: { slippage: number } | undefined
-    feeToken?: Address | undefined
-    transaction: Record<string, unknown>
-  },
-) {
-  const { autoSwap, feeToken, transaction: request } = options
-
-  // Skip re-formatting if already in RPC format (e.g. from viem's fillTransaction).
-  const format = (value: Record<string, unknown>) =>
-    value.type === '0x76' ? value : Utils.formatFillTransactionRequest(client, value)
-
-  try {
-    const result = await client.request({
-      method: 'eth_fillTransaction',
-      params: [format(request) as never],
-    })
-    return { transaction: Utils.normalizeTempoTransaction(result.tx) }
-  } catch (error) {
-    if (!(error instanceof Error)) throw error
-    const parsed = parseInsufficientBalance(error)
-    if (!parsed || !feeToken || !autoSwap) throw error
-    if (parsed.token.toLowerCase() === feeToken.toLowerCase()) throw error
-
-    const deficit = parsed.required - parsed.available
-    const maxAmountIn = deficit + (deficit * BigInt(Math.round(autoSwap.slippage * 1000))) / 1000n
-    const swapCalls = buildSwapCalls(feeToken, parsed.token, deficit, maxAmountIn)
-    const existingCalls = request.calls as Call[] | undefined
-    // If the request was normalized to top-level to/data/value (single call),
-    // convert back to a calls array so we can prepend swap calls.
-    const originalCalls: Call[] = existingCalls
-      ? [...existingCalls]
-      : request.to
-        ? [
-            {
-              to: request.to as Address,
-              data: request.data as `0x${string}`,
-              value: (request.value as bigint) ?? 0n,
-            },
-          ]
-        : []
-    const { to: _, data: __, value: ___, calls: ____, ...rest } = request
-    const result = await client.request({
-      method: 'eth_fillTransaction',
-      params: [
-        format({
-          ...rest,
-          calls: [...swapCalls, ...originalCalls],
-        }) as never,
-      ],
-    })
-    return {
-      transaction: Utils.normalizeTempoTransaction(result.tx),
-      swap: {
-        calls: swapCalls,
-        tokenIn: feeToken,
-        tokenOut: parsed.token,
-        amountOut: deficit,
-        maxAmountIn,
-      },
-    }
-  }
 }
 
 export namespace relay {
@@ -381,6 +322,73 @@ export namespace relay {
   }
 }
 
+// TODO: cleanup
+async function fill(
+  client: Client,
+  options: {
+    autoSwap?: { slippage: number } | undefined
+    feeToken?: Address | undefined
+    transaction: Record<string, unknown>
+  },
+) {
+  const { autoSwap, feeToken, transaction: request } = options
+
+  // Skip re-formatting if already in RPC format (e.g. from viem's fillTransaction).
+  const format = (value: Record<string, unknown>) =>
+    value.type === '0x76' ? value : Utils.formatFillTransactionRequest(client, value)
+
+  try {
+    const result = await client.request({
+      method: 'eth_fillTransaction',
+      params: [format(request) as never],
+    })
+    return { transaction: Utils.normalizeTempoTransaction(result.tx) }
+  } catch (error) {
+    if (!(error instanceof Error)) throw error
+    const parsed = parseInsufficientBalance(error)
+    if (!parsed || !feeToken || !autoSwap) throw error
+    if (parsed.token.toLowerCase() === feeToken.toLowerCase()) throw error
+
+    const deficit = parsed.required - parsed.available
+    const maxAmountIn = deficit + (deficit * BigInt(Math.round(autoSwap.slippage * 1000))) / 1000n
+    const swapCalls = buildSwapCalls(feeToken, parsed.token, deficit, maxAmountIn)
+    const existingCalls = request.calls as Call[] | undefined
+    // If the request was normalized to top-level to/data/value (single call),
+    // convert back to a calls array so we can prepend swap calls.
+    const originalCalls: Call[] = existingCalls
+      ? [...existingCalls]
+      : request.to
+        ? [
+            {
+              to: request.to as Address,
+              data: request.data as `0x${string}`,
+              value: (request.value as bigint) ?? 0n,
+            },
+          ]
+        : []
+    const { to: _, data: __, value: ___, calls: ____, ...rest } = request
+    const result = await client.request({
+      method: 'eth_fillTransaction',
+      params: [
+        format({
+          ...rest,
+          calls: [...swapCalls, ...originalCalls],
+        }) as never,
+      ],
+    })
+    return {
+      transaction: Utils.normalizeTempoTransaction(result.tx),
+      swap: {
+        calls: swapCalls,
+        tokenIn: feeToken,
+        tokenOut: parsed.token,
+        amountOut: deficit,
+        maxAmountIn,
+      },
+    }
+  }
+}
+
 async function resolveFeeToken(
   client: Client,
   options: {
@@ -431,10 +439,9 @@ async function resolveFeeToken(
     if (!best || asset.balance > best.balance) best = asset
   }
   if (best) return best.address
-
-  return Addresses.pathUsd as Address
 }
 
+// TODO: cleanup/remove
 function extractCalls(transaction: Record<string, unknown>): readonly Call[] {
   const calls = transaction.calls as readonly Call[] | undefined
   if (calls && calls.length > 0)
@@ -452,6 +459,7 @@ function extractCalls(transaction: Record<string, unknown>): readonly Call[] {
   ] as readonly Call[]
 }
 
+// TODO: cleanup/remove
 async function simulate(
   client: Client,
   options: {
