@@ -44,7 +44,7 @@ export namespace Button {
   export const className = cva({
     base: [
       'inline-flex items-center justify-center shrink-0',
-      'border font-medium cursor-pointer',
+      'border font-normal cursor-pointer',
       'transition-colors',
       'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-7',
       'data-disabled:opacity-50 data-disabled:pointer-events-none',
