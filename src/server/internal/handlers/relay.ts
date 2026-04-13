@@ -202,6 +202,7 @@ export function relay(options: relay.Options = {}): Handler {
         ])
         if (!inMeta || !outMeta) return undefined
         return {
+          calls: swap.calls.map((c) => ({ to: c.to, data: c.data })),
           slippage: autoSwap!.slippage,
           maxIn: {
             token: swap.tokenIn,
@@ -296,6 +297,7 @@ async function fill(
     return {
       transaction: Utils.normalizeTempoTransaction(result.tx),
       swap: {
+        calls: swapCalls,
         tokenIn: feeToken,
         tokenOut: parsed.token,
         amountOut: deficit,
