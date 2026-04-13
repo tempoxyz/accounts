@@ -148,7 +148,7 @@ export namespace eth_fillTransaction {
     method: z.literal('eth_fillTransaction'),
     params: z.readonly(z.tuple([transactionRequest])),
     returns: z.object({
-      meta: z.object({
+      capabilities: z.object({
         balanceDiffs: z.optional(z.record(u.address(), z.readonly(z.array(balanceDiff)))),
         fee: z.nullable(
           z.object({
