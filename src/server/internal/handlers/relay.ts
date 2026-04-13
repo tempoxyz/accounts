@@ -16,7 +16,7 @@ import {
 } from 'viem'
 import { simulateCalls } from 'viem/actions'
 import { tempo, tempoLocalnet, tempoMainnet, tempoModerato } from 'viem/chains'
-import { Abis, Actions, Addresses, Transaction } from 'viem/tempo'
+import { Abis, Actions, Addresses, Capabilities, Transaction } from 'viem/tempo'
 
 import { type Handler, from } from '../../Handler.js'
 import * as FeePayer from './feePayer.js'
@@ -194,7 +194,7 @@ export function relay(options: relay.Options = {}): Handler {
         : undefined
 
       // 6. Resolve autoSwap metadata (when AMM path was taken).
-      const autoSwapMeta = await (async (): Promise<relay.Meta['autoSwap']> => {
+      const autoSwap_ = await (async () => {
         if (!swap) return undefined
         const [inMeta, outMeta] = await Promise.all([
           resolveTokenMetadata(client, swap.tokenIn).catch(() => undefined),
@@ -224,12 +224,12 @@ export function relay(options: relay.Options = {}): Handler {
 
       return Utils.rpcResult(request, {
         tx: core_Transaction.toRpc(tx as core_Transaction.Transaction),
-        meta: {
+        capabilities: {
           balanceDiffs,
           fee,
           sponsored: !!sponsor,
           ...(sponsor ? { sponsor } : {}),
-          ...(autoSwapMeta ? { autoSwap: autoSwapMeta } : {}),
+          ...(autoSwap_ ? { autoSwap: autoSwap_ } : {}),
         },
       })
     } catch (error) {
@@ -376,65 +376,6 @@ export namespace relay {
     path?: string | undefined
     /** Transports keyed by chain ID. Defaults to `http()` for each chain. */
     transports?: Record<number, Transport> | undefined
-  }
-
-  /** Metadata returned alongside the filled transaction. */
-  export type Meta = {
-    /** Per-account balance diffs keyed by address. */
-    balanceDiffs?: Record<Address, readonly BalanceDiff[]> | undefined
-    /** Fee estimate for the transaction. */
-    fee: { amount: Hex.Hex; decimals: number; formatted: string; symbol: string } | null
-    /** Whether the transaction is sponsored by a fee payer. */
-    sponsored: boolean
-    /** Sponsor details (when sponsored). */
-    sponsor?: { address: Address; name: string; url: string } | undefined
-    /** AMM swap injected by the relay to cover an InsufficientBalance. */
-    autoSwap?:
-      | {
-          /** Max input amount with slippage. */
-          maxIn: SwapAmount
-          /** Deficit amount that triggered the swap. */
-          minOut: SwapAmount
-          /** Slippage tolerance (e.g. 0.1 = 10%). */
-          slippage: number
-        }
-      | undefined
-  }
-
-  /** Token amount in a fee swap. */
-  export type SwapAmount = {
-    /** Token address. */
-    token: Address
-    /** Amount (hex-encoded). */
-    value: Hex.Hex
-    /** Human-readable formatted amount. */
-    formatted: string
-    /** Token decimals. */
-    decimals: number
-    /** Token symbol (e.g. "USDC.e"). */
-    symbol: string
-    /** Token name (e.g. "USDC.e"). */
-    name: string
-  }
-
-  /** Balance diff for a single token relative to the user account. */
-  export type BalanceDiff = {
-    /** Token address. */
-    address: Address
-    /** Token decimals (e.g. 6). */
-    decimals: number
-    /** Direction relative to the user. */
-    direction: 'incoming' | 'outgoing'
-    /** Human-readable formatted currency value (e.g. "100.00"). */
-    formatted: string
-    /** Token name (e.g. "USDC.e"). */
-    name: string
-    /** Addresses receiving this asset. */
-    recipients: readonly Address[]
-    /** Token symbol (e.g. "USDC.e"). */
-    symbol: string
-    /** Token amount (hex-encoded). */
-    value: Hex.Hex
   }
 }
 
@@ -627,7 +568,7 @@ async function buildBalanceDiffs(
     const fromLower = log.args.from.toLowerCase()
     const toLower = log.args.to.toLowerCase()
 
-    // Skip swap-related transfers (reported in meta.feeSwap instead).
+    // Skip swap-related transfers (reported in capabilities.autoSwap instead).
     if (swap) {
       if (token === swapTokenIn && fromLower === accountLower && toLower === dexLower) continue
       if (token === swapTokenOut && fromLower === dexLower && toLower === accountLower) continue
@@ -654,7 +595,7 @@ async function buildBalanceDiffs(
     if (log.args.owner.toLowerCase() !== accountLower) continue
     const token = log.address.toLowerCase()
 
-    // Skip swap-related approvals (reported in meta.feeSwap instead).
+    // Skip swap-related approvals (reported in capabilities.autoSwap instead).
     if (swap && token === swapTokenIn && log.args.spender.toLowerCase() === dexLower) continue
 
     const spenderKey = `${token}:${log.args.spender.toLowerCase()}`
@@ -691,7 +632,7 @@ async function buildBalanceDiffs(
   )
 
   // Build the diff array for this account.
-  const diffs: relay.BalanceDiff[] = []
+  const diffs: Capabilities.BalanceDiff[] = []
   for (const entry of entries) {
     const net =
       entry.outgoing > entry.incoming
