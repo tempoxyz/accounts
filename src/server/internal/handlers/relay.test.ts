@@ -2,7 +2,7 @@ import type { RpcRequest } from 'ox'
 import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import { parseUnits } from 'viem'
 import { fillTransaction, sendTransactionSync } from 'viem/actions'
-import { Actions, Addresses, Tick, Transaction } from 'viem/tempo'
+import { Actions, Addresses, Capabilities, Tick, Transaction } from 'viem/tempo'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, addresses, chain, getClient, http } from '../../../../test/config.js'
@@ -14,7 +14,10 @@ const feePayerAccount = accounts[0]!
 const recipient = accounts[7]!
 
 /** Case-insensitive lookup into balanceDiffs keyed by address. */
-function findDiffs(balanceDiffs: relay.Meta['balanceDiffs'], address: string) {
+function findDiffs(
+  balanceDiffs: Capabilities.FillTransactionCapabilities['balanceDiffs'],
+  address: string,
+) {
   return Object.entries(balanceDiffs ?? {}).find(
     ([addr]) => addr.toLowerCase() === address.toLowerCase(),
   )?.[1]
@@ -56,7 +59,7 @@ describe('behavior: without feePayer', () => {
     server.close()
   })
 
-  test('default: returns filled transaction with meta', async () => {
+  test('default: returns filled transaction with capabilities', async () => {
     const { transaction } = await fillTransaction(client, {
       account: userAccount.address,
       calls: [transferCall()],
@@ -72,7 +75,7 @@ describe('behavior: without feePayer', () => {
   })
 })
 
-describe('behavior: meta', () => {
+describe('behavior: capabilities', () => {
   let server: Server
   let client: ReturnType<typeof getClient<typeof chain>>
 
@@ -95,12 +98,12 @@ describe('behavior: meta', () => {
       account: userAccount.address,
       calls: [transferCall()],
     })
-    const meta = result.meta as relay.Meta
+    const meta = result.capabilities
 
-    expect(meta.fee).toBeDefined()
-    expect(meta.fee!.decimals).toBe(6)
-    expect(meta.fee!.symbol).toBe('AlphaUSD')
-    expect(meta.sponsored).toBe(false)
+    expect(meta?.fee).toBeDefined()
+    expect(meta?.fee?.decimals).toBe(6)
+    expect(meta?.fee?.symbol).toBe('AlphaUSD')
+    expect(meta?.sponsored).toBe(false)
   })
 
   test('behavior: token transfer produces balance diffs', async () => {
@@ -130,8 +133,8 @@ describe('behavior: meta', () => {
       data,
     })
 
-    const meta = result.meta as relay.Meta
-    const senderDiffs = findDiffs(meta.balanceDiffs, sender.address)!
+    const meta = result.capabilities
+    const senderDiffs = findDiffs(meta?.balanceDiffs, sender.address)!
     const tokenDiff = senderDiffs.find((d) => d.address.toLowerCase() === token.toLowerCase())!
     expect(tokenDiff.decimals).toBe(6)
     expect(tokenDiff.direction).toBe('outgoing')
@@ -226,9 +229,9 @@ describe('behavior: meta', () => {
         }),
       ],
     })
-    const meta = result.meta as relay.Meta
+    const meta = result.capabilities
 
-    const diffs = findDiffs(meta.balanceDiffs, sender.address)!
+    const diffs = findDiffs(meta?.balanceDiffs, sender.address)!
     expect(diffs).toHaveLength(1)
 
     const quoteDiff = diffs[0]!
@@ -262,9 +265,9 @@ describe('behavior: meta', () => {
         }),
       ],
     })
-    const meta = result.meta as relay.Meta
+    const meta = result.capabilities
 
-    const diffs = findDiffs(meta.balanceDiffs, sender.address)!
+    const diffs = findDiffs(meta?.balanceDiffs, sender.address)!
     const tokenDiff = diffs.find((d) => d.address.toLowerCase() === token.toLowerCase())!
     // Only the transfer shows — approval is fully covered.
     expect(tokenDiff.value).toBe('0x64')
@@ -292,9 +295,9 @@ describe('behavior: meta', () => {
         }),
       ],
     })
-    const meta = result.meta as relay.Meta
+    const meta = result.capabilities
 
-    const diffs = findDiffs(meta.balanceDiffs, sender.address)!
+    const diffs = findDiffs(meta?.balanceDiffs, sender.address)!
     const tokenDiff = diffs.find((d) => d.address.toLowerCase() === token.toLowerCase())!
     // transfer(50) + uncovered approval(150) = 200 outgoing.
     expect(tokenDiff.value).toBe('0xc8')
@@ -386,19 +389,19 @@ describe('behavior: AMM resolution', () => {
     })
 
     // Should succeed — relay auto-swapped quote → base.
-    const { transaction, meta } = result
+    const { transaction, capabilities } = result
     expect(transaction.gas).toBeDefined()
     expect(transaction.nonce).toBeDefined()
     expect(transaction.feeToken).toBe(addresses.alphaUsd)
     expect(transaction.calls).toHaveLength(3) // approve + swap + transfer
 
-    const m = meta as relay.Meta
-    expect(m.sponsored).toBe(false)
-    expect(m.fee?.decimals).toBe(6)
-    expect(m.fee?.symbol).toBe('AlphaUSD')
+    const m = capabilities
+    expect(m?.sponsored).toBe(false)
+    expect(m?.fee?.decimals).toBe(6)
+    expect(m?.fee?.symbol).toBe('AlphaUSD')
 
     // Balance diffs exclude swap tokens — only the user's transfer shows.
-    const diffs = findDiffs(m.balanceDiffs, sender.address)!
+    const diffs = findDiffs(m?.balanceDiffs, sender.address)!
     expect(diffs).toHaveLength(1)
     expect(diffs[0]!.direction).toBe('outgoing')
     expect(diffs[0]!.formatted).toBe('5')
@@ -406,13 +409,13 @@ describe('behavior: AMM resolution', () => {
     expect(diffs[0]!.address.toLowerCase()).toBe(base.toLowerCase())
 
     // autoSwap reports the injected AMM swap.
-    expect(m.autoSwap?.slippage).toBe(0.05)
-    expect(m.autoSwap?.maxIn.formatted).toBe('5.25')
-    expect(m.autoSwap?.maxIn.symbol).toBe('AlphaUSD')
-    expect(m.autoSwap?.maxIn.token.toLowerCase()).toBe(addresses.alphaUsd.toLowerCase())
-    expect(m.autoSwap?.minOut.formatted).toBe('5')
-    expect(m.autoSwap?.minOut.symbol).toBe('SWBASE')
-    expect(m.autoSwap?.minOut.token.toLowerCase()).toBe(base.toLowerCase())
+    expect(m?.autoSwap?.slippage).toBe(0.05)
+    expect(m?.autoSwap?.maxIn.formatted).toBe('5.25')
+    expect(m?.autoSwap?.maxIn.symbol).toBe('AlphaUSD')
+    expect(m?.autoSwap?.maxIn.token.toLowerCase()).toBe(addresses.alphaUsd.toLowerCase())
+    expect(m?.autoSwap?.minOut.formatted).toBe('5')
+    expect(m?.autoSwap?.minOut.symbol).toBe('SWBASE')
+    expect(m?.autoSwap?.minOut.token.toLowerCase()).toBe(base.toLowerCase())
   })
 
   test('behavior: custom slippage is applied to autoSwap', async () => {
@@ -487,11 +490,11 @@ describe('behavior: AMM resolution', () => {
     })
     customServer.close()
 
-    const m = result.meta as relay.Meta
-    expect(m.autoSwap?.slippage).toBe(0.02)
+    const m = result.capabilities
+    expect(m?.autoSwap?.slippage).toBe(0.02)
     // 10 + 2% = 10.2
-    expect(m.autoSwap?.maxIn.formatted).toBe('10.2')
-    expect(m.autoSwap?.minOut.formatted).toBe('10')
+    expect(m?.autoSwap?.maxIn.formatted).toBe('10.2')
+    expect(m?.autoSwap?.minOut.formatted).toBe('10')
   })
 
   test('behavior: autoSwap disabled throws InsufficientBalance instead of swapping', async () => {
@@ -606,15 +609,15 @@ describe('behavior: with feePayer', () => {
     `)
   })
 
-  test('behavior: returns sponsor metadata', async () => {
+  test('behavior: returns sponsor capabilities', async () => {
     const result = await fillTransaction(client, {
       account: userAccount.address,
       calls: [transferCall()],
     })
-    const meta = result.meta as relay.Meta
+    const meta = result.capabilities
 
-    expect(meta.sponsored).toBe(true)
-    expect(meta.sponsor).toMatchInlineSnapshot(`
+    expect(meta?.sponsored).toBe(true)
+    expect(meta?.sponsor).toMatchInlineSnapshot(`
       {
         "address": "${feePayerAccount.address}",
         "name": "Test Sponsor",
@@ -714,9 +717,9 @@ describe('behavior: conditional sponsoring', () => {
     })
     expect(result.transaction.feePayerSignature).toBeUndefined()
 
-    const meta = result.meta as relay.Meta
-    expect(meta.sponsored).toBe(false)
-    expect(meta.sponsor).toBeUndefined()
+    const meta = result.capabilities
+    expect(meta?.sponsored).toBe(false)
+    expect(meta?.sponsor).toBeUndefined()
 
     const serialized = (await Transaction.serialize(result.transaction as never)) as `0x76${string}`
     const envelope = TxEnvelopeTempo.deserialize(serialized)
