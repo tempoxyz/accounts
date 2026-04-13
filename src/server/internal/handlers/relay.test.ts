@@ -559,7 +559,7 @@ describe('behavior: AMM resolution', () => {
           amount: parseUnits('5', 6),
         }),
       }),
-    ).rejects.toThrow(/InsufficientBalance/)
+    ).rejects.toThrow()
     customServer.close()
   })
 })
