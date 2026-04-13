@@ -99,11 +99,7 @@ export function relay(options: relay.Options = {}): Handler {
     return clients.get(chains[0]!.id)!
   }
 
-  const router = from(rest)
-
-  router.post(path, async (c) => {
-    const request = RpcRequest.from(await c.req.raw.json()) as RpcRequest.RpcRequest<Schema.Ox>
-
+  async function handleRequest(request: RpcRequest.RpcRequest<Schema.Ox>) {
     await onRequest?.(request)
 
     // Resolve chainId + client from the first param object (if present).
@@ -216,33 +212,50 @@ export function relay(options: relay.Options = {}): Handler {
             }
           })()
 
-          return Response.json(
-            RpcResponse.from(
-              {
-                result: {
-                  tx: core_Transaction.toRpc(transaction_final as core_Transaction.Transaction),
-                  capabilities: {
-                    balanceDiffs,
-                    fee,
-                    sponsored: !!sponsor,
-                    ...(sponsor ? { sponsor } : {}),
-                    ...(autoSwap_ ? { autoSwap: autoSwap_ } : {}),
-                  },
+          return RpcResponse.from(
+            {
+              result: {
+                tx: core_Transaction.toRpc(transaction_final as core_Transaction.Transaction),
+                capabilities: {
+                  balanceDiffs,
+                  fee,
+                  sponsored: !!sponsor,
+                  ...(sponsor ? { sponsor } : {}),
+                  ...(autoSwap_ ? { autoSwap: autoSwap_ } : {}),
                 },
               },
-              { request },
-            ),
+            },
+            { request },
           )
         } catch (error) {
-          return Utils.rpcError(request, error)
+          return Utils.rpcErrorJson(request, error)
         }
       }
 
       default: {
         const result = await client.request(request as never)
-        return Response.json(RpcResponse.from({ result }, { request }))
+        return RpcResponse.from({ result }, { request })
       }
     }
+  }
+
+  const router = from(rest)
+
+  router.post(path, async (c) => {
+    const body = await c.req.raw.json()
+    const isBatch = Array.isArray(body)
+
+    if (!isBatch) {
+      const request = RpcRequest.from(body) as RpcRequest.RpcRequest<Schema.Ox>
+      return Response.json(await handleRequest(request))
+    }
+
+    const responses = await Promise.all(
+      (body as unknown[]).map((item) =>
+        handleRequest(RpcRequest.from(item as never) as RpcRequest.RpcRequest<Schema.Ox>),
+      ),
+    )
+    return Response.json(responses)
   })
 
   return router
