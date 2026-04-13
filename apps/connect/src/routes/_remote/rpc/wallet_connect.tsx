@@ -140,7 +140,16 @@ function SignInOrSignUp(props: { method: string | undefined; submit: Submit }) {
       <Frame>
         <Frame.Header
           icon={<LogIn className="size-5" />}
-          subtitle={host ? <>Sign into <span className="text-foreground">{host}</span> using your email address or passkey.</> : 'Sign in using your email address or passkey.'}
+          subtitle={
+            host ? (
+              <>
+                Sign into <span className="text-foreground">{host}</span> using your email address
+                or passkey.
+              </>
+            ) : (
+              'Sign in using your email address or passkey.'
+            )
+          }
           title="Sign in with Tempo"
         />
         <Frame.Body>
