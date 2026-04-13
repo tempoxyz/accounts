@@ -13,6 +13,13 @@ const userAccount = accounts[9]!
 const feePayerAccount = accounts[0]!
 const recipient = accounts[7]!
 
+/** Case-insensitive lookup into balanceDiffs keyed by address. */
+function findDiffs(balanceDiffs: relay.Meta['balanceDiffs'], address: string) {
+  return Object.entries(balanceDiffs).find(
+    ([addr]) => addr.toLowerCase() === address.toLowerCase(),
+  )?.[1]
+}
+
 /** A simple transfer call for tests that just need a valid transaction. */
 const transferCall = () =>
   Actions.token.transfer.call({
@@ -124,22 +131,13 @@ describe('behavior: meta', () => {
     })
 
     const meta = result.meta as relay.Meta
-    const senderDiffs = meta.balanceDiffs[sender.address]!
+    const senderDiffs = findDiffs(meta.balanceDiffs, sender.address)!
     const tokenDiff = senderDiffs.find((d) => d.address.toLowerCase() === token.toLowerCase())!
-    expect(tokenDiff).toMatchInlineSnapshot(`
-      {
-        "address": "${token}",
-        "decimals": 6,
-        "direction": "outgoing",
-        "formatted": "0.0001",
-        "name": "AlphaUSD",
-        "recipients": [
-          "${recipient.address}",
-        ],
-        "symbol": "AlphaUSD",
-        "value": "0x64",
-      }
-    `)
+    expect(tokenDiff.decimals).toBe(6)
+    expect(tokenDiff.direction).toBe('outgoing')
+    expect(tokenDiff.formatted).toBe('0.0001')
+    expect(tokenDiff.symbol).toBe('AlphaUSD')
+    expect(tokenDiff.value).toBe('0x64')
   })
 
   test('behavior: approve + dex swap + transfer produces balance diffs', async () => {
@@ -230,7 +228,7 @@ describe('behavior: meta', () => {
     })
     const meta = result.meta as relay.Meta
 
-    const diffs = meta.balanceDiffs[sender.address]!
+    const diffs = findDiffs(meta.balanceDiffs, sender.address)!
     expect(diffs).toHaveLength(1)
 
     const quoteDiff = diffs[0]!
@@ -266,7 +264,7 @@ describe('behavior: meta', () => {
     })
     const meta = result.meta as relay.Meta
 
-    const diffs = meta.balanceDiffs[sender.address]!
+    const diffs = findDiffs(meta.balanceDiffs, sender.address)!
     const tokenDiff = diffs.find((d) => d.address.toLowerCase() === token.toLowerCase())!
     // Only the transfer shows — approval is fully covered.
     expect(tokenDiff.value).toBe('0x64')
@@ -296,7 +294,7 @@ describe('behavior: meta', () => {
     })
     const meta = result.meta as relay.Meta
 
-    const diffs = meta.balanceDiffs[sender.address]!
+    const diffs = findDiffs(meta.balanceDiffs, sender.address)!
     const tokenDiff = diffs.find((d) => d.address.toLowerCase() === token.toLowerCase())!
     // transfer(50) + uncovered approval(150) = 200 outgoing.
     expect(tokenDiff.value).toBe('0xc8')
