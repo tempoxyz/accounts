@@ -71,6 +71,10 @@
 - **Conventional commits** — use `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:` prefixes. Scope is optional (e.g. `feat(parser): add array coercion`).
 - **No section separator comments** — don't use `// ---` or `// ===` divider comments. Let JSDoc and whitespace provide structure.
 
+## UI Component Conventions
+
+- **Base UI first** — before building a custom UI component, check if [Base UI](https://base-ui.com) (`@base-ui/react`) already provides an unstyled primitive for it (e.g. OTP Field, Dialog, Select, Menu, Checkbox, etc.). Use the Base UI primitive as the foundation and style it with Tailwind/CVA. Only build from scratch when no Base UI component covers the use case.
+
 ## React Component Conventions
 
 - **Colocate components in the file** — don't extract into separate component files until reusability is needed. Place helper components at the bottom of the file that uses them.

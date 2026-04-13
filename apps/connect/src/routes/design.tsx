@@ -527,7 +527,9 @@ function Design() {
                   </Frame.Body>
                   <Frame.Footer>
                     <div className="flex flex-col gap-4">
-                      <Button className="w-full" variant="primary">Verify</Button>
+                      <Button className="w-full" variant="primary">
+                        Verify
+                      </Button>
                       <p className="text-center text-label-13 text-foreground-secondary">
                         Didn't receive a code?{' '}
                         <button
@@ -562,7 +564,11 @@ function Design() {
                         className="flex h-[38px] w-full cursor-pointer items-center gap-3 rounded-lg border border-border px-3 transition-colors hover:bg-gray-1"
                         type="button"
                       >
-                        <Identicon address="0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9e8f" className="size-6 shrink-0 rounded-full" size={24} />
+                        <Identicon
+                          address="0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9e8f"
+                          className="size-6 shrink-0 rounded-full"
+                          size={24}
+                        />
                         <p className="min-w-0 flex-1 truncate text-left text-label-13">
                           john@example.com
                         </p>
@@ -702,11 +708,7 @@ function Design() {
               '0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8',
             ].map((addr) => (
               <div key={addr} className="flex flex-col items-center gap-2">
-                <Identicon
-                  address={addr as `0x${string}`}
-                  className="rounded-full"
-                  size={48}
-                />
+                <Identicon address={addr as `0x${string}`} className="rounded-full" size={48} />
                 <p className="font-mono text-label-11 text-foreground-secondary">
                   {addr.slice(0, 6)}…{addr.slice(-4)}
                 </p>

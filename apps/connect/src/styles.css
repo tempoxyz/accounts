@@ -224,7 +224,6 @@
   --color-warning: var(--amber-7);
   --color-info: var(--blue-7);
 
-  --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, monospace;
 
   --text-heading-72: 4.5rem;
