@@ -66,7 +66,7 @@ beforeAll(async () => {
           })
         })
 
-      // Fund first webAuthn account for provider tests.
+      // Fund first account for provider tests.
       await withRetry(async () => {
         await Actions.token.transferSync(client, {
           account: accounts[0],

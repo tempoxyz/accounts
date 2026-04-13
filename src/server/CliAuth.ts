@@ -17,7 +17,7 @@ export const keyType = z.union([z.literal('secp256k1'), z.literal('p256'), z.lit
 export const keyAuthorization = z.object({
   address: u.address(),
   chainId: u.bigint(),
-  expiry: z.nullish(u.number()),
+  expiry: z.union([u.number(), z.null(), z.undefined()]),
   keyId: u.address(),
   keyType,
   limits: z.optional(z.readonly(z.array(z.object({ token: u.address(), limit: u.bigint() })))),
