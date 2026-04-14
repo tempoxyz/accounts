@@ -44,7 +44,6 @@ async function authorize(
       chainId: BigInt(chain.id),
       expiry: options.expiry ?? expiry,
       limits: options.limits ?? limits,
-      scopes: [],
     },
   )
   const keyAuthorization = KeyAuthorization.toRpc(signed)
@@ -82,7 +81,6 @@ async function authorizeWebAuthn(
       chainId: BigInt(chain.id),
       expiry: options.expiry ?? expiry,
       limits: options.limits ?? limits,
-      scopes: [],
     },
   )
   const keyAuthorization = KeyAuthorization.toRpc(signed)
