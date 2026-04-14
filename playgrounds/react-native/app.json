@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Accounts RN Playground",
+    "slug": "accounts-rn-playground",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "scheme": "accounts-playground",
+    "platforms": ["ios", "android"],
+    "ios": {
+      "bundleIdentifier": "xyz.tempo.accounts.playground"
+    },
+    "android": {
+      "package": "xyz.tempo.accounts.playground"
+    }
+  }
+}
