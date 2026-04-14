@@ -7,6 +7,9 @@ import { store } from './deps.js'
 
 const path = '/cli-auth'
 
+const PRIVATE_KEY = process.env.PRIVATE_KEY
+if (!PRIVATE_KEY) throw new Error('PRIVATE_KEY is not set')
+
 type Bindings = CloudflareBindings & {
   ASSETS?:
     | {

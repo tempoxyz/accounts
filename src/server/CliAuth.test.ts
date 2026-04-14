@@ -170,6 +170,64 @@ async function get<response extends z.ZodMiniType>(
   }
 }
 
+describe('from', () => {
+  test('default: shares defaults across the device-code flow', async () => {
+    const store = CliAuth.Store.memory()
+    const now = () => 1_000
+    const { codeVerifier, request } = await createRequest()
+    const cli = CliAuth.from({
+      chains: [chain],
+      now,
+      random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
+      store,
+      ttlMs: 30_000,
+    })
+
+    const created = await cli.createDeviceCode({ request })
+    const entry = await store.get(created.code)
+    const authorized = await cli.authorize({
+      request: await authorize(created.code),
+    })
+    const polled = await cli.poll({
+      code: created.code,
+      request: {
+        codeVerifier,
+      },
+    })
+
+    expect(created).toMatchInlineSnapshot(`
+      {
+        "code": "ABCDEFGH",
+      }
+    `)
+    expect(entry).toMatchInlineSnapshot(`
+      {
+        "chainId": 1337n,
+        "code": "ABCDEFGH",
+        "codeChallenge": "NUwjc1h8PuXcsvSOG44Rp4bMayBXnOkriHEJ19CaSQM",
+        "createdAt": 1000,
+        "expiresAt": 31000,
+        "expiry": ${expiry},
+        "keyType": "p256",
+        "limits": [
+          {
+            "limit": 1000n,
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+        "pubKey": "${accessKey.publicKey}",
+        "status": "pending",
+      }
+    `)
+    expect(authorized).toMatchInlineSnapshot(`
+      {
+        "status": "authorized",
+      }
+    `)
+    expect(polled.status).toMatchInlineSnapshot(`"authorized"`)
+  })
+})
+
 describe('createDeviceCode', () => {
   test('default: creates a pending device code', async () => {
     const store = CliAuth.Store.memory()
@@ -254,6 +312,31 @@ describe('createDeviceCode', () => {
       "[\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "codeChallenge"\n    ],\n    "message": "Invalid input"\n  },\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "pubKey"\n    ],\n    "message": "Expected hex value"\n  }\n]"
     `)
     expect(response.status).toMatchInlineSnapshot(`400`)
+  })
+
+  test('behavior: handler rejects requests for unconfigured chains', async () => {
+    const handler = Handler.codeAuth({
+      chains: [chain],
+    })
+    const { request } = await createRequest()
+
+    const result = await post(handler, {
+      body: {
+        ...request,
+        chainId: BigInt(chain.id + 1),
+      },
+      request: CliAuth.createRequest,
+      url: 'http://localhost/auth/pkce/code',
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "Chain 1338 not configured",
+        },
+        "status": 400,
+      }
+    `)
   })
 
   test('behavior: supports pubkey-only requests with server defaults', async () => {
