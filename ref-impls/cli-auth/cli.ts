@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { Hex } from 'ox'
 import { connect } from 'viem/experimental/erc7846'
 
-const defaultHost = 'https://wallet.tempo.xyz/cli-auth' as const
+const defaultHost = 'https://wallet.tempo.xyz/embed/cli-auth' as const
 const defaultToken = '0x20c0000000000000000000000000000000000000' as const
 
 const options = z.object({
@@ -40,9 +40,6 @@ const cli = Cli.create('accounts-cli')
 
       const provider = Provider.create({
         host: options.host,
-        open(url) {
-          console.log(`open ${url}`)
-        },
         storage: Storage.memory(),
         testnet: options.testnet,
       })
@@ -71,9 +68,6 @@ const cli = Cli.create('accounts-cli')
       configureLocalTls(options.host)
       const provider = Provider.create({
         host: options.host,
-        open(url) {
-          console.log(`open ${url}`)
-        },
         storage: Storage.memory(),
         testnet: options.testnet,
       })

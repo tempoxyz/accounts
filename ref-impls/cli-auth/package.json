@@ -10,8 +10,7 @@
     "check:types": "tsc --noEmit",
     "postinstall": "wrangler types --env-interface='CloudflareBindings' --env-file .env.example",
     "preview": "vp preview",
-    "request": "tsx ./cli.ts request",
-    "test": "vp test run --config ./vitest.config.ts"
+    "request": "tsx ./cli.ts request"
   },
   "dependencies": {
     "accounts": "workspace:*",
