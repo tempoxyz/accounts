@@ -39,17 +39,17 @@ export const createRequest = z.object({
   pubKey: u.hex(),
 })
 
-/** CLI auth device-code creation response body. */
+/** Response body for `POST /cli-auth/device-code`. */
 export const createResponse = z.object({
   code: z.string(),
 })
 
-/** CLI auth device-code poll request body. */
+/** Request body for `POST /auth/pkce/poll/:code`. */
 export const pollRequest = z.object({
   codeVerifier: z.string(),
 })
 
-/** CLI auth device-code poll response body. */
+/** Response body for `POST /auth/pkce/poll/:code`. */
 export const pollResponse = u.oneOf([
   z.object({
     status: z.literal('pending'),
@@ -64,7 +64,7 @@ export const pollResponse = u.oneOf([
   }),
 ])
 
-/** CLI auth pending-request response body. */
+/** Response body for `GET /auth/pkce/pending/:code`. */
 export const pendingResponse = z.object({
   accessKeyAddress: u.address(),
   account: z.optional(u.address()),
@@ -77,14 +77,14 @@ export const pendingResponse = z.object({
   status: z.literal('pending'),
 })
 
-/** CLI auth device-code authorization request body. */
+/** Request body for `POST /auth/pkce`. */
 export const authorizeRequest = z.object({
   accountAddress: u.address(),
   code: z.string(),
   keyAuthorization: keyAuthorization,
 })
 
-/** CLI auth device-code authorization response body. */
+/** Response body for `POST /cli-auth/authorize`. */
 export const authorizeResponse = z.object({
   status: z.literal('authorized'),
 })
