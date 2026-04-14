@@ -7,6 +7,7 @@ export function Otp(props: Otp.Props) {
 
   return (
     <div className="grid gap-2">
+      <label className="sr-only">Verification code</label>
       <OTPField.Root
         className={cx('flex justify-center', className)}
         data-error={error ? '' : undefined}
@@ -18,7 +19,7 @@ export function Otp(props: Otp.Props) {
         {Array.from({ length }, (_, i) => (
           <OTPField.Input
             key={i}
-            aria-label={`Digit ${i + 1} of ${length}`}
+            autoFocus={i === 0}
             className={Otp.inputClassName({ size })}
           />
         ))}

@@ -22,6 +22,15 @@ export default defineConfig({
           setupFiles: [join(import.meta.dirname, './test/setup.ts')],
         },
       },
+      {
+        extends: true,
+        test: {
+          include: ['./apps/connect/worker/**/*.test.ts'],
+          name: 'connect/worker',
+          globalSetup: [join(import.meta.dirname, './apps/connect/test/setup.ts')],
+          hookTimeout: 60_000,
+        },
+      },
       // {
       //   extends: true,
       //   test: {

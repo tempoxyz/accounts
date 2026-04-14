@@ -204,3 +204,4 @@ Reference when building, reviewing, or refactoring UI components and interaction
 - **Deduplicate `vp` in Vitest config** — in this workspace, mixed peer resolution (for example different `@types/node` versions across packages) can load two `vp` instances and break suite initialization; set `resolve.dedupe` to include `vp`.
 - **CLI auth example URL inputs** — the example CLI flow is expected to support both `--url` and `AUTH_URL`-based defaults, and should avoid hardcoded personal hostnames in source.
 - **Test RPC port selection should auto-fallback** — localnet test setup should start from `VITE_RPC_PORT` (or `8545`) and select the next available port to avoid `EADDRINUSE` collisions.
+- **`process.env` over `c.env` for string secrets** — in CF Workers, prefer `process.env` for string env vars and secrets (e.g. `SESSION_PRIVATE_KEY`, `MAILGUN_API_KEY`). Use `c.env` only for non-string bindings that require it (KVNamespace, RateLimit, Hyperdrive, etc.).

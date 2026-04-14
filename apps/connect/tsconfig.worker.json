@@ -4,7 +4,7 @@
     "target": "esnext",
     "lib": ["ESNext"],
     "module": "esnext",
-    "types": ["vp/client"],
+    "types": ["vp/client", "@types/node"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -16,5 +16,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["worker", "worker-configuration.d.ts"]
+  "include": ["worker/", "worker-configuration.d.ts"]
 }

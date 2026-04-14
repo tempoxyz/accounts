@@ -34,7 +34,7 @@ catalog:
   typescript: ^5.9.3
   viem: ^2.47.18
   vite: ^8.0.5
-  vp: npm:vite-plus@~0.1.16
+  vp: npm:vite-plus@0.1.16
   wagmi: ^3.6.1
   wrangler: ^4.81.1
   zod: ^4.3.6
@@ -58,9 +58,4 @@ onlyBuiltDependencies:
   - simple-git-hooks
   - workerd
 
-overrides:
-  accounts: workspace:*
-  ox: ~0.14.15
-  react: catalog:default
-  react-dom: catalog:default
 trustPolicy: permissive

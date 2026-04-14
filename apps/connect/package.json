@@ -8,22 +8,27 @@
   "scripts": {
     "build": "vp build",
     "check:types": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "deploy": "wrangler deploy",
-    "dev": "vp dev",
-    "gen:types": "wrangler types",
+    "dev": "pnpm db:migrate && vp dev",
+    "gen:types": "test -f .env || cp .env.example .env; wrangler types",
     "postinstall": "pnpm gen:types",
     "preview": "vp preview"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
     "@fontsource-variable/geist-mono": "^5.2.7",
+    "@hono/zod-validator": "^0.7.6",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "accounts": "workspace:*",
     "cuer": "^0.0.3",
     "cva": "1.0.0-beta.1",
+    "drizzle-orm": "0.45.2",
     "hono": "catalog:",
     "ox": "catalog:",
+    "postgres": "3.4.8",
     "react": "catalog:",
     "react-dom": "catalog:",
     "viem": "catalog:",
@@ -39,10 +44,10 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "drizzle-kit": "0.31.8",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "unplugin-icons": "^23.0.1",
-    "vp": "catalog:",
     "wrangler": "catalog:"
   }
 }

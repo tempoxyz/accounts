@@ -40,6 +40,7 @@ export function useEnsureVisibility(
 
     const observer = new IntersectionObserver(
       (entries) => {
+        if (document.visibilityState === 'hidden') return
         const entry = entries[0]
         if (!entry) return
         const isVisible =

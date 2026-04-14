@@ -375,8 +375,7 @@ function Design() {
                 <Frame>
                   <Frame.Header
                     icon={<ArrowUpRight className="size-5" />}
-                    subtitle="Some description of the transaction might go here and could stretch onto two or even three lines."
-                    title="Review Transaction"
+                     title="Review Transaction"
                   />
                   <Frame.Body>
                     <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
@@ -415,15 +414,15 @@ function Design() {
                 <Frame>
                   <Frame.Header
                     icon={<ArrowUpRight className="size-5" />}
-                    subtitle="acmeswap.xyz"
+                    subtitle={
+                      <>
+                        <span className="text-foreground">example.com</span> is requesting a
+                        payment.
+                      </>
+                    }
                     title="Payment Request"
                   />
                   <Frame.Body>
-                    <p className="text-copy-15 text-foreground-secondary">
-                      Some description of the transaction might go here and could stretch onto two
-                      or even three lines.
-                    </p>
-
                     <div className="flex flex-col items-center gap-1 rounded-xl bg-gray-1 px-4 py-5 text-center">
                       <p className="text-heading-32 tabular-nums">$50.00</p>
                       <p className="font-mono text-label-13 text-foreground-secondary">
@@ -449,8 +448,8 @@ function Design() {
                 <Frame>
                   <Frame.Header
                     icon={<Terminal className="size-5" />}
-                    subtitle="Some description of the authorization might go here and could stretch onto two or even three lines."
-                    title="Authorize Device"
+                    subtitle={<><span className="text-foreground">Amp</span> is requesting to access your account.</>}
+                     title="Authorize CLI"
                   />
                   <Frame.Body>
                     <div className="flex flex-col gap-3 rounded-xl bg-gray-1 px-4 py-5 text-center">
@@ -461,8 +460,7 @@ function Design() {
                     </div>
 
                     <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-                      <ScopeRow label="Spend USDC.e" suffix="/ hour" value="$100.00" />
-                      <ScopeRow label="Spend USDC" suffix="/ hour" value="$50.00" />
+                      <ScopeRow label="Spend USDC.e" value="$100.00" />
                       <ScopeRow label="Expires" value="24 hours" />
                     </div>
                   </Frame.Body>
@@ -524,23 +522,22 @@ function Design() {
                   />
                   <Frame.Body>
                     <OtpDemo size="large" />
-                  </Frame.Body>
-                  <Frame.Footer>
-                    <div className="flex flex-col gap-4">
-                      <Button className="w-full" variant="primary">
-                        Verify
-                      </Button>
-                      <p className="text-center text-label-13 text-foreground-secondary">
-                        Didn't receive a code?{' '}
-                        <button
-                          className="cursor-pointer text-foreground underline underline-offset-2 transition-colors hover:text-blue-9"
-                          type="button"
-                        >
-                          Resend
-                        </button>
-                      </p>
+                    <div className="flex items-center justify-center gap-3">
+                      <button
+                        className="cursor-pointer text-label-13 text-foreground-secondary transition-colors hover:text-foreground"
+                        type="button"
+                      >
+                        Resend code
+                      </button>
+                      <span className="text-label-13 text-foreground-secondary">·</span>
+                      <button
+                        className="cursor-pointer text-label-13 text-foreground-secondary transition-colors hover:text-foreground"
+                        type="button"
+                      >
+                        Use a different email
+                      </button>
                     </div>
-                  </Frame.Footer>
+                  </Frame.Body>
                 </Frame>
               </div>
             </div>

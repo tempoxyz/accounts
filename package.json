@@ -61,7 +61,9 @@
       "react-dom": "catalog:",
       "accounts": "workspace:*",
       "viem": "catalog:",
-      "wrangler": "catalog:"
+      "wrangler": "catalog:",
+      "vite-plus": "0.1.16",
+      "vp": "catalog:"
     }
   },
   "imports": {

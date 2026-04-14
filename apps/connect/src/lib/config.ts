@@ -12,7 +12,7 @@ export const wagmiConfig = createConfig({
   chains: [tempo, tempoModerato],
   connectors: [
     webAuthn({
-      authUrl: '/webauthn',
+      authUrl: '/api/webauthn',
       storage: Storage.combine(Storage.cookie(), Storage.localStorage()),
     }),
   ],

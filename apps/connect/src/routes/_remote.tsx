@@ -24,6 +24,8 @@ function RemoteLayout() {
   // Mode is derived once on mount from search params + window hierarchy.
   const [mode] = useState<Mode.Mode>(() => Mode.get(search))
   const ready = Remote.useState(remote, (s) => s.ready)
+  const origin = Remote.useState(remote, (s) => s.origin)
+  const framed = Mode.ensureFramed(mode)
 
   // Wire up parent messaging for iframe/popup modes only.
   // Standalone mode (e.g. payment links) has no parent to message.
@@ -49,7 +51,9 @@ function RemoteLayout() {
   return (
     <Page mode={mode}>
       <Frame mode={mode}>
-        <Outlet />
+        <EnsureVisibility enabled={framed && !!origin}>
+          <Outlet />
+        </EnsureVisibility>
       </Frame>
     </Page>
   )
@@ -58,9 +62,6 @@ function RemoteLayout() {
 function Page(props: { children: ReactNode; mode: Mode.Mode }) {
   const { children, mode } = props
   const framed = Mode.ensureFramed(mode)
-  // Wait for origin before enabling occlusion detection — avoids a flash
-  // when IO v2 isn't supported and the trusted-host check hasn't resolved yet.
-  const origin = Remote.useState(remote, (s) => s.origin)
   const rejectAll = useCallback(() => remote.rejectAll(), [])
 
   // Escape key dismisses the dialog in iframe/popup modes.
@@ -88,7 +89,7 @@ function Page(props: { children: ReactNode; mode: Mode.Mode }) {
         className="fixed inset-0 flex items-start justify-center pt-4 bg-black/50"
         onClick={rejectAll}
       >
-        <EnsureVisibility enabled={framed && !!origin}>{children}</EnsureVisibility>
+        {children}
       </div>
     )
 
