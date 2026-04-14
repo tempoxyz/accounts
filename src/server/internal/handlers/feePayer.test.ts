@@ -1,7 +1,7 @@
 import type { RpcRequest } from 'ox'
 import { SignatureEnvelope, Transaction as core_Transaction, TxEnvelopeTempo } from 'ox/tempo'
 import { parseUnits } from 'viem'
-import { sendTransactionSync } from 'viem/actions'
+import { sendTransaction, sendTransactionSync, waitForTransactionReceipt } from 'viem/actions'
 import { Actions, Transaction, withFeePayer } from 'viem/tempo'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
@@ -150,16 +150,17 @@ describe('POST /', () => {
       }),
     })
 
-    const receipt = await sendTransactionSync(client, {
+    const hash = await sendTransaction(client, {
       feePayer: true,
-      to: '0x0000000000000000000000000000000000000000',
+      to: '0x0000000000000000000000000000000000000001',
     })
+    const receipt = await waitForTransactionReceipt(getClient(), { hash })
 
     expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
 
     expect(requests.map(({ method }) => method)).toMatchInlineSnapshot(`
       [
-        "eth_sendRawTransactionSync",
+        "eth_sendRawTransaction",
       ]
     `)
   })
@@ -174,7 +175,7 @@ describe('POST /', () => {
 
     const receipt = await sendTransactionSync(client, {
       feePayer: true,
-      to: '0x0000000000000000000000000000000000000000',
+      to: '0x0000000000000000000000000000000000000002',
     })
 
     expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
