@@ -1,48 +1,44 @@
-import { Expiry, Provider } from 'accounts/react-native'
-import { secureStorage } from 'accounts/react-native'
+import { Provider, secureStorage } from '../../dist/react-native/index.js'
 import * as Linking from 'expo-linking'
+import { Hex } from 'ox'
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useState } from 'react'
-import {
-  Alert,
-  Button,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
-import { formatUnits, parseUnits, type Hex } from 'viem'
-import { Actions, PublicActions } from 'viem/tempo'
-import { createClient, http } from 'viem'
+import { Button, ScrollView, Text, TextInput, View } from 'react-native'
+import { formatUnits, parseUnits, type Address, type Hex as viem_Hex } from 'viem'
+import { Actions } from 'viem/tempo'
 import { tempoModerato } from 'viem/chains'
 
 const chain = tempoModerato
 
 const tokens = {
-  pathUSD: '0x20c0000000000000000000000000000000000000' as Hex,
-  'USDC.e': '0x20c0000000000000000000009e8d7eb59b783726' as Hex,
+  pathUSD: '0x20c0000000000000000000000000000000000000' as Address,
+  'USDC.e': '0x20c0000000000000000000009e8d7eb59b783726' as Address,
 }
 
 const redirectUri = Linking.createURL('auth')
 
 const provider = Provider.create({
+  chains: [chain],
   host: 'https://wallet.tempo.xyz',
   redirectUri,
   secureStorage: secureStorage(),
-  announceProvider: false,
+  authorizeAccessKey: () => ({
+    expiry: Math.floor(Date.now() / 1000) + 60 * 5,
+    limits: [{
+      token: tokens.pathUSD,
+      limit: parseUnits('5', 6),
+    }],
+  }),
 })
 
-const client = createClient({
-  chain,
-  transport: http(),
-}).extend(PublicActions.tempo)
-
 export default function App() {
-  const [address, setAddress] = useState<Hex | null>(null)
+  const [address, setAddress] = useState<Address | null>(null)
   const [status, setStatus] = useState('disconnected')
   const [balance, setBalance] = useState<string | null>(null)
-  const [txHash, setTxHash] = useState<string | null>(null)
-  const [signature, setSignature] = useState<string | null>(null)
+  const [faucetStatus, setFaucetStatus] = useState<string | null>(null)
+  const [isFunding, setIsFunding] = useState(false)
+  const [txHash, setTxHash] = useState<viem_Hex | null>(null)
+  const [signature, setSignature] = useState<viem_Hex | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [to, setTo] = useState('0x0000000000000000000000000000000000000001')
   const [amount, setAmount] = useState('1')
@@ -52,25 +48,33 @@ export default function App() {
     try {
       setStatus('connecting')
       setError(null)
-      const result = await provider.request({
+      let result = await provider.request({
         method: 'wallet_connect',
         params: [{
-          chainId: chain.id,
-          capabilities: {
-            authorizeAccessKey: {
-              expiry: Expiry.minutes(5),
-              limits: [{
-                token: tokens.pathUSD,
-                limit: parseUnits('5', 6),
-              }],
-            },
-          },
+          capabilities: { method: 'login' },
+          chainId: Hex.fromNumber(chain.id),
         }],
       })
+
+      if (result.accounts.length === 0)
+        result = await provider.request({
+          method: 'wallet_connect',
+          params: [{
+            capabilities: {
+              method: 'register',
+              name: 'Accounts RN Playground',
+            },
+            chainId: Hex.fromNumber(chain.id),
+          }],
+        })
+
       const addr = result.accounts[0]?.address
       if (addr) {
         setAddress(addr)
         setStatus('connected')
+      } else {
+        setError('No account returned from wallet_connect.')
+        setStatus('disconnected')
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -85,6 +89,7 @@ export default function App() {
     setAddress(null)
     setStatus('disconnected')
     setBalance(null)
+    setFaucetStatus(null)
     setTxHash(null)
     setSignature(null)
     setError(null)
@@ -93,9 +98,12 @@ export default function App() {
   const fetchBalance = useCallback(async () => {
     if (!address) return
     try {
-      const bal = await client.getBalance({ address, token: tokens.pathUSD })
+      const bal = await Actions.token.getBalance(provider.getClient({ chainId: chain.id }), {
+        account: address,
+        token: tokens.pathUSD,
+      })
       setBalance(formatUnits(bal, 6))
-    } catch (e) {
+    } catch {
       setBalance('error')
     }
   }, [address])
@@ -107,6 +115,25 @@ export default function App() {
     return () => clearInterval(interval)
   }, [address, fetchBalance])
 
+  const fund = useCallback(async () => {
+    if (!address) return
+    try {
+      setError(null)
+      setFaucetStatus(null)
+      setIsFunding(true)
+      const receipts = await Actions.faucet.fundSync(provider.getClient({ chainId: chain.id }), {
+        account: address,
+        timeout: 30_000,
+      })
+      setFaucetStatus(`Funded ${receipts.length} transaction${receipts.length === 1 ? '' : 's'}.`)
+      await fetchBalance()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setIsFunding(false)
+    }
+  }, [address, fetchBalance])
+
   const send = useCallback(async () => {
     if (!address) return
     try {
@@ -114,10 +141,11 @@ export default function App() {
       const hash = await provider.request({
         method: 'eth_sendTransaction',
         params: [{
+          chainId: Hex.fromNumber(chain.id),
           from: address,
           calls: [
             Actions.token.transfer.call({
-              to: to as Hex,
+              to: to as Address,
               token: tokens.pathUSD,
               amount: parseUnits(amount || '0', 6),
             }),
@@ -128,7 +156,7 @@ export default function App() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [address, to, amount])
+  }, [address, amount, to])
 
   const sign = useCallback(async () => {
     if (!address) return
@@ -136,7 +164,7 @@ export default function App() {
       setError(null)
       const sig = await provider.request({
         method: 'personal_sign',
-        params: [message, address],
+        params: [Hex.fromString(message), address],
       })
       setSignature(sig)
     } catch (e) {
@@ -166,6 +194,10 @@ export default function App() {
         <>
           <Text style={{ marginTop: 24, fontWeight: 'bold' }}>Balance</Text>
           <Text>{balance !== null ? `${balance} pathUSD` : 'Loading...'}</Text>
+          <View style={{ marginTop: 8 }}>
+            <Button title={isFunding ? 'Funding...' : 'Fund Account'} onPress={fund} />
+          </View>
+          {faucetStatus && <Text style={{ marginTop: 4 }}>{faucetStatus}</Text>}
 
           <Text style={{ marginTop: 24, fontWeight: 'bold' }}>Send Transaction</Text>
           <TextInput
