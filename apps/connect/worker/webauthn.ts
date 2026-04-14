@@ -4,6 +4,7 @@ import { Address, PublicKey } from 'ox'
 import type { Hex } from 'ox'
 
 import * as Db from './lib/db/index.js'
+import * as User from './lib/db/user.js'
 import * as Wallet from './lib/db/wallet.js'
 import * as Session from './lib/session.js'
 
@@ -46,16 +47,15 @@ export const webauthn = new Hono<{ Bindings: Env }>().all('/*', (c) => {
       })
     },
 
-    async onAuthenticate({ credentialId, request }) {
+    async onAuthenticate({ credentialId }) {
       const db = Db.get(c.env.HYPERDRIVE)
       const wallet = await Wallet.getByCredentialId(db, credentialId)
       if (!wallet) return undefined as never
 
-      const session = await Session.fromRawRequest(request, process.env.SESSION_PUBLIC_KEY!)
-      const userId = session?.sub ?? wallet.userId
+      const email = await User.getEmail(db, wallet.userId)
 
-      return res(hostname, userId, {
-        email: session?.email ?? undefined,
+      return res(hostname, wallet.userId, {
+        email,
         wallet: {
           credentialId: wallet.credentialId,
           publicKey: wallet.publicKeyHex,

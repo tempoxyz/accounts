@@ -86,7 +86,7 @@ function Page(props: { children: ReactNode; mode: Mode.Mode }) {
   if (framed)
     return (
       <div
-        className="fixed inset-0 flex items-start justify-center pt-4 bg-black/50"
+        className="fixed inset-0 flex items-start justify-center pt-4 max-dialog:items-end max-dialog:pt-0 bg-black/50"
         onClick={rejectAll}
       >
         {children}
@@ -133,7 +133,7 @@ function Frame(props: { children: ReactNode; mode: Mode.Mode }) {
   // Iframe + standalone: bordered card.
   return (
     <div
-      className="bg-primary text-foreground border border-border rounded-lg w-[360px] max-w-full flex flex-col"
+      className="bg-primary text-foreground border border-border rounded-lg w-[360px] max-w-full flex flex-col max-dialog:w-full max-dialog:rounded-b-none max-dialog:border-b-0 max-dialog:max-h-[90dvh] max-dialog:overflow-y-auto"
       onClick={(e) => e.stopPropagation()}
     >
       {children}
