@@ -4,16 +4,18 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "connect": "tsx ./scripts/cli.ts connect",
+    "connect": "tsx ./cli.ts connect",
     "dev": "test -f .env || cp .env.example .env && vp dev",
     "build": "tsc --noEmit && vp build",
     "check:types": "tsc --noEmit",
     "postinstall": "wrangler types --env-interface='CloudflareBindings' --env-file .env.example",
     "preview": "vp preview",
-    "request": "tsx ./scripts/cli.ts request"
+    "request": "tsx ./cli.ts request",
+    "test": "vp test run --config ./vitest.config.ts"
   },
   "dependencies": {
     "accounts": "workspace:*",
+    "incur":"^0.3.25",
     "react": "catalog:default",
     "react-dom": "catalog:default"
   },

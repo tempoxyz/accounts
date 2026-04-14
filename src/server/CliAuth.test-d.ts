@@ -54,3 +54,9 @@ describe('Store', () => {
     expectTypeOf(CliAuth.Store.memory).returns.toMatchTypeOf<CliAuth.Store>()
   })
 })
+
+describe('from', () => {
+  test('returns the shared CLI auth helper contract', () => {
+    expectTypeOf(CliAuth.from).returns.toMatchTypeOf<CliAuth.CliAuth>()
+  })
+})

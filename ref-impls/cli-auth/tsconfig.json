@@ -13,5 +13,6 @@
       "accounts/*": ["../src/*"]
     }
   },
+  "files": ["./cli.ts"],
   "include": ["src", "worker", "worker-configuration.d.ts"]
 }
