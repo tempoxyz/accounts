@@ -14,8 +14,7 @@ import * as Utils from './utils.js'
  * Instantiates a fee payer service request handler that can be used to
  * sponsor the fee for user transactions.
  *
- * @deprecated Use `Handler.relay(options)` for a drop-in replacement, or
- * `Handler.relay({ feePayer: { ... } })` for the canonical relay API.
+ * @deprecated Use `Handler.relay({ feePayer: { ... } })` instead.
  *
  * @example
  * ```ts

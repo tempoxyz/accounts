@@ -75,7 +75,7 @@ export function relay(options: relay.Options = {}): Handler {
     transports = {},
     ...rest
   } = options
-  const feePayerOptions = resolveFeePayerOptions(options)
+  const feePayerOptions = options.feePayer
 
   const autoSwap = (() => {
     if (options.autoSwap === false) return undefined
@@ -358,11 +358,6 @@ export namespace relay {
         }
       | undefined
     /**
-     * @deprecated Use `feePayer.account` instead. This keeps `Handler.relay`
-     * drop-in compatible with `Handler.feePayer`.
-     */
-    account?: LocalAccount | undefined
-    /**
      * AMM swap options for automatic insufficient balance resolution.
      * Set to `false` to disable. @default {}
      */
@@ -383,34 +378,8 @@ export namespace relay {
     onRequest?: ((request: RpcRequest.RpcRequest) => Promise<void>) | undefined
     /** Path to use for the handler. @default "/" */
     path?: string | undefined
-    /**
-     * @deprecated Use `feePayer.validate` instead. This keeps `Handler.relay`
-     * drop-in compatible with `Handler.feePayer`.
-     */
-    validate?: ((request: Transaction.TransactionRequest) => boolean | Promise<boolean>) | undefined
-    /**
-     * @deprecated Use `feePayer.name` instead. This keeps `Handler.relay`
-     * drop-in compatible with `Handler.feePayer`.
-     */
-    name?: string | undefined
     /** Transports keyed by chain ID. Defaults to `http()` for each chain. */
     transports?: Record<number, Transport> | undefined
-    /**
-     * @deprecated Use `feePayer.url` instead. This keeps `Handler.relay`
-     * drop-in compatible with `Handler.feePayer`.
-     */
-    url?: string | undefined
-  }
-}
-
-function resolveFeePayerOptions(options: relay.Options) {
-  if (options.feePayer) return options.feePayer
-  if (!options.account) return undefined
-  return {
-    account: options.account,
-    ...(options.name ? { name: options.name } : {}),
-    ...(options.url ? { url: options.url } : {}),
-    ...(options.validate ? { validate: options.validate } : {}),
   }
 }
 
