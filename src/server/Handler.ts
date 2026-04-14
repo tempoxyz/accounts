@@ -3,7 +3,6 @@ import { Hono } from 'hono'
 import * as RequestListener from './internal/requestListener.js'
 
 export { codeAuth } from './internal/handlers/codeAuth.js'
-export { feePayer } from './internal/handlers/feePayer.js'
 export { relay } from './internal/handlers/relay.js'
 export { webAuthn } from './internal/handlers/webAuthn.js'
 

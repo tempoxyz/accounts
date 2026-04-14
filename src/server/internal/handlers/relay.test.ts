@@ -619,7 +619,6 @@ describe('behavior: with feePayer', () => {
     const { transaction } = await fillTransaction(client, {
       account: userAccount.address,
       calls: [transferCall()],
-      feePayer: true,
     })
 
     expect(transaction.feePayerSignature).toBeDefined()
@@ -634,7 +633,6 @@ describe('behavior: with feePayer', () => {
     const result = await fillTransaction(client, {
       account: userAccount.address,
       calls: [transferCall()],
-      feePayer: true,
     })
     const meta = result.capabilities
 
@@ -652,7 +650,6 @@ describe('behavior: with feePayer', () => {
     const { transaction } = await fillTransaction(client, {
       account: userAccount.address,
       calls: [transferCall()],
-      feePayer: true,
     })
     const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
     const envelope = TxEnvelopeTempo.deserialize(serialized)
@@ -713,7 +710,6 @@ describe('behavior: conditional sponsoring', () => {
     const { transaction } = await fillTransaction(client, {
       account: userAccount.address,
       calls: [transferCall()],
-      feePayer: true,
     })
     expect(transaction.feePayerSignature).toBeDefined()
 
@@ -738,7 +734,6 @@ describe('behavior: conditional sponsoring', () => {
     const result = await fillTransaction(client, {
       account: sender.address,
       calls: [transferCall()],
-      feePayer: true,
     })
     expect(result.transaction.feePayerSignature).toBeUndefined()
 

@@ -27,7 +27,7 @@ const handler = Handler.compose([
     feePayer: {
       account: privateKeyToAccount(process.env.PRIVATE_KEY),
     },
-    path: '/fee-payer',
+    path: '/relay',
   }),
 ])
 

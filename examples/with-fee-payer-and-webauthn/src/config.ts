@@ -4,7 +4,7 @@ import { tempo, tempoModerato } from 'wagmi/chains'
 
 export const config = createConfig({
   chains: [tempo, tempoModerato],
-  connectors: [webAuthn({ testnet: true, authUrl: '/auth', feePayer: '/fee-payer' })],
+  connectors: [webAuthn({ testnet: true, authUrl: '/auth', feePayer: '/relay' })],
   multiInjectedProviderDiscovery: false,
   transports: {
     [tempo.id]: http(),

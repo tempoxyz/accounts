@@ -119,7 +119,7 @@ export function relay(options: relay.Options = {}): Handler {
           const from = typeof parameters.from === 'string' ? (parameters.from as Address) : undefined
           const requestFeeToken =
             typeof parameters.feeToken === 'string' ? (parameters.feeToken as Address) : undefined
-          const requestsSponsorship = parameters.feePayer === true && !!feePayerOptions
+          const requestsSponsorship = !!feePayerOptions && (parameters.feePayer !== false)
 
           // 1. Resolve fee token.
           const feeToken = await resolveFeeToken(client, {

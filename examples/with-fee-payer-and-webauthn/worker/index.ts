@@ -9,7 +9,7 @@ export default {
         feePayer: {
           account: privateKeyToAccount(env.FEE_PAYER_PRIVATE_KEY),
         },
-        path: '/fee-payer',
+        path: '/relay',
       }),
       Handler.webAuthn({
         kv: Kv.cloudflare(env.KV),
