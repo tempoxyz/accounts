@@ -41,8 +41,15 @@ minimumReleaseAgeExclude:
   - viem
 
 onlyBuiltDependencies:
+  - bufferutil
+  - cloudflared
+  - cpu-features
   - esbuild
+  - protobufjs
+  - sharp
   - simple-git-hooks
+  - ssh2
+  - utf-8-validate
   - workerd
 
 overrides:
