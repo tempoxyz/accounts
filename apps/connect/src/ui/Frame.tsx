@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 /** Card shell for dialog screens (iframe, popup, standalone). */
 export function Frame(props: Frame.Props) {
   const { children, className } = props
-  return <div className={cx('flex flex-col gap-2', className)}>{children}</div>
+  return <div className={cx('flex flex-1 flex-col gap-2', className)}>{children}</div>
 }
 
 export namespace Frame {
@@ -69,10 +69,10 @@ export namespace Frame {
     }
   }
 
-  /** Sticky footer area for actions. */
+  /** Sticky footer area for actions. Anchors to the bottom when the frame fills the viewport. */
   export function Footer(props: Footer.Props) {
     const { children, className } = props
-    return <div className={cx('px-4 pb-4', className)}>{children}</div>
+    return <div className={cx('mt-auto px-4 pb-4', className)}>{children}</div>
   }
 
   export namespace Footer {

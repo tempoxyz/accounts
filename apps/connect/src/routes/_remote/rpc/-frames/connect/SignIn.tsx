@@ -10,6 +10,7 @@ export function SignIn(props: SignIn.Props) {
 
   return (
     <form
+      className="flex flex-1 flex-col"
       onSubmit={(e) => {
         e.preventDefault()
         const email = new FormData(e.currentTarget).get('email') as string
@@ -32,52 +33,53 @@ export function SignIn(props: SignIn.Props) {
           }
           title="Sign in with Tempo"
         />
-        <Frame.Body>
-          <Input name="email" placeholder="Email address…" required type="email" />
-          <Button loading={loading} type="submit" variant="primary">
-            Continue
-          </Button>
+        <Frame.Footer>
+          <div className="flex flex-col gap-4">
+            <Input name="email" placeholder="Email address…" required type="email" />
+            {error && <p className="text-label-13 text-red-9">{error}</p>}
+            <Button loading={loading} type="submit" variant="primary">
+              Continue
+            </Button>
 
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-border" />
-            <p className="text-label-12 text-foreground-secondary">or</p>
-            <div className="h-px flex-1 bg-border" />
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-border" />
+              <p className="text-label-12 text-foreground-secondary">or</p>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
+            <Button
+              loading={passkeyLoading}
+              onClick={() => onPasskey?.()}
+              prefix={<Fingerprint className="size-4" />}
+              type="button"
+              variant="muted"
+            >
+              Continue with passkey
+            </Button>
+
+            <p className="text-center text-label-12 text-foreground-secondary">
+              By continuing, you agree to the{' '}
+              <a
+                className="text-foreground"
+                href="https://tempo.xyz/terms"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Terms of Service
+              </a>{' '}
+              and{' '}
+              <a
+                className="text-foreground"
+                href="https://tempo.xyz/privacy"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Privacy Policy
+              </a>
+              .
+            </p>
           </div>
-
-          <Button
-            loading={passkeyLoading}
-            onClick={() => onPasskey?.()}
-            prefix={<Fingerprint className="size-4" />}
-            type="button"
-            variant="muted"
-          >
-            Continue with passkey
-          </Button>
-
-          {error && <p className="text-label-13 text-red-9">{error}</p>}
-
-          <p className="text-center text-label-12 text-foreground-secondary">
-            By continuing, you agree to the{' '}
-            <a
-              className="text-foreground"
-              href="https://tempo.xyz/terms"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              Terms of Service
-            </a>{' '}
-            and{' '}
-            <a
-              className="text-foreground"
-              href="https://tempo.xyz/privacy"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              Privacy Policy
-            </a>
-            .
-          </p>
-        </Frame.Body>
+        </Frame.Footer>
       </Frame>
     </form>
   )

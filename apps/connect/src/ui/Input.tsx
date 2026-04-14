@@ -56,9 +56,9 @@ export namespace Input {
   export const className = cva({
     base: [
       'inline-flex items-center w-full',
-      'rounded-lg border border-border bg-primary text-foreground',
+      'rounded-lg border-2 border-transparent bg-gray-2 text-foreground hover:bg-gray-3',
       'transition-colors',
-      'focus-within:border-foreground focus-within:outline-1 focus-within:-outline-offset-1 focus-within:outline-foreground',
+      'focus-within:border-blue-7',
       'data-disabled:opacity-50 data-disabled:pointer-events-none',
       'data-[error]:border-red-7 data-[error]:focus-within:border-red-7 data-[error]:focus-within:outline-red-7',
     ],

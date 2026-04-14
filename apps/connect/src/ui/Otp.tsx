@@ -9,7 +9,7 @@ export function Otp(props: Otp.Props) {
     <div className="grid gap-2">
       <label className="sr-only">Verification code</label>
       <OTPField.Root
-        className={cx('flex justify-center', className)}
+        className={cx('flex justify-center gap-2', className)}
         data-error={error ? '' : undefined}
         disabled={disabled}
         length={length}
@@ -44,10 +44,9 @@ export namespace Otp {
   export const inputClassName = cva({
     base: [
       'text-center font-mono font-medium',
-      'border-y border-r border-border bg-primary text-foreground',
-      'first:rounded-l-lg first:border-l last:rounded-r-lg',
+      'rounded-lg border-2 border-transparent bg-gray-2 text-foreground',
       'outline-none transition-colors',
-      'focus:border-foreground focus:z-10 focus:outline-1 focus:-outline-offset-1 focus:outline-foreground',
+      'focus:border-blue-7',
       'disabled:opacity-50 disabled:pointer-events-none',
       'data-[error]:border-red-7 data-[error]:focus:border-red-7 data-[error]:focus:outline-red-7',
     ],
