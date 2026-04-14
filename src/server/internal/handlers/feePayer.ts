@@ -1,18 +1,21 @@
-import { RpcRequest, RpcResponse, Signature } from 'ox'
-import { Transaction as core_Transaction, TxEnvelopeTempo } from 'ox/tempo'
+import { RpcRequest, RpcResponse } from 'ox'
+import { Transaction as core_Transaction } from 'ox/tempo'
 import type { Address, Chain, Client, Transport } from 'viem'
 import { createClient, http } from 'viem'
 import type { LocalAccount } from 'viem/accounts'
-import { signTransaction } from 'viem/actions'
 import { tempo, tempoModerato } from 'viem/chains'
 import { Transaction } from 'viem/tempo'
 
 import { type Handler, from } from '../../Handler.js'
+import * as Sponsorship from './sponsorship.js'
 import * as Utils from './utils.js'
 
 /**
  * Instantiates a fee payer service request handler that can be used to
  * sponsor the fee for user transactions.
+ *
+ * @deprecated Use `Handler.relay(options)` for a drop-in replacement, or
+ * `Handler.relay({ feePayer: { ... } })` for the canonical relay API.
  *
  * @example
  * ```ts
@@ -64,11 +67,7 @@ export function feePayer(options: feePayer.Options): Handler {
     return clients.get(chains[0]!.id)!
   }
 
-  const sponsor = {
-    address: account.address,
-    ...(name ? { name } : {}),
-    ...(url ? { url } : {}),
-  }
+  const sponsor = Sponsorship.getSponsor({ account, name, url })
 
   const router = from(rest)
 
@@ -105,7 +104,7 @@ export function feePayer(options: feePayer.Options): Handler {
           typeof parameters.from === 'string' ? (parameters.from as Address) : undefined
 
         let transaction = await (async () => {
-          if (isPreparedFeePayerTransaction(parameters))
+          if (Sponsorship.isPreparedTransaction(parameters))
             return Utils.normalizeTempoTransaction(parameters)
 
           const fillRequest = Utils.formatFillTransactionRequest(client, {
@@ -120,14 +119,7 @@ export function feePayer(options: feePayer.Options): Handler {
           return Utils.normalizeTempoTransaction(result.tx)
         })()
 
-        if (
-          validate &&
-          // @ts-expect-error - TODO: Convert to `TransactionRequest` properly.
-          !(await validate({
-            ...transaction,
-            from: sender,
-          } as Transaction.TransactionRequest))
-        ) {
+        if (!(await Sponsorship.shouldSponsor({ sender, transaction, validate }))) {
           // Re-fill without feePayer so gas/nonce are correct for self-payment.
           const fillRequest = Utils.formatFillTransactionRequest(client, {
             ...normalized,
@@ -144,7 +136,7 @@ export function feePayer(options: feePayer.Options): Handler {
           })
         }
 
-        const signed = await sign({ account, transaction, sender })
+        const signed = await Sponsorship.sign({ account, transaction, sender })
 
         return Utils.rpcResult(request, {
           sponsor,
@@ -152,40 +144,12 @@ export function feePayer(options: feePayer.Options): Handler {
         })
       }
 
-      const serialized = request.params?.[0] as `0x76${string}` | undefined
-
-      if (!serialized?.startsWith('0x76') && !serialized?.startsWith('0x78'))
-        throw new RpcResponse.InvalidParamsError({
-          message: 'Only Tempo (0x76/0x78) transactions are supported.',
-        })
-
-      const transaction = Transaction.deserialize(serialized)
-
-      if (!transaction.signature || !transaction.from)
-        throw new RpcResponse.InvalidParamsError({
-          message: 'Transaction must be signed by the sender before fee payer signing.',
-        })
-
-      if (validate && !(await validate(transaction as Transaction.TransactionRequest)))
-        throw new RpcResponse.InvalidParamsError({
-          message: 'Sponsorship rejected.',
-        })
-
-      const client = getClient(transaction.chainId)
-      const serializedTransaction = toSerializedTransaction(
-        await signTransaction(client, {
-          ...transaction,
-          account,
-          feePayer: account,
-        } as never),
-      )
-
-      if (method === 'eth_signRawTransaction')
-        return Response.json(RpcResponse.from({ result: serializedTransaction }, { request }))
-
-      const result = await client.request({
-        method: method as never,
-        params: [serializedTransaction],
+      const result = await Sponsorship.handleRawTransaction({
+        account,
+        getClient,
+        method,
+        request,
+        validate,
       })
 
       return Response.json(RpcResponse.from({ result }, { request }))
@@ -198,6 +162,9 @@ export function feePayer(options: feePayer.Options): Handler {
 }
 
 export declare namespace feePayer {
+  /**
+   * @deprecated Use `relay.Options` or `relay.Options['feePayer']` instead.
+   */
   type Options = from.Options & {
     /** Account to use as the fee payer. */
     account: LocalAccount
@@ -226,46 +193,6 @@ export declare namespace feePayer {
 }
 
 /** Signs a filled transaction as the fee payer. */
-export async function sign(options: {
-  account: LocalAccount
-  transaction: Record<string, unknown>
-  sender?: `0x${string}` | undefined
-}) {
-  const { account, transaction, sender } = options
-  const from = (transaction.from as `0x${string}` | undefined) ?? sender
-  const { signature: _, ...withoutSenderSig } = transaction
-  const prepared = { ...withoutSenderSig, from }
-
-  if (!prepared.from)
-    throw new RpcResponse.InvalidParamsError({
-      message: 'Transaction sender must be provided before fee payer signing.',
-    })
-  if (!account.sign) throw new Error('Fee payer account cannot sign transactions.')
-
-  const feePayerSignature = Signature.from(
-    await account.sign({
-      hash: TxEnvelopeTempo.getFeePayerSignPayload(TxEnvelopeTempo.from(prepared as never), {
-        sender: prepared.from,
-      }),
-    }),
-  )
-
-  return { ...prepared, feePayerSignature }
-}
-
-function isPreparedFeePayerTransaction(value: Record<string, unknown>) {
-  return (
-    typeof value.from === 'string' &&
-    typeof Utils.resolveChainId(value.chainId) === 'number' &&
-    typeof value.gas !== 'undefined' &&
-    typeof value.nonce !== 'undefined' &&
-    (typeof value.maxFeePerGas !== 'undefined' || typeof value.gasPrice !== 'undefined')
-  )
-}
-
-function toSerializedTransaction(value: unknown) {
-  if (typeof value === 'string') return value
-  if (value && typeof value === 'object' && 'raw' in value && typeof value.raw === 'string')
-    return value.raw
-  throw new Error('Expected a serialized transaction result.')
+export async function sign(options: Sponsorship.sign.Options) {
+  return await Sponsorship.sign(options)
 }

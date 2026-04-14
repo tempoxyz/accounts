@@ -5,8 +5,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url)
     const handler = Handler.compose([
-      Handler.feePayer({
-        account: privateKeyToAccount(env.FEE_PAYER_PRIVATE_KEY),
+      Handler.relay({
+        feePayer: {
+          account: privateKeyToAccount(env.FEE_PAYER_PRIVATE_KEY),
+        },
         path: '/fee-payer',
       }),
       Handler.webAuthn({

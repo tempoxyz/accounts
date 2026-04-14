@@ -17,10 +17,11 @@ import {
 import { simulateCalls } from 'viem/actions'
 import { tempo, tempoLocalnet, tempoMainnet, tempoModerato } from 'viem/chains'
 import { Abis, Actions, Addresses, Capabilities, Transaction } from 'viem/tempo'
+import type { LocalAccount } from 'viem/accounts'
 
 import * as Schema from '../../../core/Schema.js'
 import { type Handler, from } from '../../Handler.js'
-import * as FeePayer from './feePayer.js'
+import * as Sponsorship from './sponsorship.js'
 import * as Utils from './utils.js'
 
 /**
@@ -67,7 +68,6 @@ import * as Utils from './utils.js'
 export function relay(options: relay.Options = {}): Handler {
   const {
     chains = [tempo, tempoModerato],
-    feePayer: feePayerOptions,
     onRequest,
     path = '/',
     resolveTokens = (chainId) =>
@@ -75,6 +75,7 @@ export function relay(options: relay.Options = {}): Handler {
     transports = {},
     ...rest
   } = options
+  const feePayerOptions = resolveFeePayerOptions(options)
 
   const autoSwap = (() => {
     if (options.autoSwap === false) return undefined
@@ -111,15 +112,19 @@ export function relay(options: relay.Options = {}): Handler {
     const chainId = Utils.resolveChainId(first?.chainId) ?? chains[0]!.id
     const client = getClient(chainId)
 
-    switch (request.method) {
+    switch (request.method as string) {
       case 'eth_fillTransaction': {
         try {
-          const parameters = request.params[0]
+          const parameters = params[0] as Record<string, unknown>
+          const from = typeof parameters.from === 'string' ? (parameters.from as Address) : undefined
+          const requestFeeToken =
+            typeof parameters.feeToken === 'string' ? (parameters.feeToken as Address) : undefined
+          const requestsSponsorship = parameters.feePayer === true && !!feePayerOptions
 
           // 1. Resolve fee token.
           const feeToken = await resolveFeeToken(client, {
-            account: parameters.from,
-            feeToken: parameters.feeToken,
+            account: from,
+            feeToken: requestFeeToken,
             tokens: resolveTokens(chainId),
           })
 
@@ -128,34 +133,38 @@ export function relay(options: relay.Options = {}): Handler {
           const transaction = {
             ...normalized,
             ...(typeof chainId !== 'undefined' ? { chainId } : {}),
-            ...(feePayerOptions ? { feePayer: true } : {}),
+            ...(requestsSponsorship ? { feePayer: true } : {}),
             ...(feeToken ? { feeToken } : {}),
           }
-          let filled = await fill(client, { autoSwap, feeToken, transaction })
+          let filled = await (async () => {
+            if (requestsSponsorship && Sponsorship.isPreparedTransaction(transaction))
+              return { transaction: Utils.normalizeTempoTransaction(transaction) }
+            return await fill(client, { autoSwap, feeToken, transaction })
+          })()
 
           // 3. Check if the fee payer approves this transaction.
-          const sponsored =
-            feePayerOptions &&
-            (!feePayerOptions.validate ||
-              // @ts-expect-error - TODO: Convert to `TransactionRequest` properly.
-              (await feePayerOptions.validate({
-                ...filled.transaction,
-                from: parameters.from,
-              } as Transaction.TransactionRequest)))
+          const sponsored = requestsSponsorship && feePayerOptions
+            ? await Sponsorship.shouldSponsor({
+                sender: from,
+                transaction: filled.transaction,
+                validate: feePayerOptions.validate,
+              })
+            : false
 
           // Re-fill without feePayer when sponsorship is rejected so the
           // gas estimate and nonce are correct for a self-paid transaction.
-          if (feePayerOptions && !sponsored) {
+          if (requestsSponsorship && !sponsored) {
             const { feePayer: _, ...tx } = transaction
             filled = await fill(client, { autoSwap, feeToken, transaction: tx })
           }
 
-          const { transaction: transaction_filled, swap } = filled
+          const transaction_filled = filled.transaction
+          const swap = 'swap' in filled ? filled.swap : undefined
 
           // 4. Simulate and compute balance diffs + fee.
           const calls = extractCalls(transaction_filled)
           const { balanceDiffs, fee } = await simulateAndParseDiffs(client, {
-            account: parameters.from,
+            account: from,
             calls,
             swap,
             feeToken: transaction_filled.feeToken,
@@ -165,22 +174,17 @@ export function relay(options: relay.Options = {}): Handler {
 
           // 5. Sign as fee payer (if sponsored).
           const transaction_final = await (async () => {
-            if (!sponsored) return transaction_filled
-            return await FeePayer.sign({
+            if (!sponsored || !feePayerOptions) return transaction_filled
+            return await Sponsorship.sign({
               account: feePayerOptions.account,
-              sender: parameters.from,
+              sender: from,
               transaction: transaction_filled,
             })
           })()
 
-          const sponsor = (() => {
-            if (!sponsored) return undefined
-            return {
-              address: feePayerOptions.account.address,
-              ...(feePayerOptions.name ? { name: feePayerOptions.name } : {}),
-              ...(feePayerOptions.url ? { url: feePayerOptions.url } : {}),
-            }
-          })()
+          const sponsor = sponsored && feePayerOptions
+            ? Sponsorship.getSponsor(feePayerOptions)
+            : undefined
 
           // 6. Resolve autoSwap metadata (when AMM path was taken).
           const autoSwap_ = await (async () => {
@@ -215,6 +219,7 @@ export function relay(options: relay.Options = {}): Handler {
           return RpcResponse.from(
             {
               result: {
+                ...(sponsor ? { sponsor } : {}),
                 tx: core_Transaction.toRpc(transaction_final as core_Transaction.Transaction),
                 capabilities: {
                   balanceDiffs,
@@ -227,6 +232,37 @@ export function relay(options: relay.Options = {}): Handler {
             },
             { request },
           )
+        } catch (error) {
+          return Utils.rpcErrorJson(request, error)
+        }
+      }
+
+      case 'eth_signRawTransaction':
+      case 'eth_sendRawTransaction':
+      case 'eth_sendRawTransactionSync': {
+        try {
+          if (!feePayerOptions) {
+            const result = await client.request(request as never)
+            return RpcResponse.from({ result }, { request })
+          }
+
+          const serialized = params[0]
+          if (
+            typeof serialized !== 'string' ||
+            !Sponsorship.requestsRawSponsorship(serialized as `0x${string}`)
+          ) {
+            const result = await client.request(request as never)
+            return RpcResponse.from({ result }, { request })
+          }
+
+          const result = await Sponsorship.handleRawTransaction({
+            account: feePayerOptions.account,
+            getClient,
+            method: request.method as Sponsorship.handleRawTransaction.Options['method'],
+            request: { params: 'params' in request ? request.params : undefined },
+            validate: feePayerOptions.validate,
+          })
+          return RpcResponse.from({ result } as never, { request } as never)
         } catch (error) {
           return Utils.rpcErrorJson(request, error)
         }
@@ -307,8 +343,25 @@ export namespace relay {
      * sign `feePayerSignature` on the filled transaction.
      */
     feePayer?:
-      | Omit<FeePayer.feePayer.Options, 'chains' | 'transports' | 'path' | 'onRequest'>
+      | {
+          /** Account to use as the fee payer. */
+          account: LocalAccount
+          /**
+           * Validates whether to sponsor the transaction. When omitted, all
+           * transactions are sponsored. Return `false` to reject sponsorship.
+           */
+          validate?: ((request: Transaction.TransactionRequest) => boolean | Promise<boolean>) | undefined
+          /** Sponsor display name returned from `eth_fillTransaction`. */
+          name?: string | undefined
+          /** Sponsor URL returned from `eth_fillTransaction`. */
+          url?: string | undefined
+        }
       | undefined
+    /**
+     * @deprecated Use `feePayer.account` instead. This keeps `Handler.relay`
+     * drop-in compatible with `Handler.feePayer`.
+     */
+    account?: LocalAccount | undefined
     /**
      * AMM swap options for automatic insufficient balance resolution.
      * Set to `false` to disable. @default {}
@@ -330,8 +383,34 @@ export namespace relay {
     onRequest?: ((request: RpcRequest.RpcRequest) => Promise<void>) | undefined
     /** Path to use for the handler. @default "/" */
     path?: string | undefined
+    /**
+     * @deprecated Use `feePayer.validate` instead. This keeps `Handler.relay`
+     * drop-in compatible with `Handler.feePayer`.
+     */
+    validate?: ((request: Transaction.TransactionRequest) => boolean | Promise<boolean>) | undefined
+    /**
+     * @deprecated Use `feePayer.name` instead. This keeps `Handler.relay`
+     * drop-in compatible with `Handler.feePayer`.
+     */
+    name?: string | undefined
     /** Transports keyed by chain ID. Defaults to `http()` for each chain. */
     transports?: Record<number, Transport> | undefined
+    /**
+     * @deprecated Use `feePayer.url` instead. This keeps `Handler.relay`
+     * drop-in compatible with `Handler.feePayer`.
+     */
+    url?: string | undefined
+  }
+}
+
+function resolveFeePayerOptions(options: relay.Options) {
+  if (options.feePayer) return options.feePayer
+  if (!options.account) return undefined
+  return {
+    account: options.account,
+    ...(options.name ? { name: options.name } : {}),
+    ...(options.url ? { url: options.url } : {}),
+    ...(options.validate ? { validate: options.validate } : {}),
   }
 }
 

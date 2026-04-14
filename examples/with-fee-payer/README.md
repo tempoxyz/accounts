@@ -1,6 +1,6 @@
 # Fee Payer Example
 
-Demonstrates sponsored transactions using `Handler.feePayer` from `accounts/server`.
+Demonstrates sponsored transactions using `Handler.relay({ feePayer: ... })` from `accounts/server`.
 
 ## Setup
 

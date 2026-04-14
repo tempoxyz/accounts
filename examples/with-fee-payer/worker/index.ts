@@ -3,8 +3,10 @@ import { privateKeyToAccount } from 'viem/accounts'
 
 export default {
   async fetch(request, env) {
-    const handler = Handler.feePayer({
-      account: privateKeyToAccount(env.FEE_PAYER_PRIVATE_KEY),
+    const handler = Handler.relay({
+      feePayer: {
+        account: privateKeyToAccount(env.FEE_PAYER_PRIVATE_KEY),
+      },
       path: '/fee-payer',
     })
     return handler.fetch(request)
