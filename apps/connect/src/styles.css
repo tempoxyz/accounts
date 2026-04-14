@@ -122,6 +122,8 @@
 
   --background-color-primary: var(--bg-100);
   --background-color-secondary: var(--bg-200);
+  --background-color-mute: var(--gray-2);
+  --background-color-mute-hover: var(--gray-3);
 
   --color-gray-1: var(--gray-1);
   --color-gray-2: var(--gray-2);

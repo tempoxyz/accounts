@@ -155,7 +155,7 @@ function Continue(props: { onSignUp: () => void; submit: Submit }) {
         <Frame.Footer>
           <div className="flex flex-col gap-4">
             <button
-              className="flex h-[38px] w-full cursor-pointer items-center gap-3 rounded-lg border border-border px-3 transition-colors hover:bg-gray-1"
+              className="flex h-[38px] w-full cursor-pointer items-center gap-3 rounded-lg bg-mute px-3 transition-colors hover:bg-mute-hover"
               onClick={() => submit.mutate({ selectAccount: true })}
               type="button"
             >
