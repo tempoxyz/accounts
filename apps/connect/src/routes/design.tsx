@@ -37,6 +37,8 @@ const sidebar = [
   { id: 'identicon-component', label: 'Identicon' },
 ] as const
 
+const externalLinks = [{ href: '/design/frames', label: 'Frames →' }] as const
+
 function useActiveSection(ids: readonly string[]) {
   const [active, setActive] = useState(ids[0]!)
 
@@ -80,6 +82,20 @@ function Design() {
             </li>
           ))}
         </ul>
+        <div className="border-t border-border pt-3 mt-3">
+          <ul role="list" className="space-y-1">
+            {externalLinks.map((link) => (
+              <li key={link.href}>
+                <a
+                  href={link.href}
+                  className="text-label-13 block rounded-md px-2 py-1.5 text-foreground-secondary transition-colors hover:text-foreground hover:bg-gray-2"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
       </nav>
 
       <main className="min-w-0 flex-1 py-12">

@@ -1,5 +1,6 @@
 import { cx, cva, type VariantProps } from 'cva'
 import type { ReactNode } from 'react'
+import Fingerprint from '~icons/lucide/fingerprint'
 
 export function Button(props: Button.Props) {
   const {
@@ -7,6 +8,7 @@ export function Button(props: Button.Props) {
     className,
     disabled,
     loading = false,
+    passkey = false,
     prefix,
     shape,
     size,
@@ -14,6 +16,8 @@ export function Button(props: Button.Props) {
     variant,
     ...rest
   } = props
+
+  const resolvedPrefix = passkey ? <Fingerprint className="size-4" /> : prefix
 
   return (
     <button
@@ -23,8 +27,12 @@ export function Button(props: Button.Props) {
       disabled={disabled || loading}
       {...rest}
     >
-      {loading ? <SpinnerIcon /> : prefix ? <span className="shrink-0">{prefix}</span> : null}
-      {children}
+      {loading ? (
+        <SpinnerIcon />
+      ) : resolvedPrefix ? (
+        <span className="shrink-0">{resolvedPrefix}</span>
+      ) : null}
+      {passkey && loading ? 'Check prompt…' : children}
       {suffix && !loading ? <span className="shrink-0">{suffix}</span> : null}
     </button>
   )
@@ -35,6 +43,8 @@ export namespace Button {
     VariantProps<typeof className> & {
       /** Show a loading spinner and disable the button. */
       loading?: boolean | undefined
+      /** Show a passkey (fingerprint) icon before the label. */
+      passkey?: boolean | undefined
       /** Icon or element before the label. */
       prefix?: ReactNode | undefined
       /** Icon or element after the label. */
@@ -43,7 +53,7 @@ export namespace Button {
 
   export const className = cva({
     base: [
-      'inline-flex items-center justify-center shrink-0',
+      'inline-flex items-center justify-center shrink-0 whitespace-nowrap',
       'border font-normal cursor-pointer',
       'transition-colors',
       'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-7',

@@ -85,8 +85,10 @@ export namespace Frame {
   /** Two-button row for reject/approve style actions. */
   export function ActionButtons(props: ActionButtons.Props) {
     const {
+      disabled = false,
       onPrimary,
       onSecondary,
+      passkey = false,
       primaryLabel = 'Approve',
       primaryLoading = false,
       primaryVariant = 'primary',
@@ -100,8 +102,10 @@ export namespace Frame {
         </Button>
         <Button
           className="flex-1"
+          disabled={disabled}
           loading={primaryLoading}
           onClick={onPrimary}
+          passkey={passkey}
           size="medium"
           variant={primaryVariant}
         >
@@ -113,12 +117,16 @@ export namespace Frame {
 
   export namespace ActionButtons {
     export type Props = {
+      /** Disable the primary button. */
+      disabled?: boolean | undefined
       /** Handler for the primary (right) button. */
       onPrimary?: (() => void) | undefined
       /** Handler for the secondary (left) button. */
       onSecondary?: (() => void) | undefined
       /** Label for the primary button. */
       primaryLabel?: string | undefined
+      /** Show a passkey (fingerprint) icon on the primary button. */
+      passkey?: boolean | undefined
       /** Show loading state on primary button. */
       primaryLoading?: boolean | undefined
       /** Variant for the primary button. */
