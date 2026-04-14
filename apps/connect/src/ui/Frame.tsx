@@ -20,11 +20,7 @@ export namespace Frame {
     return (
       <div className="flex flex-col gap-3 px-4 pt-4 pb-3">
         <div className="flex items-center gap-3">
-          {icon && (
-            <div className={Header.iconClassName({ variant })}>
-              {icon}
-            </div>
-          )}
+          {icon && <div className={Header.iconClassName({ variant })}>{icon}</div>}
           <h2 className="text-heading-20">{title}</h2>
         </div>
         {subtitle && <p className="text-copy-15 text-foreground-secondary">{subtitle}</p>}

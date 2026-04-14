@@ -128,7 +128,8 @@ function Continue(props: { onSignUp: () => void; submit: Submit }) {
       return (await res.json()) as { email: string | null }
     },
   })
-  const label = me.data?.email ?? (address ? `${address.slice(0, 8)}…${address.slice(-6)}` : undefined)
+  const label =
+    me.data?.email ?? (address ? `${address.slice(0, 8)}…${address.slice(-6)}` : undefined)
 
   return (
     <form
@@ -263,9 +264,24 @@ function SignInOrSignUp(props: {
 
           <p className="text-center text-label-12 text-foreground-secondary">
             By continuing, you agree to the{' '}
-            <a className="text-foreground" href="https://tempo.xyz/terms" rel="noopener noreferrer" target="_blank">Terms of Service</a>
-            {' '}and{' '}
-            <a className="text-foreground" href="https://tempo.xyz/privacy" rel="noopener noreferrer" target="_blank">Privacy Policy</a>.
+            <a
+              className="text-foreground"
+              href="https://tempo.xyz/terms"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Terms of Service
+            </a>{' '}
+            and{' '}
+            <a
+              className="text-foreground"
+              href="https://tempo.xyz/privacy"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Privacy Policy
+            </a>
+            .
           </p>
         </Frame.Body>
       </Frame>
@@ -434,6 +450,11 @@ type Submit = ReturnType<
   typeof useMutation<
     unknown,
     Error,
-    { method?: string | undefined; name?: string | undefined; selectAccount?: boolean | undefined } | undefined
+    | {
+        method?: string | undefined
+        name?: string | undefined
+        selectAccount?: boolean | undefined
+      }
+    | undefined
   >
 >

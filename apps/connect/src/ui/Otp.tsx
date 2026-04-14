@@ -17,11 +17,7 @@ export function Otp(props: Otp.Props) {
         value={value}
       >
         {Array.from({ length }, (_, i) => (
-          <OTPField.Input
-            key={i}
-            autoFocus={i === 0}
-            className={Otp.inputClassName({ size })}
-          />
+          <OTPField.Input key={i} autoFocus={i === 0} className={Otp.inputClassName({ size })} />
         ))}
       </OTPField.Root>
 

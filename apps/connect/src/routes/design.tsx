@@ -375,7 +375,7 @@ function Design() {
                 <Frame>
                   <Frame.Header
                     icon={<ArrowUpRight className="size-5" />}
-                     title="Review Transaction"
+                    title="Review Transaction"
                   />
                   <Frame.Body>
                     <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
@@ -448,8 +448,13 @@ function Design() {
                 <Frame>
                   <Frame.Header
                     icon={<Terminal className="size-5" />}
-                    subtitle={<><span className="text-foreground">Amp</span> is requesting to access your account.</>}
-                     title="Authorize CLI"
+                    subtitle={
+                      <>
+                        <span className="text-foreground">Amp</span> is requesting to access your
+                        account.
+                      </>
+                    }
+                    title="Authorize CLI"
                   />
                   <Frame.Body>
                     <div className="flex flex-col gap-3 rounded-xl bg-gray-1 px-4 py-5 text-center">
