@@ -8,10 +8,10 @@
     "check:types": "tsc -b"
   },
   "dependencies": {
-    "accounts": "latest",
+    "accounts": "workspace:*",
     "incur": "latest",
-    "ox": "latest",
-    "viem": "latest"
+    "ox": "~0.14.15",
+    "viem": "^2.47.17"
   },
   "devDependencies": {
     "@types/node": "latest",

@@ -14,19 +14,19 @@
   },
   "dependencies": {
     "accounts": "workspace:*",
-    "react": "catalog:default",
-    "react-dom": "catalog:default"
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "catalog:",
+    "@types/node": "catalog:",
     "@types/react": "catalog:default",
     "@types/react-dom": "catalog:default",
-    "@types/node": "catalog:",
     "@vitejs/plugin-react": "catalog:default",
     "tsx": "catalog:",
+    "typed-query-selector": "catalog:",
     "typescript": "catalog:",
     "vp": "catalog:",
-    "typed-query-selector": "catalog:",
-    "wrangler": "catalog:"
+    "wrangler": "^4.81.1"
   }
 }

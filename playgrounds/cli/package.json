@@ -9,12 +9,12 @@
     },
     "dependencies": {
         "accounts": "workspace:*",
-        "viem": "catalog:",
-        "ox": "catalog:"
+        "ox": "~0.14.15",
+        "viem": "^2.47.17"
     },
     "devDependencies": {
+        "@types/node": "catalog:",
         "tsx": "catalog:",
-        "typescript": "catalog:",
-        "@types/node": "catalog:"
+        "typescript": "catalog:"
     }
 }
