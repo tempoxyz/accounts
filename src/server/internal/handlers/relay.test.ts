@@ -738,6 +738,7 @@ describe('behavior: conditional sponsoring', () => {
     const result = await fillTransaction(client, {
       account: sender.address,
       calls: [transferCall()],
+      feePayer: true,
     })
     expect(result.transaction.feePayerSignature).toBeUndefined()
 
