@@ -12,6 +12,7 @@
     "*.porto.workers.dev",
     "benedict.dev",
     "papercut.lol",
-    "tempo-docs-git-jxom-accounts-sdk-docs-tempoxyz.vercel.app"
+    "tempo-docs-git-jxom-accounts-sdk-docs-tempoxyz.vercel.app",
+    "appkit-wagmi-tempo-wallet.vercel.app"
   ]
 }
