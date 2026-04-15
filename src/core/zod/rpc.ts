@@ -150,11 +150,28 @@ export namespace eth_fillTransaction {
     returns: z.object({
       capabilities: z.object({
         balanceDiffs: z.optional(z.record(u.address(), z.readonly(z.array(balanceDiff)))),
-        fee: z.nullable(
+        error: z.optional(
+          z.object({
+            abiItem: z.optional(z.record(z.string(), z.unknown())),
+            data: z.optional(u.hex()),
+            errorName: z.string(),
+            message: z.string(),
+          }),
+        ),
+        fee: z.optional(
           z.object({
             amount: u.hex(),
             decimals: z.number(),
             formatted: z.string(),
+            symbol: z.string(),
+          }),
+        ),
+        requireFunds: z.optional(
+          z.object({
+            amount: u.hex(),
+            decimals: z.number(),
+            formatted: z.string(),
+            token: u.address(),
             symbol: z.string(),
           }),
         ),
