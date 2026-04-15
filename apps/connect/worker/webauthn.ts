@@ -100,7 +100,6 @@ async function res(
 ) {
   const headers = new Headers({ 'content-type': 'application/json' })
   for (const cookie of await Session.cookies(process.env.SESSION_PRIVATE_KEY!, address, hostname, {
-    embed: true,
     credential: options.credential,
   }))
     headers.append('set-cookie', cookie)

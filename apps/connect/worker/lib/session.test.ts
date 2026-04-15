@@ -6,6 +6,11 @@ import * as Session from './session.js'
 let privateKey: string
 let publicKey: string
 
+const credential: Session.Credential = {
+  id: 'cred-1',
+  publicKey: 'pk-1',
+}
+
 beforeAll(async () => {
   const pair = (await crypto.subtle.generateKey('Ed25519', true, [
     'sign',
@@ -17,36 +22,24 @@ beforeAll(async () => {
 
 describe('sign + verify', () => {
   test('round-trips a basic token', async () => {
-    const token = await Session.sign(privateKey, 'user-1')
+    const token = await Session.sign(privateKey, 'user-1', { credential })
     const result = await Session.verify(publicKey, token)
     const { sid, ...rest } = result!
     expect(sid).toBeDefined()
     expect(rest).toMatchInlineSnapshot(`
       {
         "address": "user-1",
-        "credential": null,
+        "credential": {
+          "id": "cred-1",
+          "publicKey": "pk-1",
+        },
         "sub": "user-1",
       }
     `)
   })
 
-  test('includes credential', async () => {
-    const credential: Session.Credential = {
-      id: 'cred-1',
-      publicKey: 'pk-1',
-    }
-    const token = await Session.sign(privateKey, 'user-1', { credential })
-    const result = await Session.verify(publicKey, token)
-    expect(result?.credential).toMatchInlineSnapshot(`
-      {
-        "id": "cred-1",
-        "publicKey": "pk-1",
-      }
-    `)
-  })
-
   test('returns null for tampered token', async () => {
-    const token = await Session.sign(privateKey, 'user-1')
+    const token = await Session.sign(privateKey, 'user-1', { credential })
     const result = await Session.verify(publicKey, token + 'x')
     expect(result).toMatchInlineSnapshot(`null`)
   })
@@ -57,7 +50,7 @@ describe('sign + verify', () => {
   })
 
   test('produces a standard 3-part JWT', async () => {
-    const token = await Session.sign(privateKey, 'user-1')
+    const token = await Session.sign(privateKey, 'user-1', { credential })
     expect(token.split('.')).toHaveLength(3)
   })
 })
@@ -66,14 +59,15 @@ describe('set + fromRequest', () => {
   test('sets session cookie (bare/localhost)', async () => {
     const app = new Hono()
     app.get('/', async (c) => {
-      await Session.set(c, privateKey, 'user-1')
+      await Session.set(c, privateKey, 'user-1', { credential })
       return c.text('ok')
     })
     const res = await app.request('http://localhost:3000/')
     const cookie = res.headers.get('set-cookie')!
     expect(cookie).toContain('session=')
     expect(cookie).toContain('HttpOnly')
-    expect(cookie).toContain('SameSite=Lax')
+    expect(cookie).toContain('SameSite=None')
+    expect(cookie).toContain('Secure')
     expect(cookie).not.toContain('Domain=')
     expect(cookie).not.toContain('__Secure-')
   })
@@ -81,7 +75,7 @@ describe('set + fromRequest', () => {
   test('sets __Secure- cookie on .tempo.xyz', async () => {
     const app = new Hono()
     app.get('/', async (c) => {
-      await Session.set(c, privateKey, 'user-1')
+      await Session.set(c, privateKey, 'user-1', { credential })
       return c.text('ok')
     })
     const res = await app.request('https://connect.tempo.xyz/')
@@ -94,7 +88,7 @@ describe('set + fromRequest', () => {
   test('sets domain cookie on .tempo.local', async () => {
     const app = new Hono()
     app.get('/', async (c) => {
-      await Session.set(c, privateKey, 'user-1')
+      await Session.set(c, privateKey, 'user-1', { credential })
       return c.text('ok')
     })
     const res = await app.request('http://connect.tempo.local/')
@@ -104,22 +98,10 @@ describe('set + fromRequest', () => {
     expect(cookie).not.toContain('__Secure-')
   })
 
-  test('sets SameSite=None when embed is true', async () => {
-    const app = new Hono()
-    app.get('/', async (c) => {
-      await Session.set(c, privateKey, 'user-1', { embed: true })
-      return c.text('ok')
-    })
-    const res = await app.request('http://localhost:3000/')
-    const cookie = res.headers.get('set-cookie')!
-    expect(cookie).toContain('SameSite=None')
-    expect(cookie).toContain('Secure')
-  })
-
   test('fromRequest reads session cookie back', async () => {
     const app = new Hono()
     app.get('/set', async (c) => {
-      await Session.set(c, privateKey, 'user-1')
+      await Session.set(c, privateKey, 'user-1', { credential })
       return c.text('ok')
     })
     app.get('/get', async (c) => {

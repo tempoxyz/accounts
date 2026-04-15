@@ -15,15 +15,15 @@ export type Payload = {
   sid: string
   iat: number
   exp: number
-  cid?: string | undefined
-  pub?: string | undefined
+  cid: string
+  pub: string
 }
 
 export type Session = {
   sub: string
   sid: string
   address: string
-  credential: Credential | null
+  credential: Credential
 }
 
 type CookieEnv =
@@ -32,7 +32,7 @@ type CookieEnv =
   | { kind: 'bare' }
 
 /** Signs a session payload as a JWT (EdDSA / Ed25519). */
-export async function sign(privateKeyJwk: string, address: string, options: sign.Options = {}) {
+export async function sign(privateKeyJwk: string, address: string, options: sign.Options) {
   const jwk = parseJwk(privateKeyJwk)
   const now = Math.floor(Date.now() / 1000)
   const { credential } = options
@@ -41,14 +41,15 @@ export async function sign(privateKeyJwk: string, address: string, options: sign
     sid: crypto.randomUUID(),
     iat: now,
     exp: now + oneYear,
-    ...(credential && { cid: credential.id, pub: credential.publicKey }),
+    cid: credential.id,
+    pub: credential.publicKey,
   }
   return hono_sign(payload, jwk, 'EdDSA')
 }
 
 export declare namespace sign {
   type Options = {
-    credential?: Credential | undefined
+    credential: Credential
   }
 }
 
@@ -61,7 +62,7 @@ export async function verify(publicKeyJwk: string, token: string): Promise<Sessi
       sub: payload.sub,
       sid: payload.sid,
       address: payload.sub,
-      credential: payload.cid && payload.pub ? { id: payload.cid, publicKey: payload.pub } : null,
+      credential: { id: payload.cid, publicKey: payload.pub },
     }
   } catch {
     return null
@@ -73,7 +74,7 @@ export async function set(
   c: Context,
   privateKeyJwk: string,
   address: string,
-  options: set.Options = {},
+  options: set.Options,
 ) {
   const hostname = new URL(c.req.url).hostname
   for (const cookie of await cookies(privateKeyJwk, address, hostname, options))
@@ -83,7 +84,6 @@ export async function set(
 export declare namespace set {
   type Options = {
     credential?: Credential | undefined
-    embed?: boolean | undefined
   }
 }
 
@@ -104,19 +104,18 @@ export async function cookies(
   privateKeyJwk: string,
   address: string,
   hostname: string,
-  options: set.Options = {},
+  options: set.Options,
 ) {
   const token = await sign(privateKeyJwk, address, options)
   const env = cookieEnv(hostname)
   const name = cookieName(env)
-  const sameSite = options.embed ? 'None' : 'Lax'
   return [
     serialize(name, token, {
       path: '/',
       httpOnly: true,
-      sameSite,
+      sameSite: 'None',
       maxAge: oneYear,
-      secure: env.kind === 'production' || sameSite === 'None',
+      secure: true,
       ...(env.kind !== 'bare' && { domain: env.domain }),
     }),
   ]
