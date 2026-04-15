@@ -667,6 +667,36 @@ describe('behavior: with feePayer', () => {
     expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
   })
 
+  test('behavior: does not overwrite existing feePayerSignature', async () => {
+    // First fill to get a sponsored transaction with a feePayerSignature.
+    const { transaction: first } = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+    const originalSig = first.feePayerSignature
+    expect(originalSig).toBeDefined()
+
+    // Re-submit the already-sponsored transaction as a prepared fill request.
+    const response = await fetch(server.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: 1,
+        jsonrpc: '2.0',
+        method: 'eth_fillTransaction',
+        params: [{ ...Transaction.toRpc(first as never), from: userAccount.address }],
+      }),
+    })
+    const body = (await response.json()) as {
+      result?: { tx: Record<string, unknown> } | undefined
+    }
+    const second = Transaction.fromRpc(body.result?.tx as never) as {
+      feePayerSignature?: unknown
+    }
+
+    expect(second.feePayerSignature).toStrictEqual(originalSig)
+  })
+
   test('behavior: missing from returns error', async () => {
     await expect(fillTransaction(client, { calls: [transferCall()] })).rejects.toThrowError()
   })

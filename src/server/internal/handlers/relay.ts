@@ -172,9 +172,12 @@ export function relay(options: relay.Options = {}): Handler {
             maxFeePerGas: transaction_filled.maxFeePerGas,
           })
 
-          // 5. Sign as fee payer (if sponsored).
+          // 5. Sign as fee payer (if sponsored and not already signed).
+          const alreadySigned =
+            'feePayerSignature' in transaction_filled &&
+            transaction_filled.feePayerSignature != null
           const transaction_final = await (async () => {
-            if (!sponsored || !feePayerOptions) return transaction_filled
+            if (!sponsored || !feePayerOptions || alreadySigned) return transaction_filled
             return await Sponsorship.sign({
               account: feePayerOptions.account,
               sender: from,
