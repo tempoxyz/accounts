@@ -1,5 +1,21 @@
 # accounts
 
+## 0.7.0
+
+### Minor Changes
+
+- bcd4ec3: **Breaking**: Added `features` option to `Handler.relay` to control feature enablement.
+  - `features: 'all'` enables fee token resolution, auto-swap, and simulation (balance diffs + fee breakdown), at the cost of network latency.
+  - If `features` is not present, only enables fee payer sponsorship by default.
+
+- 97ea5b4: Removed `Handler.feePayer`.
+  Updated `Handler.relay` to be backwards compatible with `Handler.feePayer`.
+
+### Patch Changes
+
+- d6a4620: Added `error` and `requireFunds` capabilities to `eth_fillTransaction` relay responses.
+- 3064657: Add a shared `CliAuth.from()` helper to reuse CLI auth defaults and cached clients across create, pending, poll, and authorize flows, and reject device-code requests for unconfigured chains.
+
 ## 0.6.7
 
 ### Patch Changes
