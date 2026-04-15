@@ -373,29 +373,32 @@ function AuthorizeSpendFlow() {
   )
 }
 
-// TODO: replace mock data with real _capabilities shape once relay is wired
-
-const mockBalanceDiffs: TransactionFrames.Generic.BalanceDiff[] = [
+const mockBalanceDiffs: TransactionFrames.Generic.Props['balanceDiffs'] = [
   {
-    address: '0x1a2b…9e8f',
-    addressLabel: 'to',
-    detail: '50 USDC',
+    address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b' as `0x${string}`,
+    decimals: 6,
     direction: 'outgoing',
-    label: 'Send USDC',
-    value: '−$50.00',
+    formatted: '50.00',
+    name: 'USD Coin',
+    recipients: ['0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b' as `0x${string}`],
+    symbol: 'USDC',
+    value: '0x2faf080' as `0x${string}`,
   },
   {
-    address: '0xab12…34cd',
-    addressLabel: 'from',
-    detail: '49.85 USDC.e',
+    address: '0xab12cd34ef56789012345678901234567890abcd' as `0x${string}`,
+    decimals: 6,
     direction: 'incoming',
-    label: 'Receive USDC.e',
-    value: '+$49.85',
+    formatted: '49.85',
+    name: 'Bridged USDC',
+    recipients: ['0xab12cd34ef56789012345678901234567890abcd' as `0x${string}`],
+    symbol: 'USDC.e',
+    value: '0x2f8a4a0' as `0x${string}`,
   },
 ]
 
-const mockFee: TransactionFrames.Generic.Fee = {
-  fiat: '0.03',
+const mockFee: TransactionFrames.Generic.Props['fee'] = {
+  amount: '0x6d46' as `0x${string}`,
+  decimals: 6,
   formatted: '0.028022',
   symbol: 'pathUSD',
 }
@@ -458,7 +461,11 @@ function SendTransactionExtrasFlow() {
         <TransactionFrames.Generic
           balanceDiffs={mockBalanceDiffs}
           fee={mockFee}
-          sponsor={{ name: 'My App', url: 'https://myapp.com' }}
+          sponsor={{
+            address: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+            name: 'My App',
+            url: 'https://myapp.com',
+          }}
         />
       </Card>
 
@@ -467,18 +474,34 @@ function SendTransactionExtrasFlow() {
       <Card label="Auto Swap">
         <TransactionFrames.Generic
           autoSwap={{
-            maxIn: { formatted: '105.00', symbol: 'AlphaUSD' },
-            minOut: { formatted: '100.00', symbol: 'USDC.e' },
+            maxIn: {
+              decimals: 6,
+              formatted: '105.00',
+              name: 'AlphaUSD',
+              symbol: 'AlphaUSD',
+              token: '0x0000000000000000000000000000000000000001' as `0x${string}`,
+              value: '0x6422c40' as `0x${string}`,
+            },
+            minOut: {
+              decimals: 6,
+              formatted: '100.00',
+              name: 'Bridged USDC',
+              symbol: 'USDC.e',
+              token: '0x0000000000000000000000000000000000000002' as `0x${string}`,
+              value: '0x5f5e100' as `0x${string}`,
+            },
             slippage: 0.05,
           }}
           balanceDiffs={[
             {
-              address: '0x1a2b…9e8f',
-              addressLabel: 'to',
-              detail: '100 USDC.e',
+              address: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b' as `0x${string}`,
+              decimals: 6,
               direction: 'outgoing',
-              label: 'Send USDC.e',
-              value: '−$100.00',
+              formatted: '100.00',
+              name: 'Bridged USDC',
+              recipients: ['0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b' as `0x${string}`],
+              symbol: 'USDC.e',
+              value: '0x5f5e100' as `0x${string}`,
             },
           ]}
           fee={mockFee}
@@ -498,11 +521,25 @@ function SendTransactionExtrasFlow() {
   )
 }
 
-const mockPaymentFee: TransactionFrames.Payment.Fee = {
-  fiat: '0.01',
+const mockPaymentFee: TransactionFrames.Payment.Props['fee'] = {
+  amount: '0x2654' as `0x${string}`,
+  decimals: 6,
   formatted: '0.009812',
   symbol: 'pathUSD',
 }
+
+const mockPaymentDiffs: TransactionFrames.Payment.Props['balanceDiffs'] = [
+  {
+    address: '0xab12cd34ef56789012345678901234567890abcd' as `0x${string}`,
+    decimals: 6,
+    direction: 'outgoing',
+    formatted: '50.00',
+    name: 'Bridged USDC',
+    recipients: ['0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b' as `0x${string}`],
+    symbol: 'USDC.e',
+    value: '0x2faf080' as `0x${string}`,
+  },
+]
 
 /** Direct payment: loading → review → confirming */
 function DirectPaymentFlow() {
@@ -516,11 +553,9 @@ function DirectPaymentFlow() {
 
       <Card label="Review">
         <TransactionFrames.Payment
-          amount="$50.00"
+          balanceDiffs={mockPaymentDiffs}
           fee={mockPaymentFee}
           host="example.com"
-          recipient="0x1a2b…9e8f"
-          symbol="USDC.e"
         />
       </Card>
 
@@ -528,12 +563,10 @@ function DirectPaymentFlow() {
 
       <Card label="Confirming">
         <TransactionFrames.Payment
-          amount="$50.00"
+          balanceDiffs={mockPaymentDiffs}
           confirming
           fee={mockPaymentFee}
           host="example.com"
-          recipient="0x1a2b…9e8f"
-          symbol="USDC.e"
         />
       </Card>
     </>
@@ -657,12 +690,10 @@ function DirectPaymentExtrasFlow() {
     <>
       <Card label="Sponsored">
         <TransactionFrames.Payment
-          amount="$50.00"
+          balanceDiffs={mockPaymentDiffs}
           fee={mockPaymentFee}
           host="example.com"
-          recipient="0x1a2b…9e8f"
-          sponsor={{ name: 'My App' }}
-          symbol="USDC.e"
+          sponsor={{ address: '0x0000000000000000000000000000000000000000' as `0x${string}`, name: 'My App' }}
         />
       </Card>
 
@@ -670,16 +701,14 @@ function DirectPaymentExtrasFlow() {
 
       <Card label="Auto Swap">
         <TransactionFrames.Payment
-          amount="$50.00"
           autoSwap={{
-            maxIn: { formatted: '52.50', symbol: 'AlphaUSD' },
-            minOut: { formatted: '50.00', symbol: 'USDC.e' },
+            maxIn: { formatted: '52.50', symbol: 'AlphaUSD', decimals: 6, name: 'AlphaUSD', token: '0x0000000000000000000000000000000000000001' as `0x${string}`, value: '0x0' as `0x${string}` },
+            minOut: { formatted: '50.00', symbol: 'USDC.e', decimals: 6, name: 'Bridged USDC', token: '0x0000000000000000000000000000000000000002' as `0x${string}`, value: '0x0' as `0x${string}` },
             slippage: 0.05,
           }}
+          balanceDiffs={mockPaymentDiffs}
           fee={mockPaymentFee}
           host="example.com"
-          recipient="0x1a2b…9e8f"
-          symbol="USDC.e"
         />
       </Card>
     </>

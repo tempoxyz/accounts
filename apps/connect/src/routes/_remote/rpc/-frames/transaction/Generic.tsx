@@ -1,17 +1,14 @@
-// TODO: prototype frame — requires rewrite before wiring to real data/hooks
-
+import * as Currency from '#/lib/currency.js'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
 import { cx } from 'cva'
 import { useState } from 'react'
+import type { Capabilities } from 'viem/tempo'
 import AlertTriangle from '~icons/lucide/alert-triangle'
 import ArrowRightLeft from '~icons/lucide/arrow-right-left'
 import ArrowUpRight from '~icons/lucide/arrow-up-right'
 import Copy from '~icons/lucide/copy'
 import Info from '~icons/lucide/info'
-
-// TODO: finalize props shape once usePrepareTransactionRequest is wired up
-// and we know the exact _capabilities structure from the relay.
 
 /** Generic transaction request screen — shows balance diffs, fee, and confirm/reject. */
 export function Generic(props: Generic.Props) {
@@ -21,11 +18,13 @@ export function Generic(props: Generic.Props) {
     confirming,
     error,
     fee,
+    funding,
     insufficientBalance,
     loading,
     onAddFunds,
     onApplePay,
     onConfirm,
+    onFund,
     onReject,
     onRetry,
     sponsor,
@@ -40,14 +39,16 @@ export function Generic(props: Generic.Props) {
         {balanceDiffs && balanceDiffs.length > 0 && (
           <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
             {balanceDiffs.map((diff, i) => (
-              <BalanceDiffRow key={i} {...diff} />
+              <BalanceDiffRow diff={diff} key={i} />
             ))}
           </div>
         )}
 
-        <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-          {fee && <FeeRow fee={fee} sponsored={!!sponsor} />}
-        </div>
+        {fee && (
+          <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+            <FeeRow fee={fee} sponsored={!!sponsor} />
+          </div>
+        )}
 
         {autoSwap && (
           <div className="flex gap-2 rounded-xl border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
@@ -56,13 +57,6 @@ export function Generic(props: Generic.Props) {
               An exchange of {autoSwap.maxIn.symbol} for {autoSwap.minOut.symbol} will occur to
               cover this payment.
             </span>
-          </div>
-        )}
-
-        {error && (
-          <div className="flex gap-2 rounded-xl border border-red-4 bg-red-1 px-3 py-2 text-label-12 text-red-9">
-            <AlertTriangle className="mt-px size-3.5 shrink-0" />
-            <span>{error}</span>
           </div>
         )}
 
@@ -76,21 +70,40 @@ export function Generic(props: Generic.Props) {
             </span>
           </div>
         )}
+
+        {error && !insufficientBalance && (
+          <div className="flex gap-2 rounded-xl border border-red-4 bg-red-1 px-3 py-2 text-label-12 text-red-9">
+            <AlertTriangle className="mt-px size-3.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
       </Frame.Body>
       <Frame.Footer>
         {insufficientBalance ? (
-          <div className="flex flex-col gap-3">
-            <button
-              className="flex h-[38px] w-full cursor-pointer items-center justify-center rounded-lg bg-invert text-invert-foreground transition-opacity hover:opacity-80"
-              onClick={onApplePay}
-              type="button"
+          onFund ? (
+            <Button
+              className="w-full"
+              loading={funding}
+              onClick={onFund}
+              size="medium"
+              variant="primary"
             >
-              <ApplePayMark />
-            </button>
-            <Button onClick={onAddFunds} size="medium" variant="muted">
-              Deposit crypto
+              {funding ? 'Funding…' : `Fund ${insufficientBalance === true ? '' : insufficientBalance}`}
             </Button>
-          </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <button
+                className="flex h-[38px] w-full cursor-pointer items-center justify-center rounded-lg bg-invert text-invert-foreground transition-opacity hover:opacity-80"
+                onClick={onApplePay}
+                type="button"
+              >
+                <ApplePayMark />
+              </button>
+              <Button onClick={onAddFunds} size="medium" variant="muted">
+                Deposit crypto
+              </Button>
+            </div>
+          )
         ) : error ? (
           <div className="flex gap-3">
             <Button className="flex-1" onClick={onReject} size="medium" variant="muted">
@@ -113,6 +126,42 @@ export function Generic(props: Generic.Props) {
       </Frame.Footer>
     </Frame>
   )
+}
+
+/** Props and associated types for {@link Generic}. */
+export declare namespace Generic {
+  type Props = {
+    /** AMM swap injected to cover an insufficient balance. */
+    autoSwap?: Capabilities.FillTransactionCapabilities['autoSwap']
+    /** Per-account balance diffs from simulation. */
+    balanceDiffs?: readonly Capabilities.BalanceDiff[] | undefined
+    /** Whether the confirm action is in progress. */
+    confirming?: boolean | undefined
+    /** Error message — renders error state with retry. */
+    error?: string | undefined
+    /** Fee estimate for the transaction. */
+    fee?: Capabilities.FillTransactionCapabilities['fee']
+    /** Whether the faucet fund action is in progress. */
+    funding?: boolean | undefined
+    /** Insufficient balance — `true` for generic message, or a string (e.g. "$50.00") for a specific amount. */
+    insufficientBalance?: boolean | string | undefined
+    /** Whether the transaction is being prepared (skeleton state). */
+    loading?: boolean | undefined
+    /** Called when the user clicks "Crypto" (insufficient balance). */
+    onAddFunds?: (() => void) | undefined
+    /** Called when the user clicks "Apple Pay" (insufficient balance). */
+    onApplePay?: (() => void) | undefined
+    /** Called when the user clicks "Confirm". */
+    onConfirm?: (() => void) | undefined
+    /** Called when the user clicks "Fund" on testnet (faucet). */
+    onFund?: (() => void) | undefined
+    /** Called when the user clicks "Reject" or "Cancel". */
+    onReject?: (() => void) | undefined
+    /** Called when the user clicks "Retry" from error state. */
+    onRetry?: (() => void) | undefined
+    /** Sponsor details, present when the transaction is sponsored. */
+    sponsor?: Capabilities.FillTransactionCapabilities['sponsor']
+  }
 }
 
 function ReviewSkeleton() {
@@ -144,9 +193,18 @@ function SkeletonRow() {
   )
 }
 
-function FeeRow(props: { fee: Generic.Fee; sponsored: boolean }) {
+function truncateAddress(address: string) {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`
+}
+
+function FeeRow(props: {
+  fee: NonNullable<Capabilities.FillTransactionCapabilities['fee']>
+  sponsored: boolean
+}) {
   const { fee, sponsored } = props
-  const [showToken, setShowToken] = useState(false)
+  const [showCrypto, setShowCrypto] = useState(false)
+  const primary = Currency.fiat(fee)
+  const detail = Currency.crypto(fee)
 
   return (
     <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
@@ -163,19 +221,17 @@ function FeeRow(props: { fee: Generic.Fee; sponsored: boolean }) {
           '-mr-1.5 cursor-pointer rounded-md px-1.5 py-0.5 tabular-nums transition-colors hover:bg-gray-1',
           sponsored && 'text-foreground-secondary',
         )}
-        onClick={() => setShowToken((s) => !s)}
+        onClick={() => setShowCrypto((s) => !s)}
         type="button"
       >
         <span className="relative inline-grid items-center justify-items-end [&>span]:col-start-1 [&>span]:row-start-1 [&>span]:transition-opacity [&>span]:duration-150">
-          <span className={`flex items-center gap-1.5 ${showToken ? 'opacity-0' : 'opacity-100'}`}>
+          <span className={cx('flex items-center gap-1.5', sponsored && 'line-through', showCrypto ? 'opacity-0' : 'opacity-100')}>
             <ArrowRightLeft className="size-3 opacity-50" />
-            <span className={sponsored ? 'line-through' : ''}>${fee.fiat ?? fee.formatted}</span>
+            {primary}
           </span>
-          <span className={`flex items-center gap-1.5 ${showToken ? 'opacity-100' : 'opacity-0'}`}>
+          <span className={cx('flex items-center gap-1.5', sponsored && 'line-through', showCrypto ? 'opacity-100' : 'opacity-0')}>
             <ArrowRightLeft className="size-3 opacity-50" />
-            <span className={sponsored ? 'line-through' : ''}>
-              {fee.formatted} {fee.symbol}
-            </span>
+            {detail}
           </span>
         </span>
       </button>
@@ -183,23 +239,30 @@ function FeeRow(props: { fee: Generic.Fee; sponsored: boolean }) {
   )
 }
 
-function BalanceDiffRow(props: Generic.BalanceDiff) {
+function BalanceDiffRow(props: { diff: Capabilities.BalanceDiff }) {
+  const { diff } = props
   const [showDetail, setShowDetail] = useState(false)
-  const color = props.direction === 'incoming' ? 'text-green-9' : 'text-red-9'
+  const color = diff.direction === 'incoming' ? 'text-green-9' : 'text-red-9'
+
+  const label = `${diff.direction === 'outgoing' ? 'Send' : 'Receive'} ${diff.symbol}`
+  const addressLabel = diff.direction === 'outgoing' ? 'to' : 'from'
+  const recipient = diff.recipients[0]
+  const primary = `${diff.direction === 'outgoing' ? '−' : '+'}${Currency.fiat(diff)}`
+  const detail = `${diff.direction === 'outgoing' ? '−' : '+'}${Currency.crypto(diff)}`
 
   return (
     <div className="flex items-center justify-between px-4 py-2.5">
       <div className="flex flex-col">
-        <p className="text-label-14">{props.label}</p>
-        {props.address && (
+        <p className="text-label-14">{label}</p>
+        {recipient && (
           <p className="flex items-center gap-1 text-[0.6875rem] text-foreground-secondary">
-            {props.addressLabel && <span>{props.addressLabel} </span>}
-            <span className="font-mono">{props.address}</span>
+            <span>{addressLabel} </span>
+            <span className="font-mono">{truncateAddress(recipient)}</span>
             <button
               className="cursor-pointer opacity-40 transition-opacity hover:opacity-100"
               onClick={(e) => {
                 e.stopPropagation()
-                navigator.clipboard.writeText(props.address!)
+                navigator.clipboard.writeText(recipient)
               }}
               type="button"
             >
@@ -219,95 +282,16 @@ function BalanceDiffRow(props: Generic.BalanceDiff) {
         <span className="relative inline-grid items-center justify-items-end [&>span]:col-start-1 [&>span]:row-start-1 [&>span]:transition-opacity [&>span]:duration-150">
           <span className={`flex items-center gap-1.5 ${showDetail ? 'opacity-0' : 'opacity-100'}`}>
             <ArrowRightLeft className="size-3 opacity-50" />
-            {props.value}
+            {primary}
           </span>
           <span className={`flex items-center gap-1.5 ${showDetail ? 'opacity-100' : 'opacity-0'}`}>
             <ArrowRightLeft className="size-3 opacity-50" />
-            {props.detail}
+            {detail}
           </span>
         </span>
       </button>
     </div>
   )
-}
-
-// TODO: finalize these types once we know the exact _capabilities shape
-export declare namespace Generic {
-  type Props = {
-    /** AMM swap injected to cover an insufficient balance. */
-    autoSwap?: AutoSwap | undefined
-    /** Per-account balance diffs from simulation. */
-    balanceDiffs?: readonly BalanceDiff[] | undefined
-    /** Whether the confirm action is in progress. */
-    confirming?: boolean | undefined
-    /** Error message — renders error state with retry. */
-    error?: string | undefined
-    /** Fee estimate for the transaction. */
-    fee?: Fee | undefined
-    /** Insufficient balance — `true` for generic message, or a fiat string (e.g. "$50.00") for a specific amount. */
-    insufficientBalance?: boolean | string | undefined
-    /** Whether the transaction is being prepared (skeleton state). */
-    loading?: boolean | undefined
-    /** Called when the user clicks "Crypto" (insufficient balance). */
-    onAddFunds?: (() => void) | undefined
-    /** Called when the user clicks "Apple Pay" (insufficient balance). */
-    onApplePay?: (() => void) | undefined
-    /** Called when the user clicks "Confirm". */
-    onConfirm?: (() => void) | undefined
-    /** Called when the user clicks "Reject" or "Cancel". */
-    onReject?: (() => void) | undefined
-    /** Called when the user clicks "Retry" from error state. */
-    onRetry?: (() => void) | undefined
-    /** Sponsor details, present when the transaction is sponsored. */
-    sponsor?: Sponsor | undefined
-  }
-
-  type BalanceDiff = {
-    /** Truncated address to display (e.g. "0x1a2b…9e8f"). */
-    address?: string | undefined
-    /** Label for the address (e.g. "to", "from"). */
-    addressLabel?: string | undefined
-    /** Raw token amount string (e.g. "50 USDC"). */
-    detail: string
-    /** Direction of the transfer. */
-    direction: 'incoming' | 'outgoing'
-    /** Display label (e.g. "Send USDC"). */
-    label: string
-    /** Formatted display value (e.g. "−$50.00"). */
-    value: string
-  }
-
-  type Fee = {
-    /** Fiat-equivalent fee (e.g. "0.03"). Falls back to `formatted` if absent. */
-    fiat?: string | undefined
-    /** Human-readable token fee (e.g. "0.03"). */
-    formatted: string
-    /** Token symbol (e.g. "pathUSD"). */
-    symbol: string
-  }
-
-  type Sponsor = {
-    /** Sponsor display name. */
-    name: string
-    /** Sponsor URL. */
-    url?: string | undefined
-  }
-
-  type SwapAmount = {
-    /** Human-readable formatted amount. */
-    formatted: string
-    /** Token symbol. */
-    symbol: string
-  }
-
-  type AutoSwap = {
-    /** Max input amount with slippage applied. */
-    maxIn: SwapAmount
-    /** Deficit amount that triggered the swap. */
-    minOut: SwapAmount
-    /** Slippage tolerance (e.g. 0.05 = 5%). */
-    slippage: number
-  }
 }
 
 function ApplePayMark() {

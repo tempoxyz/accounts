@@ -15,6 +15,7 @@ export const webauthn = new Hono<{ Bindings: Env }>().all('/*', (c) => {
   const hostname = url.hostname
 
   const handler = Handler.webAuthn({
+    cors: false,
     kv: Kv.cloudflare(c.env.KV),
     origin,
     path: '/api/webauthn',

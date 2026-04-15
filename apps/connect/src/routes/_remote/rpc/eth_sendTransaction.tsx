@@ -2,7 +2,7 @@ import { remote } from '#/lib/config.js'
 import { createFileRoute } from '@tanstack/react-router'
 import { Remote } from 'accounts'
 
-import { RequestView } from './-components/RequestView.js'
+import { SendTransaction } from './-components/SendTransaction.js'
 
 export const Route = createFileRoute('/_remote/rpc/eth_sendTransaction')({
   component: Component,
@@ -12,5 +12,5 @@ export const Route = createFileRoute('/_remote/rpc/eth_sendTransaction')({
 
 function Component() {
   const search = Route.useSearch()
-  return <RequestView request={search} />
+  return <SendTransaction request={search} />
 }

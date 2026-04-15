@@ -2,6 +2,7 @@ import { getConnectors } from '@wagmi/core'
 import { Remote, Storage, TrustedHosts } from 'accounts'
 import { webAuthn } from 'accounts/wagmi'
 import { http } from 'viem'
+import type { Capabilities } from 'viem/tempo'
 import { createConfig } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 
@@ -18,8 +19,8 @@ export const wagmiConfig = createConfig({
   ],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempo.id]: http(),
-    [tempoModerato.id]: http(),
+    [tempo.id]: http(`/api/relay/${tempo.id}`),
+    [tempoModerato.id]: http(`/api/relay/${tempoModerato.id}`),
   },
 })
 
@@ -29,3 +30,15 @@ export const remote = Remote.create({
   provider: await getConnectors(wagmiConfig as any)[0]!.getProvider(),
   trustedHosts: TrustedHosts.hosts['tempo.xyz'],
 })
+
+declare module 'wagmi' {
+  interface Register {
+    config: typeof wagmiConfig
+  }
+}
+
+declare module 'viem' {
+  interface Register {
+    CapabilitiesSchema: Capabilities.Schema
+  }
+}

@@ -1,37 +1,45 @@
-// TODO: prototype frame — requires rewrite before wiring to real data/hooks
-
+import * as Currency from '#/lib/currency.js'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
 import { cx } from 'cva'
 import { useState } from 'react'
+import type { Capabilities } from 'viem/tempo'
 import AlertTriangle from '~icons/lucide/alert-triangle'
 import ArrowRightLeft from '~icons/lucide/arrow-right-left'
 import ArrowUpRight from '~icons/lucide/arrow-up-right'
 import Copy from '~icons/lucide/copy'
 import Info from '~icons/lucide/info'
 
-// TODO: finalize props — detect direct payment when balanceDiffs contain
-// only transfer(s) of a single token in a single direction.
-
 /** Direct payment screen — prominent amount display for simple token transfers. */
 export function Payment(props: Payment.Props) {
   const {
-    amount,
     autoSwap,
+    balanceDiffs,
     confirming,
     error,
     fee,
+    funding,
     host,
+    insufficientBalance,
     loading,
     onConfirm,
+    onFund,
     onReject,
     onRetry,
-    recipient,
     sponsor,
-    symbol,
   } = props
 
   if (loading) return <PaymentSkeleton host={host} />
+
+  const symbol = balanceDiffs?.[0]?.symbol
+  const totalFormatted = balanceDiffs
+    ? balanceDiffs.reduce((sum, d) => sum + Number.parseFloat(d.formatted), 0).toString()
+    : undefined
+  const token = totalFormatted !== undefined && symbol ? { formatted: totalFormatted, symbol } : undefined
+  const amountFiat = token ? Currency.fiat(token) : undefined
+  const amountCrypto = token ? Currency.crypto(token) : undefined
+  const fullRecipient = balanceDiffs?.[0]?.recipients[0]
+  const recipient = fullRecipient ? truncateAddress(fullRecipient) : undefined
 
   return (
     <Frame>
@@ -50,13 +58,13 @@ export function Payment(props: Payment.Props) {
       />
       <Frame.Body>
         <div className="flex flex-col items-center gap-1 rounded-xl bg-gray-1 px-4 py-5 text-center">
-          <p className="text-heading-32 tabular-nums">{amount}</p>
-          {recipient && (
+          <AmountDisplay crypto={amountCrypto} fiat={amountFiat} />
+          {recipient && fullRecipient && (
             <p className="flex items-center gap-1 font-mono text-label-13 text-foreground-secondary">
               <span>to {recipient}</span>
               <button
                 className="cursor-pointer opacity-40 transition-opacity hover:opacity-100"
-                onClick={() => navigator.clipboard.writeText(recipient)}
+                onClick={() => navigator.clipboard.writeText(fullRecipient)}
                 type="button"
               >
                 <Copy className="size-2.5" />
@@ -85,7 +93,18 @@ export function Payment(props: Payment.Props) {
           </div>
         )}
 
-        {error && (
+        {insufficientBalance && (
+          <div className="flex gap-2 rounded-xl border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
+            <AlertTriangle className="mt-px size-3.5 shrink-0" />
+            <span>
+              {insufficientBalance === true
+                ? 'Insufficient balance. Deposit funds to continue.'
+                : `You need to deposit ${insufficientBalance} to continue.`}
+            </span>
+          </div>
+        )}
+
+        {error && !insufficientBalance && (
           <div className="flex gap-2 rounded-xl border border-red-4 bg-red-1 px-3 py-2 text-label-12 text-red-9">
             <AlertTriangle className="mt-px size-3.5 shrink-0" />
             <span>{error}</span>
@@ -93,7 +112,17 @@ export function Payment(props: Payment.Props) {
         )}
       </Frame.Body>
       <Frame.Footer>
-        {error ? (
+        {insufficientBalance && onFund ? (
+          <Button
+            className="w-full"
+            loading={funding}
+            onClick={onFund}
+            size="medium"
+            variant="primary"
+          >
+            {funding ? 'Funding…' : `Fund ${insufficientBalance === true ? '' : insufficientBalance}`}
+          </Button>
+        ) : error ? (
           <div className="flex gap-3">
             <Button className="flex-1" onClick={onReject} size="medium" variant="muted">
               Cancel
@@ -107,7 +136,7 @@ export function Payment(props: Payment.Props) {
             onPrimary={onConfirm}
             onSecondary={onReject}
             passkey
-            primaryLabel={amount ? `Pay ${amount}` : 'Confirm'}
+            primaryLabel={amountFiat ? `Pay ${amountFiat}` : 'Confirm'}
             primaryLoading={confirming}
             secondaryLabel="Reject"
           />
@@ -156,9 +185,14 @@ function PaymentSkeleton(props: { host?: string | undefined }) {
   )
 }
 
-function FeeRow(props: { fee: Payment.Fee; sponsored: boolean }) {
+function FeeRow(props: {
+  fee: NonNullable<Capabilities.FillTransactionCapabilities['fee']>
+  sponsored: boolean
+}) {
   const { fee, sponsored } = props
-  const [showToken, setShowToken] = useState(false)
+  const [showCrypto, setShowCrypto] = useState(false)
+  const primary = Currency.fiat(fee)
+  const detail = Currency.crypto(fee)
 
   return (
     <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
@@ -175,19 +209,17 @@ function FeeRow(props: { fee: Payment.Fee; sponsored: boolean }) {
           '-mr-1.5 cursor-pointer rounded-md px-1.5 py-0.5 tabular-nums transition-colors hover:bg-gray-1',
           sponsored && 'text-foreground-secondary',
         )}
-        onClick={() => setShowToken((s) => !s)}
+        onClick={() => setShowCrypto((s) => !s)}
         type="button"
       >
         <span className="relative inline-grid items-center justify-items-end [&>span]:col-start-1 [&>span]:row-start-1 [&>span]:transition-opacity [&>span]:duration-150">
-          <span className={`flex items-center gap-1.5 ${showToken ? 'opacity-0' : 'opacity-100'}`}>
+          <span className={cx('flex items-center gap-1.5', sponsored && 'line-through', showCrypto ? 'opacity-0' : 'opacity-100')}>
             <ArrowRightLeft className="size-3 opacity-50" />
-            <span className={sponsored ? 'line-through' : ''}>${fee.fiat ?? fee.formatted}</span>
+            {primary}
           </span>
-          <span className={`flex items-center gap-1.5 ${showToken ? 'opacity-100' : 'opacity-0'}`}>
+          <span className={cx('flex items-center gap-1.5', sponsored && 'line-through', showCrypto ? 'opacity-100' : 'opacity-0')}>
             <ArrowRightLeft className="size-3 opacity-50" />
-            <span className={sponsored ? 'line-through' : ''}>
-              {fee.formatted} {fee.symbol}
-            </span>
+            {detail}
           </span>
         </span>
       </button>
@@ -195,54 +227,65 @@ function FeeRow(props: { fee: Payment.Fee; sponsored: boolean }) {
   )
 }
 
-// TODO: finalize types once we know the exact _capabilities shape
+function AmountDisplay(props: { fiat?: string | undefined; crypto?: string | undefined }) {
+  const { fiat, crypto } = props
+  const [showCrypto, setShowCrypto] = useState(false)
+
+  return (
+    <button
+      className="relative inline-grid cursor-pointer items-center justify-items-center rounded-lg px-3 py-1 text-heading-32 tabular-nums transition-colors hover:bg-gray-2 [&>span]:col-start-1 [&>span]:row-start-1 [&>span]:transition-opacity [&>span]:duration-150"
+      onClick={() => setShowCrypto((s) => !s)}
+      type="button"
+    >
+      <span className={cx('flex items-center gap-2', showCrypto ? 'opacity-0' : 'opacity-100')}>
+        <ArrowRightLeft className="size-4 opacity-30" />
+        {fiat}
+        <span className="size-4" aria-hidden />
+      </span>
+      <span className={cx('flex items-center gap-2', showCrypto ? 'opacity-100' : 'opacity-0')}>
+        <ArrowRightLeft className="size-4 opacity-30" />
+        {crypto}
+        <span className="size-4" aria-hidden />
+      </span>
+    </button>
+  )
+}
+
+function truncateAddress(address: string): string {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`
+}
+
+/** @internal */
 export declare namespace Payment {
+  /** Props for the {@link Payment} component. */
   type Props = {
-    /** Formatted fiat amount (e.g. "$50.00"). */
-    amount?: string | undefined
     /** AMM swap details if auto-swap is needed. */
-    autoSwap?: AutoSwap | undefined
+    autoSwap?: Capabilities.FillTransactionCapabilities['autoSwap']
+    /** Balance diffs representing the outgoing token transfers. */
+    balanceDiffs?: readonly Capabilities.BalanceDiff[] | undefined
     /** Whether the confirm action is in progress. */
     confirming?: boolean | undefined
     /** Error message — renders inline error alert. */
     error?: string | undefined
     /** Fee estimate for the transaction. */
-    fee?: Fee | undefined
+    fee?: Capabilities.FillTransactionCapabilities['fee']
+    /** Whether the faucet fund action is in progress. */
+    funding?: boolean | undefined
     /** Host domain requesting payment. */
     host?: string | undefined
+    /** Insufficient balance — `true` for generic message, or a string for a specific amount. */
+    insufficientBalance?: boolean | string | undefined
     /** Whether the payment is being prepared (skeleton state). */
     loading?: boolean | undefined
     /** Called when the user clicks "Pay". */
     onConfirm?: (() => void) | undefined
+    /** Called when the user clicks "Fund" on testnet (faucet). */
+    onFund?: (() => void) | undefined
     /** Called when the user clicks "Reject" or "Cancel". */
     onReject?: (() => void) | undefined
     /** Called when the user clicks "Retry" from error state. */
     onRetry?: (() => void) | undefined
-    /** Truncated recipient address (e.g. "0x1a2b…9e8f"). */
-    recipient?: string | undefined
-    /** Sponsor details. */
-    sponsor?: { name: string } | undefined
-    /** Token symbol (e.g. "USDC.e"). */
-    symbol?: string | undefined
-  }
-
-  type Fee = {
-    /** Fiat-equivalent fee. Falls back to `formatted` if absent. */
-    fiat?: string | undefined
-    /** Human-readable token fee (e.g. "0.03"). */
-    formatted: string
-    /** Token symbol (e.g. "pathUSD"). */
-    symbol: string
-  }
-
-  type SwapAmount = {
-    formatted: string
-    symbol: string
-  }
-
-  type AutoSwap = {
-    maxIn: SwapAmount
-    minOut: SwapAmount
-    slippage: number
+    /** Sponsor details — presence enables sponsored fee display. */
+    sponsor?: Capabilities.FillTransactionCapabilities['sponsor']
   }
 }
