@@ -12,23 +12,23 @@
   },
   "dependencies": {
     "accounts": "workspace:*",
-    "mppx": "^0.5.5",
-    "react": "catalog:default",
-    "react-dom": "catalog:default",
-    "viem": "catalog:default"
+    "mppx": "^0.5.12",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "viem": "^2.47.18"
   },
   "devDependencies": {
     "@bomb.sh/args": "^0.3.1",
     "@bomb.sh/tab": "^0.0.14",
-    "@clack/prompts": "^1.1.0",
+    "@clack/prompts": "^1.2.0",
     "@cloudflare/vite-plugin": "catalog:",
     "@types/react": "catalog:default",
-    "tsx": "catalog:",
     "@types/react-dom": "catalog:default",
     "@vitejs/plugin-react": "catalog:default",
+    "tsx": "catalog:",
     "typescript": "catalog:default",
-    "vite-plugin-mkcert": "^1.17.10",
+    "vite-plugin-mkcert": "^1.17.12",
     "vp": "catalog:",
-    "wrangler": "catalog:"
+    "wrangler": "^4.82.2"
   }
 }
