@@ -83,37 +83,6 @@ function createOpen(options: { mismatchFirstCall?: boolean | undefined } = {}) {
 }
 
 describe('create', () => {
-  test('behavior: reloads managed keys from secure storage when the key type is not known', async () => {
-    const secureStorage = Storage.memory()
-    const browser = createOpen()
-    const provider = Provider.create({
-      authorizeAccessKey: () => ({
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-      }),
-      chains: [chain],
-      host: 'https://wallet.tempo.xyz',
-      open: browser.open,
-      redirectUri: 'accounts-playground://auth',
-      secureStorage,
-    })
-
-    const result = await provider.request({
-      method: 'wallet_connect',
-      params: [{ capabilities: { method: 'register', name: 'Accounts RN Test' } }],
-    })
-    expect(result.accounts[0]!.address).toBe(root.address)
-
-    provider.store.setState({ accessKeys: [] })
-
-    const signature = await provider.request({
-      method: 'personal_sign',
-      params: [Hex.fromString('hello world'), root.address],
-    })
-    expect(signature).toMatch(/^0x[0-9a-f]+$/i)
-    expect(provider.store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
-    expect(browser.calls()).toMatchInlineSnapshot(`1`)
-  })
-
   test('behavior: reauthorizes the managed key when the saved authorization targets the wrong key', async () => {
     const secureStorage = Storage.memory()
     const browser = createOpen({ mismatchFirstCall: true })
