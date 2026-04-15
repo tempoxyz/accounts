@@ -1,4 +1,4 @@
-import { Provider, type WebCryptoP256 } from 'ox'
+import { AbiFunction, Provider, type WebCryptoP256 } from 'ox'
 import { type KeyAuthorization } from 'ox/tempo'
 import type { Hex } from 'viem'
 import type { Address, JsonRpcAccount } from 'viem/accounts'
@@ -42,7 +42,15 @@ export type AccessKey = {
   /** Key type. */
   keyType: 'secp256k1' | 'p256' | 'webAuthn' | 'webCrypto'
   /** TIP-20 spending limits for the access key. */
-  limits?: { token: Address; limit: bigint }[] | undefined
+  limits?: { token: Address; limit: bigint; period?: number | undefined }[] | undefined
+  /** Call scopes restricting which contracts/selectors this key can call. */
+  scopes?:
+    | {
+        address: Address
+        selector?: Hex | string | undefined
+        recipients?: readonly Address[] | undefined
+      }[]
+    | undefined
 } & OneOf<
   | {}
   | {
@@ -82,7 +90,8 @@ export function find(options: find.Options): TempoAccount.Account | JsonRpcAccou
       // Remove expired access keys.
       if (key.expiry && key.expiry < Date.now() / 1000)
         store.setState({ accessKeys: accessKeys.filter((a) => a !== key) })
-      else return hydrateAccessKey(key) as never
+      // Use access key if unscoped or scopes cover the requested calls; otherwise fall through to root.
+      else if (scopesMatch(key, options)) return hydrateAccessKey(key) as never
     }
   }
 
@@ -95,6 +104,8 @@ export declare namespace find {
     accessKey?: boolean | undefined
     /** Address to resolve. Defaults to the active account. */
     address?: Address | undefined
+    /** Calls to match against access key scopes. When provided, access keys whose scopes don't cover these calls are skipped. */
+    calls?: readonly { to?: Address | undefined; data?: Hex | undefined }[] | undefined
     /** Whether to hydrate signing capability. @default false */
     signable?: boolean | undefined
     /** Reactive state store. */
@@ -167,4 +178,24 @@ export declare namespace hydrate {
     /** Whether to hydrate signing capability. @default false */
     signable?: boolean | undefined
   }
+}
+
+/** Returns true if the access key's scopes cover the requested calls (or key is unscoped). */
+function scopesMatch(key: AccessKey, options: find.Options): boolean {
+  if (!options.calls || !key.scopes) return true
+  return options.calls!.every((call) => {
+    if (!call.to) return false
+    const callTo = call.to.toLowerCase()
+    const callSelector = call.data?.slice(0, 10).toLowerCase()
+    return key.scopes!.some((scope) => {
+      if (scope.address.toLowerCase() !== callTo) return false
+      if (!scope.selector) return true
+      const scopeSelector = (
+        scope.selector.startsWith('0x') && scope.selector.length === 10
+          ? scope.selector
+          : AbiFunction.getSelector(scope.selector)
+      ).toLowerCase()
+      return callSelector === scopeSelector
+    })
+  })
 }

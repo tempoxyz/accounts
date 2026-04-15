@@ -14,7 +14,7 @@
     "accounts": "workspace:*",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "viem": "^2.47.18",
+    "viem": "catalog:",
     "wagmi": "latest"
   },
   "devDependencies": {

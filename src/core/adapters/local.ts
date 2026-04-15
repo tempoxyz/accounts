@@ -34,7 +34,7 @@ export function local(options: local.Options): Adapter.Adapter {
      * For local keys: generates a P256 key pair via `AccessKey.generate`.
      */
     async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
-      const { expiry, limits } = options
+      const { expiry, limits, scopes } = options
       const chainId = getClient().chain.id
 
       if (options.publicKey || options.address) {
@@ -46,6 +46,7 @@ export function local(options: local.Options): Adapter.Adapter {
           chainId: BigInt(chainId),
           expiry,
           limits,
+          scopes,
           type: keyType,
         })
         return { keyAuthorization }
@@ -58,6 +59,7 @@ export function local(options: local.Options): Adapter.Adapter {
         chainId: BigInt(chainId),
         expiry,
         limits,
+        scopes,
         type: 'p256',
       })
       return { keyAuthorization, keyPair }

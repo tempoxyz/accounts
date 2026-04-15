@@ -15,7 +15,7 @@
     "mppx": "^0.5.12",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "viem": "^2.47.18"
+    "viem": "catalog:"
   },
   "devDependencies": {
     "@bomb.sh/args": "^0.3.1",

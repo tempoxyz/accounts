@@ -211,9 +211,17 @@ export declare namespace authorizeAccessKey {
     /** Key type of the external public key. Required when `publicKey` or `address` is provided. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
-    limits?: readonly { token: Address; limit: bigint }[] | undefined
+    limits?: readonly { token: Address; limit: bigint; period?: number | undefined }[] | undefined
     /** External public key to authorize. When provided, no key pair is generated — the caller holds the signing material. */
     publicKey?: Hex | undefined
+    /** Call scopes restricting which contracts/selectors this key can call. */
+    scopes?:
+      | readonly {
+          address: Address
+          selector?: Hex | string | undefined
+          recipients?: readonly Address[] | undefined
+        }[]
+      | undefined
     /** Pre-computed signature over the key authorization digest (skips a second signing ceremony). */
     signature?: Hex | undefined
   }

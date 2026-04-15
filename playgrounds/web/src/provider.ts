@@ -4,15 +4,23 @@ import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
 export type AdapterType = 'secp256k1' | 'webAuthn' | 'tempoWallet' | 'dialogRefImpl'
+export type Env = 'mainnet' | 'testnet' | 'devnet'
 export type DialogMode = 'iframe' | 'popup'
 export type ProviderValue = ReturnType<typeof Provider.create>
 
-export const testnet = (() => {
-  const param = new URLSearchParams(window.location.search).get('testnet')
-  if (param !== null) return param !== 'false'
-  if (window.location.hostname.startsWith('testnet.')) return true
-  return import.meta.env.VITE_ENV === 'testnet'
+export const env: Env = (() => {
+  const param = new URLSearchParams(window.location.search).get('env')
+  if (param === 'devnet' || param === 'testnet' || param === 'mainnet') return param
+  // Legacy ?testnet= support
+  const testnetParam = new URLSearchParams(window.location.search).get('testnet')
+  if (testnetParam !== null) return testnetParam !== 'false' ? 'testnet' : 'mainnet'
+  if (window.location.hostname.startsWith('testnet.')) return 'testnet'
+  if (import.meta.env.VITE_ENV === 'testnet') return 'testnet'
+  if (import.meta.env.VITE_ENV === 'devnet') return 'devnet'
+  return 'mainnet'
 })()
+
+export const testnet = env !== 'mainnet'
 
 export const tokensMap = {
   testnet: {
@@ -22,13 +30,20 @@ export const tokensMap = {
     thetaUSD: '0x20c0000000000000000000000000000000000003',
     'USDC.e': '0x20c0000000000000000000009e8d7eb59b783726',
   },
+  devnet: {
+    pathUSD: '0x20c0000000000000000000000000000000000000',
+    alphaUSD: '0x20c0000000000000000000000000000000000001',
+    betaUSD: '0x20c0000000000000000000000000000000000002',
+    thetaUSD: '0x20c0000000000000000000000000000000000003',
+  },
   mainnet: {
     pathUSD: '0x20c0000000000000000000000000000000000000',
     'USDC.e': '0x20C000000000000000000000b9537d11c60E8b50',
   },
 } as const
 
-export const tokens = testnet ? tokensMap.testnet : tokensMap.mainnet
+export const tokens =
+  tokensMap[env === 'mainnet' ? 'mainnet' : env === 'devnet' ? 'devnet' : 'testnet']
 
 export let dialogMode: DialogMode = 'iframe'
 export let provider: ProviderValue = createProvider('tempoWallet')

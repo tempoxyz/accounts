@@ -343,8 +343,25 @@ export namespace wallet_authorizeAccessKey {
     address: z.optional(u.address()),
     expiry: z.number(),
     keyType: z.optional(keyType),
-    limits: z.optional(z.readonly(z.array(z.object({ token: u.address(), limit: u.bigint() })))),
+    limits: z.optional(
+      z.readonly(
+        z.array(
+          z.object({ token: u.address(), limit: u.bigint(), period: z.optional(z.number()) }),
+        ),
+      ),
+    ),
     publicKey: z.optional(u.hex()),
+    scopes: z.optional(
+      z.readonly(
+        z.array(
+          z.object({
+            address: u.address(),
+            selector: z.optional(z.union([u.hex(), z.string()])),
+            recipients: z.optional(z.readonly(z.array(u.address()))),
+          }),
+        ),
+      ),
+    ),
   })
 
   const returns = z.object({
@@ -366,8 +383,21 @@ export namespace wallet_authorizeAccessKey_strict {
     address: z.optional(u.address()),
     expiry: z.number(),
     keyType: z.optional(keyType),
-    limits: z.readonly(z.array(z.object({ token: u.address(), limit: u.bigint() }))),
+    limits: z.readonly(
+      z.array(z.object({ token: u.address(), limit: u.bigint(), period: z.optional(z.number()) })),
+    ),
     publicKey: z.optional(u.hex()),
+    scopes: z.optional(
+      z.readonly(
+        z.array(
+          z.object({
+            address: u.address(),
+            selector: z.optional(z.union([u.hex(), z.string()])),
+            recipients: z.optional(z.readonly(z.array(u.address()))),
+          }),
+        ),
+      ),
+    ),
   })
 }
 
