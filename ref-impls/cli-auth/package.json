@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "accounts": "workspace:*",
-    "incur":"^0.3.25",
+    "incur": "^0.3.25",
     "react": "catalog:default",
     "react-dom": "catalog:default"
   },
