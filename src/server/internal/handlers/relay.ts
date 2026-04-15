@@ -6,19 +6,19 @@ import {
   type Chain,
   type Client,
   createClient,
-  decodeErrorResult,
   formatUnits,
   http,
   type Log,
-  parseAbi,
   parseEventLogs,
   type Transport,
+  zeroAddress,
 } from 'viem'
+import type { LocalAccount } from 'viem/accounts'
 import { simulateCalls } from 'viem/actions'
 import { tempo, tempoLocalnet, tempoMainnet, tempoModerato } from 'viem/chains'
 import { Abis, Actions, Addresses, Capabilities, Transaction } from 'viem/tempo'
-import type { LocalAccount } from 'viem/accounts'
 
+import * as ExecutionError from '../../../core/ExecutionError.js'
 import * as Schema from '../../../core/Schema.js'
 import { type Handler, from } from '../../Handler.js'
 import * as Sponsorship from './sponsorship.js'
@@ -52,12 +52,9 @@ import * as Utils from './utils.js'
  * import { privateKeyToAccount } from 'viem/accounts'
  * import { Handler } from 'accounts/server'
  *
- * // With sponsorship — signs as fee payer when `validate` approves.
  * const handler = Handler.relay({
  *   feePayer: {
  *     account: privateKeyToAccount('0x...'),
- *     // Optional: validate sponsorship approval.
- *     // validate: (request) => request.from !== BLOCKED_ADDRESS,
  *   },
  * })
  * ```
@@ -77,9 +74,19 @@ export function relay(options: relay.Options = {}): Handler {
   } = options
   const feePayerOptions = options.feePayer
 
+  const features = {
+    autoSwap: options.autoSwap ?? options.features === 'all',
+    feeTokenResolution: options.resolveTokens ?? options.features === 'all',
+    simulate: options.features === 'all',
+  }
+
   const autoSwap = (() => {
+    if (!features.autoSwap) return undefined
     if (options.autoSwap === false) return undefined
-    return { slippage: options.autoSwap?.slippage ?? 0.05 }
+    return {
+      slippage:
+        (typeof options.autoSwap === 'object' ? options.autoSwap?.slippage : undefined) ?? 0.05,
+    }
   })()
 
   const clients = new Map<number, Client>()
@@ -100,33 +107,39 @@ export function relay(options: relay.Options = {}): Handler {
     return clients.get(chains[0]!.id)!
   }
 
-  async function handleRequest(request: RpcRequest.RpcRequest<Schema.Ox>) {
+  async function handleRequest(
+    request: RpcRequest.RpcRequest<Schema.Ox>,
+    options?: { chainId?: number | undefined },
+  ) {
     await onRequest?.(request)
 
-    // Resolve chainId + client from the first param object (if present).
+    // Resolve chainId from: 1) explicit option (URL path), 2) first param object, 3) default chain.
     const params = 'params' in request && Array.isArray(request.params) ? request.params : []
     const first =
       typeof params[0] === 'object' && params[0]
         ? (params[0] as Record<string, unknown>)
         : undefined
-    const chainId = Utils.resolveChainId(first?.chainId) ?? chains[0]!.id
+    const chainId = Utils.resolveChainId(first?.chainId) ?? options?.chainId ?? chains[0]!.id
     const client = getClient(chainId)
 
-    switch (request.method as string) {
+    switch (request.method) {
       case 'eth_fillTransaction': {
         try {
           const parameters = params[0] as Record<string, unknown>
-          const from = typeof parameters.from === 'string' ? (parameters.from as Address) : undefined
+          const from =
+            typeof parameters.from === 'string' ? (parameters.from as Address) : undefined
           const requestFeeToken =
             typeof parameters.feeToken === 'string' ? (parameters.feeToken as Address) : undefined
-          const requestsSponsorship = !!feePayerOptions && (parameters.feePayer !== false)
+          const requestsSponsorship = !!feePayerOptions && parameters.feePayer !== false
 
           // 1. Resolve fee token.
-          const feeToken = await resolveFeeToken(client, {
-            account: from,
-            feeToken: requestFeeToken,
-            tokens: resolveTokens(chainId),
-          })
+          const feeToken = features.feeTokenResolution
+            ? await resolveFeeToken(client, {
+                account: from,
+                feeToken: requestFeeToken,
+                tokens: resolveTokens(chainId),
+              })
+            : requestFeeToken
 
           // 2. Fill transaction via RPC node (with AMM resolution on InsufficientBalance).
           const normalized = Utils.normalizeFillTransactionRequest(parameters)
@@ -143,13 +156,14 @@ export function relay(options: relay.Options = {}): Handler {
           })()
 
           // 3. Check if the fee payer approves this transaction.
-          const sponsored = requestsSponsorship && feePayerOptions
-            ? await Sponsorship.shouldSponsor({
-                sender: from,
-                transaction: filled.transaction,
-                validate: feePayerOptions.validate,
-              })
-            : false
+          const sponsored =
+            requestsSponsorship && feePayerOptions
+              ? await Sponsorship.shouldSponsor({
+                  sender: from,
+                  transaction: filled.transaction,
+                  validate: feePayerOptions.validate,
+                })
+              : false
 
           // Re-fill without feePayer when sponsorship is rejected so the
           // gas estimate and nonce are correct for a self-paid transaction.
@@ -162,15 +176,16 @@ export function relay(options: relay.Options = {}): Handler {
           const swap = 'swap' in filled ? filled.swap : undefined
 
           // 4. Simulate and compute balance diffs + fee.
-          const calls = extractCalls(transaction_filled)
-          const { balanceDiffs, fee } = await simulateAndParseDiffs(client, {
-            account: from,
-            calls,
-            swap,
-            feeToken: transaction_filled.feeToken,
-            gas: transaction_filled.gas,
-            maxFeePerGas: transaction_filled.maxFeePerGas,
-          })
+          const { balanceDiffs, fee } = features.simulate
+            ? await simulateAndParseDiffs(client, {
+                account: from,
+                calls: extractCalls(transaction_filled),
+                swap,
+                feeToken: transaction_filled.feeToken,
+                gas: transaction_filled.gas,
+                maxFeePerGas: transaction_filled.maxFeePerGas,
+              })
+            : { balanceDiffs: undefined, fee: undefined }
 
           // 5. Sign as fee payer (if sponsored and not already signed).
           const alreadySigned =
@@ -185,13 +200,12 @@ export function relay(options: relay.Options = {}): Handler {
             })
           })()
 
-          const sponsor = sponsored && feePayerOptions
-            ? Sponsorship.getSponsor(feePayerOptions)
-            : undefined
+          const sponsor =
+            sponsored && feePayerOptions ? Sponsorship.getSponsor(feePayerOptions) : undefined
 
           // 6. Resolve autoSwap metadata (when AMM path was taken).
           const autoSwap_ = await (async () => {
-            if (!swap) return undefined
+            if (!autoSwap || !swap) return undefined
             const [inMeta, outMeta] = await Promise.all([
               resolveTokenMetadata(client, swap.tokenIn).catch(() => undefined),
               resolveTokenMetadata(client, swap.tokenOut).catch(() => undefined),
@@ -236,10 +250,84 @@ export function relay(options: relay.Options = {}): Handler {
             { request },
           )
         } catch (error) {
-          return Utils.rpcErrorJson(request, error)
+          if (!(error instanceof Error)) return Utils.rpcErrorJson(request, error)
+
+          const revert = ExecutionError.parse(error)
+
+          const parameters = request.params[0]
+          const stub = {
+            from: parameters.from,
+            to: parameters.to ?? null,
+            gas: '0x0',
+            nonce: '0x0',
+            value: '0x0',
+            maxFeePerGas: '0x0',
+            maxPriorityFeePerGas: '0x0',
+          }
+
+          if (revert?.errorName === 'InsufficientBalance') {
+            const args = revert.args as [bigint, bigint, Address]
+            const [available, required, token] = args
+
+            const normalized = Utils.normalizeFillTransactionRequest(parameters)
+
+            // Simulate from zero address for optimistic balance diffs.
+            const optimisticCalls = normalized ? extractCalls(normalized) : undefined
+            const { balanceDiffs } = optimisticCalls
+              ? await simulateAndParseDiffs(client, {
+                  account: zeroAddress,
+                  calls: optimisticCalls,
+                })
+              : { balanceDiffs: undefined }
+
+            // Re-key balance diffs from zero address to the real sender.
+            const senderDiffs =
+              parameters.from && balanceDiffs
+                ? { [parameters.from]: balanceDiffs[zeroAddress] ?? [] }
+                : balanceDiffs
+
+            const metadata = await resolveTokenMetadata(client, token).catch(() => undefined)
+            const deficit = required - available
+            return RpcResponse.from(
+              {
+                result: {
+                  tx: stub,
+                  capabilities: {
+                    balanceDiffs: senderDiffs,
+                    error: ExecutionError.serialize(revert),
+                    requireFunds: metadata
+                      ? {
+                          amount: Hex.fromNumber(deficit) as `0x${string}`,
+                          decimals: metadata.decimals,
+                          formatted: formatUnits(deficit, metadata.decimals),
+                          token,
+                          symbol: metadata.symbol,
+                        }
+                      : undefined,
+                    sponsored: false,
+                  },
+                },
+              },
+              { request },
+            )
+          }
+
+          return RpcResponse.from(
+            {
+              result: {
+                tx: stub,
+                capabilities: {
+                  error: ExecutionError.serialize(revert),
+                  sponsored: false,
+                },
+              },
+            },
+            { request },
+          )
         }
       }
 
+      // @ts-expect-error
       case 'eth_signRawTransaction':
       case 'eth_sendRawTransaction':
       case 'eth_sendRawTransactionSync': {
@@ -280,22 +368,28 @@ export function relay(options: relay.Options = {}): Handler {
 
   const router = from(rest)
 
-  router.post(path, async (c) => {
+  async function handlePost(c: { req: { raw: Request; param: (key: string) => string } }) {
+    const chainId = Utils.resolveChainId(c.req.param('chainId'))
     const body = await c.req.raw.json()
     const isBatch = Array.isArray(body)
 
     if (!isBatch) {
-      const request = RpcRequest.from(body) as RpcRequest.RpcRequest<Schema.Ox>
-      return Response.json(await handleRequest(request))
+      const request = RpcRequest.from(body as never) as RpcRequest.RpcRequest<Schema.Ox>
+      return Response.json(await handleRequest(request, { chainId }))
     }
 
     const responses = await Promise.all(
       (body as unknown[]).map((item) =>
-        handleRequest(RpcRequest.from(item as never) as RpcRequest.RpcRequest<Schema.Ox>),
+        handleRequest(RpcRequest.from(item as never) as RpcRequest.RpcRequest<Schema.Ox>, {
+          chainId,
+        }),
       ),
     )
     return Response.json(responses)
-  })
+  }
+
+  router.post(path, handlePost as never)
+  router.post(`${path === '/' ? '' : path}/:chainId`, handlePost as never)
 
   return router
 }
@@ -336,6 +430,16 @@ export namespace relay {
 
   export type Options = from.Options & {
     /**
+     * Auto-swap options.
+     */
+    autoSwap?:
+      | false
+      | {
+          /** Slippage tolerance (e.g. 0.05 = 5%). @default 0.05 */
+          slippage?: number | undefined
+        }
+      | undefined
+    /**
      * Supported chains. The handler resolves the client based on the
      * `chainId` in the incoming transaction.
      * @default [tempo, tempoModerato]
@@ -353,22 +457,13 @@ export namespace relay {
            * Validates whether to sponsor the transaction. When omitted, all
            * transactions are sponsored. Return `false` to reject sponsorship.
            */
-          validate?: ((request: Transaction.TransactionRequest) => boolean | Promise<boolean>) | undefined
+          validate?:
+            | ((request: Transaction.TransactionRequest) => boolean | Promise<boolean>)
+            | undefined
           /** Sponsor display name returned from `eth_fillTransaction`. */
           name?: string | undefined
           /** Sponsor URL returned from `eth_fillTransaction`. */
           url?: string | undefined
-        }
-      | undefined
-    /**
-     * AMM swap options for automatic insufficient balance resolution.
-     * Set to `false` to disable. @default {}
-     */
-    autoSwap?:
-      | false
-      | {
-          /** Slippage tolerance (e.g. 0.05 = 5%). @default 0.05 */
-          slippage?: number | undefined
         }
       | undefined
     /**
@@ -377,6 +472,14 @@ export namespace relay {
      * highest balance.
      */
     resolveTokens?: ((chainId?: number | undefined) => readonly Address[]) | undefined
+    /**
+     * Relay features.
+     *
+     * - `'all'` — enables fee token resolution, auto-swap,
+     *   fee payer, and simulation (balance diffs + fee breakdown).
+     * - `undefined` (default) — only fee payers.
+     */
+    features?: 'all' | undefined
     /** Function to call before handling the request. */
     onRequest?: ((request: RpcRequest.RpcRequest) => Promise<void>) | undefined
     /** Path to use for the handler. @default "/" */
@@ -409,33 +512,27 @@ async function fill(
     return { transaction: Utils.normalizeTempoTransaction(result.tx) }
   } catch (error) {
     if (!(error instanceof Error)) throw error
-    const parsed = parseInsufficientBalance(error)
-    if (!parsed || !feeToken || !autoSwap) throw error
-    if (parsed.token.toLowerCase() === feeToken.toLowerCase()) throw error
+    if (!feeToken || !autoSwap) throw error
 
-    const deficit = parsed.required - parsed.available
+    const revert = ExecutionError.parse(error)
+    if (revert?.errorName !== 'InsufficientBalance') throw error
+
+    const [available, required, token] = revert.args
+    if (typeof available === 'undefined' || typeof required === 'undefined' || !token) throw error
+
+    if (token.toLowerCase() === feeToken.toLowerCase()) throw error
+
+    const deficit = required - available
     const maxAmountIn = deficit + (deficit * BigInt(Math.round(autoSwap.slippage * 1000))) / 1000n
-    const swapCalls = buildSwapCalls(feeToken, parsed.token, deficit, maxAmountIn)
-    const existingCalls = request.calls as Call[] | undefined
-    // If the request was normalized to top-level to/data/value (single call),
-    // convert back to a calls array so we can prepend swap calls.
-    const originalCalls: Call[] = existingCalls
-      ? [...existingCalls]
-      : request.to
-        ? [
-            {
-              to: request.to as Address,
-              data: request.data as `0x${string}`,
-              value: (request.value as bigint) ?? 0n,
-            },
-          ]
-        : []
-    const { to: _, data: __, value: ___, calls: ____, ...rest } = request
+
+    const originalCalls = (request.calls as Call[] | undefined) ?? []
+    const swapCalls = buildSwapCalls(feeToken, token, deficit, maxAmountIn)
+
     const result = await client.request({
       method: 'eth_fillTransaction',
       params: [
         format({
-          ...rest,
+          ...request,
           calls: [...swapCalls, ...originalCalls],
         }) as never,
       ],
@@ -445,7 +542,7 @@ async function fill(
       swap: {
         calls: swapCalls,
         tokenIn: feeToken,
-        tokenOut: parsed.token,
+        tokenOut: token,
         amountOut: deficit,
         maxAmountIn,
       },
@@ -568,7 +665,10 @@ async function simulateAndParseDiffs(
   const { account, calls, swap, feeToken, gas, maxFeePerGas } = options
 
   try {
-    const { results, tokenMetadata } = await simulate(client, { account, calls })
+    const { results, tokenMetadata } = await simulate(client, {
+      account: account === zeroAddress ? undefined : account,
+      calls,
+    })
 
     // Collect all logs across all call results.
     const logs: (typeof results)[number]['logs'] = []
@@ -591,7 +691,7 @@ async function simulateAndParseDiffs(
       gas,
       maxFeePerGas,
       tokenMetadata: tokenMetadata as never,
-    })
+    }).catch(() => undefined)
 
     return { balanceDiffs, fee }
   } catch {
@@ -755,7 +855,7 @@ async function computeFee(
   },
 ) {
   const { feeToken, gas, maxFeePerGas, tokenMetadata } = options
-  if (!feeToken || !gas || !maxFeePerGas) return null
+  if (!feeToken || !gas || !maxFeePerGas) return undefined
 
   try {
     const metadata = await resolveTokenMetadata(client, feeToken, tokenMetadata)
@@ -768,54 +868,8 @@ async function computeFee(
       symbol: metadata.symbol,
     }
   } catch {
-    return null
+    return undefined
   }
-}
-
-const insufficientBalanceAbi = parseAbi([
-  'error InsufficientBalance(uint256 available, uint256 required, address token)',
-])
-const insufficientBalancePattern =
-  /InsufficientBalance\(\s*InsufficientBalance\s*\{\s*available:\s*(\d+),\s*required:\s*(\d+),\s*token:\s*(0x[0-9a-fA-F]+)\s*\}\s*\)/
-
-function parseInsufficientBalance(error: Error) {
-  const message = (error as { shortMessage?: string }).shortMessage ?? error.message
-
-  const match = insufficientBalancePattern.exec(message)
-  if (match)
-    return {
-      available: BigInt(match[1]!),
-      required: BigInt(match[2]!),
-      token: match[3]! as Address,
-    }
-
-  const data = extractRevertData(error)
-  if (!data) return null
-  try {
-    const decoded = decodeErrorResult({ abi: insufficientBalanceAbi, data })
-    return {
-      available: decoded.args[0],
-      required: decoded.args[1],
-      token: decoded.args[2] as Address,
-    }
-  } catch {
-    return null
-  }
-}
-
-function extractRevertData(error: unknown): `0x${string}` | null {
-  if (!error || typeof error !== 'object') return null
-  const e = error as Record<string, unknown>
-  if (typeof e.data === 'string' && e.data.startsWith('0x')) return e.data as `0x${string}`
-  if (e.cause) return extractRevertData(e.cause)
-  if (e.error) return extractRevertData(e.error)
-  if (typeof e.walk === 'function') {
-    const inner = (e as { walk: (fn: (e: unknown) => boolean) => unknown }).walk(
-      (e) => typeof (e as Record<string, unknown>).data === 'string',
-    )
-    if (inner) return extractRevertData(inner)
-  }
-  return null
 }
 
 function buildSwapCalls(

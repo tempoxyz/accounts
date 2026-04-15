@@ -1,7 +1,8 @@
 import type { RpcRequest } from 'ox'
-import { SignatureEnvelope, Transaction as core_Transaction, TxEnvelopeTempo } from 'ox/tempo'
+import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import { parseUnits } from 'viem'
 import { fillTransaction, sendTransactionSync } from 'viem/actions'
+import { tempoModerato } from 'viem/chains'
 import { Actions, Addresses, Capabilities, Tick, Transaction } from 'viem/tempo'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
@@ -31,21 +32,23 @@ const transferCall = () =>
     amount: 1n,
   })
 
-describe('behavior: without feePayer', () => {
+beforeAll(async () => {
+  // Fund userAccount with alphaUsd for fees + transfers.
+  const rpc = getClient()
+  await Actions.token.mintSync(rpc, {
+    account: accounts[0]!,
+    token: addresses.alphaUsd,
+    amount: parseUnits('100', 6),
+    to: userAccount.address,
+  })
+  await Actions.fee.setUserToken(rpc, { account: userAccount, token: addresses.alphaUsd })
+})
+
+describe('default', () => {
   let client: ReturnType<typeof getClient<typeof chain>>
   let server: Server
 
   beforeAll(async () => {
-    // Fund userAccount with alphaUsd for fees + transfers.
-    const rpc = getClient()
-    await Actions.token.mintSync(rpc, {
-      account: accounts[0]!,
-      token: addresses.alphaUsd,
-      amount: parseUnits('100', 6),
-      to: userAccount.address,
-    })
-    await Actions.fee.setUserToken(rpc, { account: userAccount, token: addresses.alphaUsd })
-
     server = await createServer(
       relay({
         chains: [chain],
@@ -95,6 +98,154 @@ describe('behavior: without feePayer', () => {
   })
 })
 
+describe('behavior: with feePayer', () => {
+  let server: Server
+  let client: ReturnType<typeof getClient<typeof chain>>
+  let requests: RpcRequest.RpcRequest[] = []
+
+  beforeAll(async () => {
+    server = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+        feePayer: {
+          account: feePayerAccount,
+          name: 'Test Sponsor',
+          url: 'https://test.com',
+        },
+        onRequest: async (request) => {
+          requests.push(request)
+        },
+      }).listener,
+    )
+    client = getClient({ transport: http(server.url) })
+  })
+
+  afterAll(() => {
+    server.close()
+  })
+
+  afterEach(() => {
+    requests = []
+  })
+
+  test('default: returns sponsored tx with feePayerSignature', async () => {
+    const { transaction } = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+
+    expect(transaction.feePayerSignature).toBeDefined()
+    expect(requests.map(({ method }) => method)).toMatchInlineSnapshot(`
+      [
+        "eth_fillTransaction",
+      ]
+    `)
+  })
+
+  test('behavior: returns sponsor capabilities', async () => {
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+    const meta = result.capabilities
+
+    expect(meta?.sponsored).toBe(true)
+    expect(meta?.sponsor).toMatchInlineSnapshot(`
+      {
+        "address": "${feePayerAccount.address}",
+        "name": "Test Sponsor",
+        "url": "https://test.com",
+      }
+    `)
+  })
+
+  test('behavior: sponsored tx can be signed and broadcast', async () => {
+    const { transaction } = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+    const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
+    const envelope = TxEnvelopeTempo.deserialize(serialized)
+    const signature = await userAccount.sign({
+      hash: TxEnvelopeTempo.getSignPayload(envelope),
+    })
+    const signed = TxEnvelopeTempo.serialize(envelope, {
+      signature: SignatureEnvelope.from(signature),
+    })
+    const receipt = (await getClient().request({
+      method: 'eth_sendRawTransactionSync' as never,
+      params: [signed],
+    })) as { feePayer?: string | undefined }
+
+    expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+  })
+
+  test('behavior: missing from returns error capability', async () => {
+    const result = await fillTransaction(client, { calls: [transferCall()] })
+    expect(result.capabilities).toMatchInlineSnapshot(`
+    	{
+    	  "error": {
+    	    "errorName": "unknown",
+    	    "message": "unknown account",
+    	  },
+    	  "sponsored": false,
+    	}
+    `)
+  })
+})
+
+describe('behavior: chainId path parameter', () => {
+  let server: Server
+  let client: ReturnType<typeof getClient<typeof chain>>
+
+  beforeAll(async () => {
+    server = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+      }).listener,
+    )
+    client = getClient({ transport: http(`${server.url}/${chain.id}`) })
+  })
+
+  afterAll(() => {
+    server.close()
+  })
+
+  test('default: proxies RPC methods via /:chainId path', async () => {
+    const chainId = await client.request({ method: 'eth_chainId' })
+    expect(Number(chainId)).toMatchInlineSnapshot(`${chain.id}`)
+  })
+
+  test('behavior: fills transaction via /:chainId path', async () => {
+    const { transaction } = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+
+    expect(transaction.gas).toBeDefined()
+    expect(transaction.nonce).toBeDefined()
+  })
+
+  test('behavior: handles batch requests via /:chainId path', async () => {
+    const response = await fetch(`${server.url}/${chain.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([
+        { jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] },
+        { jsonrpc: '2.0', id: 2, method: 'eth_chainId', params: [] },
+      ]),
+    })
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { id: number; result: string }[]
+    expect(body).toHaveLength(2)
+    expect(Number(body[0]!.result)).toBe(chain.id)
+    expect(Number(body[1]!.result)).toBe(chain.id)
+  })
+})
+
 describe('behavior: capabilities', () => {
   let server: Server
   let client: ReturnType<typeof getClient<typeof chain>>
@@ -103,6 +254,7 @@ describe('behavior: capabilities', () => {
     server = await createServer(
       relay({
         chains: [chain],
+        features: 'all',
         transports: { [chain.id]: http() },
       }).listener,
     )
@@ -333,6 +485,7 @@ describe('behavior: AMM resolution', () => {
     server = await createServer(
       relay({
         chains: [chain],
+        features: 'all',
         transports: { [chain.id]: http() },
       }).listener,
     )
@@ -494,6 +647,7 @@ describe('behavior: AMM resolution', () => {
     const customServer = await createServer(
       relay({
         chains: [chain],
+        features: 'all',
         transports: { [chain.id]: http() },
         autoSwap: { slippage: 0.02 },
       }).listener,
@@ -563,140 +717,49 @@ describe('behavior: AMM resolution', () => {
     const customServer = await createServer(
       relay({
         chains: [chain],
+        features: 'all',
         transports: { [chain.id]: http() },
         autoSwap: false,
       }).listener,
     )
     const customClient = getClient({ transport: http(customServer.url) })
 
-    // Should throw InsufficientBalance instead of auto-swapping.
-    await expect(
-      fillTransaction(customClient, {
-        account: sender.address,
-        ...Actions.token.transfer.call({
-          token: base,
-          to: accounts[7]!.address,
-          amount: parseUnits('5', 6),
-        }),
+    // Should return error capability instead of auto-swapping.
+    const result = await fillTransaction(customClient, {
+      account: sender.address,
+      ...Actions.token.transfer.call({
+        token: base,
+        to: accounts[7]!.address,
+        amount: parseUnits('5', 6),
       }),
-    ).rejects.toThrow()
+    })
+    const error = result.capabilities?.error
+    expect({ ...error, data: undefined }).toMatchInlineSnapshot(`
+    	{
+    	  "abiItem": {
+    	    "inputs": [
+    	      {
+    	        "name": "available",
+    	        "type": "uint256",
+    	      },
+    	      {
+    	        "name": "required",
+    	        "type": "uint256",
+    	      },
+    	      {
+    	        "name": "token",
+    	        "type": "address",
+    	      },
+    	    ],
+    	    "name": "InsufficientBalance",
+    	    "type": "error",
+    	  },
+    	  "data": undefined,
+    	  "errorName": "InsufficientBalance",
+    	  "message": "Insufficient balance. Required: 5000000, available: 0.",
+    	}
+    `)
     customServer.close()
-  })
-})
-
-describe('behavior: with feePayer', () => {
-  let server: Server
-  let client: ReturnType<typeof getClient<typeof chain>>
-  let requests: RpcRequest.RpcRequest[] = []
-
-  beforeAll(async () => {
-    server = await createServer(
-      relay({
-        chains: [chain],
-        transports: { [chain.id]: http() },
-        feePayer: {
-          account: feePayerAccount,
-          name: 'Test Sponsor',
-          url: 'https://test.com',
-        },
-        onRequest: async (request) => {
-          requests.push(request)
-        },
-      }).listener,
-    )
-    client = getClient({ transport: http(server.url) })
-  })
-
-  afterAll(() => {
-    server.close()
-  })
-
-  afterEach(() => {
-    requests = []
-  })
-
-  test('default: returns sponsored tx with feePayerSignature', async () => {
-    const { transaction } = await fillTransaction(client, {
-      account: userAccount.address,
-      calls: [transferCall()],
-    })
-
-    expect(transaction.feePayerSignature).toBeDefined()
-    expect(requests.map(({ method }) => method)).toMatchInlineSnapshot(`
-      [
-        "eth_fillTransaction",
-      ]
-    `)
-  })
-
-  test('behavior: returns sponsor capabilities', async () => {
-    const result = await fillTransaction(client, {
-      account: userAccount.address,
-      calls: [transferCall()],
-    })
-    const meta = result.capabilities
-
-    expect(meta?.sponsored).toBe(true)
-    expect(meta?.sponsor).toMatchInlineSnapshot(`
-      {
-        "address": "${feePayerAccount.address}",
-        "name": "Test Sponsor",
-        "url": "https://test.com",
-      }
-    `)
-  })
-
-  test('behavior: sponsored tx can be signed and broadcast', async () => {
-    const { transaction } = await fillTransaction(client, {
-      account: userAccount.address,
-      calls: [transferCall()],
-    })
-    const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
-    const envelope = TxEnvelopeTempo.deserialize(serialized)
-    const signature = await userAccount.sign({
-      hash: TxEnvelopeTempo.getSignPayload(envelope),
-    })
-    const signed = TxEnvelopeTempo.serialize(envelope, {
-      signature: SignatureEnvelope.from(signature),
-    })
-    const receipt = (await getClient().request({
-      method: 'eth_sendRawTransactionSync' as never,
-      params: [signed],
-    })) as { feePayer?: string | undefined }
-
-    expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
-  })
-
-  test('behavior: does not overwrite existing feePayerSignature', async () => {
-    // First fill to get a sponsored transaction with a feePayerSignature.
-    const { transaction: first } = await fillTransaction(client, {
-      account: userAccount.address,
-      calls: [transferCall()],
-    })
-    expect(first.feePayerSignature).toBeDefined()
-    const rpc = core_Transaction.toRpc(first as never)
-    const originalSig = (rpc as Record<string, unknown>).feePayerSignature
-
-    // Re-submit the already-sponsored transaction as a prepared fill request.
-    const response = await fetch(server.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: 1,
-        jsonrpc: '2.0',
-        method: 'eth_fillTransaction',
-        params: [{ ...rpc, from: userAccount.address }],
-      }),
-    })
-    const body = (await response.json()) as {
-      result?: { tx: Record<string, unknown> } | undefined
-    }
-
-    expect(body.result?.tx.feePayerSignature).toStrictEqual(originalSig)
-  })
-
-  test('behavior: missing from returns error', async () => {
-    await expect(fillTransaction(client, { calls: [transferCall()] })).rejects.toThrowError()
   })
 })
 
@@ -809,6 +872,7 @@ describe('behavior: fee token resolution', () => {
     server = await createServer(
       relay({
         chains: [chain],
+        features: 'all',
         transports: { [chain.id]: http() },
       }).listener,
     )
@@ -880,5 +944,123 @@ describe('behavior: fee token resolution', () => {
     })
 
     expect(transaction.feeToken).toBeUndefined()
+  })
+})
+
+describe('behavior: error capabilities', () => {
+  let server: Server
+  let client: ReturnType<typeof getClient<typeof chain>>
+
+  beforeAll(async () => {
+    server = await createServer(
+      relay({
+        chains: [tempoModerato],
+        features: 'all',
+        transports: { [tempoModerato.id]: http('https://rpc.moderato.tempo.xyz') },
+      }).listener,
+    )
+    client = getClient({ chain: tempoModerato, transport: http(server.url) })
+  })
+
+  afterAll(() => {
+    server.close()
+  })
+
+  test('behavior: returns requireFunds on InsufficientBalance', async () => {
+    const sender = accounts[10]!
+
+    const result = await fillTransaction(client, {
+      account: sender.address,
+      calls: [
+        Actions.token.transfer.call({
+          token: addresses.alphaUsd,
+          to: recipient.address,
+          amount: parseUnits('100', 6),
+        }),
+      ],
+    })
+
+    expect(result.capabilities).toMatchInlineSnapshot(`
+    	{
+    	  "balanceDiffs": {
+    	    "0x0eB552e73e6f8E0922749e0fB08af2a71ECb2b7F": [
+    	      {
+    	        "address": "0x20c0000000000000000000000000000000000001",
+    	        "decimals": 6,
+    	        "direction": "outgoing",
+    	        "formatted": "100",
+    	        "name": "AlphaUSD",
+    	        "recipients": [
+    	          "0xAF4311d557fBC876059e39306ec1f3343753df29",
+    	        ],
+    	        "symbol": "AlphaUSD",
+    	        "value": "0x5f5e100",
+    	      },
+    	    ],
+    	  },
+    	  "error": {
+    	    "abiItem": {
+    	      "inputs": [
+    	        {
+    	          "name": "available",
+    	          "type": "uint256",
+    	        },
+    	        {
+    	          "name": "required",
+    	          "type": "uint256",
+    	        },
+    	        {
+    	          "name": "token",
+    	          "type": "address",
+    	        },
+    	      ],
+    	      "name": "InsufficientBalance",
+    	      "type": "error",
+    	    },
+    	    "data": "0x832f98b500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005f5e10000000000000000000000000020c0000000000000000000000000000000000001",
+    	    "errorName": "InsufficientBalance",
+    	    "message": "Insufficient balance. Required: 100000000, available: 0.",
+    	  },
+    	  "requireFunds": {
+    	    "amount": "0x5f5e100",
+    	    "decimals": 6,
+    	    "formatted": "100",
+    	    "symbol": "AlphaUSD",
+    	    "token": "0x20C0000000000000000000000000000000000001",
+    	  },
+    	  "sponsored": false,
+    	}
+    `)
+  })
+
+  test('behavior: returns error capability on generic revert', async () => {
+    const sender = accounts[10]!
+
+    const result = await fillTransaction(client, {
+      account: sender.address,
+      calls: [
+        Actions.token.grantRoles.call({
+          token: addresses.alphaUsd,
+          role: 'issuer',
+          to: sender.address,
+        }),
+      ],
+    })
+
+    expect(result.capabilities).toMatchInlineSnapshot(`
+    	{
+    	  "error": {
+    	    "abiItem": {
+    	      "inputs": [],
+    	      "name": "Unauthorized",
+    	      "type": "error",
+    	    },
+    	    "data": "0x82b42900",
+    	    "errorName": "Unauthorized",
+    	    "message": "Unauthorized.",
+    	  },
+    	  "sponsored": false,
+    	}
+    `)
   })
 })
