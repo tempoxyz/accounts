@@ -166,7 +166,7 @@ function SignIn(props: {
       error={sendOtp.error?.message ?? submit.error?.message}
       host={host}
       loading={sendOtp.isPending}
-      onPasskey={() => submit.mutate({ method: method ?? 'login' })}
+      onPasskey={() => submit.mutate({ method: 'login' })}
       onSubmit={(email) => sendOtp.mutate(email)}
       passkeyLoading={submit.isPending}
     />

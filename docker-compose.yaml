@@ -8,7 +8,7 @@ services:
       - .:/app
       - node_modules:/app/node_modules
     command: >
-      sh -c "corepack enable && pnpm install --frozen-lockfile"
+      sh -c "apt-get update -qq && apt-get install -yqq git > /dev/null 2>&1; corepack enable && pnpm install --frozen-lockfile"
 
   postgres:
     image: postgres:16-alpine
@@ -52,10 +52,13 @@ services:
       - '5176:5176'
     environment:
       DATABASE_URL: postgres://tempo:tempo@host.docker.internal:5432/tempo
+      # workerd needs CA certs for outbound HTTPS fetch in local dev.
+      # https://github.com/cloudflare/workers-sdk/issues/9356
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
     labels:
       dev.orbstack.domains: connect.tempo.local
     command: >
-      sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm --filter connect dev -- --host"
+      sh -c "apt-get update -qq && apt-get install -yqq ca-certificates > /dev/null 2>&1; corepack enable && pnpm install --frozen-lockfile && pnpm --filter connect dev -- --host"
     depends_on:
       install:
         condition: service_completed_successfully
@@ -98,7 +101,7 @@ services:
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     command: >
-      sh -c "apt-get update -qq && apt-get install -y -qq socat ca-certificates >/dev/null 2>&1; socat TCP-LISTEN:5432,fork,reuseaddr TCP:postgres:5432 & corepack enable && pnpm install --frozen-lockfile && pnpm drizzle-kit push --force && LOG_LEVEL=warn CLOUDFLARE=1 pnpm exec vite dev --port 5177 --host"
+      sh -c "apt-get update -qq && apt-get install -y -qq socat ca-certificates >/dev/null 2>&1; socat TCP-LISTEN:5432,fork,reuseaddr TCP:postgres:5432 & corepack enable && pnpm drizzle-kit push --force && LOG_LEVEL=warn CLOUDFLARE=1 pnpm exec vite dev --port 5177 --host"
     depends_on:
       install:
         condition: service_completed_successfully

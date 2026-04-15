@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { Hex } from 'ox'
 import { connect } from 'viem/experimental/erc7846'
 
-const defaultHost = 'https://wallet.tempo.xyz/embed/cli-auth' as const
+const defaultHost = 'https://connect.tempo.xyz/auth/cli' as const
 const defaultToken = '0x20c0000000000000000000000000000000000000' as const
 
 const options = z.object({
