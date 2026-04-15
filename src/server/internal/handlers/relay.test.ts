@@ -850,6 +850,206 @@ describe('behavior: conditional sponsoring', () => {
   })
 })
 
+describe('behavior: path A — guaranteed sponsorship (no validate)', () => {
+  let server: Server
+  let client: ReturnType<typeof getClient<typeof chain>>
+  let requests: RpcRequest.RpcRequest[] = []
+
+  beforeAll(async () => {
+    server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        transports: { [chain.id]: http() },
+        feePayer: {
+          account: feePayerAccount,
+          name: 'Path A Sponsor',
+        },
+        onRequest: async (request) => {
+          requests.push(request)
+        },
+      }).listener,
+    )
+    client = getClient({ transport: http(server.url) })
+  })
+
+  afterAll(() => {
+    server.close()
+  })
+
+  afterEach(() => {
+    requests = []
+  })
+
+  test('behavior: skips fee token resolution and sponsors', async () => {
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+
+    expect(result.transaction.feePayerSignature).toBeDefined()
+    expect(result.capabilities?.sponsored).toBe(true)
+    expect(result.capabilities?.sponsor?.name).toBe('Path A Sponsor')
+    // Only one fill request — no fee token resolution round-trip.
+    expect(requests.filter((r) => r.method === 'eth_fillTransaction')).toHaveLength(1)
+  })
+
+  test('behavior: simulate and sign run concurrently with fill', async () => {
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+
+    // All capabilities are present despite parallel execution.
+    expect(result.transaction.feePayerSignature).toBeDefined()
+    expect(result.capabilities?.sponsored).toBe(true)
+  })
+})
+
+describe('behavior: path B — conditional sponsorship (validate)', () => {
+  let server: Server
+  let client: ReturnType<typeof getClient<typeof chain>>
+  let requests: RpcRequest.RpcRequest[] = []
+
+  // Reject accounts[3], approve everyone else.
+  const rejectedSender = accounts[3]!
+
+  beforeAll(async () => {
+    const rpc = getClient()
+    await Actions.token.mintSync(rpc, {
+      account: accounts[0]!,
+      token: addresses.alphaUsd,
+      amount: parseUnits('100', 6),
+      to: rejectedSender.address,
+    })
+    await Actions.fee.setUserToken(rpc, { account: rejectedSender, token: addresses.alphaUsd })
+
+    server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        transports: { [chain.id]: http() },
+        feePayer: {
+          account: feePayerAccount,
+          name: 'Path B Sponsor',
+          validate: (request) =>
+            request.from?.toLowerCase() !== rejectedSender.address.toLowerCase(),
+        },
+        onRequest: async (request) => {
+          requests.push(request)
+        },
+      }).listener,
+    )
+    client = getClient({ transport: http(server.url) })
+  })
+
+  afterAll(() => {
+    server.close()
+  })
+
+  afterEach(() => {
+    requests = []
+  })
+
+  test('behavior: approved sender gets sponsorship with parallel fills', async () => {
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+
+    expect(result.transaction.feePayerSignature).toBeDefined()
+    expect(result.capabilities?.sponsored).toBe(true)
+    expect(result.capabilities?.sponsor?.name).toBe('Path B Sponsor')
+  })
+
+  test('behavior: rejected sender gets unsponsored tx from parallel fill', async () => {
+    const result = await fillTransaction(client, {
+      account: rejectedSender.address,
+      calls: [transferCall()],
+    })
+
+    expect(result.transaction.feePayerSignature).toBeUndefined()
+    expect(result.capabilities?.sponsored).toBe(false)
+    expect(result.capabilities?.sponsor).toBeUndefined()
+  })
+
+  test('behavior: rejected tx can be signed and broadcast by sender', async () => {
+    const result = await fillTransaction(client, {
+      account: rejectedSender.address,
+      calls: [transferCall()],
+    })
+
+    const serialized = (await Transaction.serialize(result.transaction as never)) as `0x76${string}`
+    const envelope = TxEnvelopeTempo.deserialize(serialized)
+    const signature = await rejectedSender.sign({
+      hash: TxEnvelopeTempo.getSignPayload(envelope),
+    })
+    const signed = TxEnvelopeTempo.serialize(envelope, {
+      signature: SignatureEnvelope.from(signature),
+    })
+    const receipt = (await getClient().request({
+      method: 'eth_sendRawTransactionSync' as never,
+      params: [signed],
+    })) as { feePayer?: string | undefined }
+
+    expect(receipt.feePayer).not.toBe(feePayerAccount.address.toLowerCase())
+  })
+})
+
+describe('behavior: path C — no sponsorship', () => {
+  let server: Server
+  let client: ReturnType<typeof getClient<typeof chain>>
+  let requests: RpcRequest.RpcRequest[] = []
+
+  beforeAll(async () => {
+    server = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        transports: { [chain.id]: http() },
+        onRequest: async (request) => {
+          requests.push(request)
+        },
+      }).listener,
+    )
+    client = getClient({ transport: http(server.url) })
+  })
+
+  afterAll(() => {
+    server.close()
+  })
+
+  afterEach(() => {
+    requests = []
+  })
+
+  test('behavior: resolves fee token and fills without sponsorship', async () => {
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+
+    expect(result.transaction.feePayerSignature).toBeUndefined()
+    expect(result.capabilities?.sponsored).toBe(false)
+    expect(result.capabilities?.fee).toBeDefined()
+    // Single fill — no speculative second fill.
+    expect(requests.filter((r) => r.method === 'eth_fillTransaction')).toHaveLength(1)
+  })
+
+  test('behavior: simulate and autoSwap metadata resolve concurrently', async () => {
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+
+    // Capabilities are populated despite parallel execution.
+    expect(result.transaction.gas).toBeDefined()
+    expect(result.transaction.nonce).toBeDefined()
+    expect(result.capabilities?.fee).toBeDefined()
+    expect(result.capabilities?.sponsored).toBe(false)
+  })
+})
+
 describe('behavior: fee token resolution', () => {
   const feeTokenAccount = accounts[0]!
   const preferredToken = addresses.alphaUsd
