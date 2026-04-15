@@ -64,7 +64,7 @@ describe('set + fromRequest', () => {
     })
     const res = await app.request('http://localhost:3000/')
     const cookie = res.headers.get('set-cookie')!
-    expect(cookie).toContain('session=')
+    expect(cookie).toContain('connect-session=')
     expect(cookie).toContain('HttpOnly')
     expect(cookie).toContain('SameSite=None')
     expect(cookie).toContain('Secure')
@@ -80,7 +80,7 @@ describe('set + fromRequest', () => {
     })
     const res = await app.request('https://connect.tempo.xyz/')
     const cookie = res.headers.get('set-cookie')!
-    expect(cookie).toContain('__Secure-session=')
+    expect(cookie).toContain('__Secure-connect-session=')
     expect(cookie).toContain('Domain=.tempo.xyz')
     expect(cookie).toContain('Secure')
   })
@@ -93,7 +93,7 @@ describe('set + fromRequest', () => {
     })
     const res = await app.request('http://connect.tempo.local/')
     const cookie = res.headers.get('set-cookie')!
-    expect(cookie).toContain('session=')
+    expect(cookie).toContain('connect-session=')
     expect(cookie).toContain('Domain=.tempo.local')
     expect(cookie).not.toContain('__Secure-')
   })
@@ -111,10 +111,10 @@ describe('set + fromRequest', () => {
 
     const setRes = await app.request('http://localhost:3000/set')
     const cookie = setRes.headers.get('set-cookie')!
-    const tokenMatch = cookie.match(/session=([^;]+)/)!
+    const tokenMatch = cookie.match(/connect-session=([^;]+)/)!
 
     const getRes = await app.request('http://localhost:3000/get', {
-      headers: { cookie: `session=${tokenMatch[1]}` },
+      headers: { cookie: `connect-session=${tokenMatch[1]}` },
     })
     const session = (await getRes.json()) as Session.Session
     expect(session.address).toMatchInlineSnapshot(`"user-1"`)
@@ -140,7 +140,7 @@ describe('clear', () => {
     })
     const res = await app.request('http://localhost:3000/')
     const cookie = res.headers.get('set-cookie')!
-    expect(cookie).toContain('session=')
+    expect(cookie).toContain('connect-session=')
     expect(cookie).toContain('Max-Age=0')
   })
 })

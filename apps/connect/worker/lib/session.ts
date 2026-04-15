@@ -124,7 +124,9 @@ export async function cookies(
 /** Extracts and verifies the session from a Hono context's cookies. */
 export async function fromRequest(c: Context, publicKeyJwk: string) {
   const token =
-    getCookie(c, 'session', 'secure') ?? getCookie(c, 'session', 'host') ?? getCookie(c, 'session')
+    getCookie(c, 'connect-session', 'secure') ??
+    getCookie(c, 'connect-session', 'host') ??
+    getCookie(c, 'connect-session')
   if (!token) return null
   return verify(publicKeyJwk, token)
 }
@@ -152,5 +154,5 @@ function cookieEnv(hostname: string): CookieEnv {
 }
 
 function cookieName(env: CookieEnv) {
-  return env.kind === 'production' ? '__Secure-session' : 'session'
+  return env.kind === 'production' ? '__Secure-connect-session' : 'connect-session'
 }
