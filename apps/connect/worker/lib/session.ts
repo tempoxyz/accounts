@@ -5,10 +5,9 @@ import { parse, serialize } from 'hono/utils/cookie'
 
 const oneYear = 31536000
 
-export type Wallet = {
-  credentialId: string
+export type Credential = {
+  id: string
   publicKey: string
-  label?: string | undefined
 }
 
 export type Payload = {
@@ -16,15 +15,15 @@ export type Payload = {
   sid: string
   iat: number
   exp: number
-  eml?: string | undefined
-  wal?: { cid: string; pk: string; lbl?: string | undefined } | undefined
+  cid: string
+  pub: string
 }
 
-export type DecodedPayload = {
+export type Session = {
   sub: string
   sid: string
-  email: string | null
-  wallet: Wallet | null
+  address: string
+  credential: Credential
 }
 
 type CookieEnv =
@@ -33,50 +32,37 @@ type CookieEnv =
   | { kind: 'bare' }
 
 /** Signs a session payload as a JWT (EdDSA / Ed25519). */
-export async function sign(privateKeyJwk: string, userId: string, options: sign.Options = {}) {
+export async function sign(privateKeyJwk: string, address: string, options: sign.Options) {
   const jwk = parseJwk(privateKeyJwk)
   const now = Math.floor(Date.now() / 1000)
-  const { wallet, email } = options
+  const { credential } = options
   const payload: Payload = {
-    sub: userId,
+    sub: address,
     sid: crypto.randomUUID(),
     iat: now,
     exp: now + oneYear,
-    ...(email && { eml: email }),
-    ...(wallet && {
-      wal: {
-        cid: wallet.credentialId,
-        pk: wallet.publicKey,
-        ...(wallet.label && { lbl: wallet.label }),
-      },
-    }),
+    cid: credential.id,
+    pub: credential.publicKey,
   }
   return hono_sign(payload, jwk, 'EdDSA')
 }
 
 export declare namespace sign {
   type Options = {
-    wallet?: Wallet | undefined
-    email?: string | undefined
+    credential: Credential
   }
 }
 
 /** Verifies and decodes a session JWT. Returns `null` if invalid or expired. */
-export async function verify(publicKeyJwk: string, token: string): Promise<DecodedPayload | null> {
+export async function verify(publicKeyJwk: string, token: string): Promise<Session | null> {
   try {
     const jwk = parseJwk(publicKeyJwk)
     const payload = (await hono_verify(token, jwk, 'EdDSA')) as Payload
     return {
       sub: payload.sub,
       sid: payload.sid,
-      email: payload.eml ?? null,
-      wallet: payload.wal
-        ? {
-            credentialId: payload.wal.cid,
-            publicKey: payload.wal.pk,
-            ...(payload.wal.lbl && { label: payload.wal.lbl }),
-          }
-        : null,
+      address: payload.sub,
+      credential: { id: payload.cid, publicKey: payload.pub },
     }
   } catch {
     return null
@@ -87,19 +73,17 @@ export async function verify(publicKeyJwk: string, token: string): Promise<Decod
 export async function set(
   c: Context,
   privateKeyJwk: string,
-  userId: string,
-  options: set.Options = {},
+  address: string,
+  options: set.Options,
 ) {
   const hostname = new URL(c.req.url).hostname
-  for (const cookie of await cookies(privateKeyJwk, userId, hostname, options))
+  for (const cookie of await cookies(privateKeyJwk, address, hostname, options))
     c.header('set-cookie', cookie, { append: true })
 }
 
 export declare namespace set {
   type Options = {
-    wallet?: Wallet | undefined
-    email?: string | undefined
-    embed?: boolean | undefined
+    credential?: Credential | undefined
   }
 }
 
@@ -118,21 +102,20 @@ export function clear(c: Context) {
 /** Returns raw `Set-Cookie` header values for the session token. */
 export async function cookies(
   privateKeyJwk: string,
-  userId: string,
+  address: string,
   hostname: string,
-  options: set.Options = {},
+  options: set.Options,
 ) {
-  const token = await sign(privateKeyJwk, userId, options)
+  const token = await sign(privateKeyJwk, address, options)
   const env = cookieEnv(hostname)
   const name = cookieName(env)
-  const sameSite = options.embed ? 'None' : 'Lax'
   return [
     serialize(name, token, {
       path: '/',
       httpOnly: true,
-      sameSite,
+      sameSite: 'None',
       maxAge: oneYear,
-      secure: env.kind === 'production' || sameSite === 'None',
+      secure: true,
       ...(env.kind !== 'bare' && { domain: env.domain }),
     }),
   ]
@@ -141,7 +124,9 @@ export async function cookies(
 /** Extracts and verifies the session from a Hono context's cookies. */
 export async function fromRequest(c: Context, publicKeyJwk: string) {
   const token =
-    getCookie(c, 'session', 'secure') ?? getCookie(c, 'session', 'host') ?? getCookie(c, 'session')
+    getCookie(c, 'connect-session', 'secure') ??
+    getCookie(c, 'connect-session', 'host') ??
+    getCookie(c, 'connect-session')
   if (!token) return null
   return verify(publicKeyJwk, token)
 }
@@ -169,5 +154,5 @@ function cookieEnv(hostname: string): CookieEnv {
 }
 
 function cookieName(env: CookieEnv) {
-  return env.kind === 'production' ? '__Secure-session' : 'session'
+  return env.kind === 'production' ? '__Secure-connect-session' : 'connect-session'
 }

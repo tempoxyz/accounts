@@ -4,9 +4,9 @@ import { Input } from '#/ui/Input.js'
 import Fingerprint from '~icons/lucide/fingerprint'
 import LogIn from '~icons/lucide/log-in'
 
-/** Sign-in / sign-up screen — enter email or use passkey. */
+/** Sign-in / sign-up screen — create account with email or sign in with passkey. */
 export function SignIn(props: SignIn.Props) {
-  const { error, host, loading, onPasskey, onSubmit, passkeyLoading } = props
+  const { error, host, onPasskey, onSubmit, passkeyLoading, registerLoading } = props
 
   return (
     <form
@@ -24,21 +24,21 @@ export function SignIn(props: SignIn.Props) {
           subtitle={
             host ? (
               <>
-                Sign into <span className="text-foreground">{host}</span> using your email address
-                or passkey.
+                Create an account or sign in with a passkey to{' '}
+                <span className="text-foreground">{host}</span>.
               </>
             ) : (
-              'Sign in using your email address or passkey.'
+              'Create an account or sign in with a passkey.'
             )
           }
           title="Sign in with Tempo"
         />
         <Frame.Footer>
           <div className="flex flex-col gap-4">
-            <Input name="email" placeholder="Email address…" required type="email" />
+            <Input name="email" placeholder="Email address…" type="email" />
             {error && <p className="text-label-13 text-red-9">{error}</p>}
-            <Button loading={loading} type="submit" variant="primary">
-              Continue
+            <Button loading={registerLoading} type="submit" variant="primary">
+              Create account
             </Button>
 
             <div className="flex items-center gap-3">
@@ -54,7 +54,7 @@ export function SignIn(props: SignIn.Props) {
               type="button"
               variant="muted"
             >
-              Continue with passkey
+              Sign in with passkey
             </Button>
 
             <p className="text-center text-label-12 text-foreground-secondary">
@@ -91,13 +91,13 @@ export declare namespace SignIn {
     error?: string | undefined
     /** Host domain requesting sign-in (e.g. "example.com"). */
     host?: string | undefined
-    /** Whether the email submission is in progress. */
-    loading?: boolean | undefined
-    /** Called when the user clicks "Continue with passkey". */
+    /** Called when the user clicks "Sign in with passkey". */
     onPasskey?: (() => void) | undefined
-    /** Called when the user submits an email. */
+    /** Called when the user submits an email to register. */
     onSubmit?: ((email: string) => void) | undefined
     /** Whether the passkey action is in progress. */
     passkeyLoading?: boolean | undefined
+    /** Whether the registration submission is in progress. */
+    registerLoading?: boolean | undefined
   }
 }

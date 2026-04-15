@@ -2,7 +2,6 @@ import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
 import { Identicon } from '#/ui/Identicon.js'
 import { Input } from '#/ui/Input.js'
-import { Otp } from '#/ui/Otp.js'
 import { ThemeToggle } from '#/ui/ThemeToggle.js'
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
@@ -20,7 +19,6 @@ const sidebar = [
   { id: 'typography', label: 'Typography' },
   { id: 'button-component', label: 'Button' },
   { id: 'input-component', label: 'Input' },
-  { id: 'otp-component', label: 'OTP' },
   { id: 'frame-component', label: 'Frame' },
   { id: 'identicon-component', label: 'Identicon' },
 ] as const
@@ -316,35 +314,6 @@ function Design() {
             </div>
           </div>
 
-          <GroupHeading id="otp-component">OTP</GroupHeading>
-          <p className="text-copy-14 text-foreground-secondary">
-            Numeric one-time-password input with individual digit cells.
-          </p>
-
-          <div className="mt-6 space-y-6">
-            <div>
-              <p className="text-heading-16 mb-3">Default</p>
-              <OtpDemo />
-            </div>
-
-            <div>
-              <p className="text-heading-16 mb-3">Sizes</p>
-              <div className="space-y-3">
-                <OtpDemo size="small" />
-                <OtpDemo size="medium" />
-                <OtpDemo size="large" />
-              </div>
-            </div>
-
-            <div>
-              <p className="text-heading-16 mb-3">States</p>
-              <div className="space-y-3">
-                <Otp error="Invalid code. Please try again." value="123456" />
-                <Otp disabled value="123456" />
-              </div>
-            </div>
-          </div>
-
           <GroupHeading id="frame-component">Frame</GroupHeading>
           <p className="text-copy-14 text-foreground-secondary">
             Card shell for dialog screens with header, body, footer, and action buttons.
@@ -472,8 +441,4 @@ function TypeRow(props: { className: string; label: string; sample?: string | un
       <p className={props.className}>{props.sample ?? 'The quick brown fox'}</p>
     </div>
   )
-}
-
-function OtpDemo(props: { size?: 'large' | 'medium' | 'small' | undefined }) {
-  return <Otp size={props.size} />
 }
