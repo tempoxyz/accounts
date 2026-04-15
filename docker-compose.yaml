@@ -20,6 +20,7 @@ services:
       - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
     healthcheck:
       test: [CMD-SHELL, pg_isready -U tempo]
       interval: 2s
@@ -38,6 +39,12 @@ services:
       dev.orbstack.domains: playground.tempo.local
     command: >
       sh -c "apt-get update -qq && apt-get install -yqq git > /dev/null 2>&1; corepack enable && pnpm install --frozen-lockfile && pnpm --filter playground dev -- --host"
+    healthcheck:
+      test: [CMD, node, -e, "require('http').get('http://localhost:5173',r=>{process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      start_period: 60s
+      retries: 3
     depends_on:
       install:
         condition: service_completed_successfully
@@ -51,7 +58,7 @@ services:
     ports:
       - '5176:5176'
     environment:
-      DATABASE_URL: postgres://tempo:tempo@host.docker.internal:5432/tempo
+      DATABASE_URL: postgres://tempo:tempo@host.docker.internal:5432/connect
       # workerd needs CA certs for outbound HTTPS fetch in local dev.
       # https://github.com/cloudflare/workers-sdk/issues/9356
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
@@ -59,6 +66,12 @@ services:
       dev.orbstack.domains: connect.tempo.local
     command: >
       sh -c "apt-get update -qq && apt-get install -yqq ca-certificates git > /dev/null 2>&1; corepack enable && pnpm install --frozen-lockfile && pnpm --filter connect dev -- --host"
+    healthcheck:
+      test: [CMD, node, -e, "require('http').get('http://localhost:5176',r=>{process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      start_period: 90s
+      retries: 3
     depends_on:
       install:
         condition: service_completed_successfully
@@ -102,6 +115,12 @@ services:
       - 'host.docker.internal:host-gateway'
     command: >
       sh -c "apt-get update -qq && apt-get install -y -qq socat ca-certificates >/dev/null 2>&1; socat TCP-LISTEN:5432,fork,reuseaddr TCP:postgres:5432 & corepack enable && pnpm drizzle-kit push --force && LOG_LEVEL=warn CLOUDFLARE=1 pnpm exec vite dev --port 5177 --host"
+    healthcheck:
+      test: [CMD, node, -e, "require('http').get('http://localhost:5177',r=>{process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      start_period: 90s
+      retries: 3
     depends_on:
       install:
         condition: service_completed_successfully

@@ -1,11 +1,13 @@
 import { eq } from 'drizzle-orm'
+import type { Address } from 'ox'
 
 import type { Instance } from './index.js'
 import { wallets } from './schema.js'
 
-/** Returns all wallets for a user. */
-export async function getByUserId(db: Instance, userId: string) {
-  return db.select().from(wallets).where(eq(wallets.userId, userId))
+/** Returns a wallet by address. */
+export async function getByAddress(db: Instance, address: Address.Address) {
+  const [wallet] = await db.select().from(wallets).where(eq(wallets.address, address))
+  return wallet
 }
 
 /** Returns a wallet by credential ID. */
