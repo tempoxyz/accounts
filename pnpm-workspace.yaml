@@ -41,8 +41,15 @@ minimumReleaseAgeExclude:
   - viem
 
 onlyBuiltDependencies:
+  - bufferutil
+  - cloudflared
+  - cpu-features
   - esbuild
+  - protobufjs
+  - sharp
   - simple-git-hooks
+  - ssh2
+  - utf-8-validate
   - workerd
 
 overrides:
@@ -50,4 +57,8 @@ overrides:
   ox: ~0.14.15
   react: catalog:default
   react-dom: catalog:default
-trustPolicy: permissive
+strictDepBuilds: true
+trustPolicy: no-downgrade
+trustPolicyExclude:
+  - chokidar@4.0.3
+  - semver@6.3.1
