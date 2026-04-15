@@ -90,7 +90,7 @@ function WelcomeBack(props: { onSignUp: () => void; submit: Submit }) {
       loading={submit.isPending}
       onContinue={() => submit.mutate({})}
       onCreateNew={onSignUp}
-      onSwitchAccount={() => submit.mutate({ selectAccount: true })}
+      onSignIn={() => submit.mutate({ selectAccount: true })}
     />
   )
 }
@@ -105,7 +105,7 @@ function SignIn(props: { submit: Submit }) {
     <Frames.SignIn
       error={submit.error?.message}
       host={host}
-      onPasskey={() => submit.mutate({ method: 'login' })}
+      onPasskey={() => submit.mutate({ method: 'login', selectAccount: true })}
       onSubmit={(email) => submit.mutate({ method: 'register', name: email })}
       passkeyLoading={submit.isPending}
       registerLoading={submit.isPending}
