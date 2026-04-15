@@ -62,10 +62,12 @@ function createOpen(options: { mismatchFirstCall?: boolean | undefined } = {}) {
             : {}),
           ...(limits
             ? {
-                limits: (JSON.parse(limits) as { token: `0x${string}`; limit: string }[]).map((x) => ({
-                  limit: BigInt(x.limit),
-                  token: x.token,
-                })),
+                limits: (JSON.parse(limits) as { token: `0x${string}`; limit: string }[]).map(
+                  (x) => ({
+                    limit: BigInt(x.limit),
+                    token: x.token,
+                  }),
+                ),
               }
             : {}),
         },

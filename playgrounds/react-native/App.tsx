@@ -1,12 +1,24 @@
-import { Provider } from '../../dist/react-native/index.js'
 import * as Linking from 'expo-linking'
-import { Hex } from 'ox'
 import { StatusBar } from 'expo-status-bar'
+import { Hex } from 'ox'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, ColorSchemeName, ScrollView, StyleProp, Text, TextInput, TextInputProps, TextStyle, useColorScheme, View } from 'react-native'
+import {
+  Button,
+  ColorSchemeName,
+  ScrollView,
+  StyleProp,
+  Text,
+  TextInput,
+  TextInputProps,
+  TextStyle,
+  useColorScheme,
+  View,
+} from 'react-native'
 import { formatUnits, parseUnits, type Address, type Hex as viem_Hex } from 'viem'
+import { tempoModerato } from 'viem/chains'
 import { Actions } from 'viem/tempo'
-import { tempoModerato, tempo } from 'viem/chains'
+
+import { Provider } from '../../dist/react-native/index.js'
 
 const chain = tempoModerato
 
@@ -21,10 +33,12 @@ const provider = Provider.create({
   redirectUri,
   authorizeAccessKey: () => ({
     expiry: Math.floor(Date.now() / 1000) + 60 * 5,
-    limits: [{
-      token: tokens.pathUSD,
-      limit: parseUnits('5', 6),
-    }],
+    limits: [
+      {
+        token: tokens.pathUSD,
+        limit: parseUnits('5', 6),
+      },
+    ],
   }),
 })
 
@@ -36,19 +50,27 @@ const getTextColor = (colorScheme: ColorSchemeName) => {
   return colorScheme === 'dark' ? 'white' : 'black'
 }
 
-const ThemedText = ({ children, style }: { children: React.ReactNode, style?: StyleProp<TextStyle> }) => {
+const ThemedText = ({
+  children,
+  style,
+}: {
+  children: React.ReactNode
+  style?: StyleProp<TextStyle>
+}) => {
   const colorScheme = useColorScheme()
   return <Text style={[{ color: getTextColor(colorScheme) }, style]}>{children}</Text>
 }
 
 const ThemedTextInput = (props: TextInputProps) => {
   const colorScheme = useColorScheme()
-  const style = useMemo(() => ({ color: getTextColor(colorScheme), ...props.style }), [colorScheme, props.style])
+  const style = useMemo(
+    () => ({ color: getTextColor(colorScheme), ...props.style }),
+    [colorScheme, props.style],
+  )
   return <TextInput {...props} style={style} />
 }
 
 export default function App() {
-
   const colorScheme = useColorScheme()
   const [address, setAddress] = useState<Address | null>(null)
   const [status, setStatus] = useState('disconnected')
@@ -70,7 +92,7 @@ export default function App() {
     })
     setNetwork(network)
   }, [])
-  console.log("error", error)
+  console.log('error', error)
 
   const connect = useCallback(async () => {
     try {
@@ -81,7 +103,7 @@ export default function App() {
       })
 
       const addr = result.accounts[0]?.address
-      console.log("here", result.accounts[0])
+      console.log('here', result.accounts[0])
       if (addr) {
         setAddress(addr)
         setStatus('connected')
@@ -159,18 +181,20 @@ export default function App() {
       setError(null)
       const hash = await provider.request({
         method: 'eth_sendTransaction',
-        params: [{
-          chainId: Hex.fromNumber(chain.id),
-          feeToken: tokens.pathUSD,
-          from: address,
-          calls: [
-            Actions.token.transfer.call({
-              to: to as Address,
-              token: tokens.pathUSD,
-              amount: parseUnits(amount || '0', 6),
-            }),
-          ],
-        }],
+        params: [
+          {
+            chainId: Hex.fromNumber(chain.id),
+            feeToken: tokens.pathUSD,
+            from: address,
+            calls: [
+              Actions.token.transfer.call({
+                to: to as Address,
+                token: tokens.pathUSD,
+                amount: parseUnits(amount || '0', 6),
+              }),
+            ],
+          },
+        ],
       })
       setTxHash(hash)
     } catch (e) {
@@ -193,12 +217,23 @@ export default function App() {
   }, [address, message])
 
   return (
-    <ScrollView style={{ flex: 1, padding: 20, paddingTop: 60, backgroundColor: getBackgroundColor(colorScheme) }}>
+    <ScrollView
+      style={{
+        flex: 1,
+        padding: 20,
+        paddingTop: 60,
+        backgroundColor: getBackgroundColor(colorScheme),
+      }}
+    >
       <StatusBar style="auto" />
-      <ThemedText style={{ fontSize: 24, fontWeight: 'bold',  color: getTextColor(colorScheme) }}>Accounts RN Playground</ThemedText>
+      <ThemedText style={{ fontSize: 24, fontWeight: 'bold', color: getTextColor(colorScheme) }}>
+        Accounts RN Playground
+      </ThemedText>
 
       <ThemedText style={{ marginTop: 16, fontWeight: 'bold' }}>Status: {status}</ThemedText>
-      {address && <ThemedText style={{ fontFamily: 'monospace', fontSize: 12 }}>{address}</ThemedText>}
+      {address && (
+        <ThemedText style={{ fontFamily: 'monospace', fontSize: 12 }}>{address}</ThemedText>
+      )}
       <ThemedText style={{ marginTop: 16, fontWeight: 'bold' }}>Network: {network}</ThemedText>
       <Button title="Switch Network" onPress={() => switchNetwork('moderato')} />
 
@@ -226,7 +261,14 @@ export default function App() {
             value={to}
             onChangeText={setTo}
             placeholder="To (0x...)"
-            style={{ borderWidth: 1, borderColor: '#ccc', padding: 8, marginTop: 4, fontFamily: 'monospace', fontSize: 12 }}
+            style={{
+              borderWidth: 1,
+              borderColor: '#ccc',
+              padding: 8,
+              marginTop: 4,
+              fontFamily: 'monospace',
+              fontSize: 12,
+            }}
           />
           <ThemedTextInput
             value={amount}
@@ -237,7 +279,11 @@ export default function App() {
             style={{ borderWidth: 1, borderColor: '#ccc', padding: 8, marginTop: 4 }}
           />
           <Button title="Send" onPress={send} />
-          {txHash && <ThemedText style={{ fontFamily: 'monospace', fontSize: 12, marginTop: 4 }}>{txHash}</ThemedText>}
+          {txHash && (
+            <ThemedText style={{ fontFamily: 'monospace', fontSize: 12, marginTop: 4 }}>
+              {txHash}
+            </ThemedText>
+          )}
 
           <ThemedText style={{ marginTop: 24, fontWeight: 'bold' }}>Sign Message</ThemedText>
           <ThemedTextInput
@@ -247,7 +293,11 @@ export default function App() {
             style={{ borderWidth: 1, borderColor: '#ccc', padding: 8, marginTop: 4 }}
           />
           <Button title="Sign" onPress={sign} />
-          {signature && <ThemedText style={{ fontFamily: 'monospace', fontSize: 10, marginTop: 4 }}>{signature}</ThemedText>}
+          {signature && (
+            <ThemedText style={{ fontFamily: 'monospace', fontSize: 10, marginTop: 4 }}>
+              {signature}
+            </ThemedText>
+          )}
         </>
       )}
 
