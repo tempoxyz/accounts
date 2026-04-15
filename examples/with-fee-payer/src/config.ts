@@ -5,9 +5,9 @@ import { tempo, tempoModerato } from 'wagmi/chains'
 const feePayerUrl = await (async () => {
   if (import.meta.env.MODE === 'development') {
     const { getTunnelUrl } = await import('virtual:vite-plugin-cloudflare-tunnel')
-    return `${getTunnelUrl()}/fee-payer`
+    return `${getTunnelUrl()}/relay`
   }
-  return '/fee-payer'
+  return '/relay'
 })()
 
 export const config = createConfig({

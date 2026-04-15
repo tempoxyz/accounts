@@ -23,9 +23,11 @@ const handler = Handler.compose([
     path: '/webauthn',
     rpId: process.env.RP_ID,
   }),
-  Handler.feePayer({
-    account: privateKeyToAccount(process.env.PRIVATE_KEY),
-    path: '/fee-payer',
+  Handler.relay({
+    feePayer: {
+      account: privateKeyToAccount(process.env.PRIVATE_KEY),
+    },
+    path: '/relay',
   }),
 ])
 

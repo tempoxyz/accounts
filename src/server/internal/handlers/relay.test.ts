@@ -1,5 +1,5 @@
 import type { RpcRequest } from 'ox'
-import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
+import { SignatureEnvelope, Transaction as core_Transaction, TxEnvelopeTempo } from 'ox/tempo'
 import { parseUnits } from 'viem'
 import { fillTransaction, sendTransactionSync } from 'viem/actions'
 import { Actions, Addresses, Capabilities, Tick, Transaction } from 'viem/tempo'
@@ -665,6 +665,34 @@ describe('behavior: with feePayer', () => {
     })) as { feePayer?: string | undefined }
 
     expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+  })
+
+  test('behavior: does not overwrite existing feePayerSignature', async () => {
+    // First fill to get a sponsored transaction with a feePayerSignature.
+    const { transaction: first } = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+    expect(first.feePayerSignature).toBeDefined()
+    const rpc = core_Transaction.toRpc(first as never)
+    const originalSig = (rpc as Record<string, unknown>).feePayerSignature
+
+    // Re-submit the already-sponsored transaction as a prepared fill request.
+    const response = await fetch(server.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: 1,
+        jsonrpc: '2.0',
+        method: 'eth_fillTransaction',
+        params: [{ ...rpc, from: userAccount.address }],
+      }),
+    })
+    const body = (await response.json()) as {
+      result?: { tx: Record<string, unknown> } | undefined
+    }
+
+    expect(body.result?.tx.feePayerSignature).toStrictEqual(originalSig)
   })
 
   test('behavior: missing from returns error', async () => {

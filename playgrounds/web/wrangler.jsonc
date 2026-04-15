@@ -9,7 +9,7 @@
     "run_worker_first": [
       "/cli-auth/*",
       "/webauthn/*",
-      "/fee-payer",
+      "/relay",
       "/fortune",
       "/zero-dollar-auth",
     ],

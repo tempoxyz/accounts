@@ -1600,9 +1600,11 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
     beforeAll(async () => {
       server = await createServer(
-        Handler.feePayer({
-          account: feePayerAccount,
+        Handler.relay({
           chains: [chain],
+          feePayer: {
+            account: feePayerAccount,
+          },
           transports: { [chain.id]: http() },
         }).listener,
       )
