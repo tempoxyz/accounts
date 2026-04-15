@@ -1,13 +1,11 @@
 import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
 import type { Chain, Client as ViemClient, Transport } from 'viem'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { Actions } from 'viem/tempo'
 import * as z from 'zod/mini'
 
-import * as AccessKey from './AccessKey.js'
 import * as Account from './Account.js'
 import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
@@ -49,21 +47,12 @@ const announced = new Set<string>()
 export function create(options: create.Options = {}): create.ReturnType {
   const {
     adapter = dialog(),
-    chains = [tempo, tempoModerato, tempoDevnet],
+    chains = [tempo, tempoModerato],
+    feePayerUrl,
     persistCredentials,
     testnet,
-    storage = typeof window !== 'undefined' && typeof indexedDB !== 'undefined' ? Storage.idb() : Storage.memory(),
+    storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
   } = options
-
-  const feePayerConfig = (() => {
-    if (!options.feePayer) return undefined
-    if (typeof options.feePayer === 'string')
-      return { precedence: 'fee-payer-first' as const, url: options.feePayer }
-    return {
-      precedence: options.feePayer.precedence ?? ('fee-payer-first' as const),
-      url: options.feePayer.url,
-    }
-  })()
 
   const defaultChain = testnet
     ? (chains.find((c) => c.testnet) ?? chains[chains.length - 1]!)
@@ -82,18 +71,10 @@ export function create(options: create.Options = {}): create.ReturnType {
   let providerRef: ox_Provider.Provider | undefined
 
   function getClient(
-    options: { chainId?: number | undefined; feePayer?: string | false | undefined } = {},
+    options: { chainId?: number | undefined; feePayer?: string | undefined } = {},
   ) {
     const { chainId, feePayer } = options
-    return Client.fromChainId(chainId, {
-      chains,
-      feePayer: (() => {
-        if (feePayer === false) return false
-        if (feePayer) return { url: feePayer, precedence: feePayerConfig?.precedence }
-        return undefined
-      })(),
-      store,
-    })
+    return Client.fromChainId(chainId, { chains, feePayer, store })
   }
 
   const instance = adapter({ getAccount, getClient, storage, store })
@@ -139,11 +120,8 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   /** Resolves the `feePayer` field from a transaction request into an absolute URL string or `undefined`. */
   function resolveFeePayer(feePayer: string | boolean | undefined): string | undefined {
-    const url = (() => {
-      if (typeof feePayer === 'string') return feePayer
-      if (feePayer === false) return undefined
-      return feePayerConfig?.url
-    })()
+    const url =
+      typeof feePayer === 'string' ? feePayer : feePayer === true ? feePayerUrl : undefined
     if (!url) return undefined
     if (url.startsWith('http://') || url.startsWith('https://')) return url
     if (typeof window !== 'undefined') return new URL(url, window.location.origin).href
@@ -225,73 +203,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                     return (await actions.sendTransaction(
                       {
                         ...rest,
-                        chainId: decoded.chainId ?? store.getState().chainId,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
                       request,
                     )) satisfies Rpc.eth_sendTransaction.Encoded['returns']
-                  }
-
-                  case 'eth_fillTransaction': {
-                    const [decoded] = request._decoded.params
-                    const parameters = { ...decoded }
-                    const chainId = parameters.chainId
-                    const feePayer = resolveFeePayer(parameters.feePayer)
-
-                    type FillParams = z.output<typeof Rpc.transactionRequest> & {
-                      keyAuthorization?: unknown
-                    }
-                    const fill = (params: FillParams) => {
-                      const client = getClient({ chainId, feePayer })
-                      const fillRequest = {
-                        ...params,
-                        chainId: params.chainId ?? client.chain?.id,
-                        ...(feePayer ? { feePayer: true } : {}),
-                      }
-                      const formatter = client.chain?.formatters?.transactionRequest
-                      const formatted =
-                        formatter && !fillRequest.keyAuthorization
-                          ? formatter.format({ ...fillRequest } as never, 'fillTransaction')
-                          : fillRequest
-                      return client.request({
-                        method: 'eth_fillTransaction',
-                        params: [formatted as never],
-                      })
-                    }
-
-                    // Inject pending keyAuthorization so the node accounts for
-                    // key authorization gas during estimation.
-                    if (!parameters.keyAuthorization) {
-                      const account = (() => {
-                        try {
-                          return getAccount({ signable: true })
-                        } catch {
-                          return undefined
-                        }
-                      })()
-                      if (account?.source === 'accessKey') {
-                        const keyAuth = AccessKey.getPending(account, { store })
-                        if (keyAuth) {
-                          try {
-                            const result = await fill({
-                              ...parameters,
-                              keyAuthorization: {
-                                address: keyAuth.address,
-                                ...KeyAuthorization.toRpc(keyAuth),
-                              } as never,
-                            })
-                            AccessKey.removePending(account, { store })
-                            return result
-                          } catch {
-                            AccessKey.remove(account, { store })
-                            return await fill(parameters)
-                          }
-                        }
-                      }
-                    }
-
-                    return await fill(parameters)
                   }
 
                   case 'eth_signTransaction': {
@@ -303,7 +219,6 @@ export function create(options: create.Options = {}): create.ReturnType {
                     return (await actions.signTransaction(
                       {
                         ...rest,
-                        chainId: decoded.chainId ?? store.getState().chainId,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
@@ -320,7 +235,6 @@ export function create(options: create.Options = {}): create.ReturnType {
                     return (await actions.sendTransactionSync(
                       {
                         ...rest,
-                        chainId: decoded.chainId ?? store.getState().chainId,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
@@ -357,9 +271,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const decoded = request._decoded.params?.[0]
                     const { calls = [], capabilities, chainId, from } = decoded ?? {}
                     const sync = capabilities?.sync
-                    const feePayer = resolveFeePayer(
-                      capabilities?.feePayer ?? (feePayerConfig ? true : undefined),
-                    )
+                    const feePayer = resolveFeePayer(feePayerUrl ? true : undefined)
                     const txRequest = {
                       calls,
                       chainId,
@@ -479,14 +391,12 @@ export function create(options: create.Options = {}): create.ReturnType {
                       {
                         accessKeys: { status: 'supported' }
                         atomic: { status: 'supported' }
-                        feePayer?: { status: 'supported' } | undefined
                       }
                     > = {}
                     for (const chain of filtered)
                       result[Hex.fromNumber(chain.id)] = {
                         accessKeys: { status: 'supported' },
                         atomic: { status: 'supported' },
-                        ...(feePayerConfig ? { feePayer: { status: 'supported' } } : {}),
                       }
                     return result as Rpc.wallet_getCapabilities.Encoded['returns']
                   }
@@ -582,17 +492,6 @@ export function create(options: create.Options = {}): create.ReturnType {
                     return
                   }
 
-                  case 'wallet_deposit': {
-                    if (!actions.deposit)
-                      throw new ox_Provider.UnsupportedMethodError({
-                        message: '`deposit` not supported by adapter.',
-                      })
-                    return (await actions.deposit(
-                      request._decoded.params[0],
-                      request,
-                    )) satisfies Rpc.wallet_deposit.Encoded['returns']
-                  }
-
                   case 'wallet_switchEthereumChain': {
                     const { chainId } = request._decoded.params[0]
                     if (!chains.some((c) => c.id === chainId))
@@ -619,7 +518,12 @@ export function create(options: create.Options = {}): create.ReturnType {
     ),
     {
       chains,
-      getAccount,
+      getAccount(options = {}) {
+        const account = getAccount(options)
+        if (!(options as any).signable)
+          return { address: account.address, type: 'json-rpc' } as never
+        return account as never
+      },
       getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
         const { chainId, feePayer } = options
         return Client.fromChainId(chainId, { chains, feePayer, provider: providerRef, store })
@@ -628,7 +532,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     },
   )
 
-  if (typeof window !== 'undefined' && typeof CustomEvent !== 'undefined') {
+  if (typeof window !== 'undefined') {
     const rdns =
       adapter.rdns ?? `com.${(adapter.name ?? 'Injected Wallet').toLowerCase().replace(/\s+/g, '')}`
 
@@ -651,11 +555,10 @@ export function create(options: create.Options = {}): create.ReturnType {
       methods: [
         mppx_tempo({
           getClient: ({ chainId }) => {
-            const client = provider.getClient({ chainId })
-            const account = provider.getAccount()
+            const client = Client.fromChainId(chainId, { chains, store })
+            const account = Account.find({ store, signable: true })
             return Object.assign(client, { account })
           },
-          mode: 'pull',
         }),
       ],
     })
@@ -684,8 +587,11 @@ export declare namespace create {
      * @default [tempo, tempoModerato, tempoDevnet]
      */
     chains?: readonly [Chain, ...Chain[]] | undefined
-    /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */
-    feePayer?: Client.fromChainId.Options['feePayer']
+    /**
+     * Fee payer URL for interacting with a service running `Handler.feePayer`
+     * from `accounts/server`.
+     */
+    feePayerUrl?: string | undefined
     /** Enable Machine Payment Protocol (mppx) support. @default false */
     mpp?: boolean | undefined
     /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
