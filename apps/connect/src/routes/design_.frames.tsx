@@ -229,49 +229,21 @@ function Card(props: { children: ReactNode; label?: string | undefined }) {
   )
 }
 
-/** New user + authorize: Sign In → Verify OTP → Email Verified + Spend Limits */
+/** New user + authorize: Sign In (create account triggers passkey + authorize). */
 function ConnectNewUserAuthorizeLazyFlow() {
   return (
-    <>
-      <Card label="Sign In">
-        <ConnectFrames.SignIn host="example.com" />
-      </Card>
-
-      <Arrow />
-
-      <Card label="Verify OTP">
-        <ConnectFrames.VerifyOtp email="j***@example.com" />
-      </Card>
-
-      <Arrow />
-
-      <Card label="Create Passkey + Authorize">
-        <ConnectFrames.PostEmailCreateAuthorize host="example.com" scopes={mockScopes} />
-      </Card>
-    </>
+    <Card label="Sign In">
+      <ConnectFrames.SignIn host="example.com" />
+    </Card>
   )
 }
 
-/** New user flow: Sign In → Verify OTP → Create Passkey */
+/** New user flow: Sign In (create account triggers passkey creation). */
 function ConnectNewUserFlow() {
   return (
-    <>
-      <Card label="Sign In">
-        <ConnectFrames.SignIn host="example.com" />
-      </Card>
-
-      <Arrow />
-
-      <Card label="Verify OTP">
-        <ConnectFrames.VerifyOtp email="j***@example.com" />
-      </Card>
-
-      <Arrow />
-
-      <Card label="Create Passkey">
-        <ConnectFrames.PostEmailCreate email="john@example.com" />
-      </Card>
-    </>
+    <Card label="Sign In">
+      <ConnectFrames.SignIn host="example.com" />
+    </Card>
   )
 }
 
@@ -288,41 +260,21 @@ function ConnectReturningPasskeyFlow() {
   )
 }
 
-/** Returning user via email — Sign In → OTP → Login with existing passkey. */
+/** Returning user via passkey — Sign In screen with "Sign in with passkey". */
 function ConnectReturningEmailFlow() {
   return (
-    <>
-      <Card label="Sign In">
-        <ConnectFrames.SignIn host="example.com" />
-      </Card>
-
-      <Arrow />
-
-      <Card label="Verify OTP">
-        <ConnectFrames.VerifyOtp email="j***@example.com" />
-      </Card>
-
-      <Arrow />
-
-      <Card label="Existing User → Login">
-        <ConnectFrames.PostEmailExisting email="john@example.com" />
-      </Card>
-    </>
+    <Card label="Sign In">
+      <ConnectFrames.SignIn host="example.com" />
+    </Card>
   )
 }
 
-/** Returning user via email + authorize: Sign In → OTP → Login + Authorize */
+/** Returning user + authorize: Sign In → Authorize. */
 function ConnectReturningEmailAuthorizeFlow() {
   return (
     <>
       <Card label="Sign In">
         <ConnectFrames.SignIn host="example.com" />
-      </Card>
-
-      <Arrow />
-
-      <Card label="Verify OTP">
-        <ConnectFrames.VerifyOtp email="j***@example.com" />
       </Card>
 
       <Arrow />
