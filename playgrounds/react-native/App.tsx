@@ -1,12 +1,12 @@
-import { Provider, secureStorage } from '../../dist/react-native/index.js'
+import { Provider } from '../../dist/react-native/index.js'
 import * as Linking from 'expo-linking'
 import { Hex } from 'ox'
 import { StatusBar } from 'expo-status-bar'
-import { useCallback, useEffect, useState } from 'react'
-import { Button, ScrollView, Text, TextInput, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Button, ColorSchemeName, ScrollView, StyleProp, Text, TextInput, TextInputProps, TextStyle, useColorScheme, View } from 'react-native'
 import { formatUnits, parseUnits, type Address, type Hex as viem_Hex } from 'viem'
 import { Actions } from 'viem/tempo'
-import { tempoModerato } from 'viem/chains'
+import { tempoModerato, tempo } from 'viem/chains'
 
 const chain = tempoModerato
 
@@ -18,10 +18,7 @@ const tokens = {
 const redirectUri = Linking.createURL('auth')
 
 const provider = Provider.create({
-  chains: [chain],
-  host: 'https://wallet.tempo.xyz',
   redirectUri,
-  secureStorage: secureStorage(),
   authorizeAccessKey: () => ({
     expiry: Math.floor(Date.now() / 1000) + 60 * 5,
     limits: [{
@@ -31,7 +28,28 @@ const provider = Provider.create({
   }),
 })
 
+const getBackgroundColor = (colorScheme: ColorSchemeName) => {
+  return colorScheme === 'dark' ? 'black' : 'white'
+}
+
+const getTextColor = (colorScheme: ColorSchemeName) => {
+  return colorScheme === 'dark' ? 'white' : 'black'
+}
+
+const ThemedText = ({ children, style }: { children: React.ReactNode, style?: StyleProp<TextStyle> }) => {
+  const colorScheme = useColorScheme()
+  return <Text style={[{ color: getTextColor(colorScheme) }, style]}>{children}</Text>
+}
+
+const ThemedTextInput = (props: TextInputProps) => {
+  const colorScheme = useColorScheme()
+  const style = useMemo(() => ({ color: getTextColor(colorScheme), ...props.style }), [colorScheme, props.style])
+  return <TextInput {...props} style={style} />
+}
+
 export default function App() {
+
+  const colorScheme = useColorScheme()
   const [address, setAddress] = useState<Address | null>(null)
   const [status, setStatus] = useState('disconnected')
   const [balance, setBalance] = useState<string | null>(null)
@@ -43,6 +61,16 @@ export default function App() {
   const [to, setTo] = useState('0x0000000000000000000000000000000000000001')
   const [amount, setAmount] = useState('1')
   const [message, setMessage] = useState('hello world')
+  const [network, setNetwork] = useState('mainnet')
+
+  const switchNetwork = useCallback(async (network: string) => {
+    provider.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: Hex.fromNumber(chain.id) }],
+    })
+    setNetwork(network)
+  }, [])
+  console.log("error", error)
 
   const connect = useCallback(async () => {
     try {
@@ -50,28 +78,19 @@ export default function App() {
       setError(null)
       let result = await provider.request({
         method: 'wallet_connect',
-        params: [{
-          capabilities: { method: 'login' },
-          chainId: Hex.fromNumber(chain.id),
-        }],
       })
 
-      if (result.accounts.length === 0)
-        result = await provider.request({
-          method: 'wallet_connect',
-          params: [{
-            capabilities: {
-              method: 'register',
-              name: 'Accounts RN Playground',
-            },
-            chainId: Hex.fromNumber(chain.id),
-          }],
-        })
-
       const addr = result.accounts[0]?.address
+      console.log("here", result.accounts[0])
       if (addr) {
         setAddress(addr)
         setStatus('connected')
+        const chainId = result.accounts[0]?.capabilities.keyAuthorization?.chainId
+        if (chainId) {
+          setNetwork(chainId === Hex.fromNumber(tempoModerato.id) ? 'moderato' : 'mainnet')
+        } else {
+          setNetwork('mainnet')
+        }
       } else {
         setError('No account returned from wallet_connect.')
         setStatus('disconnected')
@@ -142,6 +161,7 @@ export default function App() {
         method: 'eth_sendTransaction',
         params: [{
           chainId: Hex.fromNumber(chain.id),
+          feeToken: tokens.pathUSD,
           from: address,
           calls: [
             Actions.token.transfer.call({
@@ -173,12 +193,14 @@ export default function App() {
   }, [address, message])
 
   return (
-    <ScrollView style={{ flex: 1, padding: 20, paddingTop: 60 }}>
+    <ScrollView style={{ flex: 1, padding: 20, paddingTop: 60, backgroundColor: getBackgroundColor(colorScheme) }}>
       <StatusBar style="auto" />
-      <Text style={{ fontSize: 24, fontWeight: 'bold' }}>Accounts RN Playground</Text>
+      <ThemedText style={{ fontSize: 24, fontWeight: 'bold',  color: getTextColor(colorScheme) }}>Accounts RN Playground</ThemedText>
 
-      <Text style={{ marginTop: 16, fontWeight: 'bold' }}>Status: {status}</Text>
-      {address && <Text style={{ fontFamily: 'monospace', fontSize: 12 }}>{address}</Text>}
+      <ThemedText style={{ marginTop: 16, fontWeight: 'bold' }}>Status: {status}</ThemedText>
+      {address && <ThemedText style={{ fontFamily: 'monospace', fontSize: 12 }}>{address}</ThemedText>}
+      <ThemedText style={{ marginTop: 16, fontWeight: 'bold' }}>Network: {network}</ThemedText>
+      <Button title="Switch Network" onPress={() => switchNetwork('moderato')} />
 
       <View style={{ marginTop: 16 }}>
         {address ? (
@@ -188,43 +210,44 @@ export default function App() {
         )}
       </View>
 
-      {error && <Text style={{ color: 'red', marginTop: 8 }}>{error}</Text>}
+      {error && <ThemedText style={{ color: 'red', marginTop: 8 }}>{error}</ThemedText>}
 
       {address && (
         <>
-          <Text style={{ marginTop: 24, fontWeight: 'bold' }}>Balance</Text>
-          <Text>{balance !== null ? `${balance} pathUSD` : 'Loading...'}</Text>
+          <ThemedText style={{ marginTop: 24, fontWeight: 'bold' }}>Balance</ThemedText>
+          <ThemedText>{balance !== null ? `${balance} pathUSD` : 'Loading...'}</ThemedText>
           <View style={{ marginTop: 8 }}>
             <Button title={isFunding ? 'Funding...' : 'Fund Account'} onPress={fund} />
           </View>
-          {faucetStatus && <Text style={{ marginTop: 4 }}>{faucetStatus}</Text>}
+          {faucetStatus && <ThemedText style={{ marginTop: 4 }}>{faucetStatus}</ThemedText>}
 
-          <Text style={{ marginTop: 24, fontWeight: 'bold' }}>Send Transaction</Text>
-          <TextInput
+          <ThemedText style={{ marginTop: 24, fontWeight: 'bold' }}>Send Transaction</ThemedText>
+          <ThemedTextInput
             value={to}
             onChangeText={setTo}
             placeholder="To (0x...)"
             style={{ borderWidth: 1, borderColor: '#ccc', padding: 8, marginTop: 4, fontFamily: 'monospace', fontSize: 12 }}
           />
-          <TextInput
+          <ThemedTextInput
             value={amount}
             onChangeText={setAmount}
             placeholder="Amount"
             keyboardType="numeric"
+            placeholderTextColor={getTextColor(colorScheme)}
             style={{ borderWidth: 1, borderColor: '#ccc', padding: 8, marginTop: 4 }}
           />
           <Button title="Send" onPress={send} />
-          {txHash && <Text style={{ fontFamily: 'monospace', fontSize: 12, marginTop: 4 }}>{txHash}</Text>}
+          {txHash && <ThemedText style={{ fontFamily: 'monospace', fontSize: 12, marginTop: 4 }}>{txHash}</ThemedText>}
 
-          <Text style={{ marginTop: 24, fontWeight: 'bold' }}>Sign Message</Text>
-          <TextInput
+          <ThemedText style={{ marginTop: 24, fontWeight: 'bold' }}>Sign Message</ThemedText>
+          <ThemedTextInput
             value={message}
             onChangeText={setMessage}
             placeholder="Message"
             style={{ borderWidth: 1, borderColor: '#ccc', padding: 8, marginTop: 4 }}
           />
           <Button title="Sign" onPress={sign} />
-          {signature && <Text style={{ fontFamily: 'monospace', fontSize: 10, marginTop: 4 }}>{signature}</Text>}
+          {signature && <ThemedText style={{ fontFamily: 'monospace', fontSize: 10, marginTop: 4 }}>{signature}</ThemedText>}
         </>
       )}
 
