@@ -47,7 +47,9 @@ export function SendTransaction(props: SendTransaction.Props) {
     },
   })
   const capabilities = prepare.data?._capabilities
-  const allDiffs = capabilities?.balanceDiffs ? Object.values(capabilities.balanceDiffs).flat() : []
+  const balanceDiffs = capabilities?.balanceDiffs
+    ? Object.values(capabilities.balanceDiffs).flat()
+    : []
   const requireFunds = capabilities?.requireFunds
 
   const confirm = useMutation({
@@ -98,7 +100,7 @@ export function SendTransaction(props: SendTransaction.Props) {
     return (
       <TransactionFrames.Payment
         autoSwap={capabilities?.autoSwap}
-        balanceDiffs={allDiffs}
+        balanceDiffs={balanceDiffs}
         confirming={confirm.isPending}
         error={error}
         fee={capabilities?.fee}
@@ -117,7 +119,7 @@ export function SendTransaction(props: SendTransaction.Props) {
   return (
     <TransactionFrames.Generic
       autoSwap={capabilities?.autoSwap}
-      balanceDiffs={allDiffs}
+      balanceDiffs={balanceDiffs}
       confirming={confirm.isPending}
       error={error}
       fee={capabilities?.fee}
