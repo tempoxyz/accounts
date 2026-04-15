@@ -306,4 +306,149 @@ describe('find', () => {
       `[Provider.DisconnectedError: No active account.]`,
     )
   })
+
+  test('behavior: unscoped access key is used regardless of calls', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const store = setup(
+      [{ address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] }],
+      [
+        {
+          address: '0x0000000000000000000000000000000000000099',
+          access: accounts[0].address,
+          keyType: 'webCrypto',
+          keyPair,
+        },
+      ],
+    )
+
+    const result = Account.find({
+      signable: true,
+      store,
+      calls: [{ to: '0x0000000000000000000000000000000000000abc', data: '0xa9059cbb' }],
+    })
+
+    expect(result.source).toMatchInlineSnapshot(`"accessKey"`)
+  })
+
+  test('behavior: scoped access key is used when calls match', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const store = setup(
+      [{ address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] }],
+      [
+        {
+          address: '0x0000000000000000000000000000000000000099',
+          access: accounts[0].address,
+          keyType: 'webCrypto',
+          keyPair,
+          scopes: [{ address: token, selector: '0xa9059cbb' }],
+        },
+      ],
+    )
+
+    const result = Account.find({
+      signable: true,
+      store,
+      calls: [{ to: token, data: '0xa9059cbb0000000000000000000000000000000000000001' }],
+    })
+
+    expect(result.source).toMatchInlineSnapshot(`"accessKey"`)
+  })
+
+  test('behavior: scoped access key falls back to root when calls do not match', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const store = setup(
+      [{ address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] }],
+      [
+        {
+          address: '0x0000000000000000000000000000000000000099',
+          access: accounts[0].address,
+          keyType: 'webCrypto',
+          keyPair,
+          scopes: [{ address: token, selector: '0xa9059cbb' }],
+        },
+      ],
+    )
+
+    const result = Account.find({
+      signable: true,
+      store,
+      calls: [{ to: '0x0000000000000000000000000000000000000def', data: '0xdeadbeef' }],
+    })
+
+    expect(result.address).toMatchInlineSnapshot(`"${accounts[0].address}"`)
+    expect(result.source).not.toBe('accessKey')
+  })
+
+  test('behavior: scoped access key with human-readable selector matches', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const store = setup(
+      [{ address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] }],
+      [
+        {
+          address: '0x0000000000000000000000000000000000000099',
+          access: accounts[0].address,
+          keyType: 'webCrypto',
+          keyPair,
+          scopes: [{ address: token, selector: 'transfer(address,uint256)' }],
+        },
+      ],
+    )
+
+    // 0xa9059cbb is the selector for transfer(address,uint256)
+    const result = Account.find({
+      signable: true,
+      store,
+      calls: [{ to: token, data: '0xa9059cbb0000000000000000000000000000000000000001' }],
+    })
+
+    expect(result.source).toMatchInlineSnapshot(`"accessKey"`)
+  })
+
+  test('behavior: scoped access key without selector allows any call to that address', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const store = setup(
+      [{ address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] }],
+      [
+        {
+          address: '0x0000000000000000000000000000000000000099',
+          access: accounts[0].address,
+          keyType: 'webCrypto',
+          keyPair,
+          scopes: [{ address: token }],
+        },
+      ],
+    )
+
+    const result = Account.find({
+      signable: true,
+      store,
+      calls: [{ to: token, data: '0xdeadbeef' }],
+    })
+
+    expect(result.source).toMatchInlineSnapshot(`"accessKey"`)
+  })
+
+  test('behavior: scoped access key used when no calls provided', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const store = setup(
+      [{ address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] }],
+      [
+        {
+          address: '0x0000000000000000000000000000000000000099',
+          access: accounts[0].address,
+          keyType: 'webCrypto',
+          keyPair,
+          scopes: [{ address: '0x0000000000000000000000000000000000000abc' }],
+        },
+      ],
+    )
+
+    const result = Account.find({ signable: true, store })
+
+    expect(result.source).toMatchInlineSnapshot(`"accessKey"`)
+  })
 })

@@ -93,38 +93,21 @@ export declare namespace revoke {
 export function save(options: save.Options): void {
   const { address, keyAuthorization, keyPair, privateKey, store } = options
 
+  const base = {
+    address: keyAuthorization.address,
+    access: address,
+    expiry: keyAuthorization.expiry ?? undefined,
+    keyAuthorization,
+    keyType: keyAuthorization.type,
+    limits: keyAuthorization.limits as Store.AccessKey['limits'],
+    scopes: keyAuthorization.scopes as Store.AccessKey['scopes'],
+  }
+
   const accessKey: Store.AccessKey = privateKey
-    ? {
-        address: keyAuthorization.address,
-        access: address,
-        expiry: keyAuthorization.expiry ?? undefined,
-        keyAuthorization,
-        keyType: keyAuthorization.type,
-        limits: keyAuthorization.limits as { token: Address.Address; limit: bigint }[] | undefined,
-        privateKey,
-      }
+    ? { ...base, privateKey }
     : keyPair
-      ? {
-          address: keyAuthorization.address,
-          access: address,
-          expiry: keyAuthorization.expiry ?? undefined,
-          keyAuthorization,
-          keyType: keyAuthorization.type,
-          limits: keyAuthorization.limits as
-            | { token: Address.Address; limit: bigint }[]
-            | undefined,
-          keyPair,
-        }
-      : {
-          address: keyAuthorization.address,
-          access: address,
-          expiry: keyAuthorization.expiry ?? undefined,
-          keyAuthorization,
-          keyType: keyAuthorization.type,
-          limits: keyAuthorization.limits as
-            | { token: Address.Address; limit: bigint }[]
-            | undefined,
-        }
+      ? { ...base, keyPair }
+      : { ...base }
 
   store.setState((state) => ({
     accessKeys: [
