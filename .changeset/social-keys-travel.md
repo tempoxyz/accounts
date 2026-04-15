@@ -1,5 +1,6 @@
 ---
-"accounts": patch
+"accounts": minor
 ---
 
-Updated Handler.relay to be backwards compatible with Handler.feePayer and respect feePayer request parameter. Deprecated Handler.feePayer.
+Removed `Handler.feePayer`.
+Updated `Handler.relay` to be backwards compatible with `Handler.feePayer`. 
