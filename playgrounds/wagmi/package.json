@@ -14,7 +14,7 @@
     "accounts": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "viem": "latest",
+    "viem": "catalog:",
     "wagmi": "latest"
   },
   "devDependencies": {

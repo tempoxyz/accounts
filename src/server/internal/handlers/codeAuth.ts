@@ -1,6 +1,6 @@
 import type { Chain, Client, Transport } from 'viem'
 import { createClient, http } from 'viem'
-import { tempo, tempoModerato } from 'viem/chains'
+import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import * as z from 'zod/mini'
 
 import * as CliAuth from '../../CliAuth.js'
@@ -20,7 +20,7 @@ import { type Handler, from } from '../../Handler.js'
  */
 export function codeAuth(options: codeAuth.Options = {}): Handler {
   const {
-    chains = [tempo, tempoModerato],
+    chains = [tempo, tempoModerato, tempoDevnet],
     now,
     path = '/auth/pkce',
     policy,
@@ -127,7 +127,7 @@ export declare namespace codeAuth {
     /**
      * Supported chains. The handler resolves the client based on chain IDs carried
      * by device-code requests and key authorizations.
-     * @default [tempo, tempoModerato]
+     * @default [tempo, tempoModerato, tempoDevnet]
      */
     chains?: readonly [Chain, ...Chain[]] | undefined
     /** Time source used for TTL evaluation. */

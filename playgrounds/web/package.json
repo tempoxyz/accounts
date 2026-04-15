@@ -15,7 +15,7 @@
     "mppx": "^0.5.5",
     "react": "catalog:default",
     "react-dom": "catalog:default",
-    "viem": "catalog:default"
+    "viem": "catalog:"
   },
   "devDependencies": {
     "@bomb.sh/args": "^0.3.1",
@@ -23,9 +23,9 @@
     "@clack/prompts": "^1.1.0",
     "@cloudflare/vite-plugin": "catalog:",
     "@types/react": "catalog:default",
-    "tsx": "catalog:",
     "@types/react-dom": "catalog:default",
     "@vitejs/plugin-react": "catalog:default",
+    "tsx": "catalog:",
     "typescript": "catalog:default",
     "vite-plugin-mkcert": "^1.17.10",
     "vp": "catalog:",
