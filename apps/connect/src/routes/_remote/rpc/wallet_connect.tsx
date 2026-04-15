@@ -75,11 +75,13 @@ function WelcomeBack(props: { onSignUp: () => void; submit: Submit }) {
     queryKey: ['auth', 'me'],
     queryFn: async () => {
       const res = await api.api.auth.me.$get()
-      return (await res.json()) as { email: string | null }
+      return (await res.json()) as { email: string | null; username: string | null }
     },
   })
   const label =
-    me.data?.email ?? (address ? `${address.slice(0, 8)}…${address.slice(-6)}` : undefined)
+    me.data?.email ??
+    me.data?.username ??
+    (address ? `${address.slice(0, 8)}…${address.slice(-6)}` : undefined)
 
   return (
     <Frames.WelcomeBack

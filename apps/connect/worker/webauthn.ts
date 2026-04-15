@@ -36,7 +36,7 @@ export const webauthn = new Hono<{ Bindings: Env }>().all('/*', (c) => {
     path: '/api/webauthn',
     rpId: hostname.split('.').slice(-2).join('.'),
 
-    async onRegister({ credentialId, publicKey }) {
+    async onRegister({ credentialId, name, publicKey }) {
       const address = Address.fromPublicKey(PublicKey.fromHex(publicKey as Hex.Hex))
       const db = Db.get(c.env.HYPERDRIVE)
 
@@ -47,7 +47,7 @@ export const webauthn = new Hono<{ Bindings: Env }>().all('/*', (c) => {
         credentialId,
         label: 'Passkey',
         publicKey,
-        username: address,
+        username: name,
       })
 
       return res(hostname, address, {
