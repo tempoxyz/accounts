@@ -88,7 +88,9 @@ export function Generic(props: Generic.Props) {
               size="medium"
               variant="primary"
             >
-              {funding ? 'Funding…' : `Fund ${insufficientBalance === true ? '' : insufficientBalance}`}
+              {funding
+                ? 'Funding…'
+                : `Fund ${insufficientBalance === true ? '' : insufficientBalance}`}
             </Button>
           ) : (
             <div className="flex flex-col gap-3">
@@ -225,11 +227,23 @@ function FeeRow(props: {
         type="button"
       >
         <span className="relative inline-grid items-center justify-items-end [&>span]:col-start-1 [&>span]:row-start-1 [&>span]:transition-opacity [&>span]:duration-150">
-          <span className={cx('flex items-center gap-1.5', sponsored && 'line-through', showCrypto ? 'opacity-0' : 'opacity-100')}>
+          <span
+            className={cx(
+              'flex items-center gap-1.5',
+              sponsored && 'line-through',
+              showCrypto ? 'opacity-0' : 'opacity-100',
+            )}
+          >
             <ArrowRightLeft className="size-3 opacity-50" />
             {primary}
           </span>
-          <span className={cx('flex items-center gap-1.5', sponsored && 'line-through', showCrypto ? 'opacity-100' : 'opacity-0')}>
+          <span
+            className={cx(
+              'flex items-center gap-1.5',
+              sponsored && 'line-through',
+              showCrypto ? 'opacity-100' : 'opacity-0',
+            )}
+          >
             <ArrowRightLeft className="size-3 opacity-50" />
             {detail}
           </span>

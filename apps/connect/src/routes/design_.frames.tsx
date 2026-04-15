@@ -693,7 +693,10 @@ function DirectPaymentExtrasFlow() {
           balanceDiffs={mockPaymentDiffs}
           fee={mockPaymentFee}
           host="example.com"
-          sponsor={{ address: '0x0000000000000000000000000000000000000000' as `0x${string}`, name: 'My App' }}
+          sponsor={{
+            address: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+            name: 'My App',
+          }}
         />
       </Card>
 
@@ -702,8 +705,22 @@ function DirectPaymentExtrasFlow() {
       <Card label="Auto Swap">
         <TransactionFrames.Payment
           autoSwap={{
-            maxIn: { formatted: '52.50', symbol: 'AlphaUSD', decimals: 6, name: 'AlphaUSD', token: '0x0000000000000000000000000000000000000001' as `0x${string}`, value: '0x0' as `0x${string}` },
-            minOut: { formatted: '50.00', symbol: 'USDC.e', decimals: 6, name: 'Bridged USDC', token: '0x0000000000000000000000000000000000000002' as `0x${string}`, value: '0x0' as `0x${string}` },
+            maxIn: {
+              formatted: '52.50',
+              symbol: 'AlphaUSD',
+              decimals: 6,
+              name: 'AlphaUSD',
+              token: '0x0000000000000000000000000000000000000001' as `0x${string}`,
+              value: '0x0' as `0x${string}`,
+            },
+            minOut: {
+              formatted: '50.00',
+              symbol: 'USDC.e',
+              decimals: 6,
+              name: 'Bridged USDC',
+              token: '0x0000000000000000000000000000000000000002' as `0x${string}`,
+              value: '0x0' as `0x${string}`,
+            },
             slippage: 0.05,
           }}
           balanceDiffs={mockPaymentDiffs}
