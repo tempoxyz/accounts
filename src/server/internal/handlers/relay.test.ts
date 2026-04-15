@@ -1,5 +1,5 @@
 import type { RpcRequest } from 'ox'
-import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
+import { SignatureEnvelope, Transaction as core_Transaction, TxEnvelopeTempo } from 'ox/tempo'
 import { parseUnits } from 'viem'
 import { fillTransaction, sendTransactionSync } from 'viem/actions'
 import { Actions, Addresses, Capabilities, Tick, Transaction } from 'viem/tempo'
@@ -684,13 +684,13 @@ describe('behavior: with feePayer', () => {
         id: 1,
         jsonrpc: '2.0',
         method: 'eth_fillTransaction',
-        params: [{ ...Transaction.toRpc(first as never), from: userAccount.address }],
+        params: [{ ...core_Transaction.toRpc(first as never), from: userAccount.address }],
       }),
     })
     const body = (await response.json()) as {
       result?: { tx: Record<string, unknown> } | undefined
     }
-    const second = Transaction.fromRpc(body.result?.tx as never) as {
+    const second = core_Transaction.fromRpc(body.result?.tx as never) as {
       feePayerSignature?: unknown
     }
 
