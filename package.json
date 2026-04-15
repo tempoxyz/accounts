@@ -9,7 +9,7 @@
     "dev:cli": "pnpm --filter './playgrounds/cli' connect",
     "dev:logs": "docker compose logs -f",
     "examples": "node --import tsx scripts/examples.ts",
-    "postinstall": "pnpm preconstruct && git submodule update --init --recursive",
+    "postinstall": "pnpm preconstruct && [ -n \"$CI\" ] || git submodule update --init --recursive",
     "preconstruct": "zile dev",
     "test": "vp test",
     "vp": "vp"
