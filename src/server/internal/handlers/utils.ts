@@ -16,17 +16,22 @@ export function formatFillTransactionRequest(client: Client, value: Record<strin
   return format({ ...value } as never, 'fillTransaction') as Record<string, unknown>
 }
 
-export function normalizeFillTransactionRequest(value: Record<string, unknown>) {
-  if (typeof value.to !== 'undefined' || typeof value.data !== 'undefined') return value
-  if (!Array.isArray(value.calls) || value.calls.length !== 1) return value
-  const [call] = value.calls as Array<Record<string, unknown>>
-  const { calls: _, ...rest } = value
-  return {
-    ...rest,
-    ...(typeof call?.data !== 'undefined' ? { data: call.data } : {}),
-    ...(typeof call?.to !== 'undefined' ? { to: call.to } : {}),
-    ...(typeof call?.value !== 'undefined' ? { value: normalizeFillValue(call.value) } : {}),
+export function normalizeFillTransactionRequest(tx: Record<string, unknown>) {
+  const { to, data, value, ...rest } = tx
+  if (Array.isArray(tx.calls) && tx.calls.length > 0)
+    return {
+      ...tx,
+      calls: tx.calls.map((call) => ({
+        ...call,
+        value: normalizeFillValue(call.value),
+      })),
+    }
+  const call = {
+    ...(typeof to !== 'undefined' ? { to } : {}),
+    ...(typeof data !== 'undefined' ? { data } : {}),
+    ...(typeof value !== 'undefined' ? { value: normalizeFillValue(value) } : {}),
   }
+  return { ...rest, calls: [call] }
 }
 
 function normalizeFillValue(value: unknown) {
