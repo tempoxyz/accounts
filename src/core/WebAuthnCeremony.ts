@@ -95,7 +95,7 @@ export function from(ceremony: WebAuthnCeremony): WebAuthnCeremony {
  */
 export function local(options: local.Options = {}): WebAuthnCeremony {
   const rpId = options.rpId ?? (typeof location !== 'undefined' ? location.hostname : 'localhost')
-  const storage = options.storage ?? (typeof indexedDB !== 'undefined' ? Storage.idb() : Storage.memory())
+  const storage = options.storage ?? (typeof window !== 'undefined' && typeof indexedDB !== 'undefined' ? Storage.idb() : Storage.memory())
   const storageKey = 'credentials'
 
   return from({

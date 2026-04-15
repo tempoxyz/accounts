@@ -52,7 +52,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     chains = [tempo, tempoModerato, tempoDevnet],
     persistCredentials,
     testnet,
-    storage = typeof indexedDB !== 'undefined' ? Storage.idb() : Storage.memory(),
+    storage = typeof window !== 'undefined' && typeof indexedDB !== 'undefined' ? Storage.idb() : Storage.memory(),
   } = options
 
   const feePayerConfig = (() => {
