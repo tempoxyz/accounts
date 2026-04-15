@@ -648,24 +648,32 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const result = await provider.request({ method: 'wallet_getCapabilities' })
       expect(result).toMatchInlineSnapshot(`
-        {
-          "0x1079": {
-            "accessKeys": {
-              "status": "supported",
-            },
-            "atomic": {
-              "status": "supported",
-            },
-          },
-          "0xa5bf": {
-            "accessKeys": {
-              "status": "supported",
-            },
-            "atomic": {
-              "status": "supported",
-            },
-          },
-        }
+      	{
+      	  "0x1079": {
+      	    "accessKeys": {
+      	      "status": "supported",
+      	    },
+      	    "atomic": {
+      	      "status": "supported",
+      	    },
+      	  },
+      	  "0x7a56": {
+      	    "accessKeys": {
+      	      "status": "supported",
+      	    },
+      	    "atomic": {
+      	      "status": "supported",
+      	    },
+      	  },
+      	  "0xa5bf": {
+      	    "accessKeys": {
+      	      "status": "supported",
+      	    },
+      	    "atomic": {
+      	      "status": "supported",
+      	    },
+      	  },
+      	}
       `)
     })
 
@@ -724,7 +732,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         method: 'wallet_getCapabilities',
         params: [connected],
       })
-      expect(Object.keys(result).length).toMatchInlineSnapshot(`2`)
+      expect(Object.keys(result).length).toMatchInlineSnapshot(`3`)
       expect(result[Hex.fromNumber(tempo.id)]!.atomic.status).toMatchInlineSnapshot(`"supported"`)
     })
 

@@ -29,7 +29,7 @@ catalog:
   typescript: ^5.9.3
   viem: ^2.47.18
   vite: ^8.0.5
-  vp: npm:vite-plus@0.1.15
+  vp: npm:vite-plus@~0.1.18
   wagmi: ^3.6.1
   wrangler: ^4.82.2
   zod: ^4.3.6
@@ -39,6 +39,8 @@ minimumReleaseAgeExclude:
   - incur
   - mppx
   - viem
+  - vite-plus
+  - '@voidzero-dev/*'
 
 onlyBuiltDependencies:
   - esbuild
