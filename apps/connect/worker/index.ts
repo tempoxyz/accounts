@@ -2,11 +2,11 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 
 import { auth } from './auth.js'
+import { jwks } from './jwks.js'
 import { relay } from './relay.js'
 import { webauthn } from './webauthn.js'
 
-const app = new Hono<{ Bindings: Env }>()
-  .basePath('/api')
+const api = new Hono<{ Bindings: Env }>()
   .use(async (c, next) => {
     const origin = new URL(c.req.url).origin
     await cors({ origin })(c, next)
@@ -17,5 +17,7 @@ const app = new Hono<{ Bindings: Env }>()
   .route('/relay', relay)
   .route('/webauthn', webauthn)
 
-export type App = typeof app
+const app = new Hono<{ Bindings: Env }>().route('/.well-known', jwks).route('/api', api)
+
+export type App = typeof api
 export default app
