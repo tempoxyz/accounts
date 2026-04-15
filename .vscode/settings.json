@@ -1,4 +1,5 @@
 {
+  "editor.tabSize": 2,
   "editor.hover.enabled": "on",
   "typescript.validate.enable": true,
   "javascript.validate.enable": true,
