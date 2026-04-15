@@ -5,10 +5,9 @@ import { parse, serialize } from 'hono/utils/cookie'
 
 const oneYear = 31536000
 
-export type Wallet = {
-  credentialId: string
+export type Credential = {
+  id: string
   publicKey: string
-  label?: string | undefined
 }
 
 export type Payload = {
@@ -16,15 +15,15 @@ export type Payload = {
   sid: string
   iat: number
   exp: number
-  eml?: string | undefined
-  wal?: { cid: string; pk: string; lbl?: string | undefined } | undefined
+  cid?: string | undefined
+  pub?: string | undefined
 }
 
-export type DecodedPayload = {
+export type Session = {
   sub: string
   sid: string
-  email: string | null
-  wallet: Wallet | null
+  address: string
+  credential: Credential | null
 }
 
 type CookieEnv =
@@ -33,50 +32,36 @@ type CookieEnv =
   | { kind: 'bare' }
 
 /** Signs a session payload as a JWT (EdDSA / Ed25519). */
-export async function sign(privateKeyJwk: string, userId: string, options: sign.Options = {}) {
+export async function sign(privateKeyJwk: string, address: string, options: sign.Options = {}) {
   const jwk = parseJwk(privateKeyJwk)
   const now = Math.floor(Date.now() / 1000)
-  const { wallet, email } = options
+  const { credential } = options
   const payload: Payload = {
-    sub: userId,
+    sub: address,
     sid: crypto.randomUUID(),
     iat: now,
     exp: now + oneYear,
-    ...(email && { eml: email }),
-    ...(wallet && {
-      wal: {
-        cid: wallet.credentialId,
-        pk: wallet.publicKey,
-        ...(wallet.label && { lbl: wallet.label }),
-      },
-    }),
+    ...(credential && { cid: credential.id, pub: credential.publicKey }),
   }
   return hono_sign(payload, jwk, 'EdDSA')
 }
 
 export declare namespace sign {
   type Options = {
-    wallet?: Wallet | undefined
-    email?: string | undefined
+    credential?: Credential | undefined
   }
 }
 
 /** Verifies and decodes a session JWT. Returns `null` if invalid or expired. */
-export async function verify(publicKeyJwk: string, token: string): Promise<DecodedPayload | null> {
+export async function verify(publicKeyJwk: string, token: string): Promise<Session | null> {
   try {
     const jwk = parseJwk(publicKeyJwk)
     const payload = (await hono_verify(token, jwk, 'EdDSA')) as Payload
     return {
       sub: payload.sub,
       sid: payload.sid,
-      email: payload.eml ?? null,
-      wallet: payload.wal
-        ? {
-            credentialId: payload.wal.cid,
-            publicKey: payload.wal.pk,
-            ...(payload.wal.lbl && { label: payload.wal.lbl }),
-          }
-        : null,
+      address: payload.sub,
+      credential: payload.cid && payload.pub ? { id: payload.cid, publicKey: payload.pub } : null,
     }
   } catch {
     return null
@@ -87,18 +72,17 @@ export async function verify(publicKeyJwk: string, token: string): Promise<Decod
 export async function set(
   c: Context,
   privateKeyJwk: string,
-  userId: string,
+  address: string,
   options: set.Options = {},
 ) {
   const hostname = new URL(c.req.url).hostname
-  for (const cookie of await cookies(privateKeyJwk, userId, hostname, options))
+  for (const cookie of await cookies(privateKeyJwk, address, hostname, options))
     c.header('set-cookie', cookie, { append: true })
 }
 
 export declare namespace set {
   type Options = {
-    wallet?: Wallet | undefined
-    email?: string | undefined
+    credential?: Credential | undefined
     embed?: boolean | undefined
   }
 }
@@ -118,11 +102,11 @@ export function clear(c: Context) {
 /** Returns raw `Set-Cookie` header values for the session token. */
 export async function cookies(
   privateKeyJwk: string,
-  userId: string,
+  address: string,
   hostname: string,
   options: set.Options = {},
 ) {
-  const token = await sign(privateKeyJwk, userId, options)
+  const token = await sign(privateKeyJwk, address, options)
   const env = cookieEnv(hostname)
   const name = cookieName(env)
   const sameSite = options.embed ? 'None' : 'Lax'

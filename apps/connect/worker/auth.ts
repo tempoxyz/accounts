@@ -13,7 +13,7 @@ import * as Session from './lib/session.js'
 export const auth = new Hono<{ Bindings: Env }>()
   /** `GET /me` — return the current session's email. */
   .get('/me', Middleware.requireSession(), (c) => {
-    return c.json({ email: c.var.session.email })
+    return c.json({ address: c.var.session.address })
   })
 
   /** `POST /otp/send` — validate email, rate limit, generate + store OTP, send via Mailgun. */

@@ -23,31 +23,23 @@ describe('sign + verify', () => {
     expect(sid).toBeDefined()
     expect(rest).toMatchInlineSnapshot(`
       {
-        "email": null,
+        "address": "user-1",
+        "credential": null,
         "sub": "user-1",
-        "wallet": null,
       }
     `)
   })
 
-  test('includes email', async () => {
-    const token = await Session.sign(privateKey, 'user-1', { email: 'alice@example.com' })
-    const result = await Session.verify(publicKey, token)
-    expect(result?.email).toMatchInlineSnapshot(`"alice@example.com"`)
-  })
-
-  test('includes wallet', async () => {
-    const wallet: Session.Wallet = {
-      credentialId: 'cred-1',
+  test('includes credential', async () => {
+    const credential: Session.Credential = {
+      id: 'cred-1',
       publicKey: 'pk-1',
-      label: 'My Passkey',
     }
-    const token = await Session.sign(privateKey, 'user-1', { wallet })
+    const token = await Session.sign(privateKey, 'user-1', { credential })
     const result = await Session.verify(publicKey, token)
-    expect(result?.wallet).toMatchInlineSnapshot(`
+    expect(result?.credential).toMatchInlineSnapshot(`
       {
-        "credentialId": "cred-1",
-        "label": "My Passkey",
+        "id": "cred-1",
         "publicKey": "pk-1",
       }
     `)
@@ -127,7 +119,7 @@ describe('set + fromRequest', () => {
   test('fromRequest reads session cookie back', async () => {
     const app = new Hono()
     app.get('/set', async (c) => {
-      await Session.set(c, privateKey, 'user-1', { email: 'a@b.com' })
+      await Session.set(c, privateKey, 'user-1')
       return c.text('ok')
     })
     app.get('/get', async (c) => {
@@ -142,9 +134,8 @@ describe('set + fromRequest', () => {
     const getRes = await app.request('http://localhost:3000/get', {
       headers: { cookie: `session=${tokenMatch[1]}` },
     })
-    const session = (await getRes.json()) as Session.DecodedPayload
-    expect(session.sub).toMatchInlineSnapshot(`"user-1"`)
-    expect(session.email).toMatchInlineSnapshot(`"a@b.com"`)
+    const session = (await getRes.json()) as Session.Session
+    expect(session.address).toMatchInlineSnapshot(`"user-1"`)
   })
 
   test('fromRequest returns null without cookies', async () => {

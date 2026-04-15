@@ -38,11 +38,9 @@ export const webauthn = new Hono<{ Bindings: Env }>().all('/*', (c) => {
       })
 
       return res(hostname, session.sub, {
-        email: session.email ?? undefined,
-        wallet: {
-          credentialId: wallet.credentialId,
+        credential: {
+          id: wallet.credentialId,
           publicKey: wallet.publicKeyHex,
-          label: wallet.label,
         },
         body: { wallet: { id: wallet.id, address: wallet.address } },
       })
@@ -53,14 +51,10 @@ export const webauthn = new Hono<{ Bindings: Env }>().all('/*', (c) => {
       const wallet = await Wallet.getByCredentialId(db, credentialId)
       if (!wallet) return undefined as never
 
-      const email = await User.getEmail(db, wallet.userId)
-
       return res(hostname, wallet.userId, {
-        email,
-        wallet: {
-          credentialId: wallet.credentialId,
+        credential: {
+          id: wallet.credentialId,
           publicKey: wallet.publicKeyHex,
-          label: wallet.label,
         },
         body: { wallet: { id: wallet.id, address: wallet.address } },
       })
@@ -73,13 +67,12 @@ export const webauthn = new Hono<{ Bindings: Env }>().all('/*', (c) => {
 async function res(
   hostname: string,
   userId: string,
-  options: { email?: string | undefined; wallet: Session.Wallet; body: unknown },
+  options: { credential: Session.Credential; body: unknown },
 ) {
   const headers = new Headers({ 'content-type': 'application/json' })
   for (const cookie of await Session.cookies(process.env.SESSION_PRIVATE_KEY!, userId, hostname, {
-    email: options.email,
     embed: true,
-    wallet: options.wallet,
+    credential: options.credential,
   }))
     headers.append('set-cookie', cookie)
   return new Response(JSON.stringify(options.body), { headers })
