@@ -13,9 +13,8 @@ export function SignIn(props: SignIn.Props) {
       className="flex flex-1 flex-col"
       onSubmit={(e) => {
         e.preventDefault()
-        const email = new FormData(e.currentTarget).get('email') as string
-        if (email) onSubmit?.(email)
-        else onPasskey?.()
+        const label = new FormData(e.currentTarget).get('label') as string
+        onSubmit?.(label)
       }}
     >
       <Frame>
@@ -35,7 +34,7 @@ export function SignIn(props: SignIn.Props) {
         />
         <Frame.Footer>
           <div className="flex flex-col gap-4">
-            <Input name="email" placeholder="Email address…" type="email" />
+            <Input name="label" placeholder="Email address or label…" required />
             {error && <p className="text-label-13 text-red-9">{error}</p>}
             <Button loading={registerLoading} type="submit" variant="primary">
               Create account
