@@ -854,6 +854,26 @@ function WalletGetBalances() {
   )
 }
 
+const periodOptions = [
+  { label: 'None', value: '' },
+  { label: '10 seconds', value: '10' },
+  { label: '1 minute', value: '300' },
+  { label: '1 hour', value: '3600' },
+  { label: '1 day', value: '86400' },
+  { label: '1 month', value: '2592000' },
+  { label: '1 year', value: '31536000' },
+] as const
+
+const scopePresets = [
+  { label: 'None', value: '' },
+  { label: 'transfer(address,uint256)', value: 'transfer(address,uint256)' },
+  { label: 'approve(address,uint256)', value: 'approve(address,uint256)' },
+  {
+    label: 'transferFrom(address,address,uint256)',
+    value: 'transferFrom(address,address,uint256)',
+  },
+] as const
+
 function WalletAuthorizeAccessKey() {
   const [result, error, execute] = useRequest()
   return (
@@ -865,13 +885,21 @@ function WalletAuthorizeAccessKey() {
           const expiry = (form.get('expiry') as string) || '3600'
           const limitToken = form.get('limitToken') as string
           const limitAmount = (form.get('limitAmount') as string) || '100'
+          const period = form.get('period') as string
+          const scopeSelector = form.get('scopeSelector') as string
 
           const params: Record<string, unknown> = {}
           if (expiry) params.expiry = Math.floor(Date.now() / 1000) + Number(expiry)
           if (limitToken && limitAmount)
             params.limits = [
-              { token: limitToken, limit: Hex.fromNumber(parseUnits(limitAmount, 6)) },
+              {
+                token: limitToken,
+                limit: Hex.fromNumber(parseUnits(limitAmount, 6)),
+                ...(period ? { period: Number(period) } : {}),
+              },
             ]
+          if (scopeSelector && limitToken)
+            params.scopes = [{ address: limitToken, selector: scopeSelector }]
 
           execute(() =>
             provider.request({
@@ -899,6 +927,26 @@ function WalletAuthorizeAccessKey() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Limit Amount</label>
           <input name="limitAmount" placeholder="100" style={{ flex: 1 }} />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Period</label>
+          <select name="period" style={{ flex: 1 }}>
+            {periodOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Scope</label>
+          <select name="scopeSelector" style={{ flex: 1 }}>
+            {scopePresets.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
         <button type="submit">Authorize</button>
       </form>
