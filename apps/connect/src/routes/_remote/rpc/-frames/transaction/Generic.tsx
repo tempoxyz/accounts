@@ -1,9 +1,9 @@
 import { Amount } from '#/ui/Amount.js'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
+import { Row, Rows } from '#/ui/Rows.js'
 import type { Capabilities } from 'viem/tempo'
 import AlertTriangle from '~icons/lucide/alert-triangle'
-import ArrowUpRight from '~icons/lucide/arrow-up-right'
 import Copy from '~icons/lucide/copy'
 import Info from '~icons/lucide/info'
 
@@ -31,20 +31,20 @@ export function Generic(props: Generic.Props) {
 
   return (
     <Frame>
-      <Frame.Header icon={<ArrowUpRight className="size-5" />} title="Review Transaction" />
+      <Frame.Header title="Review Transaction" />
       <Frame.Body>
         {balanceDiffs && balanceDiffs.length > 0 && (
-          <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
+          <Rows>
             {balanceDiffs.map((diff, i) => (
               <BalanceDiffRow diff={diff} key={i} />
             ))}
-          </div>
+          </Rows>
         )}
 
         {fee && (
-          <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
+          <Rows>
             <FeeRow fee={fee} sponsored={!!sponsor} />
-          </div>
+          </Rows>
         )}
 
         {autoSwap && (
@@ -166,15 +166,15 @@ export declare namespace Generic {
 function ReviewSkeleton() {
   return (
     <Frame>
-      <Frame.Header icon={<ArrowUpRight className="size-5" />} title="Review Transaction" />
+      <Frame.Header title="Review Transaction" />
       <Frame.Body>
-        <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
+        <Rows>
           <SkeletonRow />
           <SkeletonRow />
-        </div>
-        <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
+        </Rows>
+        <Rows>
           <SkeletonRow />
-        </div>
+        </Rows>
       </Frame.Body>
       <Frame.Footer>
         <Frame.ActionButtons disabled passkey primaryLabel="Confirm" secondaryLabel="Reject" />
@@ -185,10 +185,9 @@ function ReviewSkeleton() {
 
 function SkeletonRow() {
   return (
-    <div className="flex items-center justify-between px-4 py-3">
-      <div className="h-4 w-24 animate-pulse rounded bg-gray-3" />
+    <Row label={<div className="h-4 w-24 animate-pulse rounded bg-gray-3" />}>
       <div className="h-4 w-16 animate-pulse rounded bg-gray-3" />
-    </div>
+    </Row>
   )
 }
 
@@ -202,18 +201,21 @@ function FeeRow(props: {
 }) {
   const { fee, sponsored } = props
 
+  const label = (
+    <span className="flex items-center gap-2">
+      Fee
+      {sponsored && (
+        <span className="rounded-full bg-green-2 px-2 py-0.5 text-label-12 text-green-9">
+          Sponsored
+        </span>
+      )}
+    </span>
+  )
+
   return (
-    <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
-      <div className="flex items-center gap-2">
-        <p className="text-foreground-secondary">Fee</p>
-        {sponsored && (
-          <span className="rounded-full bg-green-2 px-2 py-0.5 text-label-12 text-green-9">
-            Sponsored
-          </span>
-        )}
-      </div>
+    <Row label={label}>
       <Amount align="right" amount={fee} strikethrough={sponsored} />
-    </div>
+    </Row>
   )
 }
 
@@ -221,33 +223,36 @@ function BalanceDiffRow(props: { diff: Capabilities.BalanceDiff }) {
   const { diff } = props
   const sign = diff.direction === 'outgoing' ? '−' : '+'
 
-  const label = `${diff.direction === 'outgoing' ? 'Send' : 'Receive'} ${diff.symbol}`
+  const title = `${diff.direction === 'outgoing' ? 'Send' : 'Receive'} ${diff.symbol}`
   const addressLabel = diff.direction === 'outgoing' ? 'to' : 'from'
   const recipient = diff.recipients[0]
 
+  const label = (
+    <span className="flex flex-col">
+      <span className="text-label-14 text-foreground">{title}</span>
+      {recipient && (
+        <span className="flex items-center gap-1 text-[0.6875rem] text-foreground-secondary">
+          <span>{addressLabel} </span>
+          <span className="font-mono">{truncateAddress(recipient)}</span>
+          <button
+            className="cursor-pointer opacity-40 transition-opacity hover:opacity-100"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigator.clipboard.writeText(recipient)
+            }}
+            type="button"
+          >
+            <Copy className="size-2.5" />
+          </button>
+        </span>
+      )}
+    </span>
+  )
+
   return (
-    <div className="flex items-center justify-between px-4 py-2.5">
-      <div className="flex flex-col">
-        <p className="text-label-14">{label}</p>
-        {recipient && (
-          <p className="flex items-center gap-1 text-[0.6875rem] text-foreground-secondary">
-            <span>{addressLabel} </span>
-            <span className="font-mono">{truncateAddress(recipient)}</span>
-            <button
-              className="cursor-pointer opacity-40 transition-opacity hover:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation()
-                navigator.clipboard.writeText(recipient)
-              }}
-              type="button"
-            >
-              <Copy className="size-2.5" />
-            </button>
-          </p>
-        )}
-      </div>
+    <Row height={56} label={label}>
       <Amount align="right" amount={diff} className="text-copy-14" sign={sign} />
-    </div>
+    </Row>
   )
 }
 

@@ -1,7 +1,7 @@
 // TODO: prototype frame — requires rewrite before wiring to real data/hooks
 
 import { Frame } from '#/ui/Frame.js'
-import Terminal from '~icons/lucide/terminal'
+import { Row, Rows } from '#/ui/Rows.js'
 
 /** CLI authorization screen — confirm device code and approve spending scopes. */
 export function AuthorizeCli(props: AuthorizeCli.Props) {
@@ -10,7 +10,6 @@ export function AuthorizeCli(props: AuthorizeCli.Props) {
   return (
     <Frame>
       <Frame.Header
-        icon={<Terminal className="size-5" />}
         subtitle={
           host ? (
             <>
@@ -23,26 +22,25 @@ export function AuthorizeCli(props: AuthorizeCli.Props) {
         title="Authorize CLI"
       />
       <Frame.Body>
-        <div className="flex flex-col gap-3 rounded-body bg-gray-1 px-4 py-5 text-center">
+        <div className="flex flex-col gap-3 rounded-body bg-pane px-4 py-5 text-center">
           <p className="text-label-12 text-foreground-secondary">
             Confirm this code matches your terminal
           </p>
           <p className="font-mono text-heading-32 tracking-[0.3em]">{code}</p>
         </div>
         {scopes && scopes.length > 0 && (
-          <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
+          <Rows>
             {scopes.map((scope, i) => (
-              <div key={i} className="flex items-center justify-between px-3.5 py-2 text-label-13">
-                <p className="text-foreground-secondary">{scope.label}</p>
+              <Row key={i} label={scope.label}>
                 <p className="flex items-center gap-1.5 font-medium">
                   {scope.value}
                   {scope.suffix && (
                     <span className="font-normal text-foreground-secondary"> {scope.suffix}</span>
                   )}
                 </p>
-              </div>
+              </Row>
             ))}
-          </div>
+          </Rows>
         )}
       </Frame.Body>
       <Frame.Footer>

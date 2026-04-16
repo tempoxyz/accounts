@@ -2,9 +2,9 @@ import * as Currency from '#/lib/currency.js'
 import { Amount } from '#/ui/Amount.js'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
+import { Row, Rows } from '#/ui/Rows.js'
 import type { Capabilities } from 'viem/tempo'
 import AlertTriangle from '~icons/lucide/alert-triangle'
-import ArrowUpRight from '~icons/lucide/arrow-up-right'
 import Copy from '~icons/lucide/copy'
 import Info from '~icons/lucide/info'
 
@@ -43,7 +43,6 @@ export function Payment(props: Payment.Props) {
   return (
     <Frame>
       <Frame.Header
-        icon={<ArrowUpRight className="size-5" />}
         subtitle={
           host ? (
             <>
@@ -56,7 +55,7 @@ export function Payment(props: Payment.Props) {
         title="Payment Request"
       />
       <Frame.Body>
-        <div className="flex flex-col items-center gap-1 rounded-body bg-gray-1 px-4 py-5 text-center">
+        <div className="flex flex-col items-center gap-1 rounded-body bg-pane px-4 py-5 text-center">
           {token && <Amount align="center" amount={token} size="lg" />}
           {recipient && fullRecipient && (
             <p className="flex items-center gap-1 font-mono text-label-13 text-foreground-secondary">
@@ -72,15 +71,10 @@ export function Payment(props: Payment.Props) {
           )}
         </div>
 
-        <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
-          {first?.symbol && (
-            <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
-              <p className="text-foreground-secondary">Currency</p>
-              <p>{first.symbol}</p>
-            </div>
-          )}
+        <Rows>
+          {first?.symbol && <Row label="Currency">{first.symbol}</Row>}
           {fee && <FeeRow fee={fee} sponsored={!!sponsor} />}
-        </div>
+        </Rows>
 
         {autoSwap && (
           <div className="flex gap-2 rounded-body border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
@@ -151,7 +145,6 @@ function PaymentSkeleton(props: { host?: string | undefined }) {
   return (
     <Frame>
       <Frame.Header
-        icon={<ArrowUpRight className="size-5" />}
         subtitle={
           props.host ? (
             <>
@@ -164,20 +157,18 @@ function PaymentSkeleton(props: { host?: string | undefined }) {
         title="Payment Request"
       />
       <Frame.Body>
-        <div className="flex flex-col items-center gap-2 rounded-body bg-gray-1 px-4 py-5">
+        <div className="flex flex-col items-center gap-2 rounded-body bg-pane px-4 py-5">
           <div className="h-8 w-32 animate-pulse rounded bg-gray-3" />
           <div className="h-4 w-24 animate-pulse rounded bg-gray-3" />
         </div>
-        <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
-          <div className="flex items-center justify-between px-3.5 py-2">
-            <div className="h-4 w-16 animate-pulse rounded bg-gray-3" />
+        <Rows>
+          <Row label={<div className="h-4 w-16 animate-pulse rounded bg-gray-3" />}>
             <div className="h-4 w-12 animate-pulse rounded bg-gray-3" />
-          </div>
-          <div className="flex items-center justify-between px-3.5 py-2">
-            <div className="h-4 w-10 animate-pulse rounded bg-gray-3" />
+          </Row>
+          <Row label={<div className="h-4 w-10 animate-pulse rounded bg-gray-3" />}>
             <div className="h-4 w-14 animate-pulse rounded bg-gray-3" />
-          </div>
-        </div>
+          </Row>
+        </Rows>
       </Frame.Body>
       <Frame.Footer>
         <Frame.ActionButtons disabled passkey primaryLabel="Pay" secondaryLabel="Reject" />
@@ -189,18 +180,21 @@ function PaymentSkeleton(props: { host?: string | undefined }) {
 function FeeRow(props: FeeRow.Props) {
   const { fee, sponsored } = props
 
+  const label = (
+    <span className="flex items-center gap-2">
+      Fee
+      {sponsored && (
+        <span className="rounded-full bg-green-2 px-2 py-0.5 text-label-12 text-green-9">
+          Sponsored
+        </span>
+      )}
+    </span>
+  )
+
   return (
-    <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
-      <div className="flex items-center gap-2">
-        <p className="text-foreground-secondary">Fee</p>
-        {sponsored && (
-          <span className="rounded-full bg-green-2 px-2 py-0.5 text-label-12 text-green-9">
-            Sponsored
-          </span>
-        )}
-      </div>
+    <Row label={label}>
       <Amount align="right" amount={fee} strikethrough={sponsored} />
-    </div>
+    </Row>
   )
 }
 

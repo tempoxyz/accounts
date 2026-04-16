@@ -1,4 +1,5 @@
 import { Amount } from '#/ui/Amount.js'
+import { Row, Rows } from '#/ui/Rows.js'
 import type { Rpc } from 'accounts'
 import { Hex } from 'ox'
 import { formatUnits } from 'viem'
@@ -13,12 +14,12 @@ export function AccessKeyScopes(props: AccessKeyScopes.Props) {
   const limits = authorizeAccessKey.limits ?? []
 
   return (
-    <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
+    <Rows>
       {limits.map((limit, i) => (
         <LimitRow key={i} limit={limit} />
       ))}
       {authorizeAccessKey.expiry && <ExpiryRow expiry={authorizeAccessKey.expiry} />}
-    </div>
+    </Rows>
   )
 }
 
@@ -36,10 +37,9 @@ function LimitRow(props: LimitRow.Props) {
 
   if (metadata.isLoading)
     return (
-      <div className="flex h-10 items-center justify-between px-3.5 text-label-13">
-        <div className="h-4 w-24 animate-pulse rounded bg-gray-3" />
+      <Row label={<div className="h-4 w-24 animate-pulse rounded bg-gray-3" />}>
         <div className="h-4 w-16 animate-pulse rounded bg-gray-3" />
-      </div>
+      </Row>
     )
 
   const symbol = metadata.data?.symbol ?? `${limit.token.slice(0, 6)}…${limit.token.slice(-4)}`
@@ -48,15 +48,14 @@ function LimitRow(props: LimitRow.Props) {
   const token = { value: Hex.fromNumber(limit.limit), decimals, formatted, symbol }
 
   return (
-    <div className="flex h-10 items-center justify-between px-3.5 text-label-13">
-      <p className="text-foreground-secondary">Spend {symbol}</p>
+    <Row label={`Spend ${symbol}`}>
       <div className="flex items-center gap-1.5">
         <Amount align="right" className="pt-1" amount={token} />
         {limit.period && (
           <span className="text-foreground-secondary">/ {formatPeriod(limit.period)}</span>
         )}
       </div>
-    </div>
+    </Row>
   )
 }
 
@@ -72,12 +71,7 @@ function ExpiryRow(props: ExpiryRow.Props) {
   const now = Math.floor(Date.now() / 1000)
   const diff = props.expiry - now
 
-  return (
-    <div className="flex h-10 items-center justify-between px-3.5 text-label-13">
-      <p className="text-foreground-secondary">Expires in</p>
-      <p>{formatDuration(diff)}</p>
-    </div>
-  )
+  return <Row label="Expires in">{formatDuration(diff)}</Row>
 }
 
 declare namespace ExpiryRow {

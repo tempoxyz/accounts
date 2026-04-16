@@ -2,9 +2,9 @@
 
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
+import { Row, Rows } from '#/ui/Rows.js'
 import { Cuer } from 'cuer'
 import ChevronDown from '~icons/lucide/chevron-down'
-import CirclePlus from '~icons/lucide/circle-plus'
 import Copy from '~icons/lucide/copy'
 
 // TODO: finalize props once onramp flow is wired
@@ -16,7 +16,6 @@ export function AddFunds(props: AddFunds.Props) {
   return (
     <Frame>
       <Frame.Header
-        icon={<CirclePlus className="size-5" />}
         subtitle={
           subtitle ??
           (amount ? (
@@ -30,7 +29,7 @@ export function AddFunds(props: AddFunds.Props) {
         title={title}
       />
       <Frame.Body>
-        <div className="flex flex-col gap-3 rounded-body border border-border px-4 py-3.5">
+        <div className="flex flex-col gap-3 overflow-hidden rounded-body bg-pane px-4 py-3.5">
           <div className="flex items-center justify-between">
             <p className="text-label-13 text-foreground-secondary">Deposit address</p>
             {network && (
@@ -61,26 +60,24 @@ export function AddFunds(props: AddFunds.Props) {
           )}
         </div>
 
-        <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
+        <Rows>
           {network && (
-            <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
-              <p className="text-foreground-secondary">Network</p>
+            <Row label="Network">
               <p className="flex items-center gap-1.5">
                 {network}
                 <ChevronDown className="size-3.5 text-foreground-secondary" />
               </p>
-            </div>
+            </Row>
           )}
           {token && (
-            <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
-              <p className="text-foreground-secondary">Token</p>
+            <Row label="Token">
               <p className="flex items-center gap-1.5">
                 {token}
                 <ChevronDown className="size-3.5 text-foreground-secondary" />
               </p>
-            </div>
+            </Row>
           )}
-        </div>
+        </Rows>
 
         <div className="rounded-body border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
           ⚠ Only send {token ?? 'the correct token'} on {network ?? 'the correct network'}. Sending

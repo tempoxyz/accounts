@@ -6,6 +6,8 @@
 
   --bg-100: light-dark(#ffffff, #141414);
   --bg-200: light-dark(#fafafa, #000000);
+  --bg-pane: light-dark(var(--gray-1), var(--gray-2));
+  --border-pane: light-dark(oklch(91.3% 0 0), var(--gray-3));
 
   --gray-1: light-dark(oklch(96.19% 0 0), oklch(21.56% 0 0));
   --gray-2: light-dark(oklch(93.89% 0 0), oklch(23.76% 0 0));
@@ -141,6 +143,8 @@
   --background-color-secondary: var(--bg-200);
   --background-color-mute: var(--gray-2);
   --background-color-mute-hover: var(--gray-3);
+  --background-color-pane: var(--bg-pane);
+  --color-border-pane: var(--border-pane);
 
   --color-gray-1: var(--gray-1);
   --color-gray-2: var(--gray-2);
