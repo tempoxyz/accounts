@@ -241,10 +241,8 @@ function ConnectNewUserAuthorizeLazyFlow() {
 
       <Card label="Authorize App">
         <AuthorizeFrames.AuthorizeSpend
-          address="0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9e8f"
+          authorizeAccessKey={mockAuthorize}
           host="example.com"
-          label="john@example.com"
-          scopes={mockScopes}
         />
       </Card>
     </>
@@ -293,7 +291,7 @@ function ConnectReturningEmailAuthorizeFlow() {
       <Arrow />
 
       <Card label="Authorize">
-        <AuthorizeFrames.AuthorizeSpend host="example.com" scopes={mockScopes} />
+        <AuthorizeFrames.AuthorizeSpend authorizeAccessKey={mockAuthorize} host="example.com" />
       </Card>
     </>
   )
@@ -328,12 +326,6 @@ const mockAuthorize = {
     },
   ],
 }
-
-const mockScopes: AuthorizeFrames.AuthorizeSpend.Scope[] = [
-  { label: 'Spend USDC.e', suffix: '/ hour', value: '$100.00' },
-  { label: 'Spend USDC', suffix: '/ hour', value: '$50.00' },
-  { label: 'Expires', value: '24 hours' },
-]
 
 const mockBalanceDiffs: TransactionFrames.Generic.Props['balanceDiffs'] = [
   {
@@ -568,10 +560,8 @@ function AuthorizeMobileFlow() {
     <>
       <Card label="Review">
         <AuthorizeFrames.AuthorizeSpend
-          address="0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9e8f"
+          authorizeAccessKey={mockAuthorize}
           host="DoorDash"
-          label="john@example.com"
-          scopes={mockScopes}
         />
       </Card>
 
@@ -579,11 +569,9 @@ function AuthorizeMobileFlow() {
 
       <Card label="Confirming">
         <AuthorizeFrames.AuthorizeSpend
-          address="0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9e8f"
+          authorizeAccessKey={mockAuthorize}
           confirming
           host="DoorDash"
-          label="john@example.com"
-          scopes={mockScopes}
         />
       </Card>
     </>

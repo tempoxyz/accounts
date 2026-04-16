@@ -187,7 +187,7 @@ function WalletConnect() {
     const accessKey = form.get('accessKey') as string | null
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
 
-    const limitToken = 'USDC.e' in tokens ? tokens['USDC.e'] : tokens.pathUSD
+    const limitToken = env === 'mainnet' && 'USDC.e' in tokens ? tokens['USDC.e'] : tokens.pathUSD
     const authorizeAccessKey = (() => {
       if (accessKey === '100-forever')
         return {

@@ -15,6 +15,7 @@ export const wagmiConfig = createConfig({
     webAuthn({
       authUrl: '/api/webauthn',
       persistCredentials: false,
+      maxAccounts: 5,
       storage: Storage.combine(Storage.cookie(), Storage.localStorage()),
     }),
   ],

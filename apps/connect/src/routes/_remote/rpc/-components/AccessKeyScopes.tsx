@@ -36,7 +36,7 @@ function LimitRow(props: LimitRow.Props) {
 
   if (metadata.isLoading)
     return (
-      <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
+      <div className="flex h-10 items-center justify-between px-3.5 text-label-13">
         <div className="h-4 w-24 animate-pulse rounded bg-gray-3" />
         <div className="h-4 w-16 animate-pulse rounded bg-gray-3" />
       </div>
@@ -48,7 +48,7 @@ function LimitRow(props: LimitRow.Props) {
   const token = { value: Hex.fromNumber(limit.limit), decimals, formatted, symbol }
 
   return (
-    <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
+    <div className="flex h-10 items-center justify-between px-3.5 text-label-13">
       <p className="text-foreground-secondary">Spend {symbol}</p>
       <div className="flex items-center gap-1.5">
         <Amount align="right" amount={token} />
@@ -73,7 +73,7 @@ function ExpiryRow(props: ExpiryRow.Props) {
   const diff = props.expiry - now
 
   return (
-    <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
+    <div className="flex h-10 items-center justify-between px-3.5 text-label-13">
       <p className="text-foreground-secondary">Expires in</p>
       <p>{formatDuration(diff)}</p>
     </div>

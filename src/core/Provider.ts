@@ -50,6 +50,7 @@ export function create(options: create.Options = {}): create.ReturnType {
   const {
     adapter = dialog(),
     chains = [tempo, tempoModerato, tempoDevnet],
+    maxAccounts,
     persistCredentials,
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
@@ -71,6 +72,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const store = Store.create({
     chainId: defaultChain.id,
+    maxAccounts,
     persistCredentials,
     storage,
   })
@@ -686,6 +688,8 @@ export declare namespace create {
     chains?: readonly [Chain, ...Chain[]] | undefined
     /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */
     feePayer?: Client.fromChainId.Options['feePayer']
+    /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
+    maxAccounts?: number | undefined
     /** Enable Machine Payment Protocol (mppx) support. @default false */
     mpp?: boolean | undefined
     /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */

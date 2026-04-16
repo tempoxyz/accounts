@@ -5,8 +5,8 @@ import {
 import { Frame } from '#/ui/Frame.js'
 import Shield from '~icons/lucide/shield-check'
 
-/** Authorize access key — displays spend scopes and approve/reject actions. */
-export function AuthorizeSpend(props: AuthorizeSpend.Props) {
+/** Authorize screen shown after sign-in or account creation. */
+export function SignInAuthorize(props: SignInAuthorize.Props) {
   const { authorizeAccessKey, confirming, error, host, onApprove, onReject } = props
 
   return (
@@ -16,13 +16,14 @@ export function AuthorizeSpend(props: AuthorizeSpend.Props) {
         subtitle={
           host ? (
             <>
-              <span className="text-foreground">{host}</span> is requesting to access your account.
+              <span className="text-foreground">{host}</span> will be authorized to spend from your
+              account.
             </>
           ) : (
-            'An app is requesting to access your account.'
+            'This app will be authorized to spend from your account.'
           )
         }
-        title="Authorize App"
+        title="Authorize Spend"
       />
       <Frame.Body>
         <AccessKeyScopes authorizeAccessKey={authorizeAccessKey} />
@@ -42,7 +43,7 @@ export function AuthorizeSpend(props: AuthorizeSpend.Props) {
   )
 }
 
-export declare namespace AuthorizeSpend {
+export declare namespace SignInAuthorize {
   type Props = {
     /** Access key authorization params. */
     authorizeAccessKey: AuthorizeAccessKey
