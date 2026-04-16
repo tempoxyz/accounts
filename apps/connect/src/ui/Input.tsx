@@ -65,7 +65,7 @@ export namespace Input {
     variants: {
       size: {
         small: 'h-8 text-copy-14 gap-2.5 px-2.5',
-        medium: 'h-[38px] text-copy-14 gap-2.5 px-3',
+        medium: 'h-10 text-copy-14 gap-2.5 px-3',
         large: 'h-11 text-copy-16 gap-3 px-3.5',
       },
     },
