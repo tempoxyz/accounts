@@ -4,13 +4,13 @@ import { webAuthn } from 'accounts/wagmi'
 import { http } from 'viem'
 import type { Capabilities } from 'viem/tempo'
 import { createConfig } from 'wagmi'
-import { tempo, tempoModerato } from 'wagmi/chains'
+import { tempo, tempoDevnet, tempoModerato } from 'wagmi/chains'
 
 import * as Messenger from './messenger.js'
 
 /** Provider instance for executing confirmed requests. */
 export const wagmiConfig = createConfig({
-  chains: [tempo, tempoModerato],
+  chains: [tempo, tempoDevnet, tempoModerato],
   connectors: [
     webAuthn({
       authUrl: '/api/webauthn',
@@ -20,6 +20,7 @@ export const wagmiConfig = createConfig({
   multiInjectedProviderDiscovery: false,
   transports: {
     [tempo.id]: http(`/api/relay/${tempo.id}`),
+    [tempoDevnet.id]: http(`/api/relay/${tempoDevnet.id}`),
     [tempoModerato.id]: http(`/api/relay/${tempoModerato.id}`),
   },
 })
