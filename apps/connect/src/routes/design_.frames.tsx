@@ -224,7 +224,7 @@ function Card(props: { children: ReactNode; label?: string | undefined }) {
   return (
     <div className="flex flex-col gap-2">
       {label && <p className="text-label-12 text-foreground-secondary">{label}</p>}
-      <div className="w-[360px] rounded-lg border border-border bg-primary">{children}</div>
+      <div className="w-[360px] rounded-[28px] border border-border bg-primary">{children}</div>
     </div>
   )
 }
@@ -312,13 +312,8 @@ const mockAuthorize = {
   expiry: Math.floor(Date.now() / 1000) + 86400,
   limits: [
     {
-      token: '0x20c0000000000000000000009e8d7eb59b783726' as `0x${string}`,
-      limit: 100_000_000n,
-      period: 3600,
-    },
-    {
       token: '0x20c0000000000000000000000000000000000000' as `0x${string}`,
-      limit: 50_000_000n,
+      limit: 100_000_000n,
       period: 3600,
     },
   ],
