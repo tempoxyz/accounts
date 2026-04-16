@@ -26,7 +26,7 @@
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
     "typescript": "~5.9.3",
-    "vite-plus": "latest",
+    "vp": "catalog:",
     "wrangler": "^4.82.2"
   }
 }

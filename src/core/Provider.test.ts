@@ -657,14 +657,6 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       	      "status": "supported",
       	    },
       	  },
-      	  "0x7a56": {
-      	    "accessKeys": {
-      	      "status": "supported",
-      	    },
-      	    "atomic": {
-      	      "status": "supported",
-      	    },
-      	  },
       	  "0xa5bf": {
       	    "accessKeys": {
       	      "status": "supported",
@@ -732,7 +724,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         method: 'wallet_getCapabilities',
         params: [connected],
       })
-      expect(Object.keys(result).length).toMatchInlineSnapshot(`3`)
+      expect(Object.keys(result).length).toMatchInlineSnapshot(`2`)
       expect(result[Hex.fromNumber(tempo.id)]!.atomic.status).toMatchInlineSnapshot(`"supported"`)
     })
 

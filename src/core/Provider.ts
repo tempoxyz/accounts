@@ -3,7 +3,7 @@ import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import type { Chain, Client as ViemClient, Transport } from 'viem'
-import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
+import { tempo, tempoModerato } from 'viem/chains'
 import { Actions } from 'viem/tempo'
 import * as z from 'zod/mini'
 
@@ -681,7 +681,7 @@ export declare namespace create {
     authorizeAccessKey?: (() => Adapter.authorizeAccessKey.Parameters) | undefined
     /**
      * Supported chains. First chain is the default.
-     * @default [tempo, tempoModerato, tempoDevnet]
+     * @default [tempo, tempoModerato]
      */
     chains?: readonly [Chain, ...Chain[]] | undefined
     /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */

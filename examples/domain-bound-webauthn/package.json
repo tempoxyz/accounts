@@ -27,7 +27,7 @@
     "@vitejs/plugin-react": "latest",
     "typescript": "~5.9.3",
     "vite-plugin-mkcert": "^1.17.12",
-    "vite-plus": "latest",
+    "vp": "catalog:",
     "wrangler": "^4.82.2"
   }
 }

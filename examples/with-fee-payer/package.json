@@ -27,7 +27,7 @@
     "@vitejs/plugin-react": "latest",
     "typescript": "~5.9.3",
     "vite-plugin-cloudflare-tunnel": "^1.0.12",
-    "vite-plus": "latest",
+    "vp": "catalog:",
     "wrangler": "^4.82.2"
   }
 }
