@@ -229,12 +229,25 @@ function Card(props: { children: ReactNode; label?: string | undefined }) {
   )
 }
 
-/** New user + authorize: Sign In (create account triggers passkey + authorize). */
+/** New user + authorize: Sign In → Authorize. */
 function ConnectNewUserAuthorizeLazyFlow() {
   return (
-    <Card label="Sign In">
-      <ConnectFrames.SignIn host="example.com" />
-    </Card>
+    <>
+      <Card label="Sign In">
+        <ConnectFrames.SignIn host="example.com" />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Authorize App">
+        <AuthorizeFrames.AuthorizeSpend
+          address="0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9e8f"
+          host="example.com"
+          label="john@example.com"
+          scopes={mockScopes}
+        />
+      </Card>
+    </>
   )
 }
 
@@ -280,12 +293,7 @@ function ConnectReturningEmailAuthorizeFlow() {
       <Arrow />
 
       <Card label="Authorize">
-        <AuthorizeFrames.AuthorizeSpend
-          address="0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9e8f"
-          host="example.com"
-          label="john@example.com"
-          scopes={mockScopes}
-        />
+        <AuthorizeFrames.AuthorizeSpend host="example.com" scopes={mockScopes} />
       </Card>
     </>
   )

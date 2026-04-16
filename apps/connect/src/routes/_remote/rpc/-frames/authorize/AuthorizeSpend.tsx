@@ -36,17 +36,19 @@ export function AuthorizeSpend(props: AuthorizeSpend.Props) {
         title="Authorize App"
       />
       <Frame.Body>
-        <button
-          className="flex h-[38px] w-full cursor-pointer items-center gap-3 rounded-lg bg-mute px-3 transition-colors hover:bg-mute-hover"
-          onClick={onSwitchAccount}
-          type="button"
-        >
-          {address && (
-            <Identicon address={address} className="size-6 shrink-0 rounded-full" size={24} />
-          )}
-          <p className="min-w-0 flex-1 truncate text-left text-label-13">{label}</p>
-          <ChevronRight className="size-4 shrink-0 text-foreground-secondary" />
-        </button>
+        {(address || label) && (
+          <button
+            className="flex h-[38px] w-full cursor-pointer items-center gap-3 rounded-lg bg-mute px-3 transition-colors hover:bg-mute-hover"
+            onClick={onSwitchAccount}
+            type="button"
+          >
+            {address && (
+              <Identicon address={address} className="size-6 shrink-0 rounded-full" size={24} />
+            )}
+            <p className="min-w-0 flex-1 truncate text-left text-label-13">{label}</p>
+            <ChevronRight className="size-4 shrink-0 text-foreground-secondary" />
+          </button>
+        )}
         {scopes && scopes.length > 0 && (
           <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
             {scopes.map((scope, i) => (
