@@ -20,7 +20,9 @@ export function formatFillTransactionRequest(client: Client, value: Record<strin
   return format({ ...value } as never, 'fillTransaction') as Record<string, unknown>
 }
 
-export function normalizeFillTransactionRequest(tx: Record<string, unknown>) {
+export function normalizeFillTransactionRequest(
+  tx: Record<string, unknown>,
+): Record<string, unknown> & { calls: unknown[] } {
   const { to, data, value, ...rest } = tx
   if (Array.isArray(tx.calls) && tx.calls.length > 0)
     return {
