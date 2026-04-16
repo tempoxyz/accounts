@@ -49,7 +49,7 @@ const announced = new Set<string>()
 export function create(options: create.Options = {}): create.ReturnType {
   const {
     adapter = dialog(),
-    chains = [tempo, tempoModerato, tempoDevnet],
+    chains = [tempo, tempoModerato],
     persistCredentials,
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
