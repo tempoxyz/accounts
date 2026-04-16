@@ -54,7 +54,7 @@ export function WelcomeBack(props: WelcomeBack.Props) {
         <Frame.Footer>
           <div className="flex flex-col gap-4">
             <button
-              className="flex h-[38px] w-full cursor-pointer items-center gap-3 rounded-lg bg-mute px-3 transition-colors hover:bg-mute-hover"
+              className="flex h-[42px] w-full cursor-pointer items-center gap-3 rounded-body bg-mute px-3 transition-colors hover:bg-mute-hover"
               onClick={onSignIn}
               type="button"
             >

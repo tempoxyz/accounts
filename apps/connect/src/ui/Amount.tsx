@@ -81,7 +81,7 @@ const rootClassName = cva({
   variants: {
     size: {
       sm: '-mr-1.5 rounded-md px-1.5 py-0.5 hover:bg-gray-1',
-      lg: 'rounded-lg px-3 py-1 text-heading-32 hover:bg-gray-2',
+      lg: 'rounded-body px-3 py-1 text-heading-32 hover:bg-gray-2',
     },
   },
 })

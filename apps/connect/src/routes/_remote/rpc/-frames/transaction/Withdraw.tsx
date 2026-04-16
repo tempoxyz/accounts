@@ -29,7 +29,7 @@ export function Withdraw(props: Withdraw.Props) {
           {destinations.map((dest) => (
             <button
               key={dest.label}
-              className="flex h-[38px] cursor-pointer items-center gap-2.5 rounded-lg bg-gray-2 px-3 text-label-13 transition-colors hover:bg-gray-3"
+              className="flex h-[38px] cursor-pointer items-center gap-2.5 rounded-body bg-gray-2 px-3 text-label-13 transition-colors hover:bg-gray-3"
               onClick={() => onDestination?.(dest.label)}
               type="button"
             >

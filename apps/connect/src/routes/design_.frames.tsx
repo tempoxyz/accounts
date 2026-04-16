@@ -49,7 +49,7 @@ function Wireframes() {
     <div className="fixed inset-0 bg-gray-1">
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
         <button
-          className="flex size-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-primary text-foreground-secondary transition-colors hover:bg-gray-2 hover:text-foreground"
+          className="flex size-8 cursor-pointer items-center justify-center rounded-body border border-border bg-primary text-foreground-secondary transition-colors hover:bg-gray-2 hover:text-foreground"
           onClick={() => panzoomRef.current?.reset()}
           type="button"
         >
@@ -224,7 +224,7 @@ function Card(props: { children: ReactNode; label?: string | undefined }) {
   return (
     <div className="flex flex-col gap-2">
       {label && <p className="text-label-12 text-foreground-secondary">{label}</p>}
-      <div className="w-[360px] rounded-[28px] border border-border bg-primary">{children}</div>
+      <div className="w-[360px] rounded-frame border border-border bg-primary">{children}</div>
     </div>
   )
 }

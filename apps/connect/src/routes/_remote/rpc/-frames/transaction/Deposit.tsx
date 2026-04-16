@@ -56,7 +56,7 @@ export function Deposit(props: Deposit.Props) {
         )}
 
         <button
-          className="flex h-[38px] w-full cursor-pointer items-center justify-center rounded-lg bg-invert text-invert-foreground transition-opacity hover:opacity-80"
+          className="flex h-[38px] w-full cursor-pointer items-center justify-center rounded-body bg-invert text-invert-foreground transition-opacity hover:opacity-80"
           onClick={onApplePay}
           type="button"
         >
@@ -70,7 +70,7 @@ export function Deposit(props: Deposit.Props) {
         </div>
 
         <button
-          className="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-border px-4 py-3 text-left transition-colors hover:bg-gray-1"
+          className="flex w-full cursor-pointer items-center gap-3 rounded-body border border-border px-4 py-3 text-left transition-colors hover:bg-gray-1"
           onClick={onCrypto}
           type="button"
         >

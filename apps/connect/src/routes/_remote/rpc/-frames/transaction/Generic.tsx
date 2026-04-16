@@ -34,7 +34,7 @@ export function Generic(props: Generic.Props) {
       <Frame.Header icon={<ArrowUpRight className="size-5" />} title="Review Transaction" />
       <Frame.Body>
         {balanceDiffs && balanceDiffs.length > 0 && (
-          <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+          <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
             {balanceDiffs.map((diff, i) => (
               <BalanceDiffRow diff={diff} key={i} />
             ))}
@@ -42,13 +42,13 @@ export function Generic(props: Generic.Props) {
         )}
 
         {fee && (
-          <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+          <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
             <FeeRow fee={fee} sponsored={!!sponsor} />
           </div>
         )}
 
         {autoSwap && (
-          <div className="flex gap-2 rounded-xl border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
+          <div className="flex gap-2 rounded-body border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
             <Info className="mt-px size-3.5 shrink-0" />
             <span>
               An exchange of {autoSwap.maxIn.symbol} for {autoSwap.minOut.symbol} will occur to
@@ -58,7 +58,7 @@ export function Generic(props: Generic.Props) {
         )}
 
         {insufficientBalance && (
-          <div className="flex gap-2 rounded-xl border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
+          <div className="flex gap-2 rounded-body border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
             <AlertTriangle className="mt-px size-3.5 shrink-0" />
             <span>
               {insufficientBalance === true
@@ -69,7 +69,7 @@ export function Generic(props: Generic.Props) {
         )}
 
         {error && !insufficientBalance && (
-          <div className="flex gap-2 rounded-xl border border-red-4 bg-red-1 px-3 py-2 text-label-12 text-red-9">
+          <div className="flex gap-2 rounded-body border border-red-4 bg-red-1 px-3 py-2 text-label-12 text-red-9">
             <AlertTriangle className="mt-px size-3.5 shrink-0" />
             <span>{error}</span>
           </div>
@@ -92,7 +92,7 @@ export function Generic(props: Generic.Props) {
           ) : (
             <div className="flex flex-col gap-3">
               <button
-                className="flex h-[38px] w-full cursor-pointer items-center justify-center rounded-lg bg-invert text-invert-foreground transition-opacity hover:opacity-80"
+                className="flex h-[38px] w-full cursor-pointer items-center justify-center rounded-body bg-invert text-invert-foreground transition-opacity hover:opacity-80"
                 onClick={onApplePay}
                 type="button"
               >
@@ -168,11 +168,11 @@ function ReviewSkeleton() {
     <Frame>
       <Frame.Header icon={<ArrowUpRight className="size-5" />} title="Review Transaction" />
       <Frame.Body>
-        <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+        <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
           <SkeletonRow />
           <SkeletonRow />
         </div>
-        <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+        <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
           <SkeletonRow />
         </div>
       </Frame.Body>

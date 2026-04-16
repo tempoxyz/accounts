@@ -13,7 +13,7 @@ export function AccessKeyScopes(props: AccessKeyScopes.Props) {
   const limits = authorizeAccessKey.limits ?? []
 
   return (
-    <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+    <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
       {limits.map((limit, i) => (
         <LimitRow key={i} limit={limit} />
       ))}

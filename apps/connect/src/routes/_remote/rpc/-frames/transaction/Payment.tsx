@@ -56,7 +56,7 @@ export function Payment(props: Payment.Props) {
         title="Payment Request"
       />
       <Frame.Body>
-        <div className="flex flex-col items-center gap-1 rounded-xl bg-gray-1 px-4 py-5 text-center">
+        <div className="flex flex-col items-center gap-1 rounded-body bg-gray-1 px-4 py-5 text-center">
           {token && <Amount align="center" amount={token} size="lg" />}
           {recipient && fullRecipient && (
             <p className="flex items-center gap-1 font-mono text-label-13 text-foreground-secondary">
@@ -72,7 +72,7 @@ export function Payment(props: Payment.Props) {
           )}
         </div>
 
-        <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+        <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
           {first?.symbol && (
             <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
               <p className="text-foreground-secondary">Currency</p>
@@ -83,7 +83,7 @@ export function Payment(props: Payment.Props) {
         </div>
 
         {autoSwap && (
-          <div className="flex gap-2 rounded-xl border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
+          <div className="flex gap-2 rounded-body border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
             <Info className="mt-px size-3.5 shrink-0" />
             <span>
               An exchange of {autoSwap.maxIn.symbol} for {autoSwap.minOut.symbol} will occur to
@@ -93,7 +93,7 @@ export function Payment(props: Payment.Props) {
         )}
 
         {insufficientBalance && (
-          <div className="flex gap-2 rounded-xl border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
+          <div className="flex gap-2 rounded-body border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
             <AlertTriangle className="mt-px size-3.5 shrink-0" />
             <span>
               {insufficientBalance === true
@@ -104,7 +104,7 @@ export function Payment(props: Payment.Props) {
         )}
 
         {error && !insufficientBalance && (
-          <div className="flex gap-2 rounded-xl border border-red-4 bg-red-1 px-3 py-2 text-label-12 text-red-9">
+          <div className="flex gap-2 rounded-body border border-red-4 bg-red-1 px-3 py-2 text-label-12 text-red-9">
             <AlertTriangle className="mt-px size-3.5 shrink-0" />
             <span>{error}</span>
           </div>
@@ -164,11 +164,11 @@ function PaymentSkeleton(props: { host?: string | undefined }) {
         title="Payment Request"
       />
       <Frame.Body>
-        <div className="flex flex-col items-center gap-2 rounded-xl bg-gray-1 px-4 py-5">
+        <div className="flex flex-col items-center gap-2 rounded-body bg-gray-1 px-4 py-5">
           <div className="h-8 w-32 animate-pulse rounded bg-gray-3" />
           <div className="h-4 w-24 animate-pulse rounded bg-gray-3" />
         </div>
-        <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+        <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
           <div className="flex items-center justify-between px-3.5 py-2">
             <div className="h-4 w-16 animate-pulse rounded bg-gray-3" />
             <div className="h-4 w-12 animate-pulse rounded bg-gray-3" />

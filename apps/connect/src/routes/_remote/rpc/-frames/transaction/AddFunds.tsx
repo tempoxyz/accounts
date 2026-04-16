@@ -30,7 +30,7 @@ export function AddFunds(props: AddFunds.Props) {
         title={title}
       />
       <Frame.Body>
-        <div className="flex flex-col gap-3 rounded-xl border border-border px-4 py-3.5">
+        <div className="flex flex-col gap-3 rounded-body border border-border px-4 py-3.5">
           <div className="flex items-center justify-between">
             <p className="text-label-13 text-foreground-secondary">Deposit address</p>
             {network && (
@@ -61,7 +61,7 @@ export function AddFunds(props: AddFunds.Props) {
           )}
         </div>
 
-        <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+        <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
           {network && (
             <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
               <p className="text-foreground-secondary">Network</p>
@@ -82,7 +82,7 @@ export function AddFunds(props: AddFunds.Props) {
           )}
         </div>
 
-        <div className="rounded-lg border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
+        <div className="rounded-body border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-9">
           ⚠ Only send {token ?? 'the correct token'} on {network ?? 'the correct network'}. Sending
           other tokens or using a different network may result in permanent loss.
         </div>

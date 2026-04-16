@@ -142,7 +142,7 @@ function Frame(props: { children: ReactNode; mode: Mode.Mode }) {
   if (mode !== 'standalone')
     return (
       <div
-        className="bg-primary text-foreground border border-border rounded-[28px] w-[360px] max-w-full flex flex-col max-dialog:w-full max-dialog:rounded-b-none max-dialog:border-b-0 max-dialog:max-h-[90dvh] max-dialog:overflow-y-auto animate-dialog-card"
+        className="bg-primary text-foreground border border-border rounded-frame w-[360px] max-w-full flex flex-col max-dialog:w-full max-dialog:rounded-b-none max-dialog:border-b-0 max-dialog:max-h-[90dvh] max-dialog:overflow-y-auto animate-dialog-card"
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -151,7 +151,7 @@ function Frame(props: { children: ReactNode; mode: Mode.Mode }) {
 
   // Standalone: bordered card, full-page on mobile.
   return (
-    <div className="bg-primary text-foreground border border-border rounded-[28px] w-[360px] max-w-full flex flex-col max-dialog:w-full max-dialog:flex-1 max-dialog:rounded-none max-dialog:border-0">
+    <div className="bg-primary text-foreground border border-border rounded-frame w-[360px] max-w-full flex flex-col max-dialog:w-full max-dialog:flex-1 max-dialog:rounded-none max-dialog:border-0">
       {children}
     </div>
   )

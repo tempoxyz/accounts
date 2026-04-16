@@ -70,9 +70,9 @@ export namespace Button {
         warning: ['bg-amber-7 text-black border-transparent', 'hover:bg-amber-8'],
       },
       size: {
-        small: 'h-8 text-button-12 gap-1.5 rounded-md px-3',
-        medium: 'h-[38px] text-button-14 gap-2 rounded-lg px-4',
-        large: 'h-11 text-button-16 gap-2 rounded-[0.625rem] px-5.5',
+        small: 'h-8 text-button-12 gap-1.5 rounded-body px-3',
+        medium: 'h-10 text-button-14 gap-2 rounded-body px-4',
+        large: 'h-11 text-button-16 gap-2 rounded-body px-5.5',
       },
       shape: {
         default: '',

@@ -304,7 +304,7 @@ function Design() {
 
             <div>
               <p className="text-heading-16 mb-3">Alignment</p>
-              <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
+              <div className="flex flex-col gap-2 rounded-body border border-border p-3">
                 {(['left', 'center', 'right'] as const).map((align) => (
                   <div className="flex items-center gap-3" key={align}>
                     <p className="w-14 text-label-12 text-foreground-secondary">{align}</p>
@@ -506,7 +506,7 @@ function BackgroundCard(props: { color: string; label: string; description: stri
   return (
     <div>
       <div
-        className="h-20 rounded-lg border border-border"
+        className="h-20 rounded-body border border-border"
         style={{ backgroundColor: props.color }}
       />
       <p className="text-label-14 mt-2">{props.label}</p>

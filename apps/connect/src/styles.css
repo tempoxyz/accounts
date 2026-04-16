@@ -128,6 +128,9 @@
 @theme {
   --breakpoint-dialog: 380px;
 
+  --radius-body: 12px;
+  --radius-frame: 28px;
+
   --color-*: initial;
   --text-*: initial;
 

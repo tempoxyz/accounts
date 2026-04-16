@@ -7,7 +7,7 @@ import X from '~icons/lucide/x'
 /** Card shell for dialog screens (iframe, popup, standalone). */
 export function Frame(props: Frame.Props) {
   const { children, className } = props
-  return <div className={cx('flex flex-1 flex-col gap-2', className)}>{children}</div>
+  return <div className={cx('flex flex-1 flex-col gap-2 pb-1', className)}>{children}</div>
 }
 
 export namespace Frame {
@@ -20,7 +20,7 @@ export namespace Frame {
   export function Header(props: Header.Props) {
     const { subtitle, title } = props
     return (
-      <div className="flex flex-col gap-3 px-4 pt-4 pb-3">
+      <div className="flex flex-col gap-3 px-5 pt-4 pb-3">
         <div className="flex items-center">
           <h2 className="flex-1 text-heading-20">{title}</h2>
           <button
@@ -49,7 +49,7 @@ export namespace Frame {
   /** Scrollable content area between header and footer. */
   export function Body(props: Body.Props) {
     const { children, className } = props
-    return <div className={cx('flex flex-col gap-4 px-4 pb-4', className)}>{children}</div>
+    return <div className={cx('flex flex-col gap-4 px-5 pb-4', className)}>{children}</div>
   }
 
   export namespace Body {
@@ -62,7 +62,7 @@ export namespace Frame {
   /** Sticky footer area for actions. Anchors to the bottom when the frame fills the viewport. */
   export function Footer(props: Footer.Props) {
     const { children, className } = props
-    return <div className={cx('mt-auto px-4 pb-4', className)}>{children}</div>
+    return <div className={cx('mt-auto px-5 pb-4', className)}>{children}</div>
   }
 
   export namespace Footer {

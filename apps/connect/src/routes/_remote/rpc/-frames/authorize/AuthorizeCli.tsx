@@ -23,14 +23,14 @@ export function AuthorizeCli(props: AuthorizeCli.Props) {
         title="Authorize CLI"
       />
       <Frame.Body>
-        <div className="flex flex-col gap-3 rounded-xl bg-gray-1 px-4 py-5 text-center">
+        <div className="flex flex-col gap-3 rounded-body bg-gray-1 px-4 py-5 text-center">
           <p className="text-label-12 text-foreground-secondary">
             Confirm this code matches your terminal
           </p>
           <p className="font-mono text-heading-32 tracking-[0.3em]">{code}</p>
         </div>
         {scopes && scopes.length > 0 && (
-          <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+          <div className="divide-y divide-border overflow-hidden rounded-body border border-border">
             {scopes.map((scope, i) => (
               <div key={i} className="flex items-center justify-between px-3.5 py-2 text-label-13">
                 <p className="text-foreground-secondary">{scope.label}</p>
