@@ -1,11 +1,9 @@
 import * as Currency from '#/lib/currency.js'
+import { Amount } from '#/ui/Amount.js'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
-import { cx } from 'cva'
-import { useState } from 'react'
 import type { Capabilities } from 'viem/tempo'
 import AlertTriangle from '~icons/lucide/alert-triangle'
-import ArrowRightLeft from '~icons/lucide/arrow-right-left'
 import ArrowUpRight from '~icons/lucide/arrow-up-right'
 import Copy from '~icons/lucide/copy'
 import Info from '~icons/lucide/info'
@@ -31,15 +29,15 @@ export function Payment(props: Payment.Props) {
 
   if (loading) return <PaymentSkeleton host={host} />
 
-  const symbol = balanceDiffs?.[0]?.symbol
-  const totalFormatted = balanceDiffs
-    ? balanceDiffs.reduce((sum, d) => sum + Number.parseFloat(d.formatted), 0).toString()
-    : undefined
-  const token =
-    totalFormatted !== undefined && symbol ? { formatted: totalFormatted, symbol } : undefined
-  const amountFiat = token ? Currency.fiat(token) : undefined
-  const amountCrypto = token ? Currency.crypto(token) : undefined
-  const fullRecipient = balanceDiffs?.[0]?.recipients[0]
+  const first = balanceDiffs?.[0]
+  const token = (() => {
+    if (!balanceDiffs || !first) return undefined
+    const formatted = balanceDiffs
+      .reduce((sum, d) => sum + Number.parseFloat(d.formatted), 0)
+      .toString()
+    return { value: first.value, decimals: first.decimals, formatted, symbol: first.symbol }
+  })()
+  const fullRecipient = first?.recipients[0]
   const recipient = fullRecipient ? truncateAddress(fullRecipient) : undefined
 
   return (
@@ -59,7 +57,7 @@ export function Payment(props: Payment.Props) {
       />
       <Frame.Body>
         <div className="flex flex-col items-center gap-1 rounded-xl bg-gray-1 px-4 py-5 text-center">
-          <AmountDisplay crypto={amountCrypto} fiat={amountFiat} />
+          {token && <Amount align="center" amount={token} size="lg" />}
           {recipient && fullRecipient && (
             <p className="flex items-center gap-1 font-mono text-label-13 text-foreground-secondary">
               <span>to {recipient}</span>
@@ -75,10 +73,10 @@ export function Payment(props: Payment.Props) {
         </div>
 
         <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-          {symbol && (
+          {first?.symbol && (
             <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
               <p className="text-foreground-secondary">Currency</p>
-              <p>{symbol}</p>
+              <p>{first.symbol}</p>
             </div>
           )}
           {fee && <FeeRow fee={fee} sponsored={!!sponsor} />}
@@ -139,7 +137,7 @@ export function Payment(props: Payment.Props) {
             onPrimary={onConfirm}
             onSecondary={onReject}
             passkey
-            primaryLabel={amountFiat ? `Pay ${amountFiat}` : 'Confirm'}
+            primaryLabel={token ? `Pay ${Currency.fiat(token)}` : 'Confirm'}
             primaryLoading={confirming}
             secondaryLabel="Reject"
           />
@@ -188,14 +186,8 @@ function PaymentSkeleton(props: { host?: string | undefined }) {
   )
 }
 
-function FeeRow(props: {
-  fee: NonNullable<Capabilities.FillTransactionCapabilities['fee']>
-  sponsored: boolean
-}) {
+function FeeRow(props: FeeRow.Props) {
   const { fee, sponsored } = props
-  const [showCrypto, setShowCrypto] = useState(false)
-  const primary = Currency.fiat(fee)
-  const detail = Currency.crypto(fee)
 
   return (
     <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
@@ -207,63 +199,18 @@ function FeeRow(props: {
           </span>
         )}
       </div>
-      <button
-        className={cx(
-          '-mr-1.5 cursor-pointer rounded-md px-1.5 py-0.5 tabular-nums transition-colors hover:bg-gray-1',
-          sponsored && 'text-foreground-secondary',
-        )}
-        onClick={() => setShowCrypto((s) => !s)}
-        type="button"
-      >
-        <span className="relative inline-grid items-center justify-items-end [&>span]:col-start-1 [&>span]:row-start-1 [&>span]:transition-opacity [&>span]:duration-150">
-          <span
-            className={cx(
-              'flex items-center gap-1.5',
-              sponsored && 'line-through',
-              showCrypto ? 'opacity-0' : 'opacity-100',
-            )}
-          >
-            <ArrowRightLeft className="size-3 opacity-50" />
-            {primary}
-          </span>
-          <span
-            className={cx(
-              'flex items-center gap-1.5',
-              sponsored && 'line-through',
-              showCrypto ? 'opacity-100' : 'opacity-0',
-            )}
-          >
-            <ArrowRightLeft className="size-3 opacity-50" />
-            {detail}
-          </span>
-        </span>
-      </button>
+      <Amount align="right" amount={fee} strikethrough={sponsored} />
     </div>
   )
 }
 
-function AmountDisplay(props: { fiat?: string | undefined; crypto?: string | undefined }) {
-  const { fiat, crypto } = props
-  const [showCrypto, setShowCrypto] = useState(false)
-
-  return (
-    <button
-      className="relative inline-grid cursor-pointer items-center justify-items-center rounded-lg px-3 py-1 text-heading-32 tabular-nums transition-colors hover:bg-gray-2 [&>span]:col-start-1 [&>span]:row-start-1 [&>span]:transition-opacity [&>span]:duration-150"
-      onClick={() => setShowCrypto((s) => !s)}
-      type="button"
-    >
-      <span className={cx('flex items-center gap-2', showCrypto ? 'opacity-0' : 'opacity-100')}>
-        <ArrowRightLeft className="size-4 opacity-30" />
-        {fiat}
-        <span className="size-4" aria-hidden />
-      </span>
-      <span className={cx('flex items-center gap-2', showCrypto ? 'opacity-100' : 'opacity-0')}>
-        <ArrowRightLeft className="size-4 opacity-30" />
-        {crypto}
-        <span className="size-4" aria-hidden />
-      </span>
-    </button>
-  )
+declare namespace FeeRow {
+  type Props = {
+    /** Fee data. */
+    fee: NonNullable<Capabilities.FillTransactionCapabilities['fee']>
+    /** Whether the fee is sponsored. */
+    sponsored: boolean
+  }
 }
 
 function truncateAddress(address: string): string {

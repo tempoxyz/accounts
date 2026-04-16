@@ -1,5 +1,6 @@
-import * as Currency from '#/lib/currency.js'
+import { Amount } from '#/ui/Amount.js'
 import type { Rpc } from 'accounts'
+import { Hex } from 'ox'
 import { formatUnits } from 'viem'
 import { Hooks } from 'wagmi/tempo'
 import type * as z from 'zod/mini'
@@ -44,17 +45,17 @@ function LimitRow(props: LimitRow.Props) {
   const symbol = metadata.data?.symbol ?? `${limit.token.slice(0, 6)}…${limit.token.slice(-4)}`
   const decimals = metadata.data?.decimals ?? 6
   const formatted = formatUnits(limit.limit, decimals)
-  const display = Currency.fiat({ formatted, symbol })
+  const token = { value: Hex.fromNumber(limit.limit), decimals, formatted, symbol }
 
   return (
     <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
       <p className="text-foreground-secondary">Spend {symbol}</p>
-      <p className="flex items-center gap-1.5">
-        {display}
+      <div className="flex items-center gap-1.5">
+        <Amount align="right" amount={token} />
         {limit.period && (
           <span className="text-foreground-secondary">/ {formatPeriod(limit.period)}</span>
         )}
-      </p>
+      </div>
     </div>
   )
 }

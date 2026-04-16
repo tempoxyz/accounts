@@ -1,11 +1,8 @@
-import * as Currency from '#/lib/currency.js'
+import { Amount } from '#/ui/Amount.js'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
-import { cx } from 'cva'
-import { useState } from 'react'
 import type { Capabilities } from 'viem/tempo'
 import AlertTriangle from '~icons/lucide/alert-triangle'
-import ArrowRightLeft from '~icons/lucide/arrow-right-left'
 import ArrowUpRight from '~icons/lucide/arrow-up-right'
 import Copy from '~icons/lucide/copy'
 import Info from '~icons/lucide/info'
@@ -204,9 +201,6 @@ function FeeRow(props: {
   sponsored: boolean
 }) {
   const { fee, sponsored } = props
-  const [showCrypto, setShowCrypto] = useState(false)
-  const primary = Currency.fiat(fee)
-  const detail = Currency.crypto(fee)
 
   return (
     <div className="flex items-center justify-between px-3.5 py-2 text-label-13">
@@ -218,51 +212,18 @@ function FeeRow(props: {
           </span>
         )}
       </div>
-      <button
-        className={cx(
-          '-mr-1.5 cursor-pointer rounded-md px-1.5 py-0.5 tabular-nums transition-colors hover:bg-gray-1',
-          sponsored && 'text-foreground-secondary',
-        )}
-        onClick={() => setShowCrypto((s) => !s)}
-        type="button"
-      >
-        <span className="relative inline-grid items-center justify-items-end [&>span]:col-start-1 [&>span]:row-start-1 [&>span]:transition-opacity [&>span]:duration-150">
-          <span
-            className={cx(
-              'flex items-center gap-1.5',
-              sponsored && 'line-through',
-              showCrypto ? 'opacity-0' : 'opacity-100',
-            )}
-          >
-            <ArrowRightLeft className="size-3 opacity-50" />
-            {primary}
-          </span>
-          <span
-            className={cx(
-              'flex items-center gap-1.5',
-              sponsored && 'line-through',
-              showCrypto ? 'opacity-100' : 'opacity-0',
-            )}
-          >
-            <ArrowRightLeft className="size-3 opacity-50" />
-            {detail}
-          </span>
-        </span>
-      </button>
+      <Amount align="right" amount={fee} strikethrough={sponsored} />
     </div>
   )
 }
 
 function BalanceDiffRow(props: { diff: Capabilities.BalanceDiff }) {
   const { diff } = props
-  const [showDetail, setShowDetail] = useState(false)
-  const color = diff.direction === 'incoming' ? 'text-green-9' : 'text-red-9'
+  const sign = diff.direction === 'outgoing' ? '−' : '+'
 
   const label = `${diff.direction === 'outgoing' ? 'Send' : 'Receive'} ${diff.symbol}`
   const addressLabel = diff.direction === 'outgoing' ? 'to' : 'from'
   const recipient = diff.recipients[0]
-  const primary = `${diff.direction === 'outgoing' ? '−' : '+'}${Currency.fiat(diff)}`
-  const detail = `${diff.direction === 'outgoing' ? '−' : '+'}${Currency.crypto(diff)}`
 
   return (
     <div className="flex items-center justify-between px-4 py-2.5">
@@ -285,25 +246,7 @@ function BalanceDiffRow(props: { diff: Capabilities.BalanceDiff }) {
           </p>
         )}
       </div>
-      <button
-        className={cx(
-          '-mr-1.5 cursor-pointer rounded-md px-1.5 py-0.5 text-copy-14 tabular-nums transition-colors hover:bg-gray-1',
-          color,
-        )}
-        onClick={() => setShowDetail((s) => !s)}
-        type="button"
-      >
-        <span className="relative inline-grid items-center justify-items-end [&>span]:col-start-1 [&>span]:row-start-1 [&>span]:transition-opacity [&>span]:duration-150">
-          <span className={`flex items-center gap-1.5 ${showDetail ? 'opacity-0' : 'opacity-100'}`}>
-            <ArrowRightLeft className="size-3 opacity-50" />
-            {primary}
-          </span>
-          <span className={`flex items-center gap-1.5 ${showDetail ? 'opacity-100' : 'opacity-0'}`}>
-            <ArrowRightLeft className="size-3 opacity-50" />
-            {detail}
-          </span>
-        </span>
-      </button>
+      <Amount align="right" amount={diff} className="text-copy-14" sign={sign} />
     </div>
   )
 }

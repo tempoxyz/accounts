@@ -1,3 +1,4 @@
+import { Amount } from '#/ui/Amount.js'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
 import { Identicon } from '#/ui/Identicon.js'
@@ -17,6 +18,7 @@ const steps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const
 const sidebar = [
   { id: 'colors', label: 'Colors' },
   { id: 'typography', label: 'Typography' },
+  { id: 'amount-component', label: 'Amount' },
   { id: 'button-component', label: 'Button' },
   { id: 'input-component', label: 'Input' },
   { id: 'frame-component', label: 'Frame' },
@@ -220,6 +222,105 @@ function Design() {
             <TypeRow className="text-button-16" label="Button 16" sample="Continue" />
             <TypeRow className="text-button-14" label="Button 14" sample="Continue" />
             <TypeRow className="text-button-12" label="Button 12" sample="Continue" />
+          </div>
+
+          <GroupHeading id="amount-component">Amount</GroupHeading>
+          <p className="text-copy-14 text-foreground-secondary">
+            Toggleable display that crossfades between fiat and crypto values. Click to toggle.
+          </p>
+
+          <div className="mt-6 space-y-6">
+            <div>
+              <p className="text-heading-16 mb-3">Default</p>
+              <Amount
+                amount={{
+                  amount: '0x2386f26fc10000',
+                  decimals: 18,
+                  formatted: '0.01',
+                  symbol: 'PathUSD',
+                }}
+              />
+            </div>
+
+            <div>
+              <p className="text-heading-16 mb-3">Sizes</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Amount
+                  amount={{
+                    amount: '0x6f05b59d3b20000',
+                    decimals: 18,
+                    formatted: '50.00',
+                    symbol: 'PathUSD',
+                  }}
+                />
+                <Amount
+                  amount={{
+                    amount: '0x6f05b59d3b20000',
+                    decimals: 18,
+                    formatted: '50.00',
+                    symbol: 'PathUSD',
+                  }}
+                  size="lg"
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-heading-16 mb-3">Sign</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Amount
+                  amount={{
+                    amount: '0x6f05b59d3b20000',
+                    decimals: 18,
+                    formatted: '25.00',
+                    symbol: 'PathUSD',
+                  }}
+                  sign="−"
+                />
+                <Amount
+                  amount={{
+                    amount: '0x6f05b59d3b20000',
+                    decimals: 18,
+                    formatted: '25.00',
+                    symbol: 'PathUSD',
+                  }}
+                  sign="+"
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-heading-16 mb-3">Strikethrough</p>
+              <Amount
+                amount={{
+                  amount: '0x2386f26fc10000',
+                  decimals: 18,
+                  formatted: '0.01',
+                  symbol: 'PathUSD',
+                }}
+                strikethrough
+              />
+            </div>
+
+            <div>
+              <p className="text-heading-16 mb-3">Alignment</p>
+              <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
+                {(['left', 'center', 'right'] as const).map((align) => (
+                  <div className="flex items-center gap-3" key={align}>
+                    <p className="w-14 text-label-12 text-foreground-secondary">{align}</p>
+                    <Amount
+                      align={align}
+                      amount={{
+                        amount: '0x6f05b59d3b20000',
+                        decimals: 18,
+                        formatted: '50.00',
+                        symbol: 'PathUSD',
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           <GroupHeading id="button-component">Button</GroupHeading>
