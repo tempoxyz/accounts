@@ -14,6 +14,7 @@ export const wagmiConfig = createConfig({
   connectors: [
     webAuthn({
       authUrl: '/api/webauthn',
+      persistCredentials: false,
       storage: Storage.combine(Storage.cookie(), Storage.localStorage()),
     }),
   ],
