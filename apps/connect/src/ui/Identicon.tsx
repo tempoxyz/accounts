@@ -2,7 +2,7 @@
  * Deterministic address gradient identicon using design system colors.
  */
 
-const scales = ['blue', 'red', 'amber', 'green', 'teal', 'purple', 'pink'] as const
+const scales = ['blue', 'red', 'amber', 'green', 'purple'] as const
 const angles = [45, 135, 225, 315] as const
 
 export function Identicon(props: Identicon.Props) {
