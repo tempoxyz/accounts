@@ -11,6 +11,8 @@ import type * as core_Store from './Store.js'
 export type Store = {
   /** Account address. */
   address: Address
+  /** Display label used during registration (e.g. email). */
+  label?: string | undefined
 } & OneOf<
   | {}
   | Pick<TempoAccount.Account, 'keyType' | 'sign'>

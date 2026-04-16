@@ -48,6 +48,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           accounts: [
             {
               address: account.address,
+              label: parameters.name,
               keyType: 'webAuthn',
               credential: { id: credential.id, publicKey, rpId },
             },

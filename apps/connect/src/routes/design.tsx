@@ -421,7 +421,7 @@ function Design() {
           </p>
 
           <div className="mt-6">
-            <div className="w-[360px] rounded-lg border border-border bg-primary">
+            <div className="w-[360px] rounded-2xl border border-border bg-primary">
               <Frame>
                 <Frame.Header
                   icon={<ArrowUpRight className="size-5" />}

@@ -502,16 +502,37 @@ export function create(options: create.Options = {}): create.ReturnType {
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
 
                     const { keyAuthorization, accounts, signature } = await (async () => {
-                      if (capabilities?.method === 'register')
+                      if (capabilities?.method === 'register') {
+                        // If a stored account already has this label, sign in
+                        // with its credential instead of creating a new one.
+                        const existing = capabilities.name
+                          ? store
+                              .getState()
+                              .accounts.find(
+                                (a) =>
+                                  'credential' in a &&
+                                  a.label?.toLowerCase() === capabilities.name!.toLowerCase(),
+                              )
+                          : undefined
+                        if (existing && 'credential' in existing)
+                          return await actions.loadAccounts(
+                            {
+                              credentialId: existing.credential?.id,
+                              digest: capabilities.digest,
+                              authorizeAccessKey,
+                            },
+                            request,
+                          )
                         return await actions.createAccount(
                           {
                             digest: capabilities.digest,
                             authorizeAccessKey,
                             name: capabilities.name ?? 'default',
-                            userId: capabilities.userId,
+                            userId: capabilities.userId ?? Hex.random(16),
                           },
                           request,
                         )
+                      }
                       return await actions.loadAccounts(
                         {
                           credentialId: capabilities?.credentialId,
