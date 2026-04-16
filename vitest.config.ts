@@ -6,6 +6,7 @@ export default defineConfig({
     alias: {
       accounts: join(import.meta.dirname, './src'),
     },
+    dedupe: ['vp', '@voidzero-dev/vite-plus-test'],
   },
   test: {
     retry: 3,

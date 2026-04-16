@@ -10,8 +10,8 @@
   "dependencies": {
     "accounts": "latest",
     "incur": "latest",
-    "ox": "latest",
-    "viem": "latest"
+    "ox": "~0.14.15",
+    "viem": "^2.47.18"
   },
   "devDependencies": {
     "@types/node": "latest",

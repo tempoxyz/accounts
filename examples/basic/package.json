@@ -11,9 +11,9 @@
   "dependencies": {
     "@tanstack/react-query": "latest",
     "accounts": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "viem": "latest",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "viem": "^2.47.18",
     "wagmi": "latest"
   },
   "devDependencies": {
@@ -22,6 +22,6 @@
     "@vitejs/plugin-react": "latest",
     "typescript": "~5.9.3",
     "vite": "latest",
-    "vite-plugin-mkcert": "^1.17.10"
+    "vite-plugin-mkcert": "^1.17.12"
   }
 }
