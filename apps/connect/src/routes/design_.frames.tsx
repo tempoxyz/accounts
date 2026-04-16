@@ -92,7 +92,7 @@ function Wireframes() {
             title="Connect — Returning User (remembered) + Authorize"
             top={1700}
           >
-            <AuthorizeSpendFlow />
+            <ConnectReturningPasskeyAuthorizeFlow />
           </FlowRow>
 
           <FlowRow
@@ -299,39 +299,33 @@ function ConnectReturningEmailAuthorizeFlow() {
   )
 }
 
+/** Returning user with existing passkey + authorize — scopes shown inline. */
+function ConnectReturningPasskeyAuthorizeFlow() {
+  return (
+    <Card label="Welcome Back + Authorize">
+      <ConnectFrames.WelcomeBack
+        address="0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9e8f"
+        authorizeAccessKey={mockAuthorize}
+        host="example.com"
+        label="john@example.com"
+      />
+    </Card>
+  )
+}
+
+const mockAuthorize = {
+  expiry: Math.floor(Date.now() / 1000) + 86400,
+  limits: [
+    { token: '0x20c0000000000000000000009e8d7eb59b783726' as `0x${string}`, limit: 100_000_000n, period: 3600 },
+    { token: '0x20c0000000000000000000000000000000000000' as `0x${string}`, limit: 50_000_000n, period: 3600 },
+  ],
+}
+
 const mockScopes: AuthorizeFrames.AuthorizeSpend.Scope[] = [
   { label: 'Spend USDC.e', suffix: '/ hour', value: '$100.00' },
   { label: 'Spend USDC', suffix: '/ hour', value: '$50.00' },
   { label: 'Expires', value: '24 hours' },
 ]
-
-/** Authorize spend: review → confirming */
-function AuthorizeSpendFlow() {
-  return (
-    <>
-      <Card label="Review">
-        <AuthorizeFrames.AuthorizeSpend
-          address="0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9e8f"
-          host="example.com"
-          label="john@example.com"
-          scopes={mockScopes}
-        />
-      </Card>
-
-      <Arrow />
-
-      <Card label="Confirming">
-        <AuthorizeFrames.AuthorizeSpend
-          address="0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9e8f"
-          confirming
-          host="example.com"
-          label="john@example.com"
-          scopes={mockScopes}
-        />
-      </Card>
-    </>
-  )
-}
 
 const mockBalanceDiffs: TransactionFrames.Generic.Props['balanceDiffs'] = [
   {

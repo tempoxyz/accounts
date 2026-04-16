@@ -27,6 +27,18 @@
 - **`core_` prefix for import aliases** — when aliasing an import to avoid conflicts, use `core_<name>` (e.g. `import { local as core_local }`), not arbitrary camelCase.
 - **`Hex.fromNumber` over `toString(16)`** — use `Hex.fromNumber(n)` from `ox` instead of `` `0x${n.toString(16)}` `` for number-to-hex conversion.
 - **`Hex.Hex` over `` `0x${string}` ``** — use `Hex.Hex` from `ox` instead of the raw template literal type.
+- **IIFE over nested ternaries** — avoid complex nested ternary expressions. Use an IIFE block expression with early returns instead:
+  ```tsx
+  // ✗ Bad: nested ternaries
+  const subtitle = a ? <A /> : b ? <B /> : 'default'
+
+  // ✓ Good: IIFE with early returns
+  const subtitle = (() => {
+    if (a) return <A />
+    if (b) return <B />
+    return 'default'
+  })()
+  ```
 
 ## Type Inference Conventions
 

@@ -1,3 +1,7 @@
+import {
+  AccessKeyScopes,
+  type AuthorizeAccessKey,
+} from '#/routes/_remote/rpc/-components/AccessKeyScopes.js'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
 import { Identicon } from '#/ui/Identicon.js'
@@ -7,7 +11,17 @@ import LogIn from '~icons/lucide/log-in'
 
 /** Returning user with a connected wallet — sign in with existing passkey or switch account. */
 export function WelcomeBack(props: WelcomeBack.Props) {
-  const { address, error, host, label, loading, onContinue, onCreateNew, onSignIn } = props
+  const {
+    address,
+    authorizeAccessKey,
+    error,
+    host,
+    label,
+    loading,
+    onContinue,
+    onCreateNew,
+    onSignIn,
+  } = props
 
   return (
     <form
@@ -19,15 +33,22 @@ export function WelcomeBack(props: WelcomeBack.Props) {
       <Frame>
         <Frame.Header
           icon={<LogIn className="size-5" />}
-          subtitle={
-            host ? (
-              <>
-                You're signing in to <span className="text-foreground">{host}</span>
-              </>
-            ) : (
-              'Sign in to continue.'
-            )
-          }
+          subtitle={(() => {
+            if (authorizeAccessKey && host)
+              return (
+                <>
+                  Sign in and authorize <span className="text-foreground">{host}</span> to access
+                  your account.
+                </>
+              )
+            if (host)
+              return (
+                <>
+                  You're signing in to <span className="text-foreground">{host}</span>
+                </>
+              )
+            return 'Sign in to continue.'
+          })()}
           title="Welcome Back"
         />
         <Frame.Footer>
@@ -46,6 +67,7 @@ export function WelcomeBack(props: WelcomeBack.Props) {
                 <ChevronRight className="size-4" />
               </span>
             </button>
+            {authorizeAccessKey && <AccessKeyScopes authorizeAccessKey={authorizeAccessKey} />}
             <Button
               loading={loading}
               prefix={<Fingerprint className="size-4" />}
@@ -74,6 +96,8 @@ export declare namespace WelcomeBack {
   type Props = {
     /** Connected wallet address for identicon. */
     address?: `0x${string}` | undefined
+    /** Access key authorization params — renders scope rows when provided. */
+    authorizeAccessKey?: AuthorizeAccessKey | undefined
     /** Error message to display. */
     error?: string | undefined
     /** Host domain requesting sign-in. */

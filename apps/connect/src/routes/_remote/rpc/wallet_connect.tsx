@@ -2,10 +2,11 @@ import { api } from '#/lib/api.js'
 import { remote } from '#/lib/config.js'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { Remote } from 'accounts'
+import { Remote, Rpc } from 'accounts'
 import { Remote as RemoteReact } from 'accounts/react'
 import { useState } from 'react'
 import { useConnection } from 'wagmi'
+import * as z from 'zod/mini'
 
 import * as Frames from './-frames/connect/index.js'
 
@@ -14,8 +15,11 @@ export const Route = createFileRoute('/_remote/rpc/wallet_connect')({
   validateSearch: (search) => Remote.validateSearch(remote, search, { method: 'wallet_connect' }),
 })
 
+type Search = Remote.validateSearch.ReturnType<'wallet_connect'>
+type AuthorizeAccessKey = NonNullable<z.output<typeof Rpc.wallet_connect.authorizeAccessKey>>
+
 function Wrapper() {
-  const search = Route.useSearch()
+  const search = Route.useSearch() as Search
   return <Component key={search.id} />
 }
 
@@ -26,10 +30,11 @@ type Screen =
   | { name: 'sign-in' }
 
 function Component() {
-  const search = Route.useSearch()
+  const search = Route.useSearch() as Search
   const { isConnected } = useConnection()
 
   const method = search._decoded.params?.[0]?.capabilities?.method
+  const authorizeAccessKey = search._decoded.params?.[0]?.capabilities?.authorizeAccessKey
 
   const submit = useMutation({
     mutationFn: (variables?: {
@@ -61,13 +66,19 @@ function Component() {
   })
 
   if (screen.name === 'welcome-back')
-    return <WelcomeBack onSignUp={() => setScreen({ name: 'sign-in' })} submit={submit} />
+    return (
+      <WelcomeBack
+        authorizeAccessKey={authorizeAccessKey}
+        onSignUp={() => setScreen({ name: 'sign-in' })}
+        submit={submit}
+      />
+    )
   return <SignIn submit={submit} />
 }
 
 /** Wires WelcomeBack screen to real data (origin, address, /auth/me). */
-function WelcomeBack(props: { onSignUp: () => void; submit: Submit }) {
-  const { onSignUp, submit } = props
+function WelcomeBack(props: WelcomeBack.Props) {
+  const { authorizeAccessKey, onSignUp, submit } = props
   const origin = RemoteReact.useState(remote, (s) => s.origin)
   const { address } = useConnection()
   const host = origin ? new URL(origin).host : undefined
@@ -75,7 +86,7 @@ function WelcomeBack(props: { onSignUp: () => void; submit: Submit }) {
     queryKey: ['auth', 'me'],
     queryFn: async () => {
       const res = await api.api.auth.me.$get()
-      return (await res.json()) as { email: string | null; username: string | null }
+      return res.json()
     },
   })
   const label =
@@ -86,6 +97,7 @@ function WelcomeBack(props: { onSignUp: () => void; submit: Submit }) {
   return (
     <Frames.WelcomeBack
       address={address}
+      authorizeAccessKey={authorizeAccessKey}
       error={submit.error?.message}
       host={host}
       label={label}
@@ -97,8 +109,19 @@ function WelcomeBack(props: { onSignUp: () => void; submit: Submit }) {
   )
 }
 
+declare namespace WelcomeBack {
+  type Props = {
+    /** Access key authorization params. */
+    authorizeAccessKey?: AuthorizeAccessKey | undefined
+    /** Called when the user clicks "Create a new account". */
+    onSignUp: () => void
+    /** Mutation handle for submitting the request. */
+    submit: Submit
+  }
+}
+
 /** Wires SignIn screen to passkey registration/login. */
-function SignIn(props: { submit: Submit }) {
+function SignIn(props: SignIn.Props) {
   const { submit } = props
   const origin = RemoteReact.useState(remote, (s) => s.origin)
   const host = origin ? new URL(origin).host : undefined
@@ -113,6 +136,13 @@ function SignIn(props: { submit: Submit }) {
       registerLoading={submit.isPending && submit.variables?.method === 'register'}
     />
   )
+}
+
+declare namespace SignIn {
+  type Props = {
+    /** Mutation handle for submitting the request. */
+    submit: Submit
+  }
 }
 
 type Submit = ReturnType<
