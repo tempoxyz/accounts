@@ -240,10 +240,7 @@ function ConnectNewUserAuthorizeLazyFlow() {
       <Arrow />
 
       <Card label="Authorize App">
-        <AuthorizeFrames.AuthorizeSpend
-          authorizeAccessKey={mockAuthorize}
-          host="example.com"
-        />
+        <AuthorizeFrames.AuthorizeSpend authorizeAccessKey={mockAuthorize} host="example.com" />
       </Card>
     </>
   )
@@ -559,10 +556,7 @@ function AuthorizeMobileFlow() {
   return (
     <>
       <Card label="Review">
-        <AuthorizeFrames.AuthorizeSpend
-          authorizeAccessKey={mockAuthorize}
-          host="DoorDash"
-        />
+        <AuthorizeFrames.AuthorizeSpend authorizeAccessKey={mockAuthorize} host="DoorDash" />
       </Card>
 
       <Arrow />
