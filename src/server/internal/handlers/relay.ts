@@ -15,7 +15,7 @@ import {
 } from 'viem'
 import type { LocalAccount } from 'viem/accounts'
 import { simulateCalls } from 'viem/actions'
-import { tempo, tempoLocalnet, tempoMainnet, tempoModerato } from 'viem/chains'
+import { tempo, tempoDevnet, tempoLocalnet, tempoMainnet, tempoModerato } from 'viem/chains'
 import { Abis, Actions, Addresses, Capabilities, Transaction } from 'viem/tempo'
 
 import * as ExecutionError from '../../../core/ExecutionError.js'
@@ -64,7 +64,7 @@ import * as Utils from './utils.js'
  */
 export function relay(options: relay.Options = {}): Handler {
   const {
-    chains = [tempo, tempoModerato],
+    chains = [tempo, tempoModerato, tempoDevnet],
     onRequest,
     path = '/',
     resolveTokens = (chainId) =>
@@ -415,6 +415,12 @@ export namespace relay {
       '0x20c0000000000000000000009e8d7eb59b783726', // USDC.e
       '0x20c000000000000000000000d72572838bbee59c', // EURC.e
     ],
+    [tempoDevnet.id]: [
+      '0x20c0000000000000000000000000000000000000', // pathUSD
+      '0x20c0000000000000000000000000000000000001', // alphaUSD
+      '0x20c0000000000000000000000000000000000002', // betaUSD
+      '0x20c0000000000000000000000000000000000003', // thetaUSD
+    ],
     [tempoLocalnet.id]: [
       '0x20c0000000000000000000000000000000000000', // pathUSD
       '0x20c0000000000000000000000000000000000001', // alphaUSD
@@ -437,7 +443,7 @@ export namespace relay {
     /**
      * Supported chains. The handler resolves the client based on the
      * `chainId` in the incoming transaction.
-     * @default [tempo, tempoModerato]
+     * @default [tempo, tempoModerato, tempoDevnet]
      */
     chains?: readonly [Chain, ...Chain[]] | undefined
     /**

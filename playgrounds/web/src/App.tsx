@@ -3,7 +3,7 @@ import { Hex, Json } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
-import { tempo, tempoModerato } from 'viem/chains'
+import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { Actions } from 'viem/tempo'
 
 import {
@@ -13,6 +13,7 @@ import {
   provider,
   switchAdapter,
   switchDialogMode,
+  env,
   testnet,
   tokens,
 } from './provider.js'
@@ -183,16 +184,30 @@ function WalletConnect() {
     const form = new FormData(e.currentTarget)
     const name = form.get('name') as string
     const digest = form.get('digest') as Hex.Hex
-    const accessKey = form.get('accessKey') === 'on'
+    const accessKey = form.get('accessKey') as string | null
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
 
-    const limitToken = testnet ? tokens.pathUSD : tokens['USDC.e']
-    const authorizeAccessKey = accessKey
-      ? {
+    const limitToken = 'USDC.e' in tokens ? tokens['USDC.e'] : tokens.pathUSD
+    const authorizeAccessKey = (() => {
+      if (accessKey === '100-forever')
+        return {
           expiry: Expiry.days(1),
           limits: [{ token: limitToken, limit: Hex.fromNumber(parseUnits('100', 6)) }],
         }
-      : undefined
+      if (accessKey === '10-monthly')
+        return {
+          expiry: Expiry.days(30),
+          limits: [
+            {
+              token: limitToken,
+              limit: Hex.fromNumber(parseUnits('10', 6)),
+              period: 60 * 60 * 24 * 30,
+            },
+          ],
+          scopes: [{ address: limitToken, selector: 'transfer(address,uint256)' }],
+        }
+      return undefined
+    })()
 
     const capabilities =
       method === 'register'
@@ -210,7 +225,14 @@ function WalletConnect() {
     execute(() =>
       provider.request({
         method: 'wallet_connect',
-        params: [{ capabilities, chainId: Hex.fromNumber(testnet ? tempoModerato.id : tempo.id) }],
+        params: [
+          {
+            capabilities,
+            chainId: Hex.fromNumber(
+              env === 'devnet' ? tempoDevnet.id : testnet ? tempoModerato.id : tempo.id,
+            ),
+          },
+        ],
       }),
     )
   }
@@ -230,11 +252,19 @@ function WalletConnect() {
             style={{ flex: 1, fontFamily: 'monospace' }}
           />
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+        <fieldset style={{ marginBottom: 8 }}>
+          <legend>Access Key</legend>
           <label>
-            <input type="checkbox" name="accessKey" /> Authorize Access Key
+            <input type="radio" name="accessKey" value="none" defaultChecked /> None
           </label>
-        </div>
+          <label style={{ marginLeft: 8 }}>
+            <input type="radio" name="accessKey" value="100-forever" /> $100 forever
+          </label>
+          <label style={{ marginLeft: 8 }}>
+            <input type="radio" name="accessKey" value="10-monthly" /> $10 per month (transfer
+            scope)
+          </label>
+        </fieldset>
         <button type="submit" value="login">
           Login
         </button>
