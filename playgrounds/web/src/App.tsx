@@ -97,6 +97,9 @@ export function App() {
       <Fortune />
       <MppZeroDollarAuth />
 
+      <h2>Email Verification</h2>
+      <ManageEmail />
+
       <h2>RPC Proxy (fallthrough)</h2>
       <EthBlockNumber />
     </div>
@@ -1008,6 +1011,18 @@ function MppZeroDollarAuth() {
         Zero-Dollar Auth
       </button>
     </Method>
+  )
+}
+
+function ManageEmail() {
+  const connectHost = import.meta.env.VITE_CONNECT_HOST ?? ''
+  return (
+    <div>
+      <h3>Manage Email</h3>
+      <a href={`${connectHost}/email`} target="_blank" rel="noopener noreferrer">
+        Open email settings →
+      </a>
+    </div>
   )
 }
 
