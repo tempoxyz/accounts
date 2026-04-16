@@ -67,7 +67,8 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       else
         store.setState((state) => ({
           accessKeys: state.accessKeys.filter(
-            (accessKey) => accessKey.address.toLowerCase() !== keyAuthorization.address.toLowerCase(),
+            (accessKey) =>
+              accessKey.address.toLowerCase() !== keyAuthorization.address.toLowerCase(),
           ),
         }))
 
