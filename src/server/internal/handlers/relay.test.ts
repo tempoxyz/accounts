@@ -894,6 +894,18 @@ describe('behavior: path A — guaranteed sponsorship (no validate)', () => {
     expect(requests.filter((r) => r.method === 'eth_fillTransaction')).toHaveLength(1)
   })
 
+  test('behavior: returns fee even when no feeToken in request', async () => {
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+
+    expect(result.capabilities?.fee).toBeDefined()
+    expect(result.capabilities?.fee?.decimals).toBeTypeOf('number')
+    expect(result.capabilities?.fee?.symbol).toBeTypeOf('string')
+    expect(result.capabilities?.fee?.formatted).toBeTypeOf('string')
+  })
+
   test('behavior: simulate and sign run concurrently with fill', async () => {
     const result = await fillTransaction(client, {
       account: userAccount.address,

@@ -195,6 +195,9 @@ export function relay(options: relay.Options = {}): Handler {
 
           const transaction_filled = filled.transaction
           const swap = 'swap' in filled ? filled.swap : undefined
+          if (!feeToken)
+            feeToken =
+              (transaction_filled.feeToken as Address | undefined) ?? resolveTokens(chainId)?.[0]
 
           // Parallelize: simulate, fee payer signing, and autoSwap metadata.
           const alreadySigned =
@@ -208,7 +211,7 @@ export function relay(options: relay.Options = {}): Handler {
                   account: from,
                   calls: extractCalls(transaction_filled),
                   swap,
-                  feeToken: transaction_filled.feeToken,
+                  feeToken,
                   gas: transaction_filled.gas,
                   maxFeePerGas: transaction_filled.maxFeePerGas,
                 })
