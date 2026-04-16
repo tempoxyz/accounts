@@ -1,6 +1,7 @@
 import { Amount } from '#/ui/Amount.js'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
+import { Row, Rows } from '#/ui/Rows.js'
 import { Identicon } from '#/ui/Identicon.js'
 import { Input } from '#/ui/Input.js'
 import { ThemeToggle } from '#/ui/ThemeToggle.js'
@@ -22,6 +23,7 @@ const sidebar = [
   { id: 'input-component', label: 'Input' },
   { id: 'frame-component', label: 'Frame' },
   { id: 'identicon-component', label: 'Identicon' },
+  { id: 'rows-component', label: 'Rows' },
 ] as const
 
 const externalLinks = [{ href: '/design/frames', label: 'Frames →' }] as const
@@ -457,6 +459,34 @@ function Design() {
                 </p>
               </div>
             ))}
+          </div>
+
+          <GroupHeading id="rows-component">Rows</GroupHeading>
+          <p className="text-copy-14 text-foreground-secondary">
+            Grouped key–value rows with dividers.
+          </p>
+
+          <div className="mt-6 space-y-6">
+            <div>
+              <p className="text-heading-16 mb-3">Default</p>
+              <Rows>
+                <Row label="Network">Tempo</Row>
+                <Row label="Fee">0.01 PATH</Row>
+                <Row label="Status">Confirmed</Row>
+              </Rows>
+            </div>
+
+            <div>
+              <p className="text-heading-16 mb-3">Custom Height</p>
+              <Rows>
+                <Row height={56} label="Account">
+                  0xd8dA…6045
+                </Row>
+                <Row height={56} label="Balance">
+                  50.00 PathUSD
+                </Row>
+              </Rows>
+            </div>
           </div>
         </div>
       </main>
