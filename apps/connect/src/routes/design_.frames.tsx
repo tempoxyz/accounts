@@ -316,8 +316,16 @@ function ConnectReturningPasskeyAuthorizeFlow() {
 const mockAuthorize = {
   expiry: Math.floor(Date.now() / 1000) + 86400,
   limits: [
-    { token: '0x20c0000000000000000000009e8d7eb59b783726' as `0x${string}`, limit: 100_000_000n, period: 3600 },
-    { token: '0x20c0000000000000000000000000000000000000' as `0x${string}`, limit: 50_000_000n, period: 3600 },
+    {
+      token: '0x20c0000000000000000000009e8d7eb59b783726' as `0x${string}`,
+      limit: 100_000_000n,
+      period: 3600,
+    },
+    {
+      token: '0x20c0000000000000000000000000000000000000' as `0x${string}`,
+      limit: 50_000_000n,
+      period: 3600,
+    },
   ],
 }
 

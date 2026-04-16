@@ -19,5 +19,5 @@ const api = new Hono<{ Bindings: Env }>()
 
 const app = new Hono<{ Bindings: Env }>().route('/.well-known', jwks).route('/api', api)
 
-export type App = typeof api
+export type App = typeof app
 export default app

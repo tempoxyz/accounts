@@ -8,23 +8,41 @@ import ArrowRightLeft from '~icons/lucide/arrow-right-left'
 export function Amount(props: Amount.Props) {
   const { align = 'left', amount, className, sign = '', size = 'sm', strikethrough } = props
   const [showDetail, setShowDetail] = useState(false)
-  const signColor = sign === '−' || sign === '-' ? 'text-red-9' : sign === '+' ? 'text-green-9' : undefined
+  const signColor =
+    sign === '−' || sign === '-' ? 'text-red-9' : sign === '+' ? 'text-green-9' : undefined
   const primary = `${sign}${Currency.fiat(amount)}`
   const detail = `${sign}${Currency.crypto(amount)}`
 
   return (
     <button
-      className={cx(rootClassName({ size }), strikethrough && 'text-foreground-secondary', signColor, className)}
+      className={cx(
+        rootClassName({ size }),
+        strikethrough && 'text-foreground-secondary',
+        signColor,
+        className,
+      )}
       onClick={() => setShowDetail((s) => !s)}
       type="button"
     >
       <span className={gridClassName({ align })}>
-        <span className={cx(labelClassName({ size }), strikethrough && 'line-through', showDetail ? 'opacity-0' : 'opacity-100')}>
+        <span
+          className={cx(
+            labelClassName({ size }),
+            strikethrough && 'line-through',
+            showDetail ? 'opacity-0' : 'opacity-100',
+          )}
+        >
           <ArrowRightLeft className={iconClassName({ size })} />
           {primary}
           {size === 'lg' && <span className="size-4" aria-hidden />}
         </span>
-        <span className={cx(labelClassName({ size }), strikethrough && 'line-through', showDetail ? 'opacity-100' : 'opacity-0')}>
+        <span
+          className={cx(
+            labelClassName({ size }),
+            strikethrough && 'line-through',
+            showDetail ? 'opacity-100' : 'opacity-0',
+          )}
+        >
           <ArrowRightLeft className={iconClassName({ size })} />
           {detail}
           {size === 'lg' && <span className="size-4" aria-hidden />}
