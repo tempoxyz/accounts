@@ -1,5 +1,13 @@
 # accounts
 
+## 0.7.1
+
+### Patch Changes
+
+- 8792ea4: Added `scopes` and `limits.period` to `authorizeAccessKey`.
+- 8792ea4: Added support for Tempo Devnet.
+- fbd691f: Updated dependencies.
+
 ## 0.7.0
 
 ### Minor Changes
