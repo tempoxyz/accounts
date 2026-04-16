@@ -12,7 +12,7 @@ import { router } from '#/router.js'
 import { createFileRoute, Outlet, useRouterState } from '@tanstack/react-router'
 import { reconnect } from '@wagmi/core'
 import { Remote } from 'accounts/react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 export const Route = createFileRoute('/_remote')({
@@ -88,12 +88,9 @@ function Page(props: { children: ReactNode; mode: Mode.Mode }) {
 
   if (framed)
     return (
-      <div
-        className="fixed inset-0 flex items-start justify-center pt-4 max-dialog:items-end max-dialog:pt-0 bg-black/50"
-        onClick={rejectAll}
-      >
+      <Backdrop onClick={rejectAll}>
         {children}
-      </div>
+      </Backdrop>
     )
 
   // Popup: auto-resizes the browser window to fit content.
@@ -150,7 +147,7 @@ function Frame(props: { children: ReactNode; mode: Mode.Mode }) {
   if (mode !== 'standalone')
     return (
       <div
-        className="bg-primary text-foreground border border-border rounded-2xl w-[360px] max-w-full flex flex-col max-dialog:w-full max-dialog:rounded-b-none max-dialog:border-b-0 max-dialog:max-h-[90dvh] max-dialog:overflow-y-auto"
+        className="bg-primary text-foreground border border-border rounded-2xl w-[360px] max-w-full flex flex-col max-dialog:w-full max-dialog:rounded-b-none max-dialog:border-b-0 max-dialog:max-h-[90dvh] max-dialog:overflow-y-auto animate-dialog-card"
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -189,6 +186,22 @@ function EnsureVisibility(props: { children: ReactNode; enabled: boolean }) {
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+function Backdrop(props: { children: ReactNode; onClick: () => void }) {
+  const [visible, setVisible] = useState(false)
+  useLayoutEffect(() => {
+    requestAnimationFrame(() => setVisible(true))
+  }, [])
+  return (
+    <div
+      className="fixed inset-0 flex items-start justify-center pt-4 max-dialog:items-end max-dialog:pt-0 bg-black/50 transition-opacity duration-100 ease-out"
+      onClick={props.onClick}
+      style={{ opacity: visible ? undefined : 0 }}
+    >
+      {props.children}
     </div>
   )
 }

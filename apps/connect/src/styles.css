@@ -105,6 +105,30 @@
   }
 }
 
+@keyframes dialog-card-in {
+  from { opacity: 0; transform: translateY(-20px) }
+  to { opacity: 1; transform: translateY(0) }
+}
+
+@keyframes dialog-card-in-bottom {
+  from { opacity: 0; transform: translateY(20px) }
+  to { opacity: 1; transform: translateY(0) }
+}
+
+@utility animate-dialog-card {
+  animation: dialog-card-in 100ms cubic-bezier(0.33, 1, 0.68, 1) both;
+  @media (width < 380px) {
+    animation-name: dialog-card-in-bottom;
+    animation-duration: 150ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-dialog-card {
+    animation: none;
+  }
+}
+
 @layer base {
   html {
     @apply bg-secondary text-foreground;
