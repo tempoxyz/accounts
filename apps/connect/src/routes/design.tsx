@@ -12,7 +12,7 @@ export const Route = createFileRoute('/design')({
   component: Design,
 })
 
-const scales = ['gray', 'blue', 'red', 'amber', 'green', 'teal', 'purple', 'pink'] as const
+const scales = ['gray', 'blue', 'red', 'amber', 'green', 'purple'] as const
 const steps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const
 
 const sidebar = [
