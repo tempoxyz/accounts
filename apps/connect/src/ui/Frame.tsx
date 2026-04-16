@@ -1,6 +1,8 @@
+import { remote } from '#/lib/config.js'
 import { Button } from '#/ui/Button.js'
-import { cva, cx } from 'cva'
+import { cx } from 'cva'
 import type { ReactNode } from 'react'
+import X from '~icons/lucide/x'
 
 /** Card shell for dialog screens (iframe, popup, standalone). */
 export function Frame(props: Frame.Props) {
@@ -14,14 +16,21 @@ export namespace Frame {
     className?: string | undefined
   }
 
-  /** Header with centered icon, title, and optional subtitle. */
+  /** Header with title, optional subtitle, and dismiss button. */
   export function Header(props: Header.Props) {
-    const { icon, subtitle, title, variant } = props
+    const { subtitle, title } = props
     return (
       <div className="flex flex-col gap-3 px-4 pt-4 pb-3">
-        <div className="flex items-center gap-3">
-          {icon && <div className={Header.iconClassName({ variant })}>{icon}</div>}
-          <h2 className="text-heading-20">{title}</h2>
+        <div className="flex items-center">
+          <h2 className="flex-1 text-heading-20">{title}</h2>
+          <button
+            aria-label="Dismiss"
+            className="flex size-8 items-center justify-center rounded-full bg-gray-2 text-foreground-secondary transition-colors hover:bg-gray-3 hover:text-foreground"
+            onClick={() => remote.rejectAll()}
+            type="button"
+          >
+            <X className="size-4" />
+          </button>
         </div>
         {subtitle && <p className="text-copy-15 text-foreground-secondary">{subtitle}</p>}
       </div>
@@ -30,30 +39,11 @@ export namespace Frame {
 
   export namespace Header {
     export type Props = {
-      /** Icon element rendered in a circular container. */
-      icon?: ReactNode | undefined
       /** Secondary text below the title. */
       subtitle?: ReactNode | undefined
       /** Primary heading text. */
       title: ReactNode
-      /** Color variant for the icon container. */
-      variant?: 'error' | 'primary' | 'success' | 'warning' | undefined
     }
-
-    export const iconClassName = cva({
-      base: 'flex size-9 shrink-0 items-center justify-center rounded-full',
-      variants: {
-        variant: {
-          primary: 'bg-blue-2 text-blue-9',
-          success: 'bg-green-2 text-green-9',
-          warning: 'bg-amber-2 text-amber-9',
-          error: 'bg-red-2 text-red-9',
-        },
-      },
-      defaultVariants: {
-        variant: 'primary',
-      },
-    })
   }
 
   /** Scrollable content area between header and footer. */
