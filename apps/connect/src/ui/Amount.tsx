@@ -77,7 +77,7 @@ export declare namespace Amount {
 }
 
 const rootClassName = cva({
-  base: 'cursor-pointer tabular-nums transition-colors',
+  base: 'cursor-pointer transition-colors',
   variants: {
     size: {
       sm: '-mr-1.5 rounded-md px-1.5 py-0.5 hover:bg-gray-1',

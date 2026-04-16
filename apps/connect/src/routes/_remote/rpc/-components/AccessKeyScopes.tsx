@@ -51,7 +51,7 @@ function LimitRow(props: LimitRow.Props) {
     <div className="flex h-10 items-center justify-between px-3.5 text-label-13">
       <p className="text-foreground-secondary">Spend {symbol}</p>
       <div className="flex items-center gap-1.5">
-        <Amount align="right" amount={token} />
+        <Amount align="right" className="pt-1" amount={token} />
         {limit.period && (
           <span className="text-foreground-secondary">/ {formatPeriod(limit.period)}</span>
         )}
