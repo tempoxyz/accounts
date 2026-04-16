@@ -17,8 +17,8 @@ export const webauthn = new Hono<{ Bindings: Env }>().all('/*', (c) => {
   const baseKv = Kv.cloudflare(c.env.KV)
   const kv: Kv.Kv = {
     ...baseKv,
-    async get(key) {
-      const local = await baseKv.get(key)
+    async get<value = unknown>(key: string): Promise<value> {
+      const local = await baseKv.get<value>(key)
       if (local || !key.startsWith('credential:')) return local
       const credentialId = key.slice('credential:'.length)
       const res = await fetch(`https://keys.tempo.xyz/${encodeURIComponent(credentialId)}`)
@@ -46,7 +46,7 @@ export const webauthn = new Hono<{ Bindings: Env }>().all('/*', (c) => {
         id: crypto.randomUUID(),
         credentialId,
         label: 'Passkey',
-        publicKey,
+        publicKey: publicKey as Hex.Hex,
         username: name,
       })
 
@@ -72,7 +72,7 @@ export const webauthn = new Hono<{ Bindings: Env }>().all('/*', (c) => {
           id: crypto.randomUUID(),
           credentialId,
           label: 'Passkey',
-          publicKey,
+          publicKey: publicKey as Hex.Hex,
           username: address,
         })
       } else {

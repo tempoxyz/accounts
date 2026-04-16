@@ -5,7 +5,6 @@ import { Frame } from '#/ui/Frame.js'
 import { Input } from '#/ui/Input.js'
 import { useState } from 'react'
 import ChevronRight from '~icons/lucide/chevron-right'
-import CirclePlus from '~icons/lucide/circle-plus'
 import Wallet from '~icons/lucide/wallet'
 
 const presets = ['$20', '$50', '$100'] as const
@@ -20,7 +19,6 @@ export function Deposit(props: Deposit.Props) {
   return (
     <Frame>
       <Frame.Header
-        icon={<CirclePlus className="size-5" />}
         subtitle={subtitle ?? 'Deposit funds into your Tempo account.'}
         title="Deposit"
       />

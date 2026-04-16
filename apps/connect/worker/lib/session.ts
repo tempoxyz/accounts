@@ -83,7 +83,7 @@ export async function set(
 
 export declare namespace set {
   type Options = {
-    credential?: Credential | undefined
+    credential: Credential
   }
 }
 
@@ -104,7 +104,7 @@ export async function cookies(
   privateKeyJwk: string,
   address: string,
   hostname: string,
-  options: set.Options,
+  options: sign.Options,
 ) {
   const token = await sign(privateKeyJwk, address, options)
   const env = cookieEnv(hostname)

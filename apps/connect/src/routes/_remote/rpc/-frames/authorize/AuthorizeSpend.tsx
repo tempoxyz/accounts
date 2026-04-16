@@ -3,7 +3,6 @@ import {
   type AuthorizeAccessKey,
 } from '#/routes/_remote/rpc/-components/AccessKeyScopes.js'
 import { Frame } from '#/ui/Frame.js'
-import Shield from '~icons/lucide/shield-check'
 
 /** Authorize access key — displays spend scopes and approve/reject actions. */
 export function AuthorizeSpend(props: AuthorizeSpend.Props) {
@@ -12,7 +11,6 @@ export function AuthorizeSpend(props: AuthorizeSpend.Props) {
   return (
     <Frame>
       <Frame.Header
-        icon={<Shield className="size-5" />}
         subtitle={
           host ? (
             <>

@@ -4,7 +4,7 @@
     "target": "es2023",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "esnext",
-    "types": ["vp/client", "unplugin-icons/types/react"],
+    "types": ["vp/client", "unplugin-icons/types/react", "@types/node"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -20,5 +20,5 @@
       "#/*": ["./src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "worker-configuration.d.ts"]
 }

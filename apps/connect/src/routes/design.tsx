@@ -6,7 +6,6 @@ import { Input } from '#/ui/Input.js'
 import { ThemeToggle } from '#/ui/ThemeToggle.js'
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import ArrowUpRight from '~icons/lucide/arrow-up-right'
 
 export const Route = createFileRoute('/design')({
   component: Design,
@@ -424,7 +423,6 @@ function Design() {
             <div className="w-[360px] rounded-2xl border border-border bg-primary">
               <Frame>
                 <Frame.Header
-                  icon={<ArrowUpRight className="size-5" />}
                   subtitle="A short description of the request goes here."
                   title="Title"
                 />

@@ -420,6 +420,7 @@ function SendTransactionExtrasFlow() {
       <Card label="Auto Swap">
         <TransactionFrames.Generic
           autoSwap={{
+            calls: [],
             maxIn: {
               decimals: 6,
               formatted: '105.00',
@@ -644,6 +645,7 @@ function DirectPaymentExtrasFlow() {
       <Card label="Auto Swap">
         <TransactionFrames.Payment
           autoSwap={{
+            calls: [],
             maxIn: {
               formatted: '52.50',
               symbol: 'AlphaUSD',

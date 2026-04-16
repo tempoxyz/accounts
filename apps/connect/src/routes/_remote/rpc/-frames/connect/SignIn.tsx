@@ -2,7 +2,6 @@ import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
 import { Input } from '#/ui/Input.js'
 import Fingerprint from '~icons/lucide/fingerprint'
-import LogIn from '~icons/lucide/log-in'
 
 /** Sign-in / sign-up screen — create account with email or sign in with passkey. */
 export function SignIn(props: SignIn.Props) {
@@ -19,7 +18,6 @@ export function SignIn(props: SignIn.Props) {
     >
       <Frame>
         <Frame.Header
-          icon={<LogIn className="size-5" />}
           subtitle={
             host ? (
               <>

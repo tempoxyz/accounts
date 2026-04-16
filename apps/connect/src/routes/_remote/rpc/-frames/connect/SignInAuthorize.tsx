@@ -3,7 +3,6 @@ import {
   type AuthorizeAccessKey,
 } from '#/routes/_remote/rpc/-components/AccessKeyScopes.js'
 import { Frame } from '#/ui/Frame.js'
-import Shield from '~icons/lucide/shield-check'
 
 /** Authorize screen shown after sign-in or account creation. */
 export function SignInAuthorize(props: SignInAuthorize.Props) {
@@ -12,7 +11,6 @@ export function SignInAuthorize(props: SignInAuthorize.Props) {
   return (
     <Frame>
       <Frame.Header
-        icon={<Shield className="size-5" />}
         subtitle={
           host ? (
             <>

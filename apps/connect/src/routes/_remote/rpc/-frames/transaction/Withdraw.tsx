@@ -2,7 +2,6 @@
 
 import { Frame } from '#/ui/Frame.js'
 import { Input } from '#/ui/Input.js'
-import ArrowDownRight from '~icons/lucide/arrow-down-right'
 
 const destinations = [
   { bg: 'bg-purple-2', fg: 'text-purple-9', label: 'Phantom', letter: 'P' },
@@ -18,7 +17,6 @@ export function Withdraw(props: Withdraw.Props) {
   return (
     <Frame>
       <Frame.Header
-        icon={<ArrowDownRight className="size-5" />}
         subtitle={subtitle ?? 'Withdraw funds from your Tempo account.'}
         title="Withdraw"
       />

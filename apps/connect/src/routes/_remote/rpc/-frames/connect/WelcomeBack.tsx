@@ -7,7 +7,6 @@ import { Frame } from '#/ui/Frame.js'
 import { Identicon } from '#/ui/Identicon.js'
 import ChevronRight from '~icons/lucide/chevron-right'
 import Fingerprint from '~icons/lucide/fingerprint'
-import LogIn from '~icons/lucide/log-in'
 
 /** Returning user with a connected wallet — sign in with existing passkey or switch account. */
 export function WelcomeBack(props: WelcomeBack.Props) {
@@ -32,7 +31,6 @@ export function WelcomeBack(props: WelcomeBack.Props) {
     >
       <Frame>
         <Frame.Header
-          icon={<LogIn className="size-5" />}
           subtitle={(() => {
             if (authorizeAccessKey && host)
               return (

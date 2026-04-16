@@ -57,7 +57,6 @@
   },
   "pnpm": {
     "overrides": {
-      "@types/node": "catalog:",
       "ox": "~0.14.15",
       "react": "catalog:",
       "react-dom": "catalog:",
