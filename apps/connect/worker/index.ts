@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 
 import { auth } from './auth.js'
+import { email } from './email.js'
 import { jwks } from './jwks.js'
 import { relay } from './relay.js'
 import { webauthn } from './webauthn.js'
@@ -14,6 +15,7 @@ const api = new Hono<{ Bindings: Env }>()
   })
   .get('/health', (c) => c.json({ status: 'ok' }))
   .route('/auth', auth)
+  .route('/email', email)
   .route('/relay', relay)
   .route('/webauthn', webauthn)
 
