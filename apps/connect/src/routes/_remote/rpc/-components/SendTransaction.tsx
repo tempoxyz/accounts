@@ -37,7 +37,7 @@ export function SendTransaction(props: SendTransaction.Props) {
     query: {
       enabled: !!address && !!(params?.calls || params?.data || params?.to),
       retry: false,
-      staleTime: 0,
+      staleTime: 1_000,
       gcTime: 10_000,
       refetchOnWindowFocus: false,
       refetchInterval: (query) => {

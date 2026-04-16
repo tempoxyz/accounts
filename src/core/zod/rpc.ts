@@ -69,6 +69,7 @@ export const transactionRequest = z.object({
   chainId: z.optional(u.number()),
   data: z.optional(u.hex()),
   feePayer: z.optional(z.union([z.boolean(), z.string()])),
+  feePayerSignature: z.optional(z.record(z.string(), z.unknown())),
   feeToken: z.optional(u.address()),
   from: z.optional(u.address()),
   gas: z.optional(u.bigint()),
