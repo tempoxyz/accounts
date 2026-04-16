@@ -9,7 +9,7 @@ import {
 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { prepareTransactionRequest } from 'viem/actions'
-import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
+import { Actions, Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 
 import * as AccessKey from '../core/AccessKey.js'
 import * as Adapter from '../core/Adapter.js'
@@ -28,27 +28,58 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
     async function loadManagedKey(
       address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
       parameters: loadManagedKey.Options = {},
-    ): Promise<ManagedKeyEntry | undefined> {
+    ): Promise<loadManagedKey.ReturnType | undefined> {
       const { keyType } = parameters
       const { secureStorage } = options
       if (!secureStorage) return undefined
 
       const { chainId } = store.getState()
-      const storageKey = managedKeyStorageKey(address, chainId, keyType)
-      const entry = await secureStorage.getItem<ManagedKeyEntry>(storageKey)
+      const storageKeys = keyType
+        ? [managedKeyStorageKey(address, chainId, keyType)]
+        : [
+            managedKeyStorageKey(address, chainId, 'secp256k1'),
+            managedKeyStorageKey(address, chainId, 'p256'),
+            managedKeyStorageKey(address, chainId),
+          ]
+      let entry: ManagedKeyEntry | null = null
+      for (const storageKey of storageKeys) {
+        entry = await secureStorage.getItem<ManagedKeyEntry>(storageKey)
+        if (entry) break
+      }
       if (!entry) return undefined
 
+      const account =
+        entry.keyType === 'p256'
+          ? TempoAccount.fromP256(entry.key, { access: address })
+          : TempoAccount.fromSecp256k1(entry.key, { access: address })
+      const keyAddress = core_Address.fromPublicKey(PublicKey.from(account.publicKey))
       const deserialized = KeyAuthorization.deserialize(entry.keyAuthorization)
       if (!deserialized.signature) throw new Error('Managed access key is missing a signature.')
       const keyAuthorization = deserialized as KeyAuthorization.Signed
-      AccessKey.save({
-        address,
-        keyAuthorization,
-        privateKey: entry.key,
-        store,
-      })
 
-      return entry
+      if (keyAuthorization.address.toLowerCase() === keyAddress.toLowerCase())
+        AccessKey.save({
+          address,
+          keyAuthorization,
+          privateKey: entry.key,
+          store,
+        })
+      else
+        store.setState((state) => ({
+          accessKeys: state.accessKeys.filter(
+            (accessKey) => accessKey.address.toLowerCase() !== keyAuthorization.address.toLowerCase(),
+          ),
+        }))
+
+      return {
+        account,
+        expiry: entry.expiry,
+        key: entry.key,
+        keyAddress,
+        keyType: entry.keyType,
+        publicKey: account.publicKey,
+        storedAuthorization: keyAuthorization,
+      }
     }
 
     async function resolveManagedKey(
@@ -63,19 +94,14 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       const entry = address
         ? await loadManagedKey(address, requestedKeyType ? { keyType: requestedKeyType } : {})
         : undefined
-      if (entry) {
-        const account =
-          entry.keyType === 'p256'
-            ? TempoAccount.fromP256(entry.key, { access: address })
-            : TempoAccount.fromSecp256k1(entry.key, { access: address })
+      if (entry)
         return {
-          account,
+          account: entry.account,
           key: entry.key,
           keyAddress: entry.keyAddress,
           keyType: entry.keyType,
-          publicKey: account.publicKey,
+          publicKey: entry.publicKey,
         }
-      }
 
       const nextKeyType = requestedKeyType === 'p256' ? 'p256' : 'secp256k1'
       const key = nextKeyType === 'p256' ? P256.randomPrivateKey() : Secp256k1.randomPrivateKey()
@@ -124,6 +150,44 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       await secureStorage.setItem(storageKey, entry)
     }
 
+    async function isManagedKeyAuthorized(
+      address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
+      managedKey: loadManagedKey.ReturnType,
+    ) {
+      try {
+        const metadata = await Actions.accessKey.getMetadata(getClient(), {
+          account: address,
+          accessKey: managedKey.keyAddress,
+        })
+        return (
+          metadata.address.toLowerCase() === managedKey.keyAddress.toLowerCase() &&
+          !metadata.isRevoked
+        )
+      } catch {
+        return false
+      }
+    }
+
+    async function reauthorizeManagedKey(
+      address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
+      managedKey: loadManagedKey.ReturnType,
+    ) {
+      const result = await authorize({
+        account: address,
+        authorizeAccessKey: {
+          expiry: managedKey.expiry,
+          keyType: managedKey.keyType,
+          ...(managedKey.storedAuthorization.limits
+            ? { limits: managedKey.storedAuthorization.limits.map((limit) => ({ ...limit })) }
+            : {}),
+          publicKey: managedKey.publicKey,
+        },
+        method: 'wallet_authorizeAccessKey',
+      })
+      await saveManagedKey(address, managedKey, result.keyAuthorization)
+      return result.keyAuthorization
+    }
+
     async function withManagedAccessKey<result>(
       fn: (
         account: TempoAccount.Account,
@@ -131,10 +195,14 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       ) => Promise<result>,
     ) {
       const rootAddress = store.getState().accounts[store.getState().activeAccount]?.address
-      if (rootAddress) await loadManagedKey(rootAddress)
+      const managedKey = rootAddress ? await loadManagedKey(rootAddress) : undefined
 
-      const account = getAccount({ signable: true })
-      const keyAuthorization = AccessKey.getPending(account, { store })
+      const account = managedKey?.account ?? getAccount({ signable: true })
+      let keyAuthorization = AccessKey.getPending(account, { store })
+      if (rootAddress && managedKey && !keyAuthorization)
+        if (!(await isManagedKeyAuthorized(rootAddress, managedKey)))
+          keyAuthorization = await reauthorizeManagedKey(rootAddress, managedKey)
+
       try {
         const result = await fn(account, keyAuthorization ?? undefined)
         AccessKey.removePending(account, { store })
@@ -370,6 +438,11 @@ declare namespace resolveManagedKey {
 declare namespace loadManagedKey {
   type Options = {
     keyType?: 'secp256k1' | 'p256' | undefined
+  }
+
+  type ReturnType = resolveManagedKey.ReturnType & {
+    expiry: number
+    storedAuthorization: KeyAuthorization.Signed
   }
 }
 

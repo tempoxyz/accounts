@@ -1,5 +1,0 @@
----
-'accounts': patch
----
-
-Updated dependencies.
