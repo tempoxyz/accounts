@@ -71,7 +71,3 @@ function Component() {
     />
   )
 }
-
-declare namespace Component {
-  type Request = Remote.validateSearch.ReturnType<'personal_sign'>
-}

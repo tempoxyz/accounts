@@ -11,14 +11,11 @@ export function Siwe(props: Siwe.Props) {
     <Frame>
       <Frame.Header
         subtitle={
-          host ? (
-            <>
-              Authenticate <span className="text-foreground">{host}</span> with your passkey to
-              continue.
-            </>
-          ) : (
-            'Authenticate with your passkey to continue.'
-          )
+          <>
+            Authenticate{' '}
+            {host ? <span className="text-foreground">{host}</span> : 'this website'} with your
+            passkey to continue.
+          </>
         }
         title="Authenticate"
       />
