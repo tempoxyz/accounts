@@ -1,8 +1,8 @@
-import { Radio } from '@base-ui/react/radio'
-import { RadioGroup } from '@base-ui/react/radio-group'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
 import { Input } from '#/ui/Input.js'
+import { Radio } from '@base-ui/react/radio'
+import { RadioGroup } from '@base-ui/react/radio-group'
 import { useState } from 'react'
 
 const presets = [20, 50, 100] as const
@@ -33,7 +33,12 @@ export function Deposit(props: Deposit.Props) {
             }}
           >
             <div className="flex flex-col gap-4">
-              <RadioGroup name="amount" value={selected} onValueChange={setSelected} className="grid grid-cols-4 gap-2">
+              <RadioGroup
+                name="amount"
+                value={selected}
+                onValueChange={setSelected}
+                className="grid grid-cols-4 gap-2"
+              >
                 {presets.map((preset) => (
                   <Radio.Root
                     key={preset}

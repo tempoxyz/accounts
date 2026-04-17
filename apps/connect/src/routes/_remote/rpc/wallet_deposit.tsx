@@ -1,8 +1,8 @@
 import * as Bridge from '#/lib/bridge.js'
 import { remote, wagmiConfig } from '#/lib/config.js'
 import { useMutation } from '@tanstack/react-query'
-import { getClient } from '@wagmi/core'
 import { createFileRoute } from '@tanstack/react-router'
+import { getClient } from '@wagmi/core'
 import { Remote } from 'accounts'
 import { useRef, useState } from 'react'
 import { tempo } from 'viem/chains'
@@ -14,8 +14,7 @@ import * as TransactionFrames from './-frames/transaction/index.js'
 
 export const Route = createFileRoute('/_remote/rpc/wallet_deposit')({
   component: Component,
-  validateSearch: (search) =>
-    Remote.validateSearch(remote, search, { method: 'wallet_deposit' }),
+  validateSearch: (search) => Remote.validateSearch(remote, search, { method: 'wallet_deposit' }),
 })
 
 function Component() {
