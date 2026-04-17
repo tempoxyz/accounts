@@ -1,7 +1,6 @@
 import { encodeAbiParameters, parseUnits } from 'viem'
 import type { Transaction } from 'viem/tempo'
-import { vi } from 'vitest'
-import { describe, expect, test } from 'vp/test'
+import { describe, expect, test, vi } from 'vp/test'
 
 vi.mock('./viem.js', () => ({
   getClient: () => mockClient,
