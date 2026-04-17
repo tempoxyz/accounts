@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'vp/test'
 
 import * as TestSession from '../test/session.js'
-import app from './index.js'
+import { app } from './index.js'
 
 beforeAll(() => TestSession.install())
 

@@ -25,7 +25,8 @@ export async function handle(request: Request): Promise<Response> {
   let envelope: { dsn?: string | undefined }
   try {
     const parsed: unknown = JSON.parse(firstLine)
-    if (!parsed || typeof parsed !== 'object') return new Response('Invalid envelope', { status: 400 })
+    if (!parsed || typeof parsed !== 'object')
+      return new Response('Invalid envelope', { status: 400 })
     envelope = parsed as { dsn?: string | undefined }
   } catch {
     return new Response('Invalid envelope', { status: 400 })

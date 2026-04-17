@@ -34,6 +34,7 @@ const app = new Hono<{ Bindings: Env }>()
   .route('/api', api)
 
 export type App = typeof app
+export { app }
 
 const handler: ExportedHandler<RuntimeEnv> = {
   fetch(request, env, ctx) {
