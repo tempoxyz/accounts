@@ -1,5 +1,4 @@
 import { remote, wagmiConfig } from '#/lib/config.js'
-import * as Currency from '#/lib/currency.js'
 import { useMutation } from '@tanstack/react-query'
 import { getClient, sendTransaction } from '@wagmi/core'
 import { sendTransactionSync } from '@wagmi/core'

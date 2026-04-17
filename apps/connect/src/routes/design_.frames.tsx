@@ -387,7 +387,12 @@ function SendTransactionOnrampFlow() {
       <Arrow />
 
       <Card label="Deposit Crypto">
-        <TransactionFrames.DepositCrypto address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600" amount="$50.00" onBack={() => {}} onDone={() => {}} />
+        <TransactionFrames.DepositCrypto
+          address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
+          amount="$50.00"
+          onBack={() => {}}
+          onDone={() => {}}
+        />
       </Card>
     </>
   )
@@ -573,7 +578,12 @@ function DepositFlow() {
       <Arrow />
 
       <Card label="Crypto Deposit">
-        <TransactionFrames.DepositCrypto address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600" amount="$25.00" onBack={() => {}} onDone={() => {}} />
+        <TransactionFrames.DepositCrypto
+          address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
+          amount="$25.00"
+          onBack={() => {}}
+          onDone={() => {}}
+        />
       </Card>
     </>
   )
@@ -596,7 +606,12 @@ function DepositRecipientFlow() {
       <Arrow />
 
       <Card label="Crypto Deposit">
-        <TransactionFrames.DepositCrypto address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600" amount="$25.00" onBack={() => {}} onDone={() => {}} />
+        <TransactionFrames.DepositCrypto
+          address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
+          amount="$25.00"
+          onBack={() => {}}
+          onDone={() => {}}
+        />
       </Card>
     </>
   )

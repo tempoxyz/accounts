@@ -174,9 +174,18 @@ export function DepositCrypto(props: DepositCrypto.Props) {
         <div className="flex gap-2 rounded-body border border-amber-4 bg-amber-1 px-3 py-2 text-label-12 text-amber-8">
           <AlertTriangle className="mt-px size-3.5 shrink-0" />
           <span>
-            {isTempo
-              ? 'Only send tokens on Tempo. Sending tokens on a different network may result in permanent loss.'
-              : <>Only send <span className="text-amber-10">{amount.replace(/^\$/, '')} {selectedToken?.symbol ?? 'the correct token'}</span> on <span className="text-amber-10">{selectedChain.name}</span>. Sending other tokens or using a different network may result in permanent loss.</>}
+            {isTempo ? (
+              'Only send tokens on Tempo. Sending tokens on a different network may result in permanent loss.'
+            ) : (
+              <>
+                Only send{' '}
+                <span className="text-amber-10">
+                  {amount.replace(/^\$/, '')} {selectedToken?.symbol ?? 'the correct token'}
+                </span>{' '}
+                on <span className="text-amber-10">{selectedChain.name}</span>. Sending other tokens
+                or using a different network may result in permanent loss.
+              </>
+            )}
           </span>
         </div>
       </Frame.Body>
@@ -185,7 +194,13 @@ export function DepositCrypto(props: DepositCrypto.Props) {
           <Button className="flex-1" onClick={onBack} size="medium" variant="muted">
             Back
           </Button>
-          <Button className="flex-1" loading={confirming} onClick={onDone} size="medium" variant="primary">
+          <Button
+            className="flex-1"
+            loading={confirming}
+            onClick={onDone}
+            size="medium"
+            variant="primary"
+          >
             {confirming ? 'Confirming…' : 'Done'}
           </Button>
         </div>

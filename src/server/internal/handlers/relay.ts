@@ -557,7 +557,7 @@ async function fill(
     const sourceToken =
       feeToken && feeToken.toLowerCase() !== token.toLowerCase()
         ? feeToken
-        : (await options.resolveFeeToken?.(token as Address))
+        : await options.resolveFeeToken?.(token as Address)
     if (!sourceToken || sourceToken.toLowerCase() === token.toLowerCase()) throw error
 
     const deficit = required - available
