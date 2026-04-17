@@ -1,2 +1,5 @@
+export { Permit } from './Permit.js'
 export { PersonalSign } from './PersonalSign.js'
 export { Siwe } from './Siwe.js'
+export { TypedData } from './TypedData.js'
+export { TypedDataInvalid } from './TypedDataInvalid.js'

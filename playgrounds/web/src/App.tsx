@@ -663,50 +663,147 @@ function PersonalSignSiwe() {
 }
 
 function EthSignTypedData() {
-  const [result, error, execute] = useRequest()
+  const [result, setResult] = useState<{ data: object; signature: string }>()
+  const [error, setError] = useState<Error>()
+
+  function signTypedData(label: string, data: object) {
+    return (
+      <button
+        key={label}
+        onClick={async () => {
+          try {
+            setResult(undefined)
+            setError(undefined)
+            const accounts = await provider.request({ method: 'eth_accounts' })
+            if (accounts.length === 0) return
+            const signature = await provider.request({
+              method: 'eth_signTypedData_v4',
+              params: [accounts[0], Json.stringify(data)],
+            } as any)
+            setResult({ data, signature: signature as string })
+          } catch (e) {
+            setResult(undefined)
+            setError(e instanceof Error ? e : new Error(String(e)))
+          }
+        }}
+      >
+        {label}
+      </button>
+    )
+  }
+
+  const chain = env === 'devnet' ? tempoDevnet : testnet ? tempoModerato : tempo
+  const tokenAddress = Object.values(tokens)[0]
+
   return (
     <Method method="eth_signTypedData_v4" result={result} error={error}>
-      <button
-        onClick={() =>
-          execute(async () => {
-            const accounts = await provider.request({ method: 'eth_accounts' })
-            if (accounts.length === 0) return 'No accounts connected'
-            return provider.request({
-              method: 'eth_signTypedData_v4',
-              params: [
-                accounts[0],
-                Json.stringify({
-                  types: {
-                    EIP712Domain: [
-                      { name: 'name', type: 'string' },
-                      { name: 'version', type: 'string' },
-                      { name: 'chainId', type: 'uint256' },
-                    ],
-                    Person: [
-                      { name: 'name', type: 'string' },
-                      { name: 'wallet', type: 'address' },
-                    ],
-                    Mail: [
-                      { name: 'from', type: 'Person' },
-                      { name: 'to', type: 'Person' },
-                      { name: 'contents', type: 'string' },
-                    ],
-                  },
-                  primaryType: 'Mail',
-                  domain: { name: 'Example', version: '1', chainId: '1' },
-                  message: {
-                    from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000001' },
-                    to: { name: 'Bob', wallet: '0x0000000000000000000000000000000000000002' },
-                    contents: 'Hello, Bob!',
-                  },
-                }),
-              ],
-            } as any)
-          })
-        }
-      >
-        Sign
-      </button>
+      {signTypedData('Generic (Mail)', {
+        types: {
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'version', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+          ],
+          Person: [
+            { name: 'name', type: 'string' },
+            { name: 'wallet', type: 'address' },
+          ],
+          Mail: [
+            { name: 'from', type: 'Person' },
+            { name: 'to', type: 'Person' },
+            { name: 'contents', type: 'string' },
+          ],
+        },
+        primaryType: 'Mail',
+        domain: { name: 'Example', version: '1', chainId: String(chain.id) },
+        message: {
+          from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000001' },
+          to: { name: 'Bob', wallet: '0x0000000000000000000000000000000000000002' },
+          contents: 'Hello, Bob!',
+        },
+      })}
+      {signTypedData('ERC-2612 Permit', {
+        types: {
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'version', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+            { name: 'verifyingContract', type: 'address' },
+          ],
+          Permit: [
+            { name: 'owner', type: 'address' },
+            { name: 'spender', type: 'address' },
+            { name: 'value', type: 'uint256' },
+            { name: 'nonce', type: 'uint256' },
+            { name: 'deadline', type: 'uint256' },
+          ],
+        },
+        primaryType: 'Permit',
+        domain: {
+          name: 'pathUSD',
+          version: '1',
+          chainId: String(chain.id),
+          verifyingContract: tokenAddress,
+        },
+        message: {
+          owner: '0x0000000000000000000000000000000000000001',
+          spender: '0x0000000000000000000000000000000000000002',
+          value: String(parseUnits('100', 6)),
+          nonce: '0',
+          deadline: String(Math.floor(Date.now() / 1000) + 86400),
+        },
+      })}
+      {signTypedData('Permit2 (PermitSingle)', {
+        types: {
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+            { name: 'verifyingContract', type: 'address' },
+          ],
+          PermitSingle: [
+            { name: 'details', type: 'PermitDetails' },
+            { name: 'spender', type: 'address' },
+            { name: 'sigDeadline', type: 'uint256' },
+          ],
+          PermitDetails: [
+            { name: 'token', type: 'address' },
+            { name: 'amount', type: 'uint160' },
+            { name: 'expiration', type: 'uint48' },
+            { name: 'nonce', type: 'uint48' },
+          ],
+        },
+        primaryType: 'PermitSingle',
+        domain: {
+          name: 'Permit2',
+          chainId: String(chain.id),
+          verifyingContract: '0x000000000022D473030F116dDEE9F6B43aC78BA3',
+        },
+        message: {
+          details: {
+            token: tokenAddress,
+            amount: String(parseUnits('100', 6)),
+            expiration: String(Math.floor(Date.now() / 1000) + 86400),
+            nonce: '0',
+          },
+          spender: '0x0000000000000000000000000000000000000002',
+          sigDeadline: String(Math.floor(Date.now() / 1000) + 3600),
+        },
+      })}
+      {signTypedData('Unusual Data', {
+        types: {
+          EIP712Domain: [{ name: 'name', type: 'string' }],
+          RawPayload: [
+            { name: 'data', type: 'bytes' },
+            { name: 'nonce', type: 'uint256' },
+          ],
+        },
+        primaryType: 'RawPayload',
+        domain: { name: 'Unknown Protocol' },
+        message: {
+          data: '0xdeadbeefcafebabe',
+          nonce: '42',
+        },
+      })}
     </Method>
   )
 }
@@ -765,46 +862,60 @@ function VerifyMessage() {
 
 function VerifyTypedData() {
   const [result, error, execute] = useRequest()
+  const clear = useCallback(() => {
+    execute(async () => undefined)
+  }, [execute])
   return (
     <Method method="eth_signTypedData_v4 (verify)" result={result} error={error}>
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          const signature = new FormData(e.currentTarget).get('signature') as `0x${string}`
-          if (!signature) return
+          const form = new FormData(e.currentTarget)
+          const data = form.get('data') as string
+          const signature = form.get('signature') as `0x${string}`
+          if (!data || !signature) return
           execute(async () => {
             const accounts = await provider.request({ method: 'eth_accounts' })
             if (accounts.length === 0) return 'No accounts connected'
+            const parsed = JSON.parse(data) as {
+              domain: Record<string, unknown>
+              message: Record<string, unknown>
+              primaryType: string
+              types: Record<string, unknown>
+            }
+            const domain = {
+              ...parsed.domain,
+              ...(typeof parsed.domain.chainId === 'string'
+                ? { chainId: BigInt(parsed.domain.chainId) }
+                : {}),
+            }
             const client = provider.getClient()
             return verifyTypedData(client, {
               address: accounts[0],
-              types: {
-                Person: [
-                  { name: 'name', type: 'string' },
-                  { name: 'wallet', type: 'address' },
-                ],
-                Mail: [
-                  { name: 'from', type: 'Person' },
-                  { name: 'to', type: 'Person' },
-                  { name: 'contents', type: 'string' },
-                ],
-              },
-              primaryType: 'Mail',
-              domain: { name: 'Example', version: '1', chainId: 1n },
-              message: {
-                from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000001' },
-                to: { name: 'Bob', wallet: '0x0000000000000000000000000000000000000002' },
-                contents: 'Hello, Bob!',
-              },
+              domain,
+              types: parsed.types,
+              primaryType: parsed.primaryType,
+              message: parsed.message,
               signature,
-            })
+            } as never)
           })
         }}
       >
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Data</label>
+          <textarea
+            name="data"
+            onFocus={clear}
+            placeholder='{"types":...,"primaryType":...,"domain":...,"message":...}'
+            rows={3}
+            style={{ flex: 1, fontFamily: 'monospace' }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Signature</label>
           <input
             name="signature"
+            onFocus={clear}
             placeholder="0x..."
             style={{ flex: 1, fontFamily: 'monospace' }}
           />
