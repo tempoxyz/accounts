@@ -13,7 +13,10 @@ export const relay = new Hono<{ Bindings: Env }>().all('/*', async (c) => {
     const key = process.env.RELAY_PRIVATE_KEY
     if (!key) return undefined
     const account = privateKeyToAccount(key as `0x${string}`)
-    const budgetValidate = FeePayer.create(account.address, c.env.KV)
+    const budgetValidate = FeePayer.create(account.address, c.env.KV, {
+      dailyLimitUsd: process.env.FEE_PAYER_DAILY_LIMIT_USD,
+      globalDailyLimitUsd: process.env.FEE_PAYER_GLOBAL_DAILY_LIMIT_USD,
+    })
     return {
       account,
       validate: (request: { from?: Address | undefined }) => {

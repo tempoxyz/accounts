@@ -1,8 +1,10 @@
 import { waitUntil } from 'cloudflare:workers'
-import { QueryBuilder, Tidx } from 'tidx.ts'
-import { type Address, type Client, createClient, formatUnits, http, parseUnits } from 'viem'
-import { tempo, tempoModerato } from 'viem/chains'
+import { type Address, formatUnits, parseUnits } from 'viem'
 import { Actions, Transaction } from 'viem/tempo'
+
+import { type TempoChain, fromId } from './chain.js'
+import * as Tidx from './tidx.js'
+import * as Viem from './viem.js'
 
 const ATTODOLLARS_PER_MICRODOLLAR = 10n ** 12n
 const MIN_BALANCE_UNITS = 1_000_000n
@@ -28,14 +30,6 @@ function parseUsdLimit(value: string | undefined, defaultValue: string): bigint 
   }
 }
 
-function createQueryBuilder(chainId: number) {
-  const tidxAuth =
-    chainId === tempoModerato.id
-      ? process.env.TEMPO_MODERATO_INDEXER_API_KEY
-      : process.env.TEMPO_INDEXER_API_KEY
-  return QueryBuilder.from(Tidx.create({ basicAuth: tidxAuth, chainId }))
-}
-
 /**
  * Prevent abuse while being blazing fast:
  *   - Always read from KV within request / response cycle, it's ok to be stale
@@ -44,27 +38,23 @@ function createQueryBuilder(chainId: number) {
 export function create(
   feePayerAddress: Address,
   kv: KVNamespace,
-  /** @internal — test overrides. */
-  internal: {
-    client?: Client | undefined
-    queryBuilder?: QueryBuilder.QueryBuilder | undefined
-  } = {},
+  options: create.Options = {},
 ): create.ReturnType {
-  const dailyLimitMicroUsd = parseUsdLimit(process.env.FEE_PAYER_DAILY_LIMIT_USD, '0.20')
-  const globalDailyLimitMicroUsd = parseUsdLimit(process.env.FEE_PAYER_GLOBAL_DAILY_LIMIT_USD, '50')
+  const dailyLimitMicroUsd = parseUsdLimit(options.dailyLimitUsd, '0.20')
+  const globalDailyLimitMicroUsd = parseUsdLimit(options.globalDailyLimitUsd, '50')
 
-  function kvKey(chainId: number, scope: string) {
-    return `fee-payer:${chainId}:${scope}`
+  function kvKey(chain: TempoChain, scope: string) {
+    return `fee-payer:${chain}:${scope}`
   }
 
   /** Read cached spend from KV. Returns `0n` on miss and refreshes in background. */
-  async function getSpend(chainId: number, requester?: string | undefined) {
+  async function getSpend(chain: TempoChain, requester?: string | undefined) {
     const scope = requester ? requester.toLowerCase() : 'global'
-    const key = kvKey(chainId, scope)
+    const key = kvKey(chain, scope)
     const raw = await kv.get(key)
 
     // Always refresh in background.
-    const qb = internal.queryBuilder ?? createQueryBuilder(chainId)
+    const qb = Tidx.getQueryBuilder(chain)
     const since = new Date(Date.now() - 86_400_000)
 
     let query = qb
@@ -92,20 +82,13 @@ export function create(
   }
 
   /** Read cached balance from KV. First read fetches on-chain; subsequent reads use cache. Always refreshes in background. */
-  async function getHasFunds(chainId: number) {
-    const key = kvKey(chainId, 'balance')
+  async function getHasFunds(chain: TempoChain) {
+    const key = kvKey(chain, 'balance')
     const raw = await kv.get(key)
-
-    const client =
-      internal.client ??
-      createClient({
-        chain: chainId === tempoModerato.id ? tempoModerato : tempo,
-        transport: http(),
-      })
 
     const fetchAndCache = () =>
       Actions.token
-        .getBalance(client, { account: feePayerAddress, token: FEE_TOKEN })
+        .getBalance(Viem.getClient(chain), { account: feePayerAddress, token: FEE_TOKEN })
         .then(async (balance) => {
           await kv.put(key, String(balance >= MIN_BALANCE_UNITS), { expirationTtl: 86_400 })
         })
@@ -132,16 +115,16 @@ export function create(
       const maxFeePerGas = request.maxFeePerGas as bigint | undefined
       if (!gas || !maxFeePerGas) return true
 
-      const chainId = (request as { chainId?: number }).chainId ?? tempo.id
+      const chain = fromId((request as { chainId?: number }).chainId ?? 4217)
 
-      if (!(await getHasFunds(chainId))) {
+      if (!(await getHasFunds(chain))) {
         console.warn('[fee-payer] insufficient balance')
         return false
       }
 
       const txFee = attodollarToMicrodollar(gas * maxFeePerGas)
 
-      const globalSpend = await getSpend(chainId)
+      const globalSpend = await getSpend(chain)
       if (globalDailyLimitMicroUsd !== null && globalSpend + txFee > globalDailyLimitMicroUsd) {
         console.info('[fee-payer] global budget exceeded', {
           globalSpentUsd: formatMicrodollar(globalSpend),
@@ -152,7 +135,7 @@ export function create(
       }
 
       if (dailyLimitMicroUsd !== null && from) {
-        const requesterSpend = await getSpend(chainId, from)
+        const requesterSpend = await getSpend(chain, from)
         if (requesterSpend + txFee > dailyLimitMicroUsd) {
           console.info('[fee-payer] address budget exceeded', {
             requester: from,
@@ -173,5 +156,12 @@ export function create(
 }
 
 export declare namespace create {
+  type Options = {
+    /** Per-address daily spend limit in USD (e.g. `"0.20"`). Defaults to `"0.20"`. */
+    dailyLimitUsd?: string | undefined
+    /** Global daily spend limit in USD (e.g. `"50"`). Defaults to `"50"`. */
+    globalDailyLimitUsd?: string | undefined
+  }
+
   type ReturnType = (request: Transaction.TransactionRequest) => boolean | Promise<boolean>
 }

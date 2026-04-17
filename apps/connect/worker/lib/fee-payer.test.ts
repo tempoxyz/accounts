@@ -1,6 +1,15 @@
 import { encodeAbiParameters, parseUnits } from 'viem'
 import type { Transaction } from 'viem/tempo'
-import { describe, expect, test, vi } from 'vp/test'
+import { vi } from 'vitest'
+import { describe, expect, test } from 'vp/test'
+
+vi.mock('./viem.js', () => ({
+  getClient: () => mockClient,
+}))
+
+vi.mock('./tidx.js', () => ({
+  getQueryBuilder: () => mockQueryBuilder,
+}))
 
 import * as FeePayer from './fee-payer.js'
 
@@ -15,6 +24,9 @@ function encodeBalance(value: bigint) {
 const FEE_PAYER = '0x1111111111111111111111111111111111111111' as const
 const REQUESTER = '0x2222222222222222222222222222222222222222' as const
 
+let mockClient: unknown
+let mockQueryBuilder: unknown
+
 function createKv() {
   const store = new Map<string, string>()
   return {
@@ -28,7 +40,7 @@ function createKv() {
   } as unknown as KVNamespace
 }
 
-function createMocks(
+function setupMocks(
   state: {
     requesterRows?: { gas_used: string; effective_gas_price: string }[]
     globalRows?: { gas_used: string; effective_gas_price: string }[]
@@ -36,26 +48,24 @@ function createMocks(
   } = {},
 ) {
   const { requesterRows = [], globalRows = [], balance = 2_000_000n } = state
-  return {
-    client: {
-      chain: { id: 4217 },
-      request: vi.fn(async () => encodeBalance(balance)),
-    } as never,
-    queryBuilder: {
-      selectFrom: () => {
-        let requesterFilter: string | undefined
-        return {
-          select() {
-            return this
-          },
-          where(column: string, _op: string, value: unknown) {
-            if (column === 'from') requesterFilter = value as string
-            return this
-          },
-          execute: vi.fn(async () => (requesterFilter ? requesterRows : globalRows)),
-        }
-      },
-    } as never,
+  mockClient = {
+    chain: { id: 4217 },
+    request: vi.fn(async () => encodeBalance(balance)),
+  }
+  mockQueryBuilder = {
+    selectFrom: () => {
+      let requesterFilter: string | undefined
+      return {
+        select() {
+          return this
+        },
+        where(column: string, _op: string, value: unknown) {
+          if (column === 'from') requesterFilter = value as string
+          return this
+        },
+        execute: vi.fn(async () => (requesterFilter ? requesterRows : globalRows)),
+      }
+    },
   }
 }
 
@@ -80,65 +90,60 @@ async function warmAndValidate(
 
 describe('create', () => {
   test('approves on cold KV (first call)', async () => {
+    setupMocks()
     const kv = createKv()
-    const validate = FeePayer.create(FEE_PAYER, kv, createMocks())
+    const validate = FeePayer.create(FEE_PAYER, kv)
     expect(await validate(request())).toMatchInlineSnapshot(`true`)
   })
 
   test('approves when under budget (warm KV)', async () => {
+    setupMocks()
     const kv = createKv()
-    const validate = FeePayer.create(FEE_PAYER, kv, createMocks())
+    const validate = FeePayer.create(FEE_PAYER, kv)
     expect(await warmAndValidate(validate, request())).toMatchInlineSnapshot(`true`)
   })
 
   test('blocks when requester daily budget is exceeded', async () => {
+    setupMocks({
+      requesterRows: [{ gas_used: '1', effective_gas_price: parseAttodollar('0.19').toString() }],
+      globalRows: [{ gas_used: '1', effective_gas_price: parseAttodollar('0.19').toString() }],
+    })
     const kv = createKv()
-    const validate = FeePayer.create(
-      FEE_PAYER,
-      kv,
-      createMocks({
-        requesterRows: [{ gas_used: '1', effective_gas_price: parseAttodollar('0.19').toString() }],
-        globalRows: [{ gas_used: '1', effective_gas_price: parseAttodollar('0.19').toString() }],
-      }),
-    )
+    const validate = FeePayer.create(FEE_PAYER, kv)
     expect(await warmAndValidate(validate, request())).toMatchInlineSnapshot(`false`)
   })
 
   test('blocks when global daily budget is exceeded', async () => {
+    setupMocks({
+      requesterRows: [{ gas_used: '1', effective_gas_price: parseAttodollar('0.01').toString() }],
+      globalRows: [{ gas_used: '1', effective_gas_price: parseAttodollar('49.99').toString() }],
+    })
     const kv = createKv()
-    const validate = FeePayer.create(
-      FEE_PAYER,
-      kv,
-      createMocks({
-        requesterRows: [{ gas_used: '1', effective_gas_price: parseAttodollar('0.01').toString() }],
-        globalRows: [{ gas_used: '1', effective_gas_price: parseAttodollar('49.99').toString() }],
-      }),
-    )
+    const validate = FeePayer.create(FEE_PAYER, kv)
     expect(await warmAndValidate(validate, request())).toMatchInlineSnapshot(`false`)
   })
 
   test('blocks when fee payer has insufficient balance', async () => {
+    setupMocks({ balance: 0n })
     const kv = createKv()
-    const validate = FeePayer.create(FEE_PAYER, kv, createMocks({ balance: 0n }))
+    const validate = FeePayer.create(FEE_PAYER, kv)
     expect(await validate(request())).toMatchInlineSnapshot(`false`)
   })
 
   test('approves when both limits are disabled', async () => {
-    process.env.FEE_PAYER_DAILY_LIMIT_USD = '0'
-    process.env.FEE_PAYER_GLOBAL_DAILY_LIMIT_USD = '0'
-    try {
-      const kv = createKv()
-      const validate = FeePayer.create(FEE_PAYER, kv, createMocks())
-      expect(await validate(request())).toMatchInlineSnapshot(`true`)
-    } finally {
-      delete process.env.FEE_PAYER_DAILY_LIMIT_USD
-      delete process.env.FEE_PAYER_GLOBAL_DAILY_LIMIT_USD
-    }
+    setupMocks()
+    const kv = createKv()
+    const validate = FeePayer.create(FEE_PAYER, kv, {
+      dailyLimitUsd: '0',
+      globalDailyLimitUsd: '0',
+    })
+    expect(await validate(request())).toMatchInlineSnapshot(`true`)
   })
 
   test('approves when gas/maxFeePerGas missing', async () => {
+    setupMocks()
     const kv = createKv()
-    const validate = FeePayer.create(FEE_PAYER, kv, createMocks())
+    const validate = FeePayer.create(FEE_PAYER, kv)
     expect(
       await validate({ from: REQUESTER } as Transaction.TransactionRequest),
     ).toMatchInlineSnapshot(`true`)
