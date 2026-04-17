@@ -253,6 +253,9 @@ importers:
       react-dom:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
+      tidx.ts:
+        specifier: 0.1.0
+        version: 0.1.0(typescript@5.9.3)
       viem:
         specifier: ^2.48.1
         version: 2.48.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
@@ -12108,7 +12111,7 @@ snapshots:
       postcss: 8.4.49
       resolve-from: 5.0.0
     optionalDependencies:
-      expo: 55.0.12(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(bufferutil@4.0.9)(react-dom@19.2.5(react@19.2.5))(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
+      expo: 55.0.12(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(bufferutil@4.0.9)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.0(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -12164,7 +12167,7 @@ snapshots:
       '@expo/json-file': 10.0.13
       '@react-native/normalize-colors': 0.83.4
       debug: 4.4.3
-      expo: 55.0.12(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(bufferutil@4.0.9)(react-dom@19.2.5(react@19.2.5))(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
+      expo: 55.0.12(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(bufferutil@4.0.9)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.0(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
       resolve-from: 5.0.0
       semver: 7.7.4
       xml2js: 0.6.0
@@ -15098,7 +15101,7 @@ snapshots:
       resolve-from: 5.0.0
     optionalDependencies:
       '@babel/runtime': 7.29.2
-      expo: 55.0.12(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(bufferutil@4.0.9)(react-dom@19.2.5(react@19.2.5))(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
+      expo: 55.0.12(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(bufferutil@4.0.9)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.0(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -16172,7 +16175,7 @@ snapshots:
 
   expo-keep-awake@55.0.6(expo@55.0.12)(react@19.2.5):
     dependencies:
-      expo: 55.0.12(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(bufferutil@4.0.9)(react-dom@19.2.5(react@19.2.5))(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
+      expo: 55.0.12(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(bufferutil@4.0.9)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.0(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
       react: 19.2.5
 
   expo-linking@55.0.13(expo@55.0.12)(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3):
@@ -16210,7 +16213,7 @@ snapshots:
 
   expo-secure-store@55.0.13(expo@55.0.12):
     dependencies:
-      expo: 55.0.12(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(bufferutil@4.0.9)(react-dom@19.2.5(react@19.2.5))(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
+      expo: 55.0.12(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(bufferutil@4.0.9)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.0(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
 
   expo-server@55.0.7: {}
 

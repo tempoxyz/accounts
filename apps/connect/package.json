@@ -38,6 +38,7 @@
     "posthog-js": "1.360.2",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "tidx.ts": "0.1.0",
     "viem": "catalog:",
     "wagmi": "catalog:"
   },
