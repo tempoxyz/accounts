@@ -19,7 +19,7 @@ const api = new Hono<{ Bindings: Env }>()
   .route('/relay', relay)
   .route('/webauthn', webauthn)
 
-const app = new Hono<{ Bindings: Env }>()
+const app = new Hono<{ Bindings: Env }>() //
   .route('/.well-known', jwks)
   .route('/api', api)
 

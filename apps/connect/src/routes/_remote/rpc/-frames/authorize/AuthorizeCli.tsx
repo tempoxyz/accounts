@@ -2,10 +2,11 @@
 
 import { Frame } from '#/ui/Frame.js'
 import { Row, Rows } from '#/ui/Rows.js'
+import * as React from 'react'
 
 /** CLI authorization screen — confirm device code and approve spending scopes. */
 export function AuthorizeCli(props: AuthorizeCli.Props) {
-  const { code, confirming, host, onApprove, onReject, scopes } = props
+  const { code, confirming, host, onApprove, onReject, scopes, scopesNode } = props
 
   return (
     <Frame>
@@ -28,20 +29,21 @@ export function AuthorizeCli(props: AuthorizeCli.Props) {
           </p>
           <p className="font-mono text-heading-32 tracking-[0.3em]">{code}</p>
         </div>
-        {scopes && scopes.length > 0 && (
-          <Rows>
-            {scopes.map((scope, i) => (
-              <Row key={i} label={scope.label}>
-                <p className="flex items-center gap-1.5 font-medium">
-                  {scope.value}
-                  {scope.suffix && (
-                    <span className="font-normal text-foreground-secondary"> {scope.suffix}</span>
-                  )}
-                </p>
-              </Row>
-            ))}
-          </Rows>
-        )}
+        {scopesNode ??
+          (scopes && scopes.length > 0 ? (
+            <Rows>
+              {scopes.map((scope, index) => (
+                <Row key={index} label={scope.label}>
+                  <p className="flex items-center gap-1.5 font-medium">
+                    {scope.value}
+                    {scope.suffix && (
+                      <span className="font-normal text-foreground-secondary"> {scope.suffix}</span>
+                    )}
+                  </p>
+                </Row>
+              ))}
+            </Rows>
+          ) : null)}
       </Frame.Body>
       <Frame.Footer>
         <Frame.ActionButtons
@@ -71,6 +73,8 @@ export declare namespace AuthorizeCli {
     onReject?: (() => void) | undefined
     /** Spending scopes to display. */
     scopes?: readonly Scope[] | undefined
+    /** Custom scope content. Overrides `scopes` when provided. */
+    scopesNode?: React.ReactNode | undefined
   }
 
   type Scope = {

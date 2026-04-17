@@ -1,4 +1,7 @@
-import { wagmiConfig } from '#/lib/config.js'
+import { wagmiConfig, zAddress } from '#/lib/config.js'
+import { TimeFormatter } from '#/lib/formatters.js'
+import { AuthorizeCli } from '#/routes/_remote/rpc/-frames/authorize/AuthorizeCli.js'
+import { Amount } from '#/ui/Amount.js'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
 import { Input } from '#/ui/Input.js'
@@ -6,59 +9,27 @@ import { Row, Rows } from '#/ui/Rows.js'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { switchChain } from '@wagmi/core'
-import { Address, Hex } from 'ox'
+import { Rpc } from 'accounts'
+import { CliAuth } from 'accounts/server'
+import { Hex } from 'ox'
 import * as React from 'react'
 import { formatUnits } from 'viem'
-import { useConnection } from 'wagmi'
+import { useConnect, useConnection, useConnectors } from 'wagmi'
 import { Hooks } from 'wagmi/tempo'
+import * as z from 'zod/mini'
 import Check from '~icons/lucide/check'
 
 /** Standalone CLI device-code approval page. */
 export const Route = createFileRoute('/cli')({
-  validateSearch: (search: Record<string, unknown>) => ({
-    code: typeof search.code === 'string' ? search.code : undefined,
-  }),
+  validateSearch: z.object({ code: z.optional(z.string()) }),
   component: RouteComponent,
 })
 
-type Pending = {
-  accessKeyAddress: Address.Address
-  chainId: number | string
-  code: string
-  expiry?: number | undefined
-  keyType: 'p256' | 'secp256k1' | 'webauthn'
-  limits?:
-    | readonly {
-        limit: Hex.Hex
-        period?: number | undefined
-        token: Address.Address
-      }[]
-    | undefined
-  pubKey: Hex.Hex
-}
-
-type Limit = {
-  limit: Hex.Hex
-  period?: number | undefined
-  token: Address.Address
-}
-
-type AuthorizeAccessKey = {
-  expiry: number
-  keyType?: 'p256' | 'secp256k1' | 'webAuthn' | undefined
-  limits?:
-    | readonly {
-        limit: Hex.Hex
-        period?: number | undefined
-        token: Address.Address
-      }[]
-    | undefined
-  publicKey?: Hex.Hex | undefined
-}
-
 function RouteComponent() {
-  const navigate = Route.useNavigate()
-  const { address } = useConnection()
+  // WHY these 2 lines?
+  Route.useNavigate()
+  useConnection()
+
   const { code } = Route.useSearch()
   const normalizedCode = React.useMemo(() => normalizeCode(code), [code])
 
@@ -67,38 +38,38 @@ function RouteComponent() {
     queryKey: ['cli', 'pending', normalizedCode],
     queryFn: async () => {
       const response = await fetch(`/api/auth/cli/pending/${normalizedCode}`)
-      const body = (await response.json()) as Pending | { error?: string | undefined }
-      console.info('pending response', JSON.stringify(body, undefined, 2))
-      if (!response.ok)
-        throw new Error(('error' in body ? body.error : undefined) ?? 'Invalid device code.')
-      return body as Pending
+      const parsed = z
+        .union([CliAuth.pendingResponse, z.object({ error: z.string() })])
+        .safeParse(await response.json())
+      if (!parsed.success) throw new Error(`Invalid response - ${z.prettifyError(parsed.error)}`)
+      if ('error' in parsed.data) throw new Error(parsed.data.error)
+      return parsed.data
     },
   })
 
-  const me = useQuery({
+  const meQuery = useQuery({
     queryKey: ['auth', 'me'],
     queryFn: async () => {
       const response = await fetch('/api/auth/me')
-      if (!response.ok) throw new Error('Unauthorized')
-      return (await response.json()) as {
-        address: Address.Address
-        email?: string | undefined
-        username?: string | undefined
-      }
+      const parsed = z.safeParse(
+        z.object({
+          address: zAddress(),
+          email: z.nullable(z.email()),
+          username: z.nullable(z.string()),
+        }),
+        await response.json(),
+      )
+      if (!parsed.success) throw new Error(`Invalid response - ${z.prettifyError(parsed.error)}`)
+      return parsed.data
     },
     retry: false,
   })
 
-  const connect = useMutation({
-    mutationFn: async (variables: { method: 'login' | 'register'; name?: string | undefined }) =>
-      wagmiConfig.connectors[0]!.connect({
-        capabilities: {
-          ...(variables.name ? { name: variables.name } : {}),
-          method: variables.method,
-          ...(variables.method === 'login' ? { selectAccount: true } : {}),
-        },
-      }),
-    onSuccess: () => void me.refetch(),
+  const [connector] = useConnectors()
+  const connect = useConnect({
+    mutation: {
+      onSuccess: () => void meQuery.refetch(),
+    },
   })
 
   const authorize = useMutation({
@@ -107,19 +78,23 @@ function RouteComponent() {
       if (!current) throw new Error('Missing pending request.')
 
       await switchChain(wagmiConfig, {
-        chainId: Number(parseChainId(current.chainId)) as never,
+        chainId: Number(BigInt(current.chainId)) as any,
       })
 
-      const provider = await wagmiConfig.connectors[0]!.getProvider()
+      const provider = await connector.getProvider()
+      const params = Rpc.wallet_authorizeAccessKey.parameters.parse({
+        ...current,
+        address: current.accessKeyAddress,
+      })
       const result = await provider.request({
         method: 'wallet_authorizeAccessKey',
-        params: [toAuthorizeAccessKey(current)],
+        params: [z.encode(Rpc.wallet_authorizeAccessKey.parameters, params)],
       })
 
       const response = await fetch('/api/auth/cli', {
         body: JSON.stringify({
-          accountAddress: result.rootAddress,
           code: current.code,
+          accountAddress: result.rootAddress,
           keyAuthorization: result.keyAuthorization,
         }),
         headers: { 'content-type': 'application/json' },
@@ -141,20 +116,7 @@ function RouteComponent() {
             title="Authorize CLI"
           />
           <Frame.Body>
-            <form
-              className="flex flex-col gap-4"
-              onSubmit={(event) => {
-                event.preventDefault()
-                const form = new FormData(event.currentTarget)
-                const value = String(form.get('code') ?? '')
-                void navigate({ search: { code: normalizeCode(value) || undefined } as never })
-              }}
-            >
-              <Input autoFocus label="Device code" name="code" placeholder="ABCD-EFGH…" />
-              <Button type="submit" variant="primary">
-                Load request
-              </Button>
-            </form>
+            <CodeForm />
           </Frame.Body>
         </Card>
       </Page>
@@ -181,9 +143,7 @@ function RouteComponent() {
             <p className="text-copy-14 text-red-9">
               {pending.error instanceof Error ? pending.error.message : 'Invalid device code.'}
             </p>
-            <Button onClick={() => void navigate({ search: {} as never })} variant="muted">
-              Try another code
-            </Button>
+            <CodeForm />
           </Frame.Body>
         </Card>
       </Page>
@@ -195,94 +155,127 @@ function RouteComponent() {
         <Card>
           <Header
             icon={<Check className="size-5" />}
-            subtitle={
-              <>
-                CLI access was authorized by{' '}
-                <span className="text-foreground">{authorize.data}</span>.
-              </>
-            }
+            subtitle="Setup is complete. You can return to the CLI."
             title="Return to your terminal"
             variant="success"
           />
           <Body>
-            <p className="text-copy-14 text-foreground-secondary">
-              Setup is complete. You can return to the CLI.
-            </p>
+            {pending.data && (
+              <AuthorizedSummary chainId={Number(pending.data.chainId)} pending={pending.data} />
+            )}
           </Body>
         </Card>
       </Page>
     )
 
   const host = window.location.host
-  const label =
-    me.data?.email ??
-    me.data?.username ??
-    (address ? `${address.slice(0, 8)}…${address.slice(-6)}` : undefined)
 
   return (
     <Page>
       <Card>
-        <Frame.Header
-          subtitle={
-            host ? (
-              <>
-                <span className="text-foreground">{host}</span> wants to authorize CLI access to
-                your account.
-              </>
-            ) : (
-              'A CLI wants to authorize access to your account.'
-            )
-          }
-          title="Authorize CLI"
-        />
-        <Frame.Body>
-          <div className="flex flex-col gap-3 rounded-body bg-pane px-4 py-5 text-center">
-            <p className="text-label-12 text-foreground-secondary">
-              Confirm this code matches your terminal
-            </p>
-            <p className="font-mono text-heading-32 tracking-[0.3em]">
-              {formatCode(pending.data.code)}
-            </p>
-          </div>
-          <CliScopes pending={pending.data} />
-        </Frame.Body>
-        <Frame.Footer>
-          {me.isPending ? (
-            <p className="text-copy-14 text-foreground-secondary">Checking session…</p>
-          ) : me.isSuccess ? (
-            <div className="flex flex-col gap-4">
-              <div className="rounded-body bg-pane px-3 py-2 text-label-13 text-foreground-secondary">
-                Authorizing as <span className="text-foreground">{label ?? me.data.address}</span>
-              </div>
-              {authorize.error && (
+        {meQuery.isSuccess ? (
+          <>
+            <AuthorizeCli
+              code={formatCode(pending.data.code)}
+              confirming={authorize.isPending}
+              host={host}
+              onApprove={() => authorize.mutate()}
+              onReject={() => history.back()}
+              scopesNode={<CliScopes pending={pending.data} />}
+            />
+            {authorize.error && (
+              <Frame.Footer className="pt-0">
                 <p className="text-label-13 text-red-9">{authorize.error.message}</p>
+              </Frame.Footer>
+            )}
+          </>
+        ) : (
+          <>
+            <Frame.Header
+              subtitle={
+                host ? (
+                  <>
+                    <span className="text-foreground">{host}</span> wants to authorize CLI access to
+                    your account.
+                  </>
+                ) : (
+                  'A CLI wants to authorize access to your account.'
+                )
+              }
+              title="Authorize CLI"
+            />
+            <Frame.Body>
+              <div className="flex flex-col gap-3 rounded-body bg-pane px-4 py-5 text-center">
+                <p className="text-label-12 text-foreground-secondary">
+                  Confirm this code matches your terminal
+                </p>
+                <p className="font-mono text-heading-32 tracking-[0.3em]">
+                  {formatCode(pending.data.code)}
+                </p>
+              </div>
+              <CliScopes pending={pending.data} />
+            </Frame.Body>
+            <Frame.Footer>
+              {meQuery.isPending ? (
+                <p className="text-copy-14 text-foreground-secondary">Checking session…</p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  <p className="text-copy-14 text-foreground-secondary">
+                    Sign in with a passkey to approve this CLI access request.
+                  </p>
+                  {connect.error && (
+                    <p className="text-label-13 text-red-9">{connect.error.message}</p>
+                  )}
+                  <SignInInline
+                    loadingLogin={
+                      connect.isPending && connect.variables?.capabilities?.method === 'login'
+                    }
+                    loadingRegister={
+                      connect.isPending && connect.variables?.capabilities?.method === 'register'
+                    }
+                    onLogin={() =>
+                      connect.mutate({
+                        connector,
+                        withCapabilities: true,
+                        capabilities: { method: 'login' },
+                      })
+                    }
+                    onRegister={(name) =>
+                      connect.mutate({
+                        connector,
+                        withCapabilities: true,
+                        capabilities: { method: 'register', name },
+                      })
+                    }
+                  />
+                </div>
               )}
-              <Frame.ActionButtons
-                onPrimary={() => authorize.mutate()}
-                onSecondary={() => void me.refetch()}
-                passkey
-                primaryLabel="Approve"
-                primaryLoading={authorize.isPending}
-                secondaryLabel="Refresh"
-              />
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4">
-              <p className="text-copy-14 text-foreground-secondary">
-                Sign in with a passkey to approve this CLI access request.
-              </p>
-              {connect.error && <p className="text-label-13 text-red-9">{connect.error.message}</p>}
-              <SignInInline
-                loadingLogin={connect.isPending && connect.variables?.method === 'login'}
-                loadingRegister={connect.isPending && connect.variables?.method === 'register'}
-                onLogin={() => connect.mutate({ method: 'login' })}
-                onRegister={(name) => connect.mutate({ method: 'register', name })}
-              />
-            </div>
-          )}
-        </Frame.Footer>
+            </Frame.Footer>
+          </>
+        )}
       </Card>
     </Page>
+  )
+}
+
+function CodeForm() {
+  const navigate = Route.useNavigate()
+
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const form = new FormData(event.currentTarget)
+        const value = String(form.get('code') ?? '')
+        void navigate({ search: { code: normalizeCode(value) } })
+      }}
+    >
+      <Input autoFocus label="Device code" name="code" placeholder="ABCD-EFGH…" />
+      <Button type="submit" variant="primary">
+        Load request
+      </Button>
+    </form>
   )
 }
 
@@ -317,109 +310,23 @@ function SignInInline(props: {
   )
 }
 
-function normalizeCode(value: string | undefined) {
-  if (!value) return ''
-  return value.replace(/\s|-/g, '').toUpperCase()
-}
-
-function formatCode(value: string) {
-  const normalized = normalizeCode(value)
-  if (normalized.length !== 8) return normalized
-  return `${normalized.slice(0, 4)}-${normalized.slice(4)}`
-}
-
-function parseChainId(value: number | string) {
-  return BigInt(String(value))
-}
-
-function toAuthorizeAccessKey(pending: Pending): AuthorizeAccessKey {
-  return {
-    expiry: pending.expiry ?? 0,
-    keyType: pending.keyType === 'webauthn' ? 'webAuthn' : pending.keyType,
-    ...(pending.limits
-      ? {
-          limits: pending.limits.map((limit) => ({
-            limit: Hex.from(limit.limit),
-            ...(limit.period ? { period: limit.period } : {}),
-            token: limit.token,
-          })),
-        }
-      : {}),
-    publicKey: pending.pubKey,
-  }
-}
-
-function CliScopes(props: { pending: Pending }) {
+function CliScopes(props: { pending: z.output<typeof CliAuth.pendingResponse> }) {
   const { pending } = props
-  const now = Math.floor(Date.now() / 1000)
-
-  const metadata = Hooks.token.useGetMetadata({ token: pending.limits?.[0]?.token })
-  const symbol =
-    metadata.data?.symbol ??
-    `${pending.limits?.[0]?.token.slice(0, 6)}…${pending.limits?.[0]?.token.slice(-4)}`
-
-  const formatted = useFormatLimit(
-    pending.limits?.[0] ?? {
-      token: Address.from('0x0'),
-      limit: Hex.from('0x0'),
-    },
-  )
+  const now = Math.floor(Date.now() / 1_000)
+  const chainId = Number(pending.chainId)
 
   return (
-    <Rows>
-      {(pending.limits ?? []).map((limit) => (
-        <Row key={`${limit.token}:${limit.limit}:${limit.period ?? ''}`} label={`Spend ${symbol}`}>
-          <div className="flex items-center gap-1.5 font-medium">
-            <span>{formatted}</span>
-            {limit.period && (
-              <span className="font-normal text-foreground-secondary">
-                / {formatPeriod(limit.period)}
-              </span>
-            )}
-          </div>
-        </Row>
+    <div className="flex flex-col gap-4">
+      {pending.limits?.map((limit) => (
+        <SpendHero chainId={chainId} key={limit.token} limit={limit} />
       ))}
-      <Row label="Expires in">
-        {formatDuration(pending.expiry ? pending.expiry - now : 3600 - now)}
-      </Row>
-    </Rows>
+      <Rows>
+        <Row label="Expires in">
+          {TimeFormatter.formatExpirable(Number(pending.expiry ?? now) - now)}
+        </Row>
+      </Rows>
+    </div>
   )
-}
-
-// function getAssetSymbol(token: Address.Address) {
-//   const asset = assetMetadata[token.toLowerCase() as keyof typeof assetMetadata]
-//   return asset?.symbol ?? `${token.slice(0, 6)}…${token.slice(-4)}`
-// }
-
-// function formatLimit(limit: Limit) {
-//   const asset = assetMetadata[limit.token.toLowerCase() as keyof typeof assetMetadata]
-//   const decimals = asset?.decimals ?? 6
-//   return formatUnits(BigInt(limit.limit), decimals)
-// }
-function useFormatLimit(limit: Limit) {
-  const metadata = Hooks.token.useGetMetadata({ token: limit.token })
-  const decimals = metadata.data?.decimals ?? 6
-  return formatUnits(Hex.toBigInt(limit.limit), decimals)
-}
-
-function formatDuration(seconds: number) {
-  if (seconds <= 0) return 'Expired'
-  if (seconds >= 86_400) {
-    const days = Math.round(seconds / 86_400)
-    return `${days} ${days === 1 ? 'day' : 'days'}`
-  }
-  if (seconds >= 3_600) {
-    const hours = Math.round(seconds / 3_600)
-    return `${hours} ${hours === 1 ? 'hour' : 'hours'}`
-  }
-  const minutes = Math.max(1, Math.round(seconds / 60))
-  return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
-}
-
-function formatPeriod(seconds: number) {
-  if (seconds >= 86_400) return seconds === 86_400 ? 'day' : `${Math.round(seconds / 86_400)} days`
-  if (seconds >= 3_600) return seconds === 3_600 ? 'hour' : `${Math.round(seconds / 3_600)} hours`
-  return seconds === 60 ? 'minute' : `${Math.round(seconds / 60)} minutes`
 }
 
 function Page(props: { children: React.ReactNode }) {
@@ -432,7 +339,7 @@ function Page(props: { children: React.ReactNode }) {
 
 function Card(props: { children: React.ReactNode }) {
   return (
-    <div className="bg-primary text-foreground border border-border rounded-frame w-[360px] max-w-full flex flex-col max-dialog:w-full max-dialog:flex-1 max-dialog:rounded-none max-dialog:border-0">
+    <div className="bg-primary text-foreground border border-border rounded-frame w-[450px] max-w-full flex flex-col max-dialog:w-full max-dialog:flex-1 max-dialog:rounded-none max-dialog:border-0">
       {props.children}
     </div>
   )
@@ -465,5 +372,97 @@ function Header(props: {
 }
 
 function Body(props: { children: React.ReactNode }) {
-  return <div className="flex flex-col gap-4 px-5 pb-4">{props.children}</div>
+  return <Frame.Body className="flex flex-col gap-4 px-5 pb-4">{props.children}</Frame.Body>
+}
+
+function AuthorizedSummary(props: {
+  chainId: number
+  pending: z.output<typeof CliAuth.pendingResponse>
+}) {
+  const { chainId, pending } = props
+  const chainName = wagmiConfig.chains.find((c) => c.id === chainId)?.name ?? `Chain ${chainId}`
+
+  return (
+    <div className="flex flex-col gap-4">
+      {pending.limits?.map((limit) => (
+        <SpendHero chainId={chainId} key={limit.token} limit={limit} />
+      ))}
+      <Rows>
+        <Row label="Network">{chainName}</Row>
+        <Row label="Expires">
+          <Countdown expiry={pending.expiry} />
+        </Row>
+      </Rows>
+    </div>
+  )
+}
+
+function SpendHero(props: {
+  chainId: number
+  limit: { limit: bigint; period?: number | undefined; token: `0x${string}` }
+}) {
+  const { limit } = props
+  const metadata = Hooks.token.useGetMetadata({
+    chainId: props.chainId as never,
+    token: limit.token,
+  })
+
+  if (metadata.isLoading)
+    return (
+      <div className="flex flex-col items-center gap-2 rounded-body bg-pane px-4 py-5">
+        <div className="h-8 w-32 animate-pulse rounded bg-gray-3" />
+        <div className="h-4 w-24 animate-pulse rounded bg-gray-3" />
+      </div>
+    )
+
+  const symbol = metadata.data?.symbol ?? `${limit.token.slice(0, 6)}…${limit.token.slice(-4)}`
+  const decimals = metadata.data?.decimals ?? 6
+  const formatted = formatUnits(limit.limit, decimals)
+  const token = { value: Hex.fromNumber(limit.limit), decimals, formatted, symbol }
+
+  return (
+    <div className="flex flex-col items-center gap-1 rounded-body bg-pane px-4 py-5 text-center">
+      <Amount align="center" amount={token} size="lg" />
+      <p className="text-label-13 text-foreground-secondary">
+        {symbol}
+        {limit.period && ` / ${TimeFormatter.formatPeriod(limit.period)}`}
+      </p>
+    </div>
+  )
+}
+
+function Countdown(props: { expiry: number }) {
+  const [now, setNow] = React.useState(() => Math.floor(Date.now() / 1_000))
+
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1_000)), 1_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const remaining = props.expiry - now
+  if (remaining <= 0) return <span className="text-red-9">Expired</span>
+
+  const hours = Math.floor(remaining / 3_600)
+  const minutes = Math.floor((remaining % 3_600) / 60)
+  const seconds = remaining % 60
+
+  const pad = (n: number) => String(n).padStart(2, '0')
+
+  return (
+    <span className="tabular-nums">
+      {hours > 0 && `${hours}:`}
+      {pad(minutes)}:{pad(seconds)}
+    </span>
+  )
+}
+
+function normalizeCode(value: string | undefined) {
+  if (!value) return ''
+  return value.replace(/\s|-/g, '').toUpperCase()
+}
+
+function formatCode(value: string) {
+  const normalized = normalizeCode(value)
+  if (normalized.length !== 8) return normalized
+  return `${normalized.slice(0, 4)}-${normalized.slice(4)}`
 }

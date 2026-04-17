@@ -68,7 +68,9 @@ export function WelcomeBack(props: WelcomeBack.Props) {
               </span>
             </button>
             {scopes ??
-              (authorizeAccessKey ? <AccessKeyScopes authorizeAccessKey={authorizeAccessKey} /> : null)}
+              (authorizeAccessKey ? (
+                <AccessKeyScopes authorizeAccessKey={authorizeAccessKey} />
+              ) : null)}
             <Button
               loading={loading}
               prefix={<Fingerprint className="size-4" />}

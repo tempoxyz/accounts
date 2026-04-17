@@ -200,6 +200,7 @@ Reference when building, reviewing, or refactoring UI components and interaction
 - **Dev-only UIs use semantic HTML only** — approval surfaces and debug pages should use plain HTML with no inline styles or CSS. Zero styling.
 - **Short spinner messages** — keep `@clack/prompts` spinner text short to avoid terminal line wrapping; show URLs and long content as static `Clack.log.info()` lines, not inside spinner text.
 - **Understand full request flow before changing CLI UX** — trace the complete path (CLI → server → browser → server → CLI polling) before modifying feedback or error handling in CLI scripts.
+- **Ref-impls are examples, not core SDK** — don't over-engineer ref-impl code with factories, DI, or abstraction layers. Keep example code simple, make it work, and finish it.
 
 ## Learned Workspace Facts
 
@@ -220,3 +221,4 @@ Reference when building, reviewing, or refactoring UI components and interaction
 - **CLI auth example URL inputs** — the example CLI flow is expected to support both `--url` and `AUTH_URL`-based defaults, and should avoid hardcoded personal hostnames in source.
 - **Test RPC port selection should auto-fallback** — localnet test setup should start from `VITE_RPC_PORT` (or `8545`) and select the next available port to avoid `EADDRINUSE` collisions.
 - **`process.env` over `c.env` for string secrets** — in CF Workers, prefer `process.env` for string env vars and secrets (e.g. `SESSION_PRIVATE_KEY`, `MAILGUN_API_KEY`). Use `c.env` only for non-string bindings that require it (KVNamespace, RateLimit, Hyperdrive, etc.).
+- **Root vitest config excludes `ref-impls/**`** — ref-impl packages that need tests require a local `vitest.config.ts` with their own test include paths.
