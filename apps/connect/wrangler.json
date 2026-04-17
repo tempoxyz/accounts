@@ -35,6 +35,17 @@
   "assets": {
     "directory": "./dist/client",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/.well-known/*", "/pho", "/pho/*", "/sentry-tunnel"]
+    "run_worker_first": [
+      "/",
+      "/design",
+      "/design/*",
+      "/rpc",
+      "/rpc/*",
+      "/api/*",
+      "/.well-known/*",
+      "/pho",
+      "/pho/*",
+      "/sentry-tunnel"
+    ]
   }
 }

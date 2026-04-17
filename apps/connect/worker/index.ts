@@ -6,12 +6,18 @@ import { auth } from './auth.js'
 import { bridge } from './bridge.js'
 import { email } from './email.js'
 import { jwks } from './jwks.js'
+import { handleGeoBlock } from './lib/geo-block.js'
 import * as PostHogProxy from './lib/posthog-proxy.js'
 import * as SentryTunnel from './lib/sentry-tunnel.js'
 import { relay } from './relay.js'
 import { webauthn } from './webauthn.js'
 
-type RuntimeEnv = Env & { SENTRY_DSN?: string | undefined }
+type RuntimeEnv = Env & {
+  ASSETS: {
+    fetch: typeof fetch
+  }
+  SENTRY_DSN?: string | undefined
+}
 
 const api = new Hono<{ Bindings: Env }>()
   .use(async (c, next) => {
@@ -26,12 +32,24 @@ const api = new Hono<{ Bindings: Env }>()
   .route('/relay', relay)
   .route('/webauthn', webauthn)
 
-const app = new Hono<{ Bindings: Env }>()
+/** Top-level connect Worker app. */
+export const app = new Hono<{ Bindings: Env }>()
   .all('/pho', (c) => PostHogProxy.handle(c.req.raw))
   .all('/pho/*', (c) => PostHogProxy.handle(c.req.raw))
   .all('/sentry-tunnel', (c) => SentryTunnel.handle(c.req.raw))
+  .use(async (c, next) => {
+    const blocked = handleGeoBlock(c.req.raw)
+    if (blocked) return blocked
+    await next()
+  })
   .route('/.well-known', jwks)
   .route('/api', api)
+  .notFound((c) => {
+    const request = c.req.raw
+    if (isViewPath(new URL(request.url).pathname))
+      return (c.env as RuntimeEnv).ASSETS.fetch(request)
+    return c.text('Not Found', 404)
+  })
 
 export type App = typeof app
 export { app }
@@ -40,6 +58,16 @@ const handler: ExportedHandler<RuntimeEnv> = {
   fetch(request, env, ctx) {
     return app.fetch(request, env, ctx)
   },
+}
+
+function isViewPath(pathname: string) {
+  return (
+    pathname === '/' ||
+    pathname === '/design' ||
+    pathname === '/rpc' ||
+    pathname.startsWith('/design/') ||
+    pathname.startsWith('/rpc/')
+  )
 }
 
 export default withSentry(
