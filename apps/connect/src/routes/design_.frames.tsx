@@ -1,5 +1,6 @@
 import * as AuthorizeFrames from '#/routes/_remote/rpc/-frames/authorize/index.js'
 import * as ConnectFrames from '#/routes/_remote/rpc/-frames/connect/index.js'
+import * as SignFrames from '#/routes/_remote/rpc/-frames/sign/index.js'
 import * as TransactionFrames from '#/routes/_remote/rpc/-frames/transaction/index.js'
 import { ThemeToggle } from '#/ui/ThemeToggle.js'
 import Panzoom from '@panzoom/panzoom'
@@ -182,6 +183,28 @@ function Wireframes() {
             top={8450}
           >
             <AuthorizeMobileFlow />
+          </FlowRow>
+
+          <FlowRow left={60} method="personal_sign" title="Sign Message" top={9050}>
+            <PersonalSignFlow />
+          </FlowRow>
+
+          <FlowRow
+            left={60}
+            method="personal_sign (raw hex)"
+            title="Sign Message — Raw Data"
+            top={9650}
+          >
+            <PersonalSignRawFlow />
+          </FlowRow>
+
+          <FlowRow
+            left={60}
+            method="personal_sign (SIWE)"
+            title="Sign Message — SIWE (Authenticate)"
+            top={10250}
+          >
+            <PersonalSignSiweFlow />
           </FlowRow>
         </div>
       </div>
@@ -584,6 +607,73 @@ function DepositFlow() {
           onBack={() => {}}
           onDone={() => {}}
         />
+      </Card>
+    </>
+  )
+}
+
+/** Personal sign: loading → review → confirming */
+function PersonalSignFlow() {
+  return (
+    <>
+      <Card label="Review">
+        <SignFrames.PersonalSign
+          host="example.com"
+          message="Hello! Please sign this message to verify your identity. Nonce: 8a3b9c7d"
+        />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Confirming">
+        <SignFrames.PersonalSign
+          confirming
+          host="example.com"
+          message="Hello! Please sign this message to verify your identity. Nonce: 8a3b9c7d"
+        />
+      </Card>
+    </>
+  )
+}
+
+/** Personal sign with raw hex data that cannot be decoded to UTF-8 */
+function PersonalSignRawFlow() {
+  return (
+    <>
+      <Card label="Review (Raw)">
+        <SignFrames.PersonalSign
+          host="example.com"
+          message="0x9c22ff5f21f0b81b113e63f7db6da94fedef11b2119b4088b89664fb9a3cb658"
+          raw
+        />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Confirming (Raw)">
+        <SignFrames.PersonalSign
+          confirming
+          host="example.com"
+          message="0x9c22ff5f21f0b81b113e63f7db6da94fedef11b2119b4088b89664fb9a3cb658"
+          raw
+        />
+      </Card>
+    </>
+  )
+}
+
+/** SIWE authentication: simplified approve screen — no message body shown */
+function PersonalSignSiweFlow() {
+  return (
+    <>
+      <Card label="Authenticate">
+        <SignFrames.Siwe host="example.com" />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Confirming">
+        <SignFrames.Siwe confirming host="example.com" />
       </Card>
     </>
   )
