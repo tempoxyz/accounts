@@ -39,7 +39,7 @@ function Component() {
     if (!message || raw) return null
     try {
       const parsed = parseSiweMessage(message)
-      if (parsed.domain || parsed.address) return parsed
+      if (Object.keys(parsed).length > 0) return parsed
       return null
     } catch {
       return null
