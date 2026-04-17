@@ -94,23 +94,19 @@ describe('handleGeoBlock', () => {
       new Request('https://connect.tempo.xyz/', { headers: { 'cf-ipcountry': 'IR' } }),
     )
 
+    const body = await res?.text()
+
     expect({
+      body: body?.includes('This site can’t be reached') && body?.includes('Tempo Connect is not available in your region at this time.'),
       cacheControl: res?.headers.get('Cache-Control'),
       contentType: res?.headers.get('Content-Type'),
       status: res?.status,
       vary: res?.headers.get('Vary'),
-      hasTitle: (await res?.text())?.includes('This site can’t be reached'),
-      hasMessage: (
-        await handleGeoBlock(
-          new Request('https://connect.tempo.xyz/', { headers: { 'cf-ipcountry': 'IR' } }),
-        )?.text()
-      )?.includes('Tempo Connect is not available in your region at this time.'),
     }).toMatchInlineSnapshot(`
       {
+        "body": true,
         "cacheControl": "no-store",
         "contentType": "text/html; charset=utf-8",
-        "hasMessage": true,
-        "hasTitle": true,
         "status": 451,
         "vary": "CF-IPCountry",
       }

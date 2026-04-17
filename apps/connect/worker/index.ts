@@ -45,10 +45,10 @@ export const app = new Hono<{ Bindings: Env }>()
   .route('/.well-known', jwks)
   .route('/api', api)
   .notFound((c) => {
-    const request = c.req.raw
-    if (isViewPath(new URL(request.url).pathname))
-      return (c.env as RuntimeEnv).ASSETS.fetch(request)
-    return c.text('Not Found', 404)
+    const pathname = new URL(c.req.url).pathname
+    if (pathname.startsWith('/api/') || pathname.startsWith('/.well-known/'))
+      return c.text('Not Found', 404)
+    return (c.env as RuntimeEnv).ASSETS.fetch(c.req.raw)
   })
 
 export type App = typeof app
@@ -58,16 +58,6 @@ const handler: ExportedHandler<RuntimeEnv> = {
   fetch(request, env, ctx) {
     return app.fetch(request, env, ctx)
   },
-}
-
-function isViewPath(pathname: string) {
-  return (
-    pathname === '/' ||
-    pathname === '/design' ||
-    pathname === '/rpc' ||
-    pathname.startsWith('/design/') ||
-    pathname.startsWith('/rpc/')
-  )
 }
 
 export default withSentry(
