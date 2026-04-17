@@ -1,17 +1,17 @@
 import { wagmiConfig } from '#/lib/config.js'
+import type { AuthorizeAccessKey } from '#/routes/_remote/rpc/-components/AccessKeyScopes.js'
 import { AuthorizeCli } from '#/routes/_remote/rpc/-frames/authorize/AuthorizeCli.js'
 import { SignIn } from '#/routes/_remote/rpc/-frames/connect/SignIn.js'
 import { WelcomeBack } from '#/routes/_remote/rpc/-frames/connect/WelcomeBack.js'
-import type { AuthorizeAccessKey } from '#/routes/_remote/rpc/-components/AccessKeyScopes.js'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
 import { Input } from '#/ui/Input.js'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
+import { switchChain } from '@wagmi/core'
 import type { Address } from 'ox'
 import { useEffect, useMemo, useState } from 'react'
 import { formatUnits } from 'viem'
-import { switchChain } from '@wagmi/core'
 import { useConnection } from 'wagmi'
 import Check from '~icons/lucide/check'
 
@@ -58,10 +58,7 @@ type ConnectVariables = {
 }
 
 type ProviderRequest = {
-  request(args: {
-    method: 'wallet_authorizeAccessKey'
-    params: [AuthorizeAccessKey]
-  }): Promise<{
+  request(args: { method: 'wallet_authorizeAccessKey'; params: [AuthorizeAccessKey] }): Promise<{
     keyAuthorization: unknown
     rootAddress: Address.Address
   }>
@@ -190,10 +187,7 @@ function RouteComponent() {
     return (
       <Page>
         <Card>
-          <Frame.Header
-            subtitle="Loading the pending CLI request."
-            title="Authorize CLI"
-          />
+          <Frame.Header subtitle="Loading the pending CLI request." title="Authorize CLI" />
           <Frame.Body>
             <p className="text-copy-14 text-foreground-secondary">Loading…</p>
           </Frame.Body>
@@ -205,18 +199,12 @@ function RouteComponent() {
     return (
       <Page>
         <Card>
-          <Frame.Header
-            subtitle="We couldn’t load that device code."
-            title="Authorize CLI"
-          />
+          <Frame.Header subtitle="We couldn’t load that device code." title="Authorize CLI" />
           <Frame.Body>
             <p className="text-copy-14 text-red-9">
               {pending.error instanceof Error ? pending.error.message : 'Invalid device code.'}
             </p>
-            <Button
-              onClick={() => void navigate({ search: {} as never })}
-              variant="muted"
-            >
+            <Button onClick={() => void navigate({ search: {} as never })} variant="muted">
               Try another code
             </Button>
           </Frame.Body>
@@ -416,7 +404,9 @@ function Header(props: {
     <div className="flex flex-col gap-3 px-5 pt-4 pb-3">
       <div className="flex items-center gap-3">
         {icon && (
-          <div className={`flex size-9 shrink-0 items-center justify-center rounded-full ${iconClass}`}>
+          <div
+            className={`flex size-9 shrink-0 items-center justify-center rounded-full ${iconClass}`}
+          >
             {icon}
           </div>
         )}
