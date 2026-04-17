@@ -97,4 +97,52 @@ describe('worker app', () => {
       }
     `)
   })
+
+  test('falls through to assets for unknown non-API paths', async () => {
+    const assets = vi.fn(
+      async (request: Request) => new Response(`asset:${new URL(request.url).pathname}`),
+    )
+
+    const res = await app.fetch(
+      new Request('https://connect.tempo.xyz/some/new/route', {
+        headers: { 'cf-ipcountry': 'US' },
+      }),
+      createEnv(assets),
+    )
+
+    expect({
+      assetCalls: assets.mock.calls.length,
+      body: await res.text(),
+      status: res.status,
+    }).toMatchInlineSnapshot(`
+      {
+        "assetCalls": 1,
+        "body": "asset:/some/new/route",
+        "status": 200,
+      }
+    `)
+  })
+
+  test('returns 404 for unknown .well-known routes', async () => {
+    const assets = vi.fn(async () => new Response('asset'))
+
+    const res = await app.fetch(
+      new Request('https://connect.tempo.xyz/.well-known/missing', {
+        headers: { 'cf-ipcountry': 'US' },
+      }),
+      createEnv(assets),
+    )
+
+    expect({
+      assetCalls: assets.mock.calls.length,
+      body: await res.text(),
+      status: res.status,
+    }).toMatchInlineSnapshot(`
+      {
+        "assetCalls": 0,
+        "body": "Not Found",
+        "status": 404,
+      }
+    `)
+  })
 })
