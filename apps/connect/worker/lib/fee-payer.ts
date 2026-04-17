@@ -91,7 +91,10 @@ export function create(
 
     const fetchAndCache = () =>
       Actions.token
-        .getBalance(internal.client ?? Viem.getClient(chain), { account: feePayerAddress, token: FEE_TOKEN })
+        .getBalance(internal.client ?? Viem.getClient(chain), {
+          account: feePayerAddress,
+          token: FEE_TOKEN,
+        })
         .then(async (balance) => {
           await kv.put(key, String(balance >= MIN_BALANCE_UNITS), { expirationTtl: 86_400 })
         })
