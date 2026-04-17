@@ -52,7 +52,6 @@ export const app = new Hono<{ Bindings: Env }>()
   })
 
 export type App = typeof app
-export { app }
 
 const handler: ExportedHandler<RuntimeEnv> = {
   fetch(request, env, ctx) {
