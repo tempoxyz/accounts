@@ -11,9 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as EmailRouteImport } from './routes/email'
 import { Route as DesignRouteImport } from './routes/design'
+import { Route as CliRouteImport } from './routes/cli'
 import { Route as RemoteRouteImport } from './routes/_remote'
 import { Route as SplatRouteImport } from './routes/$'
-import { Route as CliRouteRouteImport } from './routes/cli/route'
 import { Route as RemoteIndexRouteImport } from './routes/_remote/index'
 import { Route as DesignFramesRouteImport } from './routes/design_.frames'
 import { Route as RemoteRpcWallet_revokeAccessKeyRouteImport } from './routes/_remote/rpc/wallet_revokeAccessKey'
@@ -35,6 +35,11 @@ const DesignRoute = DesignRouteImport.update({
   path: '/design',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CliRoute = CliRouteImport.update({
+  id: '/cli',
+  path: '/cli',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RemoteRoute = RemoteRouteImport.update({
   id: '/_remote',
   getParentRoute: () => rootRouteImport,
@@ -42,11 +47,6 @@ const RemoteRoute = RemoteRouteImport.update({
 const SplatRoute = SplatRouteImport.update({
   id: '/$',
   path: '/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CliRouteRoute = CliRouteRouteImport.update({
-  id: '/cli',
-  path: '/cli',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RemoteIndexRoute = RemoteIndexRouteImport.update({
@@ -107,9 +107,9 @@ const RemoteRpcEth_sendTransactionRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/cli': typeof CliRouteRoute
   '/$': typeof SplatRoute
   '/': typeof RemoteIndexRoute
+  '/cli': typeof CliRoute
   '/design': typeof DesignRoute
   '/email': typeof EmailRoute
   '/design/frames': typeof DesignFramesRoute
@@ -123,8 +123,8 @@ export interface FileRoutesByFullPath {
   '/rpc/wallet_revokeAccessKey': typeof RemoteRpcWallet_revokeAccessKeyRoute
 }
 export interface FileRoutesByTo {
-  '/cli': typeof CliRouteRoute
   '/$': typeof SplatRoute
+  '/cli': typeof CliRoute
   '/design': typeof DesignRoute
   '/email': typeof EmailRoute
   '/design/frames': typeof DesignFramesRoute
@@ -140,9 +140,9 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/cli': typeof CliRouteRoute
   '/$': typeof SplatRoute
   '/_remote': typeof RemoteRouteWithChildren
+  '/cli': typeof CliRoute
   '/design': typeof DesignRoute
   '/email': typeof EmailRoute
   '/design_/frames': typeof DesignFramesRoute
@@ -159,9 +159,9 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | '/cli'
     | '/$'
     | '/'
+    | '/cli'
     | '/design'
     | '/email'
     | '/design/frames'
@@ -175,8 +175,8 @@ export interface FileRouteTypes {
     | '/rpc/wallet_revokeAccessKey'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/cli'
     | '/$'
+    | '/cli'
     | '/design'
     | '/email'
     | '/design/frames'
@@ -191,9 +191,9 @@ export interface FileRouteTypes {
     | '/rpc/wallet_revokeAccessKey'
   id:
     | '__root__'
-    | '/cli'
     | '/$'
     | '/_remote'
+    | '/cli'
     | '/design'
     | '/email'
     | '/design_/frames'
@@ -209,9 +209,9 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  CliRouteRoute: typeof CliRouteRoute
   SplatRoute: typeof SplatRoute
   RemoteRoute: typeof RemoteRouteWithChildren
+  CliRoute: typeof CliRoute
   DesignRoute: typeof DesignRoute
   EmailRoute: typeof EmailRoute
   DesignFramesRoute: typeof DesignFramesRoute
@@ -233,6 +233,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DesignRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/cli': {
+      id: '/cli'
+      path: '/cli'
+      fullPath: '/cli'
+      preLoaderRoute: typeof CliRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_remote': {
       id: '/_remote'
       path: ''
@@ -245,13 +252,6 @@ declare module '@tanstack/react-router' {
       path: '/$'
       fullPath: '/$'
       preLoaderRoute: typeof SplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cli': {
-      id: '/cli'
-      path: '/cli'
-      fullPath: '/cli'
-      preLoaderRoute: typeof CliRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_remote/': {
@@ -356,9 +356,9 @@ const RemoteRouteWithChildren =
   RemoteRoute._addFileChildren(RemoteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-  CliRouteRoute: CliRouteRoute,
   SplatRoute: SplatRoute,
   RemoteRoute: RemoteRouteWithChildren,
+  CliRoute: CliRoute,
   DesignRoute: DesignRoute,
   EmailRoute: EmailRoute,
   DesignFramesRoute: DesignFramesRoute,
