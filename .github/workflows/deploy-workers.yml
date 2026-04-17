@@ -22,11 +22,10 @@ jobs:
     strategy:
       matrix:
         worker:
+          - name: Connect
+            directory: apps/connect
           - name: Playground
             directory: playgrounds/web
-            build-env: |
-              VITE_CONNECT_HOST=https://connect.tempo.xyz
-              VITE_ENV=mainnet
           - name: Wagmi
             directory: playgrounds/wagmi
 
@@ -42,15 +41,22 @@ jobs:
       - name: Build accounts
         run: pnpm build
 
+      - name: Compute Connect host
+        id: connect
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            SHA=$(echo "${{ github.sha }}" | head -c 7)
+            echo "host=https://${SHA}-tempo-connect.porto.workers.dev" >> "$GITHUB_OUTPUT"
+          else
+            echo "host=https://connect.tempo.xyz" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build
         working-directory: ${{ matrix.worker.directory }}
-        run: |
-          if [ -n "$BUILD_ENV" ]; then
-            export ${BUILD_ENV}
-          fi
-          pnpm build
+        run: pnpm build
         env:
-          BUILD_ENV: ${{ matrix.worker.build-env }}
+          VITE_CONNECT_HOST: ${{ steps.connect.outputs.host }}
+          VITE_ENV: testnet
 
       - name: Deploy
         if: github.event_name != 'pull_request'

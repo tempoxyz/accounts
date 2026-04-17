@@ -24,7 +24,7 @@ export const tokens = testnet ? tokensMap.testnet : tokensMap.mainnet
 
 export const config = createConfig({
   chains: testnet ? [tempoModerato, tempo] : [tempo, tempoModerato],
-  connectors: [tempoConnect()],
+  connectors: [tempoConnect({ host: import.meta.env.VITE_CONNECT_HOST })],
   multiInjectedProviderDiscovery: false,
   transports: {
     [tempo.id]: http(),
