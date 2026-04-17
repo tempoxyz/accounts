@@ -6,7 +6,6 @@
     "check": "vp lint --fix --ignore-pattern package.json --ignore-pattern apps/manager && vp fmt src apps/connect examples playgrounds ref-impls scripts test",
     "check:types": "tsc -b --noEmit && pnpm --filter './apps/*' --filter '!./apps/manager' check:types && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types",
     "dev": "docker compose up -d",
-    "dev:cli": "pnpm --filter './playgrounds/cli' connect",
     "nuke:db": "docker compose exec postgres psql -U tempo -c 'DROP DATABASE connect' && docker compose exec postgres psql -U tempo -c 'CREATE DATABASE connect'",
     "dev:logs": "docker compose logs -f",
     "examples": "node --import tsx scripts/examples.ts",

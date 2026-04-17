@@ -1,8 +1,8 @@
 import { Button } from '#/ui/Button.js'
 import { Input } from '#/ui/Input.js'
 import { Otp } from '#/ui/Otp.js'
-import { hc } from 'hono/client'
 import { createFileRoute } from '@tanstack/react-router'
+import { hc } from 'hono/client'
 import { useCallback, useEffect, useState } from 'react'
 import Check from '~icons/lucide/check'
 import Mail from '~icons/lucide/mail'
@@ -76,9 +76,7 @@ function EmailPage() {
           <Body>
             <Button
               className="w-full"
-              onClick={() =>
-                setScreen({ name: 'manage', email: screen.email, username: null })
-              }
+              onClick={() => setScreen({ name: 'manage', email: screen.email, username: null })}
               variant="primary"
             >
               Done
@@ -201,11 +199,7 @@ function ManageScreen(props: {
   )
 }
 
-function VerifyScreen(props: {
-  email: string
-  onBack: () => void
-  onSuccess: () => void
-}) {
+function VerifyScreen(props: { email: string; onBack: () => void; onSuccess: () => void }) {
   const { email, onBack, onSuccess } = props
   const [code, setCode] = useState('')
   const [error, setError] = useState<string>()
@@ -297,9 +291,7 @@ function VerifyScreen(props: {
 /** Full-page centered layout. */
 function Page(props: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-secondary">
-      {props.children}
-    </div>
+    <div className="flex min-h-dvh items-center justify-center bg-secondary">{props.children}</div>
   )
 }
 
@@ -320,16 +312,15 @@ function Header(props: {
   variant?: 'primary' | 'success'
 }) {
   const { icon, subtitle, title, variant = 'primary' } = props
-  const iconClass =
-    variant === 'success'
-      ? 'bg-green-2 text-green-9'
-      : 'bg-blue-2 text-blue-9'
+  const iconClass = variant === 'success' ? 'bg-green-2 text-green-9' : 'bg-blue-2 text-blue-9'
 
   return (
     <div className="flex flex-col gap-3 px-5 pt-4 pb-3">
       <div className="flex items-center gap-3">
         {icon && (
-          <div className={`flex size-9 shrink-0 items-center justify-center rounded-full ${iconClass}`}>
+          <div
+            className={`flex size-9 shrink-0 items-center justify-center rounded-full ${iconClass}`}
+          >
             {icon}
           </div>
         )}
