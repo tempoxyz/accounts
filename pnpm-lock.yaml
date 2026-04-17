@@ -202,6 +202,12 @@ importers:
       '@panzoom/panzoom':
         specifier: ^4.6.2
         version: 4.6.2
+      '@sentry/cloudflare':
+        specifier: 10.42.0
+        version: 10.42.0
+      '@sentry/react':
+        specifier: 10.42.0
+        version: 10.42.0(react@19.2.5)
       '@tanstack/query-sync-storage-persister':
         specifier: ^5.96.1
         version: 5.96.1
@@ -238,6 +244,9 @@ importers:
       postgres:
         specifier: 3.4.8
         version: 3.4.8
+      posthog-js:
+        specifier: 1.360.2
+        version: 1.360.2
       react:
         specifier: ^19.2.5
         version: 19.2.5
