@@ -3,6 +3,7 @@ import { Hex, Json } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
+import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { Actions } from 'viem/tempo'
 
@@ -625,18 +626,15 @@ function PersonalSignSiwe() {
               setError(undefined)
               const accounts = await provider.request({ method: 'eth_accounts' })
               if (accounts.length === 0) throw new Error('No accounts connected')
-              const siweMessage = [
-                `${domain} wants you to sign in with your Ethereum account:`,
-                accounts[0],
-                '',
-                'Sign in to the playground app.',
-                '',
-                `URI: https://${domain}`,
-                'Version: 1',
-                'Chain ID: 42069',
-                `Nonce: ${Math.random().toString(36).slice(2, 10)}`,
-                `Issued At: ${new Date().toISOString()}`,
-              ].join('\n')
+              const siweMessage = createSiweMessage({
+                address: accounts[0],
+                chainId: 42069,
+                domain,
+                nonce: generateSiweNonce(),
+                statement: 'Sign in to the playground app.',
+                uri: `https://${domain}`,
+                version: '1',
+              })
               const signature = await provider.request({
                 method: 'personal_sign',
                 params: [Hex.fromString(siweMessage), accounts[0]],
