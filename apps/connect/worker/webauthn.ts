@@ -45,7 +45,6 @@ export const webauthn = new Hono<{ Bindings: Env }>().all('/*', (c) => {
         address,
         id: crypto.randomUUID(),
         credentialId,
-        label: 'Passkey',
         publicKey: publicKey as Hex.Hex,
         username: name,
       })
@@ -71,7 +70,6 @@ export const webauthn = new Hono<{ Bindings: Env }>().all('/*', (c) => {
           address,
           id: crypto.randomUUID(),
           credentialId,
-          label: 'Passkey',
           publicKey: publicKey as Hex.Hex,
           username: address,
         })
