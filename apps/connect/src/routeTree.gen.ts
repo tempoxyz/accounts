@@ -13,6 +13,7 @@ import { Route as EmailRouteImport } from './routes/email'
 import { Route as DesignRouteImport } from './routes/design'
 import { Route as RemoteRouteImport } from './routes/_remote'
 import { Route as SplatRouteImport } from './routes/$'
+import { Route as CliRouteRouteImport } from './routes/cli/route'
 import { Route as RemoteIndexRouteImport } from './routes/_remote/index'
 import { Route as DesignFramesRouteImport } from './routes/design_.frames'
 import { Route as RemoteRpcWallet_revokeAccessKeyRouteImport } from './routes/_remote/rpc/wallet_revokeAccessKey'
@@ -41,6 +42,11 @@ const RemoteRoute = RemoteRouteImport.update({
 const SplatRoute = SplatRouteImport.update({
   id: '/$',
   path: '/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CliRouteRoute = CliRouteRouteImport.update({
+  id: '/cli',
+  path: '/cli',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RemoteIndexRoute = RemoteIndexRouteImport.update({
@@ -101,6 +107,7 @@ const RemoteRpcEth_sendTransactionRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
+  '/cli': typeof CliRouteRoute
   '/$': typeof SplatRoute
   '/': typeof RemoteIndexRoute
   '/design': typeof DesignRoute
@@ -116,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/rpc/wallet_revokeAccessKey': typeof RemoteRpcWallet_revokeAccessKeyRoute
 }
 export interface FileRoutesByTo {
+  '/cli': typeof CliRouteRoute
   '/$': typeof SplatRoute
   '/design': typeof DesignRoute
   '/email': typeof EmailRoute
@@ -132,6 +140,7 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/cli': typeof CliRouteRoute
   '/$': typeof SplatRoute
   '/_remote': typeof RemoteRouteWithChildren
   '/design': typeof DesignRoute
@@ -150,6 +159,7 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/cli'
     | '/$'
     | '/'
     | '/design'
@@ -165,6 +175,7 @@ export interface FileRouteTypes {
     | '/rpc/wallet_revokeAccessKey'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/cli'
     | '/$'
     | '/design'
     | '/email'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/rpc/wallet_revokeAccessKey'
   id:
     | '__root__'
+    | '/cli'
     | '/$'
     | '/_remote'
     | '/design'
@@ -197,6 +209,7 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  CliRouteRoute: typeof CliRouteRoute
   SplatRoute: typeof SplatRoute
   RemoteRoute: typeof RemoteRouteWithChildren
   DesignRoute: typeof DesignRoute
@@ -232,6 +245,13 @@ declare module '@tanstack/react-router' {
       path: '/$'
       fullPath: '/$'
       preLoaderRoute: typeof SplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cli': {
+      id: '/cli'
+      path: '/cli'
+      fullPath: '/cli'
+      preLoaderRoute: typeof CliRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_remote/': {
@@ -336,6 +356,7 @@ const RemoteRouteWithChildren =
   RemoteRoute._addFileChildren(RemoteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
+  CliRouteRoute: CliRouteRoute,
   SplatRoute: SplatRoute,
   RemoteRoute: RemoteRouteWithChildren,
   DesignRoute: DesignRoute,

@@ -1,7 +1,7 @@
+import { Handler } from 'accounts/server'
 import { Hono } from 'hono'
 import type { Address } from 'ox'
 
-import { cli } from './cli.js'
 import * as Account from './lib/db/account.js'
 import * as Db from './lib/db/index.js'
 import * as Wallet from './lib/db/wallet.js'
@@ -22,4 +22,10 @@ export const auth = new Hono<{ Bindings: Env }>()
       username: wallet?.username ?? null,
     })
   })
-  .route('/cli', cli)
+  /** `GET/POST /cli/*` — handle CLI auth requests. */
+  .on(['GET', 'POST'], '/cli/*', (c) =>
+    Handler.codeAuth({
+      cors: false,
+      path: '/cli',
+    }).fetch(c.req.raw),
+  )
