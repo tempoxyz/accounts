@@ -1,5 +1,6 @@
 import { waitUntil } from 'cloudflare:workers'
-import { type Address, formatUnits, parseUnits } from 'viem'
+import { QueryBuilder } from 'tidx.ts'
+import { type Address, type Client, formatUnits, parseUnits } from 'viem'
 import { Actions, Transaction } from 'viem/tempo'
 
 import { type TempoChain, fromId } from './chain.js'
@@ -39,6 +40,8 @@ export function create(
   feePayerAddress: Address,
   kv: KVNamespace,
   options: create.Options = {},
+  /** @internal — test overrides. */
+  internal: create.Internal = {},
 ): create.ReturnType {
   const dailyLimitMicroUsd = parseUsdLimit(options.dailyLimitUsd, '0.20')
   const globalDailyLimitMicroUsd = parseUsdLimit(options.globalDailyLimitUsd, '50')
@@ -54,7 +57,7 @@ export function create(
     const raw = await kv.get(key)
 
     // Always refresh in background.
-    const qb = Tidx.getQueryBuilder(chain)
+    const qb = internal.queryBuilder ?? Tidx.getQueryBuilder(chain)
     const since = new Date(Date.now() - 86_400_000)
 
     let query = qb
@@ -88,7 +91,7 @@ export function create(
 
     const fetchAndCache = () =>
       Actions.token
-        .getBalance(Viem.getClient(chain), { account: feePayerAddress, token: FEE_TOKEN })
+        .getBalance(internal.client ?? Viem.getClient(chain), { account: feePayerAddress, token: FEE_TOKEN })
         .then(async (balance) => {
           await kv.put(key, String(balance >= MIN_BALANCE_UNITS), { expirationTtl: 86_400 })
         })
@@ -161,6 +164,12 @@ export declare namespace create {
     dailyLimitUsd?: string | undefined
     /** Global daily spend limit in USD (e.g. `"50"`). Defaults to `"50"`. */
     globalDailyLimitUsd?: string | undefined
+  }
+
+  /** @internal — test-only dependency overrides. */
+  type Internal = {
+    client?: Client | undefined
+    queryBuilder?: QueryBuilder.QueryBuilder | undefined
   }
 
   type ReturnType = (request: Transaction.TransactionRequest) => boolean | Promise<boolean>
