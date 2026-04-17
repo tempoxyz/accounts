@@ -1,20 +1,17 @@
-// TODO: prototype frame — requires rewrite before wiring to real data/hooks
-
+import { Radio } from '@base-ui/react/radio'
+import { RadioGroup } from '@base-ui/react/radio-group'
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
 import { Input } from '#/ui/Input.js'
 import { useState } from 'react'
-import ChevronRight from '~icons/lucide/chevron-right'
-import Wallet from '~icons/lucide/wallet'
 
-const presets = ['$20', '$50', '$100'] as const
+const presets = [20, 50, 100] as const
 
 /** Deposit screen — enter amount and choose funding method. */
 export function Deposit(props: Deposit.Props) {
-  const { error, onApplePay, onCrypto, subtitle } = props
-  const [selected, setSelected] = useState<string>('$50')
-  const [custom, setCustom] = useState('')
-  const isOther = !presets.includes(selected as (typeof presets)[number])
+  const { error, funding, onApplePay, onCrypto, onFaucet, subtitle } = props
+  const [selected, setSelected] = useState('50')
+  const isOther = selected === 'other'
 
   return (
     <Frame>
@@ -23,62 +20,69 @@ export function Deposit(props: Deposit.Props) {
         title="Deposit"
       />
       <Frame.Body>
-        <div className="grid grid-cols-4 gap-2">
-          {presets.map((preset) => (
-            <Button
-              key={preset}
-              onClick={() => setSelected(preset)}
-              type="button"
-              variant={selected === preset ? 'secondary' : 'muted'}
-            >
-              {preset}
-            </Button>
-          ))}
-          <Button
-            onClick={() => setSelected('other')}
-            type="button"
-            variant={isOther ? 'secondary' : 'muted'}
+        {!onFaucet && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              const form = new FormData(e.currentTarget)
+              const value = form.get('amount') as string
+              const custom = form.get('custom') as string | null
+              const amount = value === 'other' ? Number(custom) : Number(value)
+              if (Number.isNaN(amount) || amount <= 0) return
+              onCrypto?.({ amount })
+            }}
           >
-            Other
-          </Button>
-        </div>
-        {isOther && (
-          <Input
-            inputMode="decimal"
-            onChange={(e) => setCustom(e.target.value)}
-            placeholder="$0.00"
-            prefix="$"
-            type="text"
-            value={custom}
-          />
+            <div className="flex flex-col gap-4">
+              <RadioGroup name="amount" value={selected} onValueChange={setSelected} className="grid grid-cols-4 gap-2">
+                {presets.map((preset) => (
+                  <Radio.Root
+                    key={preset}
+                    className="flex h-9 cursor-pointer items-center justify-center rounded-body text-label-14 transition-colors data-[checked]:bg-gray-4 data-[unchecked]:bg-gray-2 data-[unchecked]:text-foreground-secondary data-[checked]:text-foreground hover:bg-gray-3"
+                    value={String(preset)}
+                  >
+                    ${preset}
+                  </Radio.Root>
+                ))}
+                <Radio.Root
+                  className="flex h-9 cursor-pointer items-center justify-center rounded-body text-label-14 transition-colors data-[checked]:bg-gray-4 data-[unchecked]:bg-gray-2 data-[unchecked]:text-foreground-secondary data-[checked]:text-foreground hover:bg-gray-3"
+                  value="other"
+                >
+                  Other
+                </Radio.Root>
+              </RadioGroup>
+
+              {isOther && (
+                <Input
+                  autoFocus
+                  inputMode="decimal"
+                  name="custom"
+                  placeholder="0.00"
+                  prefix="$"
+                  required
+                  type="text"
+                />
+              )}
+
+              <button
+                className="flex h-[38px] w-full cursor-pointer items-center justify-center rounded-body bg-invert text-invert-foreground transition-opacity hover:opacity-80"
+                onClick={onApplePay}
+                type="button"
+              >
+                <ApplePayMark />
+              </button>
+
+              <Button size="medium" type="submit" variant="muted">
+                Deposit crypto
+              </Button>
+            </div>
+          </form>
         )}
 
-        <button
-          className="flex h-[38px] w-full cursor-pointer items-center justify-center rounded-body bg-invert text-invert-foreground transition-opacity hover:opacity-80"
-          onClick={onApplePay}
-          type="button"
-        >
-          <ApplePayMark />
-        </button>
-
-        <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-border" />
-          <p className="text-label-12 text-foreground-secondary">or</p>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-
-        <button
-          className="flex w-full cursor-pointer items-center gap-3 rounded-body border border-border px-4 py-3 text-left transition-colors hover:bg-gray-1"
-          onClick={onCrypto}
-          type="button"
-        >
-          <Wallet className="size-5 text-foreground-secondary" />
-          <div className="flex-1">
-            <p className="text-label-14">Deposit crypto</p>
-            <p className="text-label-12 text-foreground-secondary">Send from wallet or exchange</p>
-          </div>
-          <ChevronRight className="size-4 text-foreground-secondary" />
-        </button>
+        {onFaucet && (
+          <Button loading={funding} onClick={onFaucet} size="medium" variant="primary">
+            {funding ? 'Funding…' : 'Fund account'}
+          </Button>
+        )}
 
         {error && <p className="text-label-13 text-red-9">{error}</p>}
       </Frame.Body>
@@ -98,10 +102,14 @@ export declare namespace Deposit {
   type Props = {
     /** Error message to display. */
     error?: string | undefined
+    /** Whether the faucet fund action is in progress. */
+    funding?: boolean | undefined
     /** Called when Apple Pay is selected. */
     onApplePay?: (() => void) | undefined
-    /** Called when crypto deposit is selected. */
-    onCrypto?: (() => void) | undefined
+    /** Called when crypto deposit is selected with the chosen amount. */
+    onCrypto?: ((params: { amount: number }) => void) | undefined
+    /** Called when the user clicks "Fund account" on testnet. */
+    onFaucet?: (() => void) | undefined
     /** Override the default subtitle. */
     subtitle?: React.ReactNode | undefined
   }

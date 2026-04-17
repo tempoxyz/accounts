@@ -156,6 +156,18 @@ function WalletDeposit() {
       >
         Deposit ($50)
       </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_deposit',
+              params: [{ displayName: 'DoorDash' }],
+            }),
+          )
+        }
+      >
+        Deposit (displayName: DoorDash)
+      </button>
     </Method>
   )
 }

@@ -130,9 +130,9 @@ export function DepositCrypto(props: DepositCrypto.Props) {
 
         <Rows>
           <Row label="Network">
-            <p className="flex items-center gap-1.5">
+            <label className="relative flex cursor-pointer items-center gap-1.5">
               <select
-                className="appearance-none bg-transparent text-right text-label-14 text-foreground outline-none"
+                className="absolute inset-0 cursor-pointer appearance-none opacity-0"
                 onChange={(e) => {
                   const chainId = Number(e.target.value)
                   setSelectedChainId(chainId)
@@ -148,14 +148,15 @@ export function DepositCrypto(props: DepositCrypto.Props) {
                   </option>
                 ))}
               </select>
+              <span className="text-label-14 text-foreground">{selectedChain.name}</span>
               <ChevronDown className="size-3.5 text-foreground-secondary" />
-            </p>
+            </label>
           </Row>
           {!isTempo && (
             <Row label="Token">
-              <p className="flex items-center gap-1.5">
+              <label className="relative flex cursor-pointer items-center gap-1.5">
                 <select
-                  className="appearance-none bg-transparent text-right text-label-14 text-foreground outline-none"
+                  className="absolute inset-0 cursor-pointer appearance-none opacity-0"
                   onChange={(e) => setSelectedTokenAddress(e.target.value)}
                   value={selectedTokenAddress}
                 >
@@ -165,8 +166,9 @@ export function DepositCrypto(props: DepositCrypto.Props) {
                     </option>
                   ))}
                 </select>
+                <span className="text-label-14 text-foreground">{selectedToken?.symbol}</span>
                 <ChevronDown className="size-3.5 text-foreground-secondary" />
-              </p>
+              </label>
             </Row>
           )}
         </Rows>
