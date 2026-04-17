@@ -18,6 +18,7 @@ export function Siwe(props: Siwe.Props) {
         }
         title="Authenticate"
       />
+      <Frame.Body />
       <Frame.Footer>
         <Frame.ActionButtons
           onPrimary={onApprove}
