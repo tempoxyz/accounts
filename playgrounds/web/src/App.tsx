@@ -3,8 +3,8 @@ import { Hex, Json } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
-import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
+import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 
 import {
