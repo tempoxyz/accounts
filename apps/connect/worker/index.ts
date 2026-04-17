@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 
 import { auth } from './auth.js'
+import { cli } from './cli.js'
 import { email } from './email.js'
 import { jwks } from './jwks.js'
 import { relay } from './relay.js'
@@ -19,7 +20,10 @@ const api = new Hono<{ Bindings: Env }>()
   .route('/relay', relay)
   .route('/webauthn', webauthn)
 
-const app = new Hono<{ Bindings: Env }>().route('/.well-known', jwks).route('/api', api)
+const app = new Hono<{ Bindings: Env }>()
+  .route('/.well-known', jwks)
+  .route('/cli', cli)
+  .route('/api', api)
 
 export type App = typeof app
 export default app
