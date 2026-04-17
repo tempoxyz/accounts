@@ -9,6 +9,9 @@ export default defineConfig({
   server: {
     port: 5176,
     allowedHosts: true,
+    hmr: {
+      overlay: false,
+    },
   },
   define: {
     __BUILD_VERSION__: JSON.stringify(
