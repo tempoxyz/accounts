@@ -1,11 +1,10 @@
 import { remote, wagmiConfig } from '#/lib/config.js'
-import * as Currency from '#/lib/currency.js'
 import { useMutation } from '@tanstack/react-query'
 import { getClient, sendTransaction } from '@wagmi/core'
 import { sendTransactionSync } from '@wagmi/core'
 import { type Remote as RemoteCore, Rpc } from 'accounts'
 import { Remote } from 'accounts/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { type PrepareTransactionRequestReturnType } from 'viem'
 import { tempo } from 'viem/chains'
 import { Actions } from 'viem/tempo'
@@ -20,7 +19,8 @@ export function SendTransaction(props: SendTransaction.Props) {
   const origin = Remote.useState(remote, (s) => s.origin)
   const host = origin ? new URL(origin).host : undefined
   const { address, chainId } = useConnection()
-  const [screen, setScreen] = useState<'review' | 'add-funds'>('review')
+  const [screen, setScreen] = useState<'review' | 'deposit-crypto'>('review')
+  const [depositConfirming, setDepositConfirming] = useState(false)
 
   const params = request._decoded?.params?.[0]
   const resolvedChainId = params?.chainId ?? chainId
@@ -37,11 +37,11 @@ export function SendTransaction(props: SendTransaction.Props) {
     query: {
       enabled: !!address && !!(params?.calls || params?.data || params?.to),
       retry: false,
-      staleTime: 1_000,
-      gcTime: 10_000,
+      staleTime: 0,
+      gcTime: 0,
       refetchOnWindowFocus: false,
       refetchInterval: (query) => {
-        if (query.state.data?._capabilities?.requireFunds) return 5_000
+        if (query.state.data?._capabilities?.requireFunds) return 2_000
         return false
       },
     },
@@ -51,16 +51,22 @@ export function SendTransaction(props: SendTransaction.Props) {
     ? Object.values(capabilities.balanceDiffs).flat()
     : []
   const requireFunds = capabilities?.requireFunds
+  const insufficientBalanceDisplay = requireFunds ? `$${requireFunds.formatted}` : undefined
 
   const confirm = useMutation({
     mutationFn: async () => {
       if (!prepare.data) return remote.respond(request)
 
+      const autoSwapCalls = capabilities?.autoSwap?.calls
+      const data = autoSwapCalls
+        ? { ...prepare.data, calls: [...autoSwapCalls, ...(prepare.data.calls ?? [])] }
+        : prepare.data
+
       if (request.method === 'eth_sendTransactionSync') {
-        const receipt = await sendTransactionSync(wagmiConfig, prepare.data)
+        const receipt = await sendTransactionSync(wagmiConfig, data as never)
         return remote.respond(request, { result: z.encode(Rpc.receipt, receipt as never) })
       }
-      const hash = await sendTransaction(wagmiConfig, prepare.data)
+      const hash = await sendTransaction(wagmiConfig, data as never)
       return remote.respond(request, { result: hash })
     },
     onError: (error) => remote.respond(request, { error: error as never }),
@@ -75,13 +81,22 @@ export function SendTransaction(props: SendTransaction.Props) {
     },
   })
 
-  if (screen === 'add-funds')
+  // Auto-navigate to review when funds arrive while confirming.
+  useEffect(() => {
+    if (depositConfirming && !requireFunds) {
+      setDepositConfirming(false)
+      setScreen('review')
+    }
+  }, [depositConfirming, requireFunds])
+
+  if (screen === 'deposit-crypto' && requireFunds)
     return (
-      <TransactionFrames.AddFunds
-        address={address}
-        network="Tempo"
-        onApplePay={() => {}}
-        token={requireFunds?.symbol}
+      <TransactionFrames.DepositCrypto
+        address={address!}
+        amount={insufficientBalanceDisplay ?? ''}
+        confirming={depositConfirming}
+        onBack={() => setScreen('review')}
+        onDone={() => setDepositConfirming(true)}
       />
     )
 
@@ -91,8 +106,6 @@ export function SendTransaction(props: SendTransaction.Props) {
       return (prepare.error as { shortMessage?: string }).shortMessage ?? prepare.error?.message
     return undefined
   })()
-
-  const insufficientBalanceDisplay = requireFunds ? Currency.fiat(requireFunds) : undefined
 
   const preimage = Preimage.detect(prepare.data, params)
 
@@ -108,8 +121,10 @@ export function SendTransaction(props: SendTransaction.Props) {
         host={host}
         insufficientBalance={insufficientBalanceDisplay}
         loading={prepare.isLoading}
+        onDepositCrypto={() => setScreen('deposit-crypto')}
+        onApplePay={() => {}}
         onConfirm={() => confirm.mutate()}
-        onFund={isTestnet ? () => fund.mutate() : undefined}
+        onFaucet={isTestnet ? () => fund.mutate() : undefined}
         onReject={() => remote.reject(request)}
         onRetry={() => prepare.refetch()}
         sponsor={capabilities?.sponsor}
@@ -126,9 +141,9 @@ export function SendTransaction(props: SendTransaction.Props) {
       funding={fund.isPending}
       insufficientBalance={insufficientBalanceDisplay}
       loading={prepare.isLoading}
-      onAddFunds={() => setScreen('add-funds')}
+      onDepositCrypto={() => setScreen('deposit-crypto')}
       onApplePay={() => {}}
-      onFund={isTestnet ? () => fund.mutate() : undefined}
+      onFaucet={isTestnet ? () => fund.mutate() : undefined}
       onConfirm={() => confirm.mutate()}
       onReject={() => remote.reject(request)}
       onRetry={() => prepare.refetch()}

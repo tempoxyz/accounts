@@ -87,6 +87,11 @@
 
 - **Base UI first** — before building a custom UI component, check if [Base UI](https://base-ui.com) (`@base-ui/react`) already provides an unstyled primitive for it (e.g. OTP Field, Dialog, Select, Menu, Checkbox, etc.). Use the Base UI primitive as the foundation and style it with Tailwind/CVA. Only build from scratch when no Base UI component covers the use case.
 
+## React Query Conventions
+
+- **Return the full query result from hooks** — don't destructure/re-wrap `useQuery` return values in custom hooks. Return the `UseQueryResult` directly so callers retain access to all tracked values (`.data`, `.isLoading`, `.error`, `.refetch`, `.fetchStatus`, etc.). Re-wrapping loses reactivity tracking and forces the hook to be updated whenever a new field is needed.
+- **Compose queries via query options** — when a hook needs to combine multiple queries, don't call `useQuery` for each and then merge the results into a custom shape. Instead, create a single `useQuery` whose `queryFn` internally uses the sub-queries' options (e.g. `queryClient.fetchQuery(subQueryOptions)`) so the hook still returns one `UseQueryResult`.
+
 ## React Component Conventions
 
 - **Colocate components in the file** — don't extract into separate component files until reusability is needed. Place helper components at the bottom of the file that uses them.

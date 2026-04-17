@@ -97,6 +97,9 @@ export function App() {
       <Fortune />
       <MppZeroDollarAuth />
 
+      <h2>Email Verification</h2>
+      <ManageEmail />
+
       <h2>RPC Proxy (fallthrough)</h2>
       <EthBlockNumber />
     </div>
@@ -152,6 +155,18 @@ function WalletDeposit() {
         }
       >
         Deposit ($50)
+      </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_deposit',
+              params: [{ displayName: 'DoorDash' }],
+            }),
+          )
+        }
+      >
+        Deposit (displayName: DoorDash)
       </button>
     </Method>
   )
@@ -383,7 +398,7 @@ function buildCalls(rows: CallRow[]) {
 
 function Transactions() {
   const [rows, setRows] = useState<CallRow[]>([defaultRow(0)])
-  const [useFeePayer, setUseFeePayer] = useState(false)
+  const [disableFeePayer, setDisableFeePayer] = useState(false)
   const [result, setResult] = useState<unknown>()
   const [error, setError] = useState<Error>()
   const [method, setMethod] = useState('')
@@ -481,10 +496,10 @@ function Transactions() {
         <label>
           <input
             type="checkbox"
-            checked={useFeePayer}
-            onChange={(e) => setUseFeePayer(e.target.checked)}
+            checked={disableFeePayer}
+            onChange={(e) => setDisableFeePayer(e.target.checked)}
           />{' '}
-          Fee Payer
+          Disable Fee Payer
         </label>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -493,7 +508,7 @@ function Transactions() {
             send('eth_sendTransaction', () =>
               provider.request({
                 method: 'eth_sendTransaction',
-                params: [{ calls, ...(useFeePayer ? { feePayer: '/relay' } : {}) }],
+                params: [{ calls, ...(disableFeePayer ? { feePayer: false } : {}) }],
               }),
             )
           }
@@ -506,7 +521,7 @@ function Transactions() {
             send('eth_sendTransactionSync', () =>
               provider.request({
                 method: 'eth_sendTransactionSync',
-                params: [{ calls, ...(useFeePayer ? { feePayer: '/relay' } : {}) }],
+                params: [{ calls, ...(disableFeePayer ? { feePayer: false } : {}) }],
               }),
             )
           }
@@ -545,7 +560,7 @@ function Transactions() {
             send('eth_signTransaction', () =>
               provider.request({
                 method: 'eth_signTransaction',
-                params: [{ calls, ...(useFeePayer ? { feePayer: '/relay' } : {}) }],
+                params: [{ calls, ...(disableFeePayer ? { feePayer: false } : {}) }],
               }),
             )
           }
@@ -1008,6 +1023,18 @@ function MppZeroDollarAuth() {
         Zero-Dollar Auth
       </button>
     </Method>
+  )
+}
+
+function ManageEmail() {
+  const connectHost = import.meta.env.VITE_CONNECT_HOST ?? ''
+  return (
+    <div>
+      <h3>Manage Email</h3>
+      <a href={`${connectHost}/email`} target="_blank" rel="noopener noreferrer">
+        Open email settings →
+      </a>
+    </div>
   )
 }
 

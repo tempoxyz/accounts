@@ -12,6 +12,23 @@
       "localConnectionString": "postgresql://tempo:tempo@host.docker.internal:5432/connect"
     }
   ],
+  "ratelimits": [
+    {
+      "name": "OTP_EMAIL_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 5, "period": 60 }
+    },
+    {
+      "name": "OTP_IP_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "OTP_VERIFY_EMAIL_RATE_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ],
   "observability": {
     "enabled": true
   },

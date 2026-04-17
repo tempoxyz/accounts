@@ -286,7 +286,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             const prepared = await prepareTransactionRequest(client, {
               account,
               ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
+              ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
               keyAuthorization,
               type: 'tempo',
             })
@@ -316,7 +316,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             const prepared = await prepareTransactionRequest(client, {
               account,
               ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
+              ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
               keyAuthorization,
               type: 'tempo',
             })
@@ -346,7 +346,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             const prepared = await prepareTransactionRequest(client, {
               account,
               ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
+              ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
               keyAuthorization,
               type: 'tempo',
             })

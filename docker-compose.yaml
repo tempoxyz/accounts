@@ -58,6 +58,7 @@ services:
     ports:
       - '5176:5176'
     environment:
+      BYPASS_EMAIL_OTP: 'true'
       DATABASE_URL: postgres://tempo:tempo@host.docker.internal:5432/connect
       # workerd needs CA certs for outbound HTTPS fetch in local dev.
       # https://github.com/cloudflare/workers-sdk/issues/9356

@@ -387,12 +387,11 @@ function SendTransactionOnrampFlow() {
       <Arrow />
 
       <Card label="Deposit Crypto">
-        <TransactionFrames.AddFunds
-          address="0x9f8e7d6c5b4a39281e0f3c21d7a4b6"
+        <TransactionFrames.DepositCrypto
+          address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
           amount="$50.00"
-          network="Base"
-          title="Deposit crypto"
-          token="USDC.e"
+          onBack={() => {}}
+          onDone={() => {}}
         />
       </Card>
     </>
@@ -579,12 +578,11 @@ function DepositFlow() {
       <Arrow />
 
       <Card label="Crypto Deposit">
-        <TransactionFrames.AddFunds
-          address="0x9f8e7d6c5b4a39281e0f3c21d7a4b6"
-          network="Tempo"
-          subtitle="Deposit funds into your Tempo account."
-          title="Deposit"
-          token="USDC.e"
+        <TransactionFrames.DepositCrypto
+          address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
+          amount="$25.00"
+          onBack={() => {}}
+          onDone={() => {}}
         />
       </Card>
     </>
@@ -608,16 +606,11 @@ function DepositRecipientFlow() {
       <Arrow />
 
       <Card label="Crypto Deposit">
-        <TransactionFrames.AddFunds
-          address="0x9f8e7d6c5b4a39281e0f3c21d7a4b6"
-          network="Tempo"
-          subtitle={
-            <>
-              Deposit funds to <span className="text-foreground">DoorDash</span>.
-            </>
-          }
-          title="Deposit"
-          token="USDC.e"
+        <TransactionFrames.DepositCrypto
+          address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
+          amount="$25.00"
+          onBack={() => {}}
+          onDone={() => {}}
         />
       </Card>
     </>
