@@ -1,5 +1,5 @@
-export { AddFunds } from './AddFunds.js'
 export { Deposit } from './Deposit.js'
-export { Payment } from './Payment.js'
+export { DepositCrypto } from './DepositCrypto.js'
 export { Generic } from './Generic.js'
+export { Payment } from './Payment.js'
 export { Withdraw } from './Withdraw.js'

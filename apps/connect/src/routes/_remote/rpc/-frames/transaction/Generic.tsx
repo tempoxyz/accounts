@@ -18,10 +18,10 @@ export function Generic(props: Generic.Props) {
     funding,
     insufficientBalance,
     loading,
-    onAddFunds,
+    onDepositCrypto,
     onApplePay,
     onConfirm,
-    onFund,
+    onFaucet,
     onReject,
     onRetry,
     sponsor,
@@ -77,11 +77,11 @@ export function Generic(props: Generic.Props) {
       </Frame.Body>
       <Frame.Footer>
         {insufficientBalance ? (
-          onFund ? (
+          onFaucet ? (
             <Button
               className="w-full"
               loading={funding}
-              onClick={onFund}
+              onClick={onFaucet}
               size="medium"
               variant="primary"
             >
@@ -98,7 +98,7 @@ export function Generic(props: Generic.Props) {
               >
                 <ApplePayMark />
               </button>
-              <Button onClick={onAddFunds} size="medium" variant="muted">
+              <Button onClick={onDepositCrypto} size="medium" variant="muted">
                 Deposit crypto
               </Button>
             </div>
@@ -147,13 +147,13 @@ export declare namespace Generic {
     /** Whether the transaction is being prepared (skeleton state). */
     loading?: boolean | undefined
     /** Called when the user clicks "Crypto" (insufficient balance). */
-    onAddFunds?: (() => void) | undefined
+    onDepositCrypto?: (() => void) | undefined
     /** Called when the user clicks "Apple Pay" (insufficient balance). */
     onApplePay?: (() => void) | undefined
     /** Called when the user clicks "Confirm". */
     onConfirm?: (() => void) | undefined
     /** Called when the user clicks "Fund" on testnet (faucet). */
-    onFund?: (() => void) | undefined
+    onFaucet?: (() => void) | undefined
     /** Called when the user clicks "Reject" or "Cancel". */
     onReject?: (() => void) | undefined
     /** Called when the user clicks "Retry" from error state. */

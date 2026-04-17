@@ -48,7 +48,7 @@
     "testcontainers": "^11.14.0",
     "tsx": "^4.21.0",
     "typescript": "catalog:",
-    "viem": "^2.47.18",
+    "viem": "catalog:",
     "vp": "catalog:",
     "zile": "^0.0.24"
   },
@@ -57,7 +57,7 @@
   },
   "pnpm": {
     "overrides": {
-      "ox": "~0.14.15",
+      "ox": "~0.14.18",
       "react": "catalog:",
       "react-dom": "catalog:",
       "accounts": "workspace:*",

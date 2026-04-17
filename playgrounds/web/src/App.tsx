@@ -386,7 +386,7 @@ function buildCalls(rows: CallRow[]) {
 
 function Transactions() {
   const [rows, setRows] = useState<CallRow[]>([defaultRow(0)])
-  const [useFeePayer, setUseFeePayer] = useState(false)
+  const [disableFeePayer, setDisableFeePayer] = useState(false)
   const [result, setResult] = useState<unknown>()
   const [error, setError] = useState<Error>()
   const [method, setMethod] = useState('')
@@ -484,10 +484,10 @@ function Transactions() {
         <label>
           <input
             type="checkbox"
-            checked={useFeePayer}
-            onChange={(e) => setUseFeePayer(e.target.checked)}
+            checked={disableFeePayer}
+            onChange={(e) => setDisableFeePayer(e.target.checked)}
           />{' '}
-          Fee Payer
+          Disable Fee Payer
         </label>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -496,7 +496,7 @@ function Transactions() {
             send('eth_sendTransaction', () =>
               provider.request({
                 method: 'eth_sendTransaction',
-                params: [{ calls, ...(useFeePayer ? { feePayer: '/relay' } : {}) }],
+                params: [{ calls, ...(disableFeePayer ? { feePayer: false } : {}) }],
               }),
             )
           }
@@ -509,7 +509,7 @@ function Transactions() {
             send('eth_sendTransactionSync', () =>
               provider.request({
                 method: 'eth_sendTransactionSync',
-                params: [{ calls, ...(useFeePayer ? { feePayer: '/relay' } : {}) }],
+                params: [{ calls, ...(disableFeePayer ? { feePayer: false } : {}) }],
               }),
             )
           }
@@ -548,7 +548,7 @@ function Transactions() {
             send('eth_signTransaction', () =>
               provider.request({
                 method: 'eth_signTransaction',
-                params: [{ calls, ...(useFeePayer ? { feePayer: '/relay' } : {}) }],
+                params: [{ calls, ...(disableFeePayer ? { feePayer: false } : {}) }],
               }),
             )
           }

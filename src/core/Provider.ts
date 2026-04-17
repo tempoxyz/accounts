@@ -140,10 +140,10 @@ export function create(options: create.Options = {}): create.ReturnType {
   }
 
   /** Resolves the `feePayer` field from a transaction request into an absolute URL string or `undefined`. */
-  function resolveFeePayer(feePayer: string | boolean | undefined): string | undefined {
+  function resolveFeePayer(feePayer: string | boolean | undefined): string | false | undefined {
+    if (feePayer === false) return false
     const url = (() => {
       if (typeof feePayer === 'string') return feePayer
-      if (feePayer === false) return undefined
       return feePayerConfig?.url
     })()
     if (!url) return undefined

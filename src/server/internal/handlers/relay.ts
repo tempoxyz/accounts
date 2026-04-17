@@ -144,6 +144,18 @@ export function relay(options: relay.Options = {}): Handler {
           let sponsored = false
           let feeToken = requestFeeToken
 
+          // Lazily resolve a swap source token when autoSwap needs one.
+          const resolveFeeTokenForSwap = from
+            ? (insufficientToken: Address) =>
+                resolveFeeToken(client, {
+                  account: from,
+                  feeToken: undefined,
+                  tokens: (resolveTokens(chainId) ?? []).filter(
+                    (t) => t.toLowerCase() !== insufficientToken.toLowerCase(),
+                  ),
+                })
+            : undefined
+
           if (requestsSponsorship && !feePayerOptions!.validate) {
             // Path A: sponsorship guaranteed (no validate) — skip fee token
             // resolution, fill once with feePayer, then parallelize the rest.
@@ -151,7 +163,12 @@ export function relay(options: relay.Options = {}): Handler {
             if (Sponsorship.isPreparedTransaction(transaction)) {
               filled = { transaction: Utils.normalizeTempoTransaction(transaction) }
             } else {
-              filled = await fill(client, { autoSwap, feeToken, transaction })
+              filled = await fill(client, {
+                autoSwap,
+                feeToken,
+                resolveFeeToken: resolveFeeTokenForSwap,
+                transaction,
+              })
             }
             sponsored = true
           } else if (requestsSponsorship && feePayerOptions!.validate) {
@@ -169,9 +186,14 @@ export function relay(options: relay.Options = {}): Handler {
               })
               filled = prepared
             } else {
+              const fillOptions = {
+                autoSwap,
+                feeToken,
+                resolveFeeToken: resolveFeeTokenForSwap,
+              }
               const [sponsoredFill, unsponsoredFill] = await Promise.all([
-                fill(client, { autoSwap, feeToken, transaction: sponsoredTx }),
-                fill(client, { autoSwap, feeToken, transaction: baseTx }),
+                fill(client, { ...fillOptions, transaction: sponsoredTx }),
+                fill(client, { ...fillOptions, transaction: baseTx }),
               ])
               sponsored = await Sponsorship.shouldSponsor({
                 sender: from,
@@ -190,7 +212,12 @@ export function relay(options: relay.Options = {}): Handler {
                 })
               : requestFeeToken
             const transaction = { ...baseTx, ...(feeToken ? { feeToken } : {}) }
-            filled = await fill(client, { autoSwap, feeToken, transaction })
+            filled = await fill(client, {
+              autoSwap,
+              feeToken,
+              resolveFeeToken: resolveFeeTokenForSwap,
+              transaction,
+            })
           }
 
           const transaction_filled = filled.transaction
@@ -499,6 +526,7 @@ async function fill(
   options: {
     autoSwap?: { slippage: number } | undefined
     feeToken?: Address | undefined
+    resolveFeeToken?: ((insufficientToken: Address) => Promise<Address | undefined>) | undefined
     transaction: Record<string, unknown>
   },
 ) {
@@ -516,7 +544,7 @@ async function fill(
     return { transaction: Utils.normalizeTempoTransaction(result.tx) }
   } catch (error) {
     if (!(error instanceof Error)) throw error
-    if (!feeToken || !autoSwap) throw error
+    if (!autoSwap) throw error
 
     const revert = ExecutionError.parse(error)
     if (revert?.errorName !== 'InsufficientBalance') throw error
@@ -524,13 +552,19 @@ async function fill(
     const [available, required, token] = revert.args
     if (typeof available === 'undefined' || typeof required === 'undefined' || !token) throw error
 
-    if (token.toLowerCase() === feeToken.toLowerCase()) throw error
+    // Resolve a source token for the swap: use the provided feeToken,
+    // or fall back to resolveFeeToken() to find one the sender holds.
+    const sourceToken =
+      feeToken && feeToken.toLowerCase() !== token.toLowerCase()
+        ? feeToken
+        : (await options.resolveFeeToken?.(token as Address))
+    if (!sourceToken || sourceToken.toLowerCase() === token.toLowerCase()) throw error
 
     const deficit = required - available
     const maxAmountIn = deficit + (deficit * BigInt(Math.round(autoSwap.slippage * 1000))) / 1000n
 
     const originalCalls = (request.calls as Call[] | undefined) ?? []
-    const swapCalls = buildSwapCalls(feeToken, token, deficit, maxAmountIn)
+    const swapCalls = buildSwapCalls(sourceToken, token, deficit, maxAmountIn)
 
     const result = await client.request({
       method: 'eth_fillTransaction',
@@ -545,7 +579,7 @@ async function fill(
       transaction: Utils.normalizeTempoTransaction(result.tx),
       swap: {
         calls: swapCalls,
-        tokenIn: feeToken,
+        tokenIn: sourceToken,
         tokenOut: token,
         amountOut: deficit,
         maxAmountIn,
