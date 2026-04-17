@@ -11,7 +11,7 @@ export function init() {
 
   posthog.init(key, {
     api_host: '/pho',
-		ui_host: 'https://us.posthog.com',
+    ui_host: 'https://us.posthog.com',
     autocapture: true,
     capture_pageleave: true,
     capture_pageview: true,
