@@ -1,5 +1,5 @@
 import { remote } from '#/lib/config.js'
-import * as TypedMessages from '#/lib/typedMessages.js'
+import * as TypedMessages from '#/lib/typed-messages.js'
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Remote } from 'accounts'
