@@ -1,7 +1,5 @@
 packages:
   - .
-  - apps/*
-  - dialog
   - examples/*
   - playgrounds/*
   - ref-impls/*
