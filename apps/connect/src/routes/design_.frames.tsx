@@ -631,6 +631,7 @@ function DepositFlow() {
         <TransactionFrames.DepositCrypto
           address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
           amount="$25.00"
+          depositAddress="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
           onBack={() => {}}
           onDone={() => {}}
         />
@@ -827,6 +828,7 @@ function DepositRecipientFlow() {
         <TransactionFrames.DepositCrypto
           address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
           amount="$25.00"
+          depositAddress="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
           onBack={() => {}}
           onDone={() => {}}
         />

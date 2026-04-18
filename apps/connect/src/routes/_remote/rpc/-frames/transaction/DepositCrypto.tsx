@@ -40,20 +40,21 @@ export function DepositCrypto(props: DepositCrypto.Props) {
 
   // Fetch a Relay deposit address for cross-chain routes.
   // Disabled when Tempo is selected — we show the user's own address instead.
+  // Also disabled when a static depositAddress is provided (design/preview mode).
   const deposit = Bridge.useDepositAddress({
     origin: {
       chainId: selectedChainId,
       token: selectedToken?.address ?? '',
       decimals: selectedToken?.decimals ?? 6,
     },
-    enabled: !!selectedToken && !isTempo,
+    enabled: !!selectedToken && !isTempo && !props.depositAddress,
   })
 
   const isUnsupported =
     deposit.isError && (deposit.error as Error & { code?: string }).code === 'UNSUPPORTED_ROUTE'
 
-  // Tempo → user's own address; cross-chain → Relay deposit address.
-  const depositAddress = isTempo ? address : deposit.data?.address
+  // Static prop → use directly; Tempo → user's own address; cross-chain → Relay deposit address.
+  const depositAddress = props.depositAddress ?? (isTempo ? address : deposit.data?.address)
 
   // EIP-681: ethereum:<address>@<chainId>
   const qrValue = useMemo(() => {
@@ -236,6 +237,8 @@ export declare namespace DepositCrypto {
     amount: string
     /** Whether the deposit is being confirmed (waiting for funds to arrive). */
     confirming?: boolean | undefined
+    /** Static deposit address — skips the Relay fetch when provided (design/preview mode). */
+    depositAddress?: string | undefined
     /** Called when user clicks "Back". */
     onBack: () => void
     /** Called when user clicks "Done". */
