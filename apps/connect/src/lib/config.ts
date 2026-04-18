@@ -27,9 +27,6 @@ export const wagmiConfig = createConfig({
   },
 })
 
-export const chainIds = [tempo.id, tempoDevnet.id, tempoModerato.id] as const
-export type ChainId = (typeof chainIds)[number]
-
 /** Remote context singleton. */
 export const remote = Remote.create({
   messenger: Messenger.init(),
