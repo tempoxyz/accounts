@@ -151,7 +151,7 @@ function Frame(props: { children: ReactNode; mode: Mode.Mode }) {
 
   // Standalone: bordered card, full-page on mobile.
   return (
-    <div className="bg-primary text-foreground border border-border rounded-frame w-[360px] max-w-full flex flex-col max-dialog:w-full max-dialog:flex-1 max-dialog:rounded-none max-dialog:border-0">
+    <div className="bg-primary text-foreground border border-border rounded-frame w-[480px] max-w-full flex flex-col max-dialog:w-full max-dialog:flex-1 max-dialog:rounded-none max-dialog:border-0">
       {children}
     </div>
   )

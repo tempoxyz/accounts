@@ -15,8 +15,8 @@ import { type Handler, from } from '../../Handler.js'
  * - `POST /auth/pkce/poll/:code`
  * - `POST /auth/pkce`
  *
- * @param options - Options.
- * @returns Request handler.
+ * @param {codeAuth.Options} options - Options.
+ * @returns {Handler} Request handler.
  */
 export function codeAuth(options: codeAuth.Options = {}): Handler {
   const {

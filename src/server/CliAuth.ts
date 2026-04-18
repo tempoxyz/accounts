@@ -361,6 +361,10 @@ export const Policy = {
 /**
  * Instantiates a CLI auth helper with shared defaults and cached clients.
  *
+ *
+ * @param {from.Options} options - Shared CLI auth defaults.
+ * @returns {CliAuth} CLI auth helper.
+ *
  * @example
  * ```ts
  * import { CliAuth } from 'accounts/server'
@@ -370,10 +374,10 @@ export const Policy = {
  * })
  *
  * const created = await cli.createDeviceCode({ request })
+ * const authorized = await cli.authorize({ request })
+ * const polled = await cli.poll({ request })
+ * const pending = await cli.pending({ code })
  * ```
- *
- * @param options - Shared CLI auth defaults.
- * @returns CLI auth helper.
  */
 export function from(options: from.Options = {}): CliAuth {
   const cache = createClientCache(options)
@@ -556,8 +560,25 @@ export declare namespace from {
 /**
  * Creates and stores a new device code.
  *
- * @param options - Shared defaults plus the incoming request.
- * @returns Created device code.
+ * @param {createDeviceCode.Options} options - Shared defaults plus the incoming request.
+ * @returns {Promise<createDeviceCode.ReturnType>} Created device code.
+ *
+ * @example
+ * ```ts
+ * import { Hono } from 'hono'
+ * import { CliAuth } from 'accounts/server'
+ * import { zValidator } from '@hono/zod-validator'
+ *
+ * export default new Hono<{ Bindings: Cloudflare.Env }>()
+ *   // ... other routes (`/authorize`, `/poll:code`, `/pending:code`)
+ *   .post('/code',
+ *    zValidator('json', CliAuth.createRequest),
+ *    async (c) => {
+ *      const request = c.req.valid('json')
+ *      const result = await CliAuth.createDeviceCode({ request })
+ *      return c.json(z.encode(CliAuth.createResponse, result))
+ *    })
+ * ```
  */
 export async function createDeviceCode(
   options: createDeviceCode.Options,
@@ -583,8 +604,24 @@ export declare namespace createDeviceCode {
 /**
  * Looks up a pending device code for browser approval UIs.
  *
- * @param options - Shared defaults plus the pending lookup parameters.
- * @returns Pending device-code payload.
+ * @param {pending.Options} options - Shared defaults plus the pending lookup parameters.
+ * @returns {Promise<pending.ReturnType>} Pending device-code payload.
+ *
+ * @example
+ * ```ts
+ * import { Hono } from 'hono'
+ * import { CliAuth } from 'accounts/server'
+ * import { zValidator } from '@hono/zod-validator'
+ *
+ * export default new Hono<{ Bindings: Cloudflare.Env }>()
+ *   // ... other routes (`/code`, `/authorize`, `/poll:code`)
+ *   .get('/pending:code',
+ *    zValidator('param', z.object({ code: z.string() })),
+ *    async (c) => {
+ *      const code = c.req.param('code')
+ *      const result = await CliAuth.pending({ code })
+ *      return c.json(z.encode(CliAuth.pendingResponse, result))
+ *    })
  */
 export async function pending(options: pending.Options): Promise<pending.ReturnType> {
   const { code, ...rest } = options
@@ -608,8 +645,25 @@ export declare namespace pending {
 /**
  * Polls a device code with PKCE verification.
  *
- * @param options - Shared defaults plus the poll parameters.
- * @returns Pending, authorized, or expired poll response.
+ * @param {poll.Options} options - Shared defaults plus the poll parameters.
+ * @returns {Promise<poll.ReturnType>} Pending, authorized, or expired poll response.
+ *
+ * @example
+ * ```ts
+ * import { Hono } from 'hono'
+ * import { CliAuth } from 'accounts/server'
+ * import { zValidator } from '@hono/zod-validator'
+ *
+ * export default new Hono<{ Bindings: Cloudflare.Env }>()
+ *   // ... other routes (`/code`, `/authorize`, `/pending:code`)
+ *   .post('/poll:code',
+ *    zValidator('json', CliAuth.pollRequest),
+ *    async (c) => {
+ *      const request = c.req.valid('json')
+ *      const result = await CliAuth.poll({ request })
+ *      return c.json(z.encode(CliAuth.pollResponse, result))
+ *    })
+ * ```
  */
 export async function poll(options: poll.Options): Promise<poll.ReturnType> {
   const { code, request, ...rest } = options
@@ -635,8 +689,25 @@ export declare namespace poll {
 /**
  * Authorizes a pending device code after validating the signed key authorization.
  *
- * @param options - Shared defaults plus the authorization request.
- * @returns Authorized response body.
+ * @param {authorize.Options} options - Shared defaults plus the authorization request.
+ * @returns {Promise<authorize.ReturnType>} Authorized response body.
+ *
+ * @example
+ * ```ts
+ * import { Hono } from 'hono'
+ * import { CliAuth } from 'accounts/server'
+ * import { zValidator } from '@hono/zod-validator'
+ *
+ * export default new Hono<{ Bindings: Cloudflare.Env }>()
+ *   // ... other routes (`/code`, `/poll:code`, `/pending:code`)
+ *   .post('/authorize',
+ *    zValidator('json', CliAuth.authorizeRequest),
+ *    async (c) => {
+ *      const request = c.req.valid('json')
+ *      const result = await CliAuth.authorize({ request })
+ *      return c.json(z.encode(CliAuth.authorizeResponse, result))
+ *    })
+ * ```
  */
 export async function authorize(options: authorize.Options): Promise<authorize.ReturnType> {
   const { client, request, ...rest } = options

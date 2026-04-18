@@ -7,8 +7,14 @@ services:
     volumes:
       - .:/app
       - node_modules:/app/node_modules
-    command: >
-      sh -c "apt-get update -qq && apt-get install -yqq git > /dev/null 2>&1; corepack enable && pnpm install --frozen-lockfile"
+    command:
+      - sh
+      - -ec
+      - |
+          apt-get update -qq
+          apt-get install -yqq git > /dev/null 2>&1
+          corepack enable
+          pnpm install --frozen-lockfile
 
   postgres:
     image: postgres:16-alpine
@@ -37,8 +43,15 @@ services:
       - '5173:5173'
     labels:
       dev.orbstack.domains: playground.tempo.local
-    command: >
-      sh -c "apt-get update -qq && apt-get install -yqq git > /dev/null 2>&1; corepack enable && pnpm install --frozen-lockfile && pnpm --filter playground dev -- --host"
+    command:
+      - sh
+      - -ec
+      - |
+          apt-get update -qq
+          apt-get install -yqq git > /dev/null 2>&1
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm --filter playground dev -- --host
     healthcheck:
       test: [CMD, node, -e, "require('http').get('http://localhost:5173',r=>{process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))"]
       interval: 2s
@@ -67,8 +80,20 @@ services:
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
     labels:
       dev.orbstack.domains: connect.tempo.local
-    command: >
-      sh -c "apt-get update -qq && apt-get install -yqq ca-certificates git > /dev/null 2>&1; corepack enable && pnpm install --frozen-lockfile && pnpm --filter connect dev -- --host"
+    command:
+      - sh
+      - -ec
+      - |
+          apt-get update -qq
+          apt-get install -yqq ca-certificates git postgresql-client > /dev/null 2>&1
+          corepack enable
+          pnpm install --frozen-lockfile
+
+          if ! PGPASSWORD=tempo psql -h postgres -p 5432 -U tempo -d tempo -tAc "SELECT 1 FROM pg_database WHERE datname='connect'" | grep -q 1; then
+            PGPASSWORD=tempo psql -h postgres -p 5432 -U tempo -d tempo -c 'CREATE DATABASE connect'
+          fi
+
+          pnpm --filter connect dev -- --host
     healthcheck:
       test: [CMD, node, -e, "require('http').get('http://localhost:5176',r=>{process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))"]
       interval: 2s
@@ -92,8 +117,15 @@ services:
       - '5174:5174'
     labels:
       dev.orbstack.domains: dialog-ref.tempo.local
-    command: >
-      sh -c "apt-get update -qq && apt-get install -yqq git > /dev/null 2>&1; corepack enable && pnpm install --frozen-lockfile && pnpm --filter dialog-ref dev -- --host"
+    command:
+      - sh
+      - -ec
+      - |
+          apt-get update -qq
+          apt-get install -yqq git > /dev/null 2>&1
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm --filter dialog-ref dev -- --host
     depends_on:
       install:
         condition: service_completed_successfully
@@ -116,8 +148,16 @@ services:
       dev.orbstack.domains: manager.tempo.local
     extra_hosts:
       - 'host.docker.internal:host-gateway'
-    command: >
-      sh -c "apt-get update -qq && apt-get install -y -qq socat ca-certificates >/dev/null 2>&1; socat TCP-LISTEN:5432,fork,reuseaddr TCP:postgres:5432 & corepack enable && pnpm drizzle-kit push --force && LOG_LEVEL=warn CLOUDFLARE=1 pnpm exec vite dev --port 5177 --host"
+    command:
+      - sh
+      - -ec
+      - |
+          apt-get update -qq
+          apt-get install -y -qq socat ca-certificates > /dev/null 2>&1
+          socat TCP-LISTEN:5432,fork,reuseaddr TCP:postgres:5432 &
+          corepack enable
+          pnpm drizzle-kit push --force
+          LOG_LEVEL=warn CLOUDFLARE=1 pnpm exec vite dev --port 5177 --host
     healthcheck:
       test: [CMD, node, -e, "require('http').get('http://localhost:5177',r=>{process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))"]
       interval: 2s
@@ -141,8 +181,15 @@ services:
       - '5175:5175'
     labels:
       dev.orbstack.domains: wagmi.tempo.local
-    command: >
-      sh -c "apt-get update -qq && apt-get install -yqq git > /dev/null 2>&1; corepack enable && pnpm install --frozen-lockfile && pnpm --filter wagmi dev -- --host --port 5175"
+    command:
+      - sh
+      - -ec
+      - |
+          apt-get update -qq
+          apt-get install -yqq git > /dev/null 2>&1
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm --filter wagmi dev -- --host --port 5175
     depends_on:
       install:
         condition: service_completed_successfully

@@ -1184,15 +1184,6 @@ importers:
         specifier: ^2.48.1
         version: 2.48.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
     devDependencies:
-      '@bomb.sh/args':
-        specifier: ^0.3.1
-        version: 0.3.1
-      '@bomb.sh/tab':
-        specifier: ^0.0.14
-        version: 0.0.14(cac@6.7.14)
-      '@clack/prompts':
-        specifier: ^1.2.0
-        version: 1.2.0
       '@cloudflare/vite-plugin':
         specifier: 'catalog:'
         version: 1.32.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)(vite@8.0.8)(workerd@1.20260415.1)(wrangler@4.83.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))
@@ -1881,24 +1872,6 @@ packages:
       react-dom: ^19.2.5
     peerDependenciesMeta:
       '@types/react':
-        optional: true
-
-  '@bomb.sh/args@0.3.1':
-    resolution: {integrity: sha512-CwxKrfgcorUPP6KfYD59aRdBYWBTsfsxT+GmoLVnKo5Tmyoqbpo0UNcjngRMyU+6tiPbd18RuIYxhgAn44wU/Q==}
-
-  '@bomb.sh/tab@0.0.14':
-    resolution: {integrity: sha512-cHMk2LI430MVoX1unTt9oK1iZzQS4CYDz97MSxKLNErW69T43Z2QLFTpdS/3jVOIKrIADWfuxQ+nQNJkNV7E4w==}
-    hasBin: true
-    peerDependencies:
-      cac: ^6.7.14
-      citty: ^0.1.6 || ^0.2.0
-      commander: ^13.1.0
-    peerDependenciesMeta:
-      cac:
-        optional: true
-      citty:
-        optional: true
-      commander:
         optional: true
 
   '@borewit/text-codec@0.2.2':
@@ -11417,12 +11390,6 @@ snapshots:
       use-sync-external-store: 1.6.0(react@19.2.5)
     optionalDependencies:
       '@types/react': 19.2.14
-
-  '@bomb.sh/args@0.3.1': {}
-
-  '@bomb.sh/tab@0.0.14(cac@6.7.14)':
-    optionalDependencies:
-      cac: 6.7.14
 
   '@borewit/text-codec@0.2.2': {}
 

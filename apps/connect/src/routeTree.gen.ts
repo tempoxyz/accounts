@@ -24,6 +24,7 @@ import { Route as RemoteRpcEth_signTypedData_v4RouteImport } from './routes/_rem
 import { Route as RemoteRpcEth_signTransactionRouteImport } from './routes/_remote/rpc/eth_signTransaction'
 import { Route as RemoteRpcEth_sendTransactionSyncRouteImport } from './routes/_remote/rpc/eth_sendTransactionSync'
 import { Route as RemoteRpcEth_sendTransactionRouteImport } from './routes/_remote/rpc/eth_sendTransaction'
+import { Route as RemoteAuthCliRouteImport } from './routes/_remote/auth.cli'
 
 const EmailRoute = EmailRouteImport.update({
   id: '/email',
@@ -105,6 +106,11 @@ const RemoteRpcEth_sendTransactionRoute =
     path: '/rpc/eth_sendTransaction',
     getParentRoute: () => RemoteRoute,
   } as any)
+const RemoteAuthCliRoute = RemoteAuthCliRouteImport.update({
+  id: '/auth/cli',
+  path: '/auth/cli',
+  getParentRoute: () => RemoteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/$': typeof SplatRoute
@@ -112,6 +118,7 @@ export interface FileRoutesByFullPath {
   '/design': typeof DesignRoute
   '/email': typeof EmailRoute
   '/design/frames': typeof DesignFramesRoute
+  '/auth/cli': typeof RemoteAuthCliRoute
   '/rpc/eth_sendTransaction': typeof RemoteRpcEth_sendTransactionRoute
   '/rpc/eth_sendTransactionSync': typeof RemoteRpcEth_sendTransactionSyncRoute
   '/rpc/eth_signTransaction': typeof RemoteRpcEth_signTransactionRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByTo {
   '/email': typeof EmailRoute
   '/design/frames': typeof DesignFramesRoute
   '/': typeof RemoteIndexRoute
+  '/auth/cli': typeof RemoteAuthCliRoute
   '/rpc/eth_sendTransaction': typeof RemoteRpcEth_sendTransactionRoute
   '/rpc/eth_sendTransactionSync': typeof RemoteRpcEth_sendTransactionSyncRoute
   '/rpc/eth_signTransaction': typeof RemoteRpcEth_signTransactionRoute
@@ -146,6 +154,7 @@ export interface FileRoutesById {
   '/email': typeof EmailRoute
   '/design_/frames': typeof DesignFramesRoute
   '/_remote/': typeof RemoteIndexRoute
+  '/_remote/auth/cli': typeof RemoteAuthCliRoute
   '/_remote/rpc/eth_sendTransaction': typeof RemoteRpcEth_sendTransactionRoute
   '/_remote/rpc/eth_sendTransactionSync': typeof RemoteRpcEth_sendTransactionSyncRoute
   '/_remote/rpc/eth_signTransaction': typeof RemoteRpcEth_signTransactionRoute
@@ -164,6 +173,7 @@ export interface FileRouteTypes {
     | '/design'
     | '/email'
     | '/design/frames'
+    | '/auth/cli'
     | '/rpc/eth_sendTransaction'
     | '/rpc/eth_sendTransactionSync'
     | '/rpc/eth_signTransaction'
@@ -180,6 +190,7 @@ export interface FileRouteTypes {
     | '/email'
     | '/design/frames'
     | '/'
+    | '/auth/cli'
     | '/rpc/eth_sendTransaction'
     | '/rpc/eth_sendTransactionSync'
     | '/rpc/eth_signTransaction'
@@ -197,6 +208,7 @@ export interface FileRouteTypes {
     | '/email'
     | '/design_/frames'
     | '/_remote/'
+    | '/_remote/auth/cli'
     | '/_remote/rpc/eth_sendTransaction'
     | '/_remote/rpc/eth_sendTransactionSync'
     | '/_remote/rpc/eth_signTransaction'
@@ -323,11 +335,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RemoteRpcEth_sendTransactionRouteImport
       parentRoute: typeof RemoteRoute
     }
+    '/_remote/auth/cli': {
+      id: '/_remote/auth/cli'
+      path: '/auth/cli'
+      fullPath: '/auth/cli'
+      preLoaderRoute: typeof RemoteAuthCliRouteImport
+      parentRoute: typeof RemoteRoute
+    }
   }
 }
 
 interface RemoteRouteChildren {
   RemoteIndexRoute: typeof RemoteIndexRoute
+  RemoteAuthCliRoute: typeof RemoteAuthCliRoute
   RemoteRpcEth_sendTransactionRoute: typeof RemoteRpcEth_sendTransactionRoute
   RemoteRpcEth_sendTransactionSyncRoute: typeof RemoteRpcEth_sendTransactionSyncRoute
   RemoteRpcEth_signTransactionRoute: typeof RemoteRpcEth_signTransactionRoute
@@ -341,6 +361,7 @@ interface RemoteRouteChildren {
 
 const RemoteRouteChildren: RemoteRouteChildren = {
   RemoteIndexRoute: RemoteIndexRoute,
+  RemoteAuthCliRoute: RemoteAuthCliRoute,
   RemoteRpcEth_sendTransactionRoute: RemoteRpcEth_sendTransactionRoute,
   RemoteRpcEth_sendTransactionSyncRoute: RemoteRpcEth_sendTransactionSyncRoute,
   RemoteRpcEth_signTransactionRoute: RemoteRpcEth_signTransactionRoute,

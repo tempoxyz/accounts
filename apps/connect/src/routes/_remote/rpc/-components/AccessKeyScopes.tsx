@@ -1,3 +1,4 @@
+import * as TimeFormatter from '#/lib/time-formatter.js'
 import { Amount } from '#/ui/Amount.js'
 import { Row, Rows } from '#/ui/Rows.js'
 import type { Rpc } from 'accounts'
@@ -52,7 +53,9 @@ function LimitRow(props: LimitRow.Props) {
       <div className="flex items-center gap-1.5">
         <Amount align="right" className="pt-1" amount={token} />
         {limit.period && (
-          <span className="text-foreground-secondary">/ {formatPeriod(limit.period)}</span>
+          <span className="text-foreground-secondary">
+            / {TimeFormatter.formatPeriod(limit.period)}
+          </span>
         )}
       </div>
     </Row>
@@ -71,7 +74,7 @@ function ExpiryRow(props: ExpiryRow.Props) {
   const now = Math.floor(Date.now() / 1000)
   const diff = props.expiry - now
 
-  return <Row label="Expires in">{formatDuration(diff)}</Row>
+  return <Row label="Expires in">{TimeFormatter.formatExpirable(diff)}</Row>
 }
 
 declare namespace ExpiryRow {
@@ -79,26 +82,4 @@ declare namespace ExpiryRow {
     /** Unix timestamp (seconds) when the access key expires. */
     expiry: number
   }
-}
-
-/** Formats seconds into a human-readable period label. */
-function formatPeriod(seconds: number) {
-  if (seconds >= 86400) return seconds === 86400 ? 'day' : `${Math.round(seconds / 86400)} days`
-  if (seconds >= 3600) return seconds === 3600 ? 'hour' : `${Math.round(seconds / 3600)} hours`
-  return seconds === 60 ? 'minute' : `${Math.round(seconds / 60)} minutes`
-}
-
-/** Formats a duration in seconds to a human-readable string. */
-function formatDuration(seconds: number) {
-  if (seconds <= 0) return 'Expired'
-  if (seconds >= 86400) {
-    const days = Math.round(seconds / 86400)
-    return `${days} ${days === 1 ? 'day' : 'days'}`
-  }
-  if (seconds >= 3600) {
-    const hours = Math.round(seconds / 3600)
-    return `${hours} ${hours === 1 ? 'hour' : 'hours'}`
-  }
-  const minutes = Math.round(seconds / 60)
-  return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
 }

@@ -5,6 +5,7 @@ import {
 import { Button } from '#/ui/Button.js'
 import { Frame } from '#/ui/Frame.js'
 import { Identicon } from '#/ui/Identicon.js'
+import * as React from 'react'
 import ChevronRight from '~icons/lucide/chevron-right'
 import Fingerprint from '~icons/lucide/fingerprint'
 
@@ -20,6 +21,7 @@ export function WelcomeBack(props: WelcomeBack.Props) {
     onContinue,
     onCreateNew,
     onSignIn,
+    scopes,
   } = props
 
   return (
@@ -65,7 +67,10 @@ export function WelcomeBack(props: WelcomeBack.Props) {
                 <ChevronRight className="size-4" />
               </span>
             </button>
-            {authorizeAccessKey && <AccessKeyScopes authorizeAccessKey={authorizeAccessKey} />}
+            {scopes ??
+              (authorizeAccessKey ? (
+                <AccessKeyScopes authorizeAccessKey={authorizeAccessKey} />
+              ) : null)}
             <Button
               loading={loading}
               prefix={<Fingerprint className="size-4" />}
@@ -100,6 +105,8 @@ export declare namespace WelcomeBack {
     error?: string | undefined
     /** Host domain requesting sign-in. */
     host?: string | undefined
+    /** Optional custom scope rows. Overrides `authorizeAccessKey` rendering when provided. */
+    scopes?: React.ReactNode | undefined
     /** Display label for the account row (email or truncated address). */
     label?: string | undefined
     /** Whether the passkey action is in progress. */
