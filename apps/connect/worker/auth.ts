@@ -33,7 +33,7 @@ export const auth = new Hono<{ Bindings: Env }>()
   .get('/cli', (c) => {
     const requestUrl = new URL(c.req.url)
     const search = requestUrl.search
-    return c.redirect(`/cli${search}`, 302)
+    return c.redirect(`/auth/cli${search}`, 302)
   })
   /** `GET/POST /cli/*` — handle CLI auth requests. */
   .on(['GET', 'POST'], '/cli/*', (c) => handler.fetch(c.req.raw))

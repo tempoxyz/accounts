@@ -18,19 +18,22 @@ export namespace Frame {
 
   /** Header with title, optional subtitle, and dismiss button. */
   export function Header(props: Header.Props) {
-    const { subtitle, title } = props
+    const isFramed = typeof window !== 'undefined' && window !== window.parent
+    const { dismissible = isFramed, subtitle, title } = props
     return (
       <div className="flex flex-col gap-3 px-5 pt-4 pb-3">
         <div className="flex items-center">
           <h2 className="flex-1 text-heading-20">{title}</h2>
-          <button
-            aria-label="Dismiss"
-            className="flex size-8 items-center justify-center rounded-full bg-gray-2 text-foreground-secondary transition-colors hover:bg-gray-3 hover:text-foreground"
-            onClick={() => remote.rejectAll()}
-            type="button"
-          >
-            <X className="size-4" />
-          </button>
+          {dismissible && (
+            <button
+              aria-label="Dismiss"
+              className="flex size-8 items-center justify-center rounded-full bg-gray-2 text-foreground-secondary transition-colors hover:bg-gray-3 hover:text-foreground"
+              onClick={() => remote.rejectAll()}
+              type="button"
+            >
+              <X className="size-4" />
+            </button>
+          )}
         </div>
         {subtitle && <p className="text-copy-15 text-foreground-secondary">{subtitle}</p>}
       </div>
@@ -39,6 +42,8 @@ export namespace Frame {
 
   export namespace Header {
     export type Props = {
+      /** Whether the dismiss button is shown. Defaults to `true`. */
+      dismissible?: boolean | undefined
       /** Secondary text below the title. */
       subtitle?: ReactNode | undefined
       /** Primary heading text. */

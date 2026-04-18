@@ -1,13 +1,12 @@
 import { Expiry } from 'accounts'
 import { Hex, Json } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
-import { Account, parseUnits } from 'viem'
+import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 
-import { AccessKey } from '../../../dist/core/Account.js'
 import {
   type AdapterType,
   type DialogMode,
@@ -1137,30 +1136,6 @@ function WalletAuthorizeAccessKey() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="submit">Authorize</button>
-          <button
-            type="button"
-            onClick={() =>
-              execute(async () => {
-                const store = provider.store as {
-                  persist: { rehydrate: () => Promise<void> }
-                  getState: () => {
-                    accessKeys: AccessKey[]
-                    accounts: Account[]
-                    activeAccount: number
-                  }
-                }
-                await store.persist.rehydrate()
-                const { accessKeys, accounts, activeAccount } = store.getState()
-                const current = accounts[activeAccount]?.address
-                if (!current) return []
-                return accessKeys.filter(
-                  (key) => key.access.toLowerCase() === current.toLowerCase(),
-                )
-              })
-            }
-          >
-            Get current
-          </button>
         </div>
       </form>
     </Method>
