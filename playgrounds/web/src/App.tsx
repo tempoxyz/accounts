@@ -1134,9 +1134,7 @@ function WalletAuthorizeAccessKey() {
             ))}
           </select>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="submit">Authorize</button>
-        </div>
+        <button type="submit">Authorize</button>
       </form>
     </Method>
   )
