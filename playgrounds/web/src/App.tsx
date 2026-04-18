@@ -4,6 +4,7 @@ import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
+import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 
 import {
@@ -89,6 +90,7 @@ export function App() {
 
       <h2>Signing &amp; Verification</h2>
       <PersonalSign />
+      <PersonalSignSiwe />
       <VerifyMessage />
       <EthSignTypedData />
       <VerifyTypedData />
@@ -608,6 +610,58 @@ function PersonalSign() {
   )
 }
 
+function PersonalSignSiwe() {
+  const [result, setResult] = useState<{ message: string; signature: string }>()
+  const [error, setError] = useState<Error>()
+  return (
+    <div>
+      <h3>personal_sign (SIWE)</h3>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          const domain =
+            (new FormData(e.currentTarget).get('domain') as string) || window.location.host
+          ;(async () => {
+            try {
+              setError(undefined)
+              const accounts = await provider.request({ method: 'eth_accounts' })
+              if (accounts.length === 0) throw new Error('No accounts connected')
+              const siweMessage = createSiweMessage({
+                address: accounts[0],
+                chainId: 42069,
+                domain,
+                nonce: generateSiweNonce(),
+                statement: 'Sign in to the playground app.',
+                uri: `https://${domain}`,
+                version: '1',
+              })
+              const signature = await provider.request({
+                method: 'personal_sign',
+                params: [Hex.fromString(siweMessage), accounts[0]],
+              })
+              setResult({ message: siweMessage, signature })
+            } catch (e) {
+              setResult(undefined)
+              setError(e instanceof Error ? e : new Error(String(e)))
+            }
+          })()
+        }}
+        style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+      >
+        <input
+          name="domain"
+          defaultValue={window.location.host}
+          placeholder="Domain…"
+          style={{ flex: 1 }}
+        />
+        <button type="submit">Sign (SIWE)</button>
+      </form>
+      {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
+      {result && <pre>{`message:\n${result.message}\n\nsignature:\n${result.signature}`}</pre>}
+    </div>
+  )
+}
+
 function EthSignTypedData() {
   const [result, error, execute] = useRequest()
   return (
@@ -659,6 +713,9 @@ function EthSignTypedData() {
 
 function VerifyMessage() {
   const [result, error, execute] = useRequest()
+  const clear = useCallback(() => {
+    execute(async () => undefined)
+  }, [execute])
   return (
     <Method method="personal_sign (verify)" result={result} error={error}>
       <form
@@ -682,10 +739,12 @@ function VerifyMessage() {
       >
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Message</label>
-          <input
+          <textarea
             name="message"
             defaultValue="hello world"
+            onFocus={clear}
             placeholder="Message"
+            rows={1}
             style={{ flex: 1 }}
           />
         </div>
@@ -693,6 +752,7 @@ function VerifyMessage() {
           <label>Signature</label>
           <input
             name="signature"
+            onFocus={clear}
             placeholder="0x..."
             style={{ flex: 1, fontFamily: 'monospace' }}
           />

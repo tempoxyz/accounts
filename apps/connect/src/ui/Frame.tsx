@@ -54,7 +54,7 @@ export namespace Frame {
 
   export namespace Body {
     export type Props = {
-      children: ReactNode
+      children?: ReactNode | undefined
       className?: string | undefined
     }
   }

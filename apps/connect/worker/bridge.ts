@@ -73,7 +73,7 @@ export const bridge = new Hono<{ Bindings: Env }>().post(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.RELAY_API_KEY,
+        ...(process.env.RELAY_API_KEY ? { 'x-api-key': process.env.RELAY_API_KEY } : {}),
       },
       body: JSON.stringify(body),
     })
