@@ -206,6 +206,33 @@ function Wireframes() {
           >
             <PersonalSignSiweFlow />
           </FlowRow>
+
+          <FlowRow
+            left={60}
+            method="eth_signTypedData_v4"
+            title="Sign Typed Data — Generic"
+            top={10850}
+          >
+            <TypedDataFlow />
+          </FlowRow>
+
+          <FlowRow
+            left={60}
+            method="eth_signTypedData_v4 (invalid)"
+            title="Sign Typed Data — Invalid"
+            top={11450}
+          >
+            <TypedDataInvalidFlow />
+          </FlowRow>
+
+          <FlowRow
+            left={60}
+            method="eth_signTypedData_v4 (ERC-2612 Permit)"
+            title="Sign Typed Data — Permit"
+            top={12050}
+          >
+            <PermitFlow />
+          </FlowRow>
         </div>
       </div>
     </div>
@@ -675,6 +702,107 @@ function PersonalSignSiweFlow() {
 
       <Card label="Confirming">
         <SignFrames.Siwe confirming host="example.com" />
+      </Card>
+    </>
+  )
+}
+
+const mockTypedData: SignFrames.TypedData.Data = {
+  domain: { name: 'Example App' },
+  message: {
+    from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000001' },
+    to: { name: 'Bob', wallet: '0x0000000000000000000000000000000000000002' },
+    contents: 'Hello, Bob!',
+  },
+  primaryType: 'Mail',
+  types: {
+    EIP712Domain: [
+      { name: 'name', type: 'string' },
+      { name: 'version', type: 'string' },
+      { name: 'chainId', type: 'uint256' },
+    ],
+    Person: [
+      { name: 'name', type: 'string' },
+      { name: 'wallet', type: 'address' },
+    ],
+    Mail: [
+      { name: 'from', type: 'Person' },
+      { name: 'to', type: 'Person' },
+      { name: 'contents', type: 'string' },
+    ],
+  },
+}
+
+/** Generic typed data: review → confirming */
+function TypedDataFlow() {
+  return (
+    <>
+      <Card label="Review">
+        <SignFrames.TypedData data={mockTypedData} host="example.com" />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Confirming">
+        <SignFrames.TypedData confirming data={mockTypedData} host="example.com" />
+      </Card>
+    </>
+  )
+}
+
+/** Invalid typed data: warning + destructive sign anyway */
+function TypedDataInvalidFlow() {
+  return (
+    <>
+      <Card label="Review (Invalid)">
+        <SignFrames.TypedDataInvalid
+          data='{"primaryType":"Transfer","message":{"to":"0x1234...","amount":"100"}}'
+          host="example.com"
+        />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Confirming (Invalid)">
+        <SignFrames.TypedDataInvalid
+          confirming
+          data='{"primaryType":"Transfer","message":{"to":"0x1234...","amount":"100"}}'
+          host="example.com"
+        />
+      </Card>
+    </>
+  )
+}
+
+/** ERC-2612 Permit: approve → confirming */
+function PermitFlow() {
+  return (
+    <>
+      <Card label="Approve">
+        <SignFrames.Permit
+          amount={100_000_000n}
+          chainId={98865}
+          deadline={Math.floor(Date.now() / 1000) + 86400}
+          host="example.com"
+          permitType="erc-2612"
+          spender={'0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b' as `0x${string}`}
+          tokenContract={'0x20c0000000000000000000000000000000000000' as `0x${string}`}
+        />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Confirming">
+        <SignFrames.Permit
+          amount={100_000_000n}
+          chainId={98865}
+          confirming
+          deadline={Math.floor(Date.now() / 1000) + 86400}
+          host="example.com"
+          permitType="erc-2612"
+          spender={'0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b' as `0x${string}`}
+          tokenContract={'0x20c0000000000000000000000000000000000000' as `0x${string}`}
+        />
       </Card>
     </>
   )
