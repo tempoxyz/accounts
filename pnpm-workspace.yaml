@@ -24,7 +24,7 @@ catalog:
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.4.2
   hono: ^4.12.12
-  ox: ~0.14.15
+  ox: ~0.14.18
   prool: ~0.2.4
   react: ^19.2.5
   react-dom: ^19.2.5
@@ -32,12 +32,12 @@ catalog:
   tailwindcss: ^4.2.1
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: ^2.47.18
+  viem: ^2.48.1
   vite: ^8.0.5
   vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
   wagmi: ^3.6.1
-  wrangler: ^4.82.2
+  wrangler: ^4.83.0
   zod: ^4.3.6
 minimumReleaseAge: 1440
 

@@ -25,6 +25,11 @@ export default defineConfig({
       },
       {
         extends: true,
+        resolve: {
+          alias: {
+            'cloudflare:workers': join(import.meta.dirname, './apps/connect/test/cloudflare-workers.ts'),
+          },
+        },
         test: {
           include: ['./apps/connect/worker/**/*.test.ts'],
           name: 'connect/worker',

@@ -31,7 +31,7 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@typescript/native-preview": "7.0.0-dev.20260303.1",
+    "@typescript/native-preview": "7.0.0-dev.20260410.1",
     "@vitejs/devtools": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@wagmi/core": "catalog:",
@@ -47,16 +47,16 @@
     "testcontainers": "^11.14.0",
     "tsx": "^4.21.0",
     "typescript": "catalog:",
-    "viem": "^2.47.18",
+    "viem": "catalog:",
     "vp": "catalog:",
-    "zile": "^0.0.24"
+    "zile": "^0.0.25"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm check"
   },
   "pnpm": {
     "overrides": {
-      "ox": "~0.14.15",
+      "ox": "~0.14.18",
       "react": "catalog:",
       "react-dom": "catalog:",
       "accounts": "workspace:*",

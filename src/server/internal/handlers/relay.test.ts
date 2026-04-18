@@ -2,7 +2,7 @@ import type { RpcRequest } from 'ox'
 import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import { parseUnits } from 'viem'
 import { fillTransaction, sendTransactionSync } from 'viem/actions'
-import { tempoModerato } from 'viem/chains'
+import { tempo, tempoModerato } from 'viem/chains'
 import { Actions, Addresses, Capabilities, Tick, Transaction } from 'viem/tempo'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
@@ -1274,5 +1274,57 @@ describe('behavior: error capabilities', () => {
     	  "sponsored": false,
     	}
     `)
+  })
+})
+
+describe('behavior: mainnet autoSwap with USDC.e → PathUSD', () => {
+  let server: Server
+  let mainnetClient: ReturnType<typeof getClient<typeof tempo>>
+
+  const mainnetUsdce = '0x20c000000000000000000000b9537d11c60e8b50' as const
+  const mainnetPathUsd = '0x20c0000000000000000000000000000000000000' as const
+  const mainnetSender = '0xb472f3ca15f34Db22d43FA503043F1e6541AC085' as const
+
+  beforeAll(async () => {
+    server = await createServer(
+      relay({
+        chains: [tempo],
+        features: 'all',
+        transports: { [tempo.id]: http('https://rpc.presto.tempo.xyz') },
+      }).listener,
+    )
+    mainnetClient = getClient({ chain: tempo, transport: http(server.url) })
+  })
+
+  afterAll(() => {
+    server.close()
+  })
+
+  test('behavior: auto-swaps USDC.e → PathUSD when sender has USDC.e but no PathUSD', async () => {
+    const result = await fillTransaction(mainnetClient, {
+      account: mainnetSender,
+      calls: [
+        Actions.token.transfer.call({
+          token: mainnetPathUsd,
+          to: recipient.address,
+          amount: parseUnits('0.5', 6),
+        }),
+      ],
+    })
+
+    // Expected: relay detects InsufficientBalance for PathUSD, auto-swaps
+    // USDC.e → PathUSD via DEX, and returns a filled transaction with swap calls.
+    const { transaction, capabilities } = result
+    expect(transaction.gas).toBeDefined()
+    expect(transaction.nonce).toBeDefined()
+    expect(transaction.calls!.length).toBeGreaterThanOrEqual(3) // approve + swap + transfer
+
+    expect(capabilities?.autoSwap).toBeDefined()
+    expect(capabilities?.autoSwap?.maxIn.token.toLowerCase()).toBe(mainnetUsdce.toLowerCase())
+    expect(capabilities?.autoSwap?.minOut.token.toLowerCase()).toBe(mainnetPathUsd.toLowerCase())
+    expect(capabilities?.sponsored).toBe(false)
+
+    // Should NOT have requireFunds — autoSwap should handle it.
+    expect((capabilities as Record<string, unknown>)?.requireFunds).toBeUndefined()
   })
 })

@@ -47,7 +47,6 @@ export const wallets = pgTable('wallets', (t) => ({
   publicKey: bytea('public_key').notNull(),
   transports: t.text('transports'),
   username: t.text('username').notNull(),
-  label: t.text('label').notNull(),
   address: address('address').notNull().unique(),
   createdAt: t.timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: t.timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

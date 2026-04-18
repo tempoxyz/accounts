@@ -1,5 +1,6 @@
 import * as AuthorizeFrames from '#/routes/_remote/rpc/-frames/authorize/index.js'
 import * as ConnectFrames from '#/routes/_remote/rpc/-frames/connect/index.js'
+import * as SignFrames from '#/routes/_remote/rpc/-frames/sign/index.js'
 import * as TransactionFrames from '#/routes/_remote/rpc/-frames/transaction/index.js'
 import { ThemeToggle } from '#/ui/ThemeToggle.js'
 import Panzoom from '@panzoom/panzoom'
@@ -182,6 +183,55 @@ function Wireframes() {
             top={8450}
           >
             <AuthorizeMobileFlow />
+          </FlowRow>
+
+          <FlowRow left={60} method="personal_sign" title="Sign Message" top={9050}>
+            <PersonalSignFlow />
+          </FlowRow>
+
+          <FlowRow
+            left={60}
+            method="personal_sign (raw hex)"
+            title="Sign Message — Raw Data"
+            top={9650}
+          >
+            <PersonalSignRawFlow />
+          </FlowRow>
+
+          <FlowRow
+            left={60}
+            method="personal_sign (SIWE)"
+            title="Sign Message — SIWE (Authenticate)"
+            top={10250}
+          >
+            <PersonalSignSiweFlow />
+          </FlowRow>
+
+          <FlowRow
+            left={60}
+            method="eth_signTypedData_v4"
+            title="Sign Typed Data — Generic"
+            top={10850}
+          >
+            <TypedDataFlow />
+          </FlowRow>
+
+          <FlowRow
+            left={60}
+            method="eth_signTypedData_v4 (invalid)"
+            title="Sign Typed Data — Invalid"
+            top={11450}
+          >
+            <TypedDataInvalidFlow />
+          </FlowRow>
+
+          <FlowRow
+            left={60}
+            method="eth_signTypedData_v4 (ERC-2612 Permit)"
+            title="Sign Typed Data — Permit"
+            top={12050}
+          >
+            <PermitFlow />
           </FlowRow>
         </div>
       </div>
@@ -387,12 +437,11 @@ function SendTransactionOnrampFlow() {
       <Arrow />
 
       <Card label="Deposit Crypto">
-        <TransactionFrames.AddFunds
-          address="0x9f8e7d6c5b4a39281e0f3c21d7a4b6"
+        <TransactionFrames.DepositCrypto
+          address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
           amount="$50.00"
-          network="Base"
-          title="Deposit crypto"
-          token="USDC.e"
+          onBack={() => {}}
+          onDone={() => {}}
         />
       </Card>
     </>
@@ -579,12 +628,180 @@ function DepositFlow() {
       <Arrow />
 
       <Card label="Crypto Deposit">
-        <TransactionFrames.AddFunds
-          address="0x9f8e7d6c5b4a39281e0f3c21d7a4b6"
-          network="Tempo"
-          subtitle="Deposit funds into your Tempo account."
-          title="Deposit"
-          token="USDC.e"
+        <TransactionFrames.DepositCrypto
+          address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
+          amount="$25.00"
+          depositAddress="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
+          onBack={() => {}}
+          onDone={() => {}}
+        />
+      </Card>
+    </>
+  )
+}
+
+/** Personal sign: loading → review → confirming */
+function PersonalSignFlow() {
+  return (
+    <>
+      <Card label="Review">
+        <SignFrames.PersonalSign
+          host="example.com"
+          message="Hello! Please sign this message to verify your identity. Nonce: 8a3b9c7d"
+        />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Confirming">
+        <SignFrames.PersonalSign
+          confirming
+          host="example.com"
+          message="Hello! Please sign this message to verify your identity. Nonce: 8a3b9c7d"
+        />
+      </Card>
+    </>
+  )
+}
+
+/** Personal sign with raw hex data that cannot be decoded to UTF-8 */
+function PersonalSignRawFlow() {
+  return (
+    <>
+      <Card label="Review (Raw)">
+        <SignFrames.PersonalSign
+          host="example.com"
+          message="0x9c22ff5f21f0b81b113e63f7db6da94fedef11b2119b4088b89664fb9a3cb658"
+          raw
+        />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Confirming (Raw)">
+        <SignFrames.PersonalSign
+          confirming
+          host="example.com"
+          message="0x9c22ff5f21f0b81b113e63f7db6da94fedef11b2119b4088b89664fb9a3cb658"
+          raw
+        />
+      </Card>
+    </>
+  )
+}
+
+/** SIWE authentication: simplified approve screen — no message body shown */
+function PersonalSignSiweFlow() {
+  return (
+    <>
+      <Card label="Authenticate">
+        <SignFrames.Siwe host="example.com" />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Confirming">
+        <SignFrames.Siwe confirming host="example.com" />
+      </Card>
+    </>
+  )
+}
+
+const mockTypedData: SignFrames.TypedData.Data = {
+  domain: { name: 'Example App' },
+  message: {
+    from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000001' },
+    to: { name: 'Bob', wallet: '0x0000000000000000000000000000000000000002' },
+    contents: 'Hello, Bob!',
+  },
+  primaryType: 'Mail',
+  types: {
+    EIP712Domain: [
+      { name: 'name', type: 'string' },
+      { name: 'version', type: 'string' },
+      { name: 'chainId', type: 'uint256' },
+    ],
+    Person: [
+      { name: 'name', type: 'string' },
+      { name: 'wallet', type: 'address' },
+    ],
+    Mail: [
+      { name: 'from', type: 'Person' },
+      { name: 'to', type: 'Person' },
+      { name: 'contents', type: 'string' },
+    ],
+  },
+}
+
+/** Generic typed data: review → confirming */
+function TypedDataFlow() {
+  return (
+    <>
+      <Card label="Review">
+        <SignFrames.TypedData data={mockTypedData} host="example.com" />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Confirming">
+        <SignFrames.TypedData confirming data={mockTypedData} host="example.com" />
+      </Card>
+    </>
+  )
+}
+
+/** Invalid typed data: warning + destructive sign anyway */
+function TypedDataInvalidFlow() {
+  return (
+    <>
+      <Card label="Review (Invalid)">
+        <SignFrames.TypedDataInvalid
+          data='{"primaryType":"Transfer","message":{"to":"0x1234...","amount":"100"}}'
+          host="example.com"
+        />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Confirming (Invalid)">
+        <SignFrames.TypedDataInvalid
+          confirming
+          data='{"primaryType":"Transfer","message":{"to":"0x1234...","amount":"100"}}'
+          host="example.com"
+        />
+      </Card>
+    </>
+  )
+}
+
+/** ERC-2612 Permit: approve → confirming */
+function PermitFlow() {
+  return (
+    <>
+      <Card label="Approve">
+        <SignFrames.Permit
+          amount={100_000_000n}
+          chainId={98865}
+          deadline={Math.floor(Date.now() / 1000) + 86400}
+          host="example.com"
+          permitType="erc-2612"
+          spender={'0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b' as `0x${string}`}
+          tokenContract={'0x20c0000000000000000000000000000000000000' as `0x${string}`}
+        />
+      </Card>
+
+      <Arrow />
+
+      <Card label="Confirming">
+        <SignFrames.Permit
+          amount={100_000_000n}
+          chainId={98865}
+          confirming
+          deadline={Math.floor(Date.now() / 1000) + 86400}
+          host="example.com"
+          permitType="erc-2612"
+          spender={'0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b' as `0x${string}`}
+          tokenContract={'0x20c0000000000000000000000000000000000000' as `0x${string}`}
         />
       </Card>
     </>
@@ -608,16 +825,12 @@ function DepositRecipientFlow() {
       <Arrow />
 
       <Card label="Crypto Deposit">
-        <TransactionFrames.AddFunds
-          address="0x9f8e7d6c5b4a39281e0f3c21d7a4b6"
-          network="Tempo"
-          subtitle={
-            <>
-              Deposit funds to <span className="text-foreground">DoorDash</span>.
-            </>
-          }
-          title="Deposit"
-          token="USDC.e"
+        <TransactionFrames.DepositCrypto
+          address="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
+          amount="$25.00"
+          depositAddress="0x9f8e7d6c5b4a3928000000001e0f3c21d7a4b600"
+          onBack={() => {}}
+          onDone={() => {}}
         />
       </Card>
     </>

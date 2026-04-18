@@ -8,6 +8,8 @@ import { createRoot } from 'react-dom/client'
 import { WagmiProvider } from 'wagmi'
 
 import { wagmiConfig } from './lib/config.js'
+import * as PostHog from './lib/telemetry/posthog.js'
+import * as SentryBrowser from './lib/telemetry/sentry-browser.js'
 import { router } from './router.js'
 import './styles.css'
 
@@ -25,6 +27,9 @@ const persister = createSyncStoragePersister({
   serialize: (data) => Json.stringify(data),
   deserialize: (data) => JSON.parse(data),
 })
+
+PostHog.init()
+SentryBrowser.init()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

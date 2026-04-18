@@ -17,6 +17,7 @@ import { Route as SplatRouteImport } from './routes/$'
 import { Route as RemoteIndexRouteImport } from './routes/_remote/index'
 import { Route as DesignFramesRouteImport } from './routes/design_.frames'
 import { Route as RemoteRpcWallet_revokeAccessKeyRouteImport } from './routes/_remote/rpc/wallet_revokeAccessKey'
+import { Route as RemoteRpcWallet_depositRouteImport } from './routes/_remote/rpc/wallet_deposit'
 import { Route as RemoteRpcWallet_connectRouteImport } from './routes/_remote/rpc/wallet_connect'
 import { Route as RemoteRpcWallet_authorizeAccessKeyRouteImport } from './routes/_remote/rpc/wallet_authorizeAccessKey'
 import { Route as RemoteRpcPersonal_signRouteImport } from './routes/_remote/rpc/personal_sign'
@@ -65,6 +66,11 @@ const RemoteRpcWallet_revokeAccessKeyRoute =
     path: '/rpc/wallet_revokeAccessKey',
     getParentRoute: () => RemoteRoute,
   } as any)
+const RemoteRpcWallet_depositRoute = RemoteRpcWallet_depositRouteImport.update({
+  id: '/rpc/wallet_deposit',
+  path: '/rpc/wallet_deposit',
+  getParentRoute: () => RemoteRoute,
+} as any)
 const RemoteRpcWallet_connectRoute = RemoteRpcWallet_connectRouteImport.update({
   id: '/rpc/wallet_connect',
   path: '/rpc/wallet_connect',
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/rpc/personal_sign': typeof RemoteRpcPersonal_signRoute
   '/rpc/wallet_authorizeAccessKey': typeof RemoteRpcWallet_authorizeAccessKeyRoute
   '/rpc/wallet_connect': typeof RemoteRpcWallet_connectRoute
+  '/rpc/wallet_deposit': typeof RemoteRpcWallet_depositRoute
   '/rpc/wallet_revokeAccessKey': typeof RemoteRpcWallet_revokeAccessKeyRoute
 }
 export interface FileRoutesByTo {
@@ -136,6 +143,7 @@ export interface FileRoutesByTo {
   '/rpc/personal_sign': typeof RemoteRpcPersonal_signRoute
   '/rpc/wallet_authorizeAccessKey': typeof RemoteRpcWallet_authorizeAccessKeyRoute
   '/rpc/wallet_connect': typeof RemoteRpcWallet_connectRoute
+  '/rpc/wallet_deposit': typeof RemoteRpcWallet_depositRoute
   '/rpc/wallet_revokeAccessKey': typeof RemoteRpcWallet_revokeAccessKeyRoute
 }
 export interface FileRoutesById {
@@ -154,6 +162,7 @@ export interface FileRoutesById {
   '/_remote/rpc/personal_sign': typeof RemoteRpcPersonal_signRoute
   '/_remote/rpc/wallet_authorizeAccessKey': typeof RemoteRpcWallet_authorizeAccessKeyRoute
   '/_remote/rpc/wallet_connect': typeof RemoteRpcWallet_connectRoute
+  '/_remote/rpc/wallet_deposit': typeof RemoteRpcWallet_depositRoute
   '/_remote/rpc/wallet_revokeAccessKey': typeof RemoteRpcWallet_revokeAccessKeyRoute
 }
 export interface FileRouteTypes {
@@ -172,6 +181,7 @@ export interface FileRouteTypes {
     | '/rpc/personal_sign'
     | '/rpc/wallet_authorizeAccessKey'
     | '/rpc/wallet_connect'
+    | '/rpc/wallet_deposit'
     | '/rpc/wallet_revokeAccessKey'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/rpc/personal_sign'
     | '/rpc/wallet_authorizeAccessKey'
     | '/rpc/wallet_connect'
+    | '/rpc/wallet_deposit'
     | '/rpc/wallet_revokeAccessKey'
   id:
     | '__root__'
@@ -205,6 +216,7 @@ export interface FileRouteTypes {
     | '/_remote/rpc/personal_sign'
     | '/_remote/rpc/wallet_authorizeAccessKey'
     | '/_remote/rpc/wallet_connect'
+    | '/_remote/rpc/wallet_deposit'
     | '/_remote/rpc/wallet_revokeAccessKey'
   fileRoutesById: FileRoutesById
 }
@@ -275,6 +287,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RemoteRpcWallet_revokeAccessKeyRouteImport
       parentRoute: typeof RemoteRoute
     }
+    '/_remote/rpc/wallet_deposit': {
+      id: '/_remote/rpc/wallet_deposit'
+      path: '/rpc/wallet_deposit'
+      fullPath: '/rpc/wallet_deposit'
+      preLoaderRoute: typeof RemoteRpcWallet_depositRouteImport
+      parentRoute: typeof RemoteRoute
+    }
     '/_remote/rpc/wallet_connect': {
       id: '/_remote/rpc/wallet_connect'
       path: '/rpc/wallet_connect'
@@ -336,6 +355,7 @@ interface RemoteRouteChildren {
   RemoteRpcPersonal_signRoute: typeof RemoteRpcPersonal_signRoute
   RemoteRpcWallet_authorizeAccessKeyRoute: typeof RemoteRpcWallet_authorizeAccessKeyRoute
   RemoteRpcWallet_connectRoute: typeof RemoteRpcWallet_connectRoute
+  RemoteRpcWallet_depositRoute: typeof RemoteRpcWallet_depositRoute
   RemoteRpcWallet_revokeAccessKeyRoute: typeof RemoteRpcWallet_revokeAccessKeyRoute
 }
 
@@ -349,6 +369,7 @@ const RemoteRouteChildren: RemoteRouteChildren = {
   RemoteRpcWallet_authorizeAccessKeyRoute:
     RemoteRpcWallet_authorizeAccessKeyRoute,
   RemoteRpcWallet_connectRoute: RemoteRpcWallet_connectRoute,
+  RemoteRpcWallet_depositRoute: RemoteRpcWallet_depositRoute,
   RemoteRpcWallet_revokeAccessKeyRoute: RemoteRpcWallet_revokeAccessKeyRoute,
 }
 

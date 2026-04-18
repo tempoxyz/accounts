@@ -73,6 +73,8 @@ services:
     environment:
       BYPASS_EMAIL_OTP: 'true'
       DATABASE_URL: postgres://tempo:tempo@host.docker.internal:5432/connect
+      TEMPO_INDEXER_API_KEY: ${TEMPO_INDEXER_API_KEY:-}
+      TEMPO_MODERATO_INDEXER_API_KEY: ${TEMPO_MODERATO_INDEXER_API_KEY:-}
       # workerd needs CA certs for outbound HTTPS fetch in local dev.
       # https://github.com/cloudflare/workers-sdk/issues/9356
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt

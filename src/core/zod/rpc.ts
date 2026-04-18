@@ -542,6 +542,7 @@ export namespace wallet_deposit {
         z.object({
           address: z.optional(u.address()),
           chainId: z.optional(u.number()),
+          displayName: z.optional(z.string()),
           token: z.optional(u.address()),
           value: z.optional(z.string()),
         }),
