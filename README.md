@@ -48,19 +48,19 @@ Join the Telegram group to chat with the team and other devs: [@mpp_devs](https:
 
 ## Examples
 
-| Example                                                                 | Description                                                                       |
-| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| [basic](./examples/basic)                                               | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallet. |
+| Example                                                                 | Description                                                                      |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [basic](./examples/basic)                                               | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallet.  |
 | [cli](./examples/cli)                                                   | Minimal CLI setup to connect and authorize local keys using Tempo Wallet.        |
-| [domain-bound-webauthn](./examples/domain-bound-webauthn)               | Domain-bound passkey example using Wagmi and the `webAuthn` connector.            |
+| [domain-bound-webauthn](./examples/domain-bound-webauthn)               | Domain-bound passkey example using Wagmi and the `webAuthn` connector.           |
 | [with-access-key](./examples/with-access-key)                           | Authorize access keys using Tempo Wallet to submit transactions without prompts. |
-| [with-access-key-and-webauthn](./examples/with-access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                                |
+| [with-access-key-and-webauthn](./examples/with-access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                               |
 | [with-fee-payer](./examples/with-fee-payer)                             | Sponsor transactions via Tempo Wallet.                                           |
-| [with-fee-payer-and-webauthn](./examples/with-fee-payer-and-webauthn)   | Sponsor transactions using a Cloudflare Worker with domain-bound Passkeys.        |
+| [with-fee-payer-and-webauthn](./examples/with-fee-payer-and-webauthn)   | Sponsor transactions using a Cloudflare Worker with domain-bound Passkeys.       |
 
 ## Development
 
-Requires [Docker](https://docs.docker.com/get-docker/) and [OrbStack](https://orbstack.dev/) (recommended on macOS for automatic HTTPS `.tempo.local` domains).
+Requires [Docker](https://docs.docker.com/get-docker/) and [OrbStack](https://orbstack.dev/) (recommended on macOS for automatic HTTPS `.accounts.local` domains).
 
 ```sh
 pnpm dev              # start all dev services via docker compose
@@ -72,11 +72,11 @@ pnpm test             # run tests
 
 ### Services
 
-| Service    | OrbStack URL                     |
-| ---------- | -------------------------------- |
-| Playground | `https://playground.accounts.local` |
-| Dialog Reference    | `https://dialog-ref.accounts.local`    |
-| Wagmi Playground | `https://wagmi.accounts.local`    |
+| Service          | OrbStack URL                        |
+| ---------------- | ----------------------------------- |
+| Playground       | `https://playground.accounts.local` |
+| Dialog Reference | `https://dialog-ref.accounts.local` |
+| Wagmi Playground | `https://wagmi.accounts.local`      |
 
 ### Playgrounds
 
