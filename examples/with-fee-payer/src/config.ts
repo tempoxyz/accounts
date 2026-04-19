@@ -1,4 +1,4 @@
-import { tempoConnect } from 'accounts/wagmi'
+import { tempoWallet } from 'accounts/wagmi'
 import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 
@@ -12,7 +12,7 @@ const feePayerUrl = await (async () => {
 
 export const config = createConfig({
   chains: [tempo, tempoModerato],
-  connectors: [tempoConnect({ testnet: true, feePayer: feePayerUrl })],
+  connectors: [tempoWallet({ testnet: true, feePayer: feePayerUrl })],
   multiInjectedProviderDiscovery: false,
   transports: {
     [tempo.id]: http(),

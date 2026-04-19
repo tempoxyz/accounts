@@ -19,7 +19,7 @@
 Prompt your agent:
 
 ```
-Read docs.tempo.xyz/accounts and integrate Tempo Connect into my application
+Read docs.tempo.xyz/accounts and integrate Tempo Wallet into my application
 ```
 
 ## Install
@@ -50,12 +50,12 @@ Join the Telegram group to chat with the team and other devs: [@mpp_devs](https:
 
 | Example                                                                 | Description                                                                       |
 | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| [basic](./examples/basic)                                               | Wagmi-based setup using the `tempoConnect` connector to connect to Tempo Connect. |
-| [cli](./examples/cli)                                                   | Minimal CLI setup to connect and authorize local keys using Tempo Connect.        |
+| [basic](./examples/basic)                                               | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallet. |
+| [cli](./examples/cli)                                                   | Minimal CLI setup to connect and authorize local keys using Tempo Wallet.        |
 | [domain-bound-webauthn](./examples/domain-bound-webauthn)               | Domain-bound passkey example using Wagmi and the `webAuthn` connector.            |
-| [with-access-key](./examples/with-access-key)                           | Authorize access keys using Tempo Connect to submit transactions without prompts. |
+| [with-access-key](./examples/with-access-key)                           | Authorize access keys using Tempo Wallet to submit transactions without prompts. |
 | [with-access-key-and-webauthn](./examples/with-access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                                |
-| [with-fee-payer](./examples/with-fee-payer)                             | Sponsor transactions via Tempo Connect.                                           |
+| [with-fee-payer](./examples/with-fee-payer)                             | Sponsor transactions via Tempo Wallet.                                           |
 | [with-fee-payer-and-webauthn](./examples/with-fee-payer-and-webauthn)   | Sponsor transactions using a Cloudflare Worker with domain-bound Passkeys.        |
 
 ## Development
@@ -77,7 +77,7 @@ pnpm test             # run tests
 | Service    | OrbStack URL                     |
 | ---------- | -------------------------------- |
 | playground | `https://playground.tempo.local` |
-| connect    | `https://connect.tempo.local`    |
+| connect    | `https://wallet.tempo.local`    |
 | manager    | `https://manager.tempo.local`    |
 
 ### Playgrounds

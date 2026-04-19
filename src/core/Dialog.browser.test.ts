@@ -4,7 +4,7 @@ import * as Dialog from './Dialog.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
 
-const host = 'https://connect.tempo.xyz'
+const host = 'https://wallet.tempo.xyz'
 
 function setup() {
   const store = Store.create({
@@ -22,14 +22,14 @@ let lastHandle: Dialog.Instance | undefined
 afterEach(() => {
   lastHandle?.destroy()
   lastHandle = undefined
-  document.querySelectorAll('dialog[data-tempo-connect]').forEach((el) => el.remove())
+  document.querySelectorAll('dialog[data-tempo-wallet]').forEach((el) => el.remove())
   document.body.style.overflow = ''
 })
 
 describe('Dialog.iframe', () => {
   test('default: appends dialog and iframe to document.body', () => {
     setup()
-    const dialog = document.querySelector('dialog[data-tempo-connect]')
+    const dialog = document.querySelector('dialog[data-tempo-wallet]')
     expect(dialog).not.toBeNull()
     const iframe = dialog!.querySelector('iframe')
     expect(iframe).not.toBeNull()
@@ -41,13 +41,13 @@ describe('Dialog.iframe', () => {
     const { handle: c } = setup()
     expect(a).toBe(b)
     expect(b).toBe(c)
-    const dialogs = document.querySelectorAll('dialog[data-tempo-connect]')
+    const dialogs = document.querySelectorAll('dialog[data-tempo-wallet]')
     expect(dialogs.length).toBe(1)
   })
 
   test('behavior: iframe has correct sandbox attributes', () => {
     setup()
-    const iframe = document.querySelector('dialog[data-tempo-connect] iframe')!
+    const iframe = document.querySelector('dialog[data-tempo-wallet] iframe')!
     expect(iframe.getAttribute('sandbox')).toMatchInlineSnapshot(
       `"allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"`,
     )
@@ -55,7 +55,7 @@ describe('Dialog.iframe', () => {
 
   test('behavior: iframe has correct allow attributes', () => {
     setup()
-    const iframe = document.querySelector('dialog[data-tempo-connect] iframe')!
+    const iframe = document.querySelector('dialog[data-tempo-wallet] iframe')!
     const allow = iframe.getAttribute('allow')!
     expect(allow).toContain('publickey-credentials-get')
     expect(allow).toContain('publickey-credentials-create')
@@ -63,15 +63,15 @@ describe('Dialog.iframe', () => {
 
   test('behavior: iframe src points to host', () => {
     setup()
-    const iframe = document.querySelector('dialog[data-tempo-connect] iframe') as HTMLIFrameElement
-    expect(iframe.src).toMatchInlineSnapshot(`"https://connect.tempo.xyz"`)
+    const iframe = document.querySelector('dialog[data-tempo-wallet] iframe') as HTMLIFrameElement
+    expect(iframe.src).toMatchInlineSnapshot(`"https://wallet.tempo.xyz"`)
     expect(iframe.src).toContain(host)
   })
 
   test('behavior: open shows dialog', () => {
     const { handle } = setup()
     handle.open()
-    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+    const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
     expect(dialog.open).toBe(true)
   })
 
@@ -79,14 +79,14 @@ describe('Dialog.iframe', () => {
     const { handle } = setup()
     handle.open()
     handle.close()
-    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+    const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
     expect(dialog.open).toBe(false)
   })
 
   test('behavior: destroy removes dialog from DOM', () => {
     const { handle } = setup()
     handle.destroy()
-    expect(document.querySelector('dialog[data-tempo-connect]')).toBeNull()
+    expect(document.querySelector('dialog[data-tempo-wallet]')).toBeNull()
   })
 
   test('behavior: body scroll locked on open', () => {
@@ -107,7 +107,7 @@ describe('Dialog.iframe', () => {
     const { handle } = setup()
     handle.open()
     expect(() => handle.open()).not.toThrow()
-    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+    const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
     expect(dialog.open).toBe(true)
     handle.close()
   })
@@ -129,13 +129,13 @@ describe('Dialog.iframe', () => {
     const { handle } = setup()
     handle.open()
     handle.destroy()
-    expect(document.querySelector('dialog[data-tempo-connect]')).toBeNull()
+    expect(document.querySelector('dialog[data-tempo-wallet]')).toBeNull()
   })
 
   test('behavior: cancel event rejects pending requests', () => {
     const { handle, store } = setup()
     handle.open()
-    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+    const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
     dialog.dispatchEvent(new Event('cancel'))
     const queue = store.getState().requestQueue
     for (const q of queue) expect(q.status).toBe('error')
@@ -158,7 +158,7 @@ describe('Dialog.iframe', () => {
   test('behavior: backdrop click rejects pending requests', () => {
     const { handle, store } = setup()
     handle.open()
-    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+    const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
 
     dialog.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
@@ -169,7 +169,7 @@ describe('Dialog.iframe', () => {
   test('behavior: click inside iframe does not close dialog', () => {
     const { handle } = setup()
     handle.open()
-    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+    const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
     const iframe = dialog.querySelector('iframe')!
 
     iframe.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -180,7 +180,7 @@ describe('Dialog.iframe', () => {
   test('behavior: 1Password inert attribute stripped from dialog', async () => {
     const { handle } = setup()
     handle.open()
-    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+    const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
 
     dialog.setAttribute('inert', '')
 
@@ -192,9 +192,9 @@ describe('Dialog.iframe', () => {
 
   test('behavior: iframe has accessibility attributes', () => {
     setup()
-    const dialog = document.querySelector('dialog[data-tempo-connect]') as HTMLDialogElement
+    const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
     expect(dialog.getAttribute('role')).toBe('dialog')
-    expect(dialog.getAttribute('aria-label')).toBe('Tempo Connect')
+    expect(dialog.getAttribute('aria-label')).toBe('Tempo Wallet')
   })
 })
 

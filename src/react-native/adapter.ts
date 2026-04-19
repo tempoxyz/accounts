@@ -408,7 +408,7 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
 
 export declare namespace reactNative {
   export type Options = {
-    /** Host URL for the mobile auth page. @default "https://connect.tempo.xyz" */
+    /** Host URL for the mobile auth page. @default "https://wallet.tempo.xyz" */
     host: string
     /** Provider display name. @default "Tempo Mobile" */
     name?: string | undefined

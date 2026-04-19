@@ -28,7 +28,7 @@ export type SetupFn = (parameters: SetupFn.Parameters) => Instance
 
 export declare namespace SetupFn {
   type Parameters = {
-    /** URL of the Tempo Connect app. */
+    /** URL of the Tempo Wallet app. */
     host: string
     /** Reactive state store. */
     store: Store.Store
@@ -111,11 +111,11 @@ export function iframe(): Dialog {
     }
 
     const root = document.createElement('dialog')
-    root.dataset.tempoConnect = ''
+    root.dataset.tempoWallet = ''
 
     root.setAttribute('role', 'dialog')
     root.setAttribute('aria-closed', 'true')
-    root.setAttribute('aria-label', 'Tempo Connect')
+    root.setAttribute('aria-label', 'Tempo Wallet')
     root.setAttribute('hidden', 'until-found')
 
     Object.assign(root.style, {
@@ -127,7 +127,7 @@ export function iframe(): Dialog {
     })
 
     const frame = document.createElement('iframe')
-    frame.dataset.testid = 'tempo-connect'
+    frame.dataset.testid = 'tempo-wallet'
     frame.setAttribute(
       'allow',
       [
@@ -139,7 +139,7 @@ export function iframe(): Dialog {
     )
     frame.setAttribute('allowtransparency', 'true')
     frame.setAttribute('tabindex', '0')
-    frame.setAttribute('title', 'Tempo Connect')
+    frame.setAttribute('title', 'Tempo Wallet')
     frame.src = hostUrl.toString()
 
     Object.assign(frame.style, {
@@ -154,7 +154,7 @@ export function iframe(): Dialog {
 
     const style = document.createElement('style')
     style.innerHTML = `
-        dialog[data-tempo-connect]::backdrop {
+        dialog[data-tempo-wallet]::backdrop {
           background: transparent!important;
         }
       `
