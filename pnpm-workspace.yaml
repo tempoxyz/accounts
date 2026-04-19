@@ -46,14 +46,11 @@ minimumReleaseAgeExclude:
   - '@voidzero-dev/*'
 
 onlyBuiltDependencies:
-  - '@j178/prek'
   - bufferutil
   - cloudflared
-  - core-js
   - cpu-features
   - esbuild
   - protobufjs
-  - secp256k1
   - sharp
   - simple-git-hooks
   - ssh2

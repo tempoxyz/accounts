@@ -91,7 +91,7 @@ describe('create', () => {
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
       chains: [chain],
-      host: 'https://wallet-next.tempo.xyz',
+      host: 'https://wallet.tempo.xyz',
       open: browser.open,
       redirectUri: 'accounts-playground://auth',
       secureStorage,

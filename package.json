@@ -5,6 +5,7 @@
     "changeset:version": "changeset version && pnpm check",
     "check": "vp lint --fix --ignore-pattern package.json && vp fmt src examples playgrounds ref-impls scripts test",
     "dev": "docker compose up -d",
+    "dev:cli": "pnpm --filter './playgrounds/cli' connect",
     "check:types": "tsc -b --noEmit && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types",
     "examples": "node --import tsx scripts/examples.ts",
     "postinstall": "pnpm preconstruct",
