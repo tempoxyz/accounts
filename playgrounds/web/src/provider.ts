@@ -53,7 +53,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: dialog({
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
-        host: import.meta.env.VITE_CONNECT_HOST,
+        host: import.meta.env.VITE_WALLET_HOST,
       }),
       mpp: true,
       testnet,

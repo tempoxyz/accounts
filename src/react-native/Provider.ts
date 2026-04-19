@@ -3,7 +3,7 @@ import { reactNative } from './adapter.js'
 
 /** Creates a provider for React Native apps using system browser authentication. */
 export function create(options: create.Options): create.ReturnType {
-  const { host = 'https://wallet.tempo.xyz', redirectUri, open, secureStorage, ...rest } = options
+  const { host = 'https://wallet-next.tempo.xyz', redirectUri, open, secureStorage, ...rest } = options
 
   return CoreProvider.create({
     ...rest,
@@ -21,7 +21,7 @@ export declare namespace create {
     CoreProvider.create.Options & reactNative.Options,
     'adapter' | 'host'
   > & {
-    /** Host URL for the mobile auth page. @default "https://wallet.tempo.xyz" */
+    /** Host URL for the mobile auth page. @default "https://wallet-next.tempo.xyz" */
     host?: string | undefined
   }
   export type ReturnType = CoreProvider.create.ReturnType

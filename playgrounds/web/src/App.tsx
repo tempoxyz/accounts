@@ -1198,11 +1198,11 @@ function MppZeroDollarAuth() {
 }
 
 function ManageEmail() {
-  const connectHost = import.meta.env.VITE_CONNECT_HOST ?? ''
+  const walletHost = import.meta.env.VITE_WALLET_HOST ?? ''
   return (
     <div>
       <h3>Manage Email</h3>
-      <a href={`${connectHost}/email`} target="_blank" rel="noopener noreferrer">
+      <a href={`${walletHost}/email`} target="_blank" rel="noopener noreferrer">
         Open email settings →
       </a>
     </div>
