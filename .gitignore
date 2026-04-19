@@ -19,7 +19,6 @@ _
 mise.toml
 _TODO
 .pi
-routeTree.gen.ts
 worker-configuration.d.ts
 _TODO
 .pnpm-store

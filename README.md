@@ -64,8 +64,6 @@ Requires [Docker](https://docs.docker.com/get-docker/) and [OrbStack](https://or
 
 ```sh
 pnpm dev              # start all dev services via docker compose
-pnpm dev:logs         # tail logs from all containers (or `pnpm dev:logs -- connect`)
-pnpm dev:cli          # start the CLI playground client (runs on host)
 pnpm build            # build library
 pnpm check            # lint + format
 pnpm check:types      # type checks
@@ -76,9 +74,9 @@ pnpm test             # run tests
 
 | Service    | OrbStack URL                     |
 | ---------- | -------------------------------- |
-| playground | `https://playground.tempo.local` |
-| connect    | `https://wallet.tempo.local`    |
-| manager    | `https://manager.tempo.local`    |
+| Playground | `https://playground.accounts.local` |
+| Dialog Reference    | `https://dialog-ref.accounts.local`    |
+| Wagmi Playground | `https://wagmi.accounts.local`    |
 
 ### Playgrounds
 

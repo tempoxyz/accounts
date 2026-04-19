@@ -12,8 +12,6 @@ catalog:
   '@tanstack/react-query': ^5.97.0
   '@tanstack/react-router': ^1.168.19
   '@tanstack/react-start': ^1.166.7
-  '@tanstack/router-plugin': ^1.167.12
-  '@tailwindcss/vite': ^4.2.1
   '@total-typescript/ts-reset': ^0.6.1
   '@types/node': ^25.5.0
   '@types/react': ^19.2.14
@@ -27,7 +25,6 @@ catalog:
   react: ^19.2.5
   react-dom: ^19.2.5
   tsx: ^4.21.0
-  tailwindcss: ^4.2.1
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
   viem: ^2.48.1
@@ -40,11 +37,6 @@ catalog:
 minimumReleaseAge: 1440
 
 minimumReleaseAgeExclude:
-  - '@base-ui/react'
-  - '@base-ui/utils'
-  - '@j178/prek'
-  - '@secretlint/*'
-  - '@tanstack/*'
   - incur
   - mppx
   - ox
@@ -72,7 +64,6 @@ strictDepBuilds: true
 trustPolicy: no-downgrade
 trustPolicyExclude:
   - chokidar@4.0.3
-  - reselect@5.1.1
   - semver@6.3.1
 
 shellEmulator: true
