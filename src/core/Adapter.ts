@@ -206,6 +206,8 @@ export declare namespace authorizeAccessKey {
   type Parameters = {
     /** Access key address. Alternative to `publicKey` when the caller already knows the derived address. */
     address?: Address | undefined
+    /** Chain ID the key authorization is scoped to. Defaults to the active chain. */
+    chainId?: number | undefined
     /** Unix timestamp (seconds) when the key expires. */
     expiry: number
     /** Key type of the external public key. Required when `publicKey` or `address` is provided. */
