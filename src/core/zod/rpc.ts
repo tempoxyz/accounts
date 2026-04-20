@@ -346,7 +346,7 @@ export namespace wallet_getCapabilities {
 export namespace wallet_authorizeAccessKey {
   export const parameters = z.object({
     address: z.optional(u.address()),
-    chainId: z.optional(u.number()),
+    chainId: z.optional(u.bigint()),
     expiry: z.number(),
     keyType: z.optional(keyType),
     limits: z.optional(
