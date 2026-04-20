@@ -35,7 +35,7 @@ export function local(options: local.Options): Adapter.Adapter {
      */
     async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
       const { expiry, limits, scopes } = options
-      const chainId = getClient().chain.id
+      const chainId = options.chainId ?? getClient().chain.id
 
       if (options.publicKey || options.address) {
         const accessKeyAddress =
