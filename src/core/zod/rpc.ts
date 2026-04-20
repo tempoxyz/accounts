@@ -53,7 +53,7 @@ export const keyAuthorization = z.object({
   keyType,
   limits: z.optional(
     z.readonly(
-      z.array(z.object({ token: u.address(), limit: u.bigint(), period: z.optional(z.number()) })),
+      z.array(z.object({ token: u.address(), limit: u.bigint(), period: z.optional(u.number()) })),
     ),
   ),
   signature: signatureEnvelope,
