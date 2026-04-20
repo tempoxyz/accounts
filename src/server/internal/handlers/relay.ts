@@ -130,7 +130,10 @@ export function relay(options: relay.Options = {}): Handler {
             typeof parameters.from === 'string' ? (parameters.from as Address) : undefined
           const requestFeeToken =
             typeof parameters.feeToken === 'string' ? (parameters.feeToken as Address) : undefined
-          const requestsSponsorship = !!feePayerOptions && parameters.feePayer !== false
+          const externalFeePayerUrl =
+            typeof parameters.feePayer === 'string' ? parameters.feePayer : undefined
+          const requestsSponsorship =
+            (!!feePayerOptions || !!externalFeePayerUrl) && parameters.feePayer !== false
 
           const { feePayer: _feePayer, ...normalized } =
             Utils.normalizeFillTransactionRequest(parameters)
@@ -156,14 +159,24 @@ export function relay(options: relay.Options = {}): Handler {
                 })
             : undefined
 
-          if (requestsSponsorship && !feePayerOptions!.validate) {
+          // When the app provides its own fee payer URL, route the fill
+          // through that service so it can sign the transaction.
+          const fillClient = externalFeePayerUrl
+            ? createClient({
+                chain: client.chain,
+                batch: { multicall: { deployless: true } },
+                transport: http(externalFeePayerUrl),
+              })
+            : client
+
+          if (requestsSponsorship && !feePayerOptions?.validate) {
             // Path A: sponsorship guaranteed (no validate) — skip fee token
             // resolution, fill once with feePayer, then parallelize the rest.
             const transaction = { ...baseTx, feePayer: true }
             if (Sponsorship.isPreparedTransaction(transaction)) {
-              filled = { transaction: Utils.normalizeTempoTransaction(transaction) }
+              filled = { transaction: Utils.normalizeTempoTransaction(transaction), sponsor: undefined }
             } else {
-              filled = await fill(client, {
+              filled = await fill(fillClient, {
                 autoSwap,
                 feeToken,
                 resolveFeeToken: resolveFeeTokenForSwap,
@@ -171,14 +184,14 @@ export function relay(options: relay.Options = {}): Handler {
               })
             }
             sponsored = true
-          } else if (requestsSponsorship && feePayerOptions!.validate) {
+          } else if (requestsSponsorship && feePayerOptions?.validate) {
             // Path B: sponsorship possible but may be rejected — fill both
             // variants in parallel, then pick the right one.
             const sponsoredTx = { ...baseTx, feePayer: true }
 
             if (Sponsorship.isPreparedTransaction(sponsoredTx)) {
               // Already prepared — skip fills, just validate sponsorship.
-              const prepared = { transaction: Utils.normalizeTempoTransaction(sponsoredTx) }
+              const prepared = { transaction: Utils.normalizeTempoTransaction(sponsoredTx), sponsor: undefined }
               sponsored = await Sponsorship.shouldSponsor({
                 sender: from,
                 transaction: prepared.transaction,
@@ -192,7 +205,7 @@ export function relay(options: relay.Options = {}): Handler {
                 resolveFeeToken: resolveFeeTokenForSwap,
               }
               const [sponsoredFill, unsponsoredFill] = await Promise.all([
-                fill(client, { ...fillOptions, transaction: sponsoredTx }),
+                fill(fillClient, { ...fillOptions, transaction: sponsoredTx }),
                 fill(client, { ...fillOptions, transaction: baseTx }),
               ])
               sponsored = await Sponsorship.shouldSponsor({
@@ -255,8 +268,13 @@ export function relay(options: relay.Options = {}): Handler {
             resolveAutoSwapMetadata(client, { autoSwap, swap }),
           ])
 
-          const sponsor =
-            sponsored && feePayerOptions ? Sponsorship.getSponsor(feePayerOptions) : undefined
+          const sponsor = (() => {
+            if (!sponsored) return undefined
+            // App-provided fee payer: relay back the sponsor from the upstream response.
+            if (externalFeePayerUrl) return filled.sponsor
+            if (feePayerOptions) return Sponsorship.getSponsor(feePayerOptions)
+            return filled.sponsor
+          })()
 
           return RpcResponse.from(
             {
@@ -537,11 +555,21 @@ async function fill(
     value.type === '0x76' ? value : Utils.formatFillTransactionRequest(client, value)
 
   try {
+    const formatted = format(request)
     const result = await client.request({
       method: 'eth_fillTransaction',
-      params: [format(request) as never],
+      params: [formatted as never],
     })
-    return { transaction: Utils.normalizeTempoTransaction(result.tx) }
+    // FIXME: node estimates gas with secp256k1 dummy sig + null feePayerSignature.
+    // Actual tx has larger keychain/webAuthn sigs + real fee payer sig, costing
+    // more intrinsic gas. Mirror the bump from viem's tempo chainConfig.
+    // @ts-expect-error
+    if (result.tx.gas && result.tx.feePayer) 
+      result.tx.gas = Hex.fromNumber(BigInt(result.tx.gas) + 20_000n)
+    const sponsor = (result as Record<string, any>).capabilities?.sponsor as
+      | { address: Address; name?: string; url?: string }
+      | undefined
+    return { transaction: Utils.normalizeTempoTransaction(result.tx), sponsor }
   } catch (error) {
     if (!(error instanceof Error)) throw error
     if (!autoSwap) throw error
@@ -575,8 +603,12 @@ async function fill(
         }) as never,
       ],
     })
+    const sponsor = (result as Record<string, any>).capabilities?.sponsor as
+      | { address: Address; name?: string; url?: string }
+      | undefined
     return {
       transaction: Utils.normalizeTempoTransaction(result.tx),
+      sponsor,
       swap: {
         calls: swapCalls,
         tokenIn: sourceToken,

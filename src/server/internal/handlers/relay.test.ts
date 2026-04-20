@@ -195,6 +195,92 @@ describe('behavior: with feePayer', () => {
   })
 })
 
+describe('behavior: with app-provided feePayer URL', () => {
+  let appServer: Server
+  let walletServer: Server
+  let client: ReturnType<typeof getClient<typeof chain>>
+
+  beforeAll(async () => {
+    // App relay: has a fee payer account and signs transactions.
+    appServer = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+        feePayer: {
+          account: feePayerAccount,
+          name: 'App Sponsor',
+          url: 'https://app.example.com',
+        },
+      }).listener,
+    )
+
+    // Wallet relay: no fee payer configured — proxies to app relay.
+    walletServer = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+      }).listener,
+    )
+
+    client = getClient({ transport: http(walletServer.url) })
+  })
+
+  afterAll(() => {
+    appServer.close()
+    walletServer.close()
+  })
+
+  test('default: proxies fill to app relay and returns sponsored tx', async () => {
+    const { transaction } = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feePayer: appServer.url as never,
+    })
+
+    expect(transaction.feePayerSignature).toBeDefined()
+    expect(transaction.gas).toBeDefined()
+  })
+
+  test('behavior: relays sponsor metadata from app relay', async () => {
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feePayer: appServer.url as never,
+    })
+
+    expect(result.capabilities?.sponsored).toBe(true)
+    expect(result.capabilities?.sponsor).toMatchInlineSnapshot(`
+      {
+        "address": "${feePayerAccount.address}",
+        "name": "App Sponsor",
+        "url": "https://app.example.com",
+      }
+    `)
+  })
+
+  test('behavior: sponsored tx from app relay can be signed and broadcast', async () => {
+    const { transaction } = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feePayer: appServer.url as never,
+    })
+    const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
+    const envelope = TxEnvelopeTempo.deserialize(serialized)
+    const signature = await userAccount.sign({
+      hash: TxEnvelopeTempo.getSignPayload(envelope),
+    })
+    const signed = TxEnvelopeTempo.serialize(envelope, {
+      signature: SignatureEnvelope.from(signature),
+    })
+    const receipt = (await getClient().request({
+      method: 'eth_sendRawTransactionSync' as never,
+      params: [signed],
+    })) as { feePayer?: string | undefined }
+
+    expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+  })
+})
+
 describe('behavior: chainId path parameter', () => {
   let server: Server
   let client: ReturnType<typeof getClient<typeof chain>>

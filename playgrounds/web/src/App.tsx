@@ -400,7 +400,7 @@ function buildCalls(rows: CallRow[]) {
 
 function Transactions() {
   const [rows, setRows] = useState<CallRow[]>([defaultRow(0)])
-  const [disableFeePayer, setDisableFeePayer] = useState(false)
+  const [feePayerMode, setFeePayerMode] = useState<'wallet' | 'playground' | 'disabled'>('wallet')
   const [result, setResult] = useState<unknown>()
   const [error, setError] = useState<Error>()
   const [method, setMethod] = useState('')
@@ -421,6 +421,11 @@ function Transactions() {
   }
 
   const calls = buildCalls(rows)
+  const feePayerParam = (() => {
+    if (feePayerMode === 'disabled') return { feePayer: false as const }
+    if (feePayerMode === 'playground') return { feePayer: '/relay' }
+    return {}
+  })()
 
   return (
     <div>
@@ -494,23 +499,28 @@ function Transactions() {
       </button>
 
       <h3>Send</h3>
-      <div style={{ marginBottom: 8 }}>
-        <label>
-          <input
-            type="checkbox"
-            checked={disableFeePayer}
-            onChange={(e) => setDisableFeePayer(e.target.checked)}
-          />{' '}
-          Disable Fee Payer
-        </label>
-      </div>
+      <fieldset style={{ marginBottom: 8, border: 'none', padding: 0 }}>
+        <legend>Fee Payer</legend>
+        {(['wallet', 'playground', 'disabled'] as const).map((mode) => (
+          <label key={mode} style={{ marginRight: 12 }}>
+            <input
+              type="radio"
+              name="feePayerMode"
+              value={mode}
+              checked={feePayerMode === mode}
+              onChange={() => setFeePayerMode(mode)}
+            />{' '}
+            {mode[0]!.toUpperCase() + mode.slice(1)}
+          </label>
+        ))}
+      </fieldset>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button
           onClick={() =>
             send('eth_sendTransaction', () =>
               provider.request({
                 method: 'eth_sendTransaction',
-                params: [{ calls, ...(disableFeePayer ? { feePayer: false } : {}) }],
+                params: [{ calls, ...feePayerParam }],
               }),
             )
           }
@@ -523,7 +533,7 @@ function Transactions() {
             send('eth_sendTransactionSync', () =>
               provider.request({
                 method: 'eth_sendTransactionSync',
-                params: [{ calls, ...(disableFeePayer ? { feePayer: false } : {}) }],
+                params: [{ calls, ...feePayerParam }],
               }),
             )
           }
@@ -562,7 +572,7 @@ function Transactions() {
             send('eth_signTransaction', () =>
               provider.request({
                 method: 'eth_signTransaction',
-                params: [{ calls, ...(disableFeePayer ? { feePayer: false } : {}) }],
+                params: [{ calls, ...feePayerParam }],
               }),
             )
           }

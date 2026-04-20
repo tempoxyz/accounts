@@ -23,6 +23,8 @@ const handler = Handler.compose([
   Handler.relay({
     feePayer: {
       account: privateKeyToAccount(process.env.PRIVATE_KEY),
+      name: 'Playground',
+      url: 'https://playground.tempo.xyz',
     },
     path: '/relay',
   }),
