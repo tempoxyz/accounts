@@ -7,4 +7,5 @@ tsconfig.json linguist-language=JSON-with-Comments
 tsconfig.*.json linguist-language=JSON-with-Comments
 .vscode/*.json linguist-language=JSON-with-Comments
 
-worker-configuration.d.ts linguist-generated
+**/routeTree.gen.ts linguist-generated
+**/worker-configuration.d.ts linguist-generated

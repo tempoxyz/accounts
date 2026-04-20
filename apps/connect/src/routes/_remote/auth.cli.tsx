@@ -16,6 +16,8 @@ import * as z from 'zod/mini'
 import Check from '~icons/lucide/check'
 import Fingerprint from '~icons/lucide/fingerprint'
 
+const errorResponse = z.object({ error: z.string() })
+
 /** Standalone CLI device-code approval page. */
 export const Route = createFileRoute('/_remote/auth/cli')({
   validateSearch: z.object({ code: z.optional(z.string()) }),
@@ -25,19 +27,26 @@ export const Route = createFileRoute('/_remote/auth/cli')({
 function RouteComponent() {
   // WHY these 2 lines?
   Route.useNavigate()
-  useConnection()
+  const { address } = useConnection()
 
   const { code } = Route.useSearch()
   const normalizedCode = React.useMemo(() => normalizeCode(code), [code])
+  const [shouldAutoAuthorize, setShouldAutoAuthorize] = React.useState(false)
 
   const pending = useQuery({
     enabled: !!normalizedCode,
     queryKey: ['cli', 'pending', normalizedCode],
     queryFn: async () => {
-      const response = await fetch(`/api/auth/cli/pending/${normalizedCode}`)
-      const json = await response.json()
-      if (json && typeof json === 'object' && 'error' in json) throw new Error(json.error as string)
-      return CliAuth.pendingResponse.parse(json)
+      const response = await api.api.auth.cli.pending[':code'].$get({
+        param: { code: normalizedCode },
+      })
+      if (!response.ok) {
+        const body = errorResponse.safeParse(await response.json())
+        throw new Error(body.success ? body.data.error : 'Failed to fetch pending CLI request.', {
+          cause: response.statusText,
+        })
+      }
+      return CliAuth.pendingResponse.parse(await response.json())
     },
   })
 
@@ -64,37 +73,6 @@ function RouteComponent() {
       }
     : undefined
 
-  const postAuthorization = useMutation({
-    mutationFn: async (result: { rootAddress: string; keyAuthorization: unknown }) => {
-      const current = pending.data
-      if (!current) throw new Error('Missing pending request.')
-      const response = await fetch('/api/auth/cli', {
-        body: JSON.stringify({
-          code: current.code,
-          accountAddress: result.rootAddress,
-          keyAuthorization: result.keyAuthorization,
-        }),
-        headers: { 'content-type': 'application/json' },
-        method: 'POST',
-      })
-      const body = (await response.json()) as { error?: string | undefined }
-      if (!response.ok) throw new Error(body.error ?? 'Failed to authorize CLI access.')
-    },
-  })
-
-  const connect = useConnect({
-    mutation: {
-      async onSuccess(data) {
-        const account = (data as any).accounts?.[0]
-        if (!account?.capabilities?.keyAuthorization) return
-        await postAuthorization.mutateAsync({
-          rootAddress: account.address,
-          keyAuthorization: account.capabilities.keyAuthorization,
-        })
-      },
-    },
-  })
-
   const authorize = useMutation({
     mutationFn: async () => {
       const current = pending.data
@@ -114,21 +92,36 @@ function RouteComponent() {
         params: [z.encode(Rpc.wallet_authorizeAccessKey.parameters, params)],
       })
 
+      const request = CliAuth.authorizeRequest.parse({
+        code: current.code,
+        accountAddress: result.rootAddress,
+        keyAuthorization: result.keyAuthorization,
+      })
       const response = await fetch('/api/auth/cli', {
-        body: JSON.stringify({
-          code: current.code,
-          accountAddress: result.rootAddress,
-          keyAuthorization: result.keyAuthorization,
-        }),
+        body: JSON.stringify(z.encode(CliAuth.authorizeRequest, request)),
         headers: { 'content-type': 'application/json' },
         method: 'POST',
       })
-      const body = (await response.json()) as { error?: string | undefined }
-      if (!response.ok) throw new Error(body.error ?? 'Failed to authorize CLI access.')
+      const body = parseErrorResponse(await response.text())
+      if (!response.ok) throw new Error(body?.error ?? 'Failed to authorize CLI access.')
 
       return result.rootAddress
     },
   })
+
+  const connect = useConnect({
+    mutation: {
+      onSuccess() {
+        setShouldAutoAuthorize(true)
+      },
+    },
+  })
+
+  React.useEffect(() => {
+    if (!shouldAutoAuthorize || !address || authorize.isPending) return
+    authorize.mutate()
+    setShouldAutoAuthorize(false)
+  }, [address, authorize, shouldAutoAuthorize])
 
   if (!normalizedCode)
     return (
@@ -166,7 +159,7 @@ function RouteComponent() {
       </Frame>
     )
 
-  if (authorize.isSuccess || postAuthorization.isSuccess)
+  if (authorize.isSuccess)
     return (
       <Frame>
         <SuccessHeader
@@ -234,9 +227,9 @@ function RouteComponent() {
             Create or sign in with your passkey to continue.
           </p>
           <Input name="label" placeholder="Email address or label…" required />
-          {(connect.error || postAuthorization.error) && (
+          {(authorize.error || connect.error) && (
             <p className="text-label-13 text-red-9">
-              {connect.error?.message ?? postAuthorization.error?.message}
+              {authorize.error?.message ?? connect.error?.message}
             </p>
           )}
           <Button
@@ -314,6 +307,19 @@ function AuthorizedSummary(props: { pending: z.output<typeof CliAuth.pendingResp
 function normalizeCode(value: string | undefined) {
   if (!value) return ''
   return value.replace(/\s|-/g, '').toUpperCase()
+}
+
+function parseErrorResponse(text: string) {
+  const value = text.trim()
+  if (!value) return undefined
+
+  try {
+    const json = JSON.parse(value)
+    const body = errorResponse.safeParse(json)
+    return body.success ? body.data : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function formatCode(value: string) {

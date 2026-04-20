@@ -35,5 +35,11 @@ export const auth = new Hono<{ Bindings: Env }>()
     const search = requestUrl.search
     return c.redirect(`/auth/cli${search}`, 302)
   })
-  /** `GET/POST /cli/*` — handle CLI auth requests. */
-  .on(['GET', 'POST'], '/cli/*', (c) => handler.fetch(c.req.raw))
+  /** `GET /cli/pending/:code` — return a pending CLI auth request. */
+  .get('/cli/pending/:code', (c) => handler.fetch(c.req.raw))
+  /** `POST /cli/code` — create a new CLI auth device code. */
+  .post('/cli/code', (c) => handler.fetch(c.req.raw))
+  /** `POST /cli/poll/:code` — poll the current CLI auth device code. */
+  .post('/cli/poll/:code', (c) => handler.fetch(c.req.raw))
+  /** `POST /cli` — authorize a pending CLI auth request. */
+  .post('/cli', (c) => handler.fetch(c.req.raw))

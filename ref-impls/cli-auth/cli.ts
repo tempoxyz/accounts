@@ -1,6 +1,7 @@
 import { Expiry, Storage } from 'accounts'
 import { Provider } from 'accounts/cli'
 import { Cli, z } from 'incur'
+import { spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { Hex } from 'ox'
 import { tempoMainnet, tempoTestnet, tempoDevnet } from 'viem/chains'
@@ -55,6 +56,7 @@ const cli = Cli.create('accounts-cli')
 
       const provider = Provider.create({
         host: options.host,
+        open: openBrowser,
         storage: Storage.memory(),
         testnet: chain.testnet,
       })
@@ -90,6 +92,7 @@ const cli = Cli.create('accounts-cli')
 
       const provider = Provider.create({
         host: options.host,
+        open: openBrowser,
         storage: Storage.memory(),
         testnet: chain.testnet,
       })
@@ -121,6 +124,23 @@ function configureLocalTls(value: string) {
   )
     return
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+}
+
+function openBrowser(url: string) {
+  console.info(`Open this URL in your browser:\n\n${url}\n`)
+
+  const command =
+    process.platform === 'darwin'
+      ? { command: 'open', args: [url] }
+      : process.platform === 'win32'
+        ? { command: 'cmd', args: ['/c', 'start', '', url] }
+        : { command: 'xdg-open', args: [url] }
+
+  const child = spawn(command.command, command.args, {
+    detached: true,
+    stdio: 'ignore',
+  })
+  child.unref()
 }
 
 function isMain() {

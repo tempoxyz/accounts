@@ -25,7 +25,7 @@ const queryClient = new QueryClient({
 const persister = createSyncStoragePersister({
   storage: globalThis.localStorage,
   serialize: (data) => Json.stringify(data),
-  deserialize: (data) => JSON.parse(data),
+  deserialize: (data) => Json.parse(data),
 })
 
 PostHog.init()

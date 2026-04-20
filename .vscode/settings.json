@@ -30,6 +30,9 @@
   },
   "typescript.tsdk": "node_modules/typescript/lib",
   "files.exclude": {
-    "**/*.tsbuildinfo": true
+    "**/.tanstack": true,
+    "**/.wrangler": true,
+    "**/.pnpm-store": true,
+    "**/*.tsbuildinfo": true,
   }
 }
