@@ -53,6 +53,9 @@ onlyBuiltDependencies:
   - ssh2
   - utf-8-validate
   - workerd
+  - '@j178/prek'
+  - core-js
+  - secp256k1
 
 overrides:
   accounts: workspace:*
