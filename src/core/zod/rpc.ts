@@ -51,7 +51,11 @@ export const keyAuthorization = z.object({
   expiry: z.union([u.number(), z.null(), z.undefined()]),
   keyId: u.address(),
   keyType,
-  limits: z.optional(z.readonly(z.array(z.object({ token: u.address(), limit: u.bigint() })))),
+  limits: z.optional(
+    z.readonly(
+      z.array(z.object({ token: u.address(), limit: u.bigint(), period: z.optional(u.number()) })),
+    ),
+  ),
   signature: signatureEnvelope,
 })
 
@@ -342,6 +346,7 @@ export namespace wallet_getCapabilities {
 export namespace wallet_authorizeAccessKey {
   export const parameters = z.object({
     address: z.optional(u.address()),
+    chainId: z.optional(u.number()),
     expiry: z.number(),
     keyType: z.optional(keyType),
     limits: z.optional(
@@ -365,7 +370,7 @@ export namespace wallet_authorizeAccessKey {
     ),
   })
 
-  const returns = z.object({
+  export const returns = z.object({
     keyAuthorization,
     rootAddress: u.address(),
   })
