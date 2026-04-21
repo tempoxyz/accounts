@@ -7,7 +7,7 @@ import { cli } from './adapter.js'
  */
 export function create(options: create.Options): create.ReturnType {
   const {
-    host = 'https://wallet.tempo.xyz/cli-auth',
+    host = 'https://wallet-next.tempo.xyz/remote/auth/cli',
     keysPath,
     open,
     pollIntervalMs,
@@ -32,7 +32,7 @@ export declare namespace create {
     CoreProvider.create.Options & cli.Options,
     'adapter' | 'authorizeAccessKey' | 'host'
   > & {
-    /** Host URL for the device-code flow. @default "https://wallet.tempo.xyz/cli-auth" */
+    /** Host URL for the device-code flow. @default "https://wallet-next.tempo.xyz/remote/auth/cli" */
     host?: string | undefined
   }
   export type ReturnType = CoreProvider.create.ReturnType
