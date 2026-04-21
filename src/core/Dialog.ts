@@ -182,6 +182,11 @@ export function iframe(): Dialog {
       m.waitForReady().then((result) => {
         readyResult = result
         if (result.colorScheme) frame.style.colorScheme = result.colorScheme
+        // Ask the wallet to verify the SDK's stored accounts are still valid.
+        syncAccounts(m)
+      })
+      m.on('sync', ({ valid }) => {
+        if (valid === false) store?.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
       })
       m.on('switch-mode', () => {
         hideDialog()
@@ -556,6 +561,14 @@ function handleBlur(store: Store.Store) {
         : queued,
     ),
   }))
+}
+
+/** Sends stored account addresses to the wallet for session validation. */
+function syncAccounts(messenger: Messenger.Bridge) {
+  if (!store) return
+  const { accounts } = store.getState()
+  if (accounts.length === 0) return
+  messenger.send('sync', { addresses: accounts.map((a) => a.address) })
 }
 
 /** Returns the active account from the store, or `undefined` if none. */

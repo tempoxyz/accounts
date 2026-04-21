@@ -64,6 +64,10 @@ export type Schema = [
     topic: 'switch-mode'
     payload: { mode: 'popup' }
   },
+  {
+    topic: 'sync'
+    payload: { addresses?: readonly string[] | undefined; valid?: boolean | undefined }
+  },
 ]
 
 /** Union of all topic strings. */

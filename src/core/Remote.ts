@@ -70,7 +70,7 @@ export type Remote = {
    * Signals readiness to the host and begins accepting requests.
    * Call this after the remote context is fully initialized.
    */
-  ready: (options?: Messenger.ReadyOptions | undefined) => void
+  ready: (options?: ready.Options | undefined) => void
   /**
    * Reject an RPC request.
    */
@@ -98,6 +98,13 @@ export declare namespace onUserRequest {
     origin: string
     /** The pending request to display, or `null` when the dialog should close. */
     request: Store.QueuedRequest['request'] | null
+  }
+}
+
+export declare namespace ready {
+  type Options = Messenger.ReadyOptions & {
+    /** Authenticated account addresses. When provided, the wallet responds to SDK sync requests. */
+    accounts?: readonly string[] | undefined
   }
 }
 
@@ -144,7 +151,13 @@ export function create(options: create.Options): Remote {
           const index = state.accounts.findIndex(
             (a) => a.address.toLowerCase() === account.address.toLowerCase(),
           )
-          if (index >= 0 && index !== state.activeAccount)
+          if (index < 0) {
+            messenger.send('sync', { valid: false })
+            for (const r of requests)
+              if (r.status === 'pending') this.reject(r.request)
+            return
+          }
+          if (index !== state.activeAccount)
             provider.store.setState({ activeAccount: index })
         }
 
@@ -183,7 +196,18 @@ export function create(options: create.Options): Remote {
     },
 
     ready(options) {
-      messenger.ready({ ...options, trustedHosts })
+      const { accounts, ...readyOptions } = options ?? {}
+      messenger.ready({ ...readyOptions, trustedHosts })
+
+      // Respond to account sync requests from the SDK.
+      if (accounts)
+        messenger.on('sync', ({ addresses }) => {
+          if (!addresses) return
+          const valid = addresses.some((a) =>
+            accounts.some((b) => a.toLowerCase() === b.toLowerCase()),
+          )
+          messenger.send('sync', { valid })
+        })
 
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search)
