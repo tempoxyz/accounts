@@ -174,7 +174,10 @@ export function relay(options: relay.Options = {}): Handler {
             // resolution, fill once with feePayer, then parallelize the rest.
             const transaction = { ...baseTx, feePayer: true }
             if (Sponsorship.isPreparedTransaction(transaction)) {
-              filled = { transaction: Utils.normalizeTempoTransaction(transaction), sponsor: undefined }
+              filled = {
+                transaction: Utils.normalizeTempoTransaction(transaction),
+                sponsor: undefined,
+              }
             } else {
               filled = await fill(fillClient, {
                 autoSwap,
@@ -191,7 +194,10 @@ export function relay(options: relay.Options = {}): Handler {
 
             if (Sponsorship.isPreparedTransaction(sponsoredTx)) {
               // Already prepared — skip fills, just validate sponsorship.
-              const prepared = { transaction: Utils.normalizeTempoTransaction(sponsoredTx), sponsor: undefined }
+              const prepared = {
+                transaction: Utils.normalizeTempoTransaction(sponsoredTx),
+                sponsor: undefined,
+              }
               sponsored = await Sponsorship.shouldSponsor({
                 sender: from,
                 transaction: prepared.transaction,
@@ -564,7 +570,7 @@ async function fill(
     // Actual tx has larger keychain/webAuthn sigs + real fee payer sig, costing
     // more intrinsic gas. Mirror the bump from viem's tempo chainConfig.
     // @ts-expect-error
-    if (result.tx.gas && result.tx.feePayer) 
+    if (result.tx.gas && result.tx.feePayer)
       result.tx.gas = Hex.fromNumber(BigInt(result.tx.gas) + 20_000n)
     const sponsor = (result as Record<string, any>).capabilities?.sponsor as
       | { address: Address; name?: string; url?: string }

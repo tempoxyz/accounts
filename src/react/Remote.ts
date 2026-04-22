@@ -107,7 +107,12 @@ export function useTheme(remote?: CoreRemote.Remote | undefined) {
 }
 
 /** Applies theme values to the document root. */
-function applyTheme(theme: { accent?: string | undefined; radius?: string | undefined; font?: string | undefined; scheme?: string | undefined }) {
+function applyTheme(theme: {
+  accent?: string | undefined
+  radius?: string | undefined
+  font?: string | undefined
+  scheme?: string | undefined
+}) {
   const root = document.documentElement
   const { accent, radius, font, scheme } = theme
 

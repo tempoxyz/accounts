@@ -3,11 +3,15 @@ import { reactNative } from './adapter.js'
 
 /** Creates a provider for React Native apps using system browser authentication. */
 export function create(options: create.Options): create.ReturnType {
-  const { 
+  const {
     // TODO: use the new host
     // host = 'https://wallet-next.tempo.xyz',
     host = 'https://wallet.tempo.xyz',
-    redirectUri, open, secureStorage, ...rest } = options
+    redirectUri,
+    open,
+    secureStorage,
+    ...rest
+  } = options
 
   return CoreProvider.create({
     ...rest,
