@@ -77,7 +77,7 @@
   "name": "accounts",
   "description": "Tempo Accounts SDK",
   "type": "module",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "dependencies": {
     "hono": "^4.12.12",
     "idb-keyval": "^6.2.2",
@@ -95,7 +95,7 @@
     "expo-web-browser": "^55.0.13",
     "react": ">=18",
     "viem": ">=2.43.3",
-    "wagmi": ">=3.6.2"
+    "wagmi": ">=0.0.0"
   },
   "peerDependenciesMeta": {
     "@wagmi/core": {
