@@ -3,10 +3,10 @@
     "build": "zile",
     "changeset:publish": "zile publish:prepare && changeset publish && zile publish:post",
     "changeset:version": "changeset version && pnpm check",
-    "check": "vp lint --fix --ignore-pattern package.json --ignore-pattern dialog && vp fmt",
-    "check:types": "tsc -b && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types",
-    "dev": "pnpm dev:dialog & pnpm dev:dialog-ref & pnpm dev:playground",
+    "check": "vp lint --fix --ignore-pattern package.json && vp fmt src examples playgrounds ref-impls scripts test",
+    "dev": "docker compose up -d",
     "dev:cli": "pnpm --filter './playgrounds/cli' connect",
+    "check:types": "tsc -b --noEmit && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types",
     "dev:dialog": "pnpm --filter tempo-app dev",
     "dev:dialog-ref": "pnpm --filter dialog-ref dev",
     "dev:hosts": "./scripts/dev:hosts.sh",
@@ -52,7 +52,7 @@
     "testcontainers": "^11.14.0",
     "tsx": "^4.21.0",
     "typescript": "catalog:",
-    "viem": "^2.47.18",
+    "viem": "catalog:",
     "vp": "catalog:",
     "wagmi": "catalog:",
     "zile": "^0.0.25"
@@ -67,7 +67,9 @@
       "react-dom": "catalog:",
       "accounts": "workspace:*",
       "viem": "catalog:",
-      "wrangler": "catalog:"
+      "wrangler": "catalog:",
+      "vite-plus": "catalog:",
+      "vp": "catalog:"
     }
   },
   "imports": {

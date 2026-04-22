@@ -18,16 +18,12 @@
     "viem": "catalog:"
   },
   "devDependencies": {
-    "@bomb.sh/args": "^0.3.1",
-    "@bomb.sh/tab": "^0.0.14",
-    "@clack/prompts": "^1.2.0",
     "@cloudflare/vite-plugin": "catalog:",
     "@types/react": "catalog:default",
     "@types/react-dom": "catalog:default",
     "@vitejs/plugin-react": "catalog:default",
     "tsx": "catalog:",
     "typescript": "catalog:default",
-    "vite-plugin-mkcert": "^1.17.12",
     "vp": "catalog:",
     "wrangler": "^4.82.2"
   }

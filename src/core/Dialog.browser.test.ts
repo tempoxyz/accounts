@@ -4,7 +4,7 @@ import * as Dialog from './Dialog.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
 
-const host = 'https://wallet.tempo.xyz/embed'
+const host = 'https://wallet-next.tempo.xyz/remote'
 
 function setup() {
   const store = Store.create({
@@ -64,7 +64,7 @@ describe('Dialog.iframe', () => {
   test('behavior: iframe src points to host', () => {
     setup()
     const iframe = document.querySelector('dialog[data-tempo-wallet] iframe') as HTMLIFrameElement
-    expect(iframe.src).toMatchInlineSnapshot(`"https://wallet.tempo.xyz/embed/"`)
+    expect(iframe.src).toMatchInlineSnapshot(`"https://wallet-next.tempo.xyz/remote"`)
     expect(iframe.src).toContain(host)
   })
 
@@ -194,7 +194,7 @@ describe('Dialog.iframe', () => {
     setup()
     const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
     expect(dialog.getAttribute('role')).toBe('dialog')
-    expect(dialog.getAttribute('aria-label')).toBe('Tempo Auth')
+    expect(dialog.getAttribute('aria-label')).toBe('Tempo Wallet')
   })
 })
 

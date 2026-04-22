@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node --import tsx cli.ts",
-    "check:types": "tsc -b"
+    "check:types": "tsc -b --noEmit"
   },
   "dependencies": {
     "accounts": "latest",

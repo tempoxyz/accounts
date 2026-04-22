@@ -4,6 +4,7 @@ import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
+import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 
 import {
@@ -13,6 +14,8 @@ import {
   provider,
   switchAdapter,
   switchDialogMode,
+  switchTheme,
+  theme,
   env,
   testnet,
   tokens,
@@ -52,6 +55,8 @@ export function App() {
             <option value="iframe">iframe</option>
             <option value="popup">popup</option>
           </select>
+          <h3>Theme</h3>
+          <ThemeConfig adapterType={adapterType} rerender={() => rerender((n) => n + 1)} />
           <h3>Occlusion Test</h3>
           <OcclusionSimulator />
         </>
@@ -89,6 +94,7 @@ export function App() {
 
       <h2>Signing &amp; Verification</h2>
       <PersonalSign />
+      <PersonalSignSiwe />
       <VerifyMessage />
       <EthSignTypedData />
       <VerifyTypedData />
@@ -96,6 +102,9 @@ export function App() {
       <h2>MPP</h2>
       <Fortune />
       <MppZeroDollarAuth />
+
+      <h2>Email Verification</h2>
+      <ManageEmail />
 
       <h2>RPC Proxy (fallthrough)</h2>
       <EthBlockNumber />
@@ -153,6 +162,18 @@ function WalletDeposit() {
       >
         Deposit ($50)
       </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_deposit',
+              params: [{ displayName: 'DoorDash' }],
+            }),
+          )
+        }
+      >
+        Deposit (displayName: DoorDash)
+      </button>
     </Method>
   )
 }
@@ -187,7 +208,7 @@ function WalletConnect() {
     const accessKey = form.get('accessKey') as string | null
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
 
-    const limitToken = 'USDC.e' in tokens ? tokens['USDC.e'] : tokens.pathUSD
+    const limitToken = env === 'mainnet' && 'USDC.e' in tokens ? tokens['USDC.e'] : tokens.pathUSD
     const authorizeAccessKey = (() => {
       if (accessKey === '100-forever')
         return {
@@ -383,7 +404,7 @@ function buildCalls(rows: CallRow[]) {
 
 function Transactions() {
   const [rows, setRows] = useState<CallRow[]>([defaultRow(0)])
-  const [useFeePayer, setUseFeePayer] = useState(false)
+  const [feePayerMode, setFeePayerMode] = useState<'wallet' | 'playground' | 'disabled'>('wallet')
   const [result, setResult] = useState<unknown>()
   const [error, setError] = useState<Error>()
   const [method, setMethod] = useState('')
@@ -404,6 +425,11 @@ function Transactions() {
   }
 
   const calls = buildCalls(rows)
+  const feePayerParam = (() => {
+    if (feePayerMode === 'disabled') return { feePayer: false as const }
+    if (feePayerMode === 'playground') return { feePayer: '/relay' }
+    return {}
+  })()
 
   return (
     <div>
@@ -477,23 +503,28 @@ function Transactions() {
       </button>
 
       <h3>Send</h3>
-      <div style={{ marginBottom: 8 }}>
-        <label>
-          <input
-            type="checkbox"
-            checked={useFeePayer}
-            onChange={(e) => setUseFeePayer(e.target.checked)}
-          />{' '}
-          Fee Payer
-        </label>
-      </div>
+      <fieldset style={{ marginBottom: 8, border: 'none', padding: 0 }}>
+        <legend>Fee Payer</legend>
+        {(['wallet', 'playground', 'disabled'] as const).map((mode) => (
+          <label key={mode} style={{ marginRight: 12 }}>
+            <input
+              type="radio"
+              name="feePayerMode"
+              value={mode}
+              checked={feePayerMode === mode}
+              onChange={() => setFeePayerMode(mode)}
+            />{' '}
+            {mode[0]!.toUpperCase() + mode.slice(1)}
+          </label>
+        ))}
+      </fieldset>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button
           onClick={() =>
             send('eth_sendTransaction', () =>
               provider.request({
                 method: 'eth_sendTransaction',
-                params: [{ calls, ...(useFeePayer ? { feePayer: '/relay' } : {}) }],
+                params: [{ calls, ...feePayerParam }],
               }),
             )
           }
@@ -506,7 +537,7 @@ function Transactions() {
             send('eth_sendTransactionSync', () =>
               provider.request({
                 method: 'eth_sendTransactionSync',
-                params: [{ calls, ...(useFeePayer ? { feePayer: '/relay' } : {}) }],
+                params: [{ calls, ...feePayerParam }],
               }),
             )
           }
@@ -545,7 +576,7 @@ function Transactions() {
             send('eth_signTransaction', () =>
               provider.request({
                 method: 'eth_signTransaction',
-                params: [{ calls, ...(useFeePayer ? { feePayer: '/relay' } : {}) }],
+                params: [{ calls, ...feePayerParam }],
               }),
             )
           }
@@ -593,57 +624,209 @@ function PersonalSign() {
   )
 }
 
+function PersonalSignSiwe() {
+  const [result, setResult] = useState<{ message: string; signature: string }>()
+  const [error, setError] = useState<Error>()
+  return (
+    <div>
+      <h3>personal_sign (SIWE)</h3>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          const domain =
+            (new FormData(e.currentTarget).get('domain') as string) || window.location.host
+          ;(async () => {
+            try {
+              setError(undefined)
+              const accounts = await provider.request({ method: 'eth_accounts' })
+              if (accounts.length === 0) throw new Error('No accounts connected')
+              const siweMessage = createSiweMessage({
+                address: accounts[0],
+                chainId: 42069,
+                domain,
+                nonce: generateSiweNonce(),
+                statement: 'Sign in to the playground app.',
+                uri: `https://${domain}`,
+                version: '1',
+              })
+              const signature = await provider.request({
+                method: 'personal_sign',
+                params: [Hex.fromString(siweMessage), accounts[0]],
+              })
+              setResult({ message: siweMessage, signature })
+            } catch (e) {
+              setResult(undefined)
+              setError(e instanceof Error ? e : new Error(String(e)))
+            }
+          })()
+        }}
+        style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+      >
+        <input
+          name="domain"
+          defaultValue={window.location.host}
+          placeholder="Domain…"
+          style={{ flex: 1 }}
+        />
+        <button type="submit">Sign (SIWE)</button>
+      </form>
+      {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
+      {result && <pre>{`message:\n${result.message}\n\nsignature:\n${result.signature}`}</pre>}
+    </div>
+  )
+}
+
 function EthSignTypedData() {
-  const [result, error, execute] = useRequest()
+  const [result, setResult] = useState<{ data: object; signature: string }>()
+  const [error, setError] = useState<Error>()
+
+  function signTypedData(label: string, data: object) {
+    return (
+      <button
+        key={label}
+        onClick={async () => {
+          try {
+            setResult(undefined)
+            setError(undefined)
+            const accounts = await provider.request({ method: 'eth_accounts' })
+            if (accounts.length === 0) return
+            const signature = await provider.request({
+              method: 'eth_signTypedData_v4',
+              params: [accounts[0], Json.stringify(data)],
+            } as any)
+            setResult({ data, signature: signature as string })
+          } catch (e) {
+            setResult(undefined)
+            setError(e instanceof Error ? e : new Error(String(e)))
+          }
+        }}
+      >
+        {label}
+      </button>
+    )
+  }
+
+  const chain = env === 'devnet' ? tempoDevnet : testnet ? tempoModerato : tempo
+  const tokenAddress = Object.values(tokens)[0]
+
   return (
     <Method method="eth_signTypedData_v4" result={result} error={error}>
-      <button
-        onClick={() =>
-          execute(async () => {
-            const accounts = await provider.request({ method: 'eth_accounts' })
-            if (accounts.length === 0) return 'No accounts connected'
-            return provider.request({
-              method: 'eth_signTypedData_v4',
-              params: [
-                accounts[0],
-                Json.stringify({
-                  types: {
-                    EIP712Domain: [
-                      { name: 'name', type: 'string' },
-                      { name: 'version', type: 'string' },
-                      { name: 'chainId', type: 'uint256' },
-                    ],
-                    Person: [
-                      { name: 'name', type: 'string' },
-                      { name: 'wallet', type: 'address' },
-                    ],
-                    Mail: [
-                      { name: 'from', type: 'Person' },
-                      { name: 'to', type: 'Person' },
-                      { name: 'contents', type: 'string' },
-                    ],
-                  },
-                  primaryType: 'Mail',
-                  domain: { name: 'Example', version: '1', chainId: '1' },
-                  message: {
-                    from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000001' },
-                    to: { name: 'Bob', wallet: '0x0000000000000000000000000000000000000002' },
-                    contents: 'Hello, Bob!',
-                  },
-                }),
-              ],
-            } as any)
-          })
-        }
-      >
-        Sign
-      </button>
+      {signTypedData('Generic (Mail)', {
+        types: {
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'version', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+          ],
+          Person: [
+            { name: 'name', type: 'string' },
+            { name: 'wallet', type: 'address' },
+          ],
+          Mail: [
+            { name: 'from', type: 'Person' },
+            { name: 'to', type: 'Person' },
+            { name: 'contents', type: 'string' },
+          ],
+        },
+        primaryType: 'Mail',
+        domain: { name: 'Example', version: '1', chainId: String(chain.id) },
+        message: {
+          from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000001' },
+          to: { name: 'Bob', wallet: '0x0000000000000000000000000000000000000002' },
+          contents: 'Hello, Bob!',
+        },
+      })}
+      {signTypedData('ERC-2612 Permit', {
+        types: {
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'version', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+            { name: 'verifyingContract', type: 'address' },
+          ],
+          Permit: [
+            { name: 'owner', type: 'address' },
+            { name: 'spender', type: 'address' },
+            { name: 'value', type: 'uint256' },
+            { name: 'nonce', type: 'uint256' },
+            { name: 'deadline', type: 'uint256' },
+          ],
+        },
+        primaryType: 'Permit',
+        domain: {
+          name: 'pathUSD',
+          version: '1',
+          chainId: String(chain.id),
+          verifyingContract: tokenAddress,
+        },
+        message: {
+          owner: '0x0000000000000000000000000000000000000001',
+          spender: '0x0000000000000000000000000000000000000002',
+          value: String(parseUnits('100', 6)),
+          nonce: '0',
+          deadline: String(Math.floor(Date.now() / 1000) + 86400),
+        },
+      })}
+      {signTypedData('Permit2 (PermitSingle)', {
+        types: {
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+            { name: 'verifyingContract', type: 'address' },
+          ],
+          PermitSingle: [
+            { name: 'details', type: 'PermitDetails' },
+            { name: 'spender', type: 'address' },
+            { name: 'sigDeadline', type: 'uint256' },
+          ],
+          PermitDetails: [
+            { name: 'token', type: 'address' },
+            { name: 'amount', type: 'uint160' },
+            { name: 'expiration', type: 'uint48' },
+            { name: 'nonce', type: 'uint48' },
+          ],
+        },
+        primaryType: 'PermitSingle',
+        domain: {
+          name: 'Permit2',
+          chainId: String(chain.id),
+          verifyingContract: '0x000000000022D473030F116dDEE9F6B43aC78BA3',
+        },
+        message: {
+          details: {
+            token: tokenAddress,
+            amount: String(parseUnits('100', 6)),
+            expiration: String(Math.floor(Date.now() / 1000) + 86400),
+            nonce: '0',
+          },
+          spender: '0x0000000000000000000000000000000000000002',
+          sigDeadline: String(Math.floor(Date.now() / 1000) + 3600),
+        },
+      })}
+      {signTypedData('Unusual Data', {
+        types: {
+          EIP712Domain: [{ name: 'name', type: 'string' }],
+          RawPayload: [
+            { name: 'data', type: 'bytes' },
+            { name: 'nonce', type: 'uint256' },
+          ],
+        },
+        primaryType: 'RawPayload',
+        domain: { name: 'Unknown Protocol' },
+        message: {
+          data: '0xdeadbeefcafebabe',
+          nonce: '42',
+        },
+      })}
     </Method>
   )
 }
 
 function VerifyMessage() {
   const [result, error, execute] = useRequest()
+  const clear = useCallback(() => {
+    execute(async () => undefined)
+  }, [execute])
   return (
     <Method method="personal_sign (verify)" result={result} error={error}>
       <form
@@ -667,10 +850,12 @@ function VerifyMessage() {
       >
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Message</label>
-          <input
+          <textarea
             name="message"
             defaultValue="hello world"
+            onFocus={clear}
             placeholder="Message"
+            rows={1}
             style={{ flex: 1 }}
           />
         </div>
@@ -678,6 +863,7 @@ function VerifyMessage() {
           <label>Signature</label>
           <input
             name="signature"
+            onFocus={clear}
             placeholder="0x..."
             style={{ flex: 1, fontFamily: 'monospace' }}
           />
@@ -690,46 +876,60 @@ function VerifyMessage() {
 
 function VerifyTypedData() {
   const [result, error, execute] = useRequest()
+  const clear = useCallback(() => {
+    execute(async () => undefined)
+  }, [execute])
   return (
     <Method method="eth_signTypedData_v4 (verify)" result={result} error={error}>
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          const signature = new FormData(e.currentTarget).get('signature') as `0x${string}`
-          if (!signature) return
+          const form = new FormData(e.currentTarget)
+          const data = form.get('data') as string
+          const signature = form.get('signature') as `0x${string}`
+          if (!data || !signature) return
           execute(async () => {
             const accounts = await provider.request({ method: 'eth_accounts' })
             if (accounts.length === 0) return 'No accounts connected'
+            const parsed = JSON.parse(data) as {
+              domain: Record<string, unknown>
+              message: Record<string, unknown>
+              primaryType: string
+              types: Record<string, unknown>
+            }
+            const domain = {
+              ...parsed.domain,
+              ...(typeof parsed.domain.chainId === 'string'
+                ? { chainId: BigInt(parsed.domain.chainId) }
+                : {}),
+            }
             const client = provider.getClient()
             return verifyTypedData(client, {
               address: accounts[0],
-              types: {
-                Person: [
-                  { name: 'name', type: 'string' },
-                  { name: 'wallet', type: 'address' },
-                ],
-                Mail: [
-                  { name: 'from', type: 'Person' },
-                  { name: 'to', type: 'Person' },
-                  { name: 'contents', type: 'string' },
-                ],
-              },
-              primaryType: 'Mail',
-              domain: { name: 'Example', version: '1', chainId: 1n },
-              message: {
-                from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000001' },
-                to: { name: 'Bob', wallet: '0x0000000000000000000000000000000000000002' },
-                contents: 'Hello, Bob!',
-              },
+              domain,
+              types: parsed.types,
+              primaryType: parsed.primaryType,
+              message: parsed.message,
               signature,
-            })
+            } as never)
           })
         }}
       >
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Data</label>
+          <textarea
+            name="data"
+            onFocus={clear}
+            placeholder='{"types":...,"primaryType":...,"domain":...,"message":...}'
+            rows={3}
+            style={{ flex: 1, fontFamily: 'monospace' }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Signature</label>
           <input
             name="signature"
+            onFocus={clear}
             placeholder="0x..."
             style={{ flex: 1, fontFamily: 'monospace' }}
           />
@@ -854,6 +1054,26 @@ function WalletGetBalances() {
   )
 }
 
+const periodOptions = [
+  { label: 'None', value: '' },
+  { label: '10 seconds', value: '10' },
+  { label: '1 minute', value: '300' },
+  { label: '1 hour', value: '3600' },
+  { label: '1 day', value: '86400' },
+  { label: '1 month', value: '2592000' },
+  { label: '1 year', value: '31536000' },
+] as const
+
+const scopePresets = [
+  { label: 'None', value: '' },
+  { label: 'transfer(address,uint256)', value: 'transfer(address,uint256)' },
+  { label: 'approve(address,uint256)', value: 'approve(address,uint256)' },
+  {
+    label: 'transferFrom(address,address,uint256)',
+    value: 'transferFrom(address,address,uint256)',
+  },
+] as const
+
 function WalletAuthorizeAccessKey() {
   const [result, error, execute] = useRequest()
   return (
@@ -865,13 +1085,21 @@ function WalletAuthorizeAccessKey() {
           const expiry = (form.get('expiry') as string) || '3600'
           const limitToken = form.get('limitToken') as string
           const limitAmount = (form.get('limitAmount') as string) || '100'
+          const period = form.get('period') as string
+          const scopeSelector = form.get('scopeSelector') as string
 
           const params: Record<string, unknown> = {}
           if (expiry) params.expiry = Math.floor(Date.now() / 1000) + Number(expiry)
           if (limitToken && limitAmount)
             params.limits = [
-              { token: limitToken, limit: Hex.fromNumber(parseUnits(limitAmount, 6)) },
+              {
+                token: limitToken,
+                limit: Hex.fromNumber(parseUnits(limitAmount, 6)),
+                ...(period ? { period: Number(period) } : {}),
+              },
             ]
+          if (scopeSelector && limitToken)
+            params.scopes = [{ address: limitToken, selector: scopeSelector }]
 
           execute(() =>
             provider.request({
@@ -899,6 +1127,26 @@ function WalletAuthorizeAccessKey() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Limit Amount</label>
           <input name="limitAmount" placeholder="100" style={{ flex: 1 }} />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Period</label>
+          <select name="period" style={{ flex: 1 }}>
+            {periodOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Scope</label>
+          <select name="scopeSelector" style={{ flex: 1 }}>
+            {scopePresets.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
         <button type="submit">Authorize</button>
       </form>
@@ -960,6 +1208,18 @@ function MppZeroDollarAuth() {
         Zero-Dollar Auth
       </button>
     </Method>
+  )
+}
+
+function ManageEmail() {
+  const walletHost = import.meta.env.VITE_WALLET_HOST ?? ''
+  return (
+    <div>
+      <h3>Manage Email</h3>
+      <a href={`${walletHost}/email`} target="_blank" rel="noopener noreferrer">
+        Open email settings →
+      </a>
+    </div>
   )
 }
 
@@ -1102,6 +1362,59 @@ function OcclusionSimulator() {
       <p style={{ fontSize: 12, color: '#666' }}>
         Injects an overlay inside the {'<dialog>'} to trigger IO v2 occlusion detection.
       </p>
+    </div>
+  )
+}
+
+const accentOptions = ['', 'invert', 'blue', 'red', 'amber', 'green', 'purple'] as const
+const radiusOptions = ['', 'none', 'small', 'medium', 'large', 'full'] as const
+const fontOptions = ['', 'System', 'Pilat', 'TT Norms', 'Inter', 'DM Sans', 'Geist', 'Outfit'] as const
+const schemeOptions = ['', 'light', 'dark'] as const
+
+function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) {
+  const [accent, setAccent] = useState(theme?.accent ?? '')
+  const [radius, setRadius] = useState(theme?.radius ?? '')
+  const [font, setFont] = useState(theme?.font ?? '')
+  const [scheme, setScheme] = useState(theme?.scheme ?? '')
+  const [customAccent, setCustomAccent] = useState('#6366f1')
+
+  function apply(next: { accent?: string; radius?: string; font?: string; scheme?: string }) {
+    const a = next.accent ?? accent
+    const r = next.radius ?? radius
+    const f = next.font ?? font
+    const s = next.scheme ?? scheme
+    const t = a || r || f || s ? { accent: a || undefined, radius: (r || undefined) as never, font: f || undefined, scheme: (s || undefined) as never } : undefined
+    switchTheme(t, props.adapterType)
+    props.rerender()
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <label>Accent</label>
+        <select value={accent} onChange={(e) => { setAccent(e.target.value); apply({ accent: e.target.value }) }}>
+          {accentOptions.map((v) => <option key={v} value={v}>{v || '(default)'}</option>)}
+        </select>
+        <input type="color" value={customAccent} onChange={(e) => { setCustomAccent(e.target.value); setAccent(e.target.value); apply({ accent: e.target.value }) }} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <label>Radius</label>
+        <select value={radius} onChange={(e) => { setRadius(e.target.value); apply({ radius: e.target.value }) }}>
+          {radiusOptions.map((v) => <option key={v} value={v}>{v || '(default)'}</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <label>Font</label>
+        <select value={font} onChange={(e) => { setFont(e.target.value); apply({ font: e.target.value }) }}>
+          {fontOptions.map((v) => <option key={v} value={v}>{v || '(default)'}</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <label>Scheme</label>
+        <select value={scheme} onChange={(e) => { setScheme(e.target.value); apply({ scheme: e.target.value }) }}>
+          {schemeOptions.map((v) => <option key={v} value={v}>{v || '(default)'}</option>)}
+        </select>
+      </div>
     </div>
   )
 }

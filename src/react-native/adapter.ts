@@ -408,7 +408,7 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
 
 export declare namespace reactNative {
   export type Options = {
-    /** Host URL for the mobile auth page. @default "https://wallet.tempo.xyz" */
+    /** Host URL for the mobile auth page. @default "https://wallet-next.tempo.xyz" */
     host: string
     /** Provider display name. @default "Tempo Mobile" */
     name?: string | undefined
@@ -491,6 +491,8 @@ function buildAuthUrl(
     state: string
   },
 ): string {
+  // TODO: use the new host
+  // const url = new URL('/remote/auth/mobile', host)
   const url = new URL('/mobile-auth', host)
   url.searchParams.set('pubKey', params.pubKey)
   if (params.keyType) url.searchParams.set('keyType', params.keyType)

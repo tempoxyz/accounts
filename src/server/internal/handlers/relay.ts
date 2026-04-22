@@ -130,107 +130,150 @@ export function relay(options: relay.Options = {}): Handler {
             typeof parameters.from === 'string' ? (parameters.from as Address) : undefined
           const requestFeeToken =
             typeof parameters.feeToken === 'string' ? (parameters.feeToken as Address) : undefined
-          const requestsSponsorship = !!feePayerOptions && parameters.feePayer !== false
+          const externalFeePayerUrl =
+            typeof parameters.feePayer === 'string' ? parameters.feePayer : undefined
+          const requestsSponsorship =
+            (!!feePayerOptions || !!externalFeePayerUrl) && parameters.feePayer !== false
 
-          // 1. Resolve fee token.
-          const feeToken = features.feeTokenResolution
-            ? await resolveFeeToken(client, {
-                account: from,
-                feeToken: requestFeeToken,
-                tokens: resolveTokens(chainId),
-              })
-            : requestFeeToken
-
-          // 2. Fill transaction via RPC node (with AMM resolution on InsufficientBalance).
-          const normalized = Utils.normalizeFillTransactionRequest(parameters)
-          const transaction = {
+          const { feePayer: _feePayer, ...normalized } =
+            Utils.normalizeFillTransactionRequest(parameters)
+          const baseTx = {
             ...normalized,
             ...(typeof chainId !== 'undefined' ? { chainId } : {}),
-            ...(requestsSponsorship ? { feePayer: true } : {}),
-            ...(feeToken ? { feeToken } : {}),
+            ...(requestFeeToken ? { feeToken: requestFeeToken } : {}),
           }
-          let filled = await (async () => {
-            if (requestsSponsorship && Sponsorship.isPreparedTransaction(transaction))
-              return { transaction: Utils.normalizeTempoTransaction(transaction) }
-            return await fill(client, { autoSwap, feeToken, transaction })
-          })()
 
-          // 3. Check if the fee payer approves this transaction.
-          const sponsored =
-            requestsSponsorship && feePayerOptions
-              ? await Sponsorship.shouldSponsor({
-                  sender: from,
-                  transaction: filled.transaction,
-                  validate: feePayerOptions.validate,
+          let filled: Awaited<ReturnType<typeof fill>>
+          let sponsored = false
+          let feeToken = requestFeeToken
+
+          // Lazily resolve a swap source token when autoSwap needs one.
+          const resolveFeeTokenForSwap = from
+            ? (insufficientToken: Address) =>
+                resolveFeeToken(client, {
+                  account: from,
+                  feeToken: undefined,
+                  tokens: (resolveTokens(chainId) ?? []).filter(
+                    (t) => t.toLowerCase() !== insufficientToken.toLowerCase(),
+                  ),
                 })
-              : false
+            : undefined
 
-          // Re-fill without feePayer when sponsorship is rejected so the
-          // gas estimate and nonce are correct for a self-paid transaction.
-          if (requestsSponsorship && !sponsored) {
-            const { feePayer: _, ...tx } = transaction
-            filled = await fill(client, { autoSwap, feeToken, transaction: tx })
+          // When the app provides its own fee payer URL, route the fill
+          // through that service so it can sign the transaction.
+          const fillClient = externalFeePayerUrl
+            ? createClient({
+                chain: client.chain,
+                batch: { multicall: { deployless: true } },
+                transport: http(externalFeePayerUrl),
+              })
+            : client
+
+          if (requestsSponsorship && !feePayerOptions?.validate) {
+            // Path A: sponsorship guaranteed (no validate) — skip fee token
+            // resolution, fill once with feePayer, then parallelize the rest.
+            const transaction = { ...baseTx, feePayer: true }
+            if (Sponsorship.isPreparedTransaction(transaction)) {
+              filled = { transaction: Utils.normalizeTempoTransaction(transaction), sponsor: undefined }
+            } else {
+              filled = await fill(fillClient, {
+                autoSwap,
+                feeToken,
+                resolveFeeToken: resolveFeeTokenForSwap,
+                transaction,
+              })
+            }
+            sponsored = true
+          } else if (requestsSponsorship && feePayerOptions?.validate) {
+            // Path B: sponsorship possible but may be rejected — fill both
+            // variants in parallel, then pick the right one.
+            const sponsoredTx = { ...baseTx, feePayer: true }
+
+            if (Sponsorship.isPreparedTransaction(sponsoredTx)) {
+              // Already prepared — skip fills, just validate sponsorship.
+              const prepared = { transaction: Utils.normalizeTempoTransaction(sponsoredTx), sponsor: undefined }
+              sponsored = await Sponsorship.shouldSponsor({
+                sender: from,
+                transaction: prepared.transaction,
+                validate: feePayerOptions!.validate,
+              })
+              filled = prepared
+            } else {
+              const fillOptions = {
+                autoSwap,
+                feeToken,
+                resolveFeeToken: resolveFeeTokenForSwap,
+              }
+              const [sponsoredFill, unsponsoredFill] = await Promise.all([
+                fill(fillClient, { ...fillOptions, transaction: sponsoredTx }),
+                fill(client, { ...fillOptions, transaction: baseTx }),
+              ])
+              sponsored = await Sponsorship.shouldSponsor({
+                sender: from,
+                transaction: sponsoredFill.transaction,
+                validate: feePayerOptions!.validate,
+              })
+              filled = sponsored ? sponsoredFill : unsponsoredFill
+            }
+          } else {
+            // Path C: no sponsorship configured — resolve fee token, fill once.
+            feeToken = features.feeTokenResolution
+              ? await resolveFeeToken(client, {
+                  account: from,
+                  feeToken: requestFeeToken,
+                  tokens: resolveTokens(chainId),
+                })
+              : requestFeeToken
+            const transaction = { ...baseTx, ...(feeToken ? { feeToken } : {}) }
+            filled = await fill(client, {
+              autoSwap,
+              feeToken,
+              resolveFeeToken: resolveFeeTokenForSwap,
+              transaction,
+            })
           }
 
           const transaction_filled = filled.transaction
           const swap = 'swap' in filled ? filled.swap : undefined
+          if (!feeToken)
+            feeToken =
+              (transaction_filled.feeToken as Address | undefined) ?? resolveTokens(chainId)?.[0]
 
-          // 4. Simulate and compute balance diffs + fee.
-          const { balanceDiffs, fee } = features.simulate
-            ? await simulateAndParseDiffs(client, {
-                account: from,
-                calls: extractCalls(transaction_filled),
-                swap,
-                feeToken: transaction_filled.feeToken,
-                gas: transaction_filled.gas,
-                maxFeePerGas: transaction_filled.maxFeePerGas,
-              })
-            : { balanceDiffs: undefined, fee: undefined }
-
-          // 5. Sign as fee payer (if sponsored and not already signed).
+          // Parallelize: simulate, fee payer signing, and autoSwap metadata.
           const alreadySigned =
             'feePayerSignature' in transaction_filled &&
             transaction_filled.feePayerSignature != null
-          const transaction_final = await (async () => {
-            if (!sponsored || !feePayerOptions || alreadySigned) return transaction_filled
-            return await Sponsorship.sign({
-              account: feePayerOptions.account,
-              sender: from,
-              transaction: transaction_filled,
-            })
-          })()
 
-          const sponsor =
-            sponsored && feePayerOptions ? Sponsorship.getSponsor(feePayerOptions) : undefined
+          const [{ balanceDiffs, fee }, transaction_final, autoSwap_] = await Promise.all([
+            // Simulate and compute balance diffs + fee.
+            features.simulate
+              ? simulateAndParseDiffs(client, {
+                  account: from,
+                  calls: extractCalls(transaction_filled),
+                  swap,
+                  feeToken,
+                  gas: transaction_filled.gas,
+                  maxFeePerGas: transaction_filled.maxFeePerGas,
+                })
+              : { balanceDiffs: undefined, fee: undefined },
+            // Sign as fee payer (if sponsored and not already signed).
+            sponsored && feePayerOptions && !alreadySigned
+              ? Sponsorship.sign({
+                  account: feePayerOptions.account,
+                  sender: from,
+                  transaction: transaction_filled,
+                })
+              : Promise.resolve(transaction_filled),
+            // Resolve autoSwap metadata (when AMM path was taken).
+            resolveAutoSwapMetadata(client, { autoSwap, swap }),
+          ])
 
-          // 6. Resolve autoSwap metadata (when AMM path was taken).
-          const autoSwap_ = await (async () => {
-            if (!autoSwap || !swap) return undefined
-            const [inMeta, outMeta] = await Promise.all([
-              resolveTokenMetadata(client, swap.tokenIn).catch(() => undefined),
-              resolveTokenMetadata(client, swap.tokenOut).catch(() => undefined),
-            ])
-            if (!inMeta || !outMeta) return undefined
-            return {
-              calls: swap.calls.map((c) => ({ to: c.to, data: c.data })),
-              slippage: autoSwap!.slippage,
-              maxIn: {
-                token: swap.tokenIn,
-                value: Hex.fromNumber(swap.maxAmountIn) as `0x${string}`,
-                formatted: formatUnits(swap.maxAmountIn, inMeta.decimals),
-                decimals: inMeta.decimals,
-                symbol: inMeta.symbol,
-                name: inMeta.name,
-              },
-              minOut: {
-                token: swap.tokenOut,
-                value: Hex.fromNumber(swap.amountOut) as `0x${string}`,
-                formatted: formatUnits(swap.amountOut, outMeta.decimals),
-                decimals: outMeta.decimals,
-                symbol: outMeta.symbol,
-                name: outMeta.name,
-              },
-            }
+          const sponsor = (() => {
+            if (!sponsored) return undefined
+            // App-provided fee payer: relay back the sponsor from the upstream response.
+            if (externalFeePayerUrl) return filled.sponsor
+            if (feePayerOptions) return Sponsorship.getSponsor(feePayerOptions)
+            return filled.sponsor
           })()
 
           return RpcResponse.from(
@@ -501,6 +544,7 @@ async function fill(
   options: {
     autoSwap?: { slippage: number } | undefined
     feeToken?: Address | undefined
+    resolveFeeToken?: ((insufficientToken: Address) => Promise<Address | undefined>) | undefined
     transaction: Record<string, unknown>
   },
 ) {
@@ -511,14 +555,24 @@ async function fill(
     value.type === '0x76' ? value : Utils.formatFillTransactionRequest(client, value)
 
   try {
+    const formatted = format(request)
     const result = await client.request({
       method: 'eth_fillTransaction',
-      params: [format(request) as never],
+      params: [formatted as never],
     })
-    return { transaction: Utils.normalizeTempoTransaction(result.tx) }
+    // FIXME: node estimates gas with secp256k1 dummy sig + null feePayerSignature.
+    // Actual tx has larger keychain/webAuthn sigs + real fee payer sig, costing
+    // more intrinsic gas. Mirror the bump from viem's tempo chainConfig.
+    // @ts-expect-error
+    if (result.tx.gas && result.tx.feePayer) 
+      result.tx.gas = Hex.fromNumber(BigInt(result.tx.gas) + 20_000n)
+    const sponsor = (result as Record<string, any>).capabilities?.sponsor as
+      | { address: Address; name?: string; url?: string }
+      | undefined
+    return { transaction: Utils.normalizeTempoTransaction(result.tx), sponsor }
   } catch (error) {
     if (!(error instanceof Error)) throw error
-    if (!feeToken || !autoSwap) throw error
+    if (!autoSwap) throw error
 
     const revert = ExecutionError.parse(error)
     if (revert?.errorName !== 'InsufficientBalance') throw error
@@ -526,13 +580,19 @@ async function fill(
     const [available, required, token] = revert.args
     if (typeof available === 'undefined' || typeof required === 'undefined' || !token) throw error
 
-    if (token.toLowerCase() === feeToken.toLowerCase()) throw error
+    // Resolve a source token for the swap: use the provided feeToken,
+    // or fall back to resolveFeeToken() to find one the sender holds.
+    const sourceToken =
+      feeToken && feeToken.toLowerCase() !== token.toLowerCase()
+        ? feeToken
+        : await options.resolveFeeToken?.(token as Address)
+    if (!sourceToken || sourceToken.toLowerCase() === token.toLowerCase()) throw error
 
     const deficit = required - available
     const maxAmountIn = deficit + (deficit * BigInt(Math.round(autoSwap.slippage * 1000))) / 1000n
 
     const originalCalls = (request.calls as Call[] | undefined) ?? []
-    const swapCalls = buildSwapCalls(feeToken, token, deficit, maxAmountIn)
+    const swapCalls = buildSwapCalls(sourceToken, token, deficit, maxAmountIn)
 
     const result = await client.request({
       method: 'eth_fillTransaction',
@@ -543,11 +603,15 @@ async function fill(
         }) as never,
       ],
     })
+    const sponsor = (result as Record<string, any>).capabilities?.sponsor as
+      | { address: Address; name?: string; url?: string }
+      | undefined
     return {
       transaction: Utils.normalizeTempoTransaction(result.tx),
+      sponsor,
       swap: {
         calls: swapCalls,
-        tokenIn: feeToken,
+        tokenIn: sourceToken,
         tokenOut: token,
         amountOut: deficit,
         maxAmountIn,
@@ -848,6 +912,50 @@ async function resolveTokenMetadata(
     decimals: fallback.decimals ?? 6,
     symbol: meta?.symbol || fallback.symbol,
     name: meta?.name || fallback.name,
+  }
+}
+
+async function resolveAutoSwapMetadata(
+  client: Client,
+  options: {
+    autoSwap?: { slippage: number } | undefined
+    swap?:
+      | {
+          calls: readonly { to: Address; data: `0x${string}` }[]
+          tokenIn: Address
+          tokenOut: Address
+          amountOut: bigint
+          maxAmountIn: bigint
+        }
+      | undefined
+  },
+) {
+  const { autoSwap, swap } = options
+  if (!autoSwap || !swap) return undefined
+  const [inMeta, outMeta] = await Promise.all([
+    resolveTokenMetadata(client, swap.tokenIn).catch(() => undefined),
+    resolveTokenMetadata(client, swap.tokenOut).catch(() => undefined),
+  ])
+  if (!inMeta || !outMeta) return undefined
+  return {
+    calls: swap.calls.map((c) => ({ to: c.to, data: c.data })),
+    slippage: autoSwap.slippage,
+    maxIn: {
+      token: swap.tokenIn,
+      value: Hex.fromNumber(swap.maxAmountIn) as `0x${string}`,
+      formatted: formatUnits(swap.maxAmountIn, inMeta.decimals),
+      decimals: inMeta.decimals,
+      symbol: inMeta.symbol,
+      name: inMeta.name,
+    },
+    minOut: {
+      token: swap.tokenOut,
+      value: Hex.fromNumber(swap.amountOut) as `0x${string}`,
+      formatted: formatUnits(swap.amountOut, outMeta.decimals),
+      decimals: outMeta.decimals,
+      symbol: outMeta.symbol,
+      name: outMeta.name,
+    },
   }
 }
 

@@ -5,7 +5,6 @@ import { createConfig } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { webAuthn } from 'wagmi/tempo'
 
-import trustedHosts from '../trusted-hosts.json'
 import * as Messenger from './messenger.js'
 
 /** Provider instance for executing confirmed requests. */
@@ -29,6 +28,5 @@ export const wagmiConfig = createConfig({
 /** Remote context singleton. */
 export const remote = Remote.create({
   messenger: Messenger.init(),
-  provider: await getConnectors(wagmiConfig)[0]!.getProvider(),
-  trustedHosts,
+  provider: await getConnectors(wagmiConfig as any)[0]!.getProvider(),
 })

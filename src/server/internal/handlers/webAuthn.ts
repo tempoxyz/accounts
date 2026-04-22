@@ -57,7 +57,7 @@ export function webAuthn(options: webAuthn.Options): Handler {
         ...(userId ? { user: { id: new TextEncoder().encode(userId), name } } : undefined),
       })
 
-      await kv.set(`challenge:${challenge}`, Date.now())
+      await kv.set(`challenge:${challenge}`, { created: Date.now(), name })
 
       return Response.json({ options })
     } catch (error) {
@@ -74,10 +74,9 @@ export function webAuthn(options: webAuthn.Options): Handler {
         Bytes.toString(new Uint8Array(deserialized.clientDataJSON)),
       ) as { challenge: string }
       const challenge = Hex.fromBytes(Base64.toBytes(clientData.challenge))
-      const stored = await kv.get<number>(`challenge:${challenge}`)
-      if (!stored || Date.now() - stored > challengeTtl * 1_000)
+      const stored = await kv.get<{ created: number; name: string }>(`challenge:${challenge}`)
+      if (!stored || Date.now() - stored.created > challengeTtl * 1_000)
         throw new Error('Missing or expired challenge')
-      await kv.delete(`challenge:${challenge}`)
 
       const result = Registration.verify(credential, {
         challenge,
@@ -88,10 +87,17 @@ export function webAuthn(options: webAuthn.Options): Handler {
       const { publicKey } = result.credential
       const credentialId = credential.id
 
-      await kv.set(`credential:${credentialId}`, { publicKey })
-
       const json = { credentialId, publicKey }
-      const hook = await onRegister?.({ credentialId, publicKey, request: c.req.raw })
+      const [, hook] = await Promise.all([
+        kv.set(`credential:${credentialId}`, { publicKey }),
+        onRegister?.({
+          credentialId,
+          name: stored.name,
+          publicKey,
+          request: c.req.raw,
+        }),
+        kv.delete(`challenge:${challenge}`),
+      ])
       return mergeResponse(json, hook)
     } catch (error) {
       return Response.json({ error: (error as Error).message }, { status: 400 })
@@ -136,12 +142,13 @@ export function webAuthn(options: webAuthn.Options): Handler {
         challenge: string
       }
       const challenge = Hex.fromBytes(Base64.toBytes(clientData.challenge))
-      const stored = await kv.get<number>(`challenge:${challenge}`)
+
+      const [stored, credentialData] = await Promise.all([
+        kv.get<number>(`challenge:${challenge}`),
+        kv.get<{ publicKey: string }>(`credential:${response.id}`),
+      ])
       if (!stored || Date.now() - stored > challengeTtl * 1_000)
         throw new Error('Missing or expired challenge')
-      await kv.delete(`challenge:${challenge}`)
-
-      const credentialData = await kv.get<{ publicKey: string }>(`credential:${response.id}`)
       if (!credentialData) throw new Error('Unknown credential')
 
       const valid = Authentication.verify(response, {
@@ -160,7 +167,10 @@ export function webAuthn(options: webAuthn.Options): Handler {
         publicKey: credentialData.publicKey,
         ...(userHandle && userHandle.length > 0 ? { userId: userHandle } : undefined),
       }
-      const hook = await onAuthenticate?.({ ...json, request: c.req.raw })
+      const [hook] = await Promise.all([
+        onAuthenticate?.({ ...json, request: c.req.raw }),
+        kv.delete(`challenge:${challenge}`),
+      ])
       return mergeResponse(json, hook)
     } catch (error) {
       return Response.json({ error: (error as Error).message }, { status: 400 })
@@ -179,6 +189,8 @@ export declare namespace webAuthn {
     /** Called after a successful registration. The returned response is merged onto the default JSON response. */
     onRegister?: (parameters: {
       credentialId: string
+      /** The name provided during `/register/options` (e.g. user email). */
+      name: string
       publicKey: string
       request: Request
     }) => Response | Promise<Response> | void | Promise<void>

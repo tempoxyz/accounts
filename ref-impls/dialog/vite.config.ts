@@ -1,6 +1,5 @@
-import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
+import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import viteReact from '@vitejs/plugin-react'
-import mkcert from 'vite-plugin-mkcert'
 import { defineConfig } from 'vp'
 
 export default defineConfig({
@@ -8,13 +7,10 @@ export default defineConfig({
     host: process.env.VITE_HOST ?? 'localhost',
     port: Number(process.env.PORT ?? 5174),
     strictPort: true,
+    allowedHosts: true,
   },
   plugins: [
-    TanStackRouterVite(),
+    tanstackRouter(),
     viteReact(),
-    mkcert({
-      force: true,
-      hosts: [process.env.VITE_HOST ?? 'localhost'],
-    }),
   ],
 })

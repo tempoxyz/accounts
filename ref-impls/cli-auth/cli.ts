@@ -3,14 +3,22 @@ import { Provider } from 'accounts/cli'
 import { Cli, z } from 'incur'
 import { pathToFileURL } from 'node:url'
 import { Hex } from 'ox'
+import { tempoMainnet, tempoTestnet, tempoDevnet } from 'viem/chains'
 import { connect } from 'viem/experimental/erc7846'
 
-const defaultHost = 'https://wallet.tempo.xyz/embed/cli-auth' as const
+const defaultHost = 'https://wallet.tempo.xyz/cli-auth' as const
 const defaultToken = '0x20c0000000000000000000000000000000000000' as const
 
 const options = z.object({
   host: z.string().default(defaultHost).describe('CLI auth host URL'),
-  testnet: z.boolean().default(true).describe('Use Tempo testnet'),
+  chain: z
+    .string()
+    .check((ctx) => {
+      if (['mainnet', 'testnet', 'devnet'].includes(ctx.value)) return
+      ctx.issues.push({ code: 'custom', input: ctx.value })
+    })
+    .default('mainnet')
+    .describe('Tempo Chain: mainnet, testnet, devnet'),
   limit: z
     .number()
     .int()
@@ -38,10 +46,17 @@ const cli = Cli.create('accounts-cli')
     async run({ options }) {
       configureLocalTls(options.host)
 
+      const chain =
+        options.chain === 'mainnet'
+          ? tempoMainnet
+          : options.chain === 'testnet'
+            ? tempoTestnet
+            : tempoDevnet
+
       const provider = Provider.create({
         host: options.host,
         storage: Storage.memory(),
-        testnet: options.testnet,
+        testnet: chain.testnet,
       })
       const authorizeAccessKey = {
         expiry: Expiry.seconds(options.expiry),
@@ -66,10 +81,17 @@ const cli = Cli.create('accounts-cli')
     options,
     async run({ options }) {
       configureLocalTls(options.host)
+      const chain =
+        options.chain === 'mainnet'
+          ? tempoMainnet
+          : options.chain === 'testnet'
+            ? tempoTestnet
+            : tempoDevnet
+
       const provider = Provider.create({
         host: options.host,
         storage: Storage.memory(),
-        testnet: options.testnet,
+        testnet: chain.testnet,
       })
       const authorizeAccessKey = {
         expiry: Expiry.seconds(options.expiry),

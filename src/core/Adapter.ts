@@ -151,10 +151,14 @@ export declare namespace createAccount {
   }
   type ReturnType = {
     accounts: readonly Store.Account[]
+    /** Email associated with the account. */
+    email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Signature over the digest, if one was provided. */
     signature?: Hex | undefined
+    /** Username associated with the account. */
+    username?: string | null | undefined
   }
 }
 
@@ -177,10 +181,14 @@ export declare namespace loadAccounts {
   type ReturnType = {
     /** Loaded accounts. */
     accounts: readonly Store.Account[]
+    /** Email associated with the account. */
+    email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Signature over the digest, if one was provided. */
     signature?: Hex | undefined
+    /** Username associated with the account. */
+    username?: string | null | undefined
   }
 }
 
@@ -207,7 +215,7 @@ export declare namespace authorizeAccessKey {
     /** Access key address. Alternative to `publicKey` when the caller already knows the derived address. */
     address?: Address | undefined
     /** Chain ID the key authorization is scoped to. Defaults to the active chain. */
-    chainId?: number | undefined
+    chainId?: bigint | undefined
     /** Unix timestamp (seconds) when the key expires. */
     expiry: number
     /** Key type of the external public key. Required when `publicKey` or `address` is provided. */

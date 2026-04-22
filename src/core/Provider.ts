@@ -50,6 +50,7 @@ export function create(options: create.Options = {}): create.ReturnType {
   const {
     adapter = dialog(),
     chains = [tempo, tempoModerato, tempoDevnet],
+    maxAccounts,
     persistCredentials,
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
@@ -71,6 +72,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const store = Store.create({
     chainId: defaultChain.id,
+    maxAccounts,
     persistCredentials,
     storage,
   })
@@ -138,10 +140,10 @@ export function create(options: create.Options = {}): create.ReturnType {
   }
 
   /** Resolves the `feePayer` field from a transaction request into an absolute URL string or `undefined`. */
-  function resolveFeePayer(feePayer: string | boolean | undefined): string | undefined {
+  function resolveFeePayer(feePayer: string | boolean | undefined): string | false | undefined {
+    if (feePayer === false) return false
     const url = (() => {
       if (typeof feePayer === 'string') return feePayer
-      if (feePayer === false) return undefined
       return feePayerConfig?.url
     })()
     if (!url) return undefined
@@ -499,17 +501,38 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const authorizeAccessKey =
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
 
-                    const { keyAuthorization, accounts, signature } = await (async () => {
-                      if (capabilities?.method === 'register')
+                    const { keyAuthorization, accounts, email, signature, username } = await (async () => {
+                      if (capabilities?.method === 'register') {
+                        // If a stored account already has this label, sign in
+                        // with its credential instead of creating a new one.
+                        const existing = capabilities.name
+                          ? store
+                              .getState()
+                              .accounts.find(
+                                (a) =>
+                                  'credential' in a &&
+                                  a.label?.toLowerCase() === capabilities.name!.toLowerCase(),
+                              )
+                          : undefined
+                        if (existing && 'credential' in existing)
+                          return await actions.loadAccounts(
+                            {
+                              credentialId: existing.credential?.id,
+                              digest: capabilities.digest,
+                              authorizeAccessKey,
+                            },
+                            request,
+                          )
                         return await actions.createAccount(
                           {
                             digest: capabilities.digest,
                             authorizeAccessKey,
                             name: capabilities.name ?? 'default',
-                            userId: capabilities.userId,
+                            userId: capabilities.userId ?? Hex.random(16),
                           },
                           request,
                         )
+                      }
                       return await actions.loadAccounts(
                         {
                           credentialId: capabilities?.credentialId,
@@ -539,6 +562,8 @@ export function create(options: create.Options = {}): create.ReturnType {
                                     }
                                   : {}),
                                 ...(signature && capabilities?.digest ? { signature } : {}),
+                                ...(email !== undefined ? { email } : {}),
+                                ...(username !== undefined ? { username } : {}),
                               }
                             : {},
                       })),
@@ -686,6 +711,8 @@ export declare namespace create {
     chains?: readonly [Chain, ...Chain[]] | undefined
     /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */
     feePayer?: Client.fromChainId.Options['feePayer']
+    /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
+    maxAccounts?: number | undefined
     /** Enable Machine Payment Protocol (mppx) support. @default false */
     mpp?: boolean | undefined
     /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */

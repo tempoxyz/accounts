@@ -21,6 +21,8 @@ export type Instance = {
   open: () => void
   /** Sync the pending request queue to the remote auth app. */
   syncRequests: (requests: readonly Store.QueuedRequest[]) => Promise<void>
+  /** Update the visual theme at runtime. */
+  syncTheme: (theme: Theme | undefined) => void
 }
 
 /** The setup function a dialog must implement. */
@@ -28,11 +30,34 @@ export type SetupFn = (parameters: SetupFn.Parameters) => Instance
 
 export declare namespace SetupFn {
   type Parameters = {
-    /** URL of the Tempo Auth app. */
+    /** URL of the Tempo Wallet app. */
     host: string
     /** Reactive state store. */
     store: Store.Store
+    /** Visual theme overrides applied to the embed. */
+    theme?: Theme | undefined
   }
+}
+
+/** Visual theme configuration for the dialog embed. */
+export type Theme = {
+  /** Accent color — a preset name or a hex color (e.g. `'#6366f1'`). */
+  accent?: 'blue' | 'red' | 'amber' | 'green' | 'purple' | 'invert' | (string & {}) | undefined
+  /** Border radius preset. */
+  radius?: 'none' | 'small' | 'medium' | 'large' | 'full' | undefined
+  /** Font family — a bundled name (`'Pilat'`, `'TT Norms'`) or a Google Font. */
+  font?: string | undefined
+  /** Color scheme — controls light/dark appearance. Defaults to `'light dark'` (follows OS). */
+  scheme?: 'light' | 'dark' | undefined
+}
+
+/** Serializes theme options onto a URL's search params. */
+function applyThemeParams(url: URL, theme: Theme | undefined) {
+  if (!theme) return
+  if (theme.accent) url.searchParams.set('accent', theme.accent)
+  if (theme.radius) url.searchParams.set('radius', theme.radius)
+  if (theme.font) url.searchParams.set('font', theme.font)
+  if (theme.scheme) url.searchParams.set('scheme', theme.scheme)
 }
 
 export const defaultSize = { height: 440, width: 360 }
@@ -86,6 +111,7 @@ export function iframe(): Dialog {
 
       fallback?.destroy()
       fallback = popup()(parameters)
+      cached.instance.syncTheme(parameters.theme)
       return cached.instance
     }
 
@@ -109,13 +135,14 @@ export function iframe(): Dialog {
         hostUrl.searchParams.set('iconDark', referrer.icon.dark)
       }
     }
+    applyThemeParams(hostUrl, parameters.theme)
 
     const root = document.createElement('dialog')
     root.dataset.tempoWallet = ''
 
     root.setAttribute('role', 'dialog')
     root.setAttribute('aria-closed', 'true')
-    root.setAttribute('aria-label', 'Tempo Auth')
+    root.setAttribute('aria-label', 'Tempo Wallet')
     root.setAttribute('hidden', 'until-found')
 
     Object.assign(root.style, {
@@ -139,13 +166,13 @@ export function iframe(): Dialog {
     )
     frame.setAttribute('allowtransparency', 'true')
     frame.setAttribute('tabindex', '0')
-    frame.setAttribute('title', 'Tempo Auth')
+    frame.setAttribute('title', 'Tempo Wallet')
     frame.src = hostUrl.toString()
 
     Object.assign(frame.style, {
       backgroundColor: 'transparent',
       border: '0',
-      colorScheme: 'light dark',
+      colorScheme: parameters.theme?.scheme ?? 'light dark',
       height: '100%',
       left: '0',
       position: 'fixed',
@@ -183,6 +210,11 @@ export function iframe(): Dialog {
       m.waitForReady().then((result) => {
         readyResult = result
         if (result.colorScheme) frame.style.colorScheme = result.colorScheme
+        // Ask the wallet to verify the SDK's stored accounts are still valid.
+        syncAccounts(m)
+      })
+      m.on('sync', ({ valid }) => {
+        if (valid === false) store?.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
       })
       m.on('switch-mode', () => {
         hideDialog()
@@ -362,6 +394,10 @@ export function iframe(): Dialog {
           })
         }
       },
+      syncTheme(theme) {
+        frame.style.colorScheme = theme?.scheme ?? 'light dark'
+        messenger.send('theme', theme ?? {})
+      },
     }
 
     cached = { host, instance }
@@ -452,6 +488,7 @@ export function popup(options: popup.Options = {}): Dialog {
             hostUrl.searchParams.set('iconDark', referrer.icon.dark)
           }
         }
+        applyThemeParams(hostUrl, parameters.theme)
 
         const left = (window.innerWidth - size.width) / 2 + window.screenX
         const top = window.screenY + 100
@@ -485,6 +522,7 @@ export function popup(options: popup.Options = {}): Dialog {
           requests,
         })
       },
+      syncTheme() {},
     }
   })
 }
@@ -503,6 +541,7 @@ export function noop(): Dialog {
     close() {},
     destroy() {},
     async syncRequests() {},
+    syncTheme() {},
   }))
 }
 
@@ -557,6 +596,14 @@ function handleBlur(store: Store.Store) {
         : queued,
     ),
   }))
+}
+
+/** Sends stored account addresses to the wallet for session validation. */
+function syncAccounts(messenger: Messenger.Bridge) {
+  if (!store) return
+  const { accounts } = store.getState()
+  if (accounts.length === 0) return
+  messenger.send('sync', { addresses: accounts.map((a) => a.address) })
 }
 
 /** Returns the active account from the store, or `undefined` if none. */

@@ -34,6 +34,8 @@ export type Store = Mutate<
 export type Options = {
   /** Initial chain ID. */
   chainId: number
+  /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
+  maxAccounts?: number | undefined
   /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
   persistCredentials?: boolean | undefined
   /** Storage adapter for persistence. */
@@ -64,6 +66,7 @@ export type QueuedRequest<result = unknown> = OneOf<
 export function create(options: Options): Store {
   const {
     chainId,
+    maxAccounts,
     persistCredentials = true,
     storage = typeof window !== 'undefined'
       ? Storage.idb({ key: 'tempo' })
@@ -99,13 +102,18 @@ export function create(options: Options): Store {
             }
           },
           name: 'store',
-          partialize: (state) =>
-            ({
-              accounts: state.accounts,
+          partialize: (state) => {
+            const accounts =
+              maxAccounts && state.accounts.length > maxAccounts
+                ? state.accounts.slice(0, maxAccounts)
+                : state.accounts
+            return {
+              accounts,
               activeAccount: state.activeAccount,
               ...(persistCredentials ? { accessKeys: state.accessKeys } : {}),
               chainId: state.chainId,
-            }) as unknown as State,
+            } as unknown as State
+          },
           storage,
           version: 0,
         },

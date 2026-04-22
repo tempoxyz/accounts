@@ -73,6 +73,7 @@ export const transactionRequest = z.object({
   chainId: z.optional(u.number()),
   data: z.optional(u.hex()),
   feePayer: z.optional(z.union([z.boolean(), z.string()])),
+  feePayerSignature: z.optional(z.record(z.string(), z.unknown())),
   feeToken: z.optional(u.address()),
   from: z.optional(u.address()),
   gas: z.optional(u.bigint()),
@@ -345,7 +346,7 @@ export namespace wallet_getCapabilities {
 export namespace wallet_authorizeAccessKey {
   export const parameters = z.object({
     address: z.optional(u.address()),
-    chainId: z.optional(u.number()),
+    chainId: z.optional(u.bigint()),
     expiry: z.number(),
     keyType: z.optional(keyType),
     limits: z.optional(
@@ -441,8 +442,10 @@ export namespace wallet_connect {
       ]),
     ),
     result: z.object({
+      email: z.optional(z.nullable(z.string())),
       keyAuthorization: z.optional(keyAuthorization),
       signature: z.optional(u.hex()),
+      username: z.optional(z.nullable(z.string())),
     }),
   }
 
@@ -546,6 +549,7 @@ export namespace wallet_deposit {
         z.object({
           address: z.optional(u.address()),
           chainId: z.optional(u.number()),
+          displayName: z.optional(z.string()),
           token: z.optional(u.address()),
           value: z.optional(z.string()),
         }),

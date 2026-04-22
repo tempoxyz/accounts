@@ -2,8 +2,6 @@ import { Handler, Kv } from 'accounts/server'
 import { Mppx, tempo } from 'mppx/server'
 import { privateKeyToAccount } from 'viem/accounts'
 
-import { handler as cliAuth } from './cli-auth.js'
-
 const payment = Mppx.create({
   methods: [
     tempo.charge({
@@ -16,7 +14,6 @@ const payment = Mppx.create({
 })
 
 const handler = Handler.compose([
-  cliAuth,
   Handler.webAuthn({
     kv: Kv.memory(),
     origin: process.env.ORIGIN,
@@ -26,6 +23,8 @@ const handler = Handler.compose([
   Handler.relay({
     feePayer: {
       account: privateKeyToAccount(process.env.PRIVATE_KEY),
+      name: 'Playground',
+      url: 'https://playground.tempo.xyz',
     },
     path: '/relay',
   }),

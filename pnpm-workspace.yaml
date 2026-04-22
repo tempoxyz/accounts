@@ -1,6 +1,5 @@
 packages:
   - .
-  - dialog
   - examples/*
   - playgrounds/*
   - ref-impls/*
@@ -10,7 +9,7 @@ blockExoticSubdeps: true
 catalog:
   '@cloudflare/vite-plugin': ^1.31.2
   '@cloudflare/workers-types': ^4.20260317.1
-  '@tanstack/react-query': 5.90.5
+  '@tanstack/react-query': ^5.97.0
   '@tanstack/react-router': ^1.168.19
   '@tanstack/react-start': ^1.166.7
   '@total-typescript/ts-reset': ^0.6.1
@@ -21,6 +20,7 @@ catalog:
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.4.4
   hono: ^4.12.12
+  ox: ~0.14.18
   prool: ~0.2.4
   react: ^19.2.5
   react-dom: ^19.2.5
@@ -29,6 +29,7 @@ catalog:
   typescript: ^5.9.3
   viem: ^2.48.1
   vite: ^8.0.5
+  vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
   wagmi: ^3.6.1
   wrangler: ^4.83.0
@@ -38,6 +39,8 @@ minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - incur
   - mppx
+  - ox
+  - secretlint
   - viem
   - vite-plus
   - '@voidzero-dev/*'
@@ -53,17 +56,12 @@ onlyBuiltDependencies:
   - ssh2
   - utf-8-validate
   - workerd
-  - '@j178/prek'
-  - core-js
-  - secp256k1
 
-overrides:
-  accounts: workspace:*
-  ox: ~0.14.18
-  react: catalog:default
-  react-dom: catalog:default
 strictDepBuilds: true
 trustPolicy: no-downgrade
 trustPolicyExclude:
   - chokidar@4.0.3
   - semver@6.3.1
+
+shellEmulator: true
+nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=DeprecationWarning'

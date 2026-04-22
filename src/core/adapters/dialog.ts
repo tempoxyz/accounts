@@ -27,10 +27,13 @@ import * as Rpc from '../zod/rpc.js'
 export function dialog(options: dialog.Options = {}): Adapter.Adapter {
   const {
     dialog = Dialog.isInsecureContext() ? Dialog.popup() : Dialog.iframe(),
+    // TODO: use the new host
+    // host = 'https://wallet-next.tempo.xyz/remote',
     host = 'https://wallet.tempo.xyz/embed',
     icon = 'data:image/svg+xml,<svg width="269" height="269" viewBox="0 0 269 269" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="269" height="269" fill="black"/><path d="M123.273 190.794H93.445L121.09 105.318H85.7334L93.445 80.2642H191.95L184.238 105.318H150.773L123.273 190.794Z" fill="white"/></svg>',
     name = 'Tempo Wallet',
     rdns = 'xyz.tempo',
+    theme,
   } = options
 
   if (typeof window !== 'undefined' && !window.isSecureContext)
@@ -169,7 +172,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       }
     }
 
-    const dialogInstance = dialog({ host, store })
+    const dialogInstance = dialog({ host, store, theme })
 
     // Sync store → dialog: whenever the request queue changes, notify
     // listeners and sync pending requests to the dialog.
@@ -286,7 +289,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             const prepared = await prepareTransactionRequest(client, {
               account,
               ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
+              ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
               keyAuthorization,
               type: 'tempo',
             })
@@ -316,7 +319,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             const prepared = await prepareTransactionRequest(client, {
               account,
               ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
+              ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
               keyAuthorization,
               type: 'tempo',
             })
@@ -346,7 +349,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             const prepared = await prepareTransactionRequest(client, {
               account,
               ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
+              ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
               keyAuthorization,
               type: 'tempo',
             })
@@ -404,7 +407,7 @@ export declare namespace dialog {
   type Options = {
     /** Dialog to use for the embed app. @default `Dialog.iframe()` (or `Dialog.popup()` in Safari/insecure contexts) */
     dialog?: Dialog.Dialog | undefined
-    /** URL of the embed app. @default `'https://wallet.tempo.xyz/embed'` */
+    /** URL of the embed app. @default `'https://wallet-next.tempo.xyz/remote'` */
     host?: string | undefined
     /** Data URI of the provider icon. */
     icon?: `data:image/${string}` | undefined
@@ -412,5 +415,7 @@ export declare namespace dialog {
     name?: string | undefined
     /** Reverse DNS identifier. @default `'xyz.tempo'` */
     rdns?: string | undefined
+    /** Visual theme overrides for the wallet dialog. */
+    theme?: Dialog.Theme | undefined
   }
 }
