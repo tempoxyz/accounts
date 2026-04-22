@@ -45,6 +45,10 @@ export const tokensMap = {
 export const tokens =
   tokensMap[env === 'mainnet' ? 'mainnet' : env === 'devnet' ? 'devnet' : 'testnet']
 
+export const host =
+  new URLSearchParams(window.location.search).get('host') ??
+  import.meta.env.VITE_WALLET_HOST
+
 export let dialogMode: DialogMode = 'iframe'
 export let theme: DialogNs.Theme | undefined
 export let provider: ProviderValue = createProvider('tempoWallet')
@@ -54,7 +58,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: dialog({
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
-        host: import.meta.env.VITE_WALLET_HOST,
+        host,
         theme,
       }),
       mpp: true,
