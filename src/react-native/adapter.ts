@@ -491,7 +491,9 @@ function buildAuthUrl(
     state: string
   },
 ): string {
-  const url = new URL('/remote/auth/mobile', host)
+  // TODO: use the new host
+  // const url = new URL('/remote/auth/mobile', host)
+  const url = new URL('/mobile-auth', host)
   url.searchParams.set('pubKey', params.pubKey)
   if (params.keyType) url.searchParams.set('keyType', params.keyType)
   url.searchParams.set('chainId', String(params.chainId))
