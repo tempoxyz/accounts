@@ -55,7 +55,7 @@ services:
       - '5175:5175'
     labels:
       dev.orbstack.domains: wagmi.accounts.local
-    command: ['sh', '-c', 'corepack enable && pnpm --filter wagmi dev -- --host --port 5175']
+    command: ['sh', '-c', 'corepack enable && pnpm --filter wagmi-playground dev -- --host --port 5175']
     healthcheck:
       test:
         [
