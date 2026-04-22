@@ -1,6 +1,6 @@
 import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
-import { tempoWallet } from 'wagmi/tempo'
+import { tempoWallet } from 'wagmi/connectors'
 
 export const config = createConfig({
   chains: [tempo, tempoModerato],
