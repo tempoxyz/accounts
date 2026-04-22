@@ -12,7 +12,7 @@
     "dev:hosts": "./scripts/dev:hosts.sh",
     "dev:playground": "pnpm --filter './playgrounds/web' dev",
     "dev:react-native": "pnpm --filter react-native-playground start",
-    "dev:wagmi": "pnpm --filter wagmi dev & pnpm dev:dialog",
+    "dev:wagmi": "pnpm --filter './playgrounds/wagmi' dev & pnpm dev:dialog",
     "examples": "node --import tsx scripts/examples.ts",
     "postinstall": "pnpm preconstruct",
     "preconstruct": "zile dev",
