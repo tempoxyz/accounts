@@ -1,6 +1,6 @@
-import { tempoWallet } from 'accounts/wagmi'
 import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/tempo'
 
 export const testnet = (() => {
   const param = new URLSearchParams(window.location.search).get('testnet')
