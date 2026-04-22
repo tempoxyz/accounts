@@ -7,6 +7,12 @@
     "dev": "docker compose up -d",
     "dev:cli": "pnpm --filter './playgrounds/cli' connect",
     "check:types": "tsc -b --noEmit && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types",
+    "dev:dialog": "pnpm --filter tempo-app dev",
+    "dev:dialog-ref": "pnpm --filter dialog-ref dev",
+    "dev:hosts": "./scripts/dev:hosts.sh",
+    "dev:playground": "pnpm --filter './playgrounds/web' dev",
+    "dev:react-native": "pnpm --filter react-native-playground start",
+    "dev:wagmi": "pnpm --filter './playgrounds/wagmi' dev & pnpm dev:dialog",
     "examples": "node --import tsx scripts/examples.ts",
     "postinstall": "pnpm preconstruct",
     "preconstruct": "zile dev",
@@ -48,6 +54,7 @@
     "typescript": "catalog:",
     "viem": "catalog:",
     "vp": "catalog:",
+    "wagmi": "catalog:",
     "zile": "^0.0.25"
   },
   "simple-git-hooks": {
@@ -72,7 +79,7 @@
   "name": "accounts",
   "description": "Tempo Accounts SDK",
   "type": "module",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "dependencies": {
     "hono": "^4.12.12",
     "idb-keyval": "^6.2.2",
@@ -85,11 +92,12 @@
   },
   "peerDependencies": {
     "@react-native-async-storage/async-storage": "^3.0.2",
-    "@wagmi/core": ">=2",
+    "@wagmi/core": ">=3.4.3",
     "expo-secure-store": "^55.0.12",
     "expo-web-browser": "^55.0.13",
     "react": ">=18",
-    "viem": ">=2.43.3"
+    "viem": ">=2.43.3",
+    "wagmi": ">=0.0.0"
   },
   "peerDependenciesMeta": {
     "@wagmi/core": {
@@ -108,6 +116,9 @@
       "optional": true
     },
     "@react-native-async-storage/async-storage": {
+      "optional": true
+    },
+    "wagmi": {
       "optional": true
     }
   },

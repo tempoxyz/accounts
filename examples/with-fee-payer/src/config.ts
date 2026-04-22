@@ -1,6 +1,6 @@
-import { tempoWallet } from 'accounts/wagmi'
 import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
 
 const feePayerUrl = await (async () => {
   if (import.meta.env.MODE === 'development') {

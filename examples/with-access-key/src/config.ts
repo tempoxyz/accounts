@@ -1,8 +1,8 @@
 import { Expiry } from 'accounts'
-import { tempoWallet } from 'accounts/wagmi'
 import { parseUnits } from 'viem'
 import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
 
 const pathUsd = '0x20c0000000000000000000000000000000000000' as const
 

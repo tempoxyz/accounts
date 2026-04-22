@@ -1,8 +1,8 @@
 import { Expiry } from 'accounts'
-import { webAuthn } from 'accounts/wagmi'
 import { parseUnits } from 'viem'
 import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
+import { webAuthn } from 'wagmi/tempo'
 
 const pathUsd = '0x20c0000000000000000000000000000000000000' as const
 
