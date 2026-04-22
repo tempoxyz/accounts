@@ -47,6 +47,8 @@ export type Theme = {
   radius?: 'none' | 'small' | 'medium' | 'large' | 'full' | undefined
   /** Font family — a bundled name (`'Pilat'`, `'TT Norms'`) or a Google Font. */
   font?: string | undefined
+  /** Color scheme — controls light/dark appearance. Defaults to `'light dark'` (follows OS). */
+  scheme?: 'light' | 'dark' | undefined
 }
 
 /** Serializes theme options onto a URL's search params. */
@@ -55,6 +57,7 @@ function applyThemeParams(url: URL, theme: Theme | undefined) {
   if (theme.accent) url.searchParams.set('accent', theme.accent)
   if (theme.radius) url.searchParams.set('radius', theme.radius)
   if (theme.font) url.searchParams.set('font', theme.font)
+  if (theme.scheme) url.searchParams.set('scheme', theme.scheme)
 }
 
 export const defaultSize = { height: 440, width: 360 }
@@ -169,6 +172,7 @@ export function iframe(): Dialog {
     Object.assign(frame.style, {
       backgroundColor: 'transparent',
       border: '0',
+      colorScheme: parameters.theme?.scheme ?? 'light dark',
       height: '100%',
       left: '0',
       position: 'fixed',
@@ -391,6 +395,7 @@ export function iframe(): Dialog {
         }
       },
       syncTheme(theme) {
+        frame.style.colorScheme = theme?.scheme ?? 'light dark'
         messenger.send('theme', theme ?? {})
       },
     }

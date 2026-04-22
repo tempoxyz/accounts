@@ -91,6 +91,7 @@ export function useTheme(remote?: CoreRemote.Remote | undefined) {
       accent: params.get('accent') ?? undefined,
       radius: params.get('radius') ?? undefined,
       font: params.get('font') ?? undefined,
+      scheme: params.get('scheme') ?? undefined,
     })
 
     return () => clearTheme()
@@ -106,15 +107,16 @@ export function useTheme(remote?: CoreRemote.Remote | undefined) {
 }
 
 /** Applies theme values to the document root. */
-function applyTheme(theme: { accent?: string | undefined; radius?: string | undefined; font?: string | undefined }) {
+function applyTheme(theme: { accent?: string | undefined; radius?: string | undefined; font?: string | undefined; scheme?: string | undefined }) {
   const root = document.documentElement
-  const { accent, radius, font } = theme
+  const { accent, radius, font, scheme } = theme
 
   if (accent) {
     const isHex = accent.startsWith('#')
     root.setAttribute('data-accent', isHex ? 'custom' : accent)
     if (isHex) root.style.setProperty('--accent-base', accent)
   }
+  if (scheme) root.style.colorScheme = scheme
   if (radius) root.setAttribute('data-radius', radius)
   if (font) {
     root.setAttribute('data-font', font === 'System' ? 'system' : font)
@@ -142,6 +144,7 @@ function clearTheme() {
   root.removeAttribute('data-accent')
   root.removeAttribute('data-radius')
   root.removeAttribute('data-font')
+  root.style.removeProperty('color-scheme')
   root.style.removeProperty('--accent-base')
   root.style.removeProperty('--font-body')
 }
