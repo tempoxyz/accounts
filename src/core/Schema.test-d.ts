@@ -71,6 +71,7 @@ describe('Encoded', () => {
                         publicKey?: Hex | undefined
                       }
                     | undefined
+                  identity?: { email?: { required: true } | undefined } | undefined
                   method: 'register'
                   name?: string | undefined
                   userId?: string | undefined
@@ -87,6 +88,7 @@ describe('Encoded', () => {
                         publicKey?: Hex | undefined
                       }
                     | undefined
+                  identity?: { email?: { required: true } | undefined } | undefined
                   method?: 'login' | undefined
                   selectAccount?: boolean | undefined
                 }
@@ -103,6 +105,35 @@ describe('Encoded', () => {
     expectTypeOf<
       Rpc.wallet_connect.Encoded['returns']['accounts'][number]['address']
     >().toEqualTypeOf<Hex>()
+    expectTypeOf<Rpc.wallet_connect.Encoded['returns']>().toMatchTypeOf<{
+      accounts: readonly {
+        capabilities: {
+          identity?:
+            | {
+                email?:
+                  | {
+                      issuer: string
+                      value: string
+                      verified: true
+                    }
+                  | undefined
+              }
+            | undefined
+        }
+      }[]
+    }>()
+    expectTypeOf<
+      Extract<
+        'email',
+        keyof Rpc.wallet_connect.Encoded['returns']['accounts'][number]['capabilities']
+      >
+    >().toEqualTypeOf<never>()
+    expectTypeOf<
+      Extract<
+        'username',
+        keyof Rpc.wallet_connect.Encoded['returns']['accounts'][number]['capabilities']
+      >
+    >().toEqualTypeOf<never>()
   })
 
   test('wallet_authorizeAccessKey', () => {

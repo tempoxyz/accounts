@@ -421,6 +421,28 @@ export namespace wallet_revokeAccessKey {
 
 export namespace wallet_connect {
   export const authorizeAccessKey = z.optional(wallet_authorizeAccessKey.parameters)
+  export const identity = {
+    request: z.optional(
+      z.object({
+        email: z.optional(
+          z.object({
+            required: z.literal(true),
+          }),
+        ),
+      }),
+    ),
+    result: z.optional(
+      z.object({
+        email: z.optional(
+          z.object({
+            issuer: z.string(),
+            value: z.string(),
+            verified: z.literal(true),
+          }),
+        ),
+      }),
+    ),
+  }
 
   export const capabilities = {
     request: z.optional(
@@ -428,6 +450,7 @@ export namespace wallet_connect {
         z.object({
           digest: z.optional(u.hex()),
           authorizeAccessKey,
+          identity: identity.request,
           method: z.literal('register'),
           name: z.optional(z.string()),
           userId: z.optional(z.string()),
@@ -436,16 +459,16 @@ export namespace wallet_connect {
           digest: z.optional(u.hex()),
           credentialId: z.optional(z.string()),
           authorizeAccessKey,
+          identity: identity.request,
           method: z.optional(z.literal('login')),
           selectAccount: z.optional(z.boolean()),
         }),
       ]),
     ),
     result: z.object({
-      email: z.optional(z.nullable(z.string())),
+      identity: identity.result,
       keyAuthorization: z.optional(keyAuthorization),
       signature: z.optional(u.hex()),
-      username: z.optional(z.nullable(z.string())),
     }),
   }
 
@@ -479,6 +502,7 @@ export namespace wallet_connect {
 
 export namespace wallet_connect_strict {
   const authorizeAccessKey = z.optional(wallet_authorizeAccessKey_strict.parameters)
+  const identity = wallet_connect.identity.request
 
   export const parameters = z.object({
     capabilities: z.optional(
@@ -486,6 +510,7 @@ export namespace wallet_connect_strict {
         z.object({
           digest: z.optional(u.hex()),
           authorizeAccessKey,
+          identity,
           method: z.literal('register'),
           name: z.optional(z.string()),
           userId: z.optional(z.string()),
@@ -494,6 +519,7 @@ export namespace wallet_connect_strict {
           digest: z.optional(u.hex()),
           credentialId: z.optional(z.string()),
           authorizeAccessKey,
+          identity,
           method: z.optional(z.literal('login')),
           selectAccount: z.optional(z.boolean()),
         }),

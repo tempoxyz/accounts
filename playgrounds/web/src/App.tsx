@@ -206,6 +206,7 @@ function WalletConnect() {
     const name = form.get('name') as string
     const digest = form.get('digest') as Hex.Hex
     const accessKey = form.get('accessKey') as string | null
+    const requireIdentityEmail = form.get('requireIdentityEmail') === 'on'
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
 
     const limitToken = env === 'mainnet' && 'USDC.e' in tokens ? tokens['USDC.e'] : tokens.pathUSD
@@ -229,16 +230,19 @@ function WalletConnect() {
         }
       return undefined
     })()
+    const identity = requireIdentityEmail ? ({ email: { required: true } } as const) : undefined
 
     const capabilities =
       method === 'register'
         ? ({
+            ...(identity ? { identity } : {}),
             method: 'register',
             ...(name ? { name } : {}),
             ...(digest ? { digest } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
           } as const)
         : {
+            ...(identity ? { identity } : {}),
             ...(digest ? { digest } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
           }
@@ -284,6 +288,12 @@ function WalletConnect() {
           <label style={{ marginLeft: 8 }}>
             <input type="radio" name="accessKey" value="10-monthly" /> $10 per month (transfer
             scope)
+          </label>
+        </fieldset>
+        <fieldset style={{ marginBottom: 8 }}>
+          <legend>Identity</legend>
+          <label>
+            <input type="checkbox" name="requireIdentityEmail" /> Require verified email
           </label>
         </fieldset>
         <button type="submit" value="login">
@@ -1368,7 +1378,16 @@ function OcclusionSimulator() {
 
 const accentOptions = ['', 'invert', 'blue', 'red', 'amber', 'green', 'purple'] as const
 const radiusOptions = ['', 'none', 'small', 'medium', 'large', 'full'] as const
-const fontOptions = ['', 'System', 'Pilat', 'TT Norms', 'Inter', 'DM Sans', 'Geist', 'Outfit'] as const
+const fontOptions = [
+  '',
+  'System',
+  'Pilat',
+  'TT Norms',
+  'Inter',
+  'DM Sans',
+  'Geist',
+  'Outfit',
+] as const
 const schemeOptions = ['', 'light', 'dark'] as const
 
 function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) {
@@ -1383,7 +1402,15 @@ function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) 
     const r = next.radius ?? radius
     const f = next.font ?? font
     const s = next.scheme ?? scheme
-    const t = a || r || f || s ? { accent: a || undefined, radius: (r || undefined) as never, font: f || undefined, scheme: (s || undefined) as never } : undefined
+    const t =
+      a || r || f || s
+        ? {
+            accent: a || undefined,
+            radius: (r || undefined) as never,
+            font: f || undefined,
+            scheme: (s || undefined) as never,
+          }
+        : undefined
     switchTheme(t, props.adapterType)
     props.rerender()
   }
@@ -1392,21 +1419,59 @@ function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <label>Accent</label>
-        <select value={accent} onChange={(e) => { setAccent(e.target.value); apply({ accent: e.target.value }) }}>
-          {accentOptions.map((v) => <option key={v} value={v}>{v || '(default)'}</option>)}
+        <select
+          value={accent}
+          onChange={(e) => {
+            setAccent(e.target.value)
+            apply({ accent: e.target.value })
+          }}
+        >
+          {accentOptions.map((v) => (
+            <option key={v} value={v}>
+              {v || '(default)'}
+            </option>
+          ))}
         </select>
-        <input type="color" value={customAccent} onChange={(e) => { setCustomAccent(e.target.value); setAccent(e.target.value); apply({ accent: e.target.value }) }} />
+        <input
+          type="color"
+          value={customAccent}
+          onChange={(e) => {
+            setCustomAccent(e.target.value)
+            setAccent(e.target.value)
+            apply({ accent: e.target.value })
+          }}
+        />
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <label>Radius</label>
-        <select value={radius} onChange={(e) => { setRadius(e.target.value); apply({ radius: e.target.value }) }}>
-          {radiusOptions.map((v) => <option key={v} value={v}>{v || '(default)'}</option>)}
+        <select
+          value={radius}
+          onChange={(e) => {
+            setRadius(e.target.value)
+            apply({ radius: e.target.value })
+          }}
+        >
+          {radiusOptions.map((v) => (
+            <option key={v} value={v}>
+              {v || '(default)'}
+            </option>
+          ))}
         </select>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <label>Font</label>
-        <select value={font} onChange={(e) => { setFont(e.target.value); apply({ font: e.target.value }) }}>
-          {fontOptions.map((v) => <option key={v} value={v}>{v || '(default)'}</option>)}
+        <select
+          value={font}
+          onChange={(e) => {
+            setFont(e.target.value)
+            apply({ font: e.target.value })
+          }}
+        >
+          {fontOptions.map((v) => (
+            <option key={v} value={v}>
+              {v || '(default)'}
+            </option>
+          ))}
         </select>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

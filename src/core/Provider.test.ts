@@ -15,9 +15,10 @@ import { Account as TempoAccount, Actions, Addresses } from 'viem/tempo'
 import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 
 import { headlessWebAuthn, secp256k1 } from '../../test/adapters.js'
-import { accounts, chain, getClient, http } from '../../test/config.js'
+import { accounts, chain, getClient, http, privateKeys } from '../../test/config.js'
 import { createServer, type Server } from '../../test/utils.js'
 import * as Handler from '../server/Handler.js'
+import { local } from './adapters/local.js'
 import * as Expiry from './Expiry.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
@@ -117,6 +118,127 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(result.accounts.length).toMatchInlineSnapshot(`1`)
       expect(result.accounts[0]!.address).toMatch(/^0x[0-9a-f]{40}$/i)
       expect(result.accounts[0]!.capabilities).toMatchInlineSnapshot(`{}`)
+    })
+
+    test('behavior: required identity email returns a verified claim', async () => {
+      const provider = Provider.create({
+        adapter: local({
+          createAccount: async () => ({
+            accounts: [
+              {
+                address: accounts[1]!.address,
+                keyType: 'secp256k1',
+                privateKey: privateKeys[1],
+              },
+            ],
+            email: 'alice@example.com',
+          }),
+          loadAccounts: async () => ({
+            accounts: [
+              {
+                address: accounts[1]!.address,
+                keyType: 'secp256k1',
+                privateKey: privateKeys[1],
+              },
+            ],
+            email: 'alice@example.com',
+          }),
+        }),
+      })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { identity: { email: { required: true } }, method: 'register' } }],
+      })
+      expect(result.accounts[0]!.capabilities).toMatchInlineSnapshot(`
+        {
+          "identity": {
+            "email": {
+              "issuer": "tempo",
+              "value": "alice@example.com",
+              "verified": true,
+            },
+          },
+        }
+      `)
+    })
+
+    test('behavior: strips legacy email and username from wallet_connect capabilities', async () => {
+      const provider = Provider.create({
+        adapter: local({
+          loadAccounts: async () => ({
+            accounts: [
+              {
+                address: accounts[1]!.address,
+                capabilities: {
+                  email: 'alice@example.com',
+                  identity: {
+                    email: {
+                      issuer: 'tempo',
+                      value: 'alice@example.com',
+                      verified: true,
+                    },
+                  },
+                  username: 'alice',
+                },
+                keyType: 'secp256k1',
+                privateKey: privateKeys[1],
+              },
+            ],
+          }),
+        }),
+      })
+
+      const result = await provider.request({ method: 'wallet_connect' })
+      expect(result.accounts[0]!.capabilities).toMatchInlineSnapshot(`
+        {
+          "identity": {
+            "email": {
+              "issuer": "tempo",
+              "value": "alice@example.com",
+              "verified": true,
+            },
+          },
+        }
+      `)
+    })
+
+    test('error: required identity email rejects when the account has no verified email', async () => {
+      const provider = Provider.create({
+        adapter: local({
+          createAccount: async () => ({
+            accounts: [
+              {
+                address: accounts[1]!.address,
+                keyType: 'secp256k1',
+                privateKey: privateKeys[1],
+              },
+            ],
+          }),
+          loadAccounts: async () => ({
+            accounts: [
+              {
+                address: accounts[1]!.address,
+                keyType: 'secp256k1',
+                privateKey: privateKeys[1],
+              },
+            ],
+          }),
+        }),
+      })
+
+      await expect(
+        provider.request({
+          method: 'wallet_connect',
+          params: [
+            {
+              capabilities: { identity: { email: { required: true } }, method: 'register' },
+            },
+          ],
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UnsupportedNonOptionalCapabilityError: This request requires a verified email address. Verify an email in Tempo Wallet and try again.]`,
+      )
     })
 
     test('behavior: register passes name to createAccount', async () => {

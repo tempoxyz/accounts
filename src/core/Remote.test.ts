@@ -103,6 +103,45 @@ describe('validateSearch', () => {
     expect(remote.rejectAll).not.toHaveBeenCalled()
   })
 
+  test('behavior: validates wallet_connect with required identity email capability', () => {
+    const remote = createMockRemote()
+    const result = Remote.validateSearch(
+      remote,
+      {
+        method: 'wallet_connect',
+        id: 5,
+        jsonrpc: '2.0',
+        params: [
+          {
+            capabilities: {
+              identity: { email: { required: true } },
+              method: 'register',
+            },
+          },
+        ],
+      },
+      { method: 'wallet_connect' },
+    )
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "identity": {
+                "email": {
+                  "required": true,
+                },
+              },
+              "method": "register",
+            },
+          },
+        ],
+      }
+    `)
+    expect(remote.rejectAll).not.toHaveBeenCalled()
+  })
+
   test('error: rejects on method mismatch', () => {
     const remote = createMockRemote()
     expect(() =>
@@ -136,7 +175,7 @@ describe('validateSearch', () => {
         remote,
         {
           method: 'wallet_authorizeAccessKey',
-          id: 5,
+          id: 6,
           jsonrpc: '2.0',
           params: [{ expiry: 100 }],
         },
@@ -156,7 +195,7 @@ describe('validateSearch', () => {
         remote,
         {
           method: 'wallet_connect',
-          id: 6,
+          id: 7,
           jsonrpc: '2.0',
           params: [
             {
@@ -182,7 +221,7 @@ describe('validateSearch', () => {
       remote,
       {
         method: 'wallet_connect',
-        id: 7,
+        id: 8,
         jsonrpc: '2.0',
         params: [{ capabilities: { method: 'register' } }],
       },
@@ -198,7 +237,7 @@ describe('validateSearch', () => {
       remote,
       {
         method: 'wallet_authorizeAccessKey',
-        id: 8,
+        id: 9,
         jsonrpc: '2.0',
         params: [{ expiry: 100, limits: [] }],
       },

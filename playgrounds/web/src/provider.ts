@@ -1,4 +1,12 @@
-import { type Dialog as DialogNs, WebAuthnCeremony, dialog, Dialog, local, Provider, webAuthn } from 'accounts'
+import {
+  type Dialog as DialogNs,
+  WebAuthnCeremony,
+  dialog,
+  Dialog,
+  local,
+  Provider,
+  webAuthn,
+} from 'accounts'
 import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
@@ -112,7 +120,10 @@ export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 't
   provider = createProvider(adapterType)
 }
 
-export function switchTheme(next: DialogNs.Theme | undefined, adapterType: AdapterType = 'tempoWallet') {
+export function switchTheme(
+  next: DialogNs.Theme | undefined,
+  adapterType: AdapterType = 'tempoWallet',
+) {
   theme = next
   Mppx.restore()
   provider = createProvider(adapterType)

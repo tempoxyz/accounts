@@ -19,6 +19,9 @@ import * as Store from './Store.js'
 import * as Request from './zod/request.js'
 import * as Rpc from './zod/rpc.js'
 
+const requiredIdentityEmailMessage =
+  'This request requires a verified email address. Verify an email in Tempo Wallet and try again.'
+
 export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
   ox_Provider.Emitter & {
     /** Configured chains. */
@@ -137,6 +140,17 @@ export function create(options: create.Options = {}): create.ReturnType {
     for (const a of store.getState().accounts)
       if (!merged.some((m) => m.address.toLowerCase() === a.address.toLowerCase())) merged.push(a)
     return merged
+  }
+
+  function sanitizeWalletConnectCapabilities(capabilities: unknown) {
+    return z.encode(
+      Rpc.wallet_connect.capabilities.result,
+      z.decode(Rpc.wallet_connect.capabilities.result, capabilities ?? {}),
+    )
+  }
+
+  function toStoredAccounts(accounts: Adapter.loadAccounts.ReturnType['accounts']) {
+    return accounts.map(({ capabilities: _, ...account }) => account)
   }
 
   /** Resolves the `feePayer` field from a transaction request into an absolute URL string or `undefined`. */
@@ -498,10 +512,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                     if (chainId) store.setState((x) => ({ ...x, chainId }))
 
                     const capabilities = request._decoded.params?.[0]?.capabilities
+                    const requireIdentityEmail = capabilities?.identity?.email?.required === true
                     const authorizeAccessKey =
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
 
-                    const { keyAuthorization, accounts, email, signature, username } = await (async () => {
+                    const { keyAuthorization, accounts, email, signature } = await (async () => {
                       if (capabilities?.method === 'register') {
                         // If a stored account already has this label, sign in
                         // with its credential instead of creating a new one.
@@ -544,14 +559,38 @@ export function create(options: create.Options = {}): create.ReturnType {
                       )
                     })()
 
-                    store.setState({ accounts: resolveAccounts(accounts), activeAccount: 0 })
+                    const resultAccounts = accounts.map((a) => ({
+                      address: a.address,
+                      capabilities: sanitizeWalletConnectCapabilities(a.capabilities),
+                    }))
+
+                    const identityEmail =
+                      resultAccounts[0]?.capabilities.identity?.email ??
+                      (requireIdentityEmail && email !== undefined && email !== null
+                        ? {
+                            issuer: 'tempo',
+                            value: email,
+                            verified: true as const,
+                          }
+                        : undefined)
+
+                    if (requireIdentityEmail && !identityEmail)
+                      throw new ox_Provider.UnsupportedNonOptionalCapabilityError({
+                        message: requiredIdentityEmailMessage,
+                      })
+
+                    store.setState({
+                      accounts: resolveAccounts(toStoredAccounts(accounts)),
+                      activeAccount: 0,
+                    })
 
                     const accountAddress = accounts[0]?.address
                     return {
-                      accounts: accounts.map((a) => ({
+                      accounts: resultAccounts.map((a) => ({
                         address: a.address,
-                        capabilities:
-                          a.address === accountAddress
+                        capabilities: {
+                          ...a.capabilities,
+                          ...(a.address === accountAddress
                             ? {
                                 ...(keyAuthorization
                                   ? {
@@ -562,10 +601,16 @@ export function create(options: create.Options = {}): create.ReturnType {
                                     }
                                   : {}),
                                 ...(signature && capabilities?.digest ? { signature } : {}),
-                                ...(email !== undefined ? { email } : {}),
-                                ...(username !== undefined ? { username } : {}),
+                                ...(!a.capabilities.identity?.email && identityEmail
+                                  ? {
+                                      identity: {
+                                        email: identityEmail,
+                                      },
+                                    }
+                                  : {}),
                               }
-                            : {},
+                            : {}),
+                        },
                       })),
                     } satisfies Rpc.wallet_connect.Encoded['returns']
                   }
