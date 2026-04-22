@@ -54,6 +54,7 @@
     "typescript": "catalog:",
     "viem": "^2.47.18",
     "vp": "catalog:",
+    "wagmi": "catalog:",
     "zile": "^0.0.25"
   },
   "simple-git-hooks": {
@@ -89,11 +90,12 @@
   },
   "peerDependencies": {
     "@react-native-async-storage/async-storage": "^3.0.2",
-    "@wagmi/core": ">=2",
+    "@wagmi/core": ">=3.4.3",
     "expo-secure-store": "^55.0.12",
     "expo-web-browser": "^55.0.13",
     "react": ">=18",
-    "viem": ">=2.43.3"
+    "viem": ">=2.43.3",
+    "wagmi": ">=3.6.2"
   },
   "peerDependenciesMeta": {
     "@wagmi/core": {
@@ -112,6 +114,9 @@
       "optional": true
     },
     "@react-native-async-storage/async-storage": {
+      "optional": true
+    },
+    "wagmi": {
       "optional": true
     }
   },
