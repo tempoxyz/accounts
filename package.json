@@ -90,6 +90,7 @@
   },
   "peerDependencies": {
     "@react-native-async-storage/async-storage": "^3.0.2",
+    "@wagmi/core": ">=3.4.3",
     "expo-secure-store": "^55.0.12",
     "expo-web-browser": "^55.0.13",
     "react": ">=18",
@@ -97,6 +98,9 @@
     "wagmi": ">=3.6.2"
   },
   "peerDependenciesMeta": {
+    "@wagmi/core": {
+      "optional": true
+    },
     "react": {
       "optional": true
     },
