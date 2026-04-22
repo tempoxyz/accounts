@@ -68,6 +68,14 @@ export type Schema = [
     topic: 'sync'
     payload: { addresses?: readonly string[] | undefined; valid?: boolean | undefined }
   },
+  {
+    topic: 'theme'
+    payload: {
+      accent?: string | undefined
+      radius?: string | undefined
+      font?: string | undefined
+    }
+  },
 ]
 
 /** Union of all topic strings. */

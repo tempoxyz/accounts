@@ -21,6 +21,8 @@ export type Instance = {
   open: () => void
   /** Sync the pending request queue to the remote auth app. */
   syncRequests: (requests: readonly Store.QueuedRequest[]) => Promise<void>
+  /** Update the visual theme at runtime. */
+  syncTheme: (theme: Theme | undefined) => void
 }
 
 /** The setup function a dialog must implement. */
@@ -32,7 +34,27 @@ export declare namespace SetupFn {
     host: string
     /** Reactive state store. */
     store: Store.Store
+    /** Visual theme overrides applied to the embed. */
+    theme?: Theme | undefined
   }
+}
+
+/** Visual theme configuration for the dialog embed. */
+export type Theme = {
+  /** Accent color — a preset name or a hex color (e.g. `'#6366f1'`). */
+  accent?: 'blue' | 'red' | 'amber' | 'green' | 'purple' | 'invert' | (string & {}) | undefined
+  /** Border radius preset. */
+  radius?: 'none' | 'small' | 'medium' | 'large' | 'full' | undefined
+  /** Font family — a bundled name (`'Pilat'`, `'TT Norms'`) or a Google Font. */
+  font?: string | undefined
+}
+
+/** Serializes theme options onto a URL's search params. */
+function applyThemeParams(url: URL, theme: Theme | undefined) {
+  if (!theme) return
+  if (theme.accent) url.searchParams.set('accent', theme.accent)
+  if (theme.radius) url.searchParams.set('radius', theme.radius)
+  if (theme.font) url.searchParams.set('font', theme.font)
 }
 
 export const defaultSize = { height: 440, width: 360 }
@@ -86,6 +108,7 @@ export function iframe(): Dialog {
 
       fallback?.destroy()
       fallback = popup()(parameters)
+      cached.instance.syncTheme(parameters.theme)
       return cached.instance
     }
 
@@ -109,6 +132,7 @@ export function iframe(): Dialog {
         hostUrl.searchParams.set('iconDark', referrer.icon.dark)
       }
     }
+    applyThemeParams(hostUrl, parameters.theme)
 
     const root = document.createElement('dialog')
     root.dataset.tempoWallet = ''
@@ -366,6 +390,9 @@ export function iframe(): Dialog {
           })
         }
       },
+      syncTheme(theme) {
+        messenger.send('theme', theme ?? {})
+      },
     }
 
     cached = { host, instance }
@@ -456,6 +483,7 @@ export function popup(options: popup.Options = {}): Dialog {
             hostUrl.searchParams.set('iconDark', referrer.icon.dark)
           }
         }
+        applyThemeParams(hostUrl, parameters.theme)
 
         const left = (window.innerWidth - size.width) / 2 + window.screenX
         const top = window.screenY + 100
@@ -489,6 +517,7 @@ export function popup(options: popup.Options = {}): Dialog {
           requests,
         })
       },
+      syncTheme() {},
     }
   })
 }
@@ -507,6 +536,7 @@ export function noop(): Dialog {
     close() {},
     destroy() {},
     async syncRequests() {},
+    syncTheme() {},
   }))
 }
 
