@@ -79,7 +79,7 @@ export function useState(
   return useStore(remote.store, selector as never)
 }
 
-const bundledFonts = new Set(['Pilat', 'TT Norms'])
+const bundledFonts = new Set(['Pilat', 'TT Norms', 'iA Writer Quattro'])
 
 /** Applies theme overrides from URL search params and live messenger updates. */
 export function useTheme(remote?: CoreRemote.Remote | undefined) {
@@ -117,6 +117,7 @@ function applyTheme(theme: { accent?: string | undefined; radius?: string | unde
   }
   if (radius) root.setAttribute('data-radius', radius)
   if (font) {
+    root.setAttribute('data-font', font === 'System' ? 'system' : font)
     if (font === 'System') {
       root.style.setProperty('--font-body', 'ui-sans-serif, system-ui, sans-serif')
       return
@@ -140,6 +141,7 @@ function clearTheme() {
   const root = document.documentElement
   root.removeAttribute('data-accent')
   root.removeAttribute('data-radius')
+  root.removeAttribute('data-font')
   root.style.removeProperty('--accent-base')
   root.style.removeProperty('--font-body')
 }
