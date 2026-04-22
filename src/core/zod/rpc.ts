@@ -442,8 +442,10 @@ export namespace wallet_connect {
       ]),
     ),
     result: z.object({
+      email: z.optional(z.nullable(z.string())),
       keyAuthorization: z.optional(keyAuthorization),
       signature: z.optional(u.hex()),
+      username: z.optional(z.nullable(z.string())),
     }),
   }
 

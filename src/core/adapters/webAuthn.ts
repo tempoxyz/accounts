@@ -39,7 +39,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         const rpId = options.publicKey?.rp.id
         if (!rpId) throw new Error('rpId is required')
         const credential = await Registration.create({ options })
-        const { publicKey } = await ceremony.verifyRegistration(credential, {
+        const { publicKey, email, username } = await ceremony.verifyRegistration(credential, {
           name: parameters.name,
         })
         await storage.setItem('lastCredentialId', credential.id)
@@ -53,6 +53,8 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
               credential: { id: credential.id, publicKey, rpId },
             },
           ],
+          email,
+          username,
         }
       },
       async loadAccounts(parameters = {}) {
@@ -74,7 +76,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         if (!rpId) throw new Error('rpId is required')
 
         const response = await Authentication.sign({ options })
-        const { publicKey } = await ceremony.verifyAuthentication(response)
+        const { publicKey, email, username } = await ceremony.verifyAuthentication(response)
 
         await storage.setItem('lastCredentialId', response.id)
 
@@ -100,7 +102,9 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
               credential: { id: response.id, publicKey, rpId },
             },
           ],
+          email,
           signature,
+          username,
         }
       },
     })(parameters)

@@ -119,7 +119,7 @@ export function local(options: local.Options): Adapter.Adapter {
               message: '`createAccount` not configured on adapter.',
             })
           const { authorizeAccessKey: grantOptions, ...rest } = parameters
-          const { accounts, signature } = await createAccount(rest)
+          const { accounts, email, signature, username } = await createAccount(rest)
 
           // Hydrate the first account for signing. Must be done here (not via
           // the store) because accounts aren't merged into the store until
@@ -137,7 +137,7 @@ export function local(options: local.Options): Adapter.Adapter {
             return await signKeyAuthorization(account, prepared)
           })()
 
-          return { accounts, keyAuthorization, signature: signature_ }
+          return { accounts, email, keyAuthorization, signature: signature_, username }
         },
         async authorizeAccessKey(parameters) {
           const prepared = await prepareKeyAuthorization(parameters)
@@ -164,7 +164,7 @@ export function local(options: local.Options): Adapter.Adapter {
 
           // Pass the prepared digest (or the caller's) into loadAccounts so
           // the ceremony can sign it in a single biometric prompt.
-          const { accounts, signature } = await loadAccounts({ ...rest, digest })
+          const { accounts, email, signature, username } = await loadAccounts({ ...rest, digest })
 
           // Hydrate here (not from the store) — same reason as createAccount.
           // Guard against empty accounts (e.g. user cancelled the ceremony).
@@ -181,7 +181,7 @@ export function local(options: local.Options): Adapter.Adapter {
                 })
               : undefined
 
-          return { accounts, keyAuthorization, signature: signature_ }
+          return { accounts, email, keyAuthorization, signature: signature_, username }
         },
         async revokeAccessKey(parameters) {
           AccessKey.revoke({

@@ -501,7 +501,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const authorizeAccessKey =
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
 
-                    const { keyAuthorization, accounts, signature } = await (async () => {
+                    const { keyAuthorization, accounts, email, signature, username } = await (async () => {
                       if (capabilities?.method === 'register') {
                         // If a stored account already has this label, sign in
                         // with its credential instead of creating a new one.
@@ -562,6 +562,8 @@ export function create(options: create.Options = {}): create.ReturnType {
                                     }
                                   : {}),
                                 ...(signature && capabilities?.digest ? { signature } : {}),
+                                ...(email !== undefined ? { email } : {}),
+                                ...(username !== undefined ? { username } : {}),
                               }
                             : {},
                       })),
