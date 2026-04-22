@@ -1,5 +1,13 @@
 # accounts
 
+## 0.7.2
+
+### Patch Changes
+
+- 6be8e14: Added `chainId` parameter to `wallet_authorizeAccessKey` to allow scoping key authorizations to a specific chain instead of defaulting to the active chain.
+- b8863bb: Deprecated `accounts/wagmi`. Consumers should use the following entrypoints instead: `wagmi/tempo`, `@wagmi/core/tempo`, or `wagmi/connectors` (when they only need `tempoWallet`).
+  - wagmi@0.0.0
+
 ## 0.7.1
 
 ### Patch Changes
