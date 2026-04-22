@@ -153,12 +153,10 @@ export function create(options: create.Options): Remote {
           )
           if (index < 0) {
             messenger.send('sync', { valid: false })
-            for (const r of requests)
-              if (r.status === 'pending') this.reject(r.request)
+            for (const r of requests) if (r.status === 'pending') this.reject(r.request)
             return
           }
-          if (index !== state.activeAccount)
-            provider.store.setState({ activeAccount: index })
+          if (index !== state.activeAccount) provider.store.setState({ activeAccount: index })
         }
 
         const pending = requests.find((r) => r.status === 'pending')

@@ -1,4 +1,12 @@
-import { type Dialog as DialogNs, WebAuthnCeremony, dialog, Dialog, local, Provider, webAuthn } from 'accounts'
+import {
+  type Dialog as DialogNs,
+  WebAuthnCeremony,
+  dialog,
+  Dialog,
+  local,
+  Provider,
+  webAuthn,
+} from 'accounts'
 import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
@@ -46,8 +54,7 @@ export const tokens =
   tokensMap[env === 'mainnet' ? 'mainnet' : env === 'devnet' ? 'devnet' : 'testnet']
 
 export const host =
-  new URLSearchParams(window.location.search).get('host') ??
-  import.meta.env.VITE_WALLET_HOST
+  new URLSearchParams(window.location.search).get('host') ?? import.meta.env.VITE_WALLET_HOST
 
 export let dialogMode: DialogMode = 'iframe'
 export let theme: DialogNs.Theme | undefined
@@ -112,7 +119,10 @@ export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 't
   provider = createProvider(adapterType)
 }
 
-export function switchTheme(next: DialogNs.Theme | undefined, adapterType: AdapterType = 'tempoWallet') {
+export function switchTheme(
+  next: DialogNs.Theme | undefined,
+  adapterType: AdapterType = 'tempoWallet',
+) {
   theme = next
   Mppx.restore()
   provider = createProvider(adapterType)

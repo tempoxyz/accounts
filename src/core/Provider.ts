@@ -501,48 +501,49 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const authorizeAccessKey =
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
 
-                    const { keyAuthorization, accounts, email, signature, username } = await (async () => {
-                      if (capabilities?.method === 'register') {
-                        // If a stored account already has this label, sign in
-                        // with its credential instead of creating a new one.
-                        const existing = capabilities.name
-                          ? store
-                              .getState()
-                              .accounts.find(
-                                (a) =>
-                                  'credential' in a &&
-                                  a.label?.toLowerCase() === capabilities.name!.toLowerCase(),
-                              )
-                          : undefined
-                        if (existing && 'credential' in existing)
-                          return await actions.loadAccounts(
+                    const { keyAuthorization, accounts, email, signature, username } =
+                      await (async () => {
+                        if (capabilities?.method === 'register') {
+                          // If a stored account already has this label, sign in
+                          // with its credential instead of creating a new one.
+                          const existing = capabilities.name
+                            ? store
+                                .getState()
+                                .accounts.find(
+                                  (a) =>
+                                    'credential' in a &&
+                                    a.label?.toLowerCase() === capabilities.name!.toLowerCase(),
+                                )
+                            : undefined
+                          if (existing && 'credential' in existing)
+                            return await actions.loadAccounts(
+                              {
+                                credentialId: existing.credential?.id,
+                                digest: capabilities.digest,
+                                authorizeAccessKey,
+                              },
+                              request,
+                            )
+                          return await actions.createAccount(
                             {
-                              credentialId: existing.credential?.id,
                               digest: capabilities.digest,
                               authorizeAccessKey,
+                              name: capabilities.name ?? 'default',
+                              userId: capabilities.userId ?? Hex.random(16),
                             },
                             request,
                           )
-                        return await actions.createAccount(
+                        }
+                        return await actions.loadAccounts(
                           {
-                            digest: capabilities.digest,
+                            credentialId: capabilities?.credentialId,
+                            digest: capabilities?.digest,
                             authorizeAccessKey,
-                            name: capabilities.name ?? 'default',
-                            userId: capabilities.userId ?? Hex.random(16),
+                            selectAccount: capabilities?.selectAccount,
                           },
                           request,
                         )
-                      }
-                      return await actions.loadAccounts(
-                        {
-                          credentialId: capabilities?.credentialId,
-                          digest: capabilities?.digest,
-                          authorizeAccessKey,
-                          selectAccount: capabilities?.selectAccount,
-                        },
-                        request,
-                      )
-                    })()
+                      })()
 
                     store.setState({ accounts: resolveAccounts(accounts), activeAccount: 0 })
 
