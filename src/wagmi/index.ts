@@ -1,9 +1,18 @@
 import * as wagmi_tempo from 'wagmi/tempo'
 
 /**
- * Compatibility namespace for the deprecated `accounts/wagmi` entrypoint.
+ * Compatibility object for legacy `accounts/wagmi` `Connector.*` access.
  *
  * @deprecated Import from `wagmi/tempo` instead.
+ *
+ * Migrate from `'accounts/wagmi'` entrypoint to `'wagmi/tempo'` entrypoint with named imports.
+ *
+ * @example
+ * ```ts
+ * import { tempoWallet } from 'wagmi/tempo'
+ *
+ * const connector = tempoWallet()
+ * ```
  */
 export const Connector = {
   ...wagmi_tempo,
