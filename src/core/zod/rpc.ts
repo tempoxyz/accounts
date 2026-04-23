@@ -531,6 +531,32 @@ export namespace wallet_getCallsStatus {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
+export namespace wallet_send {
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_send'),
+    params: z.optional(
+      z.readonly(
+        z.tuple([
+          z.object({
+            /** Recipient address to pre-fill. */
+            to: z.optional(u.address()),
+            /** Token contract address to pre-fill. Omit to let the user choose. */
+            token: z.optional(u.address()),
+            /** Human-readable amount to pre-fill (e.g. "1.5"). */
+            value: z.optional(z.string()),
+          }),
+        ]),
+      ),
+    ),
+    returns: z.object({
+      /** Transaction hash of the submitted send. */
+      transactionHash: u.hex(),
+    }),
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
 export namespace wallet_switchEthereumChain {
   export const schema = Schema.defineItem({
     method: z.literal('wallet_switchEthereumChain'),
