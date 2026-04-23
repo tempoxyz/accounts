@@ -72,6 +72,16 @@ describe('Encoded', () => {
                       }
                     | undefined
                   identity?: { email?: { required: true } | undefined } | undefined
+                  oidc?:
+                    | {
+                        tempo?:
+                          | {
+                              nonce?: string | undefined
+                              scope: 'openid' | 'openid email'
+                            }
+                          | undefined
+                      }
+                    | undefined
                   method: 'register'
                   name?: string | undefined
                   userId?: string | undefined
@@ -89,6 +99,16 @@ describe('Encoded', () => {
                       }
                     | undefined
                   identity?: { email?: { required: true } | undefined } | undefined
+                  oidc?:
+                    | {
+                        tempo?:
+                          | {
+                              nonce?: string | undefined
+                              scope: 'openid' | 'openid email'
+                            }
+                          | undefined
+                      }
+                    | undefined
                   method?: 'login' | undefined
                   selectAccount?: boolean | undefined
                 }
@@ -115,6 +135,17 @@ describe('Encoded', () => {
                       issuer: string
                       value: string
                       verified: true
+                    }
+                  | undefined
+              }
+            | undefined
+          oidc?:
+            | {
+                tempo?:
+                  | {
+                      idToken: string
+                      issuer: string
+                      scope: 'openid' | 'openid email'
                     }
                   | undefined
               }

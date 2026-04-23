@@ -142,6 +142,46 @@ describe('validateSearch', () => {
     expect(remote.rejectAll).not.toHaveBeenCalled()
   })
 
+  test('behavior: validates wallet_connect with Tempo OIDC capability', () => {
+    const remote = createMockRemote()
+    const result = Remote.validateSearch(
+      remote,
+      {
+        method: 'wallet_connect',
+        id: 6,
+        jsonrpc: '2.0',
+        params: [
+          {
+            capabilities: {
+              method: 'login',
+              oidc: { tempo: { nonce: 'nonce-1', scope: 'openid email' } },
+            },
+          },
+        ],
+      },
+      { method: 'wallet_connect' },
+    )
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "method": "login",
+              "oidc": {
+                "tempo": {
+                  "nonce": "nonce-1",
+                  "scope": "openid email",
+                },
+              },
+            },
+          },
+        ],
+      }
+    `)
+    expect(remote.rejectAll).not.toHaveBeenCalled()
+  })
+
   test('error: rejects on method mismatch', () => {
     const remote = createMockRemote()
     expect(() =>

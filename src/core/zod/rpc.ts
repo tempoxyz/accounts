@@ -421,6 +421,7 @@ export namespace wallet_revokeAccessKey {
 
 export namespace wallet_connect {
   export const authorizeAccessKey = z.optional(wallet_authorizeAccessKey.parameters)
+  const tempoOidcScope = z.union([z.literal('openid'), z.literal('openid email')])
   export const identity = {
     request: z.optional(
       z.object({
@@ -443,6 +444,29 @@ export namespace wallet_connect {
       }),
     ),
   }
+  export const oidc = {
+    request: z.optional(
+      z.object({
+        tempo: z.optional(
+          z.object({
+            nonce: z.optional(z.string()),
+            scope: tempoOidcScope,
+          }),
+        ),
+      }),
+    ),
+    result: z.optional(
+      z.object({
+        tempo: z.optional(
+          z.object({
+            idToken: z.string(),
+            issuer: z.string(),
+            scope: tempoOidcScope,
+          }),
+        ),
+      }),
+    ),
+  }
 
   export const capabilities = {
     request: z.optional(
@@ -451,6 +475,7 @@ export namespace wallet_connect {
           digest: z.optional(u.hex()),
           authorizeAccessKey,
           identity: identity.request,
+          oidc: oidc.request,
           method: z.literal('register'),
           name: z.optional(z.string()),
           userId: z.optional(z.string()),
@@ -460,6 +485,7 @@ export namespace wallet_connect {
           credentialId: z.optional(z.string()),
           authorizeAccessKey,
           identity: identity.request,
+          oidc: oidc.request,
           method: z.optional(z.literal('login')),
           selectAccount: z.optional(z.boolean()),
         }),
@@ -468,6 +494,7 @@ export namespace wallet_connect {
     result: z.object({
       identity: identity.result,
       keyAuthorization: z.optional(keyAuthorization),
+      oidc: oidc.result,
       signature: z.optional(u.hex()),
     }),
   }
@@ -503,6 +530,7 @@ export namespace wallet_connect {
 export namespace wallet_connect_strict {
   const authorizeAccessKey = z.optional(wallet_authorizeAccessKey_strict.parameters)
   const identity = wallet_connect.identity.request
+  const oidc = wallet_connect.oidc.request
 
   export const parameters = z.object({
     capabilities: z.optional(
@@ -511,6 +539,7 @@ export namespace wallet_connect_strict {
           digest: z.optional(u.hex()),
           authorizeAccessKey,
           identity,
+          oidc,
           method: z.literal('register'),
           name: z.optional(z.string()),
           userId: z.optional(z.string()),
@@ -520,6 +549,7 @@ export namespace wallet_connect_strict {
           credentialId: z.optional(z.string()),
           authorizeAccessKey,
           identity,
+          oidc,
           method: z.optional(z.literal('login')),
           selectAccount: z.optional(z.boolean()),
         }),

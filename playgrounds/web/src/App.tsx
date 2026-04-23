@@ -1,4 +1,5 @@
-import { Expiry } from 'accounts'
+import { Expiry, type Rpc } from 'accounts'
+import * as jose from 'jose'
 import { Hex, Json } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
@@ -67,7 +68,7 @@ export function App() {
       <Events />
 
       <h2>Connection</h2>
-      <WalletConnect />
+      <WalletConnect adapterType={adapterType} />
       <EthRequestAccounts />
       <WalletDisconnect />
 
@@ -197,8 +198,20 @@ function ProviderState() {
   )
 }
 
-function WalletConnect() {
+type WalletConnectResult = Rpc.wallet_connect.Encoded['returns']
+type WalletConnectTempoOidcRequest = NonNullable<
+  NonNullable<NonNullable<Rpc.wallet_connect.Decoded['params']>[0]['capabilities']>['oidc']
+>['tempo']
+
+function WalletConnect(props: { adapterType: AdapterType }) {
+  const { adapterType } = props
   const [result, error, execute] = useRequest()
+  const supportsTempoOidc = adapterType === 'tempoWallet'
+  const [requestedTempoOidc, setRequestedTempoOidc] = useState<
+    WalletConnectTempoOidcRequest | undefined
+  >()
+  const walletConnect = result as WalletConnectResult | undefined
+  const returnedTempoOidc = walletConnect?.accounts[0]?.capabilities.oidc?.tempo
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -206,7 +219,7 @@ function WalletConnect() {
     const name = form.get('name') as string
     const digest = form.get('digest') as Hex.Hex
     const accessKey = form.get('accessKey') as string | null
-    const requireIdentityEmail = form.get('requireIdentityEmail') === 'on'
+    const oidcScope = supportsTempoOidc ? ((form.get('oidcScope') as '' | 'openid' | 'openid email') ?? '') : ''
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
 
     const limitToken = env === 'mainnet' && 'USDC.e' in tokens ? tokens['USDC.e'] : tokens.pathUSD
@@ -230,20 +243,30 @@ function WalletConnect() {
         }
       return undefined
     })()
-    const identity = requireIdentityEmail ? ({ email: { required: true } } as const) : undefined
+    const nonce = oidcScope ? crypto.randomUUID() : undefined
+    const oidc = oidcScope
+      ? ({
+          tempo: {
+            nonce: nonce!,
+            scope: oidcScope,
+          },
+        } as const)
+      : undefined
+
+    setRequestedTempoOidc(oidc?.tempo)
 
     const capabilities =
       method === 'register'
         ? ({
-            ...(identity ? { identity } : {}),
             method: 'register',
             ...(name ? { name } : {}),
             ...(digest ? { digest } : {}),
+            ...(oidc ? { oidc } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
           } as const)
         : {
-            ...(identity ? { identity } : {}),
             ...(digest ? { digest } : {}),
+            ...(oidc ? { oidc } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
           }
 
@@ -290,12 +313,24 @@ function WalletConnect() {
             scope)
           </label>
         </fieldset>
-        <fieldset style={{ marginBottom: 8 }}>
-          <legend>Identity</legend>
-          <label>
-            <input type="checkbox" name="requireIdentityEmail" /> Require verified email
-          </label>
-        </fieldset>
+        {supportsTempoOidc ? (
+          <fieldset style={{ marginBottom: 8 }}>
+            <legend>OIDC</legend>
+            <label>
+              <input type="radio" name="oidcScope" value="" defaultChecked /> None
+            </label>
+            <label style={{ marginLeft: 8 }}>
+              <input type="radio" name="oidcScope" value="openid" /> Request `openid`
+            </label>
+            <label style={{ marginLeft: 8 }}>
+              <input type="radio" name="oidcScope" value="openid email" /> Request `openid email`
+            </label>
+          </fieldset>
+        ) : (
+          <p style={{ marginBottom: 8 }}>
+            Tempo OIDC is currently available only with the <code>tempoWallet</code> adapter.
+          </p>
+        )}
         <button type="submit" value="login">
           Login
         </button>
@@ -303,6 +338,20 @@ function WalletConnect() {
           Register
         </button>
       </form>
+      {supportsTempoOidc && (
+        <TempoOidcInspector
+          audience={currentOrigin()}
+          prefill={
+            returnedTempoOidc
+              ? {
+                  issuer: returnedTempoOidc.issuer,
+                  nonce: requestedTempoOidc?.nonce ?? '',
+                  token: returnedTempoOidc.idToken,
+                }
+              : undefined
+          }
+        />
+      )}
     </Method>
   )
 }
@@ -1315,6 +1364,201 @@ function useRequest() {
     }
   }, [])
   return [result, error, execute] as const
+}
+
+type TempoOidcVerification = Awaited<ReturnType<typeof verifyTempoOidcIdToken>>
+type Jwk = JsonWebKey & {
+  alg?: string | undefined
+  kid?: string | undefined
+  use?: string | undefined
+}
+
+function TempoOidcInspector(props: {
+  audience: string
+  prefill?: { issuer: string; nonce: string; token: string } | undefined
+}) {
+  const { audience: defaultAudience, prefill } = props
+  const [audience, setAudience] = useState(defaultAudience)
+  const [issuer, setIssuer] = useState(prefill?.issuer ?? '')
+  const [nonce, setNonce] = useState(prefill?.nonce ?? '')
+  const [token, setToken] = useState(prefill?.token ?? '')
+  const [error, setError] = useState<Error>()
+  const [result, setResult] = useState<TempoOidcVerification>()
+
+  useEffect(() => {
+    if (!prefill?.token) return
+
+    setIssuer(prefill.issuer)
+    setNonce(prefill.nonce)
+    setToken(prefill.token)
+    setError(undefined)
+    setResult(undefined)
+  }, [prefill?.issuer, prefill?.nonce, prefill?.token])
+
+  return (
+    <details style={{ marginTop: 12 }}>
+      <summary>Verify Tempo OIDC ID token</summary>
+      <p style={{ marginBottom: 8 }}>
+        Fetch discovery and JWKS first, then verify the signature and standard claims before
+        reading payload fields.
+      </p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void (async () => {
+            try {
+              setError(undefined)
+              setResult(undefined)
+              setResult(
+                await verifyTempoOidcIdToken({
+                  audience,
+                  issuer,
+                  nonce,
+                  token,
+                }),
+              )
+            } catch (e) {
+              setError(e instanceof Error ? e : new Error(String(e)))
+            }
+          })()
+        }}
+      >
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Issuer</label>
+          <input
+            onChange={(e) => setIssuer(e.target.value)}
+            placeholder="https://wallet.tempo.local"
+            style={{ flex: 1 }}
+            value={issuer}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Audience</label>
+          <input onChange={(e) => setAudience(e.target.value)} style={{ flex: 1 }} value={audience} />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Nonce</label>
+          <input
+            onChange={(e) => setNonce(e.target.value)}
+            placeholder="Optional"
+            style={{ flex: 1 }}
+            value={nonce}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8 }}>
+          <label>ID Token</label>
+          <textarea
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="Paste a Tempo OIDC ID token"
+            rows={4}
+            style={{ flex: 1, fontFamily: 'monospace' }}
+            value={token}
+          />
+        </div>
+        <button type="submit">Verify token</button>
+      </form>
+      {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
+      {result && (
+        <>
+          <h4>Verified Claims</h4>
+          <pre>{Json.stringify(result.claims, null, 2)}</pre>
+          <details>
+            <summary>Verification details</summary>
+            <pre>
+              {Json.stringify(
+                {
+                  discovery: result.discovery,
+                  header: result.header,
+                  jwk: result.jwk,
+                  payload: result.payload,
+                },
+                null,
+                2,
+              )}
+            </pre>
+          </details>
+        </>
+      )}
+    </details>
+  )
+}
+
+async function verifyTempoOidcIdToken(options: {
+  audience: string
+  issuer: string
+  nonce: string
+  token: string
+}) {
+  const { audience, issuer, nonce, token } = options
+  if (!issuer.trim()) throw new Error('Issuer is required.')
+  if (!audience.trim()) throw new Error('Audience is required.')
+  if (!token.trim()) throw new Error('ID token is required.')
+
+  const discovery = await fetchJson<{
+    issuer: string
+    jwks_uri: string
+  }>(new URL('/.well-known/openid-configuration', issuer).toString())
+  const jwks = await fetchJson<{ keys: Jwk[] }>(discovery.jwks_uri)
+  const header = jose.decodeProtectedHeader(token)
+  if (!header.alg) throw new Error('The ID token is missing an `alg` header.')
+
+  const jwk = jwks.keys.find(
+    (key) =>
+      (header.kid ? key.kid === header.kid : true) &&
+      (key.use === undefined || key.use === 'sig') &&
+      (key.alg === undefined || key.alg === header.alg),
+  )
+  if (!jwk)
+    throw new Error(
+      header.kid
+        ? `No JWKS signing key matched kid \`${header.kid}\`.`
+        : 'No JWKS signing key matched the ID token header.',
+    )
+
+  const key = await jose.importJWK(jwk, header.alg)
+  if (key instanceof Uint8Array) throw new Error('Expected a CryptoKey for the OIDC signing key.')
+
+  const verified = await jose.jwtVerify(token, key, {
+    audience,
+    issuer: discovery.issuer,
+  })
+  if (nonce && verified.payload.nonce !== nonce)
+    throw new Error(
+      `Nonce mismatch. Expected \`${nonce}\`, received \`${String(verified.payload.nonce ?? '')}\`.`,
+    )
+
+  const email = verified.payload.email
+  const emailVerified = verified.payload['email_verified']
+  return {
+    claims: {
+      aud: verified.payload.aud,
+      email: typeof email === 'string' ? email : undefined,
+      email_verified: typeof emailVerified === 'boolean' ? emailVerified : undefined,
+      exp: verified.payload.exp,
+      expIso: verified.payload.exp ? new Date(verified.payload.exp * 1_000).toISOString() : undefined,
+      iss: verified.payload.iss,
+      nonce: verified.payload.nonce,
+      sub: verified.payload.sub,
+    },
+    discovery,
+    header: verified.protectedHeader,
+    jwk: {
+      alg: jwk.alg,
+      kid: jwk.kid,
+      use: jwk.use,
+    },
+    payload: verified.payload,
+  }
+}
+
+async function fetchJson<value>(url: string): Promise<value> {
+  const response = await fetch(`/oidc-proxy?url=${encodeURIComponent(url)}`)
+  if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`)
+  return (await response.json()) as value
+}
+
+function currentOrigin() {
+  return typeof window === 'undefined' ? '' : window.location.origin
 }
 
 function OcclusionSimulator() {

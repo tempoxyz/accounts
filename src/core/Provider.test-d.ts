@@ -48,6 +48,17 @@ describe('request', () => {
                   | undefined
               }
             | undefined
+          oidc?:
+            | {
+                tempo?:
+                  | {
+                      idToken: string
+                      issuer: string
+                      scope: 'openid' | 'openid email'
+                    }
+                  | undefined
+              }
+            | undefined
           signature?: `0x${string}` | undefined
         }
       }[]

@@ -203,6 +203,47 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       `)
     })
 
+    test('behavior: preserves returned Tempo OIDC capabilities', async () => {
+      const provider = Provider.create({
+        adapter: local({
+          loadAccounts: async () => ({
+            accounts: [
+              {
+                address: accounts[1]!.address,
+                capabilities: {
+                  oidc: {
+                    tempo: {
+                      idToken: 'header.payload.signature',
+                      issuer: 'https://wallet.tempo.xyz',
+                      scope: 'openid email',
+                    },
+                  },
+                },
+                keyType: 'secp256k1',
+                privateKey: privateKeys[1],
+              },
+            ],
+          }),
+        }),
+      })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { oidc: { tempo: { scope: 'openid email' } } } }],
+      })
+      expect(result.accounts[0]!.capabilities).toMatchInlineSnapshot(`
+        {
+          "oidc": {
+            "tempo": {
+              "idToken": "header.payload.signature",
+              "issuer": "https://wallet.tempo.xyz",
+              "scope": "openid email",
+            },
+          },
+        }
+      `)
+    })
+
     test('error: required identity email rejects when the account has no verified email', async () => {
       const provider = Provider.create({
         adapter: local({
@@ -238,6 +279,31 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         }),
       ).rejects.toThrowErrorMatchingInlineSnapshot(
         `[Provider.UnsupportedNonOptionalCapabilityError: This request requires a verified email address. Verify an email in Tempo Wallet and try again.]`,
+      )
+    })
+
+    test('error: requested Tempo OIDC rejects when the account has no token', async () => {
+      const provider = Provider.create({
+        adapter: local({
+          loadAccounts: async () => ({
+            accounts: [
+              {
+                address: accounts[1]!.address,
+                keyType: 'secp256k1',
+                privateKey: privateKeys[1],
+              },
+            ],
+          }),
+        }),
+      })
+
+      await expect(
+        provider.request({
+          method: 'wallet_connect',
+          params: [{ capabilities: { oidc: { tempo: { scope: 'openid' } } } }],
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UnsupportedNonOptionalCapabilityError: This request requires Tempo OIDC. Try again in Tempo Wallet.]`,
       )
     })
 

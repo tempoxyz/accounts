@@ -84,6 +84,35 @@ describe('validate', () => {
     `)
   })
 
+  test('behavior: validates wallet_connect with Tempo OIDC capability', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: { method: 'login', oidc: { tempo: { nonce: 'nonce-1', scope: 'openid' } } },
+        },
+      ],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "method": "login",
+              "oidc": {
+                "tempo": {
+                  "nonce": "nonce-1",
+                  "scope": "openid",
+                },
+              },
+            },
+          },
+        ],
+      }
+    `)
+  })
+
   test('default: validates wallet_disconnect', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'wallet_disconnect',

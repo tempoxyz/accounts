@@ -21,6 +21,8 @@ import * as Rpc from './zod/rpc.js'
 
 const requiredIdentityEmailMessage =
   'This request requires a verified email address. Verify an email in Tempo Wallet and try again.'
+const requiredTempoOidcMessage =
+  'This request requires Tempo OIDC. Try again in Tempo Wallet.'
 
 export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
   ox_Provider.Emitter & {
@@ -513,6 +515,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                     const capabilities = request._decoded.params?.[0]?.capabilities
                     const requireIdentityEmail = capabilities?.identity?.email?.required === true
+                    const requireTempoOidc = capabilities?.oidc?.tempo !== undefined
                     const authorizeAccessKey =
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
 
@@ -573,10 +576,15 @@ export function create(options: create.Options = {}): create.ReturnType {
                             verified: true as const,
                           }
                         : undefined)
+                    const tempoOidc = resultAccounts[0]?.capabilities.oidc?.tempo
 
                     if (requireIdentityEmail && !identityEmail)
                       throw new ox_Provider.UnsupportedNonOptionalCapabilityError({
                         message: requiredIdentityEmailMessage,
+                      })
+                    if (requireTempoOidc && !tempoOidc)
+                      throw new ox_Provider.UnsupportedNonOptionalCapabilityError({
+                        message: requiredTempoOidcMessage,
                       })
 
                     store.setState({
