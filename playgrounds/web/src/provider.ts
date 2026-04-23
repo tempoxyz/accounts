@@ -54,8 +54,7 @@ export const tokens =
   tokensMap[env === 'mainnet' ? 'mainnet' : env === 'devnet' ? 'devnet' : 'testnet']
 
 export const host =
-  new URLSearchParams(window.location.search).get('host') ??
-  import.meta.env.VITE_WALLET_HOST
+  new URLSearchParams(window.location.search).get('host') ?? import.meta.env.VITE_WALLET_HOST
 
 export let dialogMode: DialogMode = 'iframe'
 export let theme: DialogNs.Theme | undefined

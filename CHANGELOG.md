@@ -1,5 +1,33 @@
 # accounts
 
+## 0.8.1
+
+### Patch Changes
+
+- c4b669b: Fixed relay handler gas bump not applying when `feePayer` is present. The condition checked `result.tx.feePayer` (node response) which is not set; now checks `request.feePayer` (the input).
+
+## 0.8.0
+
+### Minor Changes
+
+- d058f26: Updated default dialog host from `https://wallet.tempo.xyz/embed` to `https://wallet-next.tempo.xyz`.
+- d058f26: Added runtime theme sync for iframe dialog. Theme changes (accent, radius, font) now propagate to the cached iframe without reloading via the `syncTheme` method and a new `theme` messenger topic.
+
+### Patch Changes
+
+- d058f26: Changed `chainId` type in `wallet_authorizeAccessKey` parameters and `Adapter.authorizeAccessKey.Parameters` from `number` to `bigint` to match ox/viem's `KeyAuthorization.chainId`.
+- d058f26: Added label-based deduplication in `wallet_connect` to sign in with an existing credential when a matching account label is found during registration.
+- d058f26: Fixed `feePayer: false` to correctly propagate through `resolveFeePayer` and `prepareTransactionRequest`, allowing per-request opt-out of fee payers.
+- d058f26: Added support for app-provided fee payer URLs in `Handler.relay`. The relay now proxies `eth_fillTransaction` through an external fee payer service when a URL is provided, and passes through sponsor metadata from the upstream response.
+- d058f26: Added a 20k gas buffer for sponsored transactions in the relay to prevent out-of-gas reverts from signature size differences.
+- d058f26: Changed fee token resolution in the relay to lazily resolve swap source tokens on `InsufficientBalance` instead of eagerly resolving upfront.
+- d058f26: Restructured relay fill logic into three paths (guaranteed, conditional, no sponsorship) with parallelized simulation, signing, and autoSwap metadata resolution.
+- d058f26: Added `name` and `url` fields to relay sponsor metadata in `eth_fillTransaction` responses.
+- d058f26: Added `feePayerSignature`, `period` on key authorization limits, and `displayName` on `wallet_deposit` to RPC schemas. Exported `wallet_authorizeAccessKey.returns`.
+- d058f26: Added `maxAccounts` option to `Provider.create` and `Store.create` for LRU eviction of persisted accounts.
+- d058f26: Added `.local` TLD to trusted hosts for local development.
+- d058f26: Passed registration `name` through the webAuthn challenge store so it is available in the `onRegister` callback.
+
 ## 0.7.2
 
 ### Patch Changes
@@ -21,6 +49,7 @@
 ### Minor Changes
 
 - bcd4ec3: **Breaking**: Added `features` option to `Handler.relay` to control feature enablement.
+
   - `features: 'all'` enables fee token resolution, auto-swap, and simulation (balance diffs + fee breakdown), at the cost of network latency.
   - If `features` is not present, only enables fee payer sponsorship by default.
 

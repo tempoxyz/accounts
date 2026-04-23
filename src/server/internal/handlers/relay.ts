@@ -569,8 +569,9 @@ async function fill(
     // FIXME: node estimates gas with secp256k1 dummy sig + null feePayerSignature.
     // Actual tx has larger keychain/webAuthn sigs + real fee payer sig, costing
     // more intrinsic gas. Mirror the bump from viem's tempo chainConfig.
+    // Skip if another relay already bumped (indicated by feePayerSignature).
     // @ts-expect-error
-    if (result.tx.gas && result.tx.feePayer)
+    if (result.tx.gas && request.feePayer && !result.tx.feePayerSignature)
       result.tx.gas = Hex.fromNumber(BigInt(result.tx.gas) + 20_000n)
     const sponsor = (result as Record<string, any>).capabilities?.sponsor as
       | { address: Address; name?: string; url?: string }

@@ -1476,8 +1476,18 @@ function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) 
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <label>Scheme</label>
-        <select value={scheme} onChange={(e) => { setScheme(e.target.value); apply({ scheme: e.target.value }) }}>
-          {schemeOptions.map((v) => <option key={v} value={v}>{v || '(default)'}</option>)}
+        <select
+          value={scheme}
+          onChange={(e) => {
+            setScheme(e.target.value)
+            apply({ scheme: e.target.value })
+          }}
+        >
+          {schemeOptions.map((v) => (
+            <option key={v} value={v}>
+              {v || '(default)'}
+            </option>
+          ))}
         </select>
       </div>
     </div>
