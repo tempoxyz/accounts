@@ -8,7 +8,7 @@ import { cli } from './adapter.js'
 export function create(options: create.Options): create.ReturnType {
   const {
     // TODO: use the new host
-    // host = 'https://wallet-next.tempo.xyz/remote/auth/cli',
+    // host = 'https://wallet-next.tempo.xyz/api/auth/cli',
     host = 'https://wallet.tempo.xyz/cli-auth',
     keysPath,
     open,
