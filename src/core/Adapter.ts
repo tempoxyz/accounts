@@ -67,6 +67,13 @@ export type Instance = {
           request: EncodedRequest<Rpc.wallet_revokeAccessKey.Encoded>,
         ) => Promise<void>)
       | undefined
+    /** Open the send-token flow. */
+    send?:
+      | ((
+          params: send.Parameters,
+          request: EncodedRequest<Rpc.wallet_send.Encoded>,
+        ) => Promise<send.ReturnType>)
+      | undefined
     /** Send a transaction. */
     sendTransaction: (
       params: sendTransaction.Parameters,
@@ -249,6 +256,11 @@ export declare namespace revokeAccessKey {
     /** Address of the access key to revoke. */
     accessKeyAddress: Address
   }
+}
+
+export declare namespace send {
+  type Parameters = ActionRequest<typeof Rpc.wallet_send.schema>
+  type ReturnType = Rpc.wallet_send.Encoded['returns']
 }
 
 export declare namespace sendTransaction {

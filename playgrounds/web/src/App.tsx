@@ -80,6 +80,7 @@ export function App() {
       <WalletGetBalances />
       <Faucet />
       <WalletDeposit />
+      <WalletSend />
 
       <h2>Transactions</h2>
       <Transactions />
@@ -173,6 +174,50 @@ function WalletDeposit() {
         }
       >
         Deposit (displayName: DoorDash)
+      </button>
+    </Method>
+  )
+}
+
+function WalletSend() {
+  const [result, error, execute] = useRequest()
+  return (
+    <Method method="wallet_send" result={result} error={error}>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_send',
+              params: [{}],
+            }),
+          )
+        }
+      >
+        Send
+      </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_send',
+              params: [{ token: tokens.pathUSD }],
+            }),
+          )
+        }
+      >
+        Send (PathUSD)
+      </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_send',
+              params: [{ to: '0x0000000000000000000000000000000000000001', token: tokens.pathUSD, value: '1' }],
+            }),
+          )
+        }
+      >
+        Send ($1 PathUSD)
       </button>
     </Method>
   )

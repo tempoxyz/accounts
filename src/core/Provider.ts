@@ -619,6 +619,18 @@ export function create(options: create.Options = {}): create.ReturnType {
                     )) satisfies Rpc.wallet_deposit.Encoded['returns']
                   }
 
+                  case 'wallet_send': {
+                    assertConnected()
+                    if (!actions.send)
+                      throw new ox_Provider.UnsupportedMethodError({
+                        message: '`send` not supported by adapter.',
+                      })
+                    return (await actions.send(
+                      (request._decoded.params?.[0] ?? {}) as Adapter.send.Parameters,
+                      request,
+                    )) satisfies Rpc.wallet_send.Encoded['returns']
+                  }
+
                   case 'wallet_switchEthereumChain': {
                     const { chainId } = request._decoded.params[0]
                     if (!chains.some((c) => c.id === chainId))
