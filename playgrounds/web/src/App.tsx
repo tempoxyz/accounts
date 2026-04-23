@@ -8,6 +8,7 @@ import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 
+import * as Oidc from './oidc.js'
 import {
   type AdapterType,
   type DialogMode,
@@ -199,19 +200,36 @@ function ProviderState() {
 }
 
 type WalletConnectResult = Rpc.wallet_connect.Encoded['returns']
-type WalletConnectTempoOidcRequest = NonNullable<
+type WalletConnectOidcRequest = NonNullable<
   NonNullable<NonNullable<Rpc.wallet_connect.Decoded['params']>[0]['capabilities']>['oidc']
->['tempo']
+>
+type WalletConnectRequestedOidc = {
+  nonce: string
+  provider: WalletConnectOidcProvider
+  scope: 'openid' | 'openid email'
+}
+type WalletConnectOidcProvider = keyof WalletConnectOidcRequest
 
 function WalletConnect(props: { adapterType: AdapterType }) {
   const { adapterType } = props
   const [result, error, execute] = useRequest()
-  const supportsTempoOidc = adapterType === 'tempoWallet'
-  const [requestedTempoOidc, setRequestedTempoOidc] = useState<
-    WalletConnectTempoOidcRequest | undefined
-  >()
+  const supportsWalletOidc = adapterType === 'tempoWallet'
+  const [requestedOidc, setRequestedOidc] = useState<WalletConnectRequestedOidc | undefined>()
   const walletConnect = result as WalletConnectResult | undefined
-  const returnedTempoOidc = walletConnect?.accounts[0]?.capabilities.oidc?.tempo
+  const returnedOidc = (() => {
+    if (requestedOidc?.provider === 'mock') return walletConnect?.accounts[0]?.capabilities.oidc?.mock
+    if (requestedOidc?.provider === 'tempo') return walletConnect?.accounts[0]?.capabilities.oidc?.tempo
+
+    return (
+      walletConnect?.accounts[0]?.capabilities.oidc?.tempo ??
+      walletConnect?.accounts[0]?.capabilities.oidc?.mock
+    )
+  })()
+  const returnedOidcProvider = (() => {
+    if (walletConnect?.accounts[0]?.capabilities.oidc?.tempo) return 'tempo' as const
+    if (walletConnect?.accounts[0]?.capabilities.oidc?.mock) return 'mock' as const
+    return undefined
+  })()
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -219,7 +237,12 @@ function WalletConnect(props: { adapterType: AdapterType }) {
     const name = form.get('name') as string
     const digest = form.get('digest') as Hex.Hex
     const accessKey = form.get('accessKey') as string | null
-    const oidcScope = supportsTempoOidc ? ((form.get('oidcScope') as '' | 'openid' | 'openid email') ?? '') : ''
+    const oidcProvider = supportsWalletOidc
+      ? ((form.get('oidcProvider') as '' | WalletConnectOidcProvider) ?? '')
+      : ''
+    const oidcScope = supportsWalletOidc
+      ? ((form.get('oidcScope') as '' | 'openid' | 'openid email') ?? '')
+      : ''
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
 
     const limitToken = env === 'mainnet' && 'USDC.e' in tokens ? tokens['USDC.e'] : tokens.pathUSD
@@ -243,17 +266,23 @@ function WalletConnect(props: { adapterType: AdapterType }) {
         }
       return undefined
     })()
-    const nonce = oidcScope ? crypto.randomUUID() : undefined
-    const oidc = oidcScope
-      ? ({
-          tempo: {
-            nonce: nonce!,
-            scope: oidcScope,
-          },
-        } as const)
-      : undefined
+    const oidc = (() => {
+      if (!oidcProvider || !oidcScope) return undefined
 
-    setRequestedTempoOidc(oidc?.tempo)
+      const request = { nonce: crypto.randomUUID(), scope: oidcScope } as const
+      if (oidcProvider === 'mock') return { mock: request } satisfies WalletConnectOidcRequest
+      return { tempo: request } satisfies WalletConnectOidcRequest
+    })()
+
+    setRequestedOidc(
+      oidcProvider && oidcScope && oidc
+        ? {
+            nonce: oidc[oidcProvider]!.nonce,
+            provider: oidcProvider,
+            scope: oidcScope,
+          }
+        : undefined,
+    )
 
     const capabilities =
       method === 'register'
@@ -286,7 +315,29 @@ function WalletConnect(props: { adapterType: AdapterType }) {
   }
 
   return (
-    <Method method="wallet_connect" result={result} error={error}>
+    <Method
+      error={error}
+      footer={
+        supportsWalletOidc ? (
+          <OidcInspector
+            audience={currentOrigin()}
+            prefill={
+              returnedOidc && returnedOidcProvider
+                ? {
+                    issuer: returnedOidc.issuer,
+                    nonce:
+                      requestedOidc?.provider === returnedOidcProvider ? requestedOidc.nonce : '',
+                    provider: returnedOidcProvider,
+                    token: returnedOidc.idToken,
+                  }
+                : undefined
+            }
+          />
+        ) : undefined
+      }
+      method="wallet_connect"
+      result={result}
+    >
       <form onSubmit={submit}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Name</label>
@@ -313,12 +364,20 @@ function WalletConnect(props: { adapterType: AdapterType }) {
             scope)
           </label>
         </fieldset>
-        {supportsTempoOidc ? (
+        {supportsWalletOidc ? (
           <fieldset style={{ marginBottom: 8 }}>
             <legend>OIDC</legend>
             <label>
               <input type="radio" name="oidcScope" value="" defaultChecked /> None
             </label>
+            <div style={{ marginTop: 8 }}>
+              <label>
+                <input type="radio" name="oidcProvider" value="tempo" defaultChecked /> Tempo
+              </label>
+              <label style={{ marginLeft: 8 }}>
+                <input type="radio" name="oidcProvider" value="mock" /> Mock
+              </label>
+            </div>
             <label style={{ marginLeft: 8 }}>
               <input type="radio" name="oidcScope" value="openid" /> Request `openid`
             </label>
@@ -328,7 +387,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
           </fieldset>
         ) : (
           <p style={{ marginBottom: 8 }}>
-            Tempo OIDC is currently available only with the <code>tempoWallet</code> adapter.
+            Wallet OIDC is currently available only with the <code>tempoWallet</code> adapter.
           </p>
         )}
         <button type="submit" value="login">
@@ -338,20 +397,6 @@ function WalletConnect(props: { adapterType: AdapterType }) {
           Register
         </button>
       </form>
-      {supportsTempoOidc && (
-        <TempoOidcInspector
-          audience={currentOrigin()}
-          prefill={
-            returnedTempoOidc
-              ? {
-                  issuer: returnedTempoOidc.issuer,
-                  nonce: requestedTempoOidc?.nonce ?? '',
-                  token: returnedTempoOidc.idToken,
-                }
-              : undefined
-          }
-        />
-      )}
     </Method>
   )
 }
@@ -1366,41 +1411,48 @@ function useRequest() {
   return [result, error, execute] as const
 }
 
-type TempoOidcVerification = Awaited<ReturnType<typeof verifyTempoOidcIdToken>>
+type OidcVerification = Awaited<ReturnType<typeof verifyOidcIdToken>>
 type Jwk = JsonWebKey & {
   alg?: string | undefined
   kid?: string | undefined
   use?: string | undefined
 }
 
-function TempoOidcInspector(props: {
+function OidcInspector(props: {
   audience: string
-  prefill?: { issuer: string; nonce: string; token: string } | undefined
+  prefill?: { issuer: string; nonce: string; provider: WalletConnectOidcProvider; token: string } | undefined
 }) {
   const { audience: defaultAudience, prefill } = props
   const [audience, setAudience] = useState(defaultAudience)
+  const [provider, setProvider] = useState<WalletConnectOidcProvider>(prefill?.provider ?? 'tempo')
   const [issuer, setIssuer] = useState(prefill?.issuer ?? '')
   const [nonce, setNonce] = useState(prefill?.nonce ?? '')
   const [token, setToken] = useState(prefill?.token ?? '')
   const [error, setError] = useState<Error>()
-  const [result, setResult] = useState<TempoOidcVerification>()
+  const [result, setResult] = useState<OidcVerification>()
 
   useEffect(() => {
     if (!prefill?.token) return
 
+    setProvider(prefill.provider)
     setIssuer(prefill.issuer)
     setNonce(prefill.nonce)
     setToken(prefill.token)
     setError(undefined)
     setResult(undefined)
-  }, [prefill?.issuer, prefill?.nonce, prefill?.token])
+  }, [prefill?.issuer, prefill?.nonce, prefill?.provider, prefill?.token])
+
+  const issuerPlaceholder =
+    provider === 'mock' ? 'https://wallet.tempo.local/mock-oidc' : 'https://wallet.tempo.local'
+  const tokenPlaceholder =
+    provider === 'mock' ? 'Paste a Mock OIDC ID token' : 'Paste a Tempo OIDC ID token'
 
   return (
     <details style={{ marginTop: 12 }}>
-      <summary>Verify Tempo OIDC ID token</summary>
+      <summary>Verify OIDC ID token</summary>
       <p style={{ marginBottom: 8 }}>
         Fetch discovery and JWKS first, then verify the signature and standard claims before
-        reading payload fields.
+        reading payload fields. Works for Tempo and Mock issuers.
       </p>
       <form
         onSubmit={(e) => {
@@ -1410,7 +1462,7 @@ function TempoOidcInspector(props: {
               setError(undefined)
               setResult(undefined)
               setResult(
-                await verifyTempoOidcIdToken({
+                await verifyOidcIdToken({
                   audience,
                   issuer,
                   nonce,
@@ -1423,11 +1475,34 @@ function TempoOidcInspector(props: {
           })()
         }}
       >
+        <fieldset style={{ marginBottom: 8 }}>
+          <legend>Provider</legend>
+          <label>
+            <input
+              checked={provider === 'tempo'}
+              name="oidcInspectorProvider"
+              onChange={() => setProvider('tempo')}
+              type="radio"
+              value="tempo"
+            />{' '}
+            Tempo
+          </label>
+          <label style={{ marginLeft: 8 }}>
+            <input
+              checked={provider === 'mock'}
+              name="oidcInspectorProvider"
+              onChange={() => setProvider('mock')}
+              type="radio"
+              value="mock"
+            />{' '}
+            Mock
+          </label>
+        </fieldset>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Issuer</label>
           <input
             onChange={(e) => setIssuer(e.target.value)}
-            placeholder="https://wallet.tempo.local"
+            placeholder={issuerPlaceholder}
             style={{ flex: 1 }}
             value={issuer}
           />
@@ -1449,7 +1524,7 @@ function TempoOidcInspector(props: {
           <label>ID Token</label>
           <textarea
             onChange={(e) => setToken(e.target.value)}
-            placeholder="Paste a Tempo OIDC ID token"
+            placeholder={tokenPlaceholder}
             rows={4}
             style={{ flex: 1, fontFamily: 'monospace' }}
             value={token}
@@ -1483,7 +1558,7 @@ function TempoOidcInspector(props: {
   )
 }
 
-async function verifyTempoOidcIdToken(options: {
+async function verifyOidcIdToken(options: {
   audience: string
   issuer: string
   nonce: string
@@ -1497,7 +1572,7 @@ async function verifyTempoOidcIdToken(options: {
   const discovery = await fetchJson<{
     issuer: string
     jwks_uri: string
-  }>(new URL('/.well-known/openid-configuration', issuer).toString())
+  }>(Oidc.get(issuer))
   const jwks = await fetchJson<{ keys: Jwk[] }>(discovery.jwks_uri)
   const header = jose.decodeProtectedHeader(token)
   if (!header.alg) throw new Error('The ID token is missing an `alg` header.')
@@ -1739,15 +1814,17 @@ function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) 
 }
 
 function Method({
+  children,
+  error,
+  footer,
   method,
   result,
-  error,
-  children,
 }: {
+  children: React.ReactNode
+  error?: Error | undefined
+  footer?: React.ReactNode | undefined
   method: string
   result: unknown
-  error?: Error | undefined
-  children: React.ReactNode
 }) {
   return (
     <div>
@@ -1755,6 +1832,7 @@ function Method({
       {children}
       {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
       {result !== undefined && <pre>{Json.stringify(result, null, 2)}</pre>}
+      {footer}
     </div>
   )
 }

@@ -422,6 +422,7 @@ export namespace wallet_revokeAccessKey {
 export namespace wallet_connect {
   export const authorizeAccessKey = z.optional(wallet_authorizeAccessKey.parameters)
   const tempoOidcScope = z.union([z.literal('openid'), z.literal('openid email')])
+  const mockOidcScope = z.union([z.literal('openid'), z.literal('openid email')])
   export const identity = {
     request: z.optional(
       z.object({
@@ -447,6 +448,12 @@ export namespace wallet_connect {
   export const oidc = {
     request: z.optional(
       z.object({
+        mock: z.optional(
+          z.object({
+            nonce: z.optional(z.string()),
+            scope: mockOidcScope,
+          }),
+        ),
         tempo: z.optional(
           z.object({
             nonce: z.optional(z.string()),
@@ -457,6 +464,13 @@ export namespace wallet_connect {
     ),
     result: z.optional(
       z.object({
+        mock: z.optional(
+          z.object({
+            idToken: z.string(),
+            issuer: z.string(),
+            scope: mockOidcScope,
+          }),
+        ),
         tempo: z.optional(
           z.object({
             idToken: z.string(),

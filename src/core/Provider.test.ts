@@ -244,6 +244,47 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       `)
     })
 
+    test('behavior: preserves returned Mock OIDC capabilities', async () => {
+      const provider = Provider.create({
+        adapter: local({
+          loadAccounts: async () => ({
+            accounts: [
+              {
+                address: accounts[1]!.address,
+                capabilities: {
+                  oidc: {
+                    mock: {
+                      idToken: 'mock.header.payload',
+                      issuer: 'https://wallet.tempo.xyz/mock-oidc',
+                      scope: 'openid',
+                    },
+                  },
+                },
+                keyType: 'secp256k1',
+                privateKey: privateKeys[1],
+              },
+            ],
+          }),
+        }),
+      })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { oidc: { mock: { scope: 'openid' } } } }],
+      })
+      expect(result.accounts[0]!.capabilities).toMatchInlineSnapshot(`
+        {
+          "oidc": {
+            "mock": {
+              "idToken": "mock.header.payload",
+              "issuer": "https://wallet.tempo.xyz/mock-oidc",
+              "scope": "openid",
+            },
+          },
+        }
+      `)
+    })
+
     test('error: required identity email rejects when the account has no verified email', async () => {
       const provider = Provider.create({
         adapter: local({
@@ -304,6 +345,31 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         }),
       ).rejects.toThrowErrorMatchingInlineSnapshot(
         `[Provider.UnsupportedNonOptionalCapabilityError: This request requires Tempo OIDC. Try again in Tempo Wallet.]`,
+      )
+    })
+
+    test('error: requested Mock OIDC rejects when the account has no token', async () => {
+      const provider = Provider.create({
+        adapter: local({
+          loadAccounts: async () => ({
+            accounts: [
+              {
+                address: accounts[1]!.address,
+                keyType: 'secp256k1',
+                privateKey: privateKeys[1],
+              },
+            ],
+          }),
+        }),
+      })
+
+      await expect(
+        provider.request({
+          method: 'wallet_connect',
+          params: [{ capabilities: { oidc: { mock: { scope: 'openid' } } } }],
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UnsupportedNonOptionalCapabilityError: This request requires Mock OIDC. Try again in Tempo Wallet.]`,
       )
     })
 

@@ -21,6 +21,7 @@ import * as Rpc from './zod/rpc.js'
 
 const requiredIdentityEmailMessage =
   'This request requires a verified email address. Verify an email in Tempo Wallet and try again.'
+const requiredMockOidcMessage = 'This request requires Mock OIDC. Try again in Tempo Wallet.'
 const requiredTempoOidcMessage =
   'This request requires Tempo OIDC. Try again in Tempo Wallet.'
 
@@ -515,6 +516,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                     const capabilities = request._decoded.params?.[0]?.capabilities
                     const requireIdentityEmail = capabilities?.identity?.email?.required === true
+                    const requireMockOidc = capabilities?.oidc?.mock !== undefined
                     const requireTempoOidc = capabilities?.oidc?.tempo !== undefined
                     const authorizeAccessKey =
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
@@ -576,11 +578,16 @@ export function create(options: create.Options = {}): create.ReturnType {
                             verified: true as const,
                           }
                         : undefined)
+                    const mockOidc = resultAccounts[0]?.capabilities.oidc?.mock
                     const tempoOidc = resultAccounts[0]?.capabilities.oidc?.tempo
 
                     if (requireIdentityEmail && !identityEmail)
                       throw new ox_Provider.UnsupportedNonOptionalCapabilityError({
                         message: requiredIdentityEmailMessage,
+                      })
+                    if (requireMockOidc && !mockOidc)
+                      throw new ox_Provider.UnsupportedNonOptionalCapabilityError({
+                        message: requiredMockOidcMessage,
                       })
                     if (requireTempoOidc && !tempoOidc)
                       throw new ox_Provider.UnsupportedNonOptionalCapabilityError({

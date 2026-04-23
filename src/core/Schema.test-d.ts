@@ -74,6 +74,12 @@ describe('Encoded', () => {
                   identity?: { email?: { required: true } | undefined } | undefined
                   oidc?:
                     | {
+                        mock?:
+                          | {
+                              nonce?: string | undefined
+                              scope: 'openid' | 'openid email'
+                            }
+                          | undefined
                         tempo?:
                           | {
                               nonce?: string | undefined
@@ -101,6 +107,12 @@ describe('Encoded', () => {
                   identity?: { email?: { required: true } | undefined } | undefined
                   oidc?:
                     | {
+                        mock?:
+                          | {
+                              nonce?: string | undefined
+                              scope: 'openid' | 'openid email'
+                            }
+                          | undefined
                         tempo?:
                           | {
                               nonce?: string | undefined
@@ -141,6 +153,13 @@ describe('Encoded', () => {
             | undefined
           oidc?:
             | {
+                mock?:
+                  | {
+                      idToken: string
+                      issuer: string
+                      scope: 'openid' | 'openid email'
+                    }
+                  | undefined
                 tempo?:
                   | {
                       idToken: string

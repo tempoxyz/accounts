@@ -182,6 +182,46 @@ describe('validateSearch', () => {
     expect(remote.rejectAll).not.toHaveBeenCalled()
   })
 
+  test('behavior: validates wallet_connect with Mock OIDC capability', () => {
+    const remote = createMockRemote()
+    const result = Remote.validateSearch(
+      remote,
+      {
+        method: 'wallet_connect',
+        id: 7,
+        jsonrpc: '2.0',
+        params: [
+          {
+            capabilities: {
+              method: 'login',
+              oidc: { mock: { nonce: 'nonce-2', scope: 'openid' } },
+            },
+          },
+        ],
+      },
+      { method: 'wallet_connect' },
+    )
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "method": "login",
+              "oidc": {
+                "mock": {
+                  "nonce": "nonce-2",
+                  "scope": "openid",
+                },
+              },
+            },
+          },
+        ],
+      }
+    `)
+    expect(remote.rejectAll).not.toHaveBeenCalled()
+  })
+
   test('error: rejects on method mismatch', () => {
     const remote = createMockRemote()
     expect(() =>

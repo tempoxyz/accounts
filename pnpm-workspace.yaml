@@ -20,6 +20,7 @@ catalog:
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.4.4
   hono: ^4.12.12
+  jose: ^6.2.2
   ox: ~0.14.18
   prool: ~0.2.4
   react: ^19.2.5

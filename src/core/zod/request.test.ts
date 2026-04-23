@@ -113,6 +113,35 @@ describe('validate', () => {
     `)
   })
 
+  test('behavior: validates wallet_connect with Mock OIDC capability', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: { method: 'login', oidc: { mock: { nonce: 'nonce-2', scope: 'openid' } } },
+        },
+      ],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "method": "login",
+              "oidc": {
+                "mock": {
+                  "nonce": "nonce-2",
+                  "scope": "openid",
+                },
+              },
+            },
+          },
+        ],
+      }
+    `)
+  })
+
   test('default: validates wallet_disconnect', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'wallet_disconnect',

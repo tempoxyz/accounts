@@ -50,6 +50,13 @@ describe('request', () => {
             | undefined
           oidc?:
             | {
+                mock?:
+                  | {
+                      idToken: string
+                      issuer: string
+                      scope: 'openid' | 'openid email'
+                    }
+                  | undefined
                 tempo?:
                   | {
                       idToken: string
