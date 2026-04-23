@@ -1,5 +1,11 @@
 # accounts
 
+## 0.8.1
+
+### Patch Changes
+
+- c4b669b: Fixed relay handler gas bump not applying when `feePayer` is present. The condition checked `result.tx.feePayer` (node response) which is not set; now checks `request.feePayer` (the input).
+
 ## 0.8.0
 
 ### Minor Changes
