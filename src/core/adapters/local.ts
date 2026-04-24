@@ -186,10 +186,14 @@ export function local(options: local.Options): Adapter.Adapter {
         async revokeAccessKey(parameters) {
           const account = getAccount({ accessKey: false, signable: true })
           const client = getClient()
-          await Actions.accessKey.revoke(client, {
-            account,
-            accessKey: parameters.accessKeyAddress,
-          } as never)
+          try {
+            await Actions.accessKey.revoke(client, {
+              account,
+              accessKey: parameters.accessKeyAddress,
+            } as never)
+          } catch (error) {
+            if (!(error instanceof Error) || !error.message.includes('KeyNotFound')) throw error
+          }
           store.setState((state) => ({
             accessKeys: state.accessKeys.filter(
               (a) => a.address?.toLowerCase() !== parameters.accessKeyAddress.toLowerCase(),
