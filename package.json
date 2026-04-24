@@ -52,7 +52,7 @@
     "testcontainers": "^11.14.0",
     "tsx": "^4.21.0",
     "typescript": "catalog:",
-    "viem": "^2.48.4",
+    "viem": "catalog:",
     "vp": "catalog:",
     "wagmi": "catalog:",
     "zile": "^0.0.25"
