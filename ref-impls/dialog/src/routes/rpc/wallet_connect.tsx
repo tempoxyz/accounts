@@ -18,6 +18,18 @@ function Wrapper() {
   return <Component key={search.id} />
 }
 
+function toRequest(
+  search: ReturnType<typeof Route.useSearch>,
+  capabilities?: NonNullable<NonNullable<ReturnType<typeof Route.useSearch>['_decoded']['params']>[0]['capabilities']> | undefined,
+) {
+  return {
+    id: search.id,
+    jsonrpc: search.jsonrpc,
+    method: search.method,
+    params: [{ ...search.params?.[0], ...(capabilities ? { capabilities } : {}) }] as const,
+  }
+}
+
 function Component() {
   const search = Route.useSearch()
   const { isConnected } = useConnection()
@@ -28,16 +40,11 @@ function Component() {
     mutationFn: (variables?: { method?: string | undefined; name?: string | undefined }) => {
       const incomingCapabilities = search._decoded.params?.[0]?.capabilities
       const capabilities = {
+        ...incomingCapabilities,
         ...(variables?.method ? { method: variables.method } : {}),
         ...(variables?.name ? { name: variables.name } : {}),
-        ...(incomingCapabilities?.authorizeAccessKey
-          ? { authorizeAccessKey: incomingCapabilities.authorizeAccessKey }
-          : {}),
       }
-      const request = {
-        ...search,
-        params: [{ ...search.params?.[0], capabilities }] as const,
-      }
+      const request = toRequest(search, capabilities)
       return remote.respond(request as never)
     },
   })

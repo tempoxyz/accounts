@@ -71,6 +71,23 @@ describe('Encoded', () => {
                         publicKey?: Hex | undefined
                       }
                     | undefined
+                  identity?: { email?: { required: true } | undefined } | undefined
+                  oidc?:
+                    | {
+                        mock?:
+                          | {
+                              nonce?: string | undefined
+                              scope: 'openid' | 'openid email'
+                            }
+                          | undefined
+                        tempo?:
+                          | {
+                              nonce?: string | undefined
+                              scope: 'openid' | 'openid email'
+                            }
+                          | undefined
+                      }
+                    | undefined
                   method: 'register'
                   name?: string | undefined
                   userId?: string | undefined
@@ -85,6 +102,23 @@ describe('Encoded', () => {
                         keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
                         limits?: readonly { token: Hex; limit: Hex }[] | undefined
                         publicKey?: Hex | undefined
+                      }
+                    | undefined
+                  identity?: { email?: { required: true } | undefined } | undefined
+                  oidc?:
+                    | {
+                        mock?:
+                          | {
+                              nonce?: string | undefined
+                              scope: 'openid' | 'openid email'
+                            }
+                          | undefined
+                        tempo?:
+                          | {
+                              nonce?: string | undefined
+                              scope: 'openid' | 'openid email'
+                            }
+                          | undefined
                       }
                     | undefined
                   method?: 'login' | undefined
@@ -103,6 +137,53 @@ describe('Encoded', () => {
     expectTypeOf<
       Rpc.wallet_connect.Encoded['returns']['accounts'][number]['address']
     >().toEqualTypeOf<Hex>()
+    expectTypeOf<Rpc.wallet_connect.Encoded['returns']>().toMatchTypeOf<{
+      accounts: readonly {
+        capabilities: {
+          identity?:
+            | {
+                email?:
+                  | {
+                      issuer: string
+                      value: string
+                      verified: true
+                    }
+                  | undefined
+              }
+            | undefined
+          oidc?:
+            | {
+                mock?:
+                  | {
+                      idToken: string
+                      issuer: string
+                      scope: 'openid' | 'openid email'
+                    }
+                  | undefined
+                tempo?:
+                  | {
+                      idToken: string
+                      issuer: string
+                      scope: 'openid' | 'openid email'
+                    }
+                  | undefined
+              }
+            | undefined
+        }
+      }[]
+    }>()
+    expectTypeOf<
+      Extract<
+        'email',
+        keyof Rpc.wallet_connect.Encoded['returns']['accounts'][number]['capabilities']
+      >
+    >().toEqualTypeOf<never>()
+    expectTypeOf<
+      Extract<
+        'username',
+        keyof Rpc.wallet_connect.Encoded['returns']['accounts'][number]['capabilities']
+      >
+    >().toEqualTypeOf<never>()
   })
 
   test('wallet_authorizeAccessKey', () => {

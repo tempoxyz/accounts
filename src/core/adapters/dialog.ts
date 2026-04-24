@@ -227,7 +227,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             saveAccessKey(address, keyAuthorization, accessKey.keyPair)
 
           return {
-            accounts: accounts.map((a) => ({ address: a.address })),
+            accounts: accounts.map((a) => ({
+              address: a.address,
+              ...(a.capabilities ? { capabilities: a.capabilities } : {}),
+            })),
             ...(keyAuthorization ? { keyAuthorization } : {}),
             ...(accounts[0]?.capabilities.signature
               ? { signature: accounts[0].capabilities.signature }
@@ -265,7 +268,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             saveAccessKey(address, keyAuthorization, accessKey.keyPair)
 
           return {
-            accounts: accounts.map((a) => ({ address: a.address })),
+            accounts: accounts.map((a) => ({
+              address: a.address,
+              ...(a.capabilities ? { capabilities: a.capabilities } : {}),
+            })),
             ...(keyAuthorization ? { keyAuthorization } : {}),
             ...(accounts[0]?.capabilities.signature
               ? { signature: accounts[0].capabilities.signature }

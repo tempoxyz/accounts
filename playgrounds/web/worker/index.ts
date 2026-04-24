@@ -2,6 +2,8 @@ import { Handler, Kv } from 'accounts/server'
 import { Mppx, tempo } from 'mppx/server'
 import { privateKeyToAccount } from 'viem/accounts'
 
+import { handleOidcProxy } from './oidc-proxy.js'
+
 const payment = Mppx.create({
   methods: [
     tempo.charge({
@@ -33,6 +35,8 @@ const handler = Handler.compose([
 export default {
   async fetch(request) {
     const url = new URL(request.url)
+
+    if (url.pathname === '/oidc-proxy') return handleOidcProxy(request)
 
     if (url.pathname === '/zero-dollar-auth') {
       const result = await payment.charge({

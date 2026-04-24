@@ -56,6 +56,92 @@ describe('validate', () => {
     `)
   })
 
+  test('behavior: validates wallet_connect with required identity email capability', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: { identity: { email: { required: true } }, method: 'register' },
+        },
+      ],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "identity": {
+                "email": {
+                  "required": true,
+                },
+              },
+              "method": "register",
+            },
+          },
+        ],
+      }
+    `)
+  })
+
+  test('behavior: validates wallet_connect with Tempo OIDC capability', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: { method: 'login', oidc: { tempo: { nonce: 'nonce-1', scope: 'openid' } } },
+        },
+      ],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "method": "login",
+              "oidc": {
+                "tempo": {
+                  "nonce": "nonce-1",
+                  "scope": "openid",
+                },
+              },
+            },
+          },
+        ],
+      }
+    `)
+  })
+
+  test('behavior: validates wallet_connect with Mock OIDC capability', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: { method: 'login', oidc: { mock: { nonce: 'nonce-2', scope: 'openid' } } },
+        },
+      ],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "method": "login",
+              "oidc": {
+                "mock": {
+                  "nonce": "nonce-2",
+                  "scope": "openid",
+                },
+              },
+            },
+          },
+        ],
+      }
+    `)
+  })
+
   test('default: validates wallet_disconnect', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'wallet_disconnect',

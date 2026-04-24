@@ -33,6 +33,9 @@ catalogs:
     '@wagmi/core':
       specifier: ^3.4.4
       version: 3.4.4
+    jose:
+      specifier: ^6.2.2
+      version: 6.2.2
     prool:
       specifier: ~0.2.4
       version: 0.2.4
@@ -580,6 +583,9 @@ importers:
       accounts:
         specifier: workspace:*
         version: link:../..
+      jose:
+        specifier: 'catalog:'
+        version: 6.2.2
       mppx:
         specifier: 0.5.11
         version: 0.5.11(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.14)(typescript@5.9.3)(viem@2.48.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
@@ -4776,6 +4782,9 @@ packages:
   jiti@2.6.1:
     resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
     hasBin: true
+
+  jose@6.2.2:
+    resolution: {integrity: sha512-d7kPDd34KO/YnzaDOlikGpOurfF0ByC2sEV4cANCtdqLlTfBlw2p14O/5d/zv40gJPbIQxfES3nSx1/oYNyuZQ==}
 
   jose@6.2.2:
     resolution: {integrity: sha512-d7kPDd34KO/YnzaDOlikGpOurfF0ByC2sEV4cANCtdqLlTfBlw2p14O/5d/zv40gJPbIQxfES3nSx1/oYNyuZQ==}
@@ -11335,6 +11344,8 @@ snapshots:
 
   jose@6.2.2:
     optional: true
+
+  jose@6.2.2: {}
 
   js-tokens@4.0.0: {}
 

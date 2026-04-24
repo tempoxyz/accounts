@@ -37,10 +37,45 @@ describe('request', () => {
                 limits?: { token: `0x${string}`; limit: string }[] | undefined
               }
             | undefined
+          identity?:
+            | {
+                email?:
+                  | {
+                      issuer: string
+                      value: string
+                      verified: true
+                    }
+                  | undefined
+              }
+            | undefined
+          oidc?:
+            | {
+                mock?:
+                  | {
+                      idToken: string
+                      issuer: string
+                      scope: 'openid' | 'openid email'
+                    }
+                  | undefined
+                tempo?:
+                  | {
+                      idToken: string
+                      issuer: string
+                      scope: 'openid' | 'openid email'
+                    }
+                  | undefined
+              }
+            | undefined
           signature?: `0x${string}` | undefined
         }
       }[]
     }>()
+    expectTypeOf<
+      Extract<'email', keyof Result<'wallet_connect'>['accounts'][number]['capabilities']>
+    >().toEqualTypeOf<never>()
+    expectTypeOf<
+      Extract<'username', keyof Result<'wallet_connect'>['accounts'][number]['capabilities']>
+    >().toEqualTypeOf<never>()
   })
 
   test('wallet_disconnect', () => {

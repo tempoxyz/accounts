@@ -1,4 +1,5 @@
-import { Expiry } from 'accounts'
+import { Expiry, type Rpc } from 'accounts'
+import * as jose from 'jose'
 import { Hex, Json } from 'ox'
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import { parseUnits } from 'viem'
@@ -7,6 +8,7 @@ import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 
+import * as Oidc from './oidc.js'
 import {
   type AdapterType,
   type DialogMode,
@@ -67,7 +69,7 @@ export function App() {
       <Events />
 
       <h2>Connection</h2>
-      <WalletConnect />
+      <WalletConnect adapterType={adapterType} />
       <EthRequestAccounts />
       <WalletDisconnect />
 
@@ -242,8 +244,37 @@ function ProviderState() {
   )
 }
 
-function WalletConnect() {
+type WalletConnectResult = Rpc.wallet_connect.Encoded['returns']
+type WalletConnectOidcRequest = NonNullable<
+  NonNullable<NonNullable<Rpc.wallet_connect.Decoded['params']>[0]['capabilities']>['oidc']
+>
+type WalletConnectRequestedOidc = {
+  nonce: string
+  provider: WalletConnectOidcProvider
+  scope: 'openid' | 'openid email'
+}
+type WalletConnectOidcProvider = keyof WalletConnectOidcRequest
+
+function WalletConnect(props: { adapterType: AdapterType }) {
+  const { adapterType } = props
   const [result, error, execute] = useRequest()
+  const supportsWalletOidc = adapterType === 'tempoWallet'
+  const [requestedOidc, setRequestedOidc] = useState<WalletConnectRequestedOidc | undefined>()
+  const walletConnect = result as WalletConnectResult | undefined
+  const returnedOidc = (() => {
+    if (requestedOidc?.provider === 'mock') return walletConnect?.accounts[0]?.capabilities.oidc?.mock
+    if (requestedOidc?.provider === 'tempo') return walletConnect?.accounts[0]?.capabilities.oidc?.tempo
+
+    return (
+      walletConnect?.accounts[0]?.capabilities.oidc?.tempo ??
+      walletConnect?.accounts[0]?.capabilities.oidc?.mock
+    )
+  })()
+  const returnedOidcProvider = (() => {
+    if (walletConnect?.accounts[0]?.capabilities.oidc?.tempo) return 'tempo' as const
+    if (walletConnect?.accounts[0]?.capabilities.oidc?.mock) return 'mock' as const
+    return undefined
+  })()
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -251,6 +282,12 @@ function WalletConnect() {
     const name = form.get('name') as string
     const digest = form.get('digest') as Hex.Hex
     const accessKey = form.get('accessKey') as string | null
+    const oidcProvider = supportsWalletOidc
+      ? ((form.get('oidcProvider') as '' | WalletConnectOidcProvider) ?? '')
+      : ''
+    const oidcScope = supportsWalletOidc
+      ? ((form.get('oidcScope') as '' | 'openid' | 'openid email') ?? '')
+      : ''
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
 
     const limitToken = env === 'mainnet' && 'USDC.e' in tokens ? tokens['USDC.e'] : tokens.pathUSD
@@ -274,6 +311,23 @@ function WalletConnect() {
         }
       return undefined
     })()
+    const oidc = (() => {
+      if (!oidcProvider || !oidcScope) return undefined
+
+      const request = { nonce: crypto.randomUUID(), scope: oidcScope } as const
+      if (oidcProvider === 'mock') return { mock: request } satisfies WalletConnectOidcRequest
+      return { tempo: request } satisfies WalletConnectOidcRequest
+    })()
+
+    setRequestedOidc(
+      oidcProvider && oidcScope && oidc
+        ? {
+            nonce: oidc[oidcProvider]!.nonce,
+            provider: oidcProvider,
+            scope: oidcScope,
+          }
+        : undefined,
+    )
 
     const capabilities =
       method === 'register'
@@ -281,10 +335,12 @@ function WalletConnect() {
             method: 'register',
             ...(name ? { name } : {}),
             ...(digest ? { digest } : {}),
+            ...(oidc ? { oidc } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
           } as const)
         : {
             ...(digest ? { digest } : {}),
+            ...(oidc ? { oidc } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
           }
 
@@ -304,7 +360,29 @@ function WalletConnect() {
   }
 
   return (
-    <Method method="wallet_connect" result={result} error={error}>
+    <Method
+      error={error}
+      footer={
+        supportsWalletOidc ? (
+          <OidcInspector
+            audience={currentOrigin()}
+            prefill={
+              returnedOidc && returnedOidcProvider
+                ? {
+                    issuer: returnedOidc.issuer,
+                    nonce:
+                      requestedOidc?.provider === returnedOidcProvider ? requestedOidc.nonce : '',
+                    provider: returnedOidcProvider,
+                    token: returnedOidc.idToken,
+                  }
+                : undefined
+            }
+          />
+        ) : undefined
+      }
+      method="wallet_connect"
+      result={result}
+    >
       <form onSubmit={submit}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Name</label>
@@ -331,6 +409,32 @@ function WalletConnect() {
             scope)
           </label>
         </fieldset>
+        {supportsWalletOidc ? (
+          <fieldset style={{ marginBottom: 8 }}>
+            <legend>OIDC</legend>
+            <label>
+              <input type="radio" name="oidcScope" value="" defaultChecked /> None
+            </label>
+            <div style={{ marginTop: 8 }}>
+              <label>
+                <input type="radio" name="oidcProvider" value="tempo" defaultChecked /> Tempo
+              </label>
+              <label style={{ marginLeft: 8 }}>
+                <input type="radio" name="oidcProvider" value="mock" /> Mock
+              </label>
+            </div>
+            <label style={{ marginLeft: 8 }}>
+              <input type="radio" name="oidcScope" value="openid" /> Request `openid`
+            </label>
+            <label style={{ marginLeft: 8 }}>
+              <input type="radio" name="oidcScope" value="openid email" /> Request `openid email`
+            </label>
+          </fieldset>
+        ) : (
+          <p style={{ marginBottom: 8 }}>
+            Wallet OIDC is currently available only with the <code>tempoWallet</code> adapter.
+          </p>
+        )}
         <button type="submit" value="login">
           Login
         </button>
@@ -1352,6 +1456,231 @@ function useRequest() {
   return [result, error, execute] as const
 }
 
+type OidcVerification = Awaited<ReturnType<typeof verifyOidcIdToken>>
+type Jwk = JsonWebKey & {
+  alg?: string | undefined
+  kid?: string | undefined
+  use?: string | undefined
+}
+
+function OidcInspector(props: {
+  audience: string
+  prefill?: { issuer: string; nonce: string; provider: WalletConnectOidcProvider; token: string } | undefined
+}) {
+  const { audience: defaultAudience, prefill } = props
+  const [audience, setAudience] = useState(defaultAudience)
+  const [provider, setProvider] = useState<WalletConnectOidcProvider>(prefill?.provider ?? 'tempo')
+  const [issuer, setIssuer] = useState(prefill?.issuer ?? '')
+  const [nonce, setNonce] = useState(prefill?.nonce ?? '')
+  const [token, setToken] = useState(prefill?.token ?? '')
+  const [error, setError] = useState<Error>()
+  const [result, setResult] = useState<OidcVerification>()
+
+  useEffect(() => {
+    if (!prefill?.token) return
+
+    setProvider(prefill.provider)
+    setIssuer(prefill.issuer)
+    setNonce(prefill.nonce)
+    setToken(prefill.token)
+    setError(undefined)
+    setResult(undefined)
+  }, [prefill?.issuer, prefill?.nonce, prefill?.provider, prefill?.token])
+
+  const issuerPlaceholder =
+    provider === 'mock' ? 'https://wallet.tempo.local/mock-oidc' : 'https://wallet.tempo.local'
+  const tokenPlaceholder =
+    provider === 'mock' ? 'Paste a Mock OIDC ID token' : 'Paste a Tempo OIDC ID token'
+
+  return (
+    <details style={{ marginTop: 12 }}>
+      <summary>Verify OIDC ID token</summary>
+      <p style={{ marginBottom: 8 }}>
+        Fetch discovery and JWKS first, then verify the signature and standard claims before
+        reading payload fields. Works for Tempo and Mock issuers.
+      </p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void (async () => {
+            try {
+              setError(undefined)
+              setResult(undefined)
+              setResult(
+                await verifyOidcIdToken({
+                  audience,
+                  issuer,
+                  nonce,
+                  token,
+                }),
+              )
+            } catch (e) {
+              setError(e instanceof Error ? e : new Error(String(e)))
+            }
+          })()
+        }}
+      >
+        <fieldset style={{ marginBottom: 8 }}>
+          <legend>Provider</legend>
+          <label>
+            <input
+              checked={provider === 'tempo'}
+              name="oidcInspectorProvider"
+              onChange={() => setProvider('tempo')}
+              type="radio"
+              value="tempo"
+            />{' '}
+            Tempo
+          </label>
+          <label style={{ marginLeft: 8 }}>
+            <input
+              checked={provider === 'mock'}
+              name="oidcInspectorProvider"
+              onChange={() => setProvider('mock')}
+              type="radio"
+              value="mock"
+            />{' '}
+            Mock
+          </label>
+        </fieldset>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Issuer</label>
+          <input
+            onChange={(e) => setIssuer(e.target.value)}
+            placeholder={issuerPlaceholder}
+            style={{ flex: 1 }}
+            value={issuer}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Audience</label>
+          <input onChange={(e) => setAudience(e.target.value)} style={{ flex: 1 }} value={audience} />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Nonce</label>
+          <input
+            onChange={(e) => setNonce(e.target.value)}
+            placeholder="Optional"
+            style={{ flex: 1 }}
+            value={nonce}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8 }}>
+          <label>ID Token</label>
+          <textarea
+            onChange={(e) => setToken(e.target.value)}
+            placeholder={tokenPlaceholder}
+            rows={4}
+            style={{ flex: 1, fontFamily: 'monospace' }}
+            value={token}
+          />
+        </div>
+        <button type="submit">Verify token</button>
+      </form>
+      {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
+      {result && (
+        <>
+          <h4>Verified Claims</h4>
+          <pre>{Json.stringify(result.claims, null, 2)}</pre>
+          <details>
+            <summary>Verification details</summary>
+            <pre>
+              {Json.stringify(
+                {
+                  discovery: result.discovery,
+                  header: result.header,
+                  jwk: result.jwk,
+                  payload: result.payload,
+                },
+                null,
+                2,
+              )}
+            </pre>
+          </details>
+        </>
+      )}
+    </details>
+  )
+}
+
+async function verifyOidcIdToken(options: {
+  audience: string
+  issuer: string
+  nonce: string
+  token: string
+}) {
+  const { audience, issuer, nonce, token } = options
+  if (!issuer.trim()) throw new Error('Issuer is required.')
+  if (!audience.trim()) throw new Error('Audience is required.')
+  if (!token.trim()) throw new Error('ID token is required.')
+
+  const discovery = await fetchJson<{
+    issuer: string
+    jwks_uri: string
+  }>(Oidc.get(issuer))
+  const jwks = await fetchJson<{ keys: Jwk[] }>(discovery.jwks_uri)
+  const header = jose.decodeProtectedHeader(token)
+  if (!header.alg) throw new Error('The ID token is missing an `alg` header.')
+
+  const jwk = jwks.keys.find(
+    (key) =>
+      (header.kid ? key.kid === header.kid : true) &&
+      (key.use === undefined || key.use === 'sig') &&
+      (key.alg === undefined || key.alg === header.alg),
+  )
+  if (!jwk)
+    throw new Error(
+      header.kid
+        ? `No JWKS signing key matched kid \`${header.kid}\`.`
+        : 'No JWKS signing key matched the ID token header.',
+    )
+
+  const key = await jose.importJWK(jwk, header.alg)
+  if (key instanceof Uint8Array) throw new Error('Expected a CryptoKey for the OIDC signing key.')
+
+  const verified = await jose.jwtVerify(token, key, {
+    audience,
+    issuer: discovery.issuer,
+  })
+  if (nonce && verified.payload.nonce !== nonce)
+    throw new Error(
+      `Nonce mismatch. Expected \`${nonce}\`, received \`${String(verified.payload.nonce ?? '')}\`.`,
+    )
+
+  const email = verified.payload.email
+  const emailVerified = verified.payload['email_verified']
+  return {
+    claims: {
+      aud: verified.payload.aud,
+      email: typeof email === 'string' ? email : undefined,
+      email_verified: typeof emailVerified === 'boolean' ? emailVerified : undefined,
+      exp: verified.payload.exp,
+      expIso: verified.payload.exp ? new Date(verified.payload.exp * 1_000).toISOString() : undefined,
+      iss: verified.payload.iss,
+      nonce: verified.payload.nonce,
+      sub: verified.payload.sub,
+    },
+    discovery,
+    header: verified.protectedHeader,
+    jwk: {
+      alg: jwk.alg,
+      kid: jwk.kid,
+      use: jwk.use,
+    },
+    payload: verified.payload,
+  }
+}
+
+async function fetchJson<value>(url: string): Promise<value> {
+  const response = await fetch(`/oidc-proxy?url=${encodeURIComponent(url)}`)
+  if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`)
+  return (await response.json()) as value
+}
+
+function currentOrigin() {
+  return typeof window === 'undefined' ? '' : window.location.origin
+}
+
 function OcclusionSimulator() {
   const [active, setActive] = useState(false)
 
@@ -1530,15 +1859,17 @@ function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) 
 }
 
 function Method({
+  children,
+  error,
+  footer,
   method,
   result,
-  error,
-  children,
 }: {
+  children: React.ReactNode
+  error?: Error | undefined
+  footer?: React.ReactNode | undefined
   method: string
   result: unknown
-  error?: Error | undefined
-  children: React.ReactNode
 }) {
   return (
     <div>
@@ -1546,6 +1877,7 @@ function Method({
       {children}
       {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
       {result !== undefined && <pre>{Json.stringify(result, null, 2)}</pre>}
+      {footer}
     </div>
   )
 }

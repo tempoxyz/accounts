@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "accounts": "workspace:*",
+    "jose": "catalog:",
     "mppx": "0.5.11",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

@@ -15,6 +15,13 @@ type EncodedRequest<encoded extends { method: unknown; params: unknown }> = Pick
   'method' | 'params'
 >
 
+type WalletConnectCapabilities =
+  Rpc.wallet_connect.Encoded['returns']['accounts'][number]['capabilities']
+
+type WalletConnectAccount = Store.Account & {
+  capabilities?: WalletConnectCapabilities | undefined
+}
+
 /** Adapter interface for the provider. */
 export type Adapter = SetupFn & Meta
 
@@ -157,7 +164,7 @@ export declare namespace createAccount {
     userId?: string | undefined
   }
   type ReturnType = {
-    accounts: readonly Store.Account[]
+    accounts: readonly WalletConnectAccount[]
     /** Email associated with the account. */
     email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
@@ -187,7 +194,7 @@ export declare namespace loadAccounts {
   }
   type ReturnType = {
     /** Loaded accounts. */
-    accounts: readonly Store.Account[]
+    accounts: readonly WalletConnectAccount[]
     /** Email associated with the account. */
     email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */

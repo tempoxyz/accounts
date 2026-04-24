@@ -19,6 +19,12 @@ import * as Store from './Store.js'
 import * as Request from './zod/request.js'
 import * as Rpc from './zod/rpc.js'
 
+const requiredIdentityEmailMessage =
+  'This request requires a verified email address. Verify an email in Tempo Wallet and try again.'
+const requiredMockOidcMessage = 'This request requires Mock OIDC. Try again in Tempo Wallet.'
+const requiredTempoOidcMessage =
+  'This request requires Tempo OIDC. Try again in Tempo Wallet.'
+
 export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
   ox_Provider.Emitter & {
     /** Configured chains. */
@@ -137,6 +143,17 @@ export function create(options: create.Options = {}): create.ReturnType {
     for (const a of store.getState().accounts)
       if (!merged.some((m) => m.address.toLowerCase() === a.address.toLowerCase())) merged.push(a)
     return merged
+  }
+
+  function sanitizeWalletConnectCapabilities(capabilities: unknown) {
+    return z.encode(
+      Rpc.wallet_connect.capabilities.result,
+      z.decode(Rpc.wallet_connect.capabilities.result, capabilities ?? {}),
+    )
+  }
+
+  function toStoredAccounts(accounts: Adapter.loadAccounts.ReturnType['accounts']) {
+    return accounts.map(({ capabilities: _, ...account }) => account)
   }
 
   /** Resolves the `feePayer` field from a transaction request into an absolute URL string or `undefined`. */
@@ -498,61 +515,97 @@ export function create(options: create.Options = {}): create.ReturnType {
                     if (chainId) store.setState((x) => ({ ...x, chainId }))
 
                     const capabilities = request._decoded.params?.[0]?.capabilities
+                    const requireIdentityEmail = capabilities?.identity?.email?.required === true
+                    const requireMockOidc = capabilities?.oidc?.mock !== undefined
+                    const requireTempoOidc = capabilities?.oidc?.tempo !== undefined
                     const authorizeAccessKey =
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
 
-                    const { keyAuthorization, accounts, email, signature, username } =
-                      await (async () => {
-                        if (capabilities?.method === 'register') {
-                          // If a stored account already has this label, sign in
-                          // with its credential instead of creating a new one.
-                          const existing = capabilities.name
-                            ? store
-                                .getState()
-                                .accounts.find(
-                                  (a) =>
-                                    'credential' in a &&
-                                    a.label?.toLowerCase() === capabilities.name!.toLowerCase(),
-                                )
-                            : undefined
-                          if (existing && 'credential' in existing)
-                            return await actions.loadAccounts(
-                              {
-                                credentialId: existing.credential?.id,
-                                digest: capabilities.digest,
-                                authorizeAccessKey,
-                              },
-                              request,
-                            )
-                          return await actions.createAccount(
+                    const { keyAuthorization, accounts, email, signature } = await (async () => {
+                      if (capabilities?.method === 'register') {
+                        // If a stored account already has this label, sign in
+                        // with its credential instead of creating a new one.
+                        const existing = capabilities.name
+                          ? store
+                              .getState()
+                              .accounts.find(
+                                (a) =>
+                                  'credential' in a &&
+                                  a.label?.toLowerCase() === capabilities.name!.toLowerCase(),
+                              )
+                          : undefined
+                        if (existing && 'credential' in existing)
+                          return await actions.loadAccounts(
                             {
+                              credentialId: existing.credential?.id,
                               digest: capabilities.digest,
                               authorizeAccessKey,
-                              name: capabilities.name ?? 'default',
-                              userId: capabilities.userId ?? Hex.random(16),
                             },
                             request,
                           )
-                        }
-                        return await actions.loadAccounts(
+                        return await actions.createAccount(
                           {
-                            credentialId: capabilities?.credentialId,
-                            digest: capabilities?.digest,
+                            digest: capabilities.digest,
                             authorizeAccessKey,
-                            selectAccount: capabilities?.selectAccount,
+                            name: capabilities.name ?? 'default',
+                            userId: capabilities.userId ?? Hex.random(16),
                           },
                           request,
                         )
-                      })()
+                      }
+                      return await actions.loadAccounts(
+                        {
+                          credentialId: capabilities?.credentialId,
+                          digest: capabilities?.digest,
+                          authorizeAccessKey,
+                          selectAccount: capabilities?.selectAccount,
+                        },
+                        request,
+                      )
+                    })()
 
-                    store.setState({ accounts: resolveAccounts(accounts), activeAccount: 0 })
+                    const resultAccounts = accounts.map((a) => ({
+                      address: a.address,
+                      capabilities: sanitizeWalletConnectCapabilities(a.capabilities),
+                    }))
+
+                    const identityEmail =
+                      resultAccounts[0]?.capabilities.identity?.email ??
+                      (requireIdentityEmail && email !== undefined && email !== null
+                        ? {
+                            issuer: 'tempo',
+                            value: email,
+                            verified: true as const,
+                          }
+                        : undefined)
+                    const mockOidc = resultAccounts[0]?.capabilities.oidc?.mock
+                    const tempoOidc = resultAccounts[0]?.capabilities.oidc?.tempo
+
+                    if (requireIdentityEmail && !identityEmail)
+                      throw new ox_Provider.UnsupportedNonOptionalCapabilityError({
+                        message: requiredIdentityEmailMessage,
+                      })
+                    if (requireMockOidc && !mockOidc)
+                      throw new ox_Provider.UnsupportedNonOptionalCapabilityError({
+                        message: requiredMockOidcMessage,
+                      })
+                    if (requireTempoOidc && !tempoOidc)
+                      throw new ox_Provider.UnsupportedNonOptionalCapabilityError({
+                        message: requiredTempoOidcMessage,
+                      })
+
+                    store.setState({
+                      accounts: resolveAccounts(toStoredAccounts(accounts)),
+                      activeAccount: 0,
+                    })
 
                     const accountAddress = accounts[0]?.address
                     return {
-                      accounts: accounts.map((a) => ({
+                      accounts: resultAccounts.map((a) => ({
                         address: a.address,
-                        capabilities:
-                          a.address === accountAddress
+                        capabilities: {
+                          ...a.capabilities,
+                          ...(a.address === accountAddress
                             ? {
                                 ...(keyAuthorization
                                   ? {
@@ -563,10 +616,16 @@ export function create(options: create.Options = {}): create.ReturnType {
                                     }
                                   : {}),
                                 ...(signature && capabilities?.digest ? { signature } : {}),
-                                ...(email !== undefined ? { email } : {}),
-                                ...(username !== undefined ? { username } : {}),
+                                ...(!a.capabilities.identity?.email && identityEmail
+                                  ? {
+                                      identity: {
+                                        email: identityEmail,
+                                      },
+                                    }
+                                  : {}),
                               }
-                            : {},
+                            : {}),
+                        },
                       })),
                     } satisfies Rpc.wallet_connect.Encoded['returns']
                   }
