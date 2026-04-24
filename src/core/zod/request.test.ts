@@ -84,6 +84,33 @@ describe('validate', () => {
     `)
   })
 
+  test('default: validates wallet_swap with amountIn', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_swap',
+      params: [
+        {
+          amountIn: '1.5',
+          chainId: '0xa',
+          tokenIn: '0x0000000000000000000000000000000000000001',
+          tokenOut: '0x0000000000000000000000000000000000000002',
+        },
+      ],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_swap",
+        "params": [
+          {
+            "amountIn": "1.5",
+            "chainId": 10,
+            "tokenIn": "0x0000000000000000000000000000000000000001",
+            "tokenOut": "0x0000000000000000000000000000000000000002",
+          },
+        ],
+      }
+    `)
+  })
+
   test('behavior: preserves original request properties', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'eth_accounts',
@@ -116,6 +143,22 @@ describe('validate', () => {
       }),
     ).toThrowErrorMatchingInlineSnapshot(
       `[ProviderRpcError: Invalid params: params.0.chainId: Expected hex value, params.0.chainId: Invalid input]`,
+    )
+  })
+
+  test('error: rejects wallet_swap when both amountIn and amountOut are provided', () => {
+    expect(() =>
+      RpcRequest.validate(Schema.Request, {
+        method: 'wallet_swap',
+        params: [
+          {
+            amountIn: '1',
+            amountOut: '2',
+          },
+        ],
+      }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[ProviderRpcError: Invalid params: params.0.amountOut: Invalid input, params.0.amountIn: Invalid input, params.0.amountIn: Invalid input, params.0.amountOut: Invalid input]`,
     )
   })
 })

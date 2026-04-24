@@ -137,6 +137,25 @@ describe('Encoded', () => {
     }>()
   })
 
+  test('wallet_swap', () => {
+    expectTypeOf<Rpc.wallet_swap.Encoded>().toMatchTypeOf<{
+      method: 'wallet_swap'
+      params:
+        | readonly [
+            {
+              amountIn?: string | undefined
+              amountOut?: string | undefined
+              chainId?: Hex | undefined
+              slippage?: number | undefined
+              tokenIn?: Hex | undefined
+              tokenOut?: Hex | undefined
+            },
+          ]
+        | undefined
+      returns: { transactionHash: Hex }
+    }>()
+  })
+
   test('wallet_switchEthereumChain', () => {
     expectTypeOf<Rpc.wallet_switchEthereumChain.Encoded>().toEqualTypeOf<{
       method: 'wallet_switchEthereumChain'
@@ -175,7 +194,7 @@ describe('Ox', () => {
 describe('Viem', () => {
   test('is a tuple of all provider methods', () => {
     expectTypeOf<Schema.Viem[0]['Method']>().toEqualTypeOf<'eth_accounts'>()
-    expectTypeOf<Schema.Viem[19]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
+    expectTypeOf<Schema.Viem[20]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
   })
 })
 
@@ -203,6 +222,7 @@ describe('Request', () => {
       | 'wallet_getBalances'
       | 'wallet_revokeAccessKey'
       | 'wallet_send'
+      | 'wallet_swap'
     >()
   })
 

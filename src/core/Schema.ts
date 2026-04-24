@@ -95,6 +95,7 @@ export const schema = from([
   Rpc.wallet_revokeAccessKey.schema,
   Rpc.wallet_send.schema,
   Rpc.wallet_sendCalls.schema,
+  Rpc.wallet_swap.schema,
   Rpc.wallet_switchEthereumChain.schema,
 ])
 

@@ -664,6 +664,22 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
     })
   })
 
+  describe('wallet_swap', () => {
+    test('error: throws UnsupportedMethodError when adapter has no swap action', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      await connect(provider)
+
+      await expect(
+        provider.request({
+          method: 'wallet_swap',
+          params: [{ amountIn: '1', tokenIn: Addresses.pathUsd, tokenOut: Addresses.pathUsd }],
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UnsupportedMethodError: \`swap\` not supported by adapter.]`,
+      )
+    })
+  })
+
   describe('wallet_getCapabilities', () => {
     test('default: returns atomic supported for all chains', async () => {
       const provider = Provider.create({ adapter: adapter() })
