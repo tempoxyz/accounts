@@ -1,7 +1,7 @@
 import { Address as ox_Address, Hex, Provider as ox_Provider, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { prepareTransactionRequest } from 'viem/actions'
-import { Account as TempoAccount } from 'viem/tempo'
+import { Account as TempoAccount, Actions } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Account from '../Account.js'
@@ -184,10 +184,17 @@ export function local(options: local.Options): Adapter.Adapter {
           return { accounts, email, keyAuthorization, signature: signature_, username }
         },
         async revokeAccessKey(parameters) {
-          AccessKey.revoke({
-            address: parameters.address,
-            store,
-          })
+          const account = getAccount({ accessKey: false, signable: true })
+          const client = getClient()
+          await Actions.accessKey.revoke(client, {
+            account,
+            accessKey: parameters.accessKeyAddress,
+          } as never)
+          store.setState((state) => ({
+            accessKeys: state.accessKeys.filter(
+              (a) => a.address?.toLowerCase() !== parameters.accessKeyAddress.toLowerCase(),
+            ),
+          }))
         },
         async signPersonalMessage({ data, address }) {
           const account = getAccount({ address, signable: true })

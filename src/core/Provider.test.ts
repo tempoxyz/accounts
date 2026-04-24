@@ -1214,24 +1214,95 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
   })
 
   describe('wallet_revokeAccessKey', () => {
-    test('default: revokes a granted access key', async () => {
+    test('default: revokes a granted access key on-chain', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       await connect(provider)
 
       const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
+      await fund(connected)
+
       const { keyAuthorization } = await provider.request({
         method: 'wallet_authorizeAccessKey',
         params: [{ expiry: Expiry.days(1) }],
       })
+
+      // Send a tx to register the key on-chain via keyAuthorization.
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      // Key should exist on-chain before revocation.
+      const client = getClient()
+      const before = await Actions.accessKey.getMetadata(client, {
+        account: connected,
+        accessKey: keyAuthorization.address,
+      })
+      expect(before.isRevoked).toBe(false)
 
       await provider.request({
         method: 'wallet_revokeAccessKey',
         params: [{ address: connected, accessKeyAddress: keyAuthorization.address }],
       })
 
-      // After revoking, sendTransactionSync should use root key (still works)
-      const address = (await provider.request({ method: 'eth_accounts' }))[0]!
-      await fund(address)
+      // Key should be revoked on-chain.
+      const after = await Actions.accessKey.getMetadata(client, {
+        account: connected,
+        accessKey: keyAuthorization.address,
+      })
+      expect(after.isRevoked).toBe(true)
+    })
+
+    test('behavior: removes key from local store', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      await connect(provider)
+
+      const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
+      await fund(connected)
+
+      const { keyAuthorization } = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      // Register the key on-chain.
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      expect(provider.store.getState().accessKeys).toHaveLength(1)
+
+      await provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [{ address: connected, accessKeyAddress: keyAuthorization.address }],
+      })
+
+      expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+    })
+
+    test('behavior: root key still works after revoking access key', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      await connect(provider)
+
+      const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
+      await fund(connected)
+
+      const { keyAuthorization } = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      // Register the key on-chain, then revoke it.
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      await provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [{ address: connected, accessKeyAddress: keyAuthorization.address }],
+      })
 
       const receipt = await provider.request({
         method: 'eth_sendTransactionSync',
