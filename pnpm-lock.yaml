@@ -98,8 +98,8 @@ importers:
         specifier: ^2.30.0
         version: 2.30.0(@types/node@25.6.0)
       '@remix-run/route-pattern':
-        specifier: ^0.19.0
-        version: 0.19.0
+        specifier: ^0.20.0
+        version: 0.20.0
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -2621,8 +2621,8 @@ packages:
       '@types/react':
         optional: true
 
-  '@remix-run/route-pattern@0.19.0':
-    resolution: {integrity: sha512-RXKaIJ2Lx01uyZc0iw+yLzowFCa1/NuB8jN7QTo4QUe2CaUGtvPGdhgrTUp75lyNNCSJIrM9SaAJ6c1pjZdmoA==}
+  '@remix-run/route-pattern@0.20.0':
+    resolution: {integrity: sha512-TEdJ5eFn40St26oyaRYGI1FWeXDvlEzkbvollM8Xit0qIuDFyFG03Okvvfc1s8KgR9sYULDPjxJIzk6xvIRR9A==}
 
   '@rolldown/binding-android-arm64@1.0.0-rc.16':
     resolution: {integrity: sha512-rhY3k7Bsae9qQfOtph2Pm2jZEA+s8Gmjoz4hhmx70K9iMQ/ddeae+xhRQcM5IuVx5ry1+bGfkvMn7D6MJggVSA==}
@@ -8997,7 +8997,7 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
 
-  '@remix-run/route-pattern@0.19.0': {}
+  '@remix-run/route-pattern@0.20.0': {}
 
   '@rolldown/binding-android-arm64@1.0.0-rc.16':
     optional: true
