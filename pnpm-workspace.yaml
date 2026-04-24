@@ -32,7 +32,7 @@ catalog:
   vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
   wagmi: ^3.6.4
-  wrangler: ^4.83.0
+  wrangler: ^4.84.1
   zod: ^4.3.6
 minimumReleaseAge: 1440
 
