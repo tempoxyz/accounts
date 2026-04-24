@@ -6,6 +6,11 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      npm-weekly:
+        applies-to: "version-updates"
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -13,6 +18,11 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      actions-weekly:
+        applies-to: "version-updates"
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: /.github/actions/install-dependencies
@@ -20,3 +30,8 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      actions-weekly:
+        applies-to: "version-updates"
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
