@@ -22,6 +22,6 @@
     "@vitejs/plugin-react": "latest",
     "typescript": "~5.9.3",
     "vite": "latest",
-    "vite-plugin-mkcert": "^1.17.12"
+    "vite-plugin-mkcert": "^2.0.0"
   }
 }

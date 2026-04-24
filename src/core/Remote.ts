@@ -210,15 +210,8 @@ export function create(options: create.Options): Remote {
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search)
         const mode = params.get('mode') as State['mode']
-        const chainId = Number(params.get('chainId'))
 
         if (mode) store.setState({ mode })
-
-        if (chainId && provider.store.getState().chainId !== chainId)
-          provider.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: Hex.fromNumber(chainId) }],
-          })
       }
     },
 

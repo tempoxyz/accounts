@@ -395,6 +395,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           return await provider.request(request)
         },
 
+        async send(_params, request) {
+          return await provider.request(request)
+        },
+
         async disconnect() {
           store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
         },

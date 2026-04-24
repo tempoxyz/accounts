@@ -642,6 +642,20 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
     })
   })
 
+  describe('wallet_send', () => {
+    test('error: throws UnsupportedMethodError when adapter has no send action', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      await connect(provider)
+
+      await expect(
+        provider.request({
+          method: 'wallet_send',
+          params: [{ to: '0x0000000000000000000000000000000000000001', token: Addresses.pathUsd, value: '1' }],
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(`[Provider.UnsupportedMethodError: \`send\` not supported by adapter.]`)
+    })
+  })
+
   describe('wallet_getCapabilities', () => {
     test('default: returns atomic supported for all chains', async () => {
       const provider = Provider.create({ adapter: adapter() })
