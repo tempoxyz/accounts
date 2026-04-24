@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "accounts": "workspace:*",
-    "mppx": "0.5.11",
+    "mppx": "0.5.13",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "viem": "catalog:"
