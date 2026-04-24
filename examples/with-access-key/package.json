@@ -22,7 +22,7 @@
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
     "typescript": "~5.9.3",
-    "vite-plugin-mkcert": "^1.17.12",
+    "vite-plugin-mkcert": "^2.0.0",
     "vite-plus": "latest"
   }
 }
