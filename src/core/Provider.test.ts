@@ -650,9 +650,17 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       await expect(
         provider.request({
           method: 'wallet_send',
-          params: [{ to: '0x0000000000000000000000000000000000000001', token: Addresses.pathUsd, value: '1' }],
+          params: [
+            {
+              to: '0x0000000000000000000000000000000000000001',
+              token: Addresses.pathUsd,
+              value: '1',
+            },
+          ],
         }),
-      ).rejects.toThrowErrorMatchingInlineSnapshot(`[Provider.UnsupportedMethodError: \`send\` not supported by adapter.]`)
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UnsupportedMethodError: \`send\` not supported by adapter.]`,
+      )
     })
   })
 
@@ -1376,6 +1384,12 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         params: [{ expiry: Expiry.days(1) }],
       })
       expect(provider.store.getState().accessKeys).toHaveLength(1)
+
+      // Send a tx to register the key on-chain via keyAuthorization.
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
 
       // Revoke the access key on-chain so the node will reject it.
       const { accessKeys } = provider.store.getState()
