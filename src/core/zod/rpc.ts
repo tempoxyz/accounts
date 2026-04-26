@@ -549,8 +549,8 @@ export namespace wallet_send {
       ),
     ),
     returns: z.object({
-      /** Transaction hash of the submitted send. */
-      transactionHash: u.hex(),
+      /** Receipt of the submitted send. */
+      receipt,
     }),
   })
   export type Encoded = Schema.Encoded<typeof schema>
