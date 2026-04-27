@@ -10,15 +10,31 @@ import _hosts from '../trusted-hosts.json' with { type: 'json' }
 export const hosts: Record<string, readonly string[]> = _hosts
 
 /**
- * Returns `true` if `hostname` matches any pattern in `trustedHosts`.
+ * Returns `true` if `hostname` matches any pattern in `trustedHosts`,
+ * or (when `source` is provided) if `hostname` shares the same
+ * registrable domain ("eTLD+1") as `source`.
+ *
  * Patterns starting with `*.` match any subdomain suffix
  * (e.g. `*.workers.dev` matches `foo.workers.dev`).
  */
-export function match(trustedHosts: readonly string[], hostname: string) {
-  if (hostname.endsWith('.local')) return true
+export function match(trustedHosts: readonly string[], hostname: string, source?: string) {
+  if (source && sameRegistrableDomain(hostname, source)) return true
   return trustedHosts.some((pattern) => {
     if (pattern.startsWith('*.'))
       return hostname.endsWith(pattern.slice(1)) && hostname.length > pattern.length - 1
     return pattern === hostname
   })
+}
+
+/** Returns `true` if `a` and `b` share the same registrable domain ("eTLD+1"). */
+export function sameRegistrableDomain(a: string, b: string) {
+  return registrableDomain(a) === registrableDomain(b)
+}
+
+/** Returns the registrable domain ("eTLD+1") for a hostname. */
+function registrableDomain(host: string) {
+  const hostname = host.split(':')[0]!.toLowerCase()
+  const labels = hostname.split('.')
+  if (labels.length <= 2) return hostname
+  return labels.slice(-2).join('.')
 }

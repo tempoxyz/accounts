@@ -18,7 +18,7 @@ export function useEnsureVisibility(
     if (!origin) return false
     try {
       const hostname = new URL(origin).hostname.replace(/^www\./, '')
-      return TrustedHosts.match(remote.trustedHosts, hostname)
+      return TrustedHosts.match(remote.trustedHosts, hostname, window.location.hostname)
     } catch {
       return false
     }
