@@ -80,10 +80,10 @@ export function App() {
       <WalletGetBalances />
       <Faucet />
       <WalletDeposit />
-      <WalletSend />
 
       <h2>Transactions</h2>
       <Transactions />
+      <WalletSend />
 
       <h2>Receipts &amp; Status</h2>
       <EthGetTransactionReceipt />
@@ -181,14 +181,37 @@ function WalletDeposit() {
 
 function WalletSend() {
   const [result, error, execute] = useRequest()
+  const [feePayerMode, setFeePayerMode] = useState<'wallet' | 'playground' | 'disabled'>('wallet')
+
+  const feePayerParam = (() => {
+    if (feePayerMode === 'disabled') return { feePayer: false as const }
+    if (feePayerMode === 'playground') return { feePayer: '/relay' }
+    return {}
+  })()
+
   return (
     <Method method="wallet_send" result={result} error={error}>
+      <fieldset style={{ marginBottom: 8, border: 'none', padding: 0 }}>
+        <legend>Fee Payer</legend>
+        {(['wallet', 'playground', 'disabled'] as const).map((mode) => (
+          <label key={mode} style={{ marginRight: 12 }}>
+            <input
+              type="radio"
+              name="walletSendFeePayerMode"
+              value={mode}
+              checked={feePayerMode === mode}
+              onChange={() => setFeePayerMode(mode)}
+            />{' '}
+            {mode[0]!.toUpperCase() + mode.slice(1)}
+          </label>
+        ))}
+      </fieldset>
       <button
         onClick={() =>
           execute(() =>
             provider.request({
               method: 'wallet_send',
-              params: [{}],
+              params: [{ ...feePayerParam }],
             }),
           )
         }
@@ -200,7 +223,7 @@ function WalletSend() {
           execute(() =>
             provider.request({
               method: 'wallet_send',
-              params: [{ token: tokens.pathUSD }],
+              params: [{ token: tokens.pathUSD, ...feePayerParam }],
             }),
           )
         }
@@ -212,7 +235,14 @@ function WalletSend() {
           execute(() =>
             provider.request({
               method: 'wallet_send',
-              params: [{ to: '0x0000000000000000000000000000000000000001', token: tokens.pathUSD, value: '1' }],
+              params: [
+                {
+                  to: '0x0000000000000000000000000000000000000001',
+                  token: tokens.pathUSD,
+                  value: '1',
+                  ...feePayerParam,
+                },
+              ],
             }),
           )
         }
@@ -478,7 +508,7 @@ function Transactions() {
 
   return (
     <div>
-      <h3>Calls</h3>
+      <h3>Send</h3>
       <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: '15%' }} />
@@ -547,7 +577,6 @@ function Transactions() {
         + Add Call
       </button>
 
-      <h3>Send</h3>
       <fieldset style={{ marginBottom: 8, border: 'none', padding: 0 }}>
         <legend>Fee Payer</legend>
         {(['wallet', 'playground', 'disabled'] as const).map((mode) => (

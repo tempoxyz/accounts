@@ -573,10 +573,37 @@ async function fill(
     // @ts-expect-error
     if (result.tx.gas && request.feePayer && !result.tx.feePayerSignature)
       result.tx.gas = Hex.fromNumber(BigInt(result.tx.gas) + 20_000n)
-    const sponsor = (result as Record<string, any>).capabilities?.sponsor as
+    const upstreamCapabilities = (result as { capabilities?: Record<string, unknown> })
+      .capabilities
+    const sponsor = upstreamCapabilities?.sponsor as
       | { address: Address; name?: string; url?: string }
       | undefined
-    return { transaction: Utils.normalizeTempoTransaction(result.tx), sponsor }
+    // External fee-payer relays surface chain reverts (e.g. InsufficientBalance)
+    // inside `capabilities.error` with a stub `tx` instead of throwing. Detect
+    // that here and re-throw so the autoSwap branch below can recover the same
+    // way it does for the direct-chain path.
+    const upstreamError = upstreamCapabilities?.error as
+      | { errorName?: string; message?: string; data?: `0x${string}` }
+      | undefined
+    if (upstreamError?.errorName === 'InsufficientBalance') {
+      const synthetic = new Error(upstreamError.message ?? 'InsufficientBalance')
+      synthetic.name = 'UpstreamRevertError'
+      ;(synthetic as { data?: `0x${string}` | undefined }).data = upstreamError.data
+      throw synthetic
+    }
+    // Reconstruct a `swap` shape from upstream's `capabilities.autoSwap` so the
+    // wallet relay's outer code can re-resolve autoSwap metadata locally —
+    // otherwise upstream-driven swaps are silently dropped from the response.
+    const swap = extractSwapFromCapabilities(upstreamCapabilities?.autoSwap)
+    // The chain's `eth_fillTransaction` doesn't echo back `calls`, so merge
+    // them in from the original request before normalizing — otherwise the
+    // typed envelope built for sponsorship signing throws CallsEmptyError.
+    const mergedTx = mergeCallsFromRequest(result.tx as Record<string, unknown>, request)
+    return {
+      transaction: Utils.normalizeTempoTransaction(mergedTx),
+      sponsor,
+      ...(swap ? { swap } : {}),
+    }
   } catch (error) {
     if (!(error instanceof Error)) throw error
     if (!autoSwap) throw error
@@ -613,8 +640,12 @@ async function fill(
     const sponsor = (result as Record<string, any>).capabilities?.sponsor as
       | { address: Address; name?: string; url?: string }
       | undefined
+    const mergedTx = mergeCallsFromRequest(result.tx as Record<string, unknown>, {
+      ...request,
+      calls: [...swapCalls, ...originalCalls],
+    })
     return {
-      transaction: Utils.normalizeTempoTransaction(result.tx),
+      transaction: Utils.normalizeTempoTransaction(mergedTx),
       sponsor,
       swap: {
         calls: swapCalls,
@@ -1014,4 +1045,76 @@ function buildSwapCalls(
     { to: approve.to, data: approve.data, value: 0n },
     { to: buy.to, data: buy.data, value: 0n },
   ] as const
+}
+
+/**
+ * Merges the original fill request into the result tx. The chain's
+ * `eth_fillTransaction` returns only the "filled" gas/nonce/fee fields and
+ * omits envelope inputs like `calls`, `chainId`, `validBefore`, `nonceKey`,
+ * `keyData`, `keyType`, `feePayer`. Without these the typed Tempo envelope
+ * built for sponsorship signing throws `CallsEmptyError` or
+ * `Cannot convert undefined to a BigInt` when serializing.
+ *
+ * Result fields take precedence (they are the chain's authoritative filled
+ * values); request fields fill in everything else. Calls are normalized
+ * separately so legacy `to`/`data`/`value` requests are also supported.
+ */
+function mergeCallsFromRequest(
+  resultTx: Record<string, unknown>,
+  request: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...request, ...resultTx }
+  const resultCalls = resultTx.calls
+  if (Array.isArray(resultCalls) && resultCalls.length > 0) return merged
+
+  const reqCalls = request.calls
+  if (Array.isArray(reqCalls) && reqCalls.length > 0) {
+    merged.calls = reqCalls
+    return merged
+  }
+
+  const { to, data, value } = request
+  if (typeof to === 'undefined' && typeof data === 'undefined' && typeof value === 'undefined')
+    return merged
+
+  merged.calls = [
+    {
+      ...(typeof to !== 'undefined' ? { to } : {}),
+      ...(typeof data !== 'undefined' ? { data } : {}),
+      ...(typeof value !== 'undefined' ? { value } : {}),
+    },
+  ]
+  return merged
+}
+
+/**
+ * Reconstructs a `swap` shape (matching the inner autoSwap branch's return
+ * value) from an upstream relay's `capabilities.autoSwap`. Used so a wallet
+ * relay forwarding to an external feePayer URL can re-emit autoSwap metadata
+ * locally without losing track of the upstream's swap.
+ */
+function extractSwapFromCapabilities(autoSwap: unknown):
+  | {
+      calls: readonly { to: Address; data: `0x${string}` }[]
+      tokenIn: Address
+      tokenOut: Address
+      amountOut: bigint
+      maxAmountIn: bigint
+    }
+  | undefined {
+  if (!autoSwap || typeof autoSwap !== 'object') return undefined
+  const a = autoSwap as {
+    calls?: readonly { to: Address; data: `0x${string}` }[]
+    maxIn?: { token?: Address; value?: `0x${string}` }
+    minOut?: { token?: Address; value?: `0x${string}` }
+  }
+  if (!a.calls || !a.maxIn?.token || !a.maxIn.value || !a.minOut?.token || !a.minOut.value)
+    return undefined
+  return {
+    calls: a.calls,
+    tokenIn: a.maxIn.token,
+    tokenOut: a.minOut.token,
+    amountOut: BigInt(a.minOut.value),
+    maxAmountIn: BigInt(a.maxIn.value),
+  }
 }

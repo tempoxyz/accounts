@@ -22,8 +22,9 @@ export function fromChainId(
   const { chains, feePayer: feePayerOption, provider, store } = options
   const feePayerUrl = (() => {
     if (feePayerOption === false) return undefined
-    if (typeof feePayerOption === 'string') return feePayerOption
-    return feePayerOption?.url
+    if (typeof feePayerOption === 'string') return normalizeFeePayerUrl(feePayerOption)
+    if (feePayerOption?.url) return normalizeFeePayerUrl(feePayerOption.url)
+    return undefined
   })()
   const precedence = (() => {
     if (typeof feePayerOption === 'object' && feePayerOption !== null)
@@ -85,6 +86,17 @@ function providerTransport(provider: ox_Provider.Provider, base: Transport): Tra
       },
     } as ReturnType<Transport>
   }
+}
+
+/**
+ * Resolves a fee payer URL to an absolute URL string. Relative paths (e.g.
+ * `/relay`) are resolved against `window.location.origin` when running in a
+ * browser; on the server, relative paths are returned as-is.
+ */
+function normalizeFeePayerUrl(url: string): string {
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+  if (typeof window !== 'undefined') return new URL(url, window.location.origin).href
+  return url
 }
 
 function feePayerTransport(
