@@ -396,8 +396,11 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           return await provider.request(request)
         },
 
-        async send(_params, request) {
-          return await provider.request(request)
+        async send(params, request) {
+          return await provider.request({
+            ...request,
+            params: [z.encode(Rpc.wallet_send.parameters, params)] as const,
+          })
         },
 
         async disconnect() {

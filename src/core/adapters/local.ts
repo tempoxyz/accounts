@@ -1,5 +1,6 @@
 import { Address as ox_Address, Hex, Provider as ox_Provider, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { BaseError } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
 
@@ -186,10 +187,19 @@ export function local(options: local.Options): Adapter.Adapter {
         async revokeAccessKey(parameters) {
           const account = getAccount({ accessKey: false, signable: true })
           const client = getClient()
-          await Actions.accessKey.revoke(client, {
-            account,
-            accessKey: parameters.accessKeyAddress,
-          } as never)
+          try {
+            await Actions.accessKey.revoke(client, {
+              account,
+              accessKey: parameters.accessKeyAddress,
+            } as never)
+          } catch (error) {
+            const isKeyNotFound =
+              error instanceof BaseError &&
+              !!error.walk(
+                (e) => (e as { data?: { errorName?: string } }).data?.errorName === 'KeyNotFound',
+              )
+            if (!isKeyNotFound) throw error
+          }
           store.setState((state) => ({
             accessKeys: state.accessKeys.filter(
               (a) => a.address?.toLowerCase() !== parameters.accessKeyAddress.toLowerCase(),
