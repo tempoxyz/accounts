@@ -36,7 +36,6 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@typescript/native-preview": "7.0.0-dev.20260416.2",
     "@vitejs/devtools": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@wagmi/core": "catalog:",
