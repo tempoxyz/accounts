@@ -143,12 +143,10 @@ describe('Encoded', () => {
       params:
         | readonly [
             {
-              amountIn?: string | undefined
-              amountOut?: string | undefined
-              chainId?: Hex | undefined
+              amount?: Hex | undefined
               slippage?: number | undefined
-              tokenIn?: Hex | undefined
-              tokenOut?: Hex | undefined
+              token?: Hex | undefined
+              type?: 'buy' | 'sell' | undefined
             },
           ]
         | undefined

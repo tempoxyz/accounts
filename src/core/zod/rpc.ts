@@ -559,50 +559,16 @@ export namespace wallet_send {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
-const swapParameters = z.union([
-  z.object({
-    /** Chain to pre-select for the swap. */
-    chainId: z.optional(u.number()),
-    /** Maximum allowed slippage as a decimal fraction (for example `0.05` for 5%). */
-    slippage: z.optional(z.number()),
-    /** Input token contract address to pre-fill. Omit to let the user choose. */
-    tokenIn: z.optional(u.address()),
-    /** Output token contract address to pre-fill. Omit to let the user choose. */
-    tokenOut: z.optional(u.address()),
-    /** Human-readable exact input amount to pre-fill (for example `"1.5"`). */
-    amountIn: z.string(),
-    /** Exact output amount cannot be provided together with `amountIn`. */
-    amountOut: z.optional(z.never()),
-  }),
-  z.object({
-    /** Chain to pre-select for the swap. */
-    chainId: z.optional(u.number()),
-    /** Maximum allowed slippage as a decimal fraction (for example `0.05` for 5%). */
-    slippage: z.optional(z.number()),
-    /** Input token contract address to pre-fill. Omit to let the user choose. */
-    tokenIn: z.optional(u.address()),
-    /** Output token contract address to pre-fill. Omit to let the user choose. */
-    tokenOut: z.optional(u.address()),
-    /** Exact input amount cannot be provided together with `amountOut`. */
-    amountIn: z.optional(z.never()),
-    /** Human-readable exact output amount to pre-fill (for example `"1.5"`). */
-    amountOut: z.string(),
-  }),
-  z.object({
-    /** Chain to pre-select for the swap. */
-    chainId: z.optional(u.number()),
-    /** Maximum allowed slippage as a decimal fraction (for example `0.05` for 5%). */
-    slippage: z.optional(z.number()),
-    /** Input token contract address to pre-fill. Omit to let the user choose. */
-    tokenIn: z.optional(u.address()),
-    /** Output token contract address to pre-fill. Omit to let the user choose. */
-    tokenOut: z.optional(u.address()),
-    /** Exact input amount is optional when the wallet should let the user choose it. */
-    amountIn: z.optional(z.never()),
-    /** Exact output amount is optional when the wallet should let the user choose it. */
-    amountOut: z.optional(z.never()),
-  }),
-])
+const swapParameters = z.object({
+  /** Raw token amount to pre-fill. Omit to let the user choose. */
+  amount: z.optional(u.hex()),
+  /** Maximum allowed slippage as a decimal fraction (for example `0.05` for 5%). */
+  slippage: z.optional(z.number().check(z.minimum(0), z.maximum(1))),
+  /** Token contract address to pre-fill. Omit to let the user choose. */
+  token: z.optional(u.address()),
+  /** Whether the amount is the exact token amount to buy or sell. */
+  type: z.optional(z.union([z.literal('buy'), z.literal('sell')])),
+})
 
 /** Opens the wallet swap flow with optional pre-filled swap intent fields. */
 export namespace wallet_swap {

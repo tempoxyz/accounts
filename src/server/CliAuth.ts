@@ -208,6 +208,8 @@ export declare namespace Policy {
     export type Options = {
       /** Requested root account restriction. */
       account?: Address.Address | undefined
+      /** Requested chain ID. */
+      chainId: bigint
       /** Requested access-key expiry timestamp. Omit to let the server choose one. */
       expiry?: number | undefined
       /** Requested key type. */
@@ -417,14 +419,11 @@ export function from(options: from.Options = {}): CliAuth {
         throw new Error('Key authorization key type does not match the device-code request.')
       if (actual.chainId !== expected.chainId)
         throw new Error('Key authorization chain does not match the device-code request.')
-      if ((actual.expiry ?? undefined) !== (expected.expiry ?? undefined))
-        throw new Error('Key authorization expiry does not match the device-code request.')
-      if (!sameLimits(actual.limits, expected.limits))
-        throw new Error('Key authorization limits do not match the device-code request.')
+      validateGrant(actual, current)
 
       const valid = await verifyHash((options.client ?? cache.get(current.chainId)) as never, {
         address: options.request.accountAddress,
-        hash: TempoKeyAuthorization.getSignPayload(expected),
+        hash: TempoKeyAuthorization.getSignPayload(toKeyAuthorization(actual)),
         signature: SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(actual.signature), {
           magic: actual.signature.type === 'webAuthn',
         }),
@@ -446,6 +445,7 @@ export function from(options: from.Options = {}): CliAuth {
       const keyType = options.request.keyType ?? 'secp256k1'
       const approved = await policy.validate({
         ...(account ? { account } : {}),
+        chainId: typeof nextChainId === 'bigint' ? nextChainId : BigInt(nextChainId),
         expiry: options.request.expiry,
         keyType,
         ...(options.request.limits ? { limits: options.request.limits } : {}),
@@ -809,16 +809,29 @@ function normalizeKeyAuthorization(value: z.output<typeof keyAuthorization>) {
 }
 
 /** @internal */
-function sameLimits(
-  a: Policy.validate.ReturnType['limits'],
-  b: Policy.validate.ReturnType['limits'],
-) {
-  if (!a && !b) return true
-  if (!a || !b || a.length !== b.length) return false
-  return a.every((limit, i) => {
-    const other = b[i]
-    if (!other) return false
-    return limit.token.toLowerCase() === other.token.toLowerCase() && limit.limit === other.limit
+function validateGrant(actual: ReturnType<typeof normalizeKeyAuthorization>, expected: Entry) {
+  if (typeof actual.expiry !== 'number' || actual.expiry > expected.expiry)
+    throw new Error('Key authorization expiry exceeds the device-code policy.')
+  if (!expected.limits) return
+  if (!actual.limits) throw new Error('Key authorization limits exceed the device-code policy.')
+
+  for (const limit of actual.limits) {
+    const expectedLimit = expected.limits.find(
+      (x) => x.token.toLowerCase() === limit.token.toLowerCase(),
+    )
+    if (!expectedLimit || limit.limit > expectedLimit.limit)
+      throw new Error('Key authorization limits exceed the device-code policy.')
+  }
+}
+
+/** @internal */
+function toKeyAuthorization(value: ReturnType<typeof normalizeKeyAuthorization>) {
+  return TempoKeyAuthorization.from({
+    address: value.address,
+    chainId: value.chainId,
+    expiry: value.expiry,
+    ...(value.limits ? { limits: value.limits } : {}),
+    type: value.keyType,
   })
 }
 

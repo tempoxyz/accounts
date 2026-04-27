@@ -343,6 +343,7 @@ describe('createDeviceCode', () => {
     const store = CliAuth.Store.memory()
     const now = () => 1_000
     const defaultExpiry = 4_600
+    let validatedChainId: bigint | undefined
     const { request } = await createRequest('device-code-verifier', {
       accessKey: secpAccessKey,
       expiry: undefined,
@@ -354,7 +355,8 @@ describe('createDeviceCode', () => {
       chainId: chain.id,
       now,
       policy: {
-        validate({ expiry, limits }) {
+        validate({ chainId, expiry, limits }) {
+          validatedChainId = chainId
           return {
             expiry: expiry ?? defaultExpiry,
             ...(limits ? { limits } : {}),
@@ -368,17 +370,20 @@ describe('createDeviceCode', () => {
     })
     const entry = await store.get(result.code)
 
-    expect(entry).toMatchInlineSnapshot(`
+    expect({ entry, validatedChainId }).toMatchInlineSnapshot(`
       {
-        "chainId": 1337n,
-        "code": "ABCDEFGH",
-        "codeChallenge": "NUwjc1h8PuXcsvSOG44Rp4bMayBXnOkriHEJ19CaSQM",
-        "createdAt": 1000,
-        "expiresAt": 31000,
-        "expiry": 4600,
-        "keyType": "secp256k1",
-        "pubKey": "${secpAccessKey.publicKey}",
-        "status": "pending",
+        "entry": {
+          "chainId": 1337n,
+          "code": "ABCDEFGH",
+          "codeChallenge": "NUwjc1h8PuXcsvSOG44Rp4bMayBXnOkriHEJ19CaSQM",
+          "createdAt": 1000,
+          "expiresAt": 31000,
+          "expiry": 4600,
+          "keyType": "secp256k1",
+          "pubKey": "${secpAccessKey.publicKey}",
+          "status": "pending",
+        },
+        "validatedChainId": 1337n,
       }
     `)
   })
@@ -734,7 +739,7 @@ describe('authorize', () => {
     expect(polled.status).toMatchInlineSnapshot(`"authorized"`)
   })
 
-  test('behavior: rejects a mismatched key authorization', async () => {
+  test('error: rejects an increased key authorization expiry', async () => {
     const store = CliAuth.Store.memory()
     const { request } = await createRequest()
     const { code } = await CliAuth.createDeviceCode({
@@ -750,7 +755,95 @@ describe('authorize', () => {
         store,
       }),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: Key authorization expiry does not match the device-code request.]`,
+      `[Error: Key authorization expiry exceeds the device-code policy.]`,
+    )
+  })
+
+  test('behavior: accepts a reduced key authorization', async () => {
+    const store = CliAuth.Store.memory()
+    const { codeVerifier, request } = await createRequest()
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      request,
+      store,
+    })
+
+    const authorized = await CliAuth.authorize({
+      chainId: chain.id,
+      request: await authorize(code, {
+        expiry: expiry - 60,
+        limits: [{ limit: 999n, token: limits[0]!.token }],
+      }),
+      store,
+    })
+    const polled = await CliAuth.poll({
+      code,
+      request: {
+        codeVerifier: codeVerifier,
+      },
+      store,
+    })
+    const polled_ =
+      polled.status === 'authorized'
+        ? {
+            ...polled,
+            keyAuthorization: {
+              ...polled.keyAuthorization,
+              signature: {
+                type: polled.keyAuthorization.signature.type,
+              },
+            },
+          }
+        : polled
+
+    expect({ authorized, polled: polled_ }).toMatchInlineSnapshot(`
+      {
+        "authorized": {
+          "status": "authorized",
+        },
+        "polled": {
+          "accountAddress": "${root.address}",
+          "keyAuthorization": {
+            "address": "${accessKey.address}",
+            "chainId": 1337n,
+            "expiry": ${expiry - 60},
+            "keyId": "${accessKey.address}",
+            "keyType": "p256",
+            "limits": [
+              {
+                "limit": 999n,
+                "token": "0x20c0000000000000000000000000000000000001",
+              },
+            ],
+            "signature": {
+              "type": "secp256k1",
+            },
+          },
+          "status": "authorized",
+        },
+      }
+    `)
+  })
+
+  test('error: rejects an increased key authorization limit', async () => {
+    const store = CliAuth.Store.memory()
+    const { request } = await createRequest()
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      request,
+      store,
+    })
+
+    await expect(
+      CliAuth.authorize({
+        chainId: chain.id,
+        request: await authorize(code, {
+          limits: [{ limit: 1_001n, token: limits[0]!.token }],
+        }),
+        store,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Key authorization limits exceed the device-code policy.]`,
     )
   })
 
