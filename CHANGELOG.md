@@ -1,5 +1,21 @@
 # accounts
 
+## 0.8.2
+
+### Patch Changes
+
+- 9ffdd28: Modified `wallet_send` to return `{ receipt }` instead of `{ transactionHash }`
+- 9ffdd28: Resolved relative `feePayer` URLs in `Client.fromChainId` against `window.location.origin` in the browser.
+- 3ec1b23: Added `wallet_send` RPC action.
+- 7c62e76: Fixed `Remote.ready()` reverting persisted chain by removing stale `chainId` URL param switch.
+- 8b6265a: Logged access key sign errors in the `dialog` adapter's `withAccessKey` catch block via `console.warn` before removing the stale key.
+- 9ffdd28: Merged original `eth_fillTransaction` request fields (calls, chainId, validBefore, key data, feePayer) into the chain's filled tx so sponsorship envelope serialization no longer throws `CallsEmptyError`.
+- 9ffdd28: Forwarded upstream relay `capabilities.autoSwap` and `InsufficientBalance` errors through the wallet relay so external fee-payer fills surface autoSwap metadata and trigger the local autoSwap fallback.
+- 447707a: Made `wallet_revokeAccessKey` on the local adapter send a `revokeKey` transaction to the AccountKeychain precompile via `Actions.accessKey.revoke` before removing the key from the local store.
+- 77b094b: Fixed `wallet_revokeAccessKey` in the local adapter crashing with `KeyNotFound` when the access key was only authorized locally and never registered on-chain via a transaction.
+- 9ffdd28: Added `feePayer` parameter to `wallet_send` for per-call fee payer override.
+- 9ffdd28: Exported `Rpc.wallet_send.parameters` zod schema for the `wallet_send` parameters object.
+
 ## 0.8.1
 
 ### Patch Changes
