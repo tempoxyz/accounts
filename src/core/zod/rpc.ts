@@ -532,22 +532,24 @@ export namespace wallet_getCallsStatus {
 }
 
 export namespace wallet_send {
+  /** Parameters object for `wallet_send`. */
+  export const parameters = z.object({
+    /**
+     * Fee payer override. `false` to disable the wallet's default fee
+     * payer, a URL string to use a custom fee payer service.
+     */
+    feePayer: z.optional(z.union([z.boolean(), z.string()])),
+    /** Recipient address to pre-fill. */
+    to: z.optional(u.address()),
+    /** Token contract address to pre-fill. Omit to let the user choose. */
+    token: z.optional(u.address()),
+    /** Human-readable amount to pre-fill (e.g. "1.5"). */
+    value: z.optional(z.string()),
+  })
+
   export const schema = Schema.defineItem({
     method: z.literal('wallet_send'),
-    params: z.optional(
-      z.readonly(
-        z.tuple([
-          z.object({
-            /** Recipient address to pre-fill. */
-            to: z.optional(u.address()),
-            /** Token contract address to pre-fill. Omit to let the user choose. */
-            token: z.optional(u.address()),
-            /** Human-readable amount to pre-fill (e.g. "1.5"). */
-            value: z.optional(z.string()),
-          }),
-        ]),
-      ),
-    ),
+    params: z.optional(z.readonly(z.tuple([parameters]))),
     returns: z.object({
       /** Receipt of the submitted send. */
       receipt,

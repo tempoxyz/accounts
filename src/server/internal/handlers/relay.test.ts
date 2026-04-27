@@ -281,6 +281,127 @@ describe('behavior: with app-provided feePayer URL', () => {
   })
 })
 
+describe('behavior: with app-provided feePayer URL + autoSwap', () => {
+  let appServer: Server
+  let walletServer: Server
+  let client: ReturnType<typeof getClient<typeof chain>>
+
+  beforeAll(async () => {
+    // App relay sponsors fees AND has `features: 'all'` so it can recover
+    // from InsufficientBalance via autoSwap.
+    appServer = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        transports: { [chain.id]: http() },
+        feePayer: {
+          account: feePayerAccount,
+          name: 'App Sponsor',
+          url: 'https://app.example.com',
+        },
+      }).listener,
+    )
+
+    // Wallet relay forwards to the app relay; also has features:'all' so its
+    // own fill() can detect upstream `capabilities.error` as InsufficientBalance.
+    walletServer = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        transports: { [chain.id]: http() },
+      }).listener,
+    )
+
+    client = getClient({ transport: http(walletServer.url) })
+  })
+
+  afterAll(() => {
+    appServer.close()
+    walletServer.close()
+  })
+
+  test('behavior: autoSwap recovers when external feePayer surfaces InsufficientBalance', async () => {
+    const sender = accounts[6]!
+
+    // Token pair + DEX liquidity. Use alphaUsd as the quote token so the
+    // relay can swap alphaUsd → base to cover the deficit.
+    const rpc = getClient({ account: accounts[0]! })
+    const { token: base } = await Actions.token.createSync(rpc, {
+      name: 'External Swap Base',
+      symbol: 'EXTBASE',
+      currency: 'USD',
+      quoteToken: addresses.alphaUsd,
+    })
+    await sendTransactionSync(rpc, {
+      calls: [
+        Actions.token.grantRoles.call({ token: base, role: 'issuer', to: rpc.account!.address }),
+        Actions.token.mint.call({
+          token: base,
+          to: rpc.account!.address,
+          amount: parseUnits('10000', 6),
+        }),
+        Actions.token.mint.call({
+          token: addresses.alphaUsd,
+          to: rpc.account!.address,
+          amount: parseUnits('10000', 6),
+        }),
+        Actions.token.approve.call({
+          token: base,
+          spender: Addresses.stablecoinDex,
+          amount: parseUnits('10000', 6),
+        }),
+        Actions.token.approve.call({
+          token: addresses.alphaUsd,
+          spender: Addresses.stablecoinDex,
+          amount: parseUnits('10000', 6),
+        }),
+      ],
+    })
+    await Actions.dex.createPairSync(rpc, { base })
+    await Actions.dex.placeSync(rpc, {
+      token: base,
+      amount: parseUnits('500', 6),
+      type: 'sell',
+      tick: Tick.fromPrice('1.001'),
+    })
+
+    // Give sender alphaUsd (fee + swap source) but NO base tokens.
+    await Actions.token.mintSync(rpc, {
+      token: addresses.alphaUsd,
+      amount: parseUnits('1000', 6),
+      to: sender.address,
+    })
+    await Actions.fee.setUserToken(getClient({ account: sender }), { token: addresses.alphaUsd })
+
+    // Sender attempts to transfer base via the wallet relay, which forwards
+    // to the app relay. The app relay returns 200 with capabilities.error =
+    // InsufficientBalance and a stub tx; the wallet relay must convert that
+    // into a synthetic throw so its own fill() autoSwap branch can recover.
+    const transferAmount = parseUnits('5', 6)
+    const result = await fillTransaction(client, {
+      account: sender.address,
+      ...Actions.token.transfer.call({
+        token: base,
+        to: accounts[7]!.address,
+        amount: transferAmount,
+      }),
+      feePayer: appServer.url as never,
+    })
+
+    const { transaction, capabilities } = result
+
+    // Tx is filled with the swap calls prepended (approve + buy + transfer).
+    expect(transaction.calls).toHaveLength(3)
+    expect(transaction.feePayerSignature).toBeDefined()
+
+    // autoSwap metadata is surfaced.
+    expect(capabilities?.autoSwap?.slippage).toBe(0.05)
+    expect(capabilities?.autoSwap?.maxIn.symbol).toBe('AlphaUSD')
+    expect(capabilities?.autoSwap?.minOut.symbol).toBe('EXTBASE')
+    expect(capabilities?.autoSwap?.minOut.formatted).toBe('5')
+  })
+})
+
 describe('behavior: chainId path parameter', () => {
   let server: Server
   let client: ReturnType<typeof getClient<typeof chain>>
