@@ -566,7 +566,7 @@ const swapParameters = z.object({
   slippage: z.optional(z.number().check(z.minimum(0), z.maximum(1))),
   /** Token contract address to pre-fill. Omit to let the user choose. */
   token: z.optional(u.address()),
-  /** Whether the amount is the exact token amount to buy or sell. */
+  /** Whether the amount is an exact buy amount (`swapExactAmountOut`) or sell amount (`swapExactAmountIn`). */
   type: z.optional(z.union([z.literal('buy'), z.literal('sell')])),
 })
 
