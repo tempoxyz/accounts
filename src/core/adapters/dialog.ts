@@ -27,6 +27,8 @@ import * as Rpc from '../zod/rpc.js'
 export function dialog(options: dialog.Options = {}): Adapter.Adapter {
   const {
     dialog = Dialog.isInsecureContext() ? Dialog.popup() : Dialog.iframe(),
+    // TODO: use the new host
+    // host = 'https://wallet-next.tempo.xyz/remote',
     host = 'https://wallet.tempo.xyz/embed',
     icon = 'data:image/svg+xml,<svg width="269" height="269" viewBox="0 0 269 269" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="269" height="269" fill="black"/><path d="M123.273 190.794H93.445L121.09 105.318H85.7334L93.445 80.2642H191.95L184.238 105.318H150.773L123.273 190.794Z" fill="white"/></svg>',
     name = 'Tempo Wallet',
