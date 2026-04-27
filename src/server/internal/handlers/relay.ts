@@ -573,8 +573,7 @@ async function fill(
     // @ts-expect-error
     if (result.tx.gas && request.feePayer && !result.tx.feePayerSignature)
       result.tx.gas = Hex.fromNumber(BigInt(result.tx.gas) + 20_000n)
-    const upstreamCapabilities = (result as { capabilities?: Record<string, unknown> })
-      .capabilities
+    const upstreamCapabilities = (result as { capabilities?: Record<string, unknown> }).capabilities
     const sponsor = upstreamCapabilities?.sponsor as
       | { address: Address; name?: string; url?: string }
       | undefined
