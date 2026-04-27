@@ -208,6 +208,8 @@ export declare namespace Policy {
     export type Options = {
       /** Requested root account restriction. */
       account?: Address.Address | undefined
+      /** Requested chain ID. */
+      chainId: bigint
       /** Requested access-key expiry timestamp. Omit to let the server choose one. */
       expiry?: number | undefined
       /** Requested key type. */
@@ -446,6 +448,7 @@ export function from(options: from.Options = {}): CliAuth {
       const keyType = options.request.keyType ?? 'secp256k1'
       const approved = await policy.validate({
         ...(account ? { account } : {}),
+        chainId: typeof nextChainId === 'bigint' ? nextChainId : BigInt(nextChainId),
         expiry: options.request.expiry,
         keyType,
         ...(options.request.limits ? { limits: options.request.limits } : {}),
