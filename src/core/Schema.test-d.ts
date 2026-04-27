@@ -144,6 +144,7 @@ describe('Encoded', () => {
         | readonly [
             {
               amount?: Hex | undefined
+              pairToken?: Hex | undefined
               slippage?: number | undefined
               token?: Hex | undefined
               type?: 'buy' | 'sell' | undefined

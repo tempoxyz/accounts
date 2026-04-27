@@ -257,6 +257,7 @@ function WalletSend() {
 function WalletSwap() {
   const [result, error, execute] = useRequest()
   const token = tokens.pathUSD
+  const pairToken = Object.values(tokens).find((x) => x !== token) ?? token
 
   return (
     <Method method="wallet_swap" result={result} error={error}>
@@ -277,19 +278,21 @@ function WalletSwap() {
           execute(() =>
             provider.request({
               method: 'wallet_swap',
-              params: [{ token }],
+              params: [{ pairToken, token }],
             }),
           )
         }
       >
-        Swap (token)
+        Swap (pair)
       </button>
       <button
         onClick={() =>
           execute(() =>
             provider.request({
               method: 'wallet_swap',
-              params: [{ amount: '0xde0b6b3a7640000', slippage: 0.01, token, type: 'sell' }],
+              params: [
+                { amount: '0xde0b6b3a7640000', pairToken, slippage: 0.01, token, type: 'sell' },
+              ],
             }),
           )
         }
@@ -301,7 +304,7 @@ function WalletSwap() {
           execute(() =>
             provider.request({
               method: 'wallet_swap',
-              params: [{ amount: '0xde0b6b3a7640000', token, type: 'buy' }],
+              params: [{ amount: '0xde0b6b3a7640000', pairToken, token, type: 'buy' }],
             }),
           )
         }

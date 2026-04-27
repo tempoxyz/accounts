@@ -90,6 +90,7 @@ describe('validate', () => {
       params: [
         {
           amount: '0x64',
+          pairToken: '0x0000000000000000000000000000000000000002',
           slippage: 0.01,
           token: '0x0000000000000000000000000000000000000001',
           type: 'sell',
@@ -102,6 +103,7 @@ describe('validate', () => {
         "params": [
           {
             "amount": "0x64",
+            "pairToken": "0x0000000000000000000000000000000000000002",
             "slippage": 0.01,
             "token": "0x0000000000000000000000000000000000000001",
             "type": "sell",

@@ -562,9 +562,11 @@ export namespace wallet_send {
 const swapParameters = z.object({
   /** Raw token amount to pre-fill. Omit to let the user choose. */
   amount: z.optional(u.hex()),
+  /** Other side of the swap pair. For buys, this is the token to sell. For sells, this is the token to buy. */
+  pairToken: z.optional(u.address()),
   /** Maximum allowed slippage as a decimal fraction (for example `0.05` for 5%). */
   slippage: z.optional(z.number().check(z.minimum(0), z.maximum(1))),
-  /** Token contract address to pre-fill. Omit to let the user choose. */
+  /** Token to buy or sell. Omit to let the user choose. */
   token: z.optional(u.address()),
   /** Whether the amount is an exact buy amount (`swapExactAmountOut`) or sell amount (`swapExactAmountIn`). */
   type: z.optional(z.union([z.literal('buy'), z.literal('sell')])),
