@@ -371,7 +371,9 @@ export function iframe(): Dialog {
 
         const ioSupported = IO.supported()
         const hostname = window.location.hostname.replace(/^www\./, '')
-        const trusted = Boolean(trustedHosts && TrustedHosts.match(trustedHosts, hostname))
+        const trusted = Boolean(
+          trustedHosts && TrustedHosts.match(trustedHosts, hostname, hostUrl.hostname),
+        )
         const secure = ioSupported || trusted
 
         if (!secure) {
