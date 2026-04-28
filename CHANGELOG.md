@@ -1,5 +1,15 @@
 # accounts
 
+## 0.8.3
+
+### Patch Changes
+
+- f3ac13b: Bumped `mppx` to `0.6.5`.
+- 3c77fe7: Passed the resolved CLI auth chain ID to `CliAuth.Policy.validate`.
+- ba69e15: Allowed CLI auth approvals to return a different expiry or spending limits when the submitted signature covers those values.
+- 37cf2a9: Replaced the `.local` shortcut in `TrustedHosts.match` with an opt-in `source` parameter that treats hostnames sharing the same registrable domain ("eTLD+1") as `source` as trusted.
+- 08c0e12: Added `wallet_swap` RPC action.
+
 ## 0.8.2
 
 ### Patch Changes
