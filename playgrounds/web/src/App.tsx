@@ -336,36 +336,57 @@ function ProviderState() {
 
 function WalletConnect() {
   const [result, error, execute] = useRequest()
+  const tokenlist = useTokenlist()
+  const [accessKeyEnabled, setAccessKeyEnabled] = useState(false)
+  const [expiry, setExpiry] = useState('86400')
+  const [limits, setLimits] = useState<LimitInput[]>([{ token: '', amount: '100', period: '' }])
+  const [scopeSelector, setScopeSelector] = useState('transfer(address,uint256)')
+
+  // Once the tokenlist resolves, hydrate any unselected limit row with the first token.
+  useEffect(() => {
+    const first = tokenlist[0]?.address
+    if (!first) return
+    setLimits((prev) => prev.map((l) => (l.token ? l : { ...l, token: first })))
+  }, [tokenlist])
+
+  function updateLimit(index: number, patch: Partial<LimitInput>) {
+    setLimits((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)))
+  }
+  function addLimit() {
+    setLimits((prev) => [...prev, { token: '', amount: '100', period: '' }])
+  }
+  function removeLimit(index: number) {
+    setLimits((prev) => prev.filter((_, i) => i !== index))
+  }
+  function tokenInfo(address: string) {
+    return tokenlist.find((t) => t.address.toLowerCase() === address.toLowerCase())
+  }
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = new FormData(e.currentTarget)
     const name = form.get('name') as string
     const digest = form.get('digest') as Hex.Hex
-    const accessKey = form.get('accessKey') as string | null
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
 
-    const limitToken = env === 'mainnet' && 'USDC.e' in tokens ? tokens['USDC.e'] : tokens.pathUSD
-    const authorizeAccessKey = (() => {
-      if (accessKey === '100-forever')
-        return {
-          expiry: Expiry.days(1),
-          limits: [{ token: limitToken, limit: Hex.fromNumber(parseUnits('100', 6)) }],
-        }
-      if (accessKey === '10-monthly')
-        return {
-          expiry: Expiry.days(30),
-          limits: [
-            {
-              token: limitToken,
-              limit: Hex.fromNumber(parseUnits('10', 6)),
-              period: 60 * 60 * 24 * 30,
-            },
-          ],
-          scopes: [{ address: limitToken, selector: 'transfer(address,uint256)' }],
-        }
-      return undefined
-    })()
+    const authorizeAccessKey = accessKeyEnabled
+      ? (() => {
+          const filledLimits = limits.filter((l) => l.token && l.amount)
+          return {
+            expiry: Math.floor(Date.now() / 1000) + Number(expiry || '86400'),
+            ...(filledLimits.length > 0 && {
+              limits: filledLimits.map((l) => ({
+                token: l.token,
+                limit: Hex.fromNumber(parseUnits(l.amount, tokenInfo(l.token)?.decimals ?? 6)),
+                ...(l.period ? { period: Number(l.period) } : {}),
+              })),
+            }),
+            ...(scopeSelector && filledLimits[0]
+              ? { scopes: [{ address: filledLimits[0].token, selector: scopeSelector }] }
+              : {}),
+          } as never
+        })()
+      : undefined
 
     const capabilities =
       method === 'register'
@@ -411,17 +432,122 @@ function WalletConnect() {
           />
         </div>
         <fieldset style={{ marginBottom: 8 }}>
-          <legend>Access Key</legend>
-          <label>
-            <input type="radio" name="accessKey" value="none" defaultChecked /> None
-          </label>
-          <label style={{ marginLeft: 8 }}>
-            <input type="radio" name="accessKey" value="100-forever" /> $100 forever
-          </label>
-          <label style={{ marginLeft: 8 }}>
-            <input type="radio" name="accessKey" value="10-monthly" /> $10 per month (transfer
-            scope)
-          </label>
+          <legend>
+            <label>
+              <input
+                checked={accessKeyEnabled}
+                onChange={(e) => setAccessKeyEnabled(e.target.checked)}
+                type="checkbox"
+              />{' '}
+              Authorize Access Key
+            </label>
+          </legend>
+          {accessKeyEnabled && (
+            <>
+              <div
+                style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}
+              >
+                <label>Expiry (seconds)</label>
+                <input
+                  onChange={(e) => setExpiry(e.target.value)}
+                  placeholder="86400"
+                  style={{ flex: 1 }}
+                  value={expiry}
+                />
+              </div>
+              <div style={{ marginBottom: 4 }}>
+                <strong>Limits</strong>
+              </div>
+              {limits.map((limit, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    alignItems: 'center',
+                    marginBottom: 6,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <select
+                    onChange={(e) => updateLimit(i, { token: e.target.value })}
+                    style={{ flex: '1 1 160px' }}
+                    value={limit.token}
+                  >
+                    <option value="">Select token…</option>
+                    {tokenlist.map((t) => (
+                      <option key={t.address} value={t.address}>
+                        {t.symbol}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    onChange={(e) => updateLimit(i, { amount: e.target.value })}
+                    placeholder="100"
+                    style={{ flex: '1 1 80px' }}
+                    value={limit.amount}
+                  />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input
+                      checked={limit.period !== ''}
+                      onChange={(e) =>
+                        updateLimit(i, { period: e.target.checked ? '2592000' : '' })
+                      }
+                      type="checkbox"
+                    />
+                    period
+                  </label>
+                  {limit.period !== '' && (
+                    <select
+                      onChange={(e) => updateLimit(i, { period: e.target.value })}
+                      style={{ flex: '1 1 100px' }}
+                      value={limit.period}
+                    >
+                      {periodOptions
+                        .filter((opt) => opt.value !== '')
+                        .map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                  <button
+                    disabled={limits.length === 1}
+                    onClick={() => removeLimit(i)}
+                    type="button"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button onClick={addLimit} type="button">
+                + Add limit
+              </button>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'center',
+                  marginTop: 8,
+                  marginBottom: 8,
+                }}
+              >
+                <label>Scope</label>
+                <select
+                  onChange={(e) => setScopeSelector(e.target.value)}
+                  style={{ flex: 1 }}
+                  value={scopeSelector}
+                >
+                  {scopePresets.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
         </fieldset>
         <button type="submit" value="login">
           Login
@@ -1210,8 +1336,73 @@ const scopePresets = [
   },
 ] as const
 
+type TokenlistEntry = {
+  address: string
+  chainId: number
+  decimals: number
+  logoURI?: string
+  name: string
+  symbol: string
+}
+
+type LimitInput = {
+  token: string
+  amount: string
+  /** Empty string = no period (lifetime budget). */
+  period: string
+}
+
+/** Fetch the live token list for the current chain, with a static fallback. */
+function useTokenlist(): TokenlistEntry[] {
+  const [list, setList] = useState<TokenlistEntry[]>(() =>
+    Object.entries(tokens).map(([symbol, address]) => ({
+      address,
+      chainId: env === 'mainnet' ? tempo.id : env === 'devnet' ? tempoDevnet.id : tempoModerato.id,
+      decimals: 6,
+      name: symbol,
+      symbol,
+    })),
+  )
+  useEffect(() => {
+    const chainId =
+      env === 'mainnet' ? tempo.id : env === 'devnet' ? tempoDevnet.id : tempoModerato.id
+    fetch(`https://tokenlist.tempo.xyz/list/${chainId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const list = (data as { tokens?: TokenlistEntry[] } | null)?.tokens
+        if (list?.length) setList(list)
+      })
+      .catch(() => {})
+  }, [])
+  return list
+}
+
 function WalletAuthorizeAccessKey() {
   const [result, error, execute] = useRequest()
+  const tokenlist = useTokenlist()
+  const [limits, setLimits] = useState<LimitInput[]>([{ token: '', amount: '100', period: '' }])
+
+  // Once the tokenlist resolves, hydrate any unselected limit row with the first token.
+  useEffect(() => {
+    const first = tokenlist[0]?.address
+    if (!first) return
+    setLimits((prev) => prev.map((l) => (l.token ? l : { ...l, token: first })))
+  }, [tokenlist])
+
+  function updateLimit(index: number, patch: Partial<LimitInput>) {
+    setLimits((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)))
+  }
+  function addLimit() {
+    setLimits((prev) => [...prev, { token: '', amount: '100', period: '' }])
+  }
+  function removeLimit(index: number) {
+    setLimits((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function tokenInfo(address: string) {
+    return tokenlist.find((t) => t.address.toLowerCase() === address.toLowerCase())
+  }
+
   return (
     <Method method="wallet_authorizeAccessKey" result={result} error={error}>
       <form
@@ -1219,23 +1410,19 @@ function WalletAuthorizeAccessKey() {
           e.preventDefault()
           const form = new FormData(e.currentTarget)
           const expiry = (form.get('expiry') as string) || '3600'
-          const limitToken = form.get('limitToken') as string
-          const limitAmount = (form.get('limitAmount') as string) || '100'
-          const period = form.get('period') as string
           const scopeSelector = form.get('scopeSelector') as string
 
+          const filledLimits = limits.filter((l) => l.token && l.amount)
           const params: Record<string, unknown> = {}
           if (expiry) params.expiry = Math.floor(Date.now() / 1000) + Number(expiry)
-          if (limitToken && limitAmount)
-            params.limits = [
-              {
-                token: limitToken,
-                limit: Hex.fromNumber(parseUnits(limitAmount, 6)),
-                ...(period ? { period: Number(period) } : {}),
-              },
-            ]
-          if (scopeSelector && limitToken)
-            params.scopes = [{ address: limitToken, selector: scopeSelector }]
+          if (filledLimits.length > 0)
+            params.limits = filledLimits.map((l) => ({
+              token: l.token,
+              limit: Hex.fromNumber(parseUnits(l.amount, tokenInfo(l.token)?.decimals ?? 6)),
+              ...(l.period ? { period: Number(l.period) } : {}),
+            }))
+          if (scopeSelector && filledLimits[0])
+            params.scopes = [{ address: filledLimits[0].token, selector: scopeSelector }]
 
           execute(() =>
             provider.request({
@@ -1249,34 +1436,84 @@ function WalletAuthorizeAccessKey() {
           <label>Expiry (seconds)</label>
           <input name="expiry" placeholder="3600" style={{ flex: 1 }} />
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-          <label>Limit Token</label>
-          <select name="limitToken" defaultValue={Object.values(tokens)[0]} style={{ flex: 1 }}>
-            <option value="">None</option>
-            {Object.entries(tokens).map(([name, addr]) => (
-              <option key={addr} value={addr}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-          <label>Limit Amount</label>
-          <input name="limitAmount" placeholder="100" style={{ flex: 1 }} />
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-          <label>Period</label>
-          <select name="period" style={{ flex: 1 }}>
-            {periodOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
+
+        <fieldset style={{ marginBottom: 8 }}>
+          <legend>Limits</legend>
+          {limits.map((limit, i) => (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                marginBottom: 6,
+                flexWrap: 'wrap',
+              }}
+            >
+              <select
+                onChange={(e) => updateLimit(i, { token: e.target.value })}
+                style={{ flex: '1 1 160px' }}
+                value={limit.token}
+              >
+                <option value="">Select token…</option>
+                {tokenlist.map((t) => (
+                  <option key={t.address} value={t.address}>
+                    {t.symbol}
+                  </option>
+                ))}
+              </select>
+              <input
+                onChange={(e) => updateLimit(i, { amount: e.target.value })}
+                placeholder="100"
+                style={{ flex: '1 1 80px' }}
+                value={limit.amount}
+              />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input
+                  checked={limit.period !== ''}
+                  onChange={(e) =>
+                    updateLimit(i, { period: e.target.checked ? '2592000' : '' })
+                  }
+                  type="checkbox"
+                />
+                period
+              </label>
+              {limit.period !== '' && (
+                <select
+                  onChange={(e) => updateLimit(i, { period: e.target.value })}
+                  style={{ flex: '1 1 100px' }}
+                  value={limit.period}
+                >
+                  {periodOptions
+                    .filter((opt) => opt.value !== '')
+                    .map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                </select>
+              )}
+              <button
+                disabled={limits.length === 1}
+                onClick={() => removeLimit(i)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button onClick={addLimit} type="button">
+            + Add limit
+          </button>
+        </fieldset>
+
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Scope</label>
-          <select name="scopeSelector" style={{ flex: 1 }}>
+          <select
+            defaultValue="transfer(address,uint256)"
+            name="scopeSelector"
+            style={{ flex: 1 }}
+          >
             {scopePresets.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
