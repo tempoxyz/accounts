@@ -444,9 +444,7 @@ function WalletConnect() {
           </legend>
           {accessKeyEnabled && (
             <>
-              <div
-                style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}
-              >
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
                 <label>Expiry (seconds)</label>
                 <input
                   onChange={(e) => setExpiry(e.target.value)}
@@ -1471,9 +1469,7 @@ function WalletAuthorizeAccessKey() {
               <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <input
                   checked={limit.period !== ''}
-                  onChange={(e) =>
-                    updateLimit(i, { period: e.target.checked ? '2592000' : '' })
-                  }
+                  onChange={(e) => updateLimit(i, { period: e.target.checked ? '2592000' : '' })}
                   type="checkbox"
                 />
                 period
@@ -1493,11 +1489,7 @@ function WalletAuthorizeAccessKey() {
                     ))}
                 </select>
               )}
-              <button
-                disabled={limits.length === 1}
-                onClick={() => removeLimit(i)}
-                type="button"
-              >
+              <button disabled={limits.length === 1} onClick={() => removeLimit(i)} type="button">
                 ×
               </button>
             </div>
@@ -1509,11 +1501,7 @@ function WalletAuthorizeAccessKey() {
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Scope</label>
-          <select
-            defaultValue="transfer(address,uint256)"
-            name="scopeSelector"
-            style={{ flex: 1 }}
-          >
+          <select defaultValue="transfer(address,uint256)" name="scopeSelector" style={{ flex: 1 }}>
             {scopePresets.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
