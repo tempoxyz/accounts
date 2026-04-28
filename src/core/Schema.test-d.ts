@@ -143,7 +143,7 @@ describe('Encoded', () => {
       params:
         | readonly [
             {
-              amount?: Hex | undefined
+              amount?: string | undefined
               pairToken?: Hex | undefined
               slippage?: number | undefined
               token?: Hex | undefined

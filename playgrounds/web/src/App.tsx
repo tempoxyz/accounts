@@ -290,9 +290,7 @@ function WalletSwap() {
           execute(() =>
             provider.request({
               method: 'wallet_swap',
-              params: [
-                { amount: '0xde0b6b3a7640000', pairToken, slippage: 0.01, token, type: 'sell' },
-              ],
+              params: [{ amount: '1', pairToken, slippage: 0.01, token, type: 'sell' }],
             }),
           )
         }
@@ -304,7 +302,7 @@ function WalletSwap() {
           execute(() =>
             provider.request({
               method: 'wallet_swap',
-              params: [{ amount: '0xde0b6b3a7640000', pairToken, token, type: 'buy' }],
+              params: [{ amount: '1', pairToken, token, type: 'buy' }],
             }),
           )
         }

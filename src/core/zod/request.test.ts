@@ -89,7 +89,7 @@ describe('validate', () => {
       method: 'wallet_swap',
       params: [
         {
-          amount: '0x64',
+          amount: '1.5',
           pairToken: '0x0000000000000000000000000000000000000002',
           slippage: 0.01,
           token: '0x0000000000000000000000000000000000000001',
@@ -102,7 +102,7 @@ describe('validate', () => {
         "method": "wallet_swap",
         "params": [
           {
-            "amount": "0x64",
+            "amount": "1.5",
             "pairToken": "0x0000000000000000000000000000000000000002",
             "slippage": 0.01,
             "token": "0x0000000000000000000000000000000000000001",
