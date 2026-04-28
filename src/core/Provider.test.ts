@@ -672,7 +672,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       await expect(
         provider.request({
           method: 'wallet_swap',
-          params: [{ amount: '0x1', token: Addresses.pathUsd, type: 'sell' }],
+          params: [{ amount: '1', token: Addresses.pathUsd, type: 'sell' }],
         }),
       ).rejects.toThrowErrorMatchingInlineSnapshot(
         `[Provider.UnsupportedMethodError: \`swap\` not supported by adapter.]`,

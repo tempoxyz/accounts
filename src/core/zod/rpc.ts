@@ -560,8 +560,8 @@ export namespace wallet_send {
 }
 
 const swapParameters = z.object({
-  /** Raw token amount to pre-fill. Omit to let the user choose. */
-  amount: z.optional(u.hex()),
+  /** Human-readable amount to pre-fill (e.g. "1.5"). */
+  amount: z.optional(z.string()),
   /** Other side of the swap pair. For buys, this is the token to sell. For sells, this is the token to buy. */
   pairToken: z.optional(u.address()),
   /** Maximum allowed slippage as a decimal fraction (for example `0.05` for 5%). */
