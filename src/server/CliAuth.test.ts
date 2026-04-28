@@ -739,6 +739,94 @@ describe('authorize', () => {
     expect(polled.status).toMatchInlineSnapshot(`"authorized"`)
   })
 
+  test('behavior: accepts user-approved expiry and limit changes', async () => {
+    const store = CliAuth.Store.memory()
+    const { codeVerifier, request } = await createRequest()
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      request,
+      store,
+    })
+    const approvedLimits = [
+      {
+        limit: 2_000n,
+        token: limits[0]!.token,
+      },
+    ] as const
+
+    const authorized = await CliAuth.authorize({
+      chainId: chain.id,
+      request: await authorize(code, { expiry: expiry + 60 * 60 * 24 * 6, limits: approvedLimits }),
+      store,
+    })
+    const polled = await CliAuth.poll({
+      code,
+      request: {
+        codeVerifier: codeVerifier,
+      },
+      store,
+    })
+
+    if (polled.status !== 'authorized') throw new Error('Expected device code to be authorized.')
+
+    expect(authorized).toMatchInlineSnapshot(`
+      {
+        "status": "authorized",
+      }
+    `)
+    expect({ expiry: polled.keyAuthorization.expiry, limits: polled.keyAuthorization.limits })
+      .toMatchInlineSnapshot(`
+        {
+          "expiry": ${expiry + 60 * 60 * 24 * 6},
+          "limits": [
+            {
+              "limit": 2000n,
+              "token": "0x20c0000000000000000000000000000000000001",
+            },
+          ],
+        }
+      `)
+  })
+
+  test('behavior: rejects unsigned expiry and limit changes', async () => {
+    const store = CliAuth.Store.memory()
+    const { request } = await createRequest()
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      request,
+      store,
+    })
+    const authorized = await authorize(code)
+
+    await expect(
+      CliAuth.authorize({
+        chainId: chain.id,
+        request: {
+          ...authorized,
+          keyAuthorization: {
+            ...authorized.keyAuthorization,
+            expiry: expiry + 1,
+          },
+        },
+        store,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: Key authorization signature is invalid.]`)
+
+    await expect(
+      CliAuth.authorize({
+        chainId: chain.id,
+        request: {
+          ...authorized,
+          keyAuthorization: {
+            ...authorized.keyAuthorization,
+            limits: [{ limit: limits[0]!.limit + 1n, token: limits[0]!.token }],
+          },
+        },
+        store,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: Key authorization signature is invalid.]`)
+  })
+
   test('behavior: rejects a mismatched key authorization', async () => {
     const store = CliAuth.Store.memory()
     const { request } = await createRequest()
@@ -751,11 +839,11 @@ describe('authorize', () => {
     await expect(
       CliAuth.authorize({
         chainId: chain.id,
-        request: await authorize(code, { expiry: expiry + 1 }),
+        request: await authorize(code, { accessKeyAddress: secpAccessKey.address }),
         store,
       }),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: Key authorization expiry does not match the device-code request.]`,
+      `[Error: Key authorization key does not match the device-code request.]`,
     )
   })
 

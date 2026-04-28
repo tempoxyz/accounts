@@ -170,7 +170,7 @@ export type Store = {
 
 /** Host validation and sanitization for requested CLI auth defaults. */
 export type Policy = {
-  /** Validates and optionally rewrites requested policy before the entry is stored. */
+  /** Validates and optionally rewrites requested defaults before the entry is stored. */
   validate: (options: Policy.validate.Options) => MaybePromise<Policy.validate.ReturnType>
 }
 
@@ -221,9 +221,9 @@ export declare namespace Policy {
     }
 
     export type ReturnType = {
-      /** Approved access-key expiry timestamp. */
+      /** Suggested access-key expiry timestamp. */
       expiry: number
-      /** Approved spending limits. */
+      /** Suggested spending limits. */
       limits?: readonly { token: Address.Address; limit: bigint }[] | undefined
     }
   }
@@ -419,24 +419,38 @@ export function from(options: from.Options = {}): CliAuth {
         throw new Error('Key authorization key type does not match the device-code request.')
       if (actual.chainId !== expected.chainId)
         throw new Error('Key authorization chain does not match the device-code request.')
-      if ((actual.expiry ?? undefined) !== (expected.expiry ?? undefined))
-        throw new Error('Key authorization expiry does not match the device-code request.')
-      if (!sameLimits(actual.limits, expected.limits))
-        throw new Error('Key authorization limits do not match the device-code request.')
+
+      const signed = TempoKeyAuthorization.from({
+        address: actual.address,
+        chainId: actual.chainId,
+        expiry: actual.expiry,
+        ...(actual.limits ? { limits: actual.limits } : {}),
+        type: actual.keyType,
+      })
 
       const valid = await verifyHash((options.client ?? cache.get(current.chainId)) as never, {
         address: options.request.accountAddress,
-        hash: TempoKeyAuthorization.getSignPayload(expected),
+        hash: TempoKeyAuthorization.getSignPayload(signed),
         signature: SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(actual.signature), {
           magic: actual.signature.type === 'webAuthn',
         }),
       })
       if (!valid) throw new Error('Key authorization signature is invalid.')
 
+      const signedKeyAuthorization = {
+        address: options.request.keyAuthorization.address,
+        chainId: options.request.keyAuthorization.chainId,
+        expiry: actual.expiry,
+        keyId: options.request.keyAuthorization.keyId,
+        keyType: options.request.keyAuthorization.keyType,
+        ...(actual.limits ? { limits: actual.limits } : {}),
+        signature: options.request.keyAuthorization.signature,
+      } satisfies z.output<typeof keyAuthorization>
+
       const authorized = await store.authorize({
         accountAddress: options.request.accountAddress,
         code,
-        keyAuthorization: options.request.keyAuthorization,
+        keyAuthorization: signedKeyAuthorization,
       })
       if (!authorized) throw new Error('Unable to authorize device code.')
 
@@ -809,20 +823,6 @@ function normalizeKeyAuthorization(value: z.output<typeof keyAuthorization>) {
     expiry: value.expiry ?? undefined,
     limits: value.limits ?? undefined,
   }
-}
-
-/** @internal */
-function sameLimits(
-  a: Policy.validate.ReturnType['limits'],
-  b: Policy.validate.ReturnType['limits'],
-) {
-  if (!a && !b) return true
-  if (!a || !b || a.length !== b.length) return false
-  return a.every((limit, i) => {
-    const other = b[i]
-    if (!other) return false
-    return limit.token.toLowerCase() === other.token.toLowerCase() && limit.limit === other.limit
-  })
 }
 
 /** @internal */
