@@ -8,6 +8,7 @@ describe('Dialog', () => {
     expectTypeOf<Dialog.SetupFn.Parameters>().toEqualTypeOf<{
       host: string
       store: Store.Store
+      theme?: Dialog.Theme | undefined
     }>()
     expectTypeOf<Dialog.Instance>().toMatchTypeOf<{
       open: () => void

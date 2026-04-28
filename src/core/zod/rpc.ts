@@ -559,6 +559,33 @@ export namespace wallet_send {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
+const swapParameters = z.object({
+  /** Raw token amount to pre-fill. Omit to let the user choose. */
+  amount: z.optional(u.hex()),
+  /** Other side of the swap pair. For buys, this is the token to sell. For sells, this is the token to buy. */
+  pairToken: z.optional(u.address()),
+  /** Maximum allowed slippage as a decimal fraction (for example `0.05` for 5%). */
+  slippage: z.optional(z.number().check(z.minimum(0), z.maximum(1))),
+  /** Token to buy or sell. Omit to let the user choose. */
+  token: z.optional(u.address()),
+  /** Whether the amount is an exact buy amount (`swapExactAmountOut`) or sell amount (`swapExactAmountIn`). */
+  type: z.optional(z.union([z.literal('buy'), z.literal('sell')])),
+})
+
+/** Opens the wallet swap flow with optional pre-filled swap intent fields. */
+export namespace wallet_swap {
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_swap'),
+    params: z.optional(z.readonly(z.tuple([swapParameters]))),
+    returns: z.object({
+      /** Receipt of the submitted swap. */
+      receipt,
+    }),
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
 export namespace wallet_switchEthereumChain {
   export const schema = Schema.defineItem({
     method: z.literal('wallet_switchEthereumChain'),

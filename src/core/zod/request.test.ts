@@ -84,6 +84,35 @@ describe('validate', () => {
     `)
   })
 
+  test('default: validates wallet_swap with sell amount', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_swap',
+      params: [
+        {
+          amount: '0x64',
+          pairToken: '0x0000000000000000000000000000000000000002',
+          slippage: 0.01,
+          token: '0x0000000000000000000000000000000000000001',
+          type: 'sell',
+        },
+      ],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_swap",
+        "params": [
+          {
+            "amount": "0x64",
+            "pairToken": "0x0000000000000000000000000000000000000002",
+            "slippage": 0.01,
+            "token": "0x0000000000000000000000000000000000000001",
+            "type": "sell",
+          },
+        ],
+      }
+    `)
+  })
+
   test('behavior: preserves original request properties', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'eth_accounts',
@@ -116,6 +145,49 @@ describe('validate', () => {
       }),
     ).toThrowErrorMatchingInlineSnapshot(
       `[ProviderRpcError: Invalid params: params.0.chainId: Expected hex value, params.0.chainId: Invalid input]`,
+    )
+  })
+
+  test('error: rejects wallet_swap with invalid type', () => {
+    expect(() =>
+      RpcRequest.validate(Schema.Request, {
+        method: 'wallet_swap',
+        params: [
+          {
+            type: 'hold',
+          },
+        ],
+      }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[ProviderRpcError: Invalid params: params.0.type: Invalid input, params.0.type: Invalid input]`,
+    )
+  })
+
+  test('error: rejects wallet_swap with out-of-range slippage', () => {
+    expect(() =>
+      RpcRequest.validate(Schema.Request, {
+        method: 'wallet_swap',
+        params: [
+          {
+            slippage: 1.1,
+          },
+        ],
+      }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[ProviderRpcError: Invalid params: params.0.slippage: Invalid input]`,
+    )
+
+    expect(() =>
+      RpcRequest.validate(Schema.Request, {
+        method: 'wallet_swap',
+        params: [
+          {
+            slippage: -0.1,
+          },
+        ],
+      }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[ProviderRpcError: Invalid params: params.0.slippage: Invalid input]`,
     )
   })
 })

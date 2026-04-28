@@ -47,6 +47,12 @@ describe('request', () => {
     expectTypeOf<Result<'wallet_disconnect'>>().toEqualTypeOf<undefined>()
   })
 
+  test('wallet_swap', () => {
+    expectTypeOf<Result<'wallet_swap'>>().toMatchTypeOf<{
+      receipt: { transactionHash: `0x${string}` }
+    }>()
+  })
+
   test('wallet_switchEthereumChain', () => {
     expectTypeOf<Result<'wallet_switchEthereumChain'>>().toEqualTypeOf<undefined>()
   })

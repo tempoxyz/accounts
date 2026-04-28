@@ -74,6 +74,13 @@ export type Instance = {
           request: EncodedRequest<Rpc.wallet_send.Encoded>,
         ) => Promise<send.ReturnType>)
       | undefined
+    /** Open the swap flow. */
+    swap?:
+      | ((
+          params: swap.Parameters,
+          request: EncodedRequest<Rpc.wallet_swap.Encoded>,
+        ) => Promise<swap.ReturnType>)
+      | undefined
     /** Send a transaction. */
     sendTransaction: (
       params: sendTransaction.Parameters,
@@ -261,6 +268,12 @@ export declare namespace revokeAccessKey {
 export declare namespace send {
   type Parameters = ActionRequest<typeof Rpc.wallet_send.schema>
   type ReturnType = Rpc.wallet_send.Encoded['returns']
+}
+
+/** Parameters and return type for the `wallet_swap` action. */
+export declare namespace swap {
+  type Parameters = ActionRequest<typeof Rpc.wallet_swap.schema>
+  type ReturnType = Rpc.wallet_swap.Encoded['returns']
 }
 
 export declare namespace sendTransaction {

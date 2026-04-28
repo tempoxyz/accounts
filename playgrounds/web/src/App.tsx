@@ -84,6 +84,7 @@ export function App() {
       <h2>Transactions</h2>
       <Transactions />
       <WalletSend />
+      <WalletSwap />
 
       <h2>Receipts &amp; Status</h2>
       <EthGetTransactionReceipt />
@@ -248,6 +249,67 @@ function WalletSend() {
         }
       >
         Send ($1 PathUSD)
+      </button>
+    </Method>
+  )
+}
+
+function WalletSwap() {
+  const [result, error, execute] = useRequest()
+  const token = tokens.pathUSD
+  const pairToken = Object.values(tokens).find((x) => x !== token) ?? token
+
+  return (
+    <Method method="wallet_swap" result={result} error={error}>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_swap',
+              params: [{}],
+            }),
+          )
+        }
+      >
+        Swap
+      </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_swap',
+              params: [{ pairToken, token }],
+            }),
+          )
+        }
+      >
+        Swap (pair)
+      </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_swap',
+              params: [
+                { amount: '0xde0b6b3a7640000', pairToken, slippage: 0.01, token, type: 'sell' },
+              ],
+            }),
+          )
+        }
+      >
+        Swap (sell 1 PathUSD)
+      </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_swap',
+              params: [{ amount: '0xde0b6b3a7640000', pairToken, token, type: 'buy' }],
+            }),
+          )
+        }
+      >
+        Swap (buy 1 PathUSD)
       </button>
     </Method>
   )
