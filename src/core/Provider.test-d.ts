@@ -48,7 +48,9 @@ describe('request', () => {
   })
 
   test('wallet_swap', () => {
-    expectTypeOf<Result<'wallet_swap'>>().toEqualTypeOf<{ transactionHash: `0x${string}` }>()
+    expectTypeOf<Result<'wallet_swap'>>().toMatchTypeOf<{
+      receipt: { transactionHash: `0x${string}` }
+    }>()
   })
 
   test('wallet_switchEthereumChain', () => {

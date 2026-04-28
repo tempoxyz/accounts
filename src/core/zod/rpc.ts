@@ -578,8 +578,8 @@ export namespace wallet_swap {
     method: z.literal('wallet_swap'),
     params: z.optional(z.readonly(z.tuple([swapParameters]))),
     returns: z.object({
-      /** Transaction hash of the submitted swap. */
-      transactionHash: u.hex(),
+      /** Receipt of the submitted swap. */
+      receipt,
     }),
   })
   export type Encoded = Schema.Encoded<typeof schema>

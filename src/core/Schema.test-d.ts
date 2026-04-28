@@ -151,7 +151,7 @@ describe('Encoded', () => {
             },
           ]
         | undefined
-      returns: { transactionHash: Hex }
+      returns: { receipt: { transactionHash: Hex } }
     }>()
   })
 
