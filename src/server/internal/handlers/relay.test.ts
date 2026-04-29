@@ -77,6 +77,49 @@ describe('default', () => {
     expect(Number(chainId)).toMatchInlineSnapshot(`${chain.id}`)
   })
 
+  test('behavior: surfaces upstream RPC errors as JSON-RPC errors', async () => {
+    // grantRoles reverts with Unauthorized when caller is not an admin
+    // (eth_call defaults `from` to the zero address). We expect the relay to
+    // forward the revert as a structured JSON-RPC error response (HTTP 200
+    // with `error.code`/`error.data`), not a 500.
+    const call = Actions.token.grantRoles.call({
+      token: addresses.alphaUsd,
+      role: 'issuer',
+      to: recipient.address,
+    })
+
+    const response = await fetch(server.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_call',
+        params: [{ to: call.to, data: call.data }, 'latest'],
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      id: number
+      jsonrpc: string
+      error: { code: number; message: string; data?: string }
+    }
+    // Drop `message` from the snapshot — it embeds the upstream RPC URL/port
+    // and viem version, which are nondeterministic.
+    const { message: _message, ...errorRest } = body.error
+    expect({ ...body, error: errorRest }).toMatchInlineSnapshot(`
+    	{
+    	  "error": {
+    	    "code": 3,
+    	    "data": "0x82b42900",
+    	  },
+    	  "id": 1,
+    	  "jsonrpc": "2.0",
+    	}
+    `)
+  })
+
   test('behavior: handles JSON-RPC batch requests', async () => {
     const response = await fetch(server.url, {
       method: 'POST',

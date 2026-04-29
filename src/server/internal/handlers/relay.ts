@@ -409,8 +409,12 @@ export function relay(options: relay.Options = {}): Handler {
       }
 
       default: {
-        const result = await client.request(request as never)
-        return RpcResponse.from({ result }, { request })
+        try {
+          const result = await client.request(request as never)
+          return RpcResponse.from({ result }, { request })
+        } catch (error) {
+          return Utils.rpcErrorJson(request, error)
+        }
       }
     }
   }
