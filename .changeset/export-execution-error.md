@@ -1,5 +1,5 @@
 ---
-'accounts': minor
+'accounts': patch
 ---
 
 Exported `ExecutionError`.
