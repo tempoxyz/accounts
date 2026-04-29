@@ -70,8 +70,6 @@ export function compose<
 
   const app = from(options) as unknown as Hono
   for (const sub of handlers) app.route(mountPath, sub)
-  // Match the legacy `app.all('*')` 404 body so consumers that asserted on
-  // it don't break. Hono's default body is `'404 Not Found'`.
   app.notFound(() => new Response('Not Found', { status: 404 }))
 
   return app as never
