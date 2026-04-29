@@ -25,9 +25,7 @@ export function isError(value: unknown): value is { name: string; issues: readon
  * human-readable messages. Union mismatches are folded by collecting the
  * accepted literal values across all branches.
  */
-export function flattenIssues(
-  issues: readonly Issue[],
-): { path: string; message: string }[] {
+export function flattenIssues(issues: readonly Issue[]): { path: string; message: string }[] {
   const result: { path: string; message: string }[] = []
   for (const issue of issues) {
     if (issue.code === 'invalid_union' && issue.errors?.length) {
@@ -57,8 +55,7 @@ export function flattenIssues(
     }
 
     let message = issue.message
-    if (issue.code === 'invalid_type' && issue.expected)
-      message = `expected ${issue.expected}`
+    if (issue.code === 'invalid_type' && issue.expected) message = `expected ${issue.expected}`
     else if (issue.code === 'invalid_value' && issue.values?.length)
       message = `expected one of: ${issue.values.map((v) => JSON.stringify(v)).join(', ')}`
 

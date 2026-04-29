@@ -1,5 +1,13 @@
 # accounts
 
+## 0.8.5
+
+### Patch Changes
+
+- a9c2b0d: Added `Handler.exchange()` for the Tempo Stablecoin DEX, exposing `GET /exchange/tokens` and `POST /exchange/quote`.
+- 5c5988f: Exported `ExecutionError`.
+- 5c5988f: Fixed relay default pass-through to return upstream RPC errors as structured JSON-RPC errors instead of HTTP 500.
+
 ## 0.8.4
 
 ### Patch Changes
