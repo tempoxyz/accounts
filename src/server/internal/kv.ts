@@ -14,9 +14,7 @@ export async function cached<value>(
 ): Promise<value> {
   const { ttl = Infinity } = options
 
-  const entry = await kv
-    .get<{ expiresAt: number; value: value } | null>(key)
-    .catch(() => null)
+  const entry = await kv.get<{ expiresAt: number; value: value } | null>(key).catch(() => null)
   if (entry && entry.expiresAt > Date.now()) return entry.value
 
   const value = await fn()

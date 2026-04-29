@@ -185,9 +185,7 @@ export function exchange<const path extends string = '/exchange'>(
         )
 
         return c.json(
-          z.encode(schema.tokens.returns, { tokens }) as z.output<
-            typeof schema.tokens.returns
-          >,
+          z.encode(schema.tokens.returns, { tokens }) as z.output<typeof schema.tokens.returns>,
         )
       } catch (error) {
         return c.json({ error: (error as Error).message }, 400)
@@ -259,10 +257,7 @@ export function exchange<const path extends string = '/exchange'>(
         // (network errors, unknown symbols) falls through to the plain
         // message path.
         if (revert && revert.errorName !== 'unknown')
-          return c.json(
-            { data: ExecutionError.serialize(revert), error: revert.errorName },
-            400,
-          )
+          return c.json({ data: ExecutionError.serialize(revert), error: revert.errorName }, 400)
         return c.json({ error: (error as Error).message }, 400)
       }
     })
@@ -300,9 +295,7 @@ export declare namespace exchange {
      * are matched against this list first, falling back to on-chain metadata.
      * @default Fetches `https://tokenlist.tempo.xyz/list/:chainId`
      */
-    resolveTokens?:
-      | ((chainId: number) => readonly Token[] | Promise<readonly Token[]>)
-      | undefined
+    resolveTokens?: ((chainId: number) => readonly Token[] | Promise<readonly Token[]>) | undefined
     /** Transports keyed by chain ID. Defaults to `http()` per chain. */
     transports?: Record<number, Transport> | undefined
   }
@@ -339,9 +332,7 @@ async function resolveToken(client: Client, options: resolveToken.Parameters): P
     if (found) return found
 
     return await cached(kv, `metadata:${chainId}:${refLower}`, async () => {
-      const meta = await Actions.token
-        .getMetadata(client, { token: ref })
-        .catch(() => undefined)
+      const meta = await Actions.token.getMetadata(client, { token: ref }).catch(() => undefined)
       return {
         address: ref,
         decimals: meta?.decimals ?? 6,

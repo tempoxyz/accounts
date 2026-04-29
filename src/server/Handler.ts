@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import type { ExtractSchema, MergeSchemaPath, Schema } from 'hono/types'
 
-import * as RequestListener from './internal/requestListener.js'
 import type { UnionToIntersection } from '../internal/types.js'
+import * as RequestListener from './internal/requestListener.js'
 
 export { codeAuth } from './internal/handlers/codeAuth.js'
 export { exchange } from './internal/handlers/exchange.js'
@@ -24,18 +24,16 @@ export type Handler<app extends Hono<any, any, any> = Hono> = app & {
  * prefixing each route key with `path`. Used by `compose()` to preserve
  * typed routes for Hono's RPC client (`hc`).
  */
-export type ComposedSchema<
-  subs extends readonly unknown[],
-  path extends string,
-> = UnionToIntersection<
-  subs[number] extends infer sub
-    ? sub extends unknown
-      ? MergeSchemaPath<Extract<ExtractSchema<sub>, Schema>, path>
+export type ComposedSchema<subs extends readonly unknown[], path extends string> =
+  UnionToIntersection<
+    subs[number] extends infer sub
+      ? sub extends unknown
+        ? MergeSchemaPath<Extract<ExtractSchema<sub>, Schema>, path>
+        : never
       : never
+  > extends infer schema extends Schema
+    ? schema
     : never
-> extends infer schema extends Schema
-  ? schema
-  : never
 
 /**
  * Mounts each sub-handler onto a fresh Hono app at `path` (default `/`) and
@@ -59,10 +57,7 @@ export type ComposedSchema<
  * await client.api.exchange.quote.$post({ json: { ... } }) // typed
  * ```
  */
-export function compose<
-  const subs extends readonly Handler[],
-  const path extends string = '/',
->(
+export function compose<const subs extends readonly Handler[], const path extends string = '/'>(
   handlers: subs,
   options: compose.Options & { path?: path } = {},
 ): Handler<Hono<{}, ComposedSchema<subs, path>, '/'>> {

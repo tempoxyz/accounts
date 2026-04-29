@@ -42,7 +42,8 @@ export const messages: Record<AbiErrorName, string> = {
   InsufficientBalance: 'Insufficient balance. Required: {1}, available: {0}.',
   InsufficientFeeTokenBalance: 'Insufficient fee token balance.',
   InsufficientLiquidity: 'Not enough liquidity in the order book to fill this trade.',
-  InsufficientOutput: 'The output amount is below the slippage minimum — try increasing slippage tolerance.',
+  InsufficientOutput:
+    'The output amount is below the slippage minimum — try increasing slippage tolerance.',
   InsufficientReserves: 'Insufficient reserves.',
   InternalError: 'Internal error.',
   InvalidAmount: 'Invalid amount.',
@@ -77,7 +78,8 @@ export const messages: Record<AbiErrorName, string> = {
   KeyNotFound: 'Key not found.',
   LegacyAuthorizeKeySelectorChanged: 'Legacy authorize key selector changed to {0}.',
   MasterIdCollision: 'Master ID collision with {0}.',
-  MaxInputExceeded: 'The required input exceeds the slippage maximum — try increasing slippage tolerance.',
+  MaxInputExceeded:
+    'The required input exceeds the slippage maximum — try increasing slippage tolerance.',
   MigrationNotComplete: 'Migration is not complete.',
   NoOptedInSupply: 'No opted-in supply.',
   NonceOverflow: 'Nonce overflow.',
