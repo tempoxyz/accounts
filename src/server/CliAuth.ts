@@ -9,8 +9,9 @@ import * as u from '../core/zod/utils.js'
 import type { MaybePromise } from '../internal/types.js'
 import type { Kv } from './Kv.js'
 
+const maxLimits = 10
 const limit = z.object({ token: u.address(), limit: u.bigint() })
-const limits = z.readonly(z.array(limit))
+const limits = z.readonly(z.array(limit).check(z.maxLength(maxLimits)))
 const defaultTtlMs = 10 * 60 * 1_000
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -555,6 +556,7 @@ export function from(options: from.Options = {}): CliAuth {
       const nextChainId = options.request.chainId ?? chainId ?? cache.defaultChainId
       const { account, codeChallenge, pubKey } = options.request
       const keyType = options.request.keyType ?? 'secp256k1'
+      validatePublicKey(pubKey)
       const approved = await policy.validate({
         ...(account ? { account } : {}),
         chainId: typeof nextChainId === 'bigint' ? nextChainId : BigInt(nextChainId),
@@ -917,6 +919,15 @@ function normalizeKeyAuthorization(value: z.output<typeof keyAuthorization>) {
     ...value,
     expiry: value.expiry ?? undefined,
     limits: value.limits ?? undefined,
+  }
+}
+
+/** @internal */
+function validatePublicKey(value: Hex.Hex) {
+  try {
+    PublicKey.from(value)
+  } catch {
+    throw new Error('Invalid access-key public key.')
   }
 }
 

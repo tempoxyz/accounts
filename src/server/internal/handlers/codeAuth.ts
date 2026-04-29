@@ -23,6 +23,7 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     chains = [tempo, tempoModerato, tempoDevnet],
     now,
     path = '/auth/pkce',
+    maxBodyBytes = 16_384,
     policy,
     random,
     rateLimit = CliAuth.RateLimit.memory({ max: 120, windowMs: 60_000 }),
@@ -79,7 +80,10 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     const limited = await checkRateLimit(c.req.raw)
     if (limited) return limited
     try {
-      const request = z.decode(CliAuth.createRequest, await c.req.raw.json())
+      const request = z.decode(
+        CliAuth.createRequest,
+        (await readJson(c.req.raw, maxBodyBytes)) as never,
+      )
       const chainId = request.chainId ?? chains[0]!.id
       getClient(chainId)
       const result = await CliAuth.createDeviceCode({
@@ -102,7 +106,10 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     const limited = await checkRateLimit(c.req.raw)
     if (limited) return limited
     try {
-      const request = z.decode(CliAuth.pollRequest, await c.req.raw.json())
+      const request = z.decode(
+        CliAuth.pollRequest,
+        (await readJson(c.req.raw, maxBodyBytes)) as never,
+      )
       const code = c.req.param('code')
       const result = await CliAuth.poll({
         code,
@@ -121,7 +128,10 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     const limited = await checkRateLimit(c.req.raw)
     if (limited) return limited
     try {
-      const request = z.decode(CliAuth.authorizeRequest, await c.req.raw.json())
+      const request = z.decode(
+        CliAuth.authorizeRequest,
+        (await readJson(c.req.raw, maxBodyBytes)) as never,
+      )
       const result = await CliAuth.authorize({
         client: getClient(request.keyAuthorization.chainId),
         ...(now ? { now } : {}),
@@ -147,6 +157,8 @@ export declare namespace codeAuth {
      * @default [tempo, tempoModerato, tempoDevnet]
      */
     chains?: readonly [Chain, ...Chain[]] | undefined
+    /** Maximum JSON request body size in bytes. @default 16384 */
+    maxBodyBytes?: number | undefined
     /** Time source used for TTL evaluation. */
     now?: (() => number) | undefined
     /** Path prefix for the code auth endpoints. @default "/auth/pkce" */
@@ -164,6 +176,15 @@ export declare namespace codeAuth {
     /** Pending entry TTL in milliseconds. @default 600000 */
     ttlMs?: number | undefined
   }
+}
+
+async function readJson(request: Request, maxBodyBytes: number) {
+  const length = request.headers.get('content-length')
+  if (length && Number(length) > maxBodyBytes) throw new Error('Request body is too large.')
+  const text = await request.text()
+  if (new TextEncoder().encode(text).byteLength > maxBodyBytes)
+    throw new Error('Request body is too large.')
+  return JSON.parse(text) as unknown
 }
 
 function getRateLimitKey(request: Request) {

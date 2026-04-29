@@ -360,6 +360,96 @@ describe('createDeviceCode', () => {
     expect(response.status).toMatchInlineSnapshot(`400`)
   })
 
+  test('behavior: handler rejects oversized JSON request bodies', async () => {
+    const { request } = await createRequest()
+    const handler = Handler.codeAuth({ maxBodyBytes: 16 })
+    const response = await handler.fetch(
+      new Request('http://localhost/auth/pkce/code', {
+        body: JSON.stringify(z.encode(CliAuth.createRequest, request)),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      }),
+    )
+    const body = await response.json()
+
+    expect({ body, status: response.status }).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "Request body is too large.",
+        },
+        "status": 400,
+      }
+    `)
+  })
+
+  test('behavior: rejects invalid public keys at creation time', async () => {
+    const { request } = await createRequest()
+
+    await expect(
+      CliAuth.createDeviceCode({
+        chainId: chain.id,
+        request: { ...request, pubKey: '0x1234' },
+        store: CliAuth.Store.memory(),
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: Invalid access-key public key.]`)
+  })
+
+  test('behavior: rejects too many limits', async () => {
+    const { request } = await createRequest()
+    const result = await z.safeDecodeAsync(CliAuth.createRequest, {
+      ...z.encode(CliAuth.createRequest, request),
+      limits: Array.from({ length: 11 }, () => ({
+        limit: '0x1',
+        token: '0x20c0000000000000000000000000000000000001',
+      })),
+    } as never)
+
+    expect(result).toMatchInlineSnapshot(`
+    	{
+    	  "error": [$ZodError: [
+    	  {
+    	    "origin": "array",
+    	    "code": "too_big",
+    	    "maximum": 10,
+    	    "inclusive": true,
+    	    "path": [
+    	      "limits"
+    	    ],
+    	    "message": "Invalid input"
+    	  }
+    	]],
+    	  "success": false,
+    	}
+    `)
+  })
+
+  test('behavior: rejects malformed limit tokens', async () => {
+    const { request } = await createRequest()
+    const result = await z.safeDecodeAsync(CliAuth.createRequest, {
+      ...z.encode(CliAuth.createRequest, request),
+      limits: [{ limit: '0x1', token: '0x1234' }],
+    } as never)
+
+    expect(result).toMatchInlineSnapshot(`
+    	{
+    	  "error": [$ZodError: [
+    	  {
+    	    "code": "invalid_format",
+    	    "format": "template_literal",
+    	    "pattern": "^0x[0-9a-fA-F]{40}$",
+    	    "path": [
+    	      "limits",
+    	      0,
+    	      "token"
+    	    ],
+    	    "message": "Expected address"
+    	  }
+    	]],
+    	  "success": false,
+    	}
+    `)
+  })
+
   test('behavior: handler rejects requests for unconfigured chains', async () => {
     const handler = Handler.codeAuth({
       chains: [chain],
