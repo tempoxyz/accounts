@@ -788,6 +788,40 @@ describe('authorize', () => {
       `)
   })
 
+  test('behavior: rejects final expiry and limit changes beyond policy', async () => {
+    const store = CliAuth.Store.memory()
+    const { request } = await createRequest()
+    const maxExpiry = expiry + 60 * 60
+    const policy = CliAuth.Policy.from({
+      validate(options) {
+        if (options.expiry && options.expiry > maxExpiry) throw new Error('Expiry exceeds policy.')
+        if (options.limits?.some((limit) => limit.limit > 1_000n))
+          throw new Error('Limit exceeds policy.')
+        return {
+          expiry: options.expiry ?? maxExpiry,
+          ...(options.limits ? { limits: options.limits } : {}),
+        }
+      },
+    })
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      policy,
+      request,
+      store,
+    })
+
+    await expect(
+      CliAuth.authorize({
+        chainId: chain.id,
+        policy,
+        request: await authorize(code, {
+          limits: [{ limit: 2_000n, token: limits[0]!.token }],
+        }),
+        store,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: Limit exceeds policy.]`)
+  })
+
   test('behavior: rejects unsigned expiry and limit changes', async () => {
     const store = CliAuth.Store.memory()
     const { request } = await createRequest()

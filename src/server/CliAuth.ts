@@ -420,6 +420,19 @@ export function from(options: from.Options = {}): CliAuth {
       if (actual.chainId !== expected.chainId)
         throw new Error('Key authorization chain does not match the device-code request.')
 
+      const approved = await policy.validate({
+        account: options.request.accountAddress,
+        chainId: actual.chainId,
+        expiry: actual.expiry,
+        keyType: actual.keyType,
+        ...(actual.limits ? { limits: actual.limits } : {}),
+        pubKey: current.pubKey,
+      })
+      if (actual.expiry !== approved.expiry)
+        throw new Error('Key authorization expiry exceeds policy.')
+      if (!areLimitsEqual(actual.limits, approved.limits))
+        throw new Error('Key authorization limits exceed policy.')
+
       const signed = TempoKeyAuthorization.from({
         address: actual.address,
         chainId: actual.chainId,
@@ -823,6 +836,20 @@ function normalizeKeyAuthorization(value: z.output<typeof keyAuthorization>) {
     expiry: value.expiry ?? undefined,
     limits: value.limits ?? undefined,
   }
+}
+
+/** @internal */
+function areLimitsEqual(
+  a: readonly { token: Address.Address; limit: bigint }[] | undefined,
+  b: readonly { token: Address.Address; limit: bigint }[] | undefined,
+) {
+  if (!a && !b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return a.every(
+    (limit, i) =>
+      limit.limit === b[i]!.limit && limit.token.toLowerCase() === b[i]!.token.toLowerCase(),
+  )
 }
 
 /** @internal */
