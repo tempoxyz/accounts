@@ -38,17 +38,17 @@ export namespace schema {
     export const parameters = z.object({
       amount: z.string(),
       chainId: z.optional(z.number()),
-      input: z.string(),
-      output: z.string(),
+      pairToken: z.string(),
       slippage: z.number(),
+      token: z.string(),
       type: z.union([z.literal('buy'), z.literal('sell')]),
     })
 
     const side = z.object({
+      address: u.address(),
       amount: z.string(),
       name: z.string(),
       symbol: z.string(),
-      token: u.address(),
     })
 
     /** Response body schema. */
@@ -61,9 +61,9 @@ export namespace schema {
           }),
         ),
       ),
-      input: side,
-      output: side,
+      pairToken: side,
       slippage: z.number(),
+      token: side,
       type: z.union([z.literal('buy'), z.literal('sell')]),
     })
   }
@@ -119,14 +119,14 @@ export namespace schema {
  * const res = await client.exchange.quote.$post({
  *   json: {
  *     amount: '1',
- *     input: 'USDC',
- *     output: 'USDT',
+ *     pairToken: 'pathUSD',
  *     slippage: 0.01,
+ *     token: 'USDC',
  *     type: 'sell',
  *   },
  * })
  * if (res.ok) {
- *   const { calls, input, output } = await res.json()
+ *   const { calls, pairToken, token } = await res.json()
  *   // fully typed
  * }
  * ```
@@ -194,60 +194,70 @@ export function exchange<const path extends string = '/exchange'>(
     .post(`${path}/quote`, Hono.validate('json', schema.quote.parameters), async (c) => {
       try {
         await onRequest?.(c.req.raw)
-        const { amount, chainId, input, output, slippage, type } = c.req.valid('json')
+        const { amount, chainId, pairToken, slippage, token, type } = c.req.valid('json')
 
         const chain = chainId ? chains.find((c) => c.id === chainId) : chains[0]
         if (!chain) throw new Error(`Chain ${chainId} is not supported.`)
         const client = clients.get(chain.id)!
 
-        // Resolve `input` and `output` to addresses + metadata in parallel.
+        // Resolve `token` and `pairToken` to addresses + metadata in parallel.
         const tokens = await cached(
           kv,
           `tokenlist:${chain.id}`,
           async () => resolveTokens(chain.id),
           { ttl: cacheTtl },
         )
-        const [inToken, outToken] = await Promise.all([
-          resolveToken(client, { kv, ref: input, tokens }),
-          resolveToken(client, { kv, ref: output, tokens }),
+        const [tokenInfo, pairTokenInfo] = await Promise.all([
+          resolveToken(client, { kv, ref: token, tokens }),
+          resolveToken(client, { kv, ref: pairToken, tokens }),
         ])
 
-        // Parse `amount` using the decimals of whichever side is the "exact"
-        // one for the requested `type`.
-        const decimals = type === 'buy' ? outToken.decimals : inToken.decimals
-        const amount_ = parseUnits(amount, decimals)
+        // `amount` is always denominated in `token` units. For `buy`, that
+        // means the exact `token` to receive (exact-out); for `sell`, the
+        // exact `token` to spend (exact-in).
+        const amount_ = parseUnits(amount, tokenInfo.decimals)
+
+        // `buy` spends `pairToken` to receive `token`; `sell` spends `token`
+        // to receive `pairToken`.
+        const inInfo = type === 'buy' ? pairTokenInfo : tokenInfo
+        const outInfo = type === 'buy' ? tokenInfo : pairTokenInfo
 
         const result =
           type === 'buy'
             ? await quoteBuy(client, {
                 amount: amount_,
-                input: inToken.address,
-                output: outToken.address,
+                input: inInfo.address,
+                output: outInfo.address,
                 slippage,
               })
             : await quoteSell(client, {
                 amount: amount_,
-                input: inToken.address,
-                output: outToken.address,
+                input: inInfo.address,
+                output: outInfo.address,
                 slippage,
               })
+
+        // Map the trade-direction-relative amounts back onto the
+        // `token`/`pairToken` axis the caller speaks in.
+        const tokenAmount = type === 'buy' ? result.outputAmount : result.inputAmount
+        const pairTokenAmount = type === 'buy' ? result.inputAmount : result.outputAmount
 
         return c.json(
           z.encode(schema.quote.returns, {
             calls: result.calls,
-            input: {
-              amount: formatUnits(result.inputAmount, inToken.decimals),
-              name: inToken.name,
-              symbol: inToken.symbol,
-              token: inToken.address,
-            },
-            output: {
-              amount: formatUnits(result.outputAmount, outToken.decimals),
-              name: outToken.name,
-              symbol: outToken.symbol,
-              token: outToken.address,
+            pairToken: {
+              address: pairTokenInfo.address,
+              amount: formatUnits(pairTokenAmount, pairTokenInfo.decimals),
+              name: pairTokenInfo.name,
+              symbol: pairTokenInfo.symbol,
             },
             slippage,
+            token: {
+              address: tokenInfo.address,
+              amount: formatUnits(tokenAmount, tokenInfo.decimals),
+              name: tokenInfo.name,
+              symbol: tokenInfo.symbol,
+            },
             type,
           }) as z.output<typeof schema.quote.returns>,
         )
