@@ -58,6 +58,7 @@ describe('exchange handler', () => {
         tokens: readonly {
           address: `0x${string}`
           decimals: number
+          logoUri?: string | undefined
           name: string
           symbol: string
         }[]
