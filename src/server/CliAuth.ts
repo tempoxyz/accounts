@@ -524,7 +524,8 @@ export function from(options: from.Options = {}): CliAuth {
         type: actual.keyType,
       })
 
-      const valid = await verifyHash((options.client ?? cache.get(current.chainId)) as never, {
+      const client = options.client ?? cache.get(current.chainId)
+      const valid = await verifyHash(client, {
         address: options.request.accountAddress,
         hash: TempoKeyAuthorization.getSignPayload(signed),
         signature: SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(actual.signature), {
@@ -556,7 +557,7 @@ export function from(options: from.Options = {}): CliAuth {
       const nextChainId = options.request.chainId ?? chainId ?? cache.defaultChainId
       const { account, codeChallenge, pubKey } = options.request
       const keyType = options.request.keyType ?? 'secp256k1'
-      validatePublicKey(pubKey)
+      PublicKey.assert(PublicKey.from(pubKey))
       const approved = await policy.validate({
         ...(account ? { account } : {}),
         chainId: typeof nextChainId === 'bigint' ? nextChainId : BigInt(nextChainId),
@@ -863,6 +864,7 @@ function createCode(random: (size: number) => Uint8Array) {
 /** @internal */
 function createClientCache(options: from.Options = {}) {
   const chains = options.chains ?? [tempo]
+  const [defaultChain] = chains
   const transports = options.transports ?? {}
   const clients = new Map<number, Client<Transport, Chain | undefined>>()
 
@@ -871,7 +873,7 @@ function createClientCache(options: from.Options = {}) {
     clients.set(chain.id, createClient({ chain, transport }))
   }
 
-  const defaultChainId = options.chainId ?? chains[0]!.id
+  const defaultChainId = options.chainId ?? defaultChain.id
 
   return {
     defaultChainId,
@@ -923,15 +925,6 @@ function normalizeKeyAuthorization(value: z.output<typeof keyAuthorization>) {
 }
 
 /** @internal */
-function validatePublicKey(value: Hex.Hex) {
-  try {
-    PublicKey.from(value)
-  } catch {
-    throw new Error('Invalid access-key public key.')
-  }
-}
-
-/** @internal */
 function areLimitsEqual(
   a: readonly { token: Address.Address; limit: bigint }[] | undefined,
   b: readonly { token: Address.Address; limit: bigint }[] | undefined,
@@ -939,10 +932,11 @@ function areLimitsEqual(
   if (!a && !b) return true
   if (!a || !b) return false
   if (a.length !== b.length) return false
-  return a.every(
-    (limit, i) =>
-      limit.limit === b[i]!.limit && limit.token.toLowerCase() === b[i]!.token.toLowerCase(),
-  )
+  return a.every((limit, i) => {
+    const other = b[i]
+    if (!other) return false
+    return limit.limit === other.limit && limit.token.toLowerCase() === other.token.toLowerCase()
+  })
 }
 
 /** @internal */

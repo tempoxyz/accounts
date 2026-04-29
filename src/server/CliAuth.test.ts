@@ -13,10 +13,12 @@ const webAuthnRoot = webAuthnAccounts[0]!
 const accessKey = TempoAccount.fromP256(privateKeys[1]!)
 const secpAccessKey = accounts[1]!
 const expiry = Math.floor(Date.now() / 1000) + 3_600
+const token = '0x20c0000000000000000000000000000000000001' as const
+const limit = 1_000n
 const limits = [
   {
-    limit: 1_000n,
-    token: '0x20c0000000000000000000000000000000000001' as const,
+    limit,
+    token,
   },
 ] as const
 
@@ -391,18 +393,23 @@ describe('createDeviceCode', () => {
         request: { ...request, pubKey: '0x1234' },
         store: CliAuth.Store.memory(),
       }),
-    ).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: Invalid access-key public key.]`)
+    ).rejects
+      .toThrowErrorMatchingInlineSnapshot(`[PublicKey.InvalidSerializedSizeError: Value \`0x1234\` is an invalid public key size.
+
+Expected: 33 bytes (compressed + prefix), 64 bytes (uncompressed) or 65 bytes (uncompressed + prefix).
+Received 2 bytes.]`)
   })
 
   test('behavior: rejects too many limits', async () => {
     const { request } = await createRequest()
+    const item = {
+      limit: '0x1' as const,
+      token: '0x20c0000000000000000000000000000000000001' as const,
+    }
     const result = await z.safeDecodeAsync(CliAuth.createRequest, {
       ...z.encode(CliAuth.createRequest, request),
-      limits: Array.from({ length: 11 }, () => ({
-        limit: '0x1',
-        token: '0x20c0000000000000000000000000000000000001',
-      })),
-    } as never)
+      limits: Array.from({ length: 11 }, () => item),
+    })
 
     expect(result).toMatchInlineSnapshot(`
     	{
@@ -428,7 +435,7 @@ describe('createDeviceCode', () => {
     const result = await z.safeDecodeAsync(CliAuth.createRequest, {
       ...z.encode(CliAuth.createRequest, request),
       limits: [{ limit: '0x1', token: '0x1234' }],
-    } as never)
+    })
 
     expect(result).toMatchInlineSnapshot(`
     	{
@@ -886,7 +893,7 @@ describe('authorize', () => {
     const approvedLimits = [
       {
         limit: 2_000n,
-        token: limits[0]!.token,
+        token,
       },
     ] as const
 
@@ -951,7 +958,7 @@ describe('authorize', () => {
         chainId: chain.id,
         policy,
         request: await authorize(code, {
-          limits: [{ limit: 2_000n, token: limits[0]!.token }],
+          limits: [{ limit: 2_000n, token }],
         }),
         store,
       }),
@@ -989,7 +996,7 @@ describe('authorize', () => {
           ...authorized,
           keyAuthorization: {
             ...authorized.keyAuthorization,
-            limits: [{ limit: limits[0]!.limit + 1n, token: limits[0]!.token }],
+            limits: [{ limit: limit + 1n, token }],
           },
         },
         store,
@@ -1126,8 +1133,8 @@ describe('Store.kv', () => {
   test('default: persists encoded entries through KV', async () => {
     const store = CliAuth.Store.kv({
       async delete() {},
-      async get<_value = unknown>(_key: string) {
-        return undefined as never
+      async get<_value = unknown>(_key: string): Promise<_value> {
+        throw new Error('Not implemented.')
       },
       async set() {},
     })

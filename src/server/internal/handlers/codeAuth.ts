@@ -33,6 +33,7 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     ...rest
   } = options
 
+  const [defaultChain] = chains
   const clients = new Map<number, Client>()
   for (const chain of chains) {
     const transport = transports[chain.id] ?? http()
@@ -40,13 +41,10 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
   }
 
   function getClient(chainId?: bigint | number): Client {
-    if (typeof chainId !== 'undefined') {
-      const id = Number(chainId)
-      const client = clients.get(id)
-      if (!client) throw new Error(`Chain ${id} not configured`)
-      return client
-    }
-    return clients.get(chains[0]!.id)!
+    const id = Number(chainId ?? defaultChain.id)
+    const client = clients.get(id)
+    if (!client) throw new Error(`Chain ${id} not configured`)
+    return client
   }
 
   const router = from(rest)
@@ -80,11 +78,8 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     const limited = await checkRateLimit(c.req.raw)
     if (limited) return limited
     try {
-      const request = z.decode(
-        CliAuth.createRequest,
-        (await readJson(c.req.raw, maxBodyBytes)) as never,
-      )
-      const chainId = request.chainId ?? chains[0]!.id
+      const request = z.decode(CliAuth.createRequest, await readJson(c.req.raw, maxBodyBytes))
+      const chainId = request.chainId ?? defaultChain.id
       getClient(chainId)
       const result = await CliAuth.createDeviceCode({
         chainId,
@@ -106,10 +101,7 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     const limited = await checkRateLimit(c.req.raw)
     if (limited) return limited
     try {
-      const request = z.decode(
-        CliAuth.pollRequest,
-        (await readJson(c.req.raw, maxBodyBytes)) as never,
-      )
+      const request = z.decode(CliAuth.pollRequest, await readJson(c.req.raw, maxBodyBytes))
       const code = c.req.param('code')
       const result = await CliAuth.poll({
         code,
@@ -128,10 +120,7 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     const limited = await checkRateLimit(c.req.raw)
     if (limited) return limited
     try {
-      const request = z.decode(
-        CliAuth.authorizeRequest,
-        (await readJson(c.req.raw, maxBodyBytes)) as never,
-      )
+      const request = z.decode(CliAuth.authorizeRequest, await readJson(c.req.raw, maxBodyBytes))
       const result = await CliAuth.authorize({
         client: getClient(request.keyAuthorization.chainId),
         ...(now ? { now } : {}),
@@ -184,7 +173,7 @@ async function readJson(request: Request, maxBodyBytes: number) {
   const text = await request.text()
   if (new TextEncoder().encode(text).byteLength > maxBodyBytes)
     throw new Error('Request body is too large.')
-  return JSON.parse(text) as unknown
+  return JSON.parse(text)
 }
 
 function getRateLimitKey(request: Request) {
