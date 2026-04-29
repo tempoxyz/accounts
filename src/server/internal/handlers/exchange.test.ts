@@ -14,8 +14,8 @@ import { exchange } from './exchange.js'
  * exports).
  */
 type QuoteResponseWire = {
-  input: { amount: string; token: Address; name: string; symbol: string }
-  output: { amount: string; token: Address; name: string; symbol: string }
+  pairToken: { address: Address; amount: string; name: string; symbol: string }
+  token: { address: Address; amount: string; name: string; symbol: string }
   slippage: number
   type: 'buy' | 'sell'
   calls: readonly { to: Address; data: Hex.Hex }[]
@@ -112,13 +112,14 @@ describe('default', () => {
   })
 
   test('behavior: type=sell returns expected response shape', async () => {
+    // Sell 1 quote for base.
     const response = await fetch(`${server.url}/exchange/quote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'sell',
-        input: quote,
-        output: base,
+        token: quote,
+        pairToken: base,
         amount: '1',
         slippage: 0.01,
       }),
@@ -130,41 +131,42 @@ describe('default', () => {
     // Token addresses change per test run — snapshot the rest.
     expect({
       ...rest,
-      input: { ...rest.input, token: '<input-token>' as Address },
-      output: { ...rest.output, token: '<output-token>' as Address },
+      pairToken: { ...rest.pairToken, address: '<pair-token>' as Address },
+      token: { ...rest.token, address: '<token>' as Address },
     }).toMatchInlineSnapshot(`
     	{
-    	  "input": {
-    	    "amount": "1",
-    	    "name": "Test Quote",
-    	    "symbol": "TQUOTE",
-    	    "token": "<input-token>",
-    	  },
-    	  "output": {
+    	  "pairToken": {
+    	    "address": "<pair-token>",
     	    "amount": "0.98901",
     	    "name": "Test Base",
     	    "symbol": "TBASE",
-    	    "token": "<output-token>",
     	  },
     	  "slippage": 0.01,
+    	  "token": {
+    	    "address": "<token>",
+    	    "amount": "1",
+    	    "name": "Test Quote",
+    	    "symbol": "TQUOTE",
+    	  },
     	  "type": "sell",
     	}
     `)
 
-    // approve(input) + sell(dex)
+    // approve(token) + sell(dex)
     expect(calls).toHaveLength(2)
     expect(calls[0]!.to.toLowerCase()).toBe(quote.toLowerCase())
     expect(calls[1]!.to.toLowerCase()).toBe(Addresses.stablecoinDex.toLowerCase())
   })
 
   test('behavior: type=buy returns expected response shape', async () => {
+    // Buy 1 base, paying with quote.
     const response = await fetch(`${server.url}/exchange/quote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'buy',
-        input: quote,
-        output: base,
+        token: base,
+        pairToken: quote,
         amount: '1',
         slippage: 0.01,
       }),
@@ -175,28 +177,29 @@ describe('default', () => {
     const { calls, ...rest } = decoded
     expect({
       ...rest,
-      input: { ...rest.input, token: '<input-token>' as Address },
-      output: { ...rest.output, token: '<output-token>' as Address },
+      pairToken: { ...rest.pairToken, address: '<pair-token>' as Address },
+      token: { ...rest.token, address: '<token>' as Address },
     }).toMatchInlineSnapshot(`
     	{
-    	  "input": {
+    	  "pairToken": {
+    	    "address": "<pair-token>",
     	    "amount": "1.01101",
     	    "name": "Test Quote",
     	    "symbol": "TQUOTE",
-    	    "token": "<input-token>",
     	  },
-    	  "output": {
+    	  "slippage": 0.01,
+    	  "token": {
+    	    "address": "<token>",
     	    "amount": "1",
     	    "name": "Test Base",
     	    "symbol": "TBASE",
-    	    "token": "<output-token>",
     	  },
-    	  "slippage": 0.01,
     	  "type": "buy",
     	}
     `)
 
     expect(calls).toHaveLength(2)
+    // approve is on the spent token (pairToken == quote for type=buy).
     expect(calls[0]!.to.toLowerCase()).toBe(quote.toLowerCase())
     expect(calls[1]!.to.toLowerCase()).toBe(Addresses.stablecoinDex.toLowerCase())
   })
@@ -217,8 +220,8 @@ describe('default', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'sell',
-        input: quote,
-        output: base,
+        token: quote,
+        pairToken: base,
         amount: '1',
         slippage: 0.05,
       }),
@@ -245,8 +248,8 @@ describe('default', () => {
       headers: { 'Content-Type': 'application/json' },
       // Missing `type`.
       body: JSON.stringify({
-        input: quote,
-        output: base,
+        token: quote,
+        pairToken: base,
         amount: '1',
         slippage: 0.01,
       }),
@@ -274,8 +277,8 @@ describe('default', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'sell',
-        input: orphan,
-        output: base,
+        token: orphan,
+        pairToken: base,
         amount: '1',
         slippage: 0.01,
       }),
@@ -300,8 +303,8 @@ describe('default', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'invalid',
-        input: quote,
-        output: base,
+        token: quote,
+        pairToken: base,
         amount: '1',
         slippage: 0.01,
       }),
@@ -327,8 +330,8 @@ describe('default', () => {
       // `amount` must be a decimal string, not a number.
       body: JSON.stringify({
         type: 'sell',
-        input: quote,
-        output: base,
+        token: quote,
+        pairToken: base,
         amount: 1,
         slippage: 0.01,
       }),
@@ -347,13 +350,13 @@ describe('default', () => {
     `)
   })
 
-  test('error: schema rejects missing `input` field', async () => {
+  test('error: schema rejects missing `token` field', async () => {
     const response = await fetch(`${server.url}/exchange/quote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'sell',
-        output: base,
+        pairToken: base,
         amount: '1',
         slippage: 0.01,
       }),
@@ -365,7 +368,7 @@ describe('default', () => {
     	  "issues": [
     	    {
     	      "message": "expected string",
-    	      "path": "input",
+    	      "path": "token",
     	    },
     	  ],
     	}
@@ -380,8 +383,8 @@ describe('default', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'sell',
-        input: quote,
-        output: base,
+        token: quote,
+        pairToken: base,
         amount: 'not-a-number',
         slippage: 0.01,
       }),
@@ -392,14 +395,14 @@ describe('default', () => {
     expect(body.error).toMatch(/decimal|number/i)
   })
 
-  test('error: same input/output token reverts', async () => {
+  test('error: same token/pairToken reverts', async () => {
     const response = await fetch(`${server.url}/exchange/quote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'sell',
-        input: base,
-        output: base,
+        token: base,
+        pairToken: base,
         amount: '1',
         slippage: 0.01,
       }),
@@ -424,8 +427,8 @@ describe('default', () => {
       body: JSON.stringify({
         type: 'sell',
         chainId: 999_999,
-        input: quote,
-        output: base,
+        token: quote,
+        pairToken: base,
         amount: '1',
         slippage: 0.01,
       }),
@@ -446,8 +449,8 @@ describe('default', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'buy',
-        input: quote,
-        output: base,
+        token: base,
+        pairToken: quote,
         amount: '999999',
         slippage: 0.01,
       }),
@@ -498,8 +501,8 @@ describe('symbol resolution', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'sell',
-        input: 'TQUOTE',
-        output: 'TBASE',
+        token: 'TQUOTE',
+        pairToken: 'TBASE',
         amount: '1',
         slippage: 0.01,
       }),
@@ -510,30 +513,30 @@ describe('symbol resolution', () => {
     const { calls, ...rest } = decoded
     expect({
       ...rest,
-      input: { ...rest.input, token: '<input-token>' as Address },
-      output: { ...rest.output, token: '<output-token>' as Address },
+      pairToken: { ...rest.pairToken, address: '<pair-token>' as Address },
+      token: { ...rest.token, address: '<token>' as Address },
     }).toMatchInlineSnapshot(`
     	{
-    	  "input": {
-    	    "amount": "1",
-    	    "name": "Test Quote",
-    	    "symbol": "TQUOTE",
-    	    "token": "<input-token>",
-    	  },
-    	  "output": {
+    	  "pairToken": {
+    	    "address": "<pair-token>",
     	    "amount": "0.98901",
     	    "name": "Test Base",
     	    "symbol": "TBASE",
-    	    "token": "<output-token>",
     	  },
     	  "slippage": 0.01,
+    	  "token": {
+    	    "address": "<token>",
+    	    "amount": "1",
+    	    "name": "Test Quote",
+    	    "symbol": "TQUOTE",
+    	  },
     	  "type": "sell",
     	}
     `)
 
     // Resolved addresses match the freshly-created pair.
-    expect(decoded.input.token.toLowerCase()).toBe(quote.toLowerCase())
-    expect(decoded.output.token.toLowerCase()).toBe(base.toLowerCase())
+    expect(decoded.token.address.toLowerCase()).toBe(quote.toLowerCase())
+    expect(decoded.pairToken.address.toLowerCase()).toBe(base.toLowerCase())
     expect(calls).toHaveLength(2)
   })
 
@@ -543,8 +546,8 @@ describe('symbol resolution', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'sell',
-        input: 'TQUOTE',
-        output: 'NOPE',
+        token: 'TQUOTE',
+        pairToken: 'NOPE',
         amount: '1',
         slippage: 0.01,
       }),

@@ -16,9 +16,9 @@ describe('exchange handler', () => {
       json: {
         amount: string
         chainId?: number | undefined
-        input: string
-        output: string
+        pairToken: string
         slippage: number
+        token: string
         type: 'buy' | 'sell'
       }
     }>()
@@ -35,9 +35,9 @@ describe('exchange handler', () => {
     expectTypeOf<Args['json']>().toMatchTypeOf<{
       amount: string
       chainId?: number | undefined
-      input: string
-      output: string
+      pairToken: string
       slippage: number
+      token: string
       type: 'buy' | 'sell'
     }>()
   })
@@ -76,9 +76,9 @@ describe('exchange handler', () => {
     expectTypeOf<Body>().toMatchTypeOf<
       | {
           calls: readonly { data: `0x${string}`; to: Address }[]
-          input: { amount: string; name: string; symbol: string; token: Address }
-          output: { amount: string; name: string; symbol: string; token: Address }
+          pairToken: { address: Address; amount: string; name: string; symbol: string }
           slippage: number
+          token: { address: Address; amount: string; name: string; symbol: string }
           type: 'buy' | 'sell'
         }
       | { error: string; issues: { message: string; path: string }[] }
@@ -98,9 +98,9 @@ describe('compose', () => {
       json: {
         amount: string
         chainId?: number | undefined
-        input: string
-        output: string
+        pairToken: string
         slippage: number
+        token: string
         type: 'buy' | 'sell'
       }
     }>()
@@ -117,9 +117,9 @@ describe('compose', () => {
     expectTypeOf<Args['json']>().toMatchTypeOf<{
       amount: string
       chainId?: number | undefined
-      input: string
-      output: string
+      pairToken: string
       slippage: number
+      token: string
       type: 'buy' | 'sell'
     }>()
   })
@@ -152,9 +152,9 @@ describe('compose', () => {
     expectTypeOf<Body>().toMatchTypeOf<
       | {
           calls: readonly { data: `0x${string}`; to: Address }[]
-          input: { amount: string; name: string; symbol: string; token: Address }
-          output: { amount: string; name: string; symbol: string; token: Address }
+          pairToken: { address: Address; amount: string; name: string; symbol: string }
           slippage: number
+          token: { address: Address; amount: string; name: string; symbol: string }
           type: 'buy' | 'sell'
         }
       | { error: string; issues: { message: string; path: string }[] }
