@@ -4,8 +4,9 @@ import type * as zc from 'zod/v4/core'
 
 import type { OneOf } from '../../internal/types.js'
 
-/** EVM address (`0x...`). */
-export const address = () => z.templateLiteral(['0x', z.string()], 'Expected address')
+/** EVM address (`0x...` followed by 20 bytes). */
+export const address = () =>
+  z.templateLiteral(['0x', z.string().check(z.regex(/^[0-9a-fA-F]{40}$/))], 'Expected address')
 
 /** Hex-encoded bigint. Decodes from `0x...` hex or raw `bigint` to `bigint`. */
 export const bigint = () =>
