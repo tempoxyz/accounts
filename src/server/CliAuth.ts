@@ -174,6 +174,12 @@ export type Policy = {
   validate: (options: Policy.validate.Options) => MaybePromise<Policy.validate.ReturnType>
 }
 
+/** Request rate limiter used by CLI auth handlers. */
+export type RateLimit = {
+  /** Returns whether the request is allowed to continue. */
+  limit: (options: RateLimit.limit.Options) => MaybePromise<RateLimit.limit.ReturnType>
+}
+
 export declare namespace Entry {
   /** Pending device-code entry. */
   export type Pending = Extract<z.output<typeof entry>, { status: 'pending' }>
@@ -225,6 +231,43 @@ export declare namespace Policy {
       expiry: number
       /** Suggested spending limits. */
       limits?: readonly { token: Address.Address; limit: bigint }[] | undefined
+    }
+  }
+}
+
+export declare namespace RateLimit {
+  export namespace limit {
+    export type Options = {
+      /** Rate-limit key derived from the request. */
+      key: string
+      /** Incoming request being rate-limited. */
+      request: Request
+    }
+
+    export type ReturnType = {
+      /** Whether the request is allowed to continue. */
+      success: boolean
+    }
+  }
+
+  export namespace memory {
+    export type Options = {
+      /** Maximum requests per key in a window. */
+      max: number
+      /** Window duration in milliseconds. */
+      windowMs: number
+    }
+  }
+
+  export namespace cloudflare {
+    export type Limiter = {
+      /** Cloudflare Rate Limit binding method. */
+      limit: (options: { key: string }) => MaybePromise<{ success: boolean }>
+    }
+
+    export type Options = {
+      /** Prefix added to the derived request key. @default "cli-auth" */
+      key?: string | undefined
     }
   }
 }
@@ -357,6 +400,45 @@ export const Policy = {
   /** Returns the provided policy unchanged. */
   from(policy: Policy): Policy {
     return policy
+  },
+}
+
+/** Built-in CLI auth rate-limit helpers. */
+export const RateLimit = {
+  /**
+   * Creates a Cloudflare Rate Limit binding adapter.
+   *
+   * Uses the request-derived key for all CLI auth endpoints so one budget is
+   * shared across create, pending, poll, and authorize requests.
+   */
+  cloudflare(
+    limiter: RateLimit.cloudflare.Limiter,
+    options: RateLimit.cloudflare.Options = {},
+  ): RateLimit {
+    const key = options.key ?? 'cli-auth'
+    return {
+      async limit(options) {
+        return limiter.limit({ key: `${key}:${options.key}` })
+      },
+    }
+  },
+  /** Creates an in-memory fixed-window limiter for dev and single-process servers. */
+  memory(options: RateLimit.memory.Options): RateLimit {
+    const entries = new Map<string, { count: number; resetAt: number }>()
+
+    return {
+      limit({ key }) {
+        const now = Date.now()
+        const current = entries.get(key)
+        if (!current || now >= current.resetAt) {
+          entries.set(key, { count: 1, resetAt: now + options.windowMs })
+          return { success: true }
+        }
+        if (current.count >= options.max) return { success: false }
+        current.count++
+        return { success: true }
+      },
+    }
   },
 }
 

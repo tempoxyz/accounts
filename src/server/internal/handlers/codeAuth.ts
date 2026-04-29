@@ -25,6 +25,7 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     path = '/auth/pkce',
     policy,
     random,
+    rateLimit = CliAuth.RateLimit.memory({ max: 120, windowMs: 60_000 }),
     store = CliAuth.Store.memory(),
     transports = {},
     ttlMs,
@@ -49,7 +50,16 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
 
   const router = from(rest)
 
+  async function checkRateLimit(request: Request) {
+    if (rateLimit === false) return undefined
+    const { success } = await rateLimit.limit({ key: getRateLimitKey(request), request })
+    if (success) return undefined
+    return Response.json({ error: 'Rate limit exceeded.' }, { status: 429 })
+  }
+
   router.get(`${path}/pending/:code`, async (c) => {
+    const limited = await checkRateLimit(c.req.raw)
+    if (limited) return limited
     try {
       const code = c.req.param('code')
       const result = await CliAuth.pending({
@@ -66,6 +76,8 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
   })
 
   router.post(`${path}/code`, async (c) => {
+    const limited = await checkRateLimit(c.req.raw)
+    if (limited) return limited
     try {
       const request = z.decode(CliAuth.createRequest, await c.req.raw.json())
       const chainId = request.chainId ?? chains[0]!.id
@@ -87,6 +99,8 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
   })
 
   router.post(`${path}/poll/:code`, async (c) => {
+    const limited = await checkRateLimit(c.req.raw)
+    if (limited) return limited
     try {
       const request = z.decode(CliAuth.pollRequest, await c.req.raw.json())
       const code = c.req.param('code')
@@ -104,6 +118,8 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
   })
 
   router.post(path, async (c) => {
+    const limited = await checkRateLimit(c.req.raw)
+    if (limited) return limited
     try {
       const request = z.decode(CliAuth.authorizeRequest, await c.req.raw.json())
       const result = await CliAuth.authorize({
@@ -139,6 +155,8 @@ export declare namespace codeAuth {
     policy?: CliAuth.Policy | undefined
     /** Random byte generator used for device-code allocation. */
     random?: ((size: number) => Uint8Array) | undefined
+    /** Shared rate limiter across all CLI auth endpoints. Pass `false` to disable. */
+    rateLimit?: CliAuth.RateLimit | false | undefined
     /** Device-code store. */
     store?: CliAuth.Store | undefined
     /** Transports keyed by chain ID. Defaults to `http()` for each chain. */
@@ -146,4 +164,14 @@ export declare namespace codeAuth {
     /** Pending entry TTL in milliseconds. @default 600000 */
     ttlMs?: number | undefined
   }
+}
+
+function getRateLimitKey(request: Request) {
+  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+  return (
+    request.headers.get('cf-connecting-ip') ??
+    forwarded ??
+    request.headers.get('x-real-ip') ??
+    'unknown'
+  )
 }
