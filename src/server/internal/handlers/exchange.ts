@@ -28,6 +28,7 @@ export namespace schema {
   const token = z.object({
     address: u.address(),
     decimals: z.number(),
+    logoUri: z.optional(z.string()),
     name: z.string(),
     symbol: z.string(),
   })
@@ -306,6 +307,8 @@ export declare namespace exchange {
     address: Address
     /** Token decimals. */
     decimals: number
+    /** Token logo URI. */
+    logoUri?: string | undefined
     /** Token name. */
     name: string
     /** Token symbol. */
@@ -474,6 +477,11 @@ function toCall(call: { data: Hex.Hex; to: Address }) {
 async function defaultResolveTokens(chainId: number): Promise<readonly Token[]> {
   const response = await fetch(`https://tokenlist.tempo.xyz/list/${chainId}`)
   if (!response.ok) return []
-  const data = (await response.json()) as { tokens: readonly Token[] }
-  return data.tokens
+  const data = (await response.json()) as {
+    tokens: readonly (Token & { logoURI?: string })[]
+  }
+  return data.tokens.map(({ logoURI, ...token }) => ({
+    ...token,
+    logoUri: token.logoUri ?? logoURI,
+  }))
 }
