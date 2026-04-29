@@ -485,6 +485,7 @@ function toCall(call: { data: Hex.Hex; to: Address }) {
  * list on any non-OK response.
  */
 async function defaultResolveTokens(chainId: number): Promise<readonly Token[]> {
+  // TODO: deprecate tokenlist.tempo.xyz when TIP-1026 enshrined.
   const response = await fetch(`https://tokenlist.tempo.xyz/list/${chainId}`)
   if (!response.ok) return []
   const data = (await response.json()) as {
