@@ -4,6 +4,7 @@ import { http, type Chain, type Transport } from 'viem'
 import { tempo, tempoModerato } from 'viem/chains'
 import { describe, expectTypeOf, test } from 'vp/test'
 
+import * as CliAuth from './CliAuth.js'
 import * as Handler from './Handler.js'
 
 describe('codeAuth options', () => {
@@ -21,6 +22,15 @@ describe('codeAuth options', () => {
         [tempo.id]: http('https://rpc.tempo.xyz'),
         [tempoModerato.id]: http('https://rpc.moderato.tempo.xyz'),
       },
+    })
+  })
+
+  test('accepts a shared rate limiter', () => {
+    void Handler.codeAuth({
+      rateLimit: CliAuth.RateLimit.memory({ max: 120, windowMs: 60_000 }),
+    })
+    void Handler.codeAuth({
+      rateLimit: false,
     })
   })
 })

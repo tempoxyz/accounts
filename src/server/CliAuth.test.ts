@@ -296,6 +296,52 @@ describe('createDeviceCode', () => {
     `)
   })
 
+  test('behavior: handler rate-limits all CLI auth endpoints together', async () => {
+    const handler = Handler.codeAuth({
+      rateLimit: CliAuth.RateLimit.memory({ max: 1, windowMs: 60_000 }),
+    })
+
+    const first = await get(handler, {
+      url: 'http://localhost/auth/pkce/pending/ABCDEFGH',
+    })
+    const second = await get(handler, {
+      url: 'http://localhost/auth/pkce/pending/ABCDEFGH',
+    })
+
+    expect(first.status).toMatchInlineSnapshot(`404`)
+    expect(second).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "Rate limit exceeded.",
+        },
+        "status": 429,
+      }
+    `)
+  })
+
+  test('behavior: Cloudflare rate-limit adapter shares one key across endpoints', async () => {
+    const calls: { key: string }[] = []
+    const rateLimit = CliAuth.RateLimit.cloudflare({
+      limit(options) {
+        calls.push(options)
+        return { success: true }
+      },
+    })
+
+    await rateLimit.limit({
+      key: '127.0.0.1',
+      request: new Request('http://localhost/auth/pkce/code'),
+    })
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "key": "cli-auth:127.0.0.1",
+        },
+      ]
+    `)
+  })
+
   test('behavior: invalid input returns 400', async () => {
     const handler = Handler.codeAuth()
     const response = await handler.fetch(
