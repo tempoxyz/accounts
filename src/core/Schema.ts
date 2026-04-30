@@ -88,6 +88,7 @@ export const schema = from([
   Rpc.wallet_authorizeAccessKey.schema,
   Rpc.wallet_connect.schema,
   Rpc.wallet_deposit.schema,
+  Rpc.wallet_depositZone.schema,
   Rpc.wallet_disconnect.schema,
   Rpc.wallet_getBalances.schema,
   Rpc.wallet_getCallsStatus.schema,
@@ -97,6 +98,7 @@ export const schema = from([
   Rpc.wallet_sendCalls.schema,
   Rpc.wallet_swap.schema,
   Rpc.wallet_switchEthereumChain.schema,
+  Rpc.wallet_withdrawZone.schema,
 ])
 
 /** Ox-compatible RPC schema union for the provider. */

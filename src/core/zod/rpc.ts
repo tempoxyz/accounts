@@ -616,6 +616,59 @@ export namespace wallet_deposit {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
+/** Opens the wallet zone-deposit flow with optional pre-filled fields. */
+export namespace wallet_depositZone {
+  /** Parameters object for `wallet_depositZone`. */
+  export const parameters = z.object({
+    /** Human-readable amount to pre-fill (e.g. "1.5"). */
+    amount: z.optional(z.string()),
+    /**
+     * Fee payer override. `false` to disable the wallet's default fee
+     * payer, a URL string to use a custom fee payer service.
+     */
+    feePayer: z.optional(z.union([z.boolean(), z.string()])),
+    /** Token contract address to pre-fill. Omit to let the user choose. */
+    token: z.optional(u.address()),
+    /** Zone id to deposit into. */
+    zoneId: z.optional(u.number()),
+  })
+
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_depositZone'),
+    params: z.optional(z.readonly(z.tuple([parameters]))),
+    returns: z.object({
+      /** Receipt of the submitted deposit. */
+      receipt,
+    }),
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
+/** Opens the wallet zone-withdraw flow with optional pre-filled fields. */
+export namespace wallet_withdrawZone {
+  /** Parameters object for `wallet_withdrawZone`. */
+  export const parameters = z.object({
+    /** Human-readable amount to pre-fill (e.g. "1.5"). */
+    amount: z.optional(z.string()),
+    /** Token contract address to pre-fill. Omit to let the user choose. */
+    token: z.optional(u.address()),
+    /** Zone id to withdraw from. */
+    zoneId: z.optional(u.number()),
+  })
+
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_withdrawZone'),
+    params: z.optional(z.readonly(z.tuple([parameters]))),
+    returns: z.object({
+      /** Receipt of the submitted withdrawal. */
+      receipt,
+    }),
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
 /** Strict parameter schemas keyed by method name. */
 export const strictParameters = {
   wallet_authorizeAccessKey: wallet_authorizeAccessKey_strict.parameters,

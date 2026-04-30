@@ -53,6 +53,13 @@ export type Instance = {
           request: EncodedRequest<Rpc.wallet_deposit.Encoded>,
         ) => Promise<deposit.ReturnType>)
       | undefined
+    /** Open the zone-deposit flow. */
+    depositZone?:
+      | ((
+          params: depositZone.Parameters,
+          request: EncodedRequest<Rpc.wallet_depositZone.Encoded>,
+        ) => Promise<depositZone.ReturnType>)
+      | undefined
     /** Disconnect hook for adapter-specific cleanup. */
     disconnect?: (() => Promise<void>) | undefined
     /** Discover existing accounts (e.g. WebAuthn assertion). */
@@ -108,6 +115,13 @@ export type Instance = {
     ) => Promise<Hex>
     /** Switch chain hook for adapter-specific handling. */
     switchChain?: ((params: switchChain.Parameters) => Promise<void>) | undefined
+    /** Open the zone-withdraw flow. */
+    withdrawZone?:
+      | ((
+          params: withdrawZone.Parameters,
+          request: EncodedRequest<Rpc.wallet_withdrawZone.Encoded>,
+        ) => Promise<withdrawZone.ReturnType>)
+      | undefined
   }
   /** Cleanup function called when the provider is destroyed. */
   cleanup?: (() => void) | undefined
@@ -179,6 +193,18 @@ export declare namespace createAccount {
 export declare namespace deposit {
   type Parameters = ActionRequest<typeof Rpc.wallet_deposit.schema>
   type ReturnType = Rpc.wallet_deposit.Encoded['returns']
+}
+
+/** Parameters and return type for the `wallet_depositZone` action. */
+export declare namespace depositZone {
+  type Parameters = ActionRequest<typeof Rpc.wallet_depositZone.schema>
+  type ReturnType = Rpc.wallet_depositZone.Encoded['returns']
+}
+
+/** Parameters and return type for the `wallet_withdrawZone` action. */
+export declare namespace withdrawZone {
+  type Parameters = ActionRequest<typeof Rpc.wallet_withdrawZone.schema>
+  type ReturnType = Rpc.wallet_withdrawZone.Encoded['returns']
 }
 
 export declare namespace loadAccounts {

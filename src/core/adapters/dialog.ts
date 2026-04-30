@@ -407,6 +407,20 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           return await provider.request(request)
         },
 
+        async depositZone(params, request) {
+          return await provider.request({
+            ...request,
+            params: [z.encode(Rpc.wallet_depositZone.parameters, params)] as const,
+          })
+        },
+
+        async withdrawZone(params, request) {
+          return await provider.request({
+            ...request,
+            params: [z.encode(Rpc.wallet_withdrawZone.parameters, params)] as const,
+          })
+        },
+
         async disconnect() {
           store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
         },
