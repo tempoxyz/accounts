@@ -610,7 +610,16 @@ export namespace wallet_deposit {
         }),
       ]),
     ),
-    returns: z.void(),
+    returns: z.optional(
+      z.object({
+        /**
+         * Receipts of any onchain operations performed during the
+         * deposit (e.g. testnet faucet drops). Absent for offchain
+         * paths like Apple Pay where funds arrive asynchronously.
+         */
+        receipts: z.optional(z.readonly(z.array(receipt))),
+      }),
+    ),
   })
   export type Encoded = Schema.Encoded<typeof schema>
   export type Decoded = Schema.Decoded<typeof schema>
