@@ -1,5 +1,11 @@
 # accounts
 
+## 0.8.7
+
+### Patch Changes
+
+- 763ccfc: Treated `undefined` as "no value" in `Storage.combine` reads so adapters that return `undefined` for missing keys (Map-backed, custom caches) fell through to the next adapter instead of short-circuiting.
+
 ## 0.8.6
 
 ### Patch Changes
