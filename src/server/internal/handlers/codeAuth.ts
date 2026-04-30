@@ -27,6 +27,7 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     policy,
     random,
     rateLimit = CliAuth.RateLimit.memory({ max: 120, windowMs: 60_000 }),
+    rateLimitKey = getRateLimitKey,
     store = CliAuth.Store.memory(),
     transports = {},
     ttlMs,
@@ -51,7 +52,7 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
 
   async function checkRateLimit(request: Request) {
     if (rateLimit === false) return undefined
-    const { success } = await rateLimit.limit({ key: getRateLimitKey(request), request })
+    const { success } = await rateLimit.limit({ key: rateLimitKey(request), request })
     if (success) return undefined
     return Response.json({ error: 'Rate limit exceeded.' }, { status: 429 })
   }
@@ -158,6 +159,8 @@ export declare namespace codeAuth {
     random?: ((size: number) => Uint8Array) | undefined
     /** Shared rate limiter across all CLI auth endpoints. Pass `false` to disable. */
     rateLimit?: CliAuth.RateLimit | false | undefined
+    /** Derives the rate-limit key from the request. Defaults to Cloudflare's trusted IP header, then `unknown`. */
+    rateLimitKey?: ((request: Request) => string) | undefined
     /** Device-code store. */
     store?: CliAuth.Store | undefined
     /** Transports keyed by chain ID. Defaults to `http()` for each chain. */
@@ -170,18 +173,37 @@ export declare namespace codeAuth {
 async function readJson(request: Request, maxBodyBytes: number) {
   const length = request.headers.get('content-length')
   if (length && Number(length) > maxBodyBytes) throw new Error('Request body is too large.')
-  const text = await request.text()
-  if (new TextEncoder().encode(text).byteLength > maxBodyBytes)
-    throw new Error('Request body is too large.')
-  return JSON.parse(text)
+  if (!request.body) return JSON.parse('')
+
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      if (size > maxBodyBytes) {
+        await reader.cancel().catch(() => undefined)
+        throw new Error('Request body is too large.')
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const bytes = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+
+  return JSON.parse(new TextDecoder().decode(bytes))
 }
 
 function getRateLimitKey(request: Request) {
-  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-  return (
-    request.headers.get('cf-connecting-ip') ??
-    forwarded ??
-    request.headers.get('x-real-ip') ??
-    'unknown'
-  )
+  return request.headers.get('cf-connecting-ip') ?? 'unknown'
 }

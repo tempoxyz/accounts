@@ -344,6 +344,82 @@ describe('createDeviceCode', () => {
     `)
   })
 
+  test('behavior: handler ignores untrusted forwarding headers for rate-limit keys', async () => {
+    const calls: { key: string }[] = []
+    const handler = Handler.codeAuth({
+      rateLimit: {
+        limit(options) {
+          calls.push({ key: options.key })
+          return { success: true }
+        },
+      },
+    })
+
+    await get(handler, {
+      url: 'http://localhost/auth/pkce/pending/ABCDEFGH',
+    })
+    await handler.fetch(
+      new Request('http://localhost/auth/pkce/pending/ABCDEFGH', {
+        headers: {
+          'x-forwarded-for': '192.0.2.1',
+          'x-real-ip': '192.0.2.2',
+        },
+      }),
+    )
+    await handler.fetch(
+      new Request('http://localhost/auth/pkce/pending/ABCDEFGH', {
+        headers: {
+          'cf-connecting-ip': '192.0.2.3',
+        },
+      }),
+    )
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "key": "unknown",
+        },
+        {
+          "key": "unknown",
+        },
+        {
+          "key": "192.0.2.3",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: handler accepts a custom rate-limit key for trusted proxies', async () => {
+    const calls: { key: string }[] = []
+    const handler = Handler.codeAuth({
+      rateLimit: {
+        limit(options) {
+          calls.push({ key: options.key })
+          return { success: true }
+        },
+      },
+      rateLimitKey(request) {
+        return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+      },
+    })
+
+    await handler.fetch(
+      new Request('http://localhost/auth/pkce/pending/ABCDEFGH', {
+        headers: {
+          'x-forwarded-for': '192.0.2.1, 192.0.2.2',
+        },
+      }),
+    )
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "key": "192.0.2.1",
+        },
+      ]
+    `)
+  })
+
   test('behavior: invalid input returns 400', async () => {
     const handler = Handler.codeAuth()
     const response = await handler.fetch(
@@ -371,6 +447,34 @@ describe('createDeviceCode', () => {
         headers: { 'content-type': 'application/json' },
         method: 'POST',
       }),
+    )
+    const body = await response.json()
+
+    expect({ body, status: response.status }).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "Request body is too large.",
+        },
+        "status": 400,
+      }
+    `)
+  })
+
+  test('behavior: handler rejects oversized streamed JSON request bodies', async () => {
+    const handler = Handler.codeAuth({ maxBodyBytes: 16 })
+    const response = await handler.fetch(
+      new Request('http://localhost/auth/pkce/code', {
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"codeChallenge":"'))
+            controller.enqueue(new TextEncoder().encode('x"}'))
+            controller.close()
+          },
+        }),
+        duplex: 'half',
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      } as never),
     )
     const body = await response.json()
 
