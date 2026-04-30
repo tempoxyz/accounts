@@ -79,28 +79,32 @@ export function useState(
   return useStore(remote.store, selector as never)
 }
 
-const bundledFonts = new Set(['Pilat', 'TT Norms', 'iA Writer Quattro'])
-
 /** Applies theme overrides from URL search params and live messenger updates. */
 export function useTheme(remote?: CoreRemote.Remote | undefined) {
+  const snapshot = useRef<ThemeSnapshot | undefined>(undefined)
+
   useEffect(() => {
     if (typeof window === 'undefined') return
 
+    snapshot.current = captureTheme()
     const params = new URLSearchParams(window.location.search)
+    restoreTheme(snapshot.current)
     applyTheme({
       accent: params.get('accent') ?? undefined,
       radius: params.get('radius') ?? undefined,
-      font: params.get('font') ?? undefined,
       scheme: params.get('scheme') ?? undefined,
     })
 
-    return () => clearTheme()
+    return () => {
+      if (snapshot.current) restoreTheme(snapshot.current)
+      snapshot.current = undefined
+    }
   }, [])
 
   useEffect(() => {
     if (!remote) return
     return remote.messenger.on('theme', (payload) => {
-      clearTheme()
+      if (snapshot.current) restoreTheme(snapshot.current)
       applyTheme(payload)
     })
   }, [remote])
@@ -110,48 +114,66 @@ export function useTheme(remote?: CoreRemote.Remote | undefined) {
 function applyTheme(theme: {
   accent?: string | undefined
   radius?: string | undefined
-  font?: string | undefined
   scheme?: string | undefined
 }) {
   const root = document.documentElement
-  const { accent, radius, font, scheme } = theme
+  const { accent, radius, scheme } = theme
 
   if (accent) {
-    const isHex = accent.startsWith('#')
-    root.setAttribute('data-accent', isHex ? 'custom' : accent)
-    if (isHex) root.style.setProperty('--accent-base', accent)
+    root.removeAttribute('data-regen-color')
+    root.style.removeProperty('--regen-accent')
+    root.style.setProperty('--regen-accent', getAccentValue(accent))
   }
   if (scheme) root.style.colorScheme = scheme
-  if (radius) root.setAttribute('data-radius', radius)
-  if (font) {
-    root.setAttribute('data-font', font === 'System' ? 'system' : font)
-    if (font === 'System') {
-      root.style.setProperty('--font-body', 'ui-sans-serif, system-ui, sans-serif')
-      return
-    }
-    if (!bundledFonts.has(font)) {
-      const id = `gf-${font.replace(/\s/g, '-')}`
-      if (!document.getElementById(id)) {
-        const link = document.createElement('link')
-        link.id = id
-        link.rel = 'stylesheet'
-        link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}:wght@400;500;600&display=swap`
-        document.head.appendChild(link)
-      }
-    }
-    root.style.setProperty('--font-body', `'${font}', sans-serif`)
+  if (radius) root.setAttribute('data-regen-radius', radius)
+}
+
+function captureTheme(): ThemeSnapshot {
+  const root = document.documentElement
+  return {
+    accent: root.style.getPropertyValue('--regen-accent'),
+    color: root.getAttribute('data-regen-color'),
+    colorScheme: root.style.colorScheme,
+    radius: root.getAttribute('data-regen-radius'),
   }
 }
 
-/** Removes all theme overrides from the document root. */
-function clearTheme() {
+function restoreTheme(snapshot: ThemeSnapshot) {
   const root = document.documentElement
-  root.removeAttribute('data-accent')
-  root.removeAttribute('data-radius')
-  root.removeAttribute('data-font')
-  root.style.removeProperty('color-scheme')
-  root.style.removeProperty('--accent-base')
-  root.style.removeProperty('--font-body')
+  restoreAttribute(root, 'data-regen-color', snapshot.color)
+  restoreAttribute(root, 'data-regen-radius', snapshot.radius)
+  if (snapshot.accent) root.style.setProperty('--regen-accent', snapshot.accent)
+  else root.style.removeProperty('--regen-accent')
+  root.style.colorScheme = snapshot.colorScheme
+}
+
+function restoreAttribute(element: HTMLElement, name: string, value: string | null) {
+  if (value === null) element.removeAttribute(name)
+  else element.setAttribute(name, value)
+}
+
+function getAccentValue(accent: string) {
+  if (accent === 'invert') return 'var(--regen-accent-neutral)'
+  if (isAccentPreset(accent)) return `var(--regen-accent-${accent})`
+  return accent
+}
+
+function isAccentPreset(accent: string) {
+  return (
+    accent === 'neutral' ||
+    accent === 'blue' ||
+    accent === 'red' ||
+    accent === 'amber' ||
+    accent === 'green' ||
+    accent === 'purple'
+  )
+}
+
+type ThemeSnapshot = {
+  accent: string
+  color: string | null
+  colorScheme: string
+  radius: string | null
 }
 
 export declare namespace useEnsureVisibility {
