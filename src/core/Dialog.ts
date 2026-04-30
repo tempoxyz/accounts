@@ -41,12 +41,18 @@ export declare namespace SetupFn {
 
 /** Visual theme configuration for the dialog embed. */
 export type Theme = {
-  /** Accent color — a preset name or a hex color (e.g. `'#6366f1'`). */
-  accent?: 'blue' | 'red' | 'amber' | 'green' | 'purple' | 'invert' | (string & {}) | undefined
+  /** Accent color — a Regen preset name or a hex color (e.g. `'#6366f1'`). */
+  accent?:
+    | 'neutral'
+    | 'blue'
+    | 'red'
+    | 'amber'
+    | 'green'
+    | 'purple'
+    | (string & {})
+    | undefined
   /** Border radius preset. */
   radius?: 'none' | 'small' | 'medium' | 'large' | 'full' | undefined
-  /** Font family — a bundled name (`'Pilat'`, `'TT Norms'`) or a Google Font. */
-  font?: string | undefined
   /** Color scheme — controls light/dark appearance. Defaults to `'light dark'` (follows OS). */
   scheme?: 'light' | 'dark' | undefined
 }
@@ -56,7 +62,6 @@ function applyThemeParams(url: URL, theme: Theme | undefined) {
   if (!theme) return
   if (theme.accent) url.searchParams.set('accent', theme.accent)
   if (theme.radius) url.searchParams.set('radius', theme.radius)
-  if (theme.font) url.searchParams.set('font', theme.font)
   if (theme.scheme) url.searchParams.set('scheme', theme.scheme)
 }
 

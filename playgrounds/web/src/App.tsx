@@ -1815,38 +1815,25 @@ function OcclusionSimulator() {
   )
 }
 
-const accentOptions = ['', 'invert', 'blue', 'red', 'amber', 'green', 'purple'] as const
+const accentOptions = ['', 'neutral', 'blue', 'red', 'amber', 'green', 'purple'] as const
 const radiusOptions = ['', 'none', 'small', 'medium', 'large', 'full'] as const
-const fontOptions = [
-  '',
-  'System',
-  'Pilat',
-  'TT Norms',
-  'Inter',
-  'DM Sans',
-  'Geist',
-  'Outfit',
-] as const
 const schemeOptions = ['', 'light', 'dark'] as const
 
 function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) {
   const [accent, setAccent] = useState(theme?.accent ?? '')
   const [radius, setRadius] = useState(theme?.radius ?? '')
-  const [font, setFont] = useState(theme?.font ?? '')
   const [scheme, setScheme] = useState(theme?.scheme ?? '')
   const [customAccent, setCustomAccent] = useState('#6366f1')
 
-  function apply(next: { accent?: string; radius?: string; font?: string; scheme?: string }) {
+  function apply(next: { accent?: string; radius?: string; scheme?: string }) {
     const a = next.accent ?? accent
     const r = next.radius ?? radius
-    const f = next.font ?? font
     const s = next.scheme ?? scheme
     const t =
-      a || r || f || s
+      a || r || s
         ? {
             accent: a || undefined,
             radius: (r || undefined) as never,
-            font: f || undefined,
             scheme: (s || undefined) as never,
           }
         : undefined
@@ -1891,22 +1878,6 @@ function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) 
           }}
         >
           {radiusOptions.map((v) => (
-            <option key={v} value={v}>
-              {v || '(default)'}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <label>Font</label>
-        <select
-          value={font}
-          onChange={(e) => {
-            setFont(e.target.value)
-            apply({ font: e.target.value })
-          }}
-        >
-          {fontOptions.map((v) => (
             <option key={v} value={v}>
               {v || '(default)'}
             </option>
