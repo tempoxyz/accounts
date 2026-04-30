@@ -32,6 +32,11 @@ describe('codeAuth options', () => {
     void Handler.codeAuth({
       rateLimit: false,
     })
+    void Handler.codeAuth({
+      rateLimitKey(request) {
+        return request.headers.get('x-forwarded-for') ?? 'unknown'
+      },
+    })
   })
 })
 
