@@ -37,7 +37,7 @@ export function combine(...storages: readonly Storage[]): Storage {
   return {
     async getItem<value>(name: string) {
       const results = await Promise.allSettled(storages.map((x) => x.getItem<value>(name)))
-      const result = results.find((x) => x.status === 'fulfilled' && x.value !== null)
+      const result = results.find((x) => x.status === 'fulfilled' && x.value != null)
       if (result?.status !== 'fulfilled') return null
       return result.value as value
     },
