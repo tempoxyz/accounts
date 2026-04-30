@@ -85,6 +85,8 @@ export function App() {
       <Transactions />
       <WalletSend />
       <WalletSwap />
+      <WalletDepositZone />
+      <WalletWithdrawZone />
 
       <h2>Receipts &amp; Status</h2>
       <EthGetTransactionReceipt />
@@ -308,6 +310,94 @@ function WalletSwap() {
         }
       >
         Swap (buy 1 PathUSD)
+      </button>
+    </Method>
+  )
+}
+
+function WalletDepositZone() {
+  const [result, error, execute] = useRequest()
+  return (
+    <Method method="wallet_depositZone" result={result} error={error}>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_depositZone',
+              params: [{}],
+            }),
+          )
+        }
+      >
+        Deposit to zone
+      </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_depositZone',
+              params: [{ token: tokens.pathUSD }],
+            }),
+          )
+        }
+      >
+        Deposit (PathUSD)
+      </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_depositZone',
+              params: [{ amount: '1', token: tokens.pathUSD }],
+            }),
+          )
+        }
+      >
+        Deposit (1 PathUSD)
+      </button>
+    </Method>
+  )
+}
+
+function WalletWithdrawZone() {
+  const [result, error, execute] = useRequest()
+  return (
+    <Method method="wallet_withdrawZone" result={result} error={error}>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_withdrawZone',
+              params: [{}],
+            }),
+          )
+        }
+      >
+        Withdraw from zone
+      </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_withdrawZone',
+              params: [{ token: tokens.pathUSD }],
+            }),
+          )
+        }
+      >
+        Withdraw (PathUSD)
+      </button>
+      <button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_withdrawZone',
+              params: [{ amount: '1', token: tokens.pathUSD }],
+            }),
+          )
+        }
+      >
+        Withdraw (1 PathUSD)
       </button>
     </Method>
   )

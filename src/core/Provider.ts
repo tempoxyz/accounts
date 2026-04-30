@@ -650,6 +650,37 @@ export function create(options: create.Options = {}): create.ReturnType {
                     )) satisfies Rpc.wallet_swap.Encoded['returns']
                   }
 
+                  case 'wallet_depositZone': {
+                    assertConnected()
+                    if (!actions.depositZone)
+                      throw new ox_Provider.UnsupportedMethodError({
+                        message: '`depositZone` not supported by adapter.',
+                      })
+                    const decoded = request._decoded.params?.[0] ?? {}
+                    const parameters = {
+                      ...decoded,
+                      ...(typeof decoded.feePayer !== 'undefined'
+                        ? { feePayer: resolveFeePayer(decoded.feePayer) }
+                        : {}),
+                    } as Adapter.depositZone.Parameters
+                    return (await actions.depositZone(
+                      parameters,
+                      request,
+                    )) satisfies Rpc.wallet_depositZone.Encoded['returns']
+                  }
+
+                  case 'wallet_withdrawZone': {
+                    assertConnected()
+                    if (!actions.withdrawZone)
+                      throw new ox_Provider.UnsupportedMethodError({
+                        message: '`withdrawZone` not supported by adapter.',
+                      })
+                    return (await actions.withdrawZone(
+                      (request._decoded.params?.[0] ?? {}) as Adapter.withdrawZone.Parameters,
+                      request,
+                    )) satisfies Rpc.wallet_withdrawZone.Encoded['returns']
+                  }
+
                   case 'wallet_switchEthereumChain': {
                     const { chainId } = request._decoded.params[0]
                     if (!chains.some((c) => c.id === chainId))
