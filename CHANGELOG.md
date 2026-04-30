@@ -1,5 +1,14 @@
 # accounts
 
+## 0.8.6
+
+### Patch Changes
+
+- a15e214: Renamed `input` → `token` and `output` → `pairToken` in `POST /exchange/quote`
+- 81f8183: Included token logo URIs (`logoUri`) in the `GET /exchange/tokens` response.
+- 9a19429: Added `receipts` to the `wallet_deposit` RPC response.
+- 176c1d3: Added `wallet_depositZone` and `wallet_withdrawZone` RPC methods for moving funds between the parent Tempo chain and a private zone.
+
 ## 0.8.5
 
 ### Patch Changes
