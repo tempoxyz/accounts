@@ -73,6 +73,7 @@ export type Schema = [
     payload: {
       accent?: string | undefined
       radius?: string | undefined
+      font?: string | undefined
     }
   },
 ]
