@@ -49,7 +49,6 @@ export type Theme = {
     | 'amber'
     | 'green'
     | 'purple'
-    | 'invert'
     | (string & {})
     | undefined
   /** Border radius preset. */

@@ -120,7 +120,6 @@ function applyTheme(theme: {
   const { accent, radius, scheme } = theme
 
   if (accent) {
-    root.removeAttribute('data-regen-color')
     root.style.removeProperty('--regen-accent')
     root.style.setProperty('--regen-accent', getAccentValue(accent))
   }
@@ -132,7 +131,6 @@ function captureTheme(): ThemeSnapshot {
   const root = document.documentElement
   return {
     accent: root.style.getPropertyValue('--regen-accent'),
-    color: root.getAttribute('data-regen-color'),
     colorScheme: root.style.colorScheme,
     radius: root.getAttribute('data-regen-radius'),
   }
@@ -140,7 +138,6 @@ function captureTheme(): ThemeSnapshot {
 
 function restoreTheme(snapshot: ThemeSnapshot) {
   const root = document.documentElement
-  restoreAttribute(root, 'data-regen-color', snapshot.color)
   restoreAttribute(root, 'data-regen-radius', snapshot.radius)
   if (snapshot.accent) root.style.setProperty('--regen-accent', snapshot.accent)
   else root.style.removeProperty('--regen-accent')
@@ -153,7 +150,6 @@ function restoreAttribute(element: HTMLElement, name: string, value: string | nu
 }
 
 function getAccentValue(accent: string) {
-  if (accent === 'invert') return 'var(--regen-accent-neutral)'
   if (isAccentPreset(accent)) return `var(--regen-accent-${accent})`
   return accent
 }
@@ -171,7 +167,6 @@ function isAccentPreset(accent: string) {
 
 type ThemeSnapshot = {
   accent: string
-  color: string | null
   colorScheme: string
   radius: string | null
 }
