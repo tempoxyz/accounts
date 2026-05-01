@@ -699,10 +699,9 @@ async function fill(
             // source token also has insufficient balance), fall through
             // and return the original tx with the resolved feeToken
             // rather than failing the whole request.
-            const swapResult = await fillWithSwap(
-              resolvedFeeToken,
-              requiredFee - balance,
-            ).catch(() => null)
+            const swapResult = await fillWithSwap(resolvedFeeToken, requiredFee - balance).catch(
+              () => null,
+            )
             if (swapResult) return swapResult
           }
         }
