@@ -14,6 +14,18 @@ const userAccount = accounts[9]!
 const feePayerAccount = accounts[0]!
 const recipient = accounts[7]!
 
+/**
+ * Tokens the relay handler probes for fee-token resolution. The default
+ * `resolveTokens` fetches `tokenlist.tempo.xyz`, which doesn't know about
+ * the localnet chain — so tests inject this list explicitly.
+ */
+const localnetTokens = [
+  { address: '0x20c0000000000000000000000000000000000000', decimals: 6, name: 'pathUSD', symbol: 'pathUSD' },
+  { address: '0x20c0000000000000000000000000000000000001', decimals: 6, name: 'alphaUSD', symbol: 'alphaUSD' },
+  { address: '0x20c0000000000000000000000000000000000002', decimals: 6, name: 'betaUSD', symbol: 'betaUSD' },
+  { address: '0x20c0000000000000000000000000000000000003', decimals: 6, name: 'thetaUSD', symbol: 'thetaUSD' },
+] as const
+
 /** Case-insensitive lookup into balanceDiffs keyed by address. */
 function findDiffs(
   balanceDiffs: Capabilities.FillTransactionCapabilities['balanceDiffs'],
@@ -1110,6 +1122,7 @@ describe('behavior: path A — guaranteed sponsorship (no validate)', () => {
       relay({
         chains: [chain],
         features: 'all',
+        resolveTokens: () => localnetTokens,
         transports: { [chain.id]: http() },
         feePayer: {
           account: feePayerAccount,
@@ -1335,6 +1348,7 @@ describe('behavior: fee token resolution', () => {
       relay({
         chains: [chain],
         features: 'all',
+        resolveTokens: () => localnetTokens,
         transports: { [chain.id]: http() },
       }).listener,
     )
@@ -1366,30 +1380,62 @@ describe('behavior: fee token resolution', () => {
   })
 
   test('behavior: resolves to highest-balance token from token list', async () => {
-    // Mint different amounts of two tokens to a fresh account.
+    // Create a fresh TIP20 token "betaUsd" so we can test highest-balance
+    // selection without depending on a pre-deployed second token.
     const freshAccount = accounts[5]!
-    const betaUsd = '0x20c0000000000000000000000000000000000002'
-    const rpc = getClient()
-    await Actions.token.mintSync(rpc, {
-      account: accounts[0]!,
-      token: addresses.alphaUsd,
-      amount: 100n,
-      to: freshAccount.address,
+    const rpc = getClient({ account: accounts[0]! })
+    const { token: betaUsd } = await Actions.token.createSync(rpc, {
+      name: 'BetaUSD',
+      symbol: 'BetaUSD',
+      currency: 'USD',
+      quoteToken: addresses.alphaUsd,
     })
-    await Actions.token.mintSync(rpc, {
-      account: accounts[0]!,
-      token: betaUsd,
-      amount: 500n,
-      to: freshAccount.address,
+    await sendTransactionSync(rpc, {
+      calls: [
+        Actions.token.grantRoles.call({
+          token: betaUsd,
+          role: 'issuer',
+          to: rpc.account!.address,
+        }),
+        // Mint different amounts of two tokens to a fresh account. Amounts
+        // must be large enough to cover gas, otherwise autoSwap fires.
+        Actions.token.mint.call({
+          token: addresses.alphaUsd,
+          amount: parseUnits('100', 6),
+          to: freshAccount.address,
+        }),
+        Actions.token.mint.call({
+          token: betaUsd,
+          amount: parseUnits('500', 6),
+          to: freshAccount.address,
+        }),
+      ],
     })
 
-    const { transaction } = await fillTransaction(client, {
+    // Spin up a relay whose tokenlist includes the freshly created betaUsd
+    // alongside the localnet defaults so the highest-balance resolver can
+    // see both.
+    const customServer = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        resolveTokens: () => [
+          ...localnetTokens,
+          { address: betaUsd, decimals: 6, name: 'BetaUSD', symbol: 'BetaUSD' },
+        ],
+        transports: { [chain.id]: http() },
+      }).listener,
+    )
+    const customClient = getClient({ transport: http(customServer.url) })
+
+    const { transaction } = await fillTransaction(customClient, {
       account: freshAccount.address,
       calls: [transferCall()],
     })
+    customServer.close()
 
     // betaUsd has higher balance (500 > 100).
-    expect(transaction.feeToken).toBe(betaUsd)
+    expect(transaction.feeToken?.toLowerCase()).toBe(betaUsd.toLowerCase())
   })
 
   test('behavior: falls back to pathUSD when no preference or balances', async () => {
