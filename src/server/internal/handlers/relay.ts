@@ -704,7 +704,14 @@ async function fill(
           const requiredFee =
             (gas * maxFeePerGas) / 10n ** BigInt(Math.max(0, 18 - metadata.decimals))
           if (balance < requiredFee) {
-            const swapResult = await fillWithSwap(resolvedFeeToken, requiredFee - balance)
+            // Best-effort: if the swap itself can't be filled (e.g. the
+            // source token also has insufficient balance), fall through
+            // and return the original tx with the resolved feeToken
+            // rather than failing the whole request.
+            const swapResult = await fillWithSwap(
+              resolvedFeeToken,
+              requiredFee - balance,
+            ).catch(() => null)
             if (swapResult) return swapResult
           }
         }
