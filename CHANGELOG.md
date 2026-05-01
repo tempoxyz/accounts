@@ -1,5 +1,11 @@
 # accounts
 
+## 0.8.9
+
+### Patch Changes
+
+- 56d9b26: Added `keyType`, `keyId`, and `keyData` to the `transactionRequest` Zod schema so they survive decoding when callers (e.g. wagmi) include them on `eth_fillTransaction` / `eth_sendTransaction` / `eth_signTransaction` payloads.
+
 ## 0.8.8
 
 ### Patch Changes

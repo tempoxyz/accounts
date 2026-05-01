@@ -20,10 +20,30 @@ const recipient = accounts[7]!
  * the localnet chain — so tests inject this list explicitly.
  */
 const localnetTokens = [
-  { address: '0x20c0000000000000000000000000000000000000', decimals: 6, name: 'pathUSD', symbol: 'pathUSD' },
-  { address: '0x20c0000000000000000000000000000000000001', decimals: 6, name: 'alphaUSD', symbol: 'alphaUSD' },
-  { address: '0x20c0000000000000000000000000000000000002', decimals: 6, name: 'betaUSD', symbol: 'betaUSD' },
-  { address: '0x20c0000000000000000000000000000000000003', decimals: 6, name: 'thetaUSD', symbol: 'thetaUSD' },
+  {
+    address: '0x20c0000000000000000000000000000000000000',
+    decimals: 6,
+    name: 'pathUSD',
+    symbol: 'pathUSD',
+  },
+  {
+    address: '0x20c0000000000000000000000000000000000001',
+    decimals: 6,
+    name: 'alphaUSD',
+    symbol: 'alphaUSD',
+  },
+  {
+    address: '0x20c0000000000000000000000000000000000002',
+    decimals: 6,
+    name: 'betaUSD',
+    symbol: 'betaUSD',
+  },
+  {
+    address: '0x20c0000000000000000000000000000000000003',
+    decimals: 6,
+    name: 'thetaUSD',
+    symbol: 'thetaUSD',
+  },
 ] as const
 
 /** Case-insensitive lookup into balanceDiffs keyed by address. */
