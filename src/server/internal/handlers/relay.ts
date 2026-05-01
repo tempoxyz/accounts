@@ -287,8 +287,7 @@ export function relay(options: relay.Options = {}): Handler {
           const swap = 'swap' in filled ? filled.swap : undefined
           if (!feeToken)
             feeToken =
-              (transaction_filled.feeToken as Address | undefined) ??
-              (await getTokens(chainId))[0]
+              (transaction_filled.feeToken as Address | undefined) ?? (await getTokens(chainId))[0]
 
           // Parallelize: simulate, fee payer signing, and autoSwap metadata.
           const alreadySigned =
