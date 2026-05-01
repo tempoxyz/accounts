@@ -159,6 +159,19 @@ export function relay(options: relay.Options = {}): Handler {
                 })
             : undefined
 
+          // When no sponsor will pay, prefer fee tokens the user actually
+          // holds. Extend the configured token list with any TIP20 token
+          // the transaction is calling — typically the token being
+          // transferred — so a user transferring USDC.e can pay gas in
+          // USDC.e even when the configured list defaults to pathUSD.
+          const configuredTokens = resolveTokens(chainId)
+          const unsponsoredTokens = [
+            ...configuredTokens,
+            ...callTargetTokens(baseTx).filter(
+              (t) => !configuredTokens.some((rt) => rt.toLowerCase() === t.toLowerCase()),
+            ),
+          ]
+
           // When the app provides its own fee payer URL, route the fill
           // through that service so it can sign the transaction.
           const fillClient = externalFeePayerUrl
@@ -205,14 +218,30 @@ export function relay(options: relay.Options = {}): Handler {
               })
               filled = prepared
             } else {
+              // Resolve a fee token for the unsponsored fallback so the
+              // node doesn't pick one the user has zero balance of.
+              const unsponsoredFeeToken = features.feeTokenResolution
+                ? await resolveFeeToken(client, {
+                    account: from,
+                    feeToken: requestFeeToken,
+                    tokens: unsponsoredTokens,
+                  })
+                : requestFeeToken
+              const unsponsoredTx = {
+                ...baseTx,
+                ...(unsponsoredFeeToken ? { feeToken: unsponsoredFeeToken } : {}),
+              }
               const fillOptions = {
                 autoSwap,
-                feeToken,
                 resolveFeeToken: resolveFeeTokenForSwap,
               }
               const [sponsoredFill, unsponsoredFill] = await Promise.all([
-                fill(fillClient, { ...fillOptions, transaction: sponsoredTx }),
-                fill(client, { ...fillOptions, transaction: baseTx }),
+                fill(fillClient, { ...fillOptions, feeToken, transaction: sponsoredTx }),
+                fill(client, {
+                  ...fillOptions,
+                  feeToken: unsponsoredFeeToken,
+                  transaction: unsponsoredTx,
+                }),
               ])
               sponsored = await Sponsorship.shouldSponsor({
                 sender: from,
@@ -220,6 +249,7 @@ export function relay(options: relay.Options = {}): Handler {
                 validate: feePayerOptions!.validate,
               })
               filled = sponsored ? sponsoredFill : unsponsoredFill
+              if (!sponsored) feeToken = unsponsoredFeeToken
             }
           } else {
             // Path C: no sponsorship configured — resolve fee token, fill once.
@@ -227,7 +257,7 @@ export function relay(options: relay.Options = {}): Handler {
               ? await resolveFeeToken(client, {
                   account: from,
                   feeToken: requestFeeToken,
-                  tokens: resolveTokens(chainId),
+                  tokens: unsponsoredTokens,
                 })
               : requestFeeToken
             const transaction = { ...baseTx, ...(feeToken ? { feeToken } : {}) }
@@ -564,6 +594,51 @@ async function fill(
   const format = (value: Record<string, unknown>) =>
     value.type === '0x76' ? value : Utils.formatFillTransactionRequest(client, value)
 
+  // Re-fill the transaction with prepended swap calls so the user can
+  // mint the missing `insufficientToken` (typically the fee token) from
+  // a token they already hold. Returns null if no source token is
+  // available or autoSwap is disabled.
+  async function fillWithSwap(insufficientToken: Address, deficit: bigint) {
+    if (!autoSwap) return null
+    const sourceToken =
+      feeToken && feeToken.toLowerCase() !== insufficientToken.toLowerCase()
+        ? feeToken
+        : await options.resolveFeeToken?.(insufficientToken)
+    if (!sourceToken || sourceToken.toLowerCase() === insufficientToken.toLowerCase()) return null
+
+    const maxAmountIn = deficit + (deficit * BigInt(Math.round(autoSwap.slippage * 1000))) / 1000n
+    const originalCalls = (request.calls as Call[] | undefined) ?? []
+    const swapCalls = buildSwapCalls(sourceToken, insufficientToken, deficit, maxAmountIn)
+
+    const result = await client.request({
+      method: 'eth_fillTransaction',
+      params: [
+        format({
+          ...request,
+          calls: [...swapCalls, ...originalCalls],
+        }) as never,
+      ],
+    })
+    const sponsor = (result as Record<string, any>).capabilities?.sponsor as
+      | { address: Address; name?: string; url?: string }
+      | undefined
+    const mergedTx = mergeCallsFromRequest(result.tx as Record<string, unknown>, {
+      ...request,
+      calls: [...swapCalls, ...originalCalls],
+    })
+    return {
+      transaction: Utils.normalizeTempoTransaction(mergedTx),
+      sponsor,
+      swap: {
+        calls: swapCalls,
+        tokenIn: sourceToken,
+        tokenOut: insufficientToken,
+        amountOut: deficit,
+        maxAmountIn,
+      },
+    }
+  }
+
   try {
     const formatted = format(request)
     const result = await client.request({
@@ -602,6 +677,40 @@ async function fill(
     // them in from the original request before normalizing — otherwise the
     // typed envelope built for sponsorship signing throws CallsEmptyError.
     const mergedTx = mergeCallsFromRequest(result.tx as Record<string, unknown>, request)
+
+    // The node's `eth_fillTransaction` may pick a fee token the user
+    // doesn't yet hold (e.g. one this transaction will mint via a
+    // swap). Tempo's gas check runs before the calls execute, so the
+    // tx would revert at broadcast with `have 0 want N`. Validate the
+    // sender's pre-tx balance against the computed gas cost and, if
+    // short, autoSwap a token they do hold into the fee token.
+    if (autoSwap && !swap) {
+      const fromAddress = request.from as Address | undefined
+      const resolvedFeeToken = ((mergedTx.feeToken as Address | undefined) ?? feeToken) as
+        | Address
+        | undefined
+      const gas = mergedTx.gas ? BigInt(mergedTx.gas as `0x${string}`) : 0n
+      const maxFeePerGas = mergedTx.maxFeePerGas
+        ? BigInt(mergedTx.maxFeePerGas as `0x${string}`)
+        : 0n
+      if (fromAddress && resolvedFeeToken && gas > 0n && maxFeePerGas > 0n) {
+        const [balance, metadata] = await Promise.all([
+          Actions.token
+            .getBalance(client, { account: fromAddress, token: resolvedFeeToken })
+            .catch(() => 0n),
+          resolveTokenMetadata(client, resolvedFeeToken).catch(() => undefined),
+        ])
+        if (metadata) {
+          const requiredFee =
+            (gas * maxFeePerGas) / 10n ** BigInt(Math.max(0, 18 - metadata.decimals))
+          if (balance < requiredFee) {
+            const swapResult = await fillWithSwap(resolvedFeeToken, requiredFee - balance)
+            if (swapResult) return swapResult
+          }
+        }
+      }
+    }
+
     return {
       transaction: Utils.normalizeTempoTransaction(mergedTx),
       sponsor,
@@ -617,47 +726,9 @@ async function fill(
     const [available, required, token] = revert.args
     if (typeof available === 'undefined' || typeof required === 'undefined' || !token) throw error
 
-    // Resolve a source token for the swap: use the provided feeToken,
-    // or fall back to resolveFeeToken() to find one the sender holds.
-    const sourceToken =
-      feeToken && feeToken.toLowerCase() !== token.toLowerCase()
-        ? feeToken
-        : await options.resolveFeeToken?.(token as Address)
-    if (!sourceToken || sourceToken.toLowerCase() === token.toLowerCase()) throw error
-
-    const deficit = required - available
-    const maxAmountIn = deficit + (deficit * BigInt(Math.round(autoSwap.slippage * 1000))) / 1000n
-
-    const originalCalls = (request.calls as Call[] | undefined) ?? []
-    const swapCalls = buildSwapCalls(sourceToken, token, deficit, maxAmountIn)
-
-    const result = await client.request({
-      method: 'eth_fillTransaction',
-      params: [
-        format({
-          ...request,
-          calls: [...swapCalls, ...originalCalls],
-        }) as never,
-      ],
-    })
-    const sponsor = (result as Record<string, any>).capabilities?.sponsor as
-      | { address: Address; name?: string; url?: string }
-      | undefined
-    const mergedTx = mergeCallsFromRequest(result.tx as Record<string, unknown>, {
-      ...request,
-      calls: [...swapCalls, ...originalCalls],
-    })
-    return {
-      transaction: Utils.normalizeTempoTransaction(mergedTx),
-      sponsor,
-      swap: {
-        calls: swapCalls,
-        tokenIn: sourceToken,
-        tokenOut: token,
-        amountOut: deficit,
-        maxAmountIn,
-      },
-    }
+    const swapResult = await fillWithSwap(token as Address, required - available)
+    if (!swapResult) throw error
+    return swapResult
   }
 }
 
@@ -711,6 +782,28 @@ async function resolveFeeToken(
     if (!best || asset.balance > best.balance) best = asset
   }
   if (best) return best.address
+}
+
+/**
+ * Extracts unique TIP20 token addresses (Tempo `0x20c0…` prefix) that the
+ * transaction's calls target. Used as fallback fee-token candidates so a
+ * user transferring a token they hold can pay gas in that token even when
+ * the configured fee-token list defaults to one they don't hold.
+ */
+function callTargetTokens(transaction: Record<string, unknown>): readonly Address[] {
+  const calls = transaction.calls as readonly { to?: Address }[] | undefined
+  if (!calls) return []
+  const out: Address[] = []
+  const seen = new Set<string>()
+  for (const c of calls) {
+    if (!c.to) continue
+    const lower = c.to.toLowerCase()
+    if (!lower.startsWith('0x20c0')) continue
+    if (seen.has(lower)) continue
+    seen.add(lower)
+    out.push(c.to)
+  }
+  return out
 }
 
 // TODO: cleanup/remove
