@@ -1,5 +1,13 @@
 # accounts
 
+## 0.8.8
+
+### Patch Changes
+
+- 451f4f5: Added the transaction's call targets as fallback fee-token candidates in `Handler.relay` so users transferring a token they hold can pay gas in that token without an autoSwap.
+- 1d75917: Fixed `Handler.relay` to treat the pre-emptive fee-token autoSwap as best-effort, falling back to the resolved `feeToken` instead of failing when the swap itself can't be filled.
+- 451f4f5: Added `chainId` to the `wallet_send` return value alongside `receipt` so callers can identify which chain the receipt belongs to.
+
 ## 0.8.7
 
 ### Patch Changes
