@@ -15,14 +15,19 @@ import {
 } from 'viem'
 import type { LocalAccount } from 'viem/accounts'
 import { simulateCalls } from 'viem/actions'
-import { tempo, tempoDevnet, tempoLocalnet, tempoMainnet, tempoModerato } from 'viem/chains'
+import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { Abis, Actions, Addresses, Capabilities, Transaction } from 'viem/tempo'
 
 import * as ExecutionError from '../../../core/ExecutionError.js'
 import * as Schema from '../../../core/Schema.js'
 import { type Handler, from } from '../../Handler.js'
+import * as Kv from '../../Kv.js'
+import * as Tokenlist from '../tokenlist.js'
 import * as Sponsorship from './sponsorship.js'
 import * as Utils from './utils.js'
+
+/** Default cache TTL in seconds (10 minutes) for the verified tokenlist. */
+const defaultCacheTtl = 10 * 60
 
 /**
  * Instantiates a relay handler that proxies `eth_fillTransaction`
@@ -64,15 +69,24 @@ import * as Utils from './utils.js'
  */
 export function relay(options: relay.Options = {}): Handler {
   const {
+    cacheTtl = defaultCacheTtl,
     chains = [tempo, tempoModerato, tempoDevnet],
+    kv = Kv.memory(),
     onRequest,
     path = '/',
-    resolveTokens = (chainId) =>
-      relay.defaultTokens[chainId as keyof typeof relay.defaultTokens] ?? [],
+    resolveTokens,
     transports = {},
     ...rest
   } = options
   const feePayerOptions = options.feePayer
+
+  // Resolves the verified tokenlist for `chainId`, sharing the KV cache with
+  // `Handler.exchange` so a single `kv: Kv.cloudflare(env.KV)` covers both.
+  // The relay only needs addresses, so map down from the full metadata.
+  const getTokens = async (chainId: number): Promise<readonly Address[]> => {
+    const tokens = await Tokenlist.fetch(chainId, kv, { cacheTtl, resolver: resolveTokens })
+    return tokens.map((t) => t.address)
+  }
 
   const features = {
     autoSwap: options.autoSwap ?? options.features === 'all',
@@ -149,11 +163,11 @@ export function relay(options: relay.Options = {}): Handler {
 
           // Lazily resolve a swap source token when autoSwap needs one.
           const resolveFeeTokenForSwap = from
-            ? (insufficientToken: Address) =>
+            ? async (insufficientToken: Address) =>
                 resolveFeeToken(client, {
                   account: from,
                   feeToken: undefined,
-                  tokens: (resolveTokens(chainId) ?? []).filter(
+                  tokens: (await getTokens(chainId)).filter(
                     (t) => t.toLowerCase() !== insufficientToken.toLowerCase(),
                   ),
                 })
@@ -164,7 +178,7 @@ export function relay(options: relay.Options = {}): Handler {
           // the transaction is calling — typically the token being
           // transferred — so a user transferring USDC.e can pay gas in
           // USDC.e even when the configured list defaults to pathUSD.
-          const configuredTokens = resolveTokens(chainId)
+          const configuredTokens = await getTokens(chainId)
           const unsponsoredTokens = [
             ...configuredTokens,
             ...callTargetTokens(baseTx).filter(
@@ -273,7 +287,8 @@ export function relay(options: relay.Options = {}): Handler {
           const swap = 'swap' in filled ? filled.swap : undefined
           if (!feeToken)
             feeToken =
-              (transaction_filled.feeToken as Address | undefined) ?? resolveTokens(chainId)?.[0]
+              (transaction_filled.feeToken as Address | undefined) ??
+              (await getTokens(chainId))[0]
 
           // Parallelize: simulate, fee payer signing, and autoSwap metadata.
           const alreadySigned =
@@ -478,45 +493,6 @@ export function relay(options: relay.Options = {}): Handler {
 }
 
 export namespace relay {
-  /** Default token lists per chain ID for fee token resolution. */
-  // TODO: extract from tokenlist workspace.
-  export const defaultTokens = {
-    [tempoMainnet.id]: [
-      '0x20c0000000000000000000000000000000000000', // pathUSD
-      '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
-      '0x20c0000000000000000000001621e21f71cf12fb', // EURC.e
-      '0x20c00000000000000000000014f22ca97301eb73', // USDT0
-      '0x20c0000000000000000000003554d28269e0f3c2', // frxUSD
-      '0x20c0000000000000000000000520792dcccccccc', // cUSD
-      '0x20c0000000000000000000008ee4fcff88888888', // stcUSD
-      '0x20c0000000000000000000005c0bac7cef389a11', // GUSD
-      '0x20c0000000000000000000007f7ba549dd0251b9', // rUSD
-      '0x20c000000000000000000000aeed2ec36a54d0e5', // wsrUSD
-      '0x20c0000000000000000000009a4a4b17e0dc6651', // EURAU
-      '0x20c000000000000000000000383a23bacb546ab9', // reUSD
-    ],
-    [tempoModerato.id]: [
-      '0x20c0000000000000000000000000000000000000', // pathUSD
-      '0x20c0000000000000000000000000000000000001', // alphaUSD
-      '0x20c0000000000000000000000000000000000002', // betaUSD
-      '0x20c0000000000000000000000000000000000003', // thetaUSD
-      '0x20c0000000000000000000009e8d7eb59b783726', // USDC.e
-      '0x20c000000000000000000000d72572838bbee59c', // EURC.e
-    ],
-    [tempoDevnet.id]: [
-      '0x20c0000000000000000000000000000000000000', // pathUSD
-      '0x20c0000000000000000000000000000000000001', // alphaUSD
-      '0x20c0000000000000000000000000000000000002', // betaUSD
-      '0x20c0000000000000000000000000000000000003', // thetaUSD
-    ],
-    [tempoLocalnet.id]: [
-      '0x20c0000000000000000000000000000000000000', // pathUSD
-      '0x20c0000000000000000000000000000000000001', // alphaUSD
-      '0x20c0000000000000000000000000000000000002', // betaUSD
-      '0x20c0000000000000000000000000000000000003', // thetaUSD
-    ],
-  } as const
-
   export type Options = from.Options & {
     /**
      * Auto-swap options.
@@ -528,6 +504,11 @@ export namespace relay {
           slippage?: number | undefined
         }
       | undefined
+    /**
+     * TTL in seconds for cached `resolveTokens` results.
+     * @default 600 (10 minutes)
+     */
+    cacheTtl?: number | undefined
     /**
      * Supported chains. The handler resolves the client based on the
      * `chainId` in the incoming transaction.
@@ -556,11 +537,21 @@ export namespace relay {
         }
       | undefined
     /**
-     * Returns token addresses to check balances for during fee token resolution.
-     * The relay checks `balanceOf` for each token and picks the one with the
-     * highest balance.
+     * Kv store used to cache `resolveTokens` results across requests.
+     * Provide `Kv.cloudflare(env.KV)` for cross-instance caching, or omit
+     * for an in-process LRU.
+     * @default Kv.memory()
      */
-    resolveTokens?: ((chainId?: number | undefined) => readonly Address[]) | undefined
+    kv?: Kv.Kv | undefined
+    /**
+     * Resolves the list of known tokens for a chain. The relay checks
+     * `balanceOf` for each token and picks the one with the highest balance
+     * during fee token resolution.
+     * @default Fetches `https://tokenlist.tempo.xyz/list/:chainId`
+     */
+    resolveTokens?:
+      | ((chainId: number) => readonly Tokenlist.Token[] | Promise<readonly Tokenlist.Token[]>)
+      | undefined
     /**
      * Relay features.
      *
