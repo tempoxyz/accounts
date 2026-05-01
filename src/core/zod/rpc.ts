@@ -551,6 +551,8 @@ export namespace wallet_send {
     method: z.literal('wallet_send'),
     params: z.optional(z.readonly(z.tuple([parameters]))),
     returns: z.object({
+      /** Chain id the send is to. */
+      chainId: u.number(),
       /** Receipt of the submitted send. */
       receipt,
     }),
