@@ -13,10 +13,12 @@ const webAuthnRoot = webAuthnAccounts[0]!
 const accessKey = TempoAccount.fromP256(privateKeys[1]!)
 const secpAccessKey = accounts[1]!
 const expiry = Math.floor(Date.now() / 1000) + 3_600
+const token = '0x20c0000000000000000000000000000000000001' as const
+const limit = 1_000n
 const limits = [
   {
-    limit: 1_000n,
-    token: '0x20c0000000000000000000000000000000000001' as const,
+    limit,
+    token,
   },
 ] as const
 
@@ -296,6 +298,128 @@ describe('createDeviceCode', () => {
     `)
   })
 
+  test('behavior: handler rate-limits all CLI auth endpoints together', async () => {
+    const handler = Handler.codeAuth({
+      rateLimit: CliAuth.RateLimit.memory({ max: 1, windowMs: 60_000 }),
+    })
+
+    const first = await get(handler, {
+      url: 'http://localhost/auth/pkce/pending/ABCDEFGH',
+    })
+    const second = await get(handler, {
+      url: 'http://localhost/auth/pkce/pending/ABCDEFGH',
+    })
+
+    expect(first.status).toMatchInlineSnapshot(`404`)
+    expect(second).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "Rate limit exceeded.",
+        },
+        "status": 429,
+      }
+    `)
+  })
+
+  test('behavior: Cloudflare rate-limit adapter shares one key across endpoints', async () => {
+    const calls: { key: string }[] = []
+    const rateLimit = CliAuth.RateLimit.cloudflare({
+      limit(options) {
+        calls.push(options)
+        return { success: true }
+      },
+    })
+
+    await rateLimit.limit({
+      key: '127.0.0.1',
+      request: new Request('http://localhost/auth/pkce/code'),
+    })
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "key": "cli-auth:127.0.0.1",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: handler ignores untrusted forwarding headers for rate-limit keys', async () => {
+    const calls: { key: string }[] = []
+    const handler = Handler.codeAuth({
+      rateLimit: {
+        limit(options) {
+          calls.push({ key: options.key })
+          return { success: true }
+        },
+      },
+    })
+
+    await get(handler, {
+      url: 'http://localhost/auth/pkce/pending/ABCDEFGH',
+    })
+    await handler.fetch(
+      new Request('http://localhost/auth/pkce/pending/ABCDEFGH', {
+        headers: {
+          'x-forwarded-for': '192.0.2.1',
+          'x-real-ip': '192.0.2.2',
+        },
+      }),
+    )
+    await handler.fetch(
+      new Request('http://localhost/auth/pkce/pending/ABCDEFGH', {
+        headers: {
+          'cf-connecting-ip': '192.0.2.3',
+        },
+      }),
+    )
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "key": "unknown",
+        },
+        {
+          "key": "unknown",
+        },
+        {
+          "key": "192.0.2.3",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: handler accepts a custom rate-limit key for trusted proxies', async () => {
+    const calls: { key: string }[] = []
+    const handler = Handler.codeAuth({
+      rateLimit: {
+        limit(options) {
+          calls.push({ key: options.key })
+          return { success: true }
+        },
+      },
+      rateLimitKey(request) {
+        return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+      },
+    })
+
+    await handler.fetch(
+      new Request('http://localhost/auth/pkce/pending/ABCDEFGH', {
+        headers: {
+          'x-forwarded-for': '192.0.2.1, 192.0.2.2',
+        },
+      }),
+    )
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "key": "192.0.2.1",
+        },
+      ]
+    `)
+  })
+
   test('behavior: invalid input returns 400', async () => {
     const handler = Handler.codeAuth()
     const response = await handler.fetch(
@@ -312,6 +436,129 @@ describe('createDeviceCode', () => {
       "[\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "codeChallenge"\n    ],\n    "message": "Invalid input"\n  },\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "pubKey"\n    ],\n    "message": "Expected hex value"\n  }\n]"
     `)
     expect(response.status).toMatchInlineSnapshot(`400`)
+  })
+
+  test('behavior: handler rejects oversized JSON request bodies', async () => {
+    const { request } = await createRequest()
+    const handler = Handler.codeAuth({ maxBodyBytes: 16 })
+    const response = await handler.fetch(
+      new Request('http://localhost/auth/pkce/code', {
+        body: JSON.stringify(z.encode(CliAuth.createRequest, request)),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      }),
+    )
+    const body = await response.json()
+
+    expect({ body, status: response.status }).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "Request body is too large.",
+        },
+        "status": 400,
+      }
+    `)
+  })
+
+  test('behavior: handler rejects oversized streamed JSON request bodies', async () => {
+    const handler = Handler.codeAuth({ maxBodyBytes: 16 })
+    const response = await handler.fetch(
+      new Request('http://localhost/auth/pkce/code', {
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"codeChallenge":"'))
+            controller.enqueue(new TextEncoder().encode('x"}'))
+            controller.close()
+          },
+        }),
+        duplex: 'half',
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      } as never),
+    )
+    const body = await response.json()
+
+    expect({ body, status: response.status }).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "Request body is too large.",
+        },
+        "status": 400,
+      }
+    `)
+  })
+
+  test('behavior: rejects invalid public keys at creation time', async () => {
+    const { request } = await createRequest()
+
+    await expect(
+      CliAuth.createDeviceCode({
+        chainId: chain.id,
+        request: { ...request, pubKey: '0x1234' },
+        store: CliAuth.Store.memory(),
+      }),
+    ).rejects
+      .toThrowErrorMatchingInlineSnapshot(`[PublicKey.InvalidSerializedSizeError: Value \`0x1234\` is an invalid public key size.
+
+Expected: 33 bytes (compressed + prefix), 64 bytes (uncompressed) or 65 bytes (uncompressed + prefix).
+Received 2 bytes.]`)
+  })
+
+  test('behavior: rejects too many limits', async () => {
+    const { request } = await createRequest()
+    const item = {
+      limit: '0x1' as const,
+      token: '0x20c0000000000000000000000000000000000001' as const,
+    }
+    const result = await z.safeDecodeAsync(CliAuth.createRequest, {
+      ...z.encode(CliAuth.createRequest, request),
+      limits: Array.from({ length: 11 }, () => item),
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+    	{
+    	  "error": [$ZodError: [
+    	  {
+    	    "origin": "array",
+    	    "code": "too_big",
+    	    "maximum": 10,
+    	    "inclusive": true,
+    	    "path": [
+    	      "limits"
+    	    ],
+    	    "message": "Invalid input"
+    	  }
+    	]],
+    	  "success": false,
+    	}
+    `)
+  })
+
+  test('behavior: rejects malformed limit tokens', async () => {
+    const { request } = await createRequest()
+    const result = await z.safeDecodeAsync(CliAuth.createRequest, {
+      ...z.encode(CliAuth.createRequest, request),
+      limits: [{ limit: '0x1', token: '0x1234' }],
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+    	{
+    	  "error": [$ZodError: [
+    	  {
+    	    "code": "invalid_format",
+    	    "format": "template_literal",
+    	    "pattern": "^0x[0-9a-fA-F]{40}$",
+    	    "path": [
+    	      "limits",
+    	      0,
+    	      "token"
+    	    ],
+    	    "message": "Expected address"
+    	  }
+    	]],
+    	  "success": false,
+    	}
+    `)
   })
 
   test('behavior: handler rejects requests for unconfigured chains', async () => {
@@ -750,7 +997,7 @@ describe('authorize', () => {
     const approvedLimits = [
       {
         limit: 2_000n,
-        token: limits[0]!.token,
+        token,
       },
     ] as const
 
@@ -788,6 +1035,40 @@ describe('authorize', () => {
       `)
   })
 
+  test('behavior: rejects final expiry and limit changes beyond policy', async () => {
+    const store = CliAuth.Store.memory()
+    const { request } = await createRequest()
+    const maxExpiry = expiry + 60 * 60
+    const policy = CliAuth.Policy.from({
+      validate(options) {
+        if (options.expiry && options.expiry > maxExpiry) throw new Error('Expiry exceeds policy.')
+        if (options.limits?.some((limit) => limit.limit > 1_000n))
+          throw new Error('Limit exceeds policy.')
+        return {
+          expiry: options.expiry ?? maxExpiry,
+          ...(options.limits ? { limits: options.limits } : {}),
+        }
+      },
+    })
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      policy,
+      request,
+      store,
+    })
+
+    await expect(
+      CliAuth.authorize({
+        chainId: chain.id,
+        policy,
+        request: await authorize(code, {
+          limits: [{ limit: 2_000n, token }],
+        }),
+        store,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: Limit exceeds policy.]`)
+  })
+
   test('behavior: rejects unsigned expiry and limit changes', async () => {
     const store = CliAuth.Store.memory()
     const { request } = await createRequest()
@@ -819,7 +1100,7 @@ describe('authorize', () => {
           ...authorized,
           keyAuthorization: {
             ...authorized.keyAuthorization,
-            limits: [{ limit: limits[0]!.limit + 1n, token: limits[0]!.token }],
+            limits: [{ limit: limit + 1n, token }],
           },
         },
         store,
@@ -956,8 +1237,8 @@ describe('Store.kv', () => {
   test('default: persists encoded entries through KV', async () => {
     const store = CliAuth.Store.kv({
       async delete() {},
-      async get<_value = unknown>(_key: string) {
-        return undefined as never
+      async get<_value = unknown>(_key: string): Promise<_value> {
+        throw new Error('Not implemented.')
       },
       async set() {},
     })

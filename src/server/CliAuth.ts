@@ -9,8 +9,9 @@ import * as u from '../core/zod/utils.js'
 import type { MaybePromise } from '../internal/types.js'
 import type { Kv } from './Kv.js'
 
+const maxLimits = 10
 const limit = z.object({ token: u.address(), limit: u.bigint() })
-const limits = z.readonly(z.array(limit))
+const limits = z.readonly(z.array(limit).check(z.maxLength(maxLimits)))
 const defaultTtlMs = 10 * 60 * 1_000
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -174,6 +175,12 @@ export type Policy = {
   validate: (options: Policy.validate.Options) => MaybePromise<Policy.validate.ReturnType>
 }
 
+/** Request rate limiter used by CLI auth handlers. */
+export type RateLimit = {
+  /** Returns whether the request is allowed to continue. */
+  limit: (options: RateLimit.limit.Options) => MaybePromise<RateLimit.limit.ReturnType>
+}
+
 export declare namespace Entry {
   /** Pending device-code entry. */
   export type Pending = Extract<z.output<typeof entry>, { status: 'pending' }>
@@ -225,6 +232,43 @@ export declare namespace Policy {
       expiry: number
       /** Suggested spending limits. */
       limits?: readonly { token: Address.Address; limit: bigint }[] | undefined
+    }
+  }
+}
+
+export declare namespace RateLimit {
+  export namespace limit {
+    export type Options = {
+      /** Rate-limit key derived from the request. */
+      key: string
+      /** Incoming request being rate-limited. */
+      request: Request
+    }
+
+    export type ReturnType = {
+      /** Whether the request is allowed to continue. */
+      success: boolean
+    }
+  }
+
+  export namespace memory {
+    export type Options = {
+      /** Maximum requests per key in a window. */
+      max: number
+      /** Window duration in milliseconds. */
+      windowMs: number
+    }
+  }
+
+  export namespace cloudflare {
+    export type Limiter = {
+      /** Cloudflare Rate Limit binding method. */
+      limit: (options: { key: string }) => MaybePromise<{ success: boolean }>
+    }
+
+    export type Options = {
+      /** Prefix added to the derived request key. @default "cli-auth" */
+      key?: string | undefined
     }
   }
 }
@@ -360,6 +404,45 @@ export const Policy = {
   },
 }
 
+/** Built-in CLI auth rate-limit helpers. */
+export const RateLimit = {
+  /**
+   * Creates a Cloudflare Rate Limit binding adapter.
+   *
+   * Uses the request-derived key for all CLI auth endpoints so one budget is
+   * shared across create, pending, poll, and authorize requests.
+   */
+  cloudflare(
+    limiter: RateLimit.cloudflare.Limiter,
+    options: RateLimit.cloudflare.Options = {},
+  ): RateLimit {
+    const key = options.key ?? 'cli-auth'
+    return {
+      async limit(options) {
+        return limiter.limit({ key: `${key}:${options.key}` })
+      },
+    }
+  },
+  /** Creates an in-memory fixed-window limiter for dev and single-process servers. */
+  memory(options: RateLimit.memory.Options): RateLimit {
+    const entries = new Map<string, { count: number; resetAt: number }>()
+
+    return {
+      limit({ key }) {
+        const now = Date.now()
+        const current = entries.get(key)
+        if (!current || now >= current.resetAt) {
+          entries.set(key, { count: 1, resetAt: now + options.windowMs })
+          return { success: true }
+        }
+        if (current.count >= options.max) return { success: false }
+        current.count++
+        return { success: true }
+      },
+    }
+  },
+}
+
 /**
  * Instantiates a CLI auth helper with shared defaults and cached clients.
  *
@@ -420,6 +503,19 @@ export function from(options: from.Options = {}): CliAuth {
       if (actual.chainId !== expected.chainId)
         throw new Error('Key authorization chain does not match the device-code request.')
 
+      const approved = await policy.validate({
+        account: options.request.accountAddress,
+        chainId: actual.chainId,
+        expiry: actual.expiry,
+        keyType: actual.keyType,
+        ...(actual.limits ? { limits: actual.limits } : {}),
+        pubKey: current.pubKey,
+      })
+      if (actual.expiry !== approved.expiry)
+        throw new Error('Key authorization expiry exceeds policy.')
+      if (!areLimitsEqual(actual.limits, approved.limits))
+        throw new Error('Key authorization limits exceed policy.')
+
       const signed = TempoKeyAuthorization.from({
         address: actual.address,
         chainId: actual.chainId,
@@ -428,7 +524,8 @@ export function from(options: from.Options = {}): CliAuth {
         type: actual.keyType,
       })
 
-      const valid = await verifyHash((options.client ?? cache.get(current.chainId)) as never, {
+      const client = options.client ?? cache.get(current.chainId)
+      const valid = await verifyHash(client, {
         address: options.request.accountAddress,
         hash: TempoKeyAuthorization.getSignPayload(signed),
         signature: SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(actual.signature), {
@@ -460,6 +557,7 @@ export function from(options: from.Options = {}): CliAuth {
       const nextChainId = options.request.chainId ?? chainId ?? cache.defaultChainId
       const { account, codeChallenge, pubKey } = options.request
       const keyType = options.request.keyType ?? 'secp256k1'
+      PublicKey.assert(PublicKey.from(pubKey))
       const approved = await policy.validate({
         ...(account ? { account } : {}),
         chainId: typeof nextChainId === 'bigint' ? nextChainId : BigInt(nextChainId),
@@ -766,6 +864,7 @@ function createCode(random: (size: number) => Uint8Array) {
 /** @internal */
 function createClientCache(options: from.Options = {}) {
   const chains = options.chains ?? [tempo]
+  const [defaultChain] = chains
   const transports = options.transports ?? {}
   const clients = new Map<number, Client<Transport, Chain | undefined>>()
 
@@ -774,7 +873,7 @@ function createClientCache(options: from.Options = {}) {
     clients.set(chain.id, createClient({ chain, transport }))
   }
 
-  const defaultChainId = options.chainId ?? chains[0]!.id
+  const defaultChainId = options.chainId ?? defaultChain.id
 
   return {
     defaultChainId,
@@ -823,6 +922,21 @@ function normalizeKeyAuthorization(value: z.output<typeof keyAuthorization>) {
     expiry: value.expiry ?? undefined,
     limits: value.limits ?? undefined,
   }
+}
+
+/** @internal */
+function areLimitsEqual(
+  a: readonly { token: Address.Address; limit: bigint }[] | undefined,
+  b: readonly { token: Address.Address; limit: bigint }[] | undefined,
+) {
+  if (!a && !b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return a.every((limit, i) => {
+    const other = b[i]
+    if (!other) return false
+    return limit.limit === other.limit && limit.token.toLowerCase() === other.token.toLowerCase()
+  })
 }
 
 /** @internal */
