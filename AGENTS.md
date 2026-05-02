@@ -16,6 +16,7 @@
 - **Options default `= {}`** — use `options: Options = {}` not `options?: Options`.
 - **Namespace params and return types** — place function parameter and return types in a `declare namespace` matching the function name (e.g. `local.Options`, `createAccount.ReturnType`).
 - **Minimal variable names** — prefer short, obvious names. Use `options` not `serveOptions`, `fn` not `callbackFunction`, etc. Context makes meaning clear.
+- **No camelCase / conjunctive variable names** — when a name needs disambiguation, prefer a snake-case suffix or a suffix-style separator over CamelCase concatenation. Use `options` (or `options_fill`) not `fillOptions`, `client` (or `client_fill`) not `fillClient`. The base noun stays the same so reading flows; the suffix only kicks in when the same name is reused in scope.
 - **No redundant type annotations** — if the return type of a function already covers it, don't annotate intermediate variables. Let the return type do the work (e.g. `const cli = { ... }` not `const cli: ReturnType = { ... }`).
 - **Return directly** — don't declare a variable just to return it. Use `return { ... }` unless the variable is needed (e.g. self-reference for chaining).
 - **Skip braces for single-statement blocks** — omit `{}` for single-statement `if`, `for`, etc.
