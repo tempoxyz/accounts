@@ -779,8 +779,7 @@ async function resolveFeeToken(
   // still picking up updates within a minute. The cached value is just a
   // hint — if the user's balance is 0 we fall back to the highest-balance
   // token from the configured list.
-  const getUserToken = () =>
-    Actions.fee.getUserToken(client, { account }).catch(() => null)
+  const getUserToken = () => Actions.fee.getUserToken(client, { account }).catch(() => null)
   const userTokenPromise = kv
     ? cached(
         kv,
@@ -916,10 +915,7 @@ declare namespace simulate {
   }
 }
 
-async function simulateAndParseDiffs(
-  client: Client,
-  options: simulateAndParseDiffs.Options,
-) {
+async function simulateAndParseDiffs(client: Client, options: simulateAndParseDiffs.Options) {
   const { account, calls, swap, feeToken, gas, kv, maxFeePerGas } = options
 
   try {
@@ -1116,12 +1112,9 @@ async function resolveTokenMetadata(client: Client, options: resolveTokenMetadat
   // long-term in KV. Skips the multicall RPC on cache hits.
   const fetcher = () => Actions.token.getMetadata(client, { token })
   const fallback = kv
-    ? await cached(
-        kv,
-        `tokenMetadata:${client.chain?.id ?? 0}:${token.toLowerCase()}`,
-        fetcher,
-        { ttl: 24 * 60 * 60 },
-      )
+    ? await cached(kv, `tokenMetadata:${client.chain?.id ?? 0}:${token.toLowerCase()}`, fetcher, {
+        ttl: 24 * 60 * 60,
+      })
     : await fetcher()
   return {
     decimals: fallback.decimals ?? 6,
@@ -1133,9 +1126,7 @@ async function resolveTokenMetadata(client: Client, options: resolveTokenMetadat
 declare namespace resolveTokenMetadata {
   type Options = {
     token: Address
-    tokenMetadata?:
-      | Record<Address, { name: string; symbol: string; currency: string }>
-      | undefined
+    tokenMetadata?: Record<Address, { name: string; symbol: string; currency: string }> | undefined
     kv?: Kv.Kv | undefined
   }
 }
