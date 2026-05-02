@@ -1,5 +1,11 @@
 # accounts
 
+## 0.8.10
+
+### Patch Changes
+
+- fc3d61c: Optimized `Handler.relay`'s `eth_fillTransaction` path with a speculative sponsored fill (skipping fee-token resolution when the sponsor accepts), KV-cached `Actions.fee.getUserToken` lookups, and a `capabilities.balanceDiffs: false` opt-out that skips the post-fill `tempo_simulateV1` round trip.
+
 ## 0.8.9
 
 ### Patch Changes
