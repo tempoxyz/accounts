@@ -131,7 +131,7 @@ function applyTheme(theme: {
 function captureTheme(): ThemeSnapshot {
   const root = document.documentElement
   return {
-    accent: root.getAttribute('data-theme-accent'),
+    accentPreset: root.getAttribute('data-theme-accent'),
     accentValue: root.style.getPropertyValue('--theme-accent'),
     colorScheme: root.style.colorScheme,
     radius: root.getAttribute('data-theme-radius'),
@@ -140,7 +140,7 @@ function captureTheme(): ThemeSnapshot {
 
 function restoreTheme(snapshot: ThemeSnapshot) {
   const root = document.documentElement
-  restoreAttribute(root, 'data-theme-accent', snapshot.accent)
+  restoreAttribute(root, 'data-theme-accent', snapshot.accentPreset)
   restoreAttribute(root, 'data-theme-radius', snapshot.radius)
   if (snapshot.accentValue) root.style.setProperty('--theme-accent', snapshot.accentValue)
   else root.style.removeProperty('--theme-accent')
@@ -169,7 +169,7 @@ function isAccentPreset(accent: string) {
 }
 
 type ThemeSnapshot = {
-  accent: string | null
+  accentPreset: string | null
   accentValue: string
   colorScheme: string
   radius: string | null
