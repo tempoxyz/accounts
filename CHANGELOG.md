@@ -1,5 +1,31 @@
 # accounts
 
+## 0.8.10
+
+### Patch Changes
+
+- fc3d61c: Optimized `Handler.relay`'s `eth_fillTransaction` path with a speculative sponsored fill (skipping fee-token resolution when the sponsor accepts), KV-cached `Actions.fee.getUserToken` lookups, and a `capabilities.balanceDiffs: false` opt-out that skips the post-fill `tempo_simulateV1` round trip.
+
+## 0.8.9
+
+### Patch Changes
+
+- 56d9b26: Added `keyType`, `keyId`, and `keyData` to the `transactionRequest` Zod schema so they survive decoding when callers (e.g. wagmi) include them on `eth_fillTransaction` / `eth_sendTransaction` / `eth_signTransaction` payloads.
+
+## 0.8.8
+
+### Patch Changes
+
+- 451f4f5: Added the transaction's call targets as fallback fee-token candidates in `Handler.relay` so users transferring a token they hold can pay gas in that token without an autoSwap.
+- 1d75917: Fixed `Handler.relay` to treat the pre-emptive fee-token autoSwap as best-effort, falling back to the resolved `feeToken` instead of failing when the swap itself can't be filled.
+- 451f4f5: Added `chainId` to the `wallet_send` return value alongside `receipt` so callers can identify which chain the receipt belongs to.
+
+## 0.8.7
+
+### Patch Changes
+
+- 763ccfc: Treated `undefined` as "no value" in `Storage.combine` reads so adapters that return `undefined` for missing keys (Map-backed, custom caches) fell through to the next adapter instead of short-circuiting.
+
 ## 0.8.6
 
 ### Patch Changes

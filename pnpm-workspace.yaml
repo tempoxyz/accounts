@@ -18,7 +18,7 @@ catalog:
   '@types/react-dom': ^19.2.3
   '@vitejs/devtools': ^0.1.15
   '@vitejs/plugin-react': ^5.2.0
-  '@wagmi/core': ^3.4.5
+  '@wagmi/core': ^3.4.7
   hono: ^4.12.14
   ox: ~0.14.18
   prool: ~0.2.4
@@ -27,11 +27,11 @@ catalog:
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: ^2.48.4
+  viem: ^2.48.8
   vite: ^8.0.5
   vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
-  wagmi: ^3.6.4
+  wagmi: ^3.6.8
   wrangler: ^4.85.0
   zod: ^4.3.6
 minimumReleaseAge: 1440

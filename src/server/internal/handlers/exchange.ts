@@ -19,6 +19,7 @@ import { type Handler, from } from '../../Handler.js'
 import * as Kv from '../../Kv.js'
 import * as Hono from '../hono.js'
 import { cached } from '../kv.js'
+import * as Tokenlist from '../tokenlist.js'
 
 /** Default cache TTL in seconds (10 minutes). */
 const defaultCacheTtl = 10 * 60
@@ -144,10 +145,13 @@ export function exchange<const path extends string = '/exchange'>(
     kv = Kv.memory(),
     onRequest,
     path = '/exchange' as path,
-    resolveTokens = defaultResolveTokens,
+    resolveTokens,
     transports = {},
     ...rest
   } = options
+
+  const getTokens = (chainId: number) =>
+    Tokenlist.fetch(chainId, kv, { cacheTtl, resolver: resolveTokens })
 
   const clients = new Map<number, Client>()
   for (const chain of chains) {
@@ -170,12 +174,7 @@ export function exchange<const path extends string = '/exchange'>(
         const chain = chains.find((c) => c.id === chainId)
         if (!chain) throw new Error(`Chain ${chainId} is not supported.`)
 
-        const tokens = await cached(
-          kv,
-          `tokenlist:${chain.id}`,
-          async () => resolveTokens(chain.id),
-          { ttl: cacheTtl },
-        )
+        const tokens = await getTokens(chain.id)
 
         // Cache for `cacheTtl` and allow stale-while-revalidate for an
         // additional full TTL window so CDNs/browsers can serve immediately
@@ -202,12 +201,7 @@ export function exchange<const path extends string = '/exchange'>(
         const client = clients.get(chain.id)!
 
         // Resolve `token` and `pairToken` to addresses + metadata in parallel.
-        const tokens = await cached(
-          kv,
-          `tokenlist:${chain.id}`,
-          async () => resolveTokens(chain.id),
-          { ttl: cacheTtl },
-        )
+        const tokens = await getTokens(chain.id)
         const [tokenInfo, pairTokenInfo] = await Promise.all([
           resolveToken(client, { kv, ref: token, tokens }),
           resolveToken(client, { kv, ref: pairToken, tokens }),
@@ -477,22 +471,4 @@ function applySlippage(amount: bigint, slippage: number, dir: 'up' | 'down') {
 
 function toCall(call: { data: Hex.Hex; to: Address }) {
   return { data: call.data, to: call.to }
-}
-
-/**
- * Default `resolveTokens` implementation. Fetches the verified token list for
- * `chainId` from `https://tokenlist.tempo.xyz/list/:chainId`. Returns an empty
- * list on any non-OK response.
- */
-async function defaultResolveTokens(chainId: number): Promise<readonly Token[]> {
-  // TODO: deprecate tokenlist.tempo.xyz when TIP-1026 enshrined.
-  const response = await fetch(`https://tokenlist.tempo.xyz/list/${chainId}`)
-  if (!response.ok) return []
-  const data = (await response.json()) as {
-    tokens: readonly (Token & { logoURI?: string })[]
-  }
-  return data.tokens.map(({ logoURI, ...token }) => ({
-    ...token,
-    logoUri: token.logoUri ?? logoURI,
-  }))
 }

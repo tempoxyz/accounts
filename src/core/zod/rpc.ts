@@ -78,6 +78,9 @@ export const transactionRequest = z.object({
   from: z.optional(u.address()),
   gas: z.optional(u.bigint()),
   keyAuthorization: z.optional(keyAuthorization),
+  keyData: z.optional(u.hex()),
+  keyId: z.optional(u.address()),
+  keyType: z.optional(keyType),
   maxFeePerGas: z.optional(u.bigint()),
   maxPriorityFeePerGas: z.optional(u.bigint()),
   nonce: z.optional(u.number()),
@@ -551,6 +554,8 @@ export namespace wallet_send {
     method: z.literal('wallet_send'),
     params: z.optional(z.readonly(z.tuple([parameters]))),
     returns: z.object({
+      /** Chain id the send is to. */
+      chainId: u.number(),
       /** Receipt of the submitted send. */
       receipt,
     }),
