@@ -42,15 +42,7 @@ export declare namespace SetupFn {
 /** Visual theme configuration for the dialog embed. */
 export type Theme = {
   /** Accent color — a theme preset name or a CSS color value (e.g. `'#6366f1'`). */
-  accent?:
-    | 'neutral'
-    | 'blue'
-    | 'red'
-    | 'amber'
-    | 'green'
-    | 'purple'
-    | (string & {})
-    | undefined
+  accent?: 'neutral' | 'blue' | 'red' | 'amber' | 'green' | 'purple' | (string & {}) | undefined
   /** Border radius preset. */
   radius?: 'none' | 'small' | 'medium' | 'large' | 'full' | undefined
   /** Color scheme — controls light/dark appearance. Defaults to `'light dark'` (follows OS). */
