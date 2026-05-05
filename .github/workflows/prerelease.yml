@@ -23,4 +23,4 @@ jobs:
       - name: Build
         run: pnpm zile publish:prepare
 
-      - run: pnpx pkg-pr-new@0.0.66 publish --pnpm
+      - run: pnpx pkg-pr-new@0.0.70 publish --pnpm
