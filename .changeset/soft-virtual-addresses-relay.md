@@ -2,4 +2,4 @@
 "accounts": patch
 ---
 
-Add relay virtual-address resolution metadata to `eth_fillTransaction` capabilities.
+Added relay virtual-address resolution metadata to `eth_fillTransaction` capabilities.
