@@ -15,7 +15,10 @@ export const config = createConfig({
       authorizeAccessKey: () => ({
         expiry: Expiry.days(1),
         limits: [{ token: pathUsd, limit: parseUnits('100', 6) }],
-        scopes: [{ address: pathUsd, selector: 'transferWithMemo(address,uint256,bytes32)' }],
+        scopes: [
+          { address: pathUsd, selector: 'transfer(address,uint256)' },
+          { address: pathUsd, selector: 'transferWithMemo(address,uint256,bytes32)' },
+        ],
       }),
     }),
   ],
