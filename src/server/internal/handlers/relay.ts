@@ -6,8 +6,10 @@ import {
   type Chain,
   type Client,
   createClient,
+  decodeFunctionData,
   formatUnits,
   http,
+  isAddress,
   type Log,
   parseEventLogs,
   type Transport,
@@ -16,7 +18,7 @@ import {
 import type { LocalAccount } from 'viem/accounts'
 import { simulateCalls } from 'viem/actions'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
-import { Abis, Actions, Addresses, Capabilities, Transaction } from 'viem/tempo'
+import { Abis, Actions, Addresses, Capabilities, Transaction, VirtualAddress } from 'viem/tempo'
 
 import * as ExecutionError from '../../../core/ExecutionError.js'
 import * as Schema from '../../../core/Schema.js'
@@ -313,7 +315,8 @@ export function relay(options: relay.Options = {}): Handler {
             'feePayerSignature' in transaction_filled &&
             transaction_filled.feePayerSignature != null
 
-          const [{ balanceDiffs, fee }, transaction_final, autoSwap_] = await Promise.all([
+          const calls = extractCalls(transaction_filled)
+          const [simulation, transaction_final, autoSwap_, virtualAddresses] = await Promise.all([
             // Simulate and compute balance diffs + fee.
             // When `capabilities.balanceDiffs` is `false`, skip simulate
             // and compute fee directly from cached metadata.
@@ -322,7 +325,7 @@ export function relay(options: relay.Options = {}): Handler {
               if (requireBalanceDiffs)
                 return simulateAndParseDiffs(client, {
                   account: from,
-                  calls: extractCalls(transaction_filled),
+                  calls,
                   swap,
                   feeToken,
                   gas: transaction_filled.gas,
@@ -348,7 +351,11 @@ export function relay(options: relay.Options = {}): Handler {
             })(),
             // Resolve autoSwap metadata (when AMM path was taken).
             resolveAutoSwapMetadata(client, { autoSwap, kv, swap }),
+            // Resolve virtual-address recipients so wallets can show the
+            // eventual master address before signing.
+            resolveVirtualAddresses(client, { calls }),
           ])
+          const { balanceDiffs, fee } = simulation
 
           const sponsor = (() => {
             if (!sponsored) return undefined
@@ -369,6 +376,7 @@ export function relay(options: relay.Options = {}): Handler {
                   sponsored: !!sponsor,
                   ...(sponsor ? { sponsor } : {}),
                   ...(autoSwap_ ? { autoSwap: autoSwap_ } : {}),
+                  ...(virtualAddresses ? { virtualAddresses } : {}),
                 },
               },
             },
@@ -398,13 +406,16 @@ export function relay(options: relay.Options = {}): Handler {
 
             // Simulate from zero address for optimistic balance diffs.
             const optimisticCalls = normalized ? extractCalls(normalized) : undefined
-            const { balanceDiffs } = optimisticCalls
-              ? await simulateAndParseDiffs(client, {
-                  account: zeroAddress,
-                  calls: optimisticCalls,
-                  kv,
-                })
-              : { balanceDiffs: undefined }
+            const [{ balanceDiffs }, virtualAddresses] = optimisticCalls
+              ? await Promise.all([
+                  simulateAndParseDiffs(client, {
+                    account: zeroAddress,
+                    calls: optimisticCalls,
+                    kv,
+                  }),
+                  resolveVirtualAddresses(client, { calls: optimisticCalls }),
+                ])
+              : [{ balanceDiffs: undefined }, undefined]
 
             // Re-key balance diffs from zero address to the real sender.
             const senderDiffs =
@@ -433,12 +444,20 @@ export function relay(options: relay.Options = {}): Handler {
                         }
                       : undefined,
                     sponsored: false,
+                    ...(virtualAddresses ? { virtualAddresses } : {}),
                   },
                 },
               },
               { request },
             )
           }
+
+          const normalized = Utils.normalizeFillTransactionRequest(parameters)
+          const virtualAddresses = normalized
+            ? await resolveVirtualAddresses(client, { calls: extractCalls(normalized) }).catch(
+                () => undefined,
+              )
+            : undefined
 
           return RpcResponse.from(
             {
@@ -447,6 +466,7 @@ export function relay(options: relay.Options = {}): Handler {
                 capabilities: {
                   error: ExecutionError.serialize(revert),
                   sponsored: false,
+                  ...(virtualAddresses ? { virtualAddresses } : {}),
                 },
               },
             },
@@ -864,6 +884,70 @@ function callTargetTokens(transaction: Record<string, unknown>): readonly Addres
   }
   return out
 }
+
+// TODO: Replace with viem's Tempo fillTransaction capability type once released.
+type VirtualAddresses = Record<Address, Address | null>
+
+async function resolveVirtualAddresses(
+  client: Client,
+  options: { calls: readonly Call[] },
+): Promise<VirtualAddresses | undefined> {
+  const targets = getVirtualAddressTargets(options.calls)
+  if (targets.length === 0) return undefined
+
+  const masters = new Map<string, { addresses: Address[]; masterId: Hex.Hex }>()
+  for (const address of targets) {
+    const { masterId } = VirtualAddress.parse(address)
+    const lower = masterId.toLowerCase()
+    const entry = masters.get(lower) ?? { addresses: [], masterId }
+    entry.addresses.push(address)
+    masters.set(lower, entry)
+  }
+
+  const entries = await Promise.all(
+    [...masters.values()].map(async ({ addresses, masterId }) => {
+      const master = await Actions.virtualAddress.getMasterAddress(client, { masterId })
+      return addresses.map((address) => [address, master] as const)
+    }),
+  )
+  return Object.fromEntries(entries.flat()) as VirtualAddresses
+}
+
+function getVirtualAddressTargets(calls: readonly Call[]): readonly Address[] {
+  const targets = new Set<Address>()
+  for (const call of calls) {
+    for (const address of [call.to, decodeTransferRecipient(call.data)]) {
+      if (!address || !isAddress(address) || !VirtualAddress.isVirtual(address)) continue
+      targets.add(address.toLowerCase() as Address)
+    }
+  }
+  return [...targets]
+}
+
+function decodeTransferRecipient(data?: string | undefined): Address | undefined {
+  if (!data) return undefined
+  const selector = data.slice(0, 10).toLowerCase()
+  if (!transferSelectors.has(selector)) return undefined
+  try {
+    const { args, functionName } = decodeFunctionData({
+      abi: Abis.tip20,
+      data: data as Hex.Hex,
+    })
+    if (
+      (functionName === 'transfer' || functionName === 'transferWithMemo') &&
+      typeof args[0] === 'string'
+    )
+      return args[0]
+    if (
+      (functionName === 'transferFrom' || functionName === 'transferFromWithMemo') &&
+      typeof args[1] === 'string'
+    )
+      return args[1]
+  } catch {}
+  return undefined
+}
+
+const transferSelectors = new Set(['0xa9059cbb', '0x95777d59', '0x23b872dd', '0x929c2539'])
 
 // TODO: cleanup/remove
 function extractCalls(transaction: Record<string, unknown>): readonly Call[] {
