@@ -1,9 +1,9 @@
 import type { RpcRequest } from 'ox'
 import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
-import { parseUnits } from 'viem'
+import { parseUnits, type Address } from 'viem'
 import { fillTransaction, sendTransactionSync } from 'viem/actions'
 import { tempo, tempoModerato } from 'viem/chains'
-import { Actions, Addresses, Capabilities, Tick, Transaction } from 'viem/tempo'
+import { Actions, Addresses, Capabilities, Tick, Transaction, VirtualAddress } from 'viem/tempo'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, addresses, chain, getClient, http } from '../../../../test/config.js'
@@ -54,6 +54,17 @@ function findDiffs(
   return Object.entries(balanceDiffs ?? {}).find(
     ([addr]) => addr.toLowerCase() === address.toLowerCase(),
   )?.[1]
+}
+
+/** Extracts relay virtual-address metadata while viem's public type catches up. */
+function virtualAddresses(capabilities: Capabilities.FillTransactionCapabilities | undefined) {
+  return (
+    capabilities as
+      | (Capabilities.FillTransactionCapabilities & {
+          virtualAddresses?: Record<Address, Address | null> | undefined
+        })
+      | undefined
+  )?.virtualAddresses
 }
 
 /** A simple transfer call for tests that just need a valid transaction. */
@@ -595,6 +606,49 @@ describe('behavior: capabilities', () => {
     expect(tokenDiff.formatted).toBe('0.0001')
     expect(tokenDiff.symbol).toBe('AlphaUSD')
     expect(tokenDiff.value).toBe('0x64')
+  })
+
+  test('behavior: resolves direct virtual-address targets', async () => {
+    const virtualAddress = VirtualAddress.from({
+      masterId: '0xffffffff',
+      userTag: '0x000000000001',
+    })
+
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      to: virtualAddress,
+    })
+
+    expect(virtualAddresses(result.capabilities)).toMatchInlineSnapshot(`
+{
+  "0xfffffffffdfdfdfdfdfdfdfdfdfd000000000001": null,
+}
+    `)
+  })
+
+  test('behavior: resolves TIP-20 memo transfer virtual-address recipients', async () => {
+    const virtualAddress = VirtualAddress.from({
+      masterId: '0xfffffffe',
+      userTag: '0x000000000002',
+    })
+
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [
+        Actions.token.transfer.call({
+          amount: 1n,
+          memo: '0x01',
+          to: virtualAddress,
+          token: addresses.alphaUsd,
+        }),
+      ],
+    })
+
+    expect(virtualAddresses(result.capabilities)).toMatchInlineSnapshot(`
+{
+  "0xfffffffefdfdfdfdfdfdfdfdfdfd000000000002": null,
+}
+    `)
   })
 
   test('behavior: approve + dex swap + transfer produces balance diffs', async () => {
