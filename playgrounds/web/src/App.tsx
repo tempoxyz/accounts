@@ -245,13 +245,22 @@ function useActiveSection() {
 }
 
 function useActiveNetwork() {
+  const p = provider as {
+    store: {
+      subscribe: (
+        selector: (state: { chainId: number }) => number,
+        listener: () => void,
+      ) => () => void
+      getState: () => { chainId: number }
+    }
+  }
   const chainId = useSyncExternalStore(
     (cb) =>
-      provider.store.subscribe(
+      p.store.subscribe(
         (state) => state.chainId,
         () => cb(),
       ),
-    () => provider.store.getState().chainId,
+    () => p.store.getState().chainId,
   )
 
   if (chainId === tempo.id) return 'mainnet'
