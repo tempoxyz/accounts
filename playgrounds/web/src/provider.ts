@@ -57,7 +57,7 @@ export const host =
   new URLSearchParams(window.location.search).get('host') ?? import.meta.env.VITE_WALLET_HOST
 
 export let dialogMode: DialogMode = 'iframe'
-export let theme: DialogNs.Theme | undefined = { radius: 'small' }
+export let theme: DialogNs.Theme | undefined
 export let provider: ProviderValue = createProvider('tempoWallet')
 
 export function createProvider(adapterType: AdapterType): ProviderValue {
