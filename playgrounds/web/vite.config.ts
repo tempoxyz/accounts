@@ -12,5 +12,31 @@ export default defineConfig({
     cors: true,
     allowedHosts: true,
   },
-  plugins: [react(), icons({ compiler: 'jsx', jsx: 'react' }), regen(), cloudflare()],
+  plugins: [
+    react(),
+    icons({
+      compiler: {
+        compiler: reactIconCompiler,
+        extension: 'jsx',
+      },
+    }),
+    regen(),
+    cloudflare(),
+  ],
 })
+
+function reactIconCompiler(svg: string) {
+  const jsx = svg
+    .replace(/\s([\w:-]*[-:][\w:-]*)=/g, (_, name: string) => ` ${toJsxAttribute(name)}=`)
+    .replace(/\sclass=/g, ' className=')
+    .replace(/\sfor=/g, ' htmlFor=')
+    .replace(/<svg([^>]*)>/, '<svg$1 {...props}>')
+
+  return `export default function Icon(props) {
+  return ${jsx}
+}`
+}
+
+function toJsxAttribute(name: string) {
+  return name.replace(/[-:]([a-z])/g, (_, char: string) => char.toUpperCase())
+}
