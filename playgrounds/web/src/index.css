@@ -1,3 +1,443 @@
+@import 'tailwindcss' source(none);
+@import 'regen-ui/tailwind.css';
+
+@source './';
+
+body {
+  margin: 0;
+}
+
 html {
+  scroll-behavior: smooth;
+}
+
+.playground {
   color-scheme: light dark;
+}
+
+.playground-layout {
+  display: grid;
+  gap: 32px;
+  grid-template-areas: 'rail content config';
+  grid-template-columns: 220px minmax(0, 1fr) 300px;
+  margin: 0 auto;
+  max-width: 1400px;
+  padding: 28px 32px;
+  width: 100%;
+}
+
+.playground-rail {
+  grid-area: rail;
+}
+
+.playground-content {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  grid-area: content;
+  min-width: 0;
+  padding: 0;
+}
+
+.playground-config {
+  grid-area: config;
+}
+
+@media (width >= 1024px) {
+  .playground-rail,
+  .playground-config {
+    position: sticky;
+    top: 28px;
+  }
+
+  .playground-rail {
+    max-height: calc(100dvh - 56px);
+  }
+
+  .playground-config {
+    max-height: calc(100dvh - 56px);
+  }
+}
+
+.control-panel {
+  background: var(--background-color-surface);
+  border: 1px solid var(--border-color-border);
+  border-radius: var(--radius-body);
+  display: grid;
+  gap: 14px;
+  max-height: inherit;
+  overflow: auto;
+  padding: 14px;
+}
+
+.control-panel-title {
+  color: var(--text-color-foreground);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.control-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.control-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.control-grid label:has(input[type='color']) {
+  grid-template-columns: minmax(0, 1fr) 36px;
+}
+
+.control-grid label:has(input[type='color']) span {
+  grid-column: 1 / -1;
+}
+
+.section-nav {
+  display: grid;
+  gap: 2px;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.section-nav a {
+  border-radius: var(--radius-button);
+  color: var(--text-color-foreground-secondary);
+  display: block;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 7px 10px;
+  text-decoration: none;
+}
+
+.section-nav a:hover {
+  background: var(--background-color-secondary-hover);
+  color: var(--text-color-foreground);
+}
+
+.section-nav a[data-active] {
+  background: var(--background-color-secondary);
+  box-shadow: inset 3px 0 0 var(--accent-color);
+  color: var(--text-color-foreground);
+}
+
+.section-heading {
+  align-items: center;
+  border-bottom: 1px solid var(--border-color-border);
+  display: flex;
+  min-height: 36px;
+}
+
+.section-heading h2 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.method-panel {
+  background: var(--background-color-surface);
+  border: 1px solid var(--border-color-border-pane);
+  border-radius: var(--radius-body);
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.method-header {
+  align-items: center;
+  background: color-mix(
+    in oklch,
+    var(--background-color-surface),
+    var(--background-color-pane) 45%
+  );
+  border-bottom: 1px solid var(--border-color-border-pane);
+  display: flex;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.method-header-action {
+  margin-left: auto;
+}
+
+.method-header::before {
+  background: var(--accent-color);
+  border-radius: 999px;
+  content: '';
+  height: 7px;
+  width: 7px;
+}
+
+.method-header h3 {
+  color: var(--text-color-foreground);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.method-body {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.method-panel > fieldset,
+.method-panel > table,
+.method-panel > .events-table-wrap {
+  margin: 12px;
+  width: calc(100% - 24px) !important;
+}
+
+.method-panel > button {
+  justify-self: start;
+  margin: 0 12px 12px;
+}
+
+.method-panel > table + .method-body,
+.method-panel > fieldset + .method-body {
+  padding-top: 0;
+}
+
+.method-body > div,
+.method-body > details,
+.method-body > fieldset,
+.method-body > form,
+.method-body > table {
+  width: 100%;
+}
+
+.playground .method-result,
+.playground .method-error {
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--border-color-border-pane);
+  margin: 0;
+}
+
+.playground .method-error {
+  background: color-mix(
+    in oklch,
+    var(--background-color-negative),
+    var(--background-color-surface) 88%
+  );
+  color: var(--text-color-negative-text);
+}
+
+.playground .method-result {
+  background: var(--background-color-pane);
+}
+
+.playground .provider-state-result {
+  background: var(--background-color-surface);
+  border-top: 0;
+}
+
+.playground input:not([type='checkbox']):not([type='radio']):not([type='color']),
+.playground select,
+.playground textarea {
+  background: var(--background-color-secondary);
+  border: 2px solid transparent;
+  border-radius: var(--radius-body);
+  box-sizing: border-box;
+  color: var(--text-color-foreground);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  min-height: 32px;
+  padding: 4px 10px;
+}
+
+.playground input:not([type='checkbox']):not([type='radio']):not([type='color']):hover,
+.playground select:hover,
+.playground textarea:hover {
+  background: var(--background-color-secondary-hover);
+}
+
+.playground input:not([type='checkbox']):not([type='radio']):not([type='color']):focus,
+.playground select:focus,
+.playground textarea:focus {
+  background: var(--background-color-secondary-hover);
+  border-color: var(--border-color-focus);
+  outline: none;
+}
+
+.playground input[type='color'] {
+  height: 32px;
+  padding: 0;
+  width: 36px;
+}
+
+.playground fieldset {
+  border: 1px solid var(--border-color-border);
+  border-radius: var(--radius-body);
+  padding: 12px;
+}
+
+.playground form,
+.playground details {
+  width: 100%;
+}
+
+.playground legend,
+.playground label,
+.playground th {
+  color: var(--text-color-foreground-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.playground label span {
+  color: var(--text-color-foreground-secondary);
+}
+
+.playground table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.events-table-wrap {
+  overflow-x: auto;
+}
+
+.events-empty {
+  color: var(--text-color-foreground-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 12px;
+}
+
+.events-table {
+  min-width: 520px;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.events-table th,
+.events-table td {
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.events-table-time {
+  width: 104px;
+}
+
+.events-table-name {
+  width: 160px;
+}
+
+.events-table td:first-child,
+.events-table th:first-child {
+  white-space: nowrap;
+}
+
+.events-table td:nth-child(2),
+.events-table th:nth-child(2) {
+  white-space: nowrap;
+}
+
+.events-table td:last-child,
+.events-table th:last-child {
+  text-align: left;
+}
+
+.events-table-value {
+  display: block;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.playground th,
+.playground td {
+  border-bottom: 1px solid var(--border-color-border-pane);
+  padding: 7px 8px;
+  vertical-align: middle;
+}
+
+.playground pre {
+  background: var(--background-color-pane);
+  border: 1px solid var(--border-color-border-pane);
+  border-radius: var(--radius-body);
+  color: var(--text-color-foreground);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 100%;
+  overflow: auto;
+  padding: 12px;
+}
+
+.playground details summary {
+  color: var(--text-color-foreground-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.playground a {
+  color: var(--text-color-foreground);
+  text-decoration-color: color-mix(in oklch, currentColor, transparent 60%);
+  text-underline-offset: 3px;
+}
+
+.playground a:hover {
+  color: var(--text-color-foreground-secondary-hover);
+}
+
+@media (width < 1024px) {
+  .playground-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 24px 20px;
+  }
+
+  .playground-config {
+    order: 2;
+  }
+
+  .playground-content {
+    order: 3;
+  }
+
+  .section-nav {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}
+
+@media (width >= 1024px) and (width < 1280px) {
+  .playground-layout {
+    gap: 24px;
+    grid-template-areas:
+      'rail config'
+      'rail content';
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .playground-config {
+    max-height: none;
+    overflow: visible;
+    position: static;
+  }
 }

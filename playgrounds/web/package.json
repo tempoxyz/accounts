@@ -15,15 +15,18 @@
     "mppx": "0.6.5",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "regen-ui": "^0.3.0",
     "viem": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "catalog:",
+    "@iconify/json": "^2.2.461",
     "@types/react": "catalog:default",
     "@types/react-dom": "catalog:default",
     "@vitejs/plugin-react": "catalog:default",
     "tsx": "catalog:",
     "typescript": "catalog:default",
+    "unplugin-icons": "^23.0.1",
     "vp": "catalog:",
     "wrangler": "^4.85.0"
   }

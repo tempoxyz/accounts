@@ -1,5 +1,7 @@
 import { cloudflare } from '@cloudflare/vite-plugin'
 import react from '@vitejs/plugin-react'
+import regen from 'regen-ui/vite'
+import icons from 'unplugin-icons/vite'
 import { defineConfig } from 'vp'
 
 export default defineConfig({
@@ -10,5 +12,5 @@ export default defineConfig({
     cors: true,
     allowedHosts: true,
   },
-  plugins: [react(), cloudflare()],
+  plugins: [react(), icons({ compiler: 'jsx', jsx: 'react' }), regen(), cloudflare()],
 })

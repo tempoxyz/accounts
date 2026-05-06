@@ -1,6 +1,14 @@
 import { Expiry } from 'accounts'
 import { Hex, Json } from 'ox'
-import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
+import {
+  type ComponentProps,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useSyncExternalStore,
+  useState,
+} from 'react'
+import { Button as RegenButton } from 'regen-ui'
 import { parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
@@ -21,9 +29,27 @@ import {
   tokens,
 } from './provider.js'
 
+const sectionLinks = [
+  { id: 'provider', title: 'Provider' },
+  { id: 'connection', title: 'Connection' },
+  { id: 'accounts-chain', title: 'Accounts & Chain' },
+  { id: 'balances-funding', title: 'Balances & Funding' },
+  { id: 'transactions', title: 'Transactions' },
+  { id: 'receipts-status', title: 'Receipts & Status' },
+  { id: 'access-keys', title: 'Access Keys' },
+  { id: 'signing-verification', title: 'Signing & Verification' },
+  { id: 'mpp', title: 'MPP' },
+  { id: 'email-verification', title: 'Email Verification' },
+  { id: 'rpc-proxy', title: 'RPC Proxy' },
+] as const
+
+type SectionId = (typeof sectionLinks)[number]['id']
+
 export function App() {
   const [adapterType, setAdapterType] = useState<AdapterType>('tempoWallet')
   const [, rerender] = useState(0)
+  const activeSection = useActiveSection()
+  const network = useActiveNetwork()
 
   function onSwitch(type: AdapterType) {
     switchAdapter(type)
@@ -32,95 +58,219 @@ export function App() {
   }
 
   return (
-    <div style={{ maxWidth: 640 }}>
-      <h1>accounts playground</h1>
+    <div className="playground min-h-dvh bg-background text-foreground" data-regen-radius="small">
+      <div className="playground-layout">
+        <aside className="playground-rail">
+          <div className="flex min-h-0 flex-col gap-[20px]">
+            <header className="flex flex-col gap-[6px]">
+              <h1 className="heading-32">accounts playground</h1>
+              <div className="label-13 text-foreground-secondary">{network}</div>
+            </header>
 
-      <h2>Configuration</h2>
-      <select value={adapterType} onChange={(e) => onSwitch(e.target.value as AdapterType)}>
-        <option value="tempoWallet">tempoWallet</option>
-        <option value="dialogRefImpl">dialogRefImpl</option>
-        <option value="webAuthn">webAuthn</option>
-        <option value="secp256k1">secp256k1</option>
-      </select>
+            <nav aria-label="Playground sections" className="section-nav">
+              {sectionLinks.map((link) => (
+                <a
+                  data-active={activeSection === link.id ? '' : undefined}
+                  href={`#${link.id}`}
+                  key={link.id}
+                >
+                  {link.title}
+                </a>
+              ))}
+            </nav>
+          </div>
+        </aside>
+
+        <main className="playground-content">
+          <PlaygroundSection id="provider" title="Provider">
+            <Events />
+            <ProviderState />
+          </PlaygroundSection>
+
+          <PlaygroundSection id="connection" title="Connection">
+            <WalletConnect />
+            <EthRequestAccounts />
+            <WalletDisconnect />
+          </PlaygroundSection>
+
+          <PlaygroundSection id="accounts-chain" title="Accounts & Chain">
+            <EthAccounts />
+            <EthChainId />
+            <WalletSwitchChain />
+          </PlaygroundSection>
+
+          <PlaygroundSection id="balances-funding" title="Balances & Funding">
+            <WalletGetBalances />
+            <Faucet />
+            <WalletDeposit />
+          </PlaygroundSection>
+
+          <PlaygroundSection id="transactions" title="Transactions">
+            <Transactions />
+            <WalletSend />
+            <WalletSwap />
+            <WalletDepositZone />
+            <WalletWithdrawZone />
+          </PlaygroundSection>
+
+          <PlaygroundSection id="receipts-status" title="Receipts & Status">
+            <EthGetTransactionReceipt />
+            <WalletGetCallsStatus />
+          </PlaygroundSection>
+
+          <PlaygroundSection id="access-keys" title="Access Keys">
+            <WalletAuthorizeAccessKey />
+            <WalletRevokeAccessKey />
+          </PlaygroundSection>
+
+          <PlaygroundSection id="signing-verification" title="Signing & Verification">
+            <PersonalSign />
+            <PersonalSignSiwe />
+            <VerifyMessage />
+            <EthSignTypedData />
+            <VerifyTypedData />
+          </PlaygroundSection>
+
+          <PlaygroundSection id="mpp" title="MPP">
+            <Fortune />
+            <MppZeroDollarAuth />
+          </PlaygroundSection>
+
+          <PlaygroundSection id="email-verification" title="Email Verification">
+            <ManageEmail />
+          </PlaygroundSection>
+
+          <PlaygroundSection id="rpc-proxy" title="RPC Proxy">
+            <EthBlockNumber />
+          </PlaygroundSection>
+        </main>
+
+        <aside className="playground-config">
+          <ConfigPanel
+            adapterType={adapterType}
+            onSwitch={onSwitch}
+            rerender={() => rerender((n) => n + 1)}
+          />
+        </aside>
+      </div>
+    </div>
+  )
+}
+
+function ConfigPanel(props: {
+  adapterType: AdapterType
+  onSwitch: (type: AdapterType) => void
+  rerender: () => void
+}) {
+  const { adapterType, onSwitch, rerender } = props
+  return (
+    <section className="control-panel">
+      <h2 className="control-panel-title">Configuration</h2>
+      <div className="control-grid">
+        <label>
+          <span>Adapter</span>
+          <select value={adapterType} onChange={(e) => onSwitch(e.target.value as AdapterType)}>
+            <option value="tempoWallet">tempoWallet</option>
+            <option value="dialogRefImpl">dialogRefImpl</option>
+            <option value="webAuthn">webAuthn</option>
+            <option value="secp256k1">secp256k1</option>
+          </select>
+        </label>
+        {(adapterType === 'tempoWallet' || adapterType === 'dialogRefImpl') && (
+          <label>
+            <span>Mode</span>
+            <select
+              value={dialogMode}
+              onChange={(e) => {
+                switchDialogMode(e.target.value as DialogMode, adapterType)
+                rerender()
+              }}
+            >
+              <option value="iframe">iframe</option>
+              <option value="popup">popup</option>
+            </select>
+          </label>
+        )}
+      </div>
       {(adapterType === 'tempoWallet' || adapterType === 'dialogRefImpl') && (
         <>
-          {' '}
-          <select
-            value={dialogMode}
-            onChange={(e) => {
-              switchDialogMode(e.target.value as DialogMode, adapterType)
-              rerender((n) => n + 1)
-            }}
-          >
-            <option value="iframe">iframe</option>
-            <option value="popup">popup</option>
-          </select>
-          <h3>Theme</h3>
-          <ThemeConfig adapterType={adapterType} rerender={() => rerender((n) => n + 1)} />
-          <h3>Occlusion Test</h3>
+          <h3 className="control-panel-title">Theme</h3>
+          <ThemeConfig adapterType={adapterType} rerender={rerender} />
+          <h3 className="control-panel-title">Occlusion</h3>
           <OcclusionSimulator />
         </>
       )}
-      <ProviderState />
-
-      <h2>Events</h2>
-      <Events />
-
-      <h2>Connection</h2>
-      <WalletConnect />
-      <EthRequestAccounts />
-      <WalletDisconnect />
-
-      <h2>Accounts &amp; Chain</h2>
-      <EthAccounts />
-      <EthChainId />
-      <WalletSwitchChain />
-
-      <h2>Balances &amp; Funding</h2>
-      <WalletGetBalances />
-      <Faucet />
-      <WalletDeposit />
-
-      <h2>Transactions</h2>
-      <Transactions />
-      <WalletSend />
-      <WalletSwap />
-      <WalletDepositZone />
-      <WalletWithdrawZone />
-
-      <h2>Receipts &amp; Status</h2>
-      <EthGetTransactionReceipt />
-      <WalletGetCallsStatus />
-
-      <h2>Access Keys</h2>
-      <WalletAuthorizeAccessKey />
-      <WalletRevokeAccessKey />
-
-      <h2>Signing &amp; Verification</h2>
-      <PersonalSign />
-      <PersonalSignSiwe />
-      <VerifyMessage />
-      <EthSignTypedData />
-      <VerifyTypedData />
-
-      <h2>MPP</h2>
-      <Fortune />
-      <MppZeroDollarAuth />
-
-      <h2>Email Verification</h2>
-      <ManageEmail />
-
-      <h2>RPC Proxy (fallthrough)</h2>
-      <EthBlockNumber />
-    </div>
+    </section>
   )
+}
+
+function PlaygroundSection(props: { children: ReactNode; id: string; title: ReactNode }) {
+  const { children, id, title } = props
+  return (
+    <section className="scroll-mt-[24px] flex flex-col gap-[14px]" id={id}>
+      <div className="section-heading">
+        <h2>{title}</h2>
+      </div>
+      <div className="grid gap-[12px]">{children}</div>
+    </section>
+  )
+}
+
+function useActiveSection() {
+  const [active, setActive] = useState<SectionId>(sectionLinks[0].id)
+
+  useEffect(() => {
+    function update() {
+      let next: SectionId = sectionLinks[0].id
+
+      for (const link of sectionLinks) {
+        const section = document.getElementById(link.id)
+        if (!section) continue
+        if (section.getBoundingClientRect().top <= 120) next = link.id
+        else break
+      }
+
+      setActive(next)
+    }
+
+    update()
+    window.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
+  return active
+}
+
+function useActiveNetwork() {
+  const chainId = useSyncExternalStore(
+    (cb) =>
+      provider.store.subscribe(
+        (state) => state.chainId,
+        () => cb(),
+      ),
+    () => provider.store.getState().chainId,
+  )
+
+  if (chainId === tempo.id) return 'mainnet'
+  if (chainId === tempoModerato.id) return 'testnet'
+  if (chainId === tempoDevnet.id) return 'devnet'
+  return `chain ${chainId}`
+}
+
+function Button(props: ComponentProps<typeof RegenButton>) {
+  const { size = 'small', ...rest } = props
+  return <RegenButton size={size} {...rest} />
 }
 
 function Faucet() {
   const [result, error, execute] = useRequest()
   return (
     <Method method="tempo_fundAddress" result={result} error={error}>
-      <button
+      <Button
         onClick={() =>
           execute(async () => {
             const accounts = await provider.request({ method: 'eth_accounts' })
@@ -133,7 +283,7 @@ function Faucet() {
         }
       >
         Fund Account
-      </button>
+      </Button>
     </Method>
   )
 }
@@ -142,7 +292,7 @@ function WalletDeposit() {
   const [result, error, execute] = useRequest()
   return (
     <Method method="wallet_deposit" result={result} error={error}>
-      <button
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -153,8 +303,8 @@ function WalletDeposit() {
         }
       >
         Deposit
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -165,8 +315,8 @@ function WalletDeposit() {
         }
       >
         Deposit ($50)
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -177,7 +327,7 @@ function WalletDeposit() {
         }
       >
         Deposit (displayName: DoorDash)
-      </button>
+      </Button>
     </Method>
   )
 }
@@ -209,7 +359,7 @@ function WalletSend() {
           </label>
         ))}
       </fieldset>
-      <button
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -220,8 +370,8 @@ function WalletSend() {
         }
       >
         Send
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -232,8 +382,8 @@ function WalletSend() {
         }
       >
         Send (PathUSD)
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -251,7 +401,7 @@ function WalletSend() {
         }
       >
         Send ($1 PathUSD)
-      </button>
+      </Button>
     </Method>
   )
 }
@@ -263,7 +413,7 @@ function WalletSwap() {
 
   return (
     <Method method="wallet_swap" result={result} error={error}>
-      <button
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -274,8 +424,8 @@ function WalletSwap() {
         }
       >
         Swap
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -286,8 +436,8 @@ function WalletSwap() {
         }
       >
         Swap (pair)
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -298,8 +448,8 @@ function WalletSwap() {
         }
       >
         Swap (sell 1 PathUSD)
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -310,7 +460,7 @@ function WalletSwap() {
         }
       >
         Swap (buy 1 PathUSD)
-      </button>
+      </Button>
     </Method>
   )
 }
@@ -319,7 +469,7 @@ function WalletDepositZone() {
   const [result, error, execute] = useRequest()
   return (
     <Method method="wallet_depositZone" result={result} error={error}>
-      <button
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -330,8 +480,8 @@ function WalletDepositZone() {
         }
       >
         Deposit to zone
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -342,8 +492,8 @@ function WalletDepositZone() {
         }
       >
         Deposit (PathUSD)
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -354,7 +504,7 @@ function WalletDepositZone() {
         }
       >
         Deposit (1 PathUSD)
-      </button>
+      </Button>
     </Method>
   )
 }
@@ -363,7 +513,7 @@ function WalletWithdrawZone() {
   const [result, error, execute] = useRequest()
   return (
     <Method method="wallet_withdrawZone" result={result} error={error}>
-      <button
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -374,8 +524,8 @@ function WalletWithdrawZone() {
         }
       >
         Withdraw from zone
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -386,8 +536,8 @@ function WalletWithdrawZone() {
         }
       >
         Withdraw (PathUSD)
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -398,12 +548,13 @@ function WalletWithdrawZone() {
         }
       >
         Withdraw (1 PathUSD)
-      </button>
+      </Button>
     </Method>
   )
 }
 
 function ProviderState() {
+  const [open, setOpen] = useState(true)
   const p = provider as {
     store: {
       subscribe: (cb: () => void) => () => void
@@ -415,10 +566,17 @@ function ProviderState() {
     () => p.store.getState(),
   )
   return (
-    <details>
-      <summary>View</summary>
-      <pre>{Json.stringify(state, null, 2)}</pre>
-    </details>
+    <article className="method-panel">
+      <header className="method-header">
+        <h3>provider store</h3>
+        <Button className="method-header-action" onClick={() => setOpen((value) => !value)}>
+          {open ? 'Collapse' : 'Expand'}
+        </Button>
+      </header>
+      {open && (
+        <pre className="method-result provider-state-result">{Json.stringify(state, null, 2)}</pre>
+      )}
+    </article>
   )
 }
 
@@ -598,18 +756,18 @@ function WalletConnect() {
                         ))}
                     </select>
                   )}
-                  <button
+                  <Button
                     disabled={limits.length === 1}
                     onClick={() => removeLimit(i)}
                     type="button"
                   >
                     ×
-                  </button>
+                  </Button>
                 </div>
               ))}
-              <button onClick={addLimit} type="button">
+              <Button onClick={addLimit} type="button">
                 + Add limit
-              </button>
+              </Button>
               <div
                 style={{
                   display: 'flex',
@@ -635,12 +793,12 @@ function WalletConnect() {
             </>
           )}
         </fieldset>
-        <button type="submit" value="login">
+        <Button type="submit" value="login">
           Login
-        </button>
-        <button type="submit" value="register">
+        </Button>
+        <Button type="submit" value="register">
           Register
-        </button>
+        </Button>
       </form>
     </Method>
   )
@@ -650,9 +808,9 @@ function EthRequestAccounts() {
   const [result, error, execute] = useRequest()
   return (
     <Method method="eth_requestAccounts" result={result} error={error}>
-      <button onClick={() => execute(() => provider.request({ method: 'eth_requestAccounts' }))}>
+      <Button onClick={() => execute(() => provider.request({ method: 'eth_requestAccounts' }))}>
         Request Accounts
-      </button>
+      </Button>
     </Method>
   )
 }
@@ -661,7 +819,7 @@ function WalletDisconnect() {
   const [result, error, execute] = useRequest()
   return (
     <Method method="wallet_disconnect" result={result} error={error}>
-      <button
+      <Button
         onClick={() =>
           execute(async () => {
             await provider.request({ method: 'wallet_disconnect' })
@@ -670,7 +828,7 @@ function WalletDisconnect() {
         }
       >
         Disconnect
-      </button>
+      </Button>
     </Method>
   )
 }
@@ -679,9 +837,9 @@ function EthAccounts() {
   const [result, error, execute] = useRequest()
   return (
     <Method method="eth_accounts" result={result} error={error}>
-      <button onClick={() => execute(() => provider.request({ method: 'eth_accounts' }))}>
+      <Button onClick={() => execute(() => provider.request({ method: 'eth_accounts' }))}>
         Get Accounts
-      </button>
+      </Button>
     </Method>
   )
 }
@@ -690,9 +848,9 @@ function EthChainId() {
   const [result, error, execute] = useRequest()
   return (
     <Method method="eth_chainId" result={result} error={error}>
-      <button onClick={() => execute(() => provider.request({ method: 'eth_chainId' }))}>
+      <Button onClick={() => execute(() => provider.request({ method: 'eth_chainId' }))}>
         Get Chain ID
-      </button>
+      </Button>
     </Method>
   )
 }
@@ -702,7 +860,7 @@ function WalletSwitchChain() {
   return (
     <Method method="wallet_switchEthereumChain" result={result} error={error}>
       {provider.chains.map((c: { id: number; name?: string | undefined }) => (
-        <button
+        <Button
           key={c.id}
           onClick={() =>
             execute(async () => {
@@ -715,7 +873,7 @@ function WalletSwitchChain() {
           }
         >
           {c.name}
-        </button>
+        </Button>
       ))}
     </Method>
   )
@@ -781,8 +939,10 @@ function Transactions() {
   })()
 
   return (
-    <div>
-      <h3>Send</h3>
+    <article className="method-panel">
+      <header className="method-header">
+        <h3>Send</h3>
+      </header>
       <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: '15%' }} />
@@ -841,15 +1001,15 @@ function Transactions() {
                 />
               </td>
               <td>
-                <button onClick={() => setRows((prev) => prev.filter((_, j) => j !== i))}>×</button>
+                <Button onClick={() => setRows((prev) => prev.filter((_, j) => j !== i))}>×</Button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <button onClick={() => setRows((prev) => [...prev, defaultRow(prev.length)])}>
+      <Button onClick={() => setRows((prev) => [...prev, defaultRow(prev.length)])}>
         + Add Call
-      </button>
+      </Button>
 
       <fieldset style={{ marginBottom: 8, border: 'none', padding: 0 }}>
         <legend>Fee Payer</legend>
@@ -866,8 +1026,8 @@ function Transactions() {
           </label>
         ))}
       </fieldset>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button
+      <div className="method-body">
+        <Button
           onClick={() =>
             send('eth_sendTransaction', () =>
               provider.request({
@@ -878,9 +1038,9 @@ function Transactions() {
           }
         >
           eth_sendTransaction
-        </button>
+        </Button>
 
-        <button
+        <Button
           onClick={() =>
             send('eth_sendTransactionSync', () =>
               provider.request({
@@ -891,9 +1051,9 @@ function Transactions() {
           }
         >
           eth_sendTransactionSync
-        </button>
+        </Button>
 
-        <button
+        <Button
           onClick={() =>
             send('wallet_sendCalls', () =>
               provider.request({
@@ -904,9 +1064,9 @@ function Transactions() {
           }
         >
           wallet_sendCalls
-        </button>
+        </Button>
 
-        <button
+        <Button
           onClick={() =>
             send('wallet_sendCalls (sync)', () =>
               provider.request({
@@ -917,9 +1077,9 @@ function Transactions() {
           }
         >
           wallet_sendCalls (sync)
-        </button>
+        </Button>
 
-        <button
+        <Button
           onClick={() =>
             send('eth_signTransaction', () =>
               provider.request({
@@ -930,13 +1090,19 @@ function Transactions() {
           }
         >
           eth_signTransaction
-        </button>
+        </Button>
       </div>
 
-      {method && <h4>{method}</h4>}
-      {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
-      {result !== undefined && <pre>{Json.stringify(result, null, 2)}</pre>}
-    </div>
+      {method && (
+        <header className="method-header">
+          <h3>{method}</h3>
+        </header>
+      )}
+      {error && <pre className="method-error">{`${error.name}: ${error.message}`}</pre>}
+      {result !== undefined && (
+        <pre className="method-result">{Json.stringify(result, null, 2)}</pre>
+      )}
+    </article>
   )
 }
 
@@ -966,7 +1132,7 @@ function PersonalSign() {
           placeholder="Message"
           style={{ flex: 1 }}
         />
-        <button type="submit">Sign</button>
+        <Button type="submit">Sign</Button>
       </form>
     </Method>
   )
@@ -976,51 +1142,57 @@ function PersonalSignSiwe() {
   const [result, setResult] = useState<{ message: string; signature: string }>()
   const [error, setError] = useState<Error>()
   return (
-    <div>
-      <h3>personal_sign (SIWE)</h3>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          const domain =
-            (new FormData(e.currentTarget).get('domain') as string) || window.location.host
-          ;(async () => {
-            try {
-              setError(undefined)
-              const accounts = await provider.request({ method: 'eth_accounts' })
-              if (accounts.length === 0) throw new Error('No accounts connected')
-              const siweMessage = createSiweMessage({
-                address: accounts[0],
-                chainId: 42069,
-                domain,
-                nonce: generateSiweNonce(),
-                statement: 'Sign in to the playground app.',
-                uri: `https://${domain}`,
-                version: '1',
-              })
-              const signature = await provider.request({
-                method: 'personal_sign',
-                params: [Hex.fromString(siweMessage), accounts[0]],
-              })
-              setResult({ message: siweMessage, signature })
-            } catch (e) {
-              setResult(undefined)
-              setError(e instanceof Error ? e : new Error(String(e)))
-            }
-          })()
-        }}
-        style={{ display: 'flex', gap: 8, alignItems: 'center' }}
-      >
-        <input
-          name="domain"
-          defaultValue={window.location.host}
-          placeholder="Domain…"
-          style={{ flex: 1 }}
-        />
-        <button type="submit">Sign (SIWE)</button>
-      </form>
-      {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
-      {result && <pre>{`message:\n${result.message}\n\nsignature:\n${result.signature}`}</pre>}
-    </div>
+    <article className="method-panel">
+      <header className="method-header">
+        <h3>personal_sign (SIWE)</h3>
+      </header>
+      <div className="method-body">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            const domain =
+              (new FormData(e.currentTarget).get('domain') as string) || window.location.host
+            ;(async () => {
+              try {
+                setError(undefined)
+                const accounts = await provider.request({ method: 'eth_accounts' })
+                if (accounts.length === 0) throw new Error('No accounts connected')
+                const siweMessage = createSiweMessage({
+                  address: accounts[0],
+                  chainId: 42069,
+                  domain,
+                  nonce: generateSiweNonce(),
+                  statement: 'Sign in to the playground app.',
+                  uri: `https://${domain}`,
+                  version: '1',
+                })
+                const signature = await provider.request({
+                  method: 'personal_sign',
+                  params: [Hex.fromString(siweMessage), accounts[0]],
+                })
+                setResult({ message: siweMessage, signature })
+              } catch (e) {
+                setResult(undefined)
+                setError(e instanceof Error ? e : new Error(String(e)))
+              }
+            })()
+          }}
+          style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+        >
+          <input
+            name="domain"
+            defaultValue={window.location.host}
+            placeholder="Domain…"
+            style={{ flex: 1 }}
+          />
+          <Button type="submit">Sign (SIWE)</Button>
+        </form>
+      </div>
+      {error && <pre className="method-error">{`${error.name}: ${error.message}`}</pre>}
+      {result && (
+        <pre className="method-result">{`message:\n${result.message}\n\nsignature:\n${result.signature}`}</pre>
+      )}
+    </article>
   )
 }
 
@@ -1030,7 +1202,7 @@ function EthSignTypedData() {
 
   function signTypedData(label: string, data: object) {
     return (
-      <button
+      <Button
         key={label}
         onClick={async () => {
           try {
@@ -1050,7 +1222,7 @@ function EthSignTypedData() {
         }}
       >
         {label}
-      </button>
+      </Button>
     )
   }
 
@@ -1216,7 +1388,7 @@ function VerifyMessage() {
             style={{ flex: 1, fontFamily: 'monospace' }}
           />
         </div>
-        <button type="submit">Verify</button>
+        <Button type="submit">Verify</Button>
       </form>
     </Method>
   )
@@ -1282,7 +1454,7 @@ function VerifyTypedData() {
             style={{ flex: 1, fontFamily: 'monospace' }}
           />
         </div>
-        <button type="submit">Verify</button>
+        <Button type="submit">Verify</Button>
       </form>
     </Method>
   )
@@ -1311,7 +1483,7 @@ function EthGetTransactionReceipt() {
           placeholder="Enter tx hash (0x...)"
           style={{ flex: 1, fontFamily: 'monospace' }}
         />
-        <button type="submit">Get Receipt</button>
+        <Button type="submit">Get Receipt</Button>
       </form>
     </Method>
   )
@@ -1340,7 +1512,7 @@ function WalletGetCallsStatus() {
           placeholder="Enter calls ID (0x...)"
           style={{ flex: 1, fontFamily: 'monospace' }}
         />
-        <button type="submit">Get Status</button>
+        <Button type="submit">Get Status</Button>
       </form>
     </Method>
   )
@@ -1360,7 +1532,7 @@ function WalletGetBalances() {
   const balances = result as TokenBalance[] | undefined
   return (
     <Method method="wallet_getBalances" result={result} error={error}>
-      <button
+      <Button
         onClick={() =>
           execute(() =>
             provider.request({
@@ -1375,7 +1547,7 @@ function WalletGetBalances() {
         }
       >
         Get Balances
-      </button>
+      </Button>
       {balances && balances.length > 0 && (
         <table style={{ marginTop: 8, borderCollapse: 'collapse' }}>
           <thead>
@@ -1577,14 +1749,14 @@ function WalletAuthorizeAccessKey() {
                     ))}
                 </select>
               )}
-              <button disabled={limits.length === 1} onClick={() => removeLimit(i)} type="button">
+              <Button disabled={limits.length === 1} onClick={() => removeLimit(i)} type="button">
                 ×
-              </button>
+              </Button>
             </div>
           ))}
-          <button onClick={addLimit} type="button">
+          <Button onClick={addLimit} type="button">
             + Add limit
-          </button>
+          </Button>
         </fieldset>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
@@ -1597,7 +1769,7 @@ function WalletAuthorizeAccessKey() {
             ))}
           </select>
         </div>
-        <button type="submit">Authorize</button>
+        <Button type="submit">Authorize</Button>
       </form>
     </Method>
   )
@@ -1632,7 +1804,7 @@ function WalletRevokeAccessKey() {
             style={{ flex: 1, fontFamily: 'monospace' }}
           />
         </div>
-        <button type="submit">Revoke</button>
+        <Button type="submit">Revoke</Button>
       </form>
     </Method>
   )
@@ -1642,9 +1814,9 @@ function Fortune() {
   const [result, error, execute] = useRequest()
   return (
     <Method method="fetch /fortune" result={result} error={error}>
-      <button onClick={() => execute(() => fetch('/fortune').then((r) => r.json()))}>
+      <Button onClick={() => execute(() => fetch('/fortune').then((r) => r.json()))}>
         Get Fortune (0.01 pathUSD)
-      </button>
+      </Button>
     </Method>
   )
 }
@@ -1653,9 +1825,9 @@ function MppZeroDollarAuth() {
   const [result, error, execute] = useRequest()
   return (
     <Method method="fetch /zero-dollar-auth" result={result} error={error}>
-      <button onClick={() => execute(() => fetch('/zero-dollar-auth').then((r) => r.json()))}>
+      <Button onClick={() => execute(() => fetch('/zero-dollar-auth').then((r) => r.json()))}>
         Zero-Dollar Auth
-      </button>
+      </Button>
     </Method>
   )
 }
@@ -1663,12 +1835,16 @@ function MppZeroDollarAuth() {
 function ManageEmail() {
   const walletHost = import.meta.env.VITE_WALLET_HOST ?? ''
   return (
-    <div>
-      <h3>Manage Email</h3>
-      <a href={`${walletHost}/email`} target="_blank" rel="noopener noreferrer">
-        Open email settings →
-      </a>
-    </div>
+    <article className="method-panel">
+      <header className="method-header">
+        <h3>Manage Email</h3>
+      </header>
+      <div className="method-body">
+        <a href={`${walletHost}/email`} target="_blank" rel="noopener noreferrer">
+          Open email settings →
+        </a>
+      </div>
+    </article>
   )
 }
 
@@ -1676,9 +1852,9 @@ function EthBlockNumber() {
   const [result, error, execute] = useRequest()
   return (
     <Method method="eth_blockNumber" result={result} error={error}>
-      <button onClick={() => execute(() => provider.request({ method: 'eth_blockNumber' }))}>
+      <Button onClick={() => execute(() => provider.request({ method: 'eth_blockNumber' }))}>
         Get Block Number
-      </button>
+      </Button>
     </Method>
   )
 }
@@ -1690,7 +1866,7 @@ function Events() {
 
   useEffect(() => {
     function push(name: string, data: unknown) {
-      setEvents((prev) => [...prev, { name, data, time: new Date().toLocaleTimeString() }])
+      setEvents((prev) => [...prev, { name, data, time: formatEventTime(new Date()) }])
     }
     const onAccountsChanged = (accounts: unknown) => push('accountsChanged', accounts)
     const onChainChanged = (chainId: unknown) => push('chainChanged', chainId)
@@ -1710,35 +1886,55 @@ function Events() {
   }, [])
 
   return (
-    <div>
-      <button onClick={() => setEvents([])}>Clear</button>
-      <table style={{ tableLayout: 'fixed', width: '100%' }}>
-        <colgroup>
-          <col style={{ width: 100 }} />
-          <col style={{ width: 150 }} />
-          <col />
-        </colgroup>
-        <thead>
-          <tr>
-            <th style={{ textAlign: 'left' }}>Timestamp</th>
-            <th style={{ textAlign: 'left' }}>Event</th>
-            <th style={{ textAlign: 'left' }}>Value</th>
-          </tr>
-        </thead>
-        <tbody>
-          {events.map((e, i) => (
-            <tr key={i}>
-              <td>{e.time}</td>
-              <td>{e.name}</td>
-              <td>
-                <pre style={{ margin: 0, whiteSpace: 'nowrap' }}>{Json.stringify(e.data)}</pre>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <article className="method-panel">
+      <header className="method-header">
+        <h3>provider events</h3>
+        <Button className="method-header-action" onClick={() => setEvents([])}>
+          Clear
+        </Button>
+      </header>
+      {events.length === 0 ? (
+        <div className="events-empty">No events yet</div>
+      ) : (
+        <div className="events-table-wrap">
+          <table className="events-table">
+            <colgroup>
+              <col className="events-table-time" />
+              <col className="events-table-name" />
+              <col />
+            </colgroup>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left' }}>Time</th>
+                <th style={{ textAlign: 'left' }}>Event</th>
+                <th style={{ textAlign: 'left' }}>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((e, i) => (
+                <tr key={i}>
+                  <td>{e.time}</td>
+                  <td>{e.name}</td>
+                  <td>
+                    <code className="events-table-value">{formatEventValue(e.data)}</code>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </article>
   )
+}
+
+function formatEventTime(date: Date) {
+  return date.toTimeString().slice(0, 8)
+}
+
+function formatEventValue(value: unknown) {
+  if (typeof value === 'string') return value
+  return Json.stringify(value, null, 2)
 }
 
 function useRequest() {
@@ -1805,34 +2001,48 @@ function OcclusionSimulator() {
 
   return (
     <div>
-      <button onClick={() => setActive((v) => !v)}>
+      <Button onClick={() => setActive((v) => !v)}>
         {active ? 'Remove Overlay' : 'Simulate Occlusion'}
-      </button>
-      <p style={{ fontSize: 12, color: '#666' }}>
-        Injects an overlay inside the {'<dialog>'} to trigger IO v2 occlusion detection.
-      </p>
+      </Button>
     </div>
   )
 }
 
-const accentOptions = ['', 'neutral', 'blue', 'red', 'amber', 'green', 'purple'] as const
+const accentOptions = ['', 'neutral', 'blue', 'red', 'amber', 'green', 'purple', 'custom'] as const
 const radiusOptions = ['', 'none', 'small', 'medium', 'large', 'full'] as const
 const schemeOptions = ['', 'light', 'dark'] as const
+type AccentOption = (typeof accentOptions)[number]
+
+function isAccentOption(value: string): value is AccentOption {
+  return accentOptions.includes(value as AccentOption)
+}
 
 function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) {
-  const [accent, setAccent] = useState(theme?.accent ?? '')
+  const initialAccent = theme?.accent ?? ''
+  const [accent, setAccent] = useState<AccentOption>(
+    isAccentOption(initialAccent) ? initialAccent : 'custom',
+  )
   const [radius, setRadius] = useState(theme?.radius ?? '')
   const [scheme, setScheme] = useState(theme?.scheme ?? '')
-  const [customAccent, setCustomAccent] = useState('#6366f1')
+  const [customAccent, setCustomAccent] = useState(
+    initialAccent && !isAccentOption(initialAccent) ? initialAccent : '#6366f1',
+  )
 
-  function apply(next: { accent?: string; radius?: string; scheme?: string }) {
+  function apply(next: {
+    accent?: AccentOption | undefined
+    customAccent?: string | undefined
+    radius?: string | undefined
+    scheme?: string | undefined
+  }) {
     const a = next.accent ?? accent
+    const c = next.customAccent ?? customAccent
     const r = next.radius ?? radius
     const s = next.scheme ?? scheme
+    const accentValue = a === 'custom' ? c : a
     const t =
-      a || r || s
+      accentValue || r || s
         ? {
-            accent: a || undefined,
+            accent: accentValue || undefined,
             radius: (r || undefined) as never,
             scheme: (s || undefined) as never,
           }
@@ -1842,14 +2052,16 @@ function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) 
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <label>Accent</label>
+    <div className="control-grid">
+      <label>
+        <span>Accent</span>
         <select
           value={accent}
           onChange={(e) => {
-            setAccent(e.target.value)
-            apply({ accent: e.target.value })
+            const next = e.target.value
+            if (!isAccentOption(next)) return
+            setAccent(next)
+            apply({ accent: next })
           }}
         >
           {accentOptions.map((v) => (
@@ -1858,18 +2070,19 @@ function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) 
             </option>
           ))}
         </select>
-        <input
-          type="color"
-          value={customAccent}
-          onChange={(e) => {
-            setCustomAccent(e.target.value)
-            setAccent(e.target.value)
-            apply({ accent: e.target.value })
-          }}
-        />
-      </div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <label>Radius</label>
+        {accent === 'custom' && (
+          <input
+            type="color"
+            value={customAccent}
+            onChange={(e) => {
+              setCustomAccent(e.target.value)
+              apply({ customAccent: e.target.value })
+            }}
+          />
+        )}
+      </label>
+      <label>
+        <span>Radius</span>
         <select
           value={radius}
           onChange={(e) => {
@@ -1883,9 +2096,9 @@ function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) 
             </option>
           ))}
         </select>
-      </div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <label>Scheme</label>
+      </label>
+      <label>
+        <span>Scheme</span>
         <select
           value={scheme}
           onChange={(e) => {
@@ -1899,7 +2112,7 @@ function ThemeConfig(props: { adapterType: AdapterType; rerender: () => void }) 
             </option>
           ))}
         </select>
-      </div>
+      </label>
     </div>
   )
 }
@@ -1913,14 +2126,18 @@ function Method({
   method: string
   result: unknown
   error?: Error | undefined
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
-    <div>
-      <h3>{method}</h3>
-      {children}
-      {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
-      {result !== undefined && <pre>{Json.stringify(result, null, 2)}</pre>}
-    </div>
+    <article className="method-panel">
+      <header className="method-header">
+        <h3>{method}</h3>
+      </header>
+      <div className="method-body">{children}</div>
+      {error && <pre className="method-error">{`${error.name}: ${error.message}`}</pre>}
+      {result !== undefined && (
+        <pre className="method-result">{Json.stringify(result, null, 2)}</pre>
+      )}
+    </article>
   )
 }

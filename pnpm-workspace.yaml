@@ -40,6 +40,7 @@ minimumReleaseAgeExclude:
   - incur
   - mppx
   - ox
+  - regen-ui
   - secretlint
   - viem
   - vite-plus
