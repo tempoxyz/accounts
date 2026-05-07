@@ -13,6 +13,8 @@
     "benedict.dev",
     "papercut.lol",
     "tempo-docs-git-jxom-accounts-sdk-docs-tempoxyz.vercel.app",
-    "appkit-wagmi-tempo-wallet.vercel.app"
+    "appkit-wagmi-tempo-wallet.vercel.app",
+    "tip.bot",
+    "*.tip.bot"
   ]
 }
