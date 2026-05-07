@@ -12,7 +12,10 @@ import { Account as TempoAccount, Transaction } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
+import * as Schema from '../Schema.js'
 import type * as Store from '../Store.js'
+import * as Request from '../zod/request.js'
+import { dialog as dialogAdapter } from './dialog.js'
 
 /**
  * Creates a Turnkey adapter backed by injected Turnkey clients, providers, or React Wallet Kit state.
@@ -36,13 +39,15 @@ import type * as Store from '../Store.js'
  */
 export function turnkey(options: turnkey.Options = {}): Adapter.Adapter {
   const {
+    dialog,
     icon,
     name = 'Turnkey',
     rdns = 'com.turnkey',
     transactionType = 'TRANSACTION_TYPE_TEMPO',
   } = options
 
-  return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
+  return Adapter.define({ icon, name, rdns }, (parameters) => {
+    const { getAccount, getClient, store } = parameters
     async function getProvider() {
       return options.getProvider ? await options.getProvider() : options.provider
     }
@@ -330,152 +335,172 @@ export function turnkey(options: turnkey.Options = {}): Adapter.Adapter {
       }
     }
 
+    const actions: Adapter.Instance['actions'] = {
+      async createAccount(parameters) {
+        return await mapTurnkeyError(async () => {
+          const { authorizeAccessKey, digest, ...rest } = parameters
+          const result = await createWalletAccount({ ...rest, digest })
+          const account = result.accounts[0]
+          const signature = digest && account ? await signDigest(digest, account) : undefined
+          const keyAuthorization =
+            authorizeAccessKey && account
+              ? await signKeyAuthorization(
+                  account,
+                  await prepareKeyAuthorization(authorizeAccessKey),
+                  signature,
+                )
+              : undefined
+          return { ...result, keyAuthorization, signature }
+        })
+      },
+
+      async loadAccounts(parameters, request) {
+        return await mapTurnkeyError(async () => {
+          const { authorizeAccessKey, digest } = parameters ?? {}
+          const result = await loadWalletAccounts(parameters, request)
+          const account = result.accounts[0]
+          const signature = digest && account ? await signDigest(digest, account) : undefined
+          const keyAuthorization =
+            authorizeAccessKey && account
+              ? await signKeyAuthorization(
+                  account,
+                  await prepareKeyAuthorization(authorizeAccessKey),
+                  signature,
+                )
+              : undefined
+          return { ...result, keyAuthorization, signature }
+        })
+      },
+
+      async authorizeAccessKey(parameters) {
+        return await mapTurnkeyError(async () => {
+          const account = await resolveAccount()
+          const prepared = await prepareKeyAuthorization(parameters)
+          return {
+            keyAuthorization: await signKeyAuthorization(account, prepared, parameters.signature),
+            rootAddress: account.address,
+          }
+        })
+      },
+
+      async disconnect() {
+        await options.disconnect?.(context())
+      },
+
+      async revokeAccessKey(parameters) {
+        AccessKey.revoke({ address: parameters.address, store })
+      },
+
+      async signPersonalMessage(parameters, request) {
+        return await mapTurnkeyError(async () => {
+          const account = await resolveAccount(parameters.address)
+          const signWith = await resolveSignWith(account)
+          if (options.signPersonalMessage)
+            return normalizeSignature(
+              await options.signPersonalMessage(
+                { ...parameters, signWith, walletAccount: await selectAccount() },
+                context(),
+              ),
+            )
+          const provider = await getProvider()
+          if (provider) return (await provider.request(request as never)) as Hex
+          throw new ox_Provider.UnsupportedMethodError({
+            message: '`signPersonalMessage` not configured on Turnkey adapter.',
+          })
+        })
+      },
+
+      async signTransaction(parameters) {
+        return await mapTurnkeyError(async () => await signPreparedTransaction(parameters))
+      },
+
+      async signTypedData(parameters, request) {
+        return await mapTurnkeyError(async () => {
+          const account = await resolveAccount(parameters.address)
+          const signWith = await resolveSignWith(account)
+          if (options.signTypedData)
+            return normalizeSignature(
+              await options.signTypedData(
+                { ...parameters, signWith, walletAccount: await selectAccount() },
+                context(),
+              ),
+            )
+          if (options.signRawPayload)
+            return normalizeSignature(
+              await options.signRawPayload({
+                encoding: 'PAYLOAD_ENCODING_EIP712',
+                hashFunction: 'HASH_FUNCTION_NOT_APPLICABLE',
+                organizationId: options.organizationId,
+                payload: parameters.data,
+                signWith,
+                stampWith: options.stampWith,
+              }),
+            )
+          const provider = await getProvider()
+          if (provider) return (await provider.request(request as never)) as Hex
+          throw new ox_Provider.UnsupportedMethodError({
+            message: '`signTypedData` not configured on Turnkey adapter.',
+          })
+        })
+      },
+
+      async sendTransaction(parameters) {
+        return await mapTurnkeyError(async () => {
+          const signed = await signPreparedTransaction(parameters)
+          const client = getClient({
+            feePayer: typeof parameters.feePayer === 'string' ? parameters.feePayer : undefined,
+          })
+          return await client.request({
+            method: 'eth_sendRawTransaction' as never,
+            params: [signed],
+          })
+        })
+      },
+
+      async sendTransactionSync(parameters) {
+        return await mapTurnkeyError(async () => {
+          const signed = await signPreparedTransaction(parameters)
+          const client = getClient({
+            feePayer: typeof parameters.feePayer === 'string' ? parameters.feePayer : undefined,
+          })
+          return await client.request({
+            method: 'eth_sendRawTransactionSync' as never,
+            params: [signed],
+          })
+        })
+      },
+
+      async switchChain(parameters) {
+        await mapTurnkeyError(async () => {
+          await options.switchChain?.(parameters, context())
+          const provider = await getProvider()
+          await provider?.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: ox_Hex.fromNumber(parameters.chainId) }],
+          } as never)
+        })
+      },
+    }
+
+    if (dialog) {
+      const surface = dialogAdapter({
+        ...dialog,
+        icon,
+        name,
+        provider: createTurnkeyProvider(actions, store),
+        rdns,
+      })(parameters)
+      return {
+        cleanup() {
+          surface.cleanup?.()
+        },
+        actions: surface.actions,
+      }
+    }
+
     return {
       actions: {
-        async createAccount(parameters) {
-          return await mapTurnkeyError(async () => {
-            const { authorizeAccessKey, digest, ...rest } = parameters
-            const result = await createWalletAccount({ ...rest, digest })
-            const account = result.accounts[0]
-            const signature = digest && account ? await signDigest(digest, account) : undefined
-            const keyAuthorization =
-              authorizeAccessKey && account
-                ? await signKeyAuthorization(
-                    account,
-                    await prepareKeyAuthorization(authorizeAccessKey),
-                    signature,
-                  )
-                : undefined
-            return { ...result, keyAuthorization, signature }
-          })
-        },
-
-        async loadAccounts(parameters, request) {
-          return await mapTurnkeyError(async () => {
-            const { authorizeAccessKey, digest } = parameters ?? {}
-            const result = await loadWalletAccounts(parameters, request)
-            const account = result.accounts[0]
-            const signature = digest && account ? await signDigest(digest, account) : undefined
-            const keyAuthorization =
-              authorizeAccessKey && account
-                ? await signKeyAuthorization(
-                    account,
-                    await prepareKeyAuthorization(authorizeAccessKey),
-                    signature,
-                  )
-                : undefined
-            return { ...result, keyAuthorization, signature }
-          })
-        },
-
-        async authorizeAccessKey(parameters) {
-          return await mapTurnkeyError(async () => {
-            const account = await resolveAccount()
-            const prepared = await prepareKeyAuthorization(parameters)
-            return {
-              keyAuthorization: await signKeyAuthorization(account, prepared, parameters.signature),
-              rootAddress: account.address,
-            }
-          })
-        },
-
-        async disconnect() {
-          await options.disconnect?.(context())
-        },
-
-        async revokeAccessKey(parameters) {
-          AccessKey.revoke({ address: parameters.address, store })
-        },
-
-        async signPersonalMessage(parameters, request) {
-          return await mapTurnkeyError(async () => {
-            const account = await resolveAccount(parameters.address)
-            const signWith = await resolveSignWith(account)
-            if (options.signPersonalMessage)
-              return normalizeSignature(
-                await options.signPersonalMessage(
-                  { ...parameters, signWith, walletAccount: await selectAccount() },
-                  context(),
-                ),
-              )
-            const provider = await getProvider()
-            if (provider) return (await provider.request(request as never)) as Hex
-            throw new ox_Provider.UnsupportedMethodError({
-              message: '`signPersonalMessage` not configured on Turnkey adapter.',
-            })
-          })
-        },
-
-        async signTransaction(parameters) {
-          return await mapTurnkeyError(async () => await signPreparedTransaction(parameters))
-        },
-
-        async signTypedData(parameters, request) {
-          return await mapTurnkeyError(async () => {
-            const account = await resolveAccount(parameters.address)
-            const signWith = await resolveSignWith(account)
-            if (options.signTypedData)
-              return normalizeSignature(
-                await options.signTypedData(
-                  { ...parameters, signWith, walletAccount: await selectAccount() },
-                  context(),
-                ),
-              )
-            if (options.signRawPayload)
-              return normalizeSignature(
-                await options.signRawPayload({
-                  encoding: 'PAYLOAD_ENCODING_EIP712',
-                  hashFunction: 'HASH_FUNCTION_NOT_APPLICABLE',
-                  organizationId: options.organizationId,
-                  payload: parameters.data,
-                  signWith,
-                  stampWith: options.stampWith,
-                }),
-              )
-            const provider = await getProvider()
-            if (provider) return (await provider.request(request as never)) as Hex
-            throw new ox_Provider.UnsupportedMethodError({
-              message: '`signTypedData` not configured on Turnkey adapter.',
-            })
-          })
-        },
-
-        async sendTransaction(parameters) {
-          return await mapTurnkeyError(async () => {
-            const signed = await signPreparedTransaction(parameters)
-            const client = getClient({
-              feePayer: typeof parameters.feePayer === 'string' ? parameters.feePayer : undefined,
-            })
-            return await client.request({
-              method: 'eth_sendRawTransaction' as never,
-              params: [signed],
-            })
-          })
-        },
-
-        async sendTransactionSync(parameters) {
-          return await mapTurnkeyError(async () => {
-            const signed = await signPreparedTransaction(parameters)
-            const client = getClient({
-              feePayer: typeof parameters.feePayer === 'string' ? parameters.feePayer : undefined,
-            })
-            return await client.request({
-              method: 'eth_sendRawTransactionSync' as never,
-              params: [signed],
-            })
-          })
-        },
-
-        async switchChain(parameters) {
-          await mapTurnkeyError(async () => {
-            await options.switchChain?.(parameters, context())
-            const provider = await getProvider()
-            await provider?.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: ox_Hex.fromNumber(parameters.chainId) }],
-            } as never)
-          })
-        },
+        ...actions,
       },
     }
   })
@@ -491,6 +516,154 @@ async function mapTurnkeyError<result>(fn: () => Promise<result>) {
         message: error instanceof Error ? error.message : undefined,
       })
     throw error
+  }
+}
+
+type TurnkeyProvider = {
+  request: (request: { method: string; params?: unknown | undefined }) => Promise<unknown>
+}
+
+function createTurnkeyProvider(
+  actions: Adapter.Instance['actions'],
+  store: Store.Store,
+): TurnkeyProvider {
+  return ox_Provider.from(
+    {
+      async request(r) {
+        const request = Request.validate(Schema.Request, r)
+
+        switch (request.method) {
+          case 'eth_accounts':
+            return store.getState().accounts.map((a) => a.address)
+
+          case 'eth_chainId':
+            return ox_Hex.fromNumber(store.getState().chainId)
+
+          case 'eth_requestAccounts': {
+            const result = await actions.loadAccounts(undefined, {
+              method: 'wallet_connect',
+              originMethod: 'eth_requestAccounts',
+              params: undefined,
+            })
+            store.setState({ accounts: result.accounts, activeAccount: 0 })
+            return result.accounts.map((a) => a.address)
+          }
+
+          case 'wallet_connect': {
+            const capabilities = request._decoded.params?.[0]?.capabilities
+            const result =
+              capabilities?.method === 'register'
+                ? await actions.createAccount(
+                    {
+                      authorizeAccessKey: capabilities.authorizeAccessKey,
+                      digest: capabilities.digest,
+                      name: capabilities.name ?? 'default',
+                      userId: capabilities.userId,
+                    },
+                    request,
+                  )
+                : await actions.loadAccounts(
+                    {
+                      authorizeAccessKey: capabilities?.authorizeAccessKey,
+                      credentialId: capabilities?.credentialId,
+                      digest: capabilities?.digest,
+                      selectAccount: capabilities?.selectAccount,
+                    },
+                    request,
+                  )
+
+            store.setState({ accounts: result.accounts, activeAccount: 0 })
+            return result.accounts
+          }
+
+          case 'wallet_disconnect':
+            await actions.disconnect?.()
+            store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
+            return
+
+          case 'personal_sign': {
+            const [data, address] = request._decoded.params
+            return await actions.signPersonalMessage({ address, data }, request)
+          }
+
+          case 'eth_signTypedData_v4': {
+            const [address, data] = request._decoded.params
+            return await actions.signTypedData({ address, data }, request)
+          }
+
+          case 'eth_signTransaction': {
+            const [decoded] = request._decoded.params
+            return await actions.signTransaction(toTransactionParameters(decoded, store), request)
+          }
+
+          case 'eth_sendTransaction': {
+            const [decoded] = request._decoded.params
+            return await actions.sendTransaction(toTransactionParameters(decoded, store), request)
+          }
+
+          case 'eth_sendTransactionSync': {
+            const [decoded] = request._decoded.params
+            return await actions.sendTransactionSync(
+              toTransactionParameters(decoded, store),
+              request,
+            )
+          }
+
+          case 'wallet_authorizeAccessKey': {
+            if (!actions.authorizeAccessKey)
+              throw new ox_Provider.UnsupportedMethodError({
+                message: '`authorizeAccessKey` not supported by adapter.',
+              })
+            const [decoded] = request._decoded.params
+            return await actions.authorizeAccessKey(decoded, request)
+          }
+
+          case 'wallet_revokeAccessKey': {
+            if (!actions.revokeAccessKey)
+              throw new ox_Provider.UnsupportedMethodError({
+                message: '`revokeAccessKey` not supported by adapter.',
+              })
+            const [decoded] = request._decoded.params
+            await actions.revokeAccessKey(decoded, request)
+            return
+          }
+
+          case 'wallet_deposit': {
+            if (!actions.deposit)
+              throw new ox_Provider.UnsupportedMethodError({
+                message: '`deposit` not supported by adapter.',
+              })
+            const [decoded] = request._decoded.params
+            return await actions.deposit(decoded, request)
+          }
+
+          case 'wallet_switchEthereumChain': {
+            const { chainId } = request._decoded.params[0]
+            await actions.switchChain?.({ chainId })
+            store.setState({ chainId })
+            return
+          }
+        }
+
+        throw new ox_Provider.UnsupportedMethodError({
+          message: `Unsupported Turnkey provider method "${request.method}".`,
+        })
+      },
+    },
+    { schema: Schema.ox },
+  )
+}
+
+function toTransactionParameters(
+  decoded: Adapter.signTransaction.Parameters & { to?: unknown | undefined },
+  store: Store.Store,
+): Adapter.signTransaction.Parameters {
+  const { data, to, ...rest } = decoded
+  const calls = decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
+  return {
+    ...rest,
+    chainId: decoded.chainId ?? store.getState().chainId,
+    ...(calls ? { calls: calls as never } : {}),
   }
 }
 
@@ -671,6 +844,8 @@ export declare namespace turnkey {
       | undefined
     /** Adapter-specific disconnect cleanup. */
     disconnect?: ((context: Context) => Promise<void> | void) | undefined
+    /** Tempo dialog options for post-connect approval UI. When provided, Turnkey owns accounts and Tempo owns consent. */
+    dialog?: Omit<dialogAdapter.Options, 'icon' | 'name' | 'provider' | 'rdns'> | undefined
     /** EIP-1193 provider to delegate optional methods to. */
     provider?: Provider | undefined
     /** Lazily resolves an EIP-1193 provider to delegate optional methods to. */

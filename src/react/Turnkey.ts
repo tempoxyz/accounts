@@ -3,7 +3,6 @@ import { useMemo } from 'react'
 
 import type * as Adapter from '../core/Adapter.js'
 import { turnkey as core_turnkey } from '../core/adapters/turnkey.js'
-import { turnkeyTempo as core_turnkeyTempo } from '../core/adapters/turnkeyTempo.js'
 
 /**
  * Creates a memoized Accounts adapter from `@turnkey/react-wallet-kit` state.
@@ -68,75 +67,7 @@ export function useTurnkeyAdapter(
       kit.signRawPayload,
       kit.signTransaction,
       kit.wallets,
-      messageMode,
-      organizationId,
-      rest,
-      toMessage,
-    ],
-  )
-}
-
-/**
- * Creates a memoized Turnkey + Tempo surface adapter from `@turnkey/react-wallet-kit` state.
- *
- * Turnkey handles account connection and provisioning. Tempo handles post-connect
- * action previews and delegates confirmed signing back to Turnkey.
- */
-export function useTurnkeyTempoAdapter(
-  kit: useTurnkeyAdapter.Turnkey,
-  options: useTurnkeyTempoAdapter.Options = {},
-): Adapter.Adapter {
-  const {
-    messageMode = 'headless',
-    organizationId = kit.organizationId,
-    toMessage = (data) => ox_Hex.toString(data),
-    ...rest
-  } = options
-
-  return useMemo(
-    () =>
-      core_turnkeyTempo({
-        ...rest,
-        createWallet: kit.createWallet,
-        createWalletAccounts: kit.createWalletAccounts,
-        organizationId,
-        refreshWallets: kit.refreshWallets,
-        signPersonalMessage: async ({ data, signWith, walletAccount: selected }) => {
-          const walletAccount = selected ?? selectWalletAccount(kit.wallets, signWith)
-          const signMessage =
-            messageMode === 'modal' ? (kit.handleSignMessage ?? kit.signMessage) : kit.signMessage
-          if (!signMessage) throw new Error('Turnkey signMessage is not available.')
-          return await signMessage({
-            addEthereumPrefix: true,
-            message: toMessage(data),
-            walletAccount,
-          })
-        },
-        signRawPayload: kit.signRawPayload,
-        signTransaction: async (params) =>
-          await kit.signTransaction({
-            organizationId: params.organizationId,
-            stampWith: params.stampWith,
-            transactionType: params.transactionType,
-            unsignedTransaction: params.unsignedTransaction,
-            walletAccount:
-              params.walletAccount ?? selectWalletAccount(kit.wallets, params.signWith),
-          }),
-        wallets: kit.wallets,
-      }),
-    [
-      kit.createWallet,
-      kit.createWalletAccounts,
-      kit.handleSignMessage,
-      kit.refreshWallets,
-      kit.signMessage,
-      kit.signRawPayload,
-      kit.signTransaction,
-      kit.wallets,
-      messageMode,
-      organizationId,
-      rest,
-      toMessage,
+      options,
     ],
   )
 }
@@ -205,10 +136,4 @@ export declare namespace useTurnkeyAdapter {
     /** Converts hex `personal_sign` data into the Turnkey message string. */
     toMessage?: ((data: `0x${string}`) => string) | undefined
   }
-}
-
-export declare namespace useTurnkeyTempoAdapter {
-  /** React Turnkey + Tempo surface adapter options. */
-  type Options = useTurnkeyAdapter.Options &
-    Omit<core_turnkeyTempo.Options, keyof core_turnkey.Options>
 }

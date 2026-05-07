@@ -1,6 +1,6 @@
 import { useTurnkey } from '@turnkey/react-wallet-kit'
 import { Dialog } from 'accounts'
-import { useTurnkeyAdapter, useTurnkeyTempoAdapter } from 'accounts/react'
+import { useTurnkeyAdapter } from 'accounts/react'
 import { Hex, Json } from 'ox'
 import {
   type ComponentProps,
@@ -95,15 +95,27 @@ export function App() {
     [getKit],
   )
   const accountsTurnkey = useMemo(() => toAccountsTurnkey(getKit), [getKit])
-  const turnkeyAdapter = useTurnkeyAdapter(accountsTurnkey, turnkeyOptions)
-  const turnkeyTempoAdapter = useTurnkeyTempoAdapter(accountsTurnkey, {
-    ...turnkeyOptions,
-    dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
-    host,
-  })
+  const turnkeyAdapterOptions = useMemo(
+    () => ({
+      ...turnkeyOptions,
+      dialog: {
+        dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
+        host,
+        theme,
+      },
+    }),
+    [turnkeyOptions, dialogMode, host, theme],
+  )
+  const turnkeyAdapter = useTurnkeyAdapter(accountsTurnkey, turnkeyAdapterOptions)
 
   useEffect(() => {
-    if (adapterType !== 'turnkey' && adapterType !== 'turnkeyTempo') return
+    if (adapterType !== 'turnkey') return
+    switchProvider(createProviderWithAdapter(turnkeyAdapter))
+    rerender((n) => n + 1)
+  }, [adapterType, turnkeyAdapter])
+
+  useEffect(() => {
+    if (adapterType !== 'turnkey') return
     if (!kit.session) return
 
     let cancelled = false
@@ -124,7 +136,6 @@ export function App() {
 
   function onSwitch(type: AdapterType) {
     if (type === 'turnkey') switchProvider(createProviderWithAdapter(turnkeyAdapter))
-    else if (type === 'turnkeyTempo') switchProvider(createProviderWithAdapter(turnkeyTempoAdapter))
     else switchAdapter(type)
     setAdapterType(type)
     rerender((n) => n + 1)
@@ -157,10 +168,7 @@ export function App() {
         <main className="playground-content">
           <PlaygroundSection id="provider" title="Provider">
             <Events />
-            <TurnkeyStatus
-              active={adapterType === 'turnkey' || adapterType === 'turnkeyTempo'}
-              kit={kit}
-            />
+            <TurnkeyStatus active={adapterType === 'turnkey'} kit={kit} />
             <ProviderState />
           </PlaygroundSection>
 
@@ -251,13 +259,12 @@ function ConfigPanel(props: {
             <option value="dialogRefImpl">dialogRefImpl</option>
             <option value="webAuthn">webAuthn</option>
             <option value="turnkey">turnkey</option>
-            <option value="turnkeyTempo">turnkeyTempo</option>
             <option value="secp256k1">secp256k1</option>
           </select>
         </label>
         {(adapterType === 'tempoWallet' ||
           adapterType === 'dialogRefImpl' ||
-          adapterType === 'turnkeyTempo') && (
+          adapterType === 'turnkey') && (
           <label>
             <span>Mode</span>
             <select
@@ -275,7 +282,7 @@ function ConfigPanel(props: {
       </div>
       {(adapterType === 'tempoWallet' ||
         adapterType === 'dialogRefImpl' ||
-        adapterType === 'turnkeyTempo') && (
+        adapterType === 'turnkey') && (
         <>
           <h3 className="control-panel-title">Theme</h3>
           <ThemeConfig adapterType={adapterType} rerender={rerender} />
