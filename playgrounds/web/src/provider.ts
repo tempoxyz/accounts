@@ -11,10 +11,11 @@ import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
-export type AdapterType = 'secp256k1' | 'webAuthn' | 'tempoWallet' | 'dialogRefImpl'
+export type AdapterType = 'secp256k1' | 'turnkey' | 'webAuthn' | 'tempoWallet' | 'dialogRefImpl'
 export type Env = 'mainnet' | 'testnet' | 'devnet'
 export type DialogMode = 'iframe' | 'popup'
 export type ProviderValue = ReturnType<typeof Provider.create>
+export type ProviderOptions = NonNullable<Parameters<typeof Provider.create>[0]>
 
 export const env: Env = (() => {
   const param = new URLSearchParams(window.location.search).get('env')
@@ -60,41 +61,53 @@ export let dialogMode: DialogMode = 'iframe'
 export let theme: DialogNs.Theme | undefined
 export let provider: ProviderValue = createProvider('tempoWallet')
 
-export function createProvider(adapterType: AdapterType): ProviderValue {
+export function createProvider(
+  adapterType: AdapterType,
+  options: createProvider.Options = {},
+): ProviderValue {
+  const providerOptions = baseProviderOptions(options)
+
   if (adapterType === 'tempoWallet')
     return Provider.create({
+      ...providerOptions,
       adapter: dialog({
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host,
         theme,
       }),
-      mpp: true,
-      testnet,
     })
 
   if (adapterType === 'dialogRefImpl')
     return Provider.create({
+      ...providerOptions,
       adapter: dialog({
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host: import.meta.env.VITE_REF_DIALOG_HOST,
         theme,
       }),
-      mpp: true,
-      testnet,
     })
 
   if (adapterType === 'webAuthn') {
     const ceremony = WebAuthnCeremony.server({ url: '/webauthn' })
     return Provider.create({
+      ...providerOptions,
       adapter: webAuthn({ ceremony }),
-      mpp: true,
-      testnet,
     })
   }
+
+  if (adapterType === 'turnkey')
+    return Provider.create({
+      ...providerOptions,
+      adapter: local({
+        loadAccounts: async () => ({ accounts: [] }),
+        createAccount: async () => ({ accounts: [] }),
+      }),
+    })
 
   const privateKey = generatePrivateKey()
   const account = Account.fromSecp256k1(privateKey)
   return Provider.create({
+    ...providerOptions,
     adapter: local({
       loadAccounts: async () => ({ accounts: [account] }),
       createAccount: async () => {
@@ -103,14 +116,36 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         return { accounts: [newAccount] }
       },
     }),
-    mpp: true,
-    testnet,
   })
+}
+
+export declare namespace createProvider {
+  type Options = Omit<ProviderOptions, 'adapter'>
+}
+
+export function createProviderWithAdapter(adapter: NonNullable<ProviderOptions['adapter']>) {
+  return Provider.create({
+    ...baseProviderOptions(),
+    adapter,
+  })
+}
+
+function baseProviderOptions(options: createProvider.Options = {}) {
+  return {
+    ...options,
+    mpp: options.mpp ?? true,
+    testnet: options.testnet ?? testnet,
+  }
 }
 
 export function switchAdapter(adapterType: AdapterType) {
   Mppx.restore()
   provider = createProvider(adapterType)
+}
+
+export function switchProvider(next: ProviderValue) {
+  Mppx.restore()
+  provider = next
 }
 
 export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 'tempoWallet') {

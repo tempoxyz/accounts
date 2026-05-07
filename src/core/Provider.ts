@@ -208,6 +208,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'eth_requestAccounts': {
                     const { accounts } = await actions.loadAccounts(undefined, {
                       method: 'wallet_connect',
+                      originMethod: 'eth_requestAccounts',
                       params: undefined,
                     })
 

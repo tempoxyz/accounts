@@ -40,6 +40,10 @@ bun i accounts
 
 For documentation and guides, visit [docs.tempo.xyz/accounts](https://docs.tempo.xyz/accounts).
 
+## Adapters
+
+Accounts ships first-party adapters for Tempo Wallet, WebAuthn/passkeys, local signing, and Turnkey embedded-wallet setups. Turnkey support is exposed as `turnkey(...)` for framework-light integrations and `useTurnkeyAdapter(...)` from `accounts/react` for React apps already using `@turnkey/react-wallet-kit`.
+
 ## Getting Help
 
 Have questions or building something cool with the Accounts SDK?

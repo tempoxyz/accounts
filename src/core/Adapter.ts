@@ -13,7 +13,10 @@ import type * as Rpc from './zod/rpc.js'
 type EncodedRequest<encoded extends { method: unknown; params: unknown }> = Pick<
   encoded,
   'method' | 'params'
->
+> & {
+  /** Internal provider method that triggered this adapter request. */
+  originMethod?: string | undefined
+}
 
 /** Adapter interface for the provider. */
 export type Adapter = SetupFn & Meta
@@ -65,7 +68,7 @@ export type Instance = {
     /** Discover existing accounts (e.g. WebAuthn assertion). */
     loadAccounts: (
       params: loadAccounts.Parameters | undefined,
-      request: EncodedRequest<Rpc.wallet_connect.Encoded>,
+      request: loadAccounts.Request,
     ) => Promise<loadAccounts.ReturnType>
     /** Revoke an access key. */
     revokeAccessKey?:
@@ -222,6 +225,7 @@ export declare namespace withdrawZone {
 }
 
 export declare namespace loadAccounts {
+  type Request = EncodedRequest<Rpc.wallet_connect.Encoded>
   type Parameters = {
     /** Grant an access key during the ceremony. */
     authorizeAccessKey?: authorizeAccessKey.Parameters | undefined

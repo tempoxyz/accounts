@@ -11,6 +11,7 @@
     "preview": "vp preview"
   },
   "dependencies": {
+    "@turnkey/react-wallet-kit": "1.11.1",
     "accounts": "workspace:*",
     "mppx": "0.6.5",
     "react": "^19.2.5",
