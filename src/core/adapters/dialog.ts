@@ -1,4 +1,5 @@
-import { Address, Provider as ox_Provider, RpcRequest as ox_RpcRequest } from 'ox'
+import { Address, Hex, Provider as ox_Provider, RpcRequest as ox_RpcRequest } from 'ox'
+import * as RpcResponse from 'ox/RpcResponse'
 import { KeyAuthorization } from 'ox/tempo'
 import { prepareTransactionRequest } from 'viem/actions'
 import { Account as TempoAccount } from 'viem/tempo'
@@ -7,6 +8,7 @@ import { z } from 'zod/mini'
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
+import * as Messenger from '../Messenger.js'
 import * as Schema from '../Schema.js'
 import type * as Store from '../Store.js'
 import * as Rpc from '../zod/rpc.js'
@@ -32,6 +34,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     host = 'https://wallet.tempo.xyz/embed',
     icon = 'data:image/svg+xml,<svg width="269" height="269" viewBox="0 0 269 269" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="269" height="269" fill="black"/><path d="M123.273 190.794H93.445L121.09 105.318H85.7334L93.445 80.2642H191.95L184.238 105.318H150.773L123.273 190.794Z" fill="white"/></svg>',
     name = 'Tempo Wallet',
+    provider: attachedProvider,
     rdns = 'xyz.tempo',
     theme,
   } = options
@@ -107,6 +110,44 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       { schema: Schema.ox },
     )
 
+    async function syncAttachedProviderState(
+      accounts: readonly Store.Account[] | undefined = undefined,
+    ) {
+      if (!attachedProvider) return accounts ?? []
+      const nextAccounts =
+        accounts ?? toStoreAccounts(await attachedProvider.request({ method: 'eth_accounts' }))
+      const chainId = await (async () => {
+        try {
+          return toChainId(await attachedProvider.request({ method: 'eth_chainId' }))
+        } catch {
+          return undefined
+        }
+      })()
+      store.setState((x) => ({
+        ...x,
+        accounts: nextAccounts,
+        activeAccount: nextAccounts.length > 0 ? 0 : x.activeAccount,
+        ...(chainId ? { chainId } : {}),
+      }))
+      return nextAccounts
+    }
+
+    async function connectAttachedProvider(request: {
+      method: string
+      originMethod?: string | undefined
+      params?: unknown | undefined
+    }) {
+      if (!attachedProvider) throw new ox_Provider.UnsupportedMethodError()
+      const result = await attachedProvider.request(request).catch(async (error) => {
+        if (request.method === 'wallet_connect')
+          return await attachedProvider.request({ method: 'eth_requestAccounts' })
+        throw error
+      })
+      const accounts = toStoreAccounts(result)
+      await syncAttachedProviderState(accounts)
+      return { accounts }
+    }
+
     /**
      * Prepares a local key pair when `authorizeAccessKey` is requested without
      * an external publicKey/address, and returns the params to inject into the
@@ -173,7 +214,17 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       }
     }
 
-    const dialogInstance = dialog({ host, store, theme })
+    const dialogInstance = dialog({
+      host: attachedProvider ? withDelegatedProvider(host) : host,
+      store,
+      theme,
+    })
+    const offProviderBridge = attachedProvider
+      ? installProviderBridge({ host: withDelegatedProvider(host), provider: attachedProvider })
+      : () => undefined
+    const offProviderEvents = attachedProvider
+      ? installProviderEventBridge({ provider: attachedProvider, store })
+      : () => undefined
 
     // Sync store → dialog: whenever the request queue changes, notify
     // listeners and sync pending requests to the dialog.
@@ -194,10 +245,14 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     return {
       cleanup() {
         unsubscribe()
+        offProviderBridge()
+        offProviderEvents()
         dialogInstance?.destroy()
       },
       actions: {
         async createAccount(parameters, request) {
+          if (attachedProvider) return await connectAttachedProvider(request)
+
           const accessKey = await generateAccessKey(parameters.authorizeAccessKey)
 
           const { accounts } = await provider.request({
@@ -236,6 +291,8 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async loadAccounts(parameters, request) {
+          if (attachedProvider) return await connectAttachedProvider(request)
+
           const accessKey = await generateAccessKey(parameters?.authorizeAccessKey)
 
           const { accounts } = await provider.request({
@@ -422,11 +479,174 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async disconnect() {
+          if (attachedProvider)
+            await attachedProvider.request({ method: 'wallet_disconnect' }).catch(() => undefined)
           store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
+        },
+
+        async switchChain(parameters) {
+          if (!attachedProvider) return
+          await attachedProvider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: Hex.fromNumber(parameters.chainId) }],
+          })
         },
       },
     }
   })
+}
+
+function installProviderBridge(options: { host: string; provider: dialog.Provider }) {
+  const { host, provider } = options
+  if (typeof window === 'undefined') return () => undefined
+
+  const origin = new URL(host, window.location.origin).origin
+  const messenger = Messenger.fromWindow(window, { targetOrigin: origin })
+
+  async function onProviderRequest(
+    payload: Messenger.Payload<'provider-request'>,
+    event: MessageEvent,
+    topic: 'provider-response' | 'signer-response',
+  ) {
+    const target = event.source as Window | null
+    if (!target) return
+
+    try {
+      const result = await provider.request(payload.request)
+      target.postMessage(
+        {
+          id: (event.data as { id: string }).id,
+          payload: { result },
+          topic,
+        },
+        event.origin,
+      )
+    } catch (error) {
+      target.postMessage(
+        {
+          id: (event.data as { id: string }).id,
+          payload: { error: serializeError(error) },
+          topic,
+        },
+        event.origin,
+      )
+    }
+  }
+
+  const offProvider = messenger.on('provider-request', async (payload, event) =>
+    onProviderRequest(payload, event, 'provider-response'),
+  )
+  const offSigner = messenger.on('signer-request', async (payload, event) =>
+    onProviderRequest(payload, event, 'signer-response'),
+  )
+
+  return () => {
+    offProvider()
+    offSigner()
+    messenger.destroy()
+  }
+}
+
+function installProviderEventBridge(options: { provider: dialog.Provider; store: Store.Store }) {
+  const { provider, store } = options
+  if (!provider.on) return () => undefined
+
+  const onAccountsChanged = (accounts: unknown) => {
+    store.setState({
+      accounts: toStoreAccounts(accounts),
+      activeAccount: 0,
+    })
+  }
+  const onChainChanged = (chainId: unknown) => {
+    store.setState({ chainId: toChainId(chainId) })
+  }
+  const onDisconnect = () => {
+    store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
+  }
+
+  provider.on('accountsChanged', onAccountsChanged)
+  provider.on('chainChanged', onChainChanged)
+  provider.on('disconnect', onDisconnect)
+
+  return () => {
+    provider.removeListener?.('accountsChanged', onAccountsChanged)
+    provider.removeListener?.('chainChanged', onChainChanged)
+    provider.removeListener?.('disconnect', onDisconnect)
+  }
+}
+
+function serializeError(error: unknown): RpcResponse.ErrorObject {
+  if (isProviderError(error)) return { code: error.code, message: error.message }
+  if (error instanceof Error)
+    return {
+      code: -32603,
+      message: error.message,
+    }
+  return {
+    code: -32603,
+    message: 'Provider request failed.',
+  }
+}
+
+function isProviderError(error: unknown): error is { code: number; message: string } {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'number' &&
+    'message' in error &&
+    typeof error.message === 'string'
+  )
+}
+
+function toChainId(chainId: unknown) {
+  if (typeof chainId === 'number') return chainId
+  if (typeof chainId === 'string') return Number(chainId)
+  throw new ox_Provider.UnsupportedChainIdError({ message: 'Invalid provider chain ID.' })
+}
+
+function toStoreAccounts(result: unknown): readonly Store.Account[] {
+  if (Array.isArray(result))
+    return result.map((account) => {
+      if (typeof account === 'string') return { address: account as Address.Address }
+      if (isAccountLike(account))
+        return {
+          ...account,
+          address: account.address as Address.Address,
+        }
+      throw new ox_Provider.UnauthorizedError({ message: 'Provider returned an invalid account.' })
+    })
+
+  if (isAccountsResult(result)) return toStoreAccounts(result.accounts)
+  return []
+}
+
+function isAccountsResult(result: unknown): result is { accounts: readonly unknown[] } {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    'accounts' in result &&
+    Array.isArray(result.accounts)
+  )
+}
+
+function isAccountLike(account: unknown): account is Store.Account {
+  return (
+    typeof account === 'object' &&
+    account !== null &&
+    'address' in account &&
+    typeof account.address === 'string'
+  )
+}
+
+function withDelegatedProvider(host: string) {
+  const url = new URL(
+    host,
+    typeof window === 'undefined' ? 'https://wallet.tempo.xyz' : window.location.origin,
+  )
+  url.searchParams.set('provider', 'delegated')
+  url.searchParams.set('signer', 'delegated')
+  return url.href
 }
 
 export declare namespace dialog {
@@ -439,9 +659,23 @@ export declare namespace dialog {
     icon?: `data:image/${string}` | undefined
     /** Display name of the provider. @default `'Tempo'` */
     name?: string | undefined
+    /** Attached provider that owns accounts, chain state, and confirmed request execution. */
+    provider?: Provider | undefined
     /** Reverse DNS identifier. @default `'xyz.tempo'` */
     rdns?: string | undefined
     /** Visual theme overrides for the wallet dialog. */
     theme?: Dialog.Theme | undefined
+  }
+
+  /** Provider attached to the Tempo dialog surface. */
+  type Provider = {
+    /** Subscribe to provider events. */
+    on?: ((event: string, listener: (...args: readonly unknown[]) => void) => void) | undefined
+    /** Remove a provider event listener. */
+    removeListener?:
+      | ((event: string, listener: (...args: readonly unknown[]) => void) => void)
+      | undefined
+    /** Execute an EIP-1193 request. */
+    request: (request: { method: string; params?: unknown | undefined }) => Promise<unknown>
   }
 }

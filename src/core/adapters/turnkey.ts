@@ -1,11 +1,18 @@
-import { Address as ox_Address, Hex as ox_Hex, Provider as ox_Provider, PublicKey } from 'ox'
-import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import {
+  Address as ox_Address,
+  Hex as ox_Hex,
+  Provider as ox_Provider,
+  PublicKey,
+  Signature,
+} from 'ox'
+import { KeyAuthorization, SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import type { Address, Hex } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
 import { Account as TempoAccount, Transaction } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
+import type * as Store from '../Store.js'
 
 /**
  * Creates a Turnkey adapter backed by injected Turnkey clients, providers, or React Wallet Kit state.
@@ -52,7 +59,7 @@ export function turnkey(options: turnkey.Options = {}): Adapter.Adapter {
           message: 'No Turnkey Ethereum account is available.',
         })
 
-      return { accounts: [{ address: account.address }] }
+      return { accounts: [toStoreAccount(account)] }
     }
 
     async function createWalletAccount(parameters: Adapter.createAccount.Parameters) {
@@ -86,7 +93,7 @@ export function turnkey(options: turnkey.Options = {}): Adapter.Adapter {
           message: '`createAccount` not configured on Turnkey adapter.',
         })
 
-      return { accounts: [{ address: created.address }] }
+      return { accounts: [toStoreAccount(created)] }
     }
 
     async function selectAccount() {
@@ -265,7 +272,26 @@ export function turnkey(options: turnkey.Options = {}): Adapter.Adapter {
         const unsignedTransaction = (await Transaction.serialize(prepared as never)) as Hex
         const signWith = await resolveSignWith(root)
 
-        if (options.signTransaction)
+        if (options.signRawPayload) {
+          const payload = TxEnvelopeTempo.getSignPayload(
+            TxEnvelopeTempo.from(unsignedTransaction as `0x76${string}`),
+          )
+          const signature = Signature.from(
+            normalizeSignature(
+              await options.signRawPayload({
+                encoding: 'PAYLOAD_ENCODING_HEXADECIMAL',
+                hashFunction: 'HASH_FUNCTION_NO_OP',
+                organizationId: options.organizationId,
+                payload,
+                signWith,
+                stampWith: options.stampWith,
+              }),
+            ),
+          )
+          return (await Transaction.serialize(prepared as never, signature as never)) as Hex
+        }
+
+        if (options.signTransaction) {
           return normalizeHex(
             await options.signTransaction({
               organizationId: options.organizationId,
@@ -276,6 +302,7 @@ export function turnkey(options: turnkey.Options = {}): Adapter.Adapter {
               walletAccount: await selectAccount(),
             }),
           )
+        }
 
         const provider = await getProvider()
         if (provider)
@@ -486,6 +513,14 @@ function isEthereumAccount(account: turnkey.WalletAccount) {
     account.addressType === 'ADDRESS_TYPE_ETHEREUM' ||
     account.address.startsWith('0x')
   )
+}
+
+function toStoreAccount(account: turnkey.WalletAccount): Store.Account {
+  return {
+    address: account.address,
+    accountType: account.walletSource === 'embedded' ? 'embedded' : 'external',
+    signatureKeyType: 'secp256k1',
+  }
 }
 
 function normalizeHex(value: string): Hex {

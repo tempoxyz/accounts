@@ -2,6 +2,16 @@ import type { RpcRequest, RpcResponse } from 'ox'
 
 import type * as Store from './Store.js'
 
+/** Account metadata sent from the parent to the remote wallet surface. */
+export type Account = {
+  /** Account address. */
+  address: string
+  /** Wallet surface account type. */
+  accountType?: 'embedded' | 'external' | 'webAuthn' | undefined
+  /** Signature key type used by transaction simulation. */
+  signatureKeyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
+}
+
 /** Messenger interface for cross-frame communication. */
 export type Messenger = {
   /** Tear down all listeners. */
@@ -45,7 +55,7 @@ export type Schema = [
   {
     topic: 'rpc-requests'
     payload: {
-      account: { address: string } | undefined
+      account: Account | undefined
       chainId: number
       requests: readonly Store.QueuedRequest[]
     }
@@ -64,6 +74,22 @@ export type Schema = [
   },
   {
     topic: 'signer-response'
+    payload:
+      | {
+          error: RpcResponse.ErrorObject
+        }
+      | {
+          result: unknown
+        }
+  },
+  {
+    topic: 'provider-request'
+    payload: {
+      request: RpcRequest.RpcRequest
+    }
+  },
+  {
+    topic: 'provider-response'
     payload:
       | {
           error: RpcResponse.ErrorObject

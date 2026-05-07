@@ -613,11 +613,20 @@ function syncAccounts(messenger: Messenger.Bridge) {
 }
 
 /** Returns the active account from the store, or `undefined` if none. */
-function getAccount(store: Store.Store): { address: string } | undefined {
+function getAccount(store: Store.Store): Messenger.Account | undefined {
   const { accounts, activeAccount } = store.getState()
   const account = accounts[activeAccount]
   if (!account) return undefined
-  return { address: account.address }
+  const keyType = 'keyType' in account ? account.keyType : undefined
+  const signatureKeyType =
+    account.signatureKeyType ?? (keyType === 'webAuthn' ? 'webAuthn' : undefined)
+  return {
+    address: account.address,
+    accountType:
+      account.accountType ??
+      (signatureKeyType === 'webAuthn' || 'credential' in account ? 'webAuthn' : undefined),
+    signatureKeyType,
+  }
 }
 
 async function waitForReady(

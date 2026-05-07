@@ -11,8 +11,12 @@ import type * as core_Store from './Store.js'
 export type Store = {
   /** Account address. */
   address: Address
+  /** Wallet surface account type used by remote approval UIs. */
+  accountType?: 'embedded' | 'external' | 'webAuthn' | undefined
   /** Display label used during registration (e.g. email). */
   label?: string | undefined
+  /** Signature key type used when simulating delegated remote requests. */
+  signatureKeyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
 } & OneOf<
   | {}
   | Pick<TempoAccount.Account, 'keyType' | 'sign'>

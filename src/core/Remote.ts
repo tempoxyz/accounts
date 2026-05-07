@@ -66,7 +66,7 @@ export type Remote = {
     cb: (
       requests: readonly Store.QueuedRequest[],
       event: MessageEvent,
-      extra: { account: { address: string } | undefined },
+      extra: { account: Messenger.Account | undefined },
     ) => void,
   ) => () => void
   /**
@@ -96,7 +96,7 @@ export type Remote = {
 export declare namespace onUserRequest {
   type Payload = {
     /** Active account on the host side. */
-    account: { address: string } | undefined
+    account: Messenger.Account | undefined
     /** Origin of the host that opened this dialog. */
     origin: string
     /** The pending request to display, or `null` when the dialog should close. */
@@ -190,7 +190,14 @@ export function create(options: create.Options): Remote {
             (a) => a.address.toLowerCase() === account.address.toLowerCase(),
           )
           provider.store.setState({
-            accounts: index >= 0 ? state.accounts : [{ address: account.address as never }],
+            accounts:
+              index >= 0
+                ? state.accounts.map((existing, i) =>
+                    i === index
+                      ? { ...existing, ...account, address: account.address as never }
+                      : existing,
+                  )
+                : [{ ...account, address: account.address as never }],
             activeAccount: index >= 0 ? index : 0,
           })
         }
@@ -347,10 +354,10 @@ export function delegatedProvider(options: delegatedProvider.Options): CoreProvi
           }
         }
 
-        const sent = await messenger.send('signer-request', { request })
+        const sent = await messenger.send('provider-request', { request })
         return await new Promise((resolve, reject) => {
           const off = messenger.on(
-            'signer-response',
+            'provider-response',
             (payload) => {
               off()
               if ('error' in payload) {
