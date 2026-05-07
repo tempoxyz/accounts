@@ -39,13 +39,13 @@ export function turnkeyTempo(options: turnkeyTempo.Options = {}): Adapter.Adapte
   return Adapter.define({ icon, name, rdns }, (parameters) => {
     const { store } = parameters
     const signer = turnkey(options)(parameters)
-    const signerProvider = createSignerProvider(signer.actions, store)
+    const provider = createTurnkeyProvider(signer.actions, store)
     const surface = dialogAdapter({
       dialog,
       host,
       icon,
       name,
-      provider: signerProvider,
+      provider,
       rdns,
     })(parameters)
 
@@ -69,14 +69,14 @@ export declare namespace turnkeyTempo {
   }
 }
 
-type SignerProvider = {
+type TurnkeyProvider = {
   request: (request: { method: string; params?: unknown | undefined }) => Promise<unknown>
 }
 
-function createSignerProvider(
+function createTurnkeyProvider(
   actions: Adapter.Instance['actions'],
   store: Store.Store,
-): SignerProvider {
+): TurnkeyProvider {
   return ox_Provider.from(
     {
       async request(r) {
@@ -196,7 +196,7 @@ function createSignerProvider(
         }
 
         throw new ox_Provider.UnsupportedMethodError({
-          message: `Unsupported signer bridge method "${request.method}".`,
+          message: `Unsupported Turnkey provider method "${request.method}".`,
         })
       },
     },
