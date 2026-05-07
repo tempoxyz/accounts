@@ -57,6 +57,22 @@ export type Schema = [
     }
   },
   {
+    topic: 'signer-request'
+    payload: {
+      request: RpcRequest.RpcRequest
+    }
+  },
+  {
+    topic: 'signer-response'
+    payload:
+      | {
+          error: RpcResponse.ErrorObject
+        }
+      | {
+          result: unknown
+        }
+  },
+  {
     topic: 'close'
     payload: undefined
   },

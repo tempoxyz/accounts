@@ -24,13 +24,18 @@ export function normalizeFillTransactionRequest(
   tx: Record<string, unknown>,
 ): Record<string, unknown> & { calls: unknown[] } {
   const { to, data, value, ...rest } = tx
-  if (Array.isArray(tx.calls) && tx.calls.length > 0)
+  const { calls } = tx
+  if (Array.isArray(calls) && calls.length > 0)
     return {
       ...tx,
-      calls: tx.calls.map((call) => ({
-        ...call,
-        value: normalizeFillValue(call.value),
-      })),
+      calls: calls.map((call) => {
+        if (!call || typeof call !== 'object') return call
+        const c = call as Record<string, unknown>
+        return {
+          ...c,
+          value: normalizeFillValue(c.value),
+        }
+      }),
     }
   const call = {
     ...(typeof to !== 'undefined' ? { to } : {}),

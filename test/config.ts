@@ -59,13 +59,14 @@ export const addresses = {
   alphaUsd: '0x20c0000000000000000000000000000000000001',
 } as const
 
-export const chain = (() => {
-  if (nodeEnv === 'testnet') return tempoModerato
-  return defineChain({
-    ...tempoLocalnet,
-    rpcUrls: { default: { http: [rpcUrl] } },
-  })
-})()
+const localnetChain = defineChain({
+  ...tempoLocalnet,
+  rpcUrls: { default: { http: [rpcUrl] } },
+}) as typeof tempoLocalnet
+
+type TestChain = typeof tempoModerato | typeof localnetChain
+
+export const chain: TestChain = nodeEnv === 'testnet' ? tempoModerato : localnetChain
 
 export const chainId = (() => {
   if (nodeEnv === 'testnet') return tempoModerato.id

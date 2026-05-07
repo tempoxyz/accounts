@@ -25,8 +25,17 @@ export const wagmiConfig = createConfig({
   },
 })
 
+const messenger = Messenger.init()
+const signer =
+  typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('signer')
+    : undefined
+
 /** Remote context singleton. */
 export const remote = Remote.create({
-  messenger: Messenger.init(),
-  provider: await getConnectors(wagmiConfig as any)[0]!.getProvider(),
+  messenger,
+  provider:
+    signer === 'delegated'
+      ? Remote.delegatedProvider({ messenger })
+      : await getConnectors(wagmiConfig as any)[0]!.getProvider(),
 })

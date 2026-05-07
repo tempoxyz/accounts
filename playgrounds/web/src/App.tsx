@@ -1,9 +1,14 @@
+import { useTurnkey } from '@turnkey/react-wallet-kit'
+import { Dialog } from 'accounts'
+import { useTurnkeyAdapter, useTurnkeyTempoAdapter } from 'accounts/react'
 import { Hex, Json } from 'ox'
 import {
   type ComponentProps,
   type ReactNode,
   useCallback,
   useEffect,
+  useMemo,
+  useRef,
   useSyncExternalStore,
   useState,
 } from 'react'
@@ -18,9 +23,12 @@ import {
   type AdapterType,
   type DialogMode,
   dialogMode,
+  host,
   provider,
+  createProviderWithAdapter,
   switchAdapter,
   switchDialogMode,
+  switchProvider,
   switchTheme,
   theme,
   env,
@@ -45,16 +53,65 @@ const sectionLinks = [
 type SectionId = (typeof sectionLinks)[number]['id']
 
 export function App() {
+  const kit = useTurnkey()
+  const kitRef = useRef(kit)
+  const disconnectedRef = useRef(false)
   const [adapterType, setAdapterType] = useState<AdapterType>('tempoWallet')
   const [, rerender] = useState(0)
   const activeSection = useActiveSection()
   const network = useActiveNetwork()
 
+  useEffect(() => {
+    kitRef.current = kit
+  }, [kit])
+
+  const getKit = useCallback(() => kitRef.current, [])
+  const turnkeyOptions = {
+    createAccount: async (parameters) => {
+      disconnectedRef.current = false
+      const accounts = await ensureTurnkeyAccounts(getKit, parameters.name)
+      return { accounts }
+    },
+    disconnect: async () => {
+      disconnectedRef.current = true
+      await disconnectTurnkey(getKit)
+    },
+    loadAccounts: async (_parameters, context) => {
+      if (
+        disconnectedRef.current &&
+        !getKit().session &&
+        context.request?.originMethod === 'eth_requestAccounts'
+      )
+        return { accounts: [] }
+      disconnectedRef.current = false
+      const accounts = await ensureTurnkeyAccounts(getKit)
+      return { accounts }
+    },
+    organizationId: kit.session?.organizationId ?? import.meta.env.VITE_TURNKEY_ORGANIZATION_ID,
+    selectAccount: (accounts) =>
+      accounts.find((account) => account.walletSource === 'embedded') ?? accounts[0],
+    transactionType: 'TRANSACTION_TYPE_ETHEREUM',
+  } satisfies useTurnkeyAdapter.Options
+  const turnkeyAdapter = useTurnkeyAdapter(toAccountsTurnkey(kit), turnkeyOptions)
+  const turnkeyTempoAdapter = useTurnkeyTempoAdapter(toAccountsTurnkey(kit), {
+    ...turnkeyOptions,
+    dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
+    host,
+  })
+
   function onSwitch(type: AdapterType) {
-    switchAdapter(type)
+    if (type === 'turnkey') switchProvider(createProviderWithAdapter(turnkeyAdapter))
+    else if (type === 'turnkeyTempo') switchProvider(createProviderWithAdapter(turnkeyTempoAdapter))
+    else switchAdapter(type)
     setAdapterType(type)
     rerender((n) => n + 1)
   }
+
+  useEffect(() => {
+    if (adapterType === 'turnkey') switchProvider(createProviderWithAdapter(turnkeyAdapter))
+    if (adapterType === 'turnkeyTempo')
+      switchProvider(createProviderWithAdapter(turnkeyTempoAdapter))
+  }, [adapterType, turnkeyAdapter, turnkeyTempoAdapter])
 
   return (
     <div className="playground min-h-dvh bg-background text-foreground" data-regen-radius="small">
@@ -83,6 +140,10 @@ export function App() {
         <main className="playground-content">
           <PlaygroundSection id="provider" title="Provider">
             <Events />
+            <TurnkeyStatus
+              active={adapterType === 'turnkey' || adapterType === 'turnkeyTempo'}
+              kit={kit}
+            />
             <ProviderState />
           </PlaygroundSection>
 
@@ -172,10 +233,14 @@ function ConfigPanel(props: {
             <option value="tempoWallet">tempoWallet</option>
             <option value="dialogRefImpl">dialogRefImpl</option>
             <option value="webAuthn">webAuthn</option>
+            <option value="turnkey">turnkey</option>
+            <option value="turnkeyTempo">turnkeyTempo</option>
             <option value="secp256k1">secp256k1</option>
           </select>
         </label>
-        {(adapterType === 'tempoWallet' || adapterType === 'dialogRefImpl') && (
+        {(adapterType === 'tempoWallet' ||
+          adapterType === 'dialogRefImpl' ||
+          adapterType === 'turnkeyTempo') && (
           <label>
             <span>Mode</span>
             <select
@@ -191,7 +256,9 @@ function ConfigPanel(props: {
           </label>
         )}
       </div>
-      {(adapterType === 'tempoWallet' || adapterType === 'dialogRefImpl') && (
+      {(adapterType === 'tempoWallet' ||
+        adapterType === 'dialogRefImpl' ||
+        adapterType === 'turnkeyTempo') && (
         <>
           <h3 className="control-panel-title">Theme</h3>
           <ThemeConfig adapterType={adapterType} rerender={rerender} />
@@ -213,6 +280,172 @@ function PlaygroundSection(props: { children: ReactNode; id: string; title: Reac
       <div className="grid gap-[12px]">{children}</div>
     </section>
   )
+}
+
+function TurnkeyStatus(options: { active: boolean; kit: ReturnType<typeof useTurnkey> }) {
+  const { active, kit } = options
+  const ethereumAccounts = useMemo(
+    () =>
+      kit.wallets.flatMap((wallet) =>
+        wallet.accounts.filter(
+          (account) =>
+            account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM' || account.address.startsWith('0x'),
+        ),
+      ),
+    [kit.wallets],
+  )
+
+  return (
+    <details open={active}>
+      <summary>Turnkey</summary>
+      <pre>
+        {Json.stringify(
+          {
+            authState: kit.authState,
+            clientState: kit.clientState,
+            sessionOrganizationId: kit.session?.organizationId,
+            configuredOrganizationId: import.meta.env.VITE_TURNKEY_ORGANIZATION_ID,
+            configuredAuthProxyConfigId: import.meta.env.VITE_TURNKEY_AUTH_PROXY_CONFIG_ID,
+            ethereumAccounts: ethereumAccounts.map((account) => ({
+              address: account.address,
+              addressFormat: account.addressFormat,
+              source: account.source,
+              walletId: account.walletId,
+              walletAccountId: account.walletAccountId,
+            })),
+          },
+          null,
+          2,
+        )}
+      </pre>
+    </details>
+  )
+}
+
+type TurnkeyKit = ReturnType<typeof useTurnkey>
+
+async function ensureTurnkeyAccounts(getKit: () => TurnkeyKit, name = 'Tempo Account') {
+  if (!getKit().session) {
+    await getKit().handleLogin()
+    await waitForTurnkeySession(getKit)
+  }
+
+  let kit = getKit()
+  let wallets = await kit.refreshWallets(turnkeySessionParams(kit))
+  let account = selectEthereumAccount(wallets)
+  if (account) return [{ address: account.address as `0x${string}` }]
+
+  const wallet = selectEmbeddedWallet(wallets)
+  if (wallet?.walletId) {
+    kit = getKit()
+    await getKit().createWalletAccounts({
+      accounts: ['ADDRESS_FORMAT_ETHEREUM'],
+      walletId: wallet.walletId,
+      ...turnkeySessionParams(kit),
+    })
+  } else {
+    kit = getKit()
+    await getKit().createWallet({
+      accounts: ['ADDRESS_FORMAT_ETHEREUM'],
+      walletName: name,
+      ...turnkeySessionParams(kit),
+    })
+  }
+
+  kit = getKit()
+  wallets = await kit.refreshWallets(turnkeySessionParams(kit))
+  account = selectEthereumAccount(wallets)
+  if (!account) throw new Error('Turnkey did not return an Ethereum wallet account.')
+  return [{ address: account.address as `0x${string}` }]
+}
+
+async function waitForTurnkeySession(getKit: () => TurnkeyKit) {
+  const deadline = Date.now() + 5 * 60 * 1000
+  while (!getKit().session) {
+    if (Date.now() > deadline) throw new Error('Timed out waiting for Turnkey login.')
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+}
+
+async function disconnectTurnkey(getKit: () => TurnkeyKit) {
+  if (!getKit().session) return
+  await getKit().logout()
+  await waitForTurnkeyLogout(getKit)
+}
+
+async function waitForTurnkeyLogout(getKit: () => TurnkeyKit) {
+  const deadline = Date.now() + 10 * 1000
+  while (getKit().session) {
+    if (Date.now() > deadline) throw new Error('Timed out waiting for Turnkey logout.')
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+}
+
+function turnkeySessionParams(kit: TurnkeyKit) {
+  return {
+    organizationId: kit.session?.organizationId ?? import.meta.env.VITE_TURNKEY_ORGANIZATION_ID,
+    userId: kit.session?.userId,
+  }
+}
+
+function selectEthereumAccount(wallets: ReturnType<typeof useTurnkey>['wallets']) {
+  return wallets
+    .flatMap((wallet) => wallet.accounts.map((account) => ({ ...account, source: wallet.source })))
+    .find(
+      (account) =>
+        (account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM' || account.address.startsWith('0x')) &&
+        account.source === 'embedded',
+    )
+}
+
+function selectEmbeddedWallet(wallets: ReturnType<typeof useTurnkey>['wallets']) {
+  return wallets.find((wallet) => wallet.source === 'embedded' && wallet.walletId)
+}
+
+function toAccountsTurnkey(kit: ReturnType<typeof useTurnkey>): useTurnkeyAdapter.Turnkey {
+  return {
+    createWallet: async (params) =>
+      await kit.createWallet({
+        ...params,
+        accounts: [...params.accounts],
+      }),
+    createWalletAccounts: async (params) =>
+      await kit.createWalletAccounts({
+        ...params,
+        accounts: [...params.accounts],
+      }),
+    handleSignMessage: async (params) => await kit.signMessage(params as never),
+    organizationId: kit.session?.organizationId ?? import.meta.env.VITE_TURNKEY_ORGANIZATION_ID,
+    refreshWallets: kit.refreshWallets,
+    signMessage: async (params) => await kit.signMessage(params as never),
+    signRawPayload: async (params) => {
+      const response = await kit.httpClient?.signRawPayload(
+        {
+          encoding: params.encoding as never,
+          hashFunction: params.hashFunction as never,
+          organizationId: params.organizationId ?? kit.session?.organizationId,
+          payload: params.payload,
+          signWith: params.signWith,
+        },
+        params.stampWith as never,
+      )
+      const result = response?.activity.result.signRawPayloadResult
+      if (!result) throw new Error('Turnkey did not return a raw-payload signature.')
+      return result
+    },
+    signTransaction: async (params) => await kit.signTransaction(params as never),
+    wallets: kit.wallets.map((wallet) => ({
+      accounts: wallet.accounts.map((account) => ({
+        address: account.address as `0x${string}`,
+        addressFormat: account.addressFormat,
+        walletAccountId: account.walletAccountId,
+        walletId: account.walletId,
+        walletSource: wallet.source,
+      })),
+      source: wallet.source,
+      walletId: wallet.walletId,
+    })),
+  }
 }
 
 function useActiveSection() {

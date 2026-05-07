@@ -1,13 +1,16 @@
-import { Hex } from 'ox'
+import { Hex, RpcRequest as ox_RpcRequest } from 'ox'
 import * as Provider from 'ox/Provider'
 import * as RpcResponse from 'ox/RpcResponse'
+import { tempo } from 'viem/chains'
 import type { StoreApi } from 'zustand/vanilla'
 import { createStore } from 'zustand/vanilla'
 
 import type * as Messenger from '../core/Messenger.js'
 import type * as CoreProvider from '../core/Provider.js'
 import * as Schema from '../core/Schema.js'
+import * as Storage from '../core/Storage.js'
 import type * as Store from '../core/Store.js'
+import * as core_Store from '../core/Store.js'
 import * as Rpc from '../core/zod/rpc.js'
 
 /** State managed by the remote (dialog) side. */
@@ -181,6 +184,17 @@ export function create(options: create.Options): Remote {
         // created in a popup (e.g. Safari WebAuthn fallback).
         await provider.store.persist?.rehydrate()
 
+        if (account && isDelegatedProvider(provider)) {
+          const state = provider.store.getState()
+          const index = state.accounts.findIndex(
+            (a) => a.address.toLowerCase() === account.address.toLowerCase(),
+          )
+          provider.store.setState({
+            accounts: index >= 0 ? state.accounts : [{ address: account.address as never }],
+            activeAccount: index >= 0 ? index : 0,
+          })
+        }
+
         store.setState({ requests })
 
         if (provider.store.getState().chainId !== chainId)
@@ -294,6 +308,98 @@ export declare namespace create {
   }
 }
 
+/**
+ * Creates a remote-side provider that delegates confirmed signing requests
+ * back to a signer provider installed in the parent window.
+ */
+export function delegatedProvider(options: delegatedProvider.Options): CoreProvider.Provider {
+  const {
+    chainId = tempo.id,
+    messenger,
+    storage = Storage.memory({ key: 'delegated-remote' }),
+  } = options
+  const requestStore = ox_RpcRequest.createStore()
+  const store = core_Store.create({ chainId, persistCredentials: false, storage })
+
+  const provider = Provider.from(
+    {
+      async request(r) {
+        const request = requestStore.prepare(r as never)
+
+        if ((request.method as string) === 'wallet_connect')
+          throw new Provider.UnsupportedMethodError({
+            message: '`wallet_connect` is not supported by delegated remote providers.',
+          })
+
+        switch (request.method) {
+          case 'eth_accounts':
+            return store.getState().accounts.map((a) => a.address)
+          case 'eth_chainId':
+            return Hex.fromNumber(store.getState().chainId)
+          case 'eth_requestAccounts':
+            throw new Provider.UnsupportedMethodError({
+              message: '`wallet_connect` is not supported by delegated remote providers.',
+            })
+          case 'wallet_switchEthereumChain': {
+            const chainId = Number(request.params?.[0]?.chainId)
+            store.setState({ chainId })
+            return
+          }
+        }
+
+        const sent = await messenger.send('signer-request', { request })
+        return await new Promise((resolve, reject) => {
+          const off = messenger.on(
+            'signer-response',
+            (payload) => {
+              off()
+              if ('error' in payload) {
+                reject(toProviderError(payload.error))
+                return
+              }
+              resolve(payload.result)
+            },
+            sent.id,
+          )
+        })
+      },
+    },
+    { schema: Schema.ox },
+  )
+
+  return Object.assign(provider, {
+    chains: [tempo],
+    delegated: true,
+    getAccount() {
+      throw new Provider.UnauthorizedError({ message: 'No local account available.' })
+    },
+    getClient() {
+      throw new Provider.UnsupportedMethodError({
+        message: 'Delegated remote providers do not expose a local client.',
+      })
+    },
+    store,
+  }) as never
+}
+
+function isDelegatedProvider(provider: CoreProvider.Provider): provider is CoreProvider.Provider & {
+  delegated: true
+} {
+  return 'delegated' in provider && provider.delegated === true
+}
+
+export declare namespace delegatedProvider {
+  /** Options for creating a remote-side delegated signer provider. */
+  type Options = {
+    /** Initial chain ID for remote-local UI state. @default Tempo mainnet */
+    chainId?: number | undefined
+    /** Bridge messenger connected to the parent host. */
+    messenger: Messenger.Bridge
+    /** Storage adapter used for remote-local UI state. @default memory storage */
+    storage?: Storage.Storage | undefined
+  }
+}
+
 /** Returns an inert remote context for SSR environments. */
 export function noop(): Remote {
   const store = createStore<State>(() => ({
@@ -321,6 +427,13 @@ export function noop(): Remote {
     rejectAll: () => {},
     respond: async () => {},
   }
+}
+
+function toProviderError(error: RpcResponse.ErrorObject) {
+  return Object.assign(new Error(error.message), {
+    code: error.code,
+    ...(error.data !== undefined ? { data: error.data } : {}),
+  })
 }
 
 /**

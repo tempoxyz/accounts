@@ -11,7 +11,13 @@ import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
-export type AdapterType = 'secp256k1' | 'turnkey' | 'webAuthn' | 'tempoWallet' | 'dialogRefImpl'
+export type AdapterType =
+  | 'secp256k1'
+  | 'turnkey'
+  | 'turnkeyTempo'
+  | 'webAuthn'
+  | 'tempoWallet'
+  | 'dialogRefImpl'
 export type Env = 'mainnet' | 'testnet' | 'devnet'
 export type DialogMode = 'iframe' | 'popup'
 export type ProviderValue = ReturnType<typeof Provider.create>
@@ -95,7 +101,7 @@ export function createProvider(
     })
   }
 
-  if (adapterType === 'turnkey')
+  if (adapterType === 'turnkey' || adapterType === 'turnkeyTempo')
     return Provider.create({
       ...providerOptions,
       adapter: local({

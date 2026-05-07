@@ -193,7 +193,7 @@ describe('Ox', () => {
 describe('Viem', () => {
   test('is a tuple of all provider methods', () => {
     expectTypeOf<Schema.Viem[0]['Method']>().toEqualTypeOf<'eth_accounts'>()
-    expectTypeOf<Schema.Viem[20]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
+    expectTypeOf<Schema.Viem[21]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
   })
 })
 
@@ -222,6 +222,8 @@ describe('Request', () => {
       | 'wallet_revokeAccessKey'
       | 'wallet_send'
       | 'wallet_swap'
+      | 'wallet_depositZone'
+      | 'wallet_withdrawZone'
     >()
   })
 
