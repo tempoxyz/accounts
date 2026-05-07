@@ -1,6 +1,6 @@
 import { cloudflare } from '@cloudflare/vite-plugin'
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import regen from 'regen-ui/vite'
 import icons from 'unplugin-icons/vite'
 import { defineConfig } from 'vp'
 
@@ -34,7 +34,7 @@ export default defineConfig({
         extension: 'jsx',
       },
     }),
-    regen(),
+    tailwindcss(),
     cloudflare(),
   ],
 })

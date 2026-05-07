@@ -355,7 +355,16 @@ export function iframe(): Dialog {
           return
         }
 
-        const { trustedHosts } = readyResult ?? (await messenger.waitForReady())
+        const requiresConfirm = requests.some((x) => x.status === 'pending')
+        if (!open && requiresConfirm) this.open()
+
+        const ready = await waitForReady(messenger, readyResult)
+        if (!ready) {
+          fallback!.syncRequests(requests)
+          return
+        }
+
+        const { trustedHosts } = ready
 
         // Safari does not support WebAuthn credential creation in iframes.
         if (
@@ -384,8 +393,6 @@ export function iframe(): Dialog {
           )
           fallback!.syncRequests(requests)
         } else {
-          const requiresConfirm = requests.some((x) => x.status === 'pending')
-          if (!open && requiresConfirm) this.open()
           messenger.send('rpc-requests', {
             account: getAccount(store!),
             chainId: store!.getState().chainId,
@@ -611,6 +618,17 @@ function getAccount(store: Store.Store): { address: string } | undefined {
   const account = accounts[activeAccount]
   if (!account) return undefined
   return { address: account.address }
+}
+
+async function waitForReady(
+  messenger: Messenger.Bridge,
+  ready: Messenger.ReadyOptions | undefined,
+): Promise<Messenger.ReadyOptions | undefined> {
+  if (ready) return ready
+  return await Promise.race([
+    messenger.waitForReady(),
+    new Promise<undefined>((resolve) => setTimeout(resolve, 3_000)),
+  ])
 }
 
 /**

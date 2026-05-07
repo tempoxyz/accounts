@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "catalog:",
+    "@tailwindcss/vite": "catalog:",
     "@iconify/json": "^2.2.461",
     "@types/react": "catalog:default",
     "@types/react-dom": "catalog:default",

@@ -9,6 +9,9 @@ catalogs:
     '@cloudflare/vite-plugin':
       specifier: ^1.31.2
       version: 1.33.2
+    '@tailwindcss/vite':
+      specifier: ^4.2.1
+      version: 4.2.4
     '@tanstack/react-query':
       specifier: ^5.97.0
       version: 5.100.5
@@ -607,6 +610,9 @@ importers:
       '@iconify/json':
         specifier: ^2.2.461
         version: 2.2.469
+      '@tailwindcss/vite':
+        specifier: 'catalog:'
+        version: 4.2.4(vite@8.0.10)
       '@types/react':
         specifier: catalog:default
         version: 19.2.14

@@ -66,34 +66,39 @@ export function App() {
   }, [kit])
 
   const getKit = useCallback(() => kitRef.current, [])
-  const turnkeyOptions = {
-    createAccount: async (parameters) => {
-      disconnectedRef.current = false
-      const accounts = await ensureTurnkeyAccounts(getKit, parameters.name)
-      return { accounts }
-    },
-    disconnect: async () => {
-      disconnectedRef.current = true
-      await disconnectTurnkey(getKit)
-    },
-    loadAccounts: async (_parameters, context) => {
-      if (
-        disconnectedRef.current &&
-        !getKit().session &&
-        context.request?.originMethod === 'eth_requestAccounts'
-      )
-        return { accounts: [] }
-      disconnectedRef.current = false
-      const accounts = await ensureTurnkeyAccounts(getKit)
-      return { accounts }
-    },
-    organizationId: kit.session?.organizationId ?? import.meta.env.VITE_TURNKEY_ORGANIZATION_ID,
-    selectAccount: (accounts) =>
-      accounts.find((account) => account.walletSource === 'embedded') ?? accounts[0],
-    transactionType: 'TRANSACTION_TYPE_ETHEREUM',
-  } satisfies useTurnkeyAdapter.Options
-  const turnkeyAdapter = useTurnkeyAdapter(toAccountsTurnkey(kit), turnkeyOptions)
-  const turnkeyTempoAdapter = useTurnkeyTempoAdapter(toAccountsTurnkey(kit), {
+  const turnkeyOptions = useMemo(
+    () =>
+      ({
+        createAccount: async (parameters) => {
+          disconnectedRef.current = false
+          const accounts = await ensureTurnkeyAccounts(getKit, parameters.name)
+          return { accounts }
+        },
+        disconnect: async () => {
+          disconnectedRef.current = true
+          await disconnectTurnkey(getKit)
+        },
+        loadAccounts: async (_parameters, context) => {
+          if (
+            disconnectedRef.current &&
+            !getKit().session &&
+            context.request?.originMethod === 'eth_requestAccounts'
+          )
+            return { accounts: [] }
+          disconnectedRef.current = false
+          const accounts = await ensureTurnkeyAccounts(getKit)
+          return { accounts }
+        },
+        organizationId: import.meta.env.VITE_TURNKEY_ORGANIZATION_ID,
+        selectAccount: (accounts) =>
+          accounts.find((account) => account.walletSource === 'embedded') ?? accounts[0],
+        transactionType: 'TRANSACTION_TYPE_ETHEREUM',
+      }) satisfies useTurnkeyAdapter.Options,
+    [getKit],
+  )
+  const accountsTurnkey = useMemo(() => toAccountsTurnkey(getKit), [getKit])
+  const turnkeyAdapter = useTurnkeyAdapter(accountsTurnkey, turnkeyOptions)
+  const turnkeyTempoAdapter = useTurnkeyTempoAdapter(accountsTurnkey, {
     ...turnkeyOptions,
     dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
     host,
@@ -106,12 +111,6 @@ export function App() {
     setAdapterType(type)
     rerender((n) => n + 1)
   }
-
-  useEffect(() => {
-    if (adapterType === 'turnkey') switchProvider(createProviderWithAdapter(turnkeyAdapter))
-    if (adapterType === 'turnkeyTempo')
-      switchProvider(createProviderWithAdapter(turnkeyTempoAdapter))
-  }, [adapterType, turnkeyAdapter, turnkeyTempoAdapter])
 
   return (
     <div className="playground min-h-dvh bg-background text-foreground" data-regen-radius="small">
@@ -402,23 +401,24 @@ function selectEmbeddedWallet(wallets: ReturnType<typeof useTurnkey>['wallets'])
   return wallets.find((wallet) => wallet.source === 'embedded' && wallet.walletId)
 }
 
-function toAccountsTurnkey(kit: ReturnType<typeof useTurnkey>): useTurnkeyAdapter.Turnkey {
+function toAccountsTurnkey(getKit: () => ReturnType<typeof useTurnkey>): useTurnkeyAdapter.Turnkey {
   return {
     createWallet: async (params) =>
-      await kit.createWallet({
+      await getKit().createWallet({
         ...params,
         accounts: [...params.accounts],
       }),
     createWalletAccounts: async (params) =>
-      await kit.createWalletAccounts({
+      await getKit().createWalletAccounts({
         ...params,
         accounts: [...params.accounts],
       }),
-    handleSignMessage: async (params) => await kit.signMessage(params as never),
-    organizationId: kit.session?.organizationId ?? import.meta.env.VITE_TURNKEY_ORGANIZATION_ID,
-    refreshWallets: kit.refreshWallets,
-    signMessage: async (params) => await kit.signMessage(params as never),
+    handleSignMessage: async (params) => await getKit().signMessage(params as never),
+    organizationId: import.meta.env.VITE_TURNKEY_ORGANIZATION_ID,
+    refreshWallets: async () => await getKit().refreshWallets(turnkeySessionParams(getKit())),
+    signMessage: async (params) => await getKit().signMessage(params as never),
     signRawPayload: async (params) => {
+      const kit = getKit()
       const response = await kit.httpClient?.signRawPayload(
         {
           encoding: params.encoding as never,
@@ -433,18 +433,20 @@ function toAccountsTurnkey(kit: ReturnType<typeof useTurnkey>): useTurnkeyAdapte
       if (!result) throw new Error('Turnkey did not return a raw-payload signature.')
       return result
     },
-    signTransaction: async (params) => await kit.signTransaction(params as never),
-    wallets: kit.wallets.map((wallet) => ({
-      accounts: wallet.accounts.map((account) => ({
-        address: account.address as `0x${string}`,
-        addressFormat: account.addressFormat,
-        walletAccountId: account.walletAccountId,
-        walletId: account.walletId,
-        walletSource: wallet.source,
-      })),
-      source: wallet.source,
-      walletId: wallet.walletId,
-    })),
+    signTransaction: async (params) => await getKit().signTransaction(params as never),
+    get wallets() {
+      return (getKit().wallets ?? []).map((wallet) => ({
+        accounts: wallet.accounts.map((account) => ({
+          address: account.address as `0x${string}`,
+          addressFormat: account.addressFormat,
+          walletAccountId: account.walletAccountId,
+          walletId: account.walletId,
+          walletSource: wallet.source,
+        })),
+        source: wallet.source,
+        walletId: wallet.walletId,
+      }))
+    },
   }
 }
 
