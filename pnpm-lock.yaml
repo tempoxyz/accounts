@@ -33,9 +33,15 @@ catalogs:
     '@wagmi/core':
       specifier: ^3.4.7
       version: 3.4.7
+    ox:
+      specifier: ~0.14.18
+      version: 0.14.20
     prool:
       specifier: ~0.2.4
       version: 0.2.4
+    react:
+      specifier: ^19.2.5
+      version: 19.2.5
     tsx:
       specifier: ^4.21.0
       version: 4.21.0
@@ -45,20 +51,18 @@ catalogs:
     typescript:
       specifier: ^5.9.3
       version: 5.9.3
+    viem:
+      specifier: ^2.48.8
+      version: 2.48.8
+    vp:
+      specifier: npm:vite-plus@~0.1.18
+      version: 0.1.18
     wagmi:
       specifier: ^3.6.8
       version: 3.6.8
-
-overrides:
-  ox: ~0.14.18
-  react: ^19.2.5
-  react-dom: ^19.2.5
-  accounts: workspace:*
-  viem: ^2.48.8
-  wrangler: ^4.85.0
-  vite-plus: ~0.1.18
-  vp: npm:vite-plus@~0.1.18
-  protobufjs: 7.5.5
+    wrangler:
+      specifier: ^4.85.0
+      version: 4.85.0
 
 importers:
 
@@ -80,8 +84,8 @@ importers:
         specifier: 0.6.5
         version: 0.6.5(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@21.1.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.14)(typescript@5.9.3)(viem@2.48.8(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))
       ox:
-        specifier: ~0.14.18
-        version: 0.14.18(typescript@5.9.3)(zod@4.3.6)
+        specifier: ~0.14.20
+        version: 0.14.20(typescript@5.9.3)(zod@4.3.6)
       webauthx:
         specifier: ~0.1.1
         version: 0.1.1(typescript@5.9.3)(zod@4.3.6)
@@ -165,10 +169,10 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
       viem:
-        specifier: ^2.48.8
+        specifier: 'catalog:'
         version: 2.48.8(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       vp:
-        specifier: npm:vite-plus@~0.1.18
+        specifier: 'catalog:'
         version: vite-plus@0.1.18(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(bufferutil@4.0.9)(esbuild@0.27.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.2)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.10)(yaml@2.8.3)
       wagmi:
         specifier: 'catalog:'
@@ -183,7 +187,7 @@ importers:
         specifier: latest
         version: 5.100.5(react@19.2.5)
       accounts:
-        specifier: workspace:*
+        specifier: latest
         version: link:../..
       react:
         specifier: ^19.2.5
@@ -192,7 +196,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: ^2.48.8
+        specifier: ^2.47.18
         version: 2.48.8(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       wagmi:
         specifier: latest
@@ -220,7 +224,7 @@ importers:
   examples/cli:
     dependencies:
       accounts:
-        specifier: workspace:*
+        specifier: latest
         version: link:../..
       incur:
         specifier: latest
@@ -229,7 +233,7 @@ importers:
         specifier: ~0.14.18
         version: 0.14.18(typescript@5.9.3)(zod@4.3.6)
       viem:
-        specifier: ^2.48.8
+        specifier: ^2.47.18
         version: 2.48.8(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
     devDependencies:
       '@types/node':
@@ -248,7 +252,7 @@ importers:
         specifier: latest
         version: 5.100.5(react@19.2.5)
       accounts:
-        specifier: workspace:*
+        specifier: latest
         version: link:../..
       react:
         specifier: ^19.2.5
@@ -257,7 +261,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: ^2.48.8
+        specifier: ^2.47.18
         version: 2.48.8(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       wagmi:
         specifier: latest
@@ -285,10 +289,10 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0(vite@8.0.10)
       vite-plus:
-        specifier: ~0.1.18
+        specifier: latest
         version: 0.1.18(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(bufferutil@4.0.9)(esbuild@0.27.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.2)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.10)(yaml@2.8.3)
       wrangler:
-        specifier: ^4.85.0
+        specifier: ^4.82.2
         version: 4.85.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
 
   examples/with-access-key:
@@ -297,7 +301,7 @@ importers:
         specifier: latest
         version: 5.100.5(react@19.2.5)
       accounts:
-        specifier: workspace:*
+        specifier: latest
         version: link:../..
       react:
         specifier: ^19.2.5
@@ -306,7 +310,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: ^2.48.8
+        specifier: ^2.47.18
         version: 2.48.8(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       wagmi:
         specifier: latest
@@ -328,7 +332,7 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0(vite@8.0.10)
       vite-plus:
-        specifier: ~0.1.18
+        specifier: latest
         version: 0.1.18(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(bufferutil@4.0.9)(esbuild@0.27.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.2)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.10)(yaml@2.8.3)
 
   examples/with-access-key-and-webauthn:
@@ -337,7 +341,7 @@ importers:
         specifier: latest
         version: 5.100.5(react@19.2.5)
       accounts:
-        specifier: workspace:*
+        specifier: latest
         version: link:../..
       react:
         specifier: ^19.2.5
@@ -346,7 +350,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: ^2.48.8
+        specifier: ^2.47.18
         version: 2.48.8(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       wagmi:
         specifier: latest
@@ -374,10 +378,10 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0(vite@8.0.10)
       vite-plus:
-        specifier: ~0.1.18
+        specifier: latest
         version: 0.1.18(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(bufferutil@4.0.9)(esbuild@0.27.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.2)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.10)(yaml@2.8.3)
       wrangler:
-        specifier: ^4.85.0
+        specifier: ^4.82.2
         version: 4.85.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
 
   examples/with-fee-payer:
@@ -386,7 +390,7 @@ importers:
         specifier: latest
         version: 5.100.5(react@19.2.5)
       accounts:
-        specifier: workspace:*
+        specifier: latest
         version: link:../..
       react:
         specifier: ^19.2.5
@@ -395,7 +399,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: ^2.48.8
+        specifier: ^2.47.18
         version: 2.48.8(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       wagmi:
         specifier: latest
@@ -423,10 +427,10 @@ importers:
         specifier: ^1.0.12
         version: 1.0.12(vite@8.0.10)
       vite-plus:
-        specifier: ~0.1.18
+        specifier: latest
         version: 0.1.18(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(bufferutil@4.0.9)(esbuild@0.27.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.2)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.10)(yaml@2.8.3)
       wrangler:
-        specifier: ^4.85.0
+        specifier: ^4.82.2
         version: 4.85.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
 
   examples/with-fee-payer-and-webauthn:
@@ -435,7 +439,7 @@ importers:
         specifier: latest
         version: 5.100.5(react@19.2.5)
       accounts:
-        specifier: workspace:*
+        specifier: latest
         version: link:../..
       react:
         specifier: ^19.2.5
@@ -444,7 +448,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: ^2.48.8
+        specifier: ^2.47.18
         version: 2.48.8(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       wagmi:
         specifier: latest
@@ -469,10 +473,10 @@ importers:
         specifier: ~5.9.3
         version: 5.9.3
       vite-plus:
-        specifier: ~0.1.18
+        specifier: latest
         version: 0.1.18(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(bufferutil@4.0.9)(esbuild@0.27.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.2)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.10)(yaml@2.8.3)
       wrangler:
-        specifier: ^4.85.0
+        specifier: ^4.82.2
         version: 4.85.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
 
   playgrounds/react-native:
@@ -499,10 +503,10 @@ importers:
         specifier: ~55.0.13
         version: 55.0.14(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))
       ox:
-        specifier: ~0.14.18
+        specifier: 'catalog:'
         version: 0.14.18(typescript@5.9.3)(zod@4.3.6)
       react:
-        specifier: ^19.2.5
+        specifier: 'catalog:'
         version: 19.2.5
       react-native:
         specifier: 0.85.1
@@ -517,7 +521,7 @@ importers:
         specifier: ~4.24.0
         version: 4.24.0(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(bufferutil@4.0.9)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)
       viem:
-        specifier: ^2.48.8
+        specifier: 'catalog:'
         version: 2.48.8(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
     devDependencies:
       '@types/react':
@@ -542,7 +546,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: ^2.48.8
+        specifier: 'catalog:'
         version: 2.48.8(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
       wagmi:
         specifier: latest
@@ -567,10 +571,10 @@ importers:
         specifier: ~5.9.3
         version: 5.9.3
       vite-plus:
-        specifier: ~0.1.18
+        specifier: latest
         version: 0.1.18(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(bufferutil@4.0.9)(esbuild@0.27.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.2)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.10)(yaml@2.8.3)
       wrangler:
-        specifier: ^4.85.0
+        specifier: 'catalog:'
         version: 4.85.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
 
   playgrounds/web:
@@ -591,7 +595,7 @@ importers:
         specifier: ^0.3.0
         version: 0.3.0(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(typescript@5.9.3)(vite@8.0.10)(zod@4.3.6)
       viem:
-        specifier: ^2.48.8
+        specifier: 'catalog:'
         version: 2.48.8(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
     devDependencies:
       '@cloudflare/vite-plugin':
@@ -619,7 +623,7 @@ importers:
         specifier: ^23.0.1
         version: 23.0.1(@vue/compiler-sfc@3.5.33)
       vp:
-        specifier: npm:vite-plus@~0.1.18
+        specifier: 'catalog:'
         version: vite-plus@0.1.18(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(bufferutil@4.0.9)(esbuild@0.27.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.2)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.10)(yaml@2.8.3)
       wrangler:
         specifier: ^4.85.0
@@ -665,10 +669,10 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
       vp:
-        specifier: npm:vite-plus@~0.1.18
+        specifier: 'catalog:'
         version: vite-plus@0.1.18(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(bufferutil@4.0.9)(esbuild@0.27.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.2)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.10)(yaml@2.8.3)
       wrangler:
-        specifier: ^4.85.0
+        specifier: ^4.82.2
         version: 4.85.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
 
   ref-impls/dialog:
@@ -708,7 +712,7 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
       vp:
-        specifier: npm:vite-plus@~0.1.18
+        specifier: 'catalog:'
         version: vite-plus@0.1.18(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(bufferutil@4.0.9)(esbuild@0.27.7)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(publint@0.3.18)(terser@5.46.2)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.10)(yaml@2.8.3)
 
 packages:
