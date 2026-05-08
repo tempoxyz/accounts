@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vp/test'
+import * as z from 'zod/mini'
 
 import * as Schema from '../Schema.js'
 import * as RpcRequest from './request.js'
+import * as Rpc from './rpc.js'
 
 describe('validate', () => {
   test('default: validates eth_accounts', () => {
@@ -163,6 +165,99 @@ describe('validate', () => {
     )
   })
 
+  test('default: validates wallet_connect with personalSign capability (login branch)', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_connect',
+      params: [{ capabilities: { personalSign: { message: 'hello' } } }],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "personalSign": {
+                "message": "hello",
+              },
+            },
+          },
+        ],
+      }
+    `)
+  })
+
+  test('default: validates wallet_connect with personalSign capability (register branch)', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_connect',
+      params: [
+        { capabilities: { method: 'register', personalSign: { message: 'hello' } } },
+      ],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "method": "register",
+              "personalSign": {
+                "message": "hello",
+              },
+            },
+          },
+        ],
+      }
+    `)
+  })
+
+  test('default: validates wallet_connect with personalSign empty message', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_connect',
+      params: [{ capabilities: { personalSign: { message: '' } } }],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "personalSign": {
+                "message": "",
+              },
+            },
+          },
+        ],
+      }
+    `)
+  })
+
+  test('error: rejects wallet_connect personalSign as a string', () => {
+    expect(() =>
+      RpcRequest.validate(Schema.Request, {
+        method: 'wallet_connect',
+        params: [{ capabilities: { personalSign: 'hello' } }],
+      }),
+    ).toThrowError(/Invalid params/)
+  })
+
+  test('error: rejects wallet_connect personalSign without message', () => {
+    expect(() =>
+      RpcRequest.validate(Schema.Request, {
+        method: 'wallet_connect',
+        params: [{ capabilities: { personalSign: {} } }],
+      }),
+    ).toThrowError(/Invalid params/)
+  })
+
+  test('error: rejects wallet_connect personalSign with non-string message', () => {
+    expect(() =>
+      RpcRequest.validate(Schema.Request, {
+        method: 'wallet_connect',
+        params: [{ capabilities: { personalSign: { message: 0 } } }],
+      }),
+    ).toThrowError(/Invalid params/)
+  })
+
   test('error: rejects wallet_swap with out-of-range slippage', () => {
     expect(() =>
       RpcRequest.validate(Schema.Request, {
@@ -189,5 +284,46 @@ describe('validate', () => {
     ).toThrowErrorMatchingInlineSnapshot(
       `[ProviderRpcError: Invalid params: params.0.slippage: Invalid input]`,
     )
+  })
+})
+
+describe('wallet_connect_strict.parameters', () => {
+  test('default: parses personalSign on the strict (login) branch', () => {
+    const result = z.parse(Rpc.wallet_connect_strict.parameters, {
+      capabilities: { personalSign: { message: 'hello' } },
+    })
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "capabilities": {
+          "personalSign": {
+            "message": "hello",
+          },
+        },
+      }
+    `)
+  })
+
+  test('default: parses personalSign on the strict (register) branch', () => {
+    const result = z.parse(Rpc.wallet_connect_strict.parameters, {
+      capabilities: { method: 'register', personalSign: { message: 'hello' } },
+    })
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "capabilities": {
+          "method": "register",
+          "personalSign": {
+            "message": "hello",
+          },
+        },
+      }
+    `)
+  })
+
+  test('error: rejects strict personalSign without message', () => {
+    expect(() =>
+      z.parse(Rpc.wallet_connect_strict.parameters, {
+        capabilities: { personalSign: {} },
+      }),
+    ).toThrowError()
   })
 })

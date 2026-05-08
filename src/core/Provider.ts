@@ -500,6 +500,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const capabilities = request._decoded.params?.[0]?.capabilities
                     const authorizeAccessKey =
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
+                    const personalSign = capabilities?.personalSign
 
                     const { keyAuthorization, accounts, email, signature, username } =
                       await (async () => {
@@ -521,6 +522,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                                 credentialId: existing.credential?.id,
                                 digest: capabilities.digest,
                                 authorizeAccessKey,
+                                ...(personalSign ? { personalSign } : {}),
                               },
                               request,
                             )
@@ -530,6 +532,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                               authorizeAccessKey,
                               name: capabilities.name ?? 'default',
                               userId: capabilities.userId ?? Hex.random(16),
+                              ...(personalSign ? { personalSign } : {}),
                             },
                             request,
                           )
@@ -540,6 +543,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                             digest: capabilities?.digest,
                             authorizeAccessKey,
                             selectAccount: capabilities?.selectAccount,
+                            ...(personalSign ? { personalSign } : {}),
                           },
                           request,
                         )
@@ -562,7 +566,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                                       },
                                     }
                                   : {}),
-                                ...(signature && capabilities?.digest ? { signature } : {}),
+                                ...(signature ? { signature } : {}),
                                 ...(email !== undefined ? { email } : {}),
                                 ...(username !== undefined ? { username } : {}),
                               }

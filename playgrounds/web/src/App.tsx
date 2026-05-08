@@ -595,6 +595,7 @@ function WalletConnect() {
   const [expiry, setExpiry] = useState('86400')
   const [limits, setLimits] = useState<LimitInput[]>([{ token: '', amount: '100', period: '' }])
   const [scopeSelector, setScopeSelector] = useState('transfer(address,uint256)')
+  const [personalSignEnabled, setPersonalSignEnabled] = useState(false)
 
   // Once the tokenlist resolves, hydrate any unselected limit row with the first token.
   useEffect(() => {
@@ -642,6 +643,19 @@ function WalletConnect() {
         })()
       : undefined
 
+    const personalSign = personalSignEnabled
+      ? {
+          message: createSiweMessage({
+            address: '0x0000000000000000000000000000000000000000',
+            chainId: 0,
+            domain: window.location.host,
+            nonce: generateSiweNonce(),
+            uri: window.location.origin,
+            version: '1',
+          }),
+        }
+      : undefined
+
     const capabilities =
       method === 'register'
         ? ({
@@ -649,10 +663,12 @@ function WalletConnect() {
             ...(name ? { name } : {}),
             ...(digest ? { digest } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
+            ...(personalSign ? { personalSign } : {}),
           } as const)
         : {
             ...(digest ? { digest } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
+            ...(personalSign ? { personalSign } : {}),
           }
 
     execute(() =>
@@ -800,6 +816,18 @@ function WalletConnect() {
               </div>
             </>
           )}
+        </fieldset>
+        <fieldset style={{ marginBottom: 8 }}>
+          <legend>
+            <label>
+              <input
+                checked={personalSignEnabled}
+                onChange={(e) => setPersonalSignEnabled(e.target.checked)}
+                type="checkbox"
+              />{' '}
+              Sign in with Tempo (SIWE)
+            </label>
+          </legend>
         </fieldset>
         <Button type="submit" value="login">
           Login

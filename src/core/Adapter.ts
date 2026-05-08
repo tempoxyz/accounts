@@ -174,6 +174,13 @@ export declare namespace createAccount {
     digest?: Hex | undefined
     /** Display name for the new account (e.g. credential name for WebAuthn). */
     name: string
+    /**
+     * `personal_sign` (EIP-191) request folded into the create-account
+     * ceremony. The wallet computes `hashMessage(message)` and signs it
+     * in the same passkey prompt that creates the account, so this costs
+     * no extra prompt over a plain `wallet_connect` register.
+     */
+    personalSign?: { message: string } | undefined
     /** Opaque user identifier (e.g. for WebAuthn `user.id`). */
     userId?: string | undefined
   }
@@ -183,6 +190,13 @@ export declare namespace createAccount {
     email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
+    /**
+     * Echo of the `personalSign` request, present iff the caller supplied
+     * `personalSign`. The signature lives on the top-level `signature`
+     * field — the message is echoed so consumers can verify locally
+     * without round-tripping it.
+     */
+    personalSign?: { message: string } | undefined
     /** Signature over the digest, if one was provided. */
     signature?: Hex | undefined
     /** Username associated with the account. */
@@ -215,6 +229,13 @@ export declare namespace loadAccounts {
     credentialId?: string | undefined
     /** Digest to sign. */
     digest?: Hex | undefined
+    /**
+     * `personal_sign` (EIP-191) request folded into the load-accounts
+     * ceremony. The wallet computes `hashMessage(message)` and signs it
+     * in the same passkey prompt that loads the account, so this costs
+     * no extra prompt over a plain `wallet_connect`.
+     */
+    personalSign?: { message: string } | undefined
     /** When `true`, prompts the user to pick from all available credentials instead of using the last-used one. */
     selectAccount?: boolean | undefined
   }
@@ -225,6 +246,13 @@ export declare namespace loadAccounts {
     email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
+    /**
+     * Echo of the `personalSign` request, present iff the caller supplied
+     * `personalSign`. The signature lives on the top-level `signature`
+     * field — the message is echoed so consumers can verify locally
+     * without round-tripping it.
+     */
+    personalSign?: { message: string } | undefined
     /** Signature over the digest, if one was provided. */
     signature?: Hex | undefined
     /** Username associated with the account. */

@@ -425,6 +425,21 @@ export namespace wallet_revokeAccessKey {
 export namespace wallet_connect {
   export const authorizeAccessKey = z.optional(wallet_authorizeAccessKey.parameters)
 
+  /**
+   * Request a `personal_sign` (EIP-191) over the supplied message during
+   * `wallet_connect`. The wallet computes `hashMessage(message)` and signs
+   * the resulting 32-byte digest in the same passkey ceremony that loads
+   * or creates the account, so this costs no extra prompt over a plain
+   * `wallet_connect`. The signature is returned via the top-level
+   * `capabilities.signature` field on the connected account.
+   */
+  export const personalSign = z.optional(
+    z.object({
+      /** Message to sign. The wallet applies the EIP-191 prehash. */
+      message: z.string(),
+    }),
+  )
+
   export const capabilities = {
     request: z.optional(
       z.union([
@@ -433,6 +448,7 @@ export namespace wallet_connect {
           authorizeAccessKey,
           method: z.literal('register'),
           name: z.optional(z.string()),
+          personalSign,
           userId: z.optional(z.string()),
         }),
         z.object({
@@ -440,6 +456,7 @@ export namespace wallet_connect {
           credentialId: z.optional(z.string()),
           authorizeAccessKey,
           method: z.optional(z.literal('login')),
+          personalSign,
           selectAccount: z.optional(z.boolean()),
         }),
       ]),
@@ -482,6 +499,7 @@ export namespace wallet_connect {
 
 export namespace wallet_connect_strict {
   const authorizeAccessKey = z.optional(wallet_authorizeAccessKey_strict.parameters)
+  const personalSign = wallet_connect.personalSign
 
   export const parameters = z.object({
     capabilities: z.optional(
@@ -491,6 +509,7 @@ export namespace wallet_connect_strict {
           authorizeAccessKey,
           method: z.literal('register'),
           name: z.optional(z.string()),
+          personalSign,
           userId: z.optional(z.string()),
         }),
         z.object({
@@ -498,6 +517,7 @@ export namespace wallet_connect_strict {
           credentialId: z.optional(z.string()),
           authorizeAccessKey,
           method: z.optional(z.literal('login')),
+          personalSign,
           selectAccount: z.optional(z.boolean()),
         }),
       ]),

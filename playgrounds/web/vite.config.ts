@@ -12,6 +12,20 @@ export default defineConfig({
     cors: true,
     allowedHosts: true,
   },
+  // The `regen-ui` plugin source-aliases `regen-ui` to its `src/` folder, so
+  // Vite's dep scanner doesn't crawl through it and misses these transitive
+  // deps. Pre-bundle them explicitly so their CJS-style `react/jsx-runtime`
+  // imports are rewritten to the optimized output, and so Vite's ESM interop
+  // can synthesize the named `useSyncExternalStore(WithSelector)` exports
+  // from `use-sync-external-store`.
+  optimizeDeps: {
+    include: [
+      '@base-ui/react/otp-field',
+      '@base-ui/react/select',
+      'use-sync-external-store/shim',
+      'use-sync-external-store/shim/with-selector',
+    ],
+  },
   plugins: [
     react(),
     icons({

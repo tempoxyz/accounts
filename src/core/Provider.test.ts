@@ -225,6 +225,102 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       })
       expect(valid).toMatchInlineSnapshot(`true`)
     })
+
+    test('behavior: login with personalSign surfaces { message, signature } and suppresses top-level signature', async () => {
+      const provider = Provider.create({ adapter: adapter() })
+
+      await connect(provider)
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { personalSign: { message: 'hello' } } }],
+      })
+
+      expect(result.accounts[0]!.capabilities.personalSign).toEqual({
+        message: 'hello',
+        signature: expect.stringMatching(/^0x[0-9a-f]+$/),
+      })
+      // Top-level `signature` must not leak when personalSign consumed the slot.
+      expect(result.accounts[0]!.capabilities.signature).toBeUndefined()
+    })
+
+    test('behavior: login personalSign signature is verifiable via verifyMessage', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const client = provider.getClient()
+
+      await connect(provider)
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { personalSign: { message: 'hello' } } }],
+      })
+
+      const valid = await verifyMessage(client, {
+        address: result.accounts[0]!.address,
+        message: 'hello',
+        signature: result.accounts[0]!.capabilities.personalSign!.signature,
+      })
+      expect(valid).toMatchInlineSnapshot(`true`)
+    })
+
+    test('behavior: register with personalSign surfaces { message, signature }', async () => {
+      const provider = Provider.create({ adapter: adapter() })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [
+          {
+            capabilities: { method: 'register', personalSign: { message: 'hi' } },
+          },
+        ],
+      })
+
+      expect(result.accounts[0]!.capabilities.personalSign).toEqual({
+        message: 'hi',
+        signature: expect.stringMatching(/^0x[0-9a-f]+$/),
+      })
+      expect(result.accounts[0]!.capabilities.signature).toBeUndefined()
+    })
+
+    test('behavior: register personalSign signature is verifiable via verifyMessage', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const client = provider.getClient()
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [
+          {
+            capabilities: { method: 'register', personalSign: { message: 'hi' } },
+          },
+        ],
+      })
+
+      const valid = await verifyMessage(client, {
+        address: result.accounts[0]!.address,
+        message: 'hi',
+        signature: result.accounts[0]!.capabilities.personalSign!.signature,
+      })
+      expect(valid).toMatchInlineSnapshot(`true`)
+    })
+
+    test('error: personalSign + digest is rejected as invalid params', async () => {
+      const provider = Provider.create({ adapter: adapter() })
+      await connect(provider)
+
+      await expect(
+        provider.request({
+          method: 'wallet_connect',
+          params: [
+            {
+              capabilities: {
+                digest: '0x1234',
+                personalSign: { message: 'hello' },
+              },
+            },
+          ],
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[RpcResponse.InvalidParamsError: \`digest\` and \`personalSign\` cannot both be set on \`wallet_connect\`.]`,
+      )
+    })
   })
 
   describe('wallet_disconnect', () => {

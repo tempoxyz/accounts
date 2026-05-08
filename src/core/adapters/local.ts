@@ -1,6 +1,6 @@
 import { Address as ox_Address, Hex, Provider as ox_Provider, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
-import { BaseError } from 'viem'
+import { BaseError, hashMessage } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
 
@@ -119,8 +119,24 @@ export function local(options: local.Options): Adapter.Adapter {
             throw new ox_Provider.UnsupportedMethodError({
               message: '`createAccount` not configured on adapter.',
             })
-          const { authorizeAccessKey: grantOptions, ...rest } = parameters
-          const { accounts, email, signature, username } = await createAccount(rest)
+          const { authorizeAccessKey: grantOptions, personalSign, ...rest } = parameters
+
+          // `personalSign` claims the ceremony's challenge slot. It conflicts
+          // with a caller-supplied `digest` because both target the single
+          // WebAuthn challenge in the create-account ceremony.
+          if (personalSign && rest.digest)
+            throw new ox_Provider.ProviderRpcError(
+              -32602,
+              '`digest` and `personalSign` cannot both be set on `wallet_connect`.',
+            )
+
+          const peronsalSign_digest = personalSign ? hashMessage(personalSign.message) : undefined
+          const digest = peronsalSign_digest ?? rest.digest
+
+          const { accounts, email, signature, username } = await createAccount({
+            ...rest,
+            digest,
+          })
 
           // Hydrate the first account for signing. Must be done here (not via
           // the store) because accounts aren't merged into the store until
@@ -129,8 +145,7 @@ export function local(options: local.Options): Adapter.Adapter {
 
           // If the caller requested a digest signature but the adapter didn't
           // produce one (e.g. secp256k1 adapters), sign it ourselves.
-          const signature_ =
-            rest.digest && !signature ? await account.sign({ hash: rest.digest }) : signature
+          const signature_ = digest && !signature ? await account.sign({ hash: digest }) : signature
 
           const keyAuthorization = await (async () => {
             if (!grantOptions) return undefined
@@ -138,7 +153,14 @@ export function local(options: local.Options): Adapter.Adapter {
             return await signKeyAuthorization(account, prepared)
           })()
 
-          return { accounts, email, keyAuthorization, signature: signature_, username }
+          return {
+            accounts,
+            email,
+            keyAuthorization,
+            signature: signature_,
+            username,
+            ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
+          }
         },
         async authorizeAccessKey(parameters) {
           const prepared = await prepareKeyAuthorization(parameters)
@@ -149,19 +171,37 @@ export function local(options: local.Options): Adapter.Adapter {
           return { keyAuthorization, rootAddress: account.address }
         },
         async loadAccounts(parameters) {
-          const { authorizeAccessKey, ...rest } =
+          const { authorizeAccessKey, personalSign, ...rest } =
             parameters ?? ({} as Adapter.loadAccounts.Parameters)
+
+          // `personalSign` claims the ceremony's challenge slot. It conflicts
+          // with a caller-supplied `digest` because both target the single
+          // WebAuthn challenge in the load-accounts ceremony.
+          if (personalSign && rest.digest)
+            throw new ox_Provider.ProviderRpcError(
+              -32602,
+              '`digest` and `personalSign` cannot both be set on `wallet_connect`.',
+            )
+
+          const peronsalSign_digest = personalSign ? hashMessage(personalSign.message) : undefined
 
           const keyAuthorization_unsigned = authorizeAccessKey
             ? await prepareKeyAuthorization(authorizeAccessKey)
             : undefined
 
-          const digest = (() => {
-            if (rest.digest) return rest.digest
-            if (keyAuthorization_unsigned?.keyAuthorization)
-              return KeyAuthorization.getSignPayload(keyAuthorization_unsigned.keyAuthorization)
-            return undefined
-          })()
+          // Slot allocation:
+          //   1. `personalSign` digest, if present.
+          //   2. Else key-auth digest (existing 1-prompt fold for `authorizeAccessKey`).
+          //   3. Else caller's `rest.digest`.
+          // When BOTH `personalSign` and `authorizeAccessKey` are present,
+          // `personalSign` wins the load-accounts ceremony and the key
+          // authorization gets its own follow-up `account.sign` ceremony
+          // (2 prompts total).
+          const digest =
+            peronsalSign_digest ??
+            (keyAuthorization_unsigned
+              ? KeyAuthorization.getSignPayload(keyAuthorization_unsigned.keyAuthorization)
+              : rest.digest)
 
           // Pass the prepared digest (or the caller's) into loadAccounts so
           // the ceremony can sign it in a single biometric prompt.
@@ -175,14 +215,27 @@ export function local(options: local.Options): Adapter.Adapter {
           let signature_ = signature
           if (digest && !signature_ && account) signature_ = await account.sign({ hash: digest })
 
-          const keyAuthorization =
-            keyAuthorization_unsigned && account
-              ? await signKeyAuthorization(account, keyAuthorization_unsigned, {
-                  signature: signature_,
-                })
-              : undefined
+          // Key auth signing path:
+          //   - If `personalSign` took the ceremony slot AND `authorizeAccessKey`
+          //     is set, we need a SECOND ceremony to sign the key-auth digest.
+          //   - Else (key-auth digest took the slot), reuse `signature_`.
+          const keyAuthorization = await (async () => {
+            if (!keyAuthorization_unsigned || !account) return undefined
+            if (peronsalSign_digest)
+              return await signKeyAuthorization(account, keyAuthorization_unsigned)
+            return await signKeyAuthorization(account, keyAuthorization_unsigned, {
+              signature: signature_,
+            })
+          })()
 
-          return { accounts, email, keyAuthorization, signature: signature_, username }
+          return {
+            accounts,
+            email,
+            keyAuthorization,
+            signature: signature_,
+            username,
+            ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
+          }
         },
         async revokeAccessKey(parameters) {
           const account = getAccount({ accessKey: false, signable: true })
