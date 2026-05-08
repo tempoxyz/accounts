@@ -464,6 +464,18 @@ export namespace wallet_connect {
     result: z.object({
       email: z.optional(z.nullable(z.string())),
       keyAuthorization: z.optional(keyAuthorization),
+      /**
+       * `personal_sign` (EIP-191) result, present when the caller supplied
+       * `capabilities.personalSign` during `wallet_connect`.
+       */
+      personalSign: z.optional(
+        z.object({
+          /** Original message that was signed. */
+          message: z.string(),
+          /** Signature over `hashMessage(message)`. */
+          signature: u.hex(),
+        }),
+      ),
       signature: z.optional(u.hex()),
       username: z.optional(z.nullable(z.string())),
     }),

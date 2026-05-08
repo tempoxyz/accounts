@@ -6,11 +6,7 @@ import * as z from 'zod/mini'
 export function resolveChainId(value: unknown) {
   if (typeof value === 'number') return value
   if (typeof value === 'bigint') return Number(value)
-  if (typeof value === 'string') {
-    if (Hex.validate(value)) return Hex.toNumber(value)
-    const n = Number(value)
-    if (Number.isFinite(n)) return n
-  }
+  if (typeof value === 'string' && Hex.validate(value)) return Hex.toNumber(value)
   return undefined
 }
 
@@ -20,22 +16,15 @@ export function formatFillTransactionRequest(client: Client, value: Record<strin
   return format({ ...value } as never, 'fillTransaction') as Record<string, unknown>
 }
 
-export function normalizeFillTransactionRequest(
-  tx: Record<string, unknown>,
-): Record<string, unknown> & { calls: unknown[] } {
+export function normalizeFillTransactionRequest(tx: Record<string, unknown>) {
   const { to, data, value, ...rest } = tx
-  const { calls } = tx
-  if (Array.isArray(calls) && calls.length > 0)
+  if (Array.isArray(tx.calls) && tx.calls.length > 0)
     return {
       ...tx,
-      calls: calls.map((call) => {
-        if (!call || typeof call !== 'object') return call
-        const c = call as Record<string, unknown>
-        return {
-          ...c,
-          value: normalizeFillValue(c.value),
-        }
-      }),
+      calls: tx.calls.map((call) => ({
+        ...call,
+        value: normalizeFillValue(call.value),
+      })),
     }
   const call = {
     ...(typeof to !== 'undefined' ? { to } : {}),

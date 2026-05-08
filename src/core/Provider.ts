@@ -503,7 +503,14 @@ export function create(options: create.Options = {}): create.ReturnType {
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
                     const personalSign = capabilities?.personalSign
 
-                    const { keyAuthorization, accounts, email, signature, username } =
+                    const {
+                      keyAuthorization,
+                      accounts,
+                      email,
+                      personalSign: personalSign_result,
+                      signature,
+                      username,
+                    } =
                       await (async () => {
                         if (capabilities?.method === 'register') {
                           // If a stored account already has this label, sign in
@@ -567,7 +574,15 @@ export function create(options: create.Options = {}): create.ReturnType {
                                       },
                                     }
                                   : {}),
-                                ...(signature ? { signature } : {}),
+                                ...(personalSign_result && signature
+                                  ? {
+                                      personalSign: {
+                                        ...personalSign_result,
+                                        signature,
+                                      },
+                                    }
+                                  : {}),
+                                ...(!personalSign_result && signature ? { signature } : {}),
                                 ...(email !== undefined ? { email } : {}),
                                 ...(username !== undefined ? { username } : {}),
                               }
