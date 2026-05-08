@@ -125,7 +125,6 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
       const result = await CliAuth.authorize({
         client: getClient(request.keyAuthorization.chainId),
         ...(now ? { now } : {}),
-        ...(policy ? { policy } : {}),
         request,
         store,
       })
