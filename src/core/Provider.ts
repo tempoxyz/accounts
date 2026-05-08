@@ -596,9 +596,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                             digest: capabilities?.digest,
                             authorizeAccessKey,
                             selectAccount: capabilities?.selectAccount,
-                            ...(personalSign_request
-                              ? { personalSign: personalSign_request }
-                              : {}),
+                            ...(personalSign_request ? { personalSign: personalSign_request } : {}),
                           },
                           request,
                         )
