@@ -125,6 +125,17 @@ export type Instance = {
   }
   /** Cleanup function called when the provider is destroyed. */
   cleanup?: (() => void) | undefined
+  /**
+   * When `true`, the provider skips Server Authentication orchestration on
+   * `wallet_connect` and forwards `capabilities.auth` to the adapter
+   * verbatim. Used by remote-forwarding adapters (e.g. `dialog`) so the
+   * wallet host's own Provider runs the orchestration instead of racing
+   * the dapp-side Provider for the challenge.
+   *
+   * Wallet-host adapters (`local`, `webAuthn`, `dangerous_secp256k1`)
+   * leave this unset.
+   */
+  forwardsAuth?: boolean | undefined
   /** When `true`, the provider merges new accounts onto existing ones instead of replacing. */
   persistAccounts?: boolean | undefined
 }

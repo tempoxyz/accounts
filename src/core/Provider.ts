@@ -1,9 +1,10 @@
 import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
-import { Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
+import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import type { Chain, Client as ViemClient, Transport } from 'viem'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
+import { parseSiweMessage } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 import * as z from 'zod/mini'
 
@@ -500,9 +501,57 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const capabilities = request._decoded.params?.[0]?.capabilities
                     const authorizeAccessKey =
                       capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
-                    const personalSign = capabilities?.personalSign
 
-                    const { keyAuthorization, accounts, email, signature, username } =
+                    // Server Authentication: pre-resolve `auth` URLs against
+                    // this dapp-side Provider's `window.location.origin`. The
+                    // wallet host (different origin in dialog mode) cannot
+                    // reconstruct the dapp's origin, so forwarding the raw
+                    // relative URLs would resolve to the wrong host. We then
+                    // fetch the challenge BEFORE the ceremony so we can fold
+                    // its message into the existing `personalSign` capability.
+                    // Forwarding adapters (dialog) skip orchestration — the
+                    // wallet host's Provider runs it instead.
+                    const auth_input = capabilities?.auth ?? options.auth
+                    const auth_request = auth_input
+                      ? absolutizeAuth(
+                          auth_input as NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
+                        )
+                      : undefined
+                    if (auth_request && capabilities?.personalSign)
+                      throw new RpcResponse.InvalidParamsError({
+                        message:
+                          '`auth` and `personalSign` cannot both be set on `wallet_connect`.',
+                      })
+
+                    // Patch the raw request so forwarding adapters carry the
+                    // absolutized auth URLs downstream.
+                    if (auth_request)
+                      request = {
+                        ...request,
+                        params: [
+                          {
+                            ...request.params?.[0],
+                            capabilities: {
+                              ...request.params?.[0]?.capabilities,
+                              auth: auth_request,
+                            },
+                          },
+                        ] as never,
+                      }
+
+                    const auth =
+                      auth_request && !instance.forwardsAuth
+                        ? await fetchAuthChallenge(
+                            auth_request,
+                            chainId ?? store.getState().chainId ?? 0,
+                          )
+                        : undefined
+
+                    const personalSign_request = auth
+                      ? { message: auth.message }
+                      : capabilities?.personalSign
+
+                    const { keyAuthorization, accounts, email, personalSign, signature, username } =
                       await (async () => {
                         if (capabilities?.method === 'register') {
                           // If a stored account already has this label, sign in
@@ -522,7 +571,9 @@ export function create(options: create.Options = {}): create.ReturnType {
                                 credentialId: existing.credential?.id,
                                 digest: capabilities.digest,
                                 authorizeAccessKey,
-                                ...(personalSign ? { personalSign } : {}),
+                                ...(personalSign_request
+                                  ? { personalSign: personalSign_request }
+                                  : {}),
                               },
                               request,
                             )
@@ -532,7 +583,9 @@ export function create(options: create.Options = {}): create.ReturnType {
                               authorizeAccessKey,
                               name: capabilities.name ?? 'default',
                               userId: capabilities.userId ?? Hex.random(16),
-                              ...(personalSign ? { personalSign } : {}),
+                              ...(personalSign_request
+                                ? { personalSign: personalSign_request }
+                                : {}),
                             },
                             request,
                           )
@@ -543,15 +596,51 @@ export function create(options: create.Options = {}): create.ReturnType {
                             digest: capabilities?.digest,
                             authorizeAccessKey,
                             selectAccount: capabilities?.selectAccount,
-                            ...(personalSign ? { personalSign } : {}),
+                            ...(personalSign_request
+                              ? { personalSign: personalSign_request }
+                              : {}),
                           },
                           request,
                         )
                       })()
 
-                    store.setState({ accounts: resolveAccounts(accounts), activeAccount: 0 })
+                    store.setState({
+                      accounts: resolveAccounts(accounts),
+                      activeAccount: 0,
+                      // Persist absolutized auth URLs so a later
+                      // `wallet_disconnect` can hit logout even when the
+                      // URL was passed per-call.
+                      ...(auth_request && typeof auth_request === 'object'
+                        ? { auth: auth_request }
+                        : {}),
+                    })
 
                     const accountAddress = accounts[0]?.address
+
+                    // Server Authentication verify: POST the signed SIWE message
+                    // to the verify endpoint. Skipped when the auth capability
+                    // omits `verify` — typical when the wallet host strips it
+                    // so the dapp-origin Provider does the verify call (and
+                    // receives the session cookie on the dapp's origin).
+                    //
+                    // The signed message comes from one of two places:
+                    // - terminal Provider (wallet host): `auth.message` we just fetched.
+                    // - forwarding Provider (dapp): `personalSign.message` echoed back
+                    //   by the wallet host's Provider.
+                    const verifyUrl =
+                      auth_request && typeof auth_request === 'object'
+                        ? auth_request.verify
+                        : undefined
+                    const verifyMessage = auth?.message ?? personalSign?.message
+                    const auth_result =
+                      auth_request && verifyUrl && verifyMessage && signature && accountAddress
+                        ? await verifyAuthMessage(auth_request, {
+                            address: accountAddress,
+                            message: verifyMessage,
+                            signature,
+                          })
+                        : undefined
+
                     return {
                       accounts: accounts.map((a) => ({
                         address: a.address,
@@ -569,16 +658,51 @@ export function create(options: create.Options = {}): create.ReturnType {
                                 ...(signature ? { signature } : {}),
                                 ...(email !== undefined ? { email } : {}),
                                 ...(username !== undefined ? { username } : {}),
+                                ...(auth_result ? { auth: auth_result } : {}),
+                                ...(personalSign
+                                  ? { personalSign: { message: personalSign.message } }
+                                  : {}),
                               }
                             : {},
                       })),
                     } satisfies Rpc.wallet_connect.Encoded['returns']
                   }
 
-                  case 'wallet_disconnect':
+                  case 'wallet_disconnect': {
+                    // Best-effort logout. Source of the URL, in order:
+                    // 1. Last-connected `auth` URLs persisted in the store
+                    //    (handles per-call `auth` passed via wallet_connect).
+                    // 2. Provider.create({ auth }) option fallback.
+                    // Swallows all errors — disconnect must succeed even
+                    // when the session is already gone or the server is
+                    // unreachable.
+                    const logoutUrl = (() => {
+                      const stored = store.getState().auth
+                      if (stored?.logout) return stored.logout
+                      if (!options.auth) return undefined
+                      try {
+                        const absolute = absolutizeAuth(
+                          options.auth as NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
+                        )
+                        return typeof absolute === 'object' ? absolute.logout : undefined
+                      } catch {
+                        return undefined
+                      }
+                    })()
+                    if (logoutUrl)
+                      await fetch(logoutUrl, {
+                        method: 'POST',
+                        credentials: 'include',
+                      }).catch(() => {})
                     await actions.disconnect?.()
-                    store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
+                    store.setState({
+                      accessKeys: [],
+                      accounts: [],
+                      activeAccount: 0,
+                      auth: undefined,
+                    })
                     return
+                  }
 
                   case 'wallet_authorizeAccessKey': {
                     if (!actions.authorizeAccessKey)
@@ -766,6 +890,14 @@ export declare namespace create {
     /** Adapter to use for account management. @default dialog() */
     adapter?: Adapter.Adapter | undefined
     /**
+     * Default Server Authentication configuration for `wallet_connect`.
+     *
+     * When set, every `wallet_connect` call orchestrates the round-trip
+     * against this endpoint unless the caller passes their own
+     * `capabilities.auth` (per-call override).
+     */
+    auth?: z.input<typeof Rpc.wallet_connect.auth> | undefined
+    /**
      * Default access key parameters for `wallet_connect`.
      *
      * When set, `wallet_connect` will automatically authorize an access key.
@@ -793,4 +925,181 @@ export declare namespace create {
     testnet?: boolean | undefined
   }
   type ReturnType = Provider
+}
+
+/**
+ * Heuristic for whether the current runtime carries cookies on
+ * `fetch(..., { credentials: 'include' })`:
+ *
+ * - **Browser**: `document.cookie` exists → uses the browser cookie jar.
+ * - **React Native**: `navigator.product === 'ReactNative'` → uses the
+ *   native cookie store.
+ * - **Node / CLI**: neither — `credentials: 'include'` is a no-op.
+ *
+ * False negatives are possible (Node with `tough-cookie` shimmed in); the
+ * caller can always force token mode via `auth: { returnToken: true }`.
+ */
+function hasCookieJar(): boolean {
+  if (typeof document !== 'undefined' && typeof document.cookie === 'string') return true
+  if (typeof navigator !== 'undefined' && navigator.product === 'ReactNative') return true
+  return false
+}
+
+/**
+ * Resolves a Server Authentication endpoint from the `auth` capability
+ * into an absolute URL.
+ *
+ * - `auth: '/api/auth'`            → `/api/auth/challenge`, `/api/auth` (verify), `/api/auth/logout`
+ * - `auth: { url: '/api/auth' }`   → same as above
+ * - `auth: { challenge, verify }`  → explicit per-endpoint
+ * - Mix: explicit endpoint wins over derivation from `url`.
+ *
+ * Relative paths (`/api/auth`, `auth/challenge`) are absolutized against
+ * `window.location.origin` when available — same shape as `resolveFeePayer`.
+ * Already-absolute `http(s)://` URLs pass through verbatim.
+ */
+function resolveAuthEndpoint(
+  auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
+  kind: 'challenge' | 'verify' | 'logout',
+): string {
+  const path = (() => {
+    if (typeof auth === 'string') {
+      const base = auth.endsWith('/') ? auth.slice(0, -1) : auth
+      return kind === 'verify' ? base : `${base}/${kind}`
+    }
+    const explicit = auth[kind]
+    if (explicit) return explicit
+    if (auth.url) {
+      const base = auth.url.endsWith('/') ? auth.url.slice(0, -1) : auth.url
+      return kind === 'verify' ? base : `${base}/${kind}`
+    }
+    throw new RpcResponse.InvalidParamsError({
+      message: `\`auth\` capability must include either \`url\` or an explicit \`${kind}\` endpoint.`,
+    })
+  })()
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
+  if (typeof window !== 'undefined') return new URL(path, window.location.origin).href
+  return path
+}
+
+/**
+ * Pre-resolves the `auth` capability into its absolute, fully-explicit
+ * object form. Run once at the dapp-side Provider so forwarding adapters
+ * (dialog) carry absolute URLs to the wallet host — the wallet's
+ * `window.location.origin` belongs to the wallet, not the dapp, and
+ * cannot resolve relative paths correctly.
+ *
+ * `logout` is omitted when the input doesn't supply enough info to derive
+ * one (it's optional in the protocol).
+ */
+function absolutizeAuth(
+  auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
+): NonNullable<z.output<typeof Rpc.wallet_connect.auth>> {
+  // Wallet-host re-entry can strip endpoints (e.g. drop `verify` so the
+  // dapp-origin Provider runs verify). Only resolve endpoints the input
+  // can derive — pass through everything else as-is.
+  const hasUrl = typeof auth === 'string' || Boolean(auth.url)
+  const hasChallenge = hasUrl || (typeof auth === 'object' && Boolean(auth.challenge))
+  const hasVerify = hasUrl || (typeof auth === 'object' && Boolean(auth.verify))
+  const hasLogout = hasUrl || (typeof auth === 'object' && Boolean(auth.logout))
+  return {
+    ...(hasChallenge ? { challenge: resolveAuthEndpoint(auth, 'challenge') } : {}),
+    ...(hasVerify ? { verify: resolveAuthEndpoint(auth, 'verify') } : {}),
+    ...(hasLogout ? { logout: resolveAuthEndpoint(auth, 'logout') } : {}),
+    ...(typeof auth === 'object' && auth.returnToken ? { returnToken: true } : {}),
+  }
+}
+
+/**
+ * Fetches an auth challenge from the auth endpoint and validates that the
+ * server-supplied message is bound to the auth endpoint's origin and the
+ * requested chain.
+ *
+ * Expects an absolutized auth capability (post-`absolutizeAuth`).
+ *
+ * The signature produced from this challenge is a portable artifact: once
+ * the wallet signs, anyone holding the bytes can replay it against any
+ * auth verifier that accepts the embedded domain. We therefore refuse to
+ * sign a message whose `domain`/`uri` doesn't match the auth endpoint —
+ * otherwise a compromised auth provider could trick the wallet into
+ * signing "Sign in to attacker.com" and use it to log in as the user
+ * elsewhere.
+ */
+async function fetchAuthChallenge(
+  auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
+  chainId: number,
+): Promise<{ message: string }> {
+  const url = typeof auth === 'object' ? auth.challenge! : resolveAuthEndpoint(auth, 'challenge')
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chainId }),
+  })
+  if (!res.ok)
+    throw new RpcResponse.InvalidParamsError({
+      message: `Server Authentication challenge endpoint \`${url}\` returned ${res.status}.`,
+    })
+  const body = (await res.json().catch(() => ({}))) as { message?: string }
+  if (!body.message)
+    throw new RpcResponse.InvalidParamsError({
+      message: `Server Authentication challenge endpoint \`${url}\` response missing \`message\`.`,
+    })
+
+  const parsed = parseSiweMessage(body.message)
+  const expected = new URL(url)
+
+  if (parsed.version !== '1')
+    throw new RpcResponse.InvalidParamsError({
+      message: `Server Authentication challenge endpoint \`${url}\` returned a non-SIWE-v1 message.`,
+    })
+  if (!parsed.nonce)
+    throw new RpcResponse.InvalidParamsError({
+      message: `Server Authentication challenge endpoint \`${url}\` response is missing a \`nonce\`.`,
+    })
+  if (parsed.domain !== expected.host)
+    throw new RpcResponse.InvalidParamsError({
+      message: `Server Authentication challenge endpoint \`${url}\` returned a message bound to \`${parsed.domain}\` (expected \`${expected.host}\`).`,
+    })
+  if (parsed.uri !== expected.origin)
+    throw new RpcResponse.InvalidParamsError({
+      message: `Server Authentication challenge endpoint \`${url}\` returned a message with \`uri\` \`${parsed.uri}\` (expected \`${expected.origin}\`).`,
+    })
+  if (parsed.chainId !== chainId)
+    throw new RpcResponse.InvalidParamsError({
+      message: `Server Authentication challenge endpoint \`${url}\` returned a message bound to chainId \`${parsed.chainId}\` (expected \`${chainId}\`).`,
+    })
+
+  return { message: body.message }
+}
+
+/**
+ * Posts the signed message to the auth `verify` endpoint and returns
+ * the SDK-shaped `auth` capability output (`{ token }` in token mode,
+ * `{}` in cookie mode).
+ */
+async function verifyAuthMessage(
+  auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
+  body: { address: Address.Address; message: string; signature: Hex.Hex },
+): Promise<{ token?: string }> {
+  const url = typeof auth === 'object' ? auth.verify! : resolveAuthEndpoint(auth, 'verify')
+  // Auto-request the token in environments without a cookie jar (Node
+  // CLI). Browser / React Native let the cookie do the work; explicit
+  // `returnToken: true` always wins.
+  const explicitReturnToken = typeof auth === 'object' && auth.returnToken === true
+  const returnToken = explicitReturnToken || !hasCookieJar()
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ...body,
+      ...(returnToken ? { returnToken: true } : {}),
+    }),
+  })
+  if (!res.ok)
+    throw new RpcResponse.InternalError({
+      message: `Server Authentication verify endpoint \`${url}\` returned ${res.status}.`,
+    })
+  const json = (await res.json().catch(() => ({}))) as { token?: string }
+  return json.token ? { token: json.token } : {}
 }

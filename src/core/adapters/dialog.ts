@@ -196,6 +196,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         unsubscribe()
         dialogInstance?.destroy()
       },
+      forwardsAuth: true,
       actions: {
         async createAccount(parameters, request) {
           const accessKey = await generateAccessKey(parameters.authorizeAccessKey)
@@ -231,6 +232,9 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             ...(keyAuthorization ? { keyAuthorization } : {}),
             ...(accounts[0]?.capabilities.signature
               ? { signature: accounts[0].capabilities.signature }
+              : {}),
+            ...(accounts[0]?.capabilities.personalSign
+              ? { personalSign: accounts[0].capabilities.personalSign }
               : {}),
           }
         },
@@ -269,6 +273,9 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             ...(keyAuthorization ? { keyAuthorization } : {}),
             ...(accounts[0]?.capabilities.signature
               ? { signature: accounts[0].capabilities.signature }
+              : {}),
+            ...(accounts[0]?.capabilities.personalSign
+              ? { personalSign: accounts[0].capabilities.personalSign }
               : {}),
           }
         },

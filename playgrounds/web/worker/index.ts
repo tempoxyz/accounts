@@ -13,6 +13,8 @@ const payment = Mppx.create({
   secretKey: process.env.MPP_SECRET_KEY,
 })
 
+const auth = Handler.auth({ path: '/auth' })
+
 const handler = Handler.compose([
   Handler.webAuthn({
     kv: Kv.memory(),
@@ -28,6 +30,7 @@ const handler = Handler.compose([
     },
     path: '/relay',
   }),
+  auth,
 ])
 
 export default {
@@ -54,6 +57,14 @@ export default {
       return result.withReceipt(
         Response.json({ fortune: 'Your code will compile on the first try.' }),
       )
+    }
+
+    // Reads the SIWE-issued session and returns the connected address.
+    // Demonstrates how an authenticated endpoint consumes Handler.auth.
+    if (url.pathname === '/me') {
+      const session = await auth.getSession(request)
+      if (!session) return Response.json({ error: 'unauthenticated' }, { status: 401 })
+      return Response.json({ address: session.address, chainId: session.chainId })
     }
 
     return handler.fetch(request)

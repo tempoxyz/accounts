@@ -4,6 +4,7 @@ import type { ExtractSchema, MergeSchemaPath, Schema } from 'hono/types'
 import type { UnionToIntersection } from '../internal/types.js'
 import * as RequestListener from './internal/requestListener.js'
 
+export { auth } from './internal/handlers/auth.js'
 export { codeAuth } from './internal/handlers/codeAuth.js'
 export { exchange } from './internal/handlers/exchange.js'
 export { relay } from './internal/handlers/relay.js'

@@ -426,6 +426,38 @@ export namespace wallet_connect {
   export const authorizeAccessKey = z.optional(wallet_authorizeAccessKey.parameters)
 
   /**
+   * SIWE round-trip configuration. Bare string is shorthand for `{ url }`.
+   *
+   * - `auth: '/api/auth'` derives `${url}/challenge`, `${url}` (verify), `${url}/logout`.
+   * - Object form lets callers override individual endpoints, opt into a
+   *   `{ token }` body via `returnToken`, etc.
+   *
+   * Cross-field validation (must include `url` or both `challenge` + `verify`)
+   * is enforced inside `prepareSiwe`, not in zod, so the error message can be
+   * specific.
+   */
+  export const auth = z.optional(
+    z.union([
+      z.string(),
+      z.object({
+        /** Base URL. SDK derives `${url}/challenge` and `${url}/logout`; `${url}` itself is verify. */
+        url: z.optional(z.string()),
+        /** Override individual endpoints. Either `url` or both `challenge` + `verify` must be set. */
+        challenge: z.optional(z.string()),
+        verify: z.optional(z.string()),
+        logout: z.optional(z.string()),
+        /**
+         * Ask the verify endpoint to also return `{ token }` in the JSON body.
+         * Default `false` — cookie mode relies on `Set-Cookie` only.
+         * Set this for non-browser clients (RN, CLI) that can't store cookies, or
+         * to surface the JWT alongside a cookie in dual-transport setups.
+         */
+        returnToken: z.optional(z.boolean()),
+      }),
+    ]),
+  )
+
+  /**
    * Request a `personal_sign` (EIP-191) over the supplied message during
    * `wallet_connect`. The wallet computes `hashMessage(message)` and signs
    * the resulting 32-byte digest in the same passkey ceremony that loads
@@ -446,6 +478,7 @@ export namespace wallet_connect {
         z.object({
           digest: z.optional(u.hex()),
           authorizeAccessKey,
+          auth,
           method: z.literal('register'),
           name: z.optional(z.string()),
           personalSign,
@@ -455,6 +488,7 @@ export namespace wallet_connect {
           digest: z.optional(u.hex()),
           credentialId: z.optional(z.string()),
           authorizeAccessKey,
+          auth,
           method: z.optional(z.literal('login')),
           personalSign,
           selectAccount: z.optional(z.boolean()),
@@ -466,6 +500,27 @@ export namespace wallet_connect {
       keyAuthorization: z.optional(keyAuthorization),
       signature: z.optional(u.hex()),
       username: z.optional(z.nullable(z.string())),
+      /**
+       * SIWE round-trip output, populated when the request `auth` capability was set.
+       * `token` is present in JWT mode or when the request set `returnToken: true`.
+       * Cookie-mode default = `{}` (the session arrived via `Set-Cookie`).
+       */
+      auth: z.optional(
+        z.object({
+          token: z.optional(z.string()),
+        }),
+      ),
+      /**
+       * Echo of the `personalSign` request, present iff the caller set
+       * `capabilities.personalSign` (or `capabilities.auth` folded a SIWE
+       * message into the same slot). The signature itself lives on the
+       * top-level `capabilities.signature` field.
+       */
+      personalSign: z.optional(
+        z.object({
+          message: z.string(),
+        }),
+      ),
     }),
   }
 
@@ -499,6 +554,7 @@ export namespace wallet_connect {
 
 export namespace wallet_connect_strict {
   const authorizeAccessKey = z.optional(wallet_authorizeAccessKey_strict.parameters)
+  const auth = wallet_connect.auth
   const personalSign = wallet_connect.personalSign
 
   export const parameters = z.object({
@@ -507,6 +563,7 @@ export namespace wallet_connect_strict {
         z.object({
           digest: z.optional(u.hex()),
           authorizeAccessKey,
+          auth,
           method: z.literal('register'),
           name: z.optional(z.string()),
           personalSign,
@@ -516,6 +573,7 @@ export namespace wallet_connect_strict {
           digest: z.optional(u.hex()),
           credentialId: z.optional(z.string()),
           authorizeAccessKey,
+          auth,
           method: z.optional(z.literal('login')),
           personalSign,
           selectAccount: z.optional(z.boolean()),

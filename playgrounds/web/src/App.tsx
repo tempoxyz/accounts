@@ -37,6 +37,7 @@ const sectionLinks = [
   { id: 'receipts-status', title: 'Receipts & Status' },
   { id: 'access-keys', title: 'Access Keys' },
   { id: 'signing-verification', title: 'Signing & Verification' },
+  { id: 'auth', title: 'Server Authentication' },
   { id: 'mpp', title: 'MPP' },
   { id: 'email-verification', title: 'Email Verification' },
   { id: 'rpc-proxy', title: 'RPC Proxy' },
@@ -133,6 +134,11 @@ export function App() {
           <PlaygroundSection id="mpp" title="MPP">
             <Fortune />
             <MppZeroDollarAuth />
+          </PlaygroundSection>
+
+          <PlaygroundSection id="auth" title="Server Authentication">
+            <Authenticate />
+            <Me />
           </PlaygroundSection>
 
           <PlaygroundSection id="email-verification" title="Email Verification">
@@ -595,7 +601,7 @@ function WalletConnect() {
   const [expiry, setExpiry] = useState('86400')
   const [limits, setLimits] = useState<LimitInput[]>([{ token: '', amount: '100', period: '' }])
   const [scopeSelector, setScopeSelector] = useState('transfer(address,uint256)')
-  const [personalSignEnabled, setPersonalSignEnabled] = useState(false)
+  const [authEnabled, setAuthEnabled] = useState(false)
 
   // Once the tokenlist resolves, hydrate any unselected limit row with the first token.
   useEffect(() => {
@@ -643,18 +649,9 @@ function WalletConnect() {
         })()
       : undefined
 
-    const personalSign = personalSignEnabled
-      ? {
-          message: createSiweMessage({
-            address: '0x0000000000000000000000000000000000000000',
-            chainId: 0,
-            domain: window.location.host,
-            nonce: generateSiweNonce(),
-            uri: window.location.origin,
-            version: '1',
-          }),
-        }
-      : undefined
+    // Server Authentication: the SDK absolutizes relative URLs against
+    // the dapp's origin before forwarding to the wallet host.
+    const auth = authEnabled ? '/auth' : undefined
 
     const capabilities =
       method === 'register'
@@ -663,12 +660,12 @@ function WalletConnect() {
             ...(name ? { name } : {}),
             ...(digest ? { digest } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
-            ...(personalSign ? { personalSign } : {}),
+            ...(auth ? { auth } : {}),
           } as const)
         : {
             ...(digest ? { digest } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
-            ...(personalSign ? { personalSign } : {}),
+            ...(auth ? { auth } : {}),
           }
 
     execute(() =>
@@ -821,11 +818,11 @@ function WalletConnect() {
           <legend>
             <label>
               <input
-                checked={personalSignEnabled}
-                onChange={(e) => setPersonalSignEnabled(e.target.checked)}
+                checked={authEnabled}
+                onChange={(e) => setAuthEnabled(e.target.checked)}
                 type="checkbox"
               />{' '}
-              Sign in with Tempo (SIWE)
+              Authenticate with Server
             </label>
           </legend>
         </fieldset>
@@ -1863,6 +1860,64 @@ function MppZeroDollarAuth() {
     <Method method="fetch /zero-dollar-auth" result={result} error={error}>
       <Button onClick={() => execute(() => fetch('/zero-dollar-auth').then((r) => r.json()))}>
         Zero-Dollar Auth
+      </Button>
+    </Method>
+  )
+}
+
+function Authenticate() {
+  const [result, error, execute] = useRequest()
+  return (
+    <Method method="wallet_connect (auth)" result={result} error={error}>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_connect',
+              params: [
+                {
+                  capabilities: { auth: '/auth' },
+                  chainId: Hex.fromNumber(
+                    env === 'devnet' ? tempoDevnet.id : testnet ? tempoModerato.id : tempo.id,
+                  ),
+                },
+              ],
+            }),
+          )
+        }
+      >
+        Authenticate
+      </Button>
+    </Method>
+  )
+}
+
+function Me() {
+  const [result, error, execute] = useRequest()
+  return (
+    <Method method="fetch /me" result={result} error={error}>
+      <Button
+        onClick={() =>
+          execute(async () => {
+            const res = await fetch('/me', { credentials: 'include' })
+            return { status: res.status, body: await res.json() }
+          })
+        }
+      >
+        GET /me
+      </Button>
+      <Button
+        onClick={() =>
+          execute(async () => {
+            const res = await fetch('/auth/logout', {
+              method: 'POST',
+              credentials: 'include',
+            })
+            return { status: res.status }
+          })
+        }
+      >
+        POST /auth/logout
       </Button>
     </Method>
   )

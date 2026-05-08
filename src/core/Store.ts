@@ -18,6 +18,20 @@ export type State = {
   accounts: readonly Account[]
   /** Index of the active account. */
   activeAccount: number
+  /**
+   * Absolutized Server Authentication endpoints from the most recent
+   * `wallet_connect` (or the Provider's `auth` option). Persisted so
+   * `wallet_disconnect` can call `logout` even after a page reload, even
+   * when the URL was passed per-call rather than at Provider creation.
+   */
+  auth?:
+    | {
+        challenge?: string | undefined
+        verify?: string | undefined
+        logout?: string | undefined
+        returnToken?: boolean | undefined
+      }
+    | undefined
   /** Active chain ID. */
   chainId: number
   /** Queued RPC requests pending resolution by the dialog. */
@@ -111,6 +125,7 @@ export function create(options: Options): Store {
               accounts,
               activeAccount: state.activeAccount,
               ...(persistCredentials ? { accessKeys: state.accessKeys } : {}),
+              ...(state.auth ? { auth: state.auth } : {}),
               chainId: state.chainId,
             } as unknown as State
           },
