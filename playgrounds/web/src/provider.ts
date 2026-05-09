@@ -130,9 +130,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         },
         async loadAccounts({ client }) {
           const client_ = client as TurnkeyPlaygroundClient
-          const session = await client_.getSession()
-          if (!session || (session.expiry && session.expiry * 1000 <= Date.now()))
-            await requestTurnkeyEmailOtp({ client: client_, mode: 'login' })
+          await requestTurnkeyEmailOtp({ client: client_, mode: 'login' })
           return await getOrCreateEthereumAccounts(client_)
         },
       }),
