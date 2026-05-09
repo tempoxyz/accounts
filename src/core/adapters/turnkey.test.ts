@@ -298,7 +298,7 @@ function createClient(options: setup.Options = {}) {
         return {
           r: Hex.padLeft('0x11', 32),
           s: Hex.padLeft('0x22', 32),
-          v: 27,
+          v: '27',
         }
       },
     },

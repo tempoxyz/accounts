@@ -71,7 +71,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
 
     function toStoreAccount(account: turnkey.WalletAccount, label?: string | undefined) {
       return {
-        address: account.address,
+        address: core_Address.from(account.address),
         ...(label ? { label } : {}),
       }
     }
@@ -87,7 +87,6 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     function scheduleExpiry(session: turnkey.Session) {
       if (expiry_timeout) clearTimeout(expiry_timeout)
       expiry_timeout = undefined
-      if (!session.expiry) return
 
       const delay = Math.max(session.expiry * 1000 - Date.now() - sessionSkewMs, 0)
       expiry_timeout = setTimeout(() => clear(), delay)
@@ -97,7 +96,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       const client_ = await client()
       const session = await client_.getSession()
 
-      if (!session || (session.expiry && session.expiry * 1000 - sessionSkewMs <= Date.now())) {
+      if (!session || session.expiry * 1000 - sessionSkewMs <= Date.now()) {
         clear()
         return undefined
       }
@@ -131,7 +130,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         walletAccounts = persisted
           .map((account) =>
             restored.find((walletAccount) =>
-              isAddressEqual(walletAccount.address, account.address),
+              isAddressEqual(core_Address.from(walletAccount.address), account.address),
             ),
           )
           .filter((account): account is turnkey.WalletAccount => !!account)
@@ -181,7 +180,9 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       const address_ = address ?? store.getState().accounts[store.getState().activeAccount]?.address
       if (!address_) throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
 
-      const account = walletAccounts.find((account) => isAddressEqual(account.address, address_))
+      const account = walletAccounts.find((account) =>
+        isAddressEqual(core_Address.from(account.address), address_),
+      )
       if (account) return account
 
       if (walletAccounts.length === 0)
@@ -193,16 +194,9 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }
 
     function signatureToHex(value: turnkey.SignatureResponse): Hex.Hex {
-      if (typeof value === 'string') return value as Hex.Hex
-      if ('signature' in value) return value.signature
-      if ('activity' in value) return signatureToHex(value.activity.result.signRawPayloadResult)
+      const v = value.v.startsWith('0x') ? (value.v as Hex.Hex) : Hex.fromNumber(Number(value.v))
 
-      const v =
-        typeof value.v === 'string' && value.v.startsWith('0x')
-          ? (value.v as Hex.Hex)
-          : Hex.fromNumber(Number(value.v))
-
-      return Hex.concat(value.r, value.s, Hex.padLeft(v, 1))
+      return Hex.concat(value.r as Hex.Hex, value.s as Hex.Hex, Hex.padLeft(v, 1))
     }
 
     async function signPayload(parameters: {
@@ -271,7 +265,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       })
 
       AccessKey.save({
-        address: account.address,
+        address: core_Address.from(account.address),
         keyAuthorization,
         ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
         store,
@@ -312,7 +306,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       const { feePayer, ...rest } = parameters
       const client_tempo = getClient({ feePayer: resolveFeePayer(feePayer) })
       const prepared = await prepareTransactionRequest(client_tempo, {
-        account: account.address,
+        account: core_Address.from(account.address),
         ...rest,
         ...(feePayer ? { feePayer: true } : {}),
         type: 'tempo',
@@ -429,7 +423,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           const keyAuthorization = await signKeyAuthorization(account, prepared, {
             signature: parameters.signature,
           })
-          return { keyAuthorization, rootAddress: account.address }
+          return { keyAuthorization, rootAddress: core_Address.from(account.address) }
         },
         async signPersonalMessage(parameters) {
           const client_ = await client()
@@ -576,7 +570,7 @@ export declare namespace turnkey {
     /** Fetches wallets visible to the current Turnkey session. */
     fetchWallets: () => Promise<readonly Wallet[]>
     /** Returns the current Turnkey session, if any. */
-    getSession: () => Promise<Session | null>
+    getSession: () => Promise<Session | null | undefined>
     /** Low-level Turnkey HTTP client. */
     httpClient: {
       /** Signs a raw payload with Turnkey. */
@@ -591,7 +585,7 @@ export declare namespace turnkey {
   /** Minimal Turnkey session shape used by the adapter. */
   type Session = {
     /** Session expiry in Unix seconds. */
-    expiry?: number | undefined
+    expiry: number
   }
 
   /** Minimal structural Turnkey wallet shape used by the adapter. */
@@ -603,34 +597,19 @@ export declare namespace turnkey {
   /** Minimal structural Turnkey wallet account used by the adapter. */
   type WalletAccount = {
     /** EVM address for the Turnkey wallet account. */
-    address: Address
+    address: string
     /** Turnkey Ethereum address format. */
     addressFormat?: 'ADDRESS_FORMAT_ETHEREUM' | undefined
-    /** Turnkey secp256k1 signing curve. */
-    curve?: 'CURVE_SECP256K1' | undefined
   }
 
-  /** Supported Turnkey signature response shapes. */
-  type SignatureResponse =
-    | Hex.Hex
-    | Signature
-    | { signature: Hex.Hex }
-    | {
-        activity: {
-          result: {
-            signRawPayloadResult: Signature
-          }
-        }
-      }
-
-  /** Signature parts returned by Turnkey signing APIs. */
-  type Signature = {
+  /** Signature parts returned by Turnkey raw-payload signing. */
+  type SignatureResponse = {
     /** Signature r value. */
-    r: Hex.Hex
+    r: string
     /** Signature s value. */
-    s: Hex.Hex
+    s: string
     /** Signature recovery id/value. */
-    v: bigint | number | string
+    v: string
   }
 
   /** Parameters for low-level Turnkey raw payload signing. */
@@ -642,6 +621,6 @@ export declare namespace turnkey {
     /** Payload digest. */
     payload: Hex.Hex
     /** Turnkey signer identifier. */
-    signWith: Address
+    signWith: string
   }
 }

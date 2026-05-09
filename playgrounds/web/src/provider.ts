@@ -171,7 +171,7 @@ function getTurnkeyAdapterClient() {
     authProxyConfigId: import.meta.env.VITE_TURNKEY_AUTH_PROXY_CONFIG_ID,
   })
 
-  return turnkeyClient as unknown as TurnkeyPlaygroundClient
+  return turnkeyClient as TurnkeyPlaygroundClient
 }
 
 function createTurnkeySubOrgParams(name?: string | undefined) {
