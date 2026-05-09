@@ -498,6 +498,12 @@ export namespace wallet_connect {
     result: z.object({
       email: z.optional(z.nullable(z.string())),
       keyAuthorization: z.optional(keyAuthorization),
+      /**
+       * Echo of the `personalSign` request, present iff the caller set
+       * `capabilities.personalSign` (or `capabilities.auth` folded a SIWE
+       * message into the same slot). The signature itself lives on the
+       * top-level `capabilities.signature` field.
+       */
       personalSign: z.optional(
         z.object({
           message: z.string(),
