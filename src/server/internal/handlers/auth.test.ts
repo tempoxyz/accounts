@@ -327,7 +327,7 @@ describe('store: atomic `take` preferred, non-atomic fallback', () => {
   })
 })
 
-describe('publicOrigin / trustProxy', () => {
+describe('origin / trustProxy', () => {
   test('default: ignores `x-forwarded-host` and `x-forwarded-proto`', async () => {
     // No domain pin — relies on host header. trustProxy defaults to false.
     const handler = auth()
@@ -370,9 +370,9 @@ describe('publicOrigin / trustProxy', () => {
     expect(parsed.uri).toBe('https://app.example')
   })
 
-  test('publicOrigin: pinned origin overrides host and forwarded headers', async () => {
+  test('origin: pinned origin overrides host and forwarded headers', async () => {
     const handler = auth({
-      publicOrigin: 'https://app.example.com',
+      origin: 'https://app.example.com',
       trustProxy: true,
     })
     const app = new Hono()
@@ -394,9 +394,9 @@ describe('publicOrigin / trustProxy', () => {
     expect(parsed.uri).toBe('https://app.example.com')
   })
 
-  test('publicOrigin: invalid URL throws at construction time', async () => {
-    expect(() => auth({ publicOrigin: 'not-a-url' })).toThrowErrorMatchingInlineSnapshot(
-      `[Error: \`auth({ publicOrigin })\` must be a valid absolute URL. Got: not-a-url]`,
+  test('origin: invalid URL throws at construction time', async () => {
+    expect(() => auth({ origin: 'not-a-url' })).toThrowErrorMatchingInlineSnapshot(
+      `[Error: \`auth({ origin })\` must be a valid absolute URL. Got: not-a-url]`,
     )
   })
 })

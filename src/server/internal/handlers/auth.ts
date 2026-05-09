@@ -119,7 +119,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     cookieName = defaults.cookieName,
     domain,
     path = '/',
-    publicOrigin: publicOrigin_option,
+    origin: origin_option,
     store = Kv.memory(),
     transport = http(),
     trustProxy = false,
@@ -135,16 +135,16 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     return value
   }
 
-  // Pre-parse `publicOrigin` so a misconfiguration fails loudly at handler
+  // Pre-parse `origin` so a misconfiguration fails loudly at handler
   // construction time rather than per-request.
   const pinnedOrigin = (() => {
-    if (!publicOrigin_option) return undefined
+    if (!origin_option) return undefined
     try {
-      const url = new URL(publicOrigin_option)
+      const url = new URL(origin_option)
       return { protocol: url.protocol, host: url.host }
     } catch {
       throw new Error(
-        `\`auth({ publicOrigin })\` must be a valid absolute URL. Got: ${publicOrigin_option}`,
+        `\`auth({ origin })\` must be a valid absolute URL. Got: ${origin_option}`,
       )
     }
   })()
@@ -296,7 +296,7 @@ export declare namespace auth {
      * prevents a spoofed `x-forwarded-host` from shifting the SIWE domain
      * and a spoofed `x-forwarded-proto: http` from disabling `Secure`.
      */
-    publicOrigin?: string | undefined
+    origin?: string | undefined
     /**
      * Backing store for both single-use challenges (nonces) and issued
      * sessions. Keys are namespaced internally (`challenge:…`, `session:…`).
@@ -317,7 +317,7 @@ export declare namespace auth {
      * terminates TLS (OrbStack on `*.tempo.local`, a CDN, etc.). When
      * `false`, forwarded headers are ignored to prevent spoofing on
      * deployments that expose the origin server directly. Ignored when
-     * `publicOrigin` is set.
+     * `origin` is set.
      * @default false
      */
     trustProxy?: boolean | undefined
@@ -336,7 +336,7 @@ export declare namespace auth {
 /**
  * Resolves the public-facing protocol and host for a request.
  *
- * - When `pinnedOrigin` is set (operator passed `auth({ publicOrigin })`),
+ * - When `pinnedOrigin` is set (operator passed `auth({ origin })`),
  *   that origin is the source of truth — forwarded headers and request URL
  *   are ignored. This prevents a spoofed `x-forwarded-host` from shifting
  *   SIWE `domain` and a spoofed `x-forwarded-proto: http` from disabling

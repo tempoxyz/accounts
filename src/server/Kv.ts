@@ -106,7 +106,7 @@ export declare namespace cloudflare {
  *   fetch(req, env) {
  *     const handler = Handler.auth({
  *       store: Kv.durableObject(env.NONCE_DO),
- *       publicOrigin: 'https://app.example.com',
+ *       origin: 'https://app.example.com',
  *     })
  *     return handler.fetch(req)
  *   }
