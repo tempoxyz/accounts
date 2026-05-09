@@ -336,6 +336,97 @@ describe('cookie: false', () => {
   })
 })
 
+describe('session: false', () => {
+  test('verify returns {} with no token, no Set-Cookie, no store write', async () => {
+    const store = Kv.memory()
+    const { handler, app } = setup({ session: false, store })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const signature = await account.signMessage({ message })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature,
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchInlineSnapshot(`{}`)
+    expect(res.headers.get('set-cookie')).toBeNull()
+
+    // getSession always resolves undefined; even a manually-seeded
+    // session token must not leak through.
+    await store.set('session:tok', { address: account.address }, { ttl: 60 })
+    const req = new Request('http://wallet.example/', {
+      headers: { authorization: 'Bearer tok' },
+    })
+    expect(await handler.getSession(req)).toBeUndefined()
+  })
+
+  test('returnToken: true is ignored when session: false', async () => {
+    const { app } = setup({ session: false })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const signature = await account.signMessage({ message })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature,
+      returnToken: true,
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchInlineSnapshot(`{}`)
+  })
+
+  test('logout route is not mounted (returns 404)', async () => {
+    const store = Kv.memory()
+    const { app } = setup({ session: false, store })
+
+    await store.set('session:tok', { address: account.address }, { ttl: 60 })
+
+    const res = await app.request('/logout', {
+      method: 'POST',
+      headers: { host: 'wallet.example', authorization: 'Bearer tok' },
+    })
+    expect(res.status).toBe(404)
+    // The seeded entry survives — no logout route, nothing to delete.
+    expect(await store.get('session:tok')).toBeDefined()
+  })
+
+  test('onAuthenticate still runs and can reject before the short-circuit', async () => {
+    let invoked = false
+    const { app } = setup({
+      session: false,
+      onAuthenticate: () => {
+        invoked = true
+        throw new Error('blocked')
+      },
+    })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const signature = await account.signMessage({ message })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature,
+    })
+
+    expect(res.status).toBe(401)
+    expect(invoked).toBe(true)
+    expect(await res.json()).toMatchInlineSnapshot(`
+      {
+        "error": "blocked",
+      }
+    `)
+  })
+})
+
 describe('onAuthenticate', () => {
   test('invoked with verified address, chainId, message, signature, request', async () => {
     const calls: Array<{
@@ -427,6 +518,67 @@ describe('onAuthenticate', () => {
       }
     `)
     expect(res.headers.get('set-cookie')).toBeNull()
+  })
+
+  test('returning a Response merges body fields and status onto the verify response', async () => {
+    const { app } = setup({
+      onAuthenticate: () =>
+        Response.json({ jwt: 'eyJ...', userId: 'u_42' }, { status: 201 }),
+    })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const signature = await account.signMessage({ message })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature,
+      returnToken: true,
+    })
+
+    expect(res.status).toBe(201)
+    const { token, ...rest } = (await res.json()) as Record<string, unknown>
+    expect(token).toMatch(/^[a-z0-9]+$/)
+    expect(rest).toMatchInlineSnapshot(`
+      {
+        "jwt": "eyJ...",
+        "userId": "u_42",
+      }
+    `)
+  })
+
+  test('returned Response without `session: false` still issues a session token', async () => {
+    const store = Kv.memory()
+    const { handler, app } = setup({
+      store,
+      onAuthenticate: () => Response.json({ extra: 'meta' }),
+    })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const signature = await account.signMessage({ message })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature,
+    })
+
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as Record<string, unknown>).extra).toBe('meta')
+
+    const setCookie = res.headers.get('set-cookie')
+    expect(setCookie).toContain('accounts_auth=')
+    const token = setCookie!.split(';')[0]!.split('=')[1]!
+    expect(await store.get(`session:${token}`)).toBeDefined()
+
+    // getSession resolves the issued session via the cookie.
+    const followUp = new Request('http://wallet.example/', {
+      headers: { cookie: setCookie!.split(';')[0]! },
+    })
+    const sessionPayload = await handler.getSession(followUp)
+    expect(sessionPayload?.address).toBe(account.address)
   })
 
   test('async hook is awaited before issuing the session', async () => {

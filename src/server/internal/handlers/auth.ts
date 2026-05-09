@@ -1,4 +1,3 @@
-import { setCookie } from 'hono/cookie'
 import { Hex } from 'ox'
 import type { Address, Transport } from 'viem'
 import { createClient, http, zeroAddress } from 'viem'
@@ -11,6 +10,7 @@ import * as u from '../../../core/zod/utils.js'
 import { type Handler, from } from '../../Handler.js'
 import * as Kv from '../../Kv.js'
 import * as Hono from '../hono.js'
+import * as Session from './session.js'
 
 const defaults = {
   cookieName: 'accounts_auth',
@@ -123,6 +123,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     onAuthenticate,
     path = '/',
     origin: origin_option,
+    session = true,
     store = Kv.memory(),
     transport = http(),
     trustProxy = false,
@@ -230,25 +231,28 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     if (!valid) return c.json({ error: 'signature does not match address' }, 401)
 
     const issuedAt = Math.floor(now / 1000)
-    const session: SessionPayload = {
+    const payload: SessionPayload = {
       address,
       chainId: parsed.chainId,
       issuedAt,
       expiresAt: issuedAt + sessionTtl,
     }
 
-    // Hook for side effects (e.g. user provisioning, analytics). Throwing
-    // rejects the authentication and surfaces a 401 so the caller can
-    // gate auth on application-level checks.
+    // Hook for side effects (e.g. user provisioning, analytics). Returning
+    // a `Response` merges its JSON body and status onto the verify
+    // response (matches `webAuthn`'s contract). Throwing rejects with
+    // `401` and surfaces the error's message in the response body.
+    let hookResponse: Response | undefined
     if (onAuthenticate) {
       try {
-        await onAuthenticate({
+        const result = await onAuthenticate({
           address,
           chainId: parsed.chainId,
           message,
           request: c.req.raw,
           signature,
         })
+        if (result) hookResponse = result
       } catch (error) {
         return c.json(
           { error: error instanceof Error ? error.message : 'authentication rejected' },
@@ -257,45 +261,44 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
       }
     }
 
-    const token = generateSiweNonce()
-    await store.set(sessionKey(token), session, { ttl: sessionTtl })
+    // `session: false` short-circuits — verify acts as a stateless
+    // signature check. No token, no cookie, no store write. Useful for
+    // hosts that mint their own session in `onAuthenticate` (e.g. JWTs).
+    if (!session) return Session.mergeResponse({}, hookResponse)
 
-    // Token mode: caller sends `Authorization: Bearer <token>`. Forced when
-    // `cookie: false`, opt-in via `returnToken: true` otherwise.
+    const token = Session.generateToken()
+    await store.set(sessionKey(token), payload, { ttl: sessionTtl })
+
+    // Token mode: caller sends `Authorization: Bearer <token>`. Forced
+    // when `cookie: false`, opt-in via `returnToken: true` otherwise.
     // Cookie mode (default): browser carries the cookie automatically.
-    if (!cookie || returnToken) return c.json(z.encode(schema.verify.returns, { token }))
+    const tokenMode = !cookie || returnToken
+    const cookieHeader = tokenMode
+      ? undefined
+      : Session.serializeCookie({
+          name: cookieName,
+          protocol,
+          ttl: sessionTtl,
+          value: token,
+        })
 
-    setCookie(c, cookieName, token, {
-      httpOnly: true,
-      sameSite: 'Lax',
-      secure: protocol === 'https:',
-      path: '/',
-      maxAge: sessionTtl,
+    return Session.mergeResponse(tokenMode ? { token } : {}, hookResponse, cookieHeader)
+  })
+
+  // Logout has no meaning when sessions are disabled — skip mounting the
+  // route entirely so callers get a clean `404` instead of a misleading
+  // `204` no-op.
+  if (session)
+    router.post(logoutPath, async (c) => {
+      const token = Session.tokenFromRequest(c.req.raw, { cookie, cookieName })
+      if (token) await store.delete(sessionKey(token))
+      if (cookie) Session.clearCookie(c, cookieName)
+      return c.body(null, 204)
     })
 
-    return c.json(z.encode(schema.verify.returns, {}))
-  })
-
-  // Resolves the session token from a request. Prefers
-  // `Authorization: Bearer <token>` over the cookie. When `cookie: false`,
-  // the cookie is ignored even if present.
-  const tokenFromRequest = (req: Request): string | undefined => {
-    const bearer = bearerToken(req.headers.get('authorization'))
-    if (bearer) return bearer
-    if (!cookie) return undefined
-    const cookieHeader = req.headers.get('cookie')
-    return cookieHeader ? parseCookieValue(cookieHeader, cookieName) : undefined
-  }
-
-  router.post(logoutPath, async (c) => {
-    const token = tokenFromRequest(c.req.raw)
-    if (token) await store.delete(sessionKey(token))
-    if (cookie) setCookie(c, cookieName, '', { path: '/', maxAge: 0 })
-    return c.body(null, 204)
-  })
-
   const getSession: auth.getSession = async (req) => {
-    const token = tokenFromRequest(req)
+    if (!session) return undefined
+    const token = Session.tokenFromRequest(req, { cookie, cookieName })
     if (!token) return undefined
     return await store.get<SessionPayload>(sessionKey(token))
   }
@@ -312,7 +315,10 @@ export declare namespace auth {
 
   /**
    * Hook invoked after a SIWE signature is verified but before the
-   * session token is issued. Throw to reject the authentication.
+   * session token is issued. Returning a `Response` merges its JSON
+   * body and status onto the verify response. Throwing rejects with
+   * `401` — the thrown error's `message` is surfaced as the response
+   * `error` field — and no session is issued.
    */
   type onAuthenticate = (params: {
     /** Verified address that signed the SIWE message. */
@@ -325,7 +331,7 @@ export declare namespace auth {
     request: Request
     /** Signature provided by the wallet. */
     signature: Hex.Hex
-  }) => void | Promise<void>
+  }) => Response | Promise<Response> | void | Promise<void>
 
   type Options = from.Options & {
     /**
@@ -364,6 +370,17 @@ export declare namespace auth {
      * and a spoofed `x-forwarded-proto: http` from disabling `Secure`.
      */
     origin?: string | undefined
+    /**
+     * Whether to issue a session on successful verify. When `false`,
+     * verify acts as a stateless signature check — no token is generated,
+     * no entry is written to the session store, and no cookie is sent.
+     * The verify response is `{}`. `getSession` always returns
+     * `undefined` and `/logout` is a no-op (still returns `204`). Use
+     * this when the host application mints its own session token (e.g.
+     * a JWT inside `onAuthenticate`).
+     * @default true
+     */
+    session?: boolean | undefined
     /**
      * Backing store for both single-use challenges (nonces) and issued
      * sessions. Keys are namespaced internally (`challenge:…`, `session:…`).
@@ -439,18 +456,4 @@ function resolveOrigin(
   }
 }
 
-function bearerToken(authorization: string | null): string | undefined {
-  if (!authorization) return undefined
-  if (!authorization.toLowerCase().startsWith('bearer ')) return undefined
-  return authorization.slice(7).trim() || undefined
-}
 
-function parseCookieValue(header: string, name: string): string | undefined {
-  for (const part of header.split(';')) {
-    const trimmed = part.trim()
-    const eq = trimmed.indexOf('=')
-    if (eq === -1) continue
-    if (trimmed.slice(0, eq) === name) return decodeURIComponent(trimmed.slice(eq + 1))
-  }
-  return undefined
-}
