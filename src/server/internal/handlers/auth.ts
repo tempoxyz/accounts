@@ -126,7 +126,10 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     store = Kv.memory(),
     transport = http(),
     trustProxy = false,
-    ttl: { challenge: challengeTtl = defaults.ttl.challenge, session: sessionTtl = defaults.ttl.session } = {},
+    ttl: {
+      challenge: challengeTtl = defaults.ttl.challenge,
+      session: sessionTtl = defaults.ttl.session,
+    } = {},
     ...rest
   } = options
 
@@ -202,8 +205,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
 
     const { protocol, host: reqHost } = resolveReqOrigin(c.req.raw)
     const resolvedDomain = domain ?? reqHost
-    if (parsed.domain !== resolvedDomain)
-      return c.json({ error: 'domain mismatch' }, 400)
+    if (parsed.domain !== resolvedDomain) return c.json({ error: 'domain mismatch' }, 400)
 
     const now = Date.now()
     if (parsed.expirationTime && parsed.expirationTime.getTime() < now)
@@ -214,8 +216,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     const challenge = await take(challengeKey(parsed.nonce))
     if (!challenge) return c.json({ error: 'invalid or replayed nonce' }, 409)
 
-    if (parsed.chainId !== challenge.chainId)
-      return c.json({ error: 'chainId mismatch' }, 400)
+    if (parsed.chainId !== challenge.chainId) return c.json({ error: 'chainId mismatch' }, 400)
 
     // Signature verification via viem's `verifyMessage`. Tempo's chain
     // override unwraps `SignatureEnvelope` for WebAuthn / P256 / keychain

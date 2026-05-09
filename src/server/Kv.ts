@@ -73,7 +73,11 @@ export function cloudflare(kv: cloudflare.Parameters): Kv {
 export declare namespace cloudflare {
   type Parameters = {
     get: <value = unknown>(key: string, format: 'json') => Promise<value | null>
-    put: (key: string, value: string, options?: { expirationTtl?: number } | undefined) => Promise<void>
+    put: (
+      key: string,
+      value: string,
+      options?: { expirationTtl?: number } | undefined,
+    ) => Promise<void>
     delete: (key: string) => Promise<void>
   }
 }

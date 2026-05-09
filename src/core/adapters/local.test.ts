@@ -10,9 +10,9 @@ import {
   webAuthnAccounts,
 } from '../../../test/config.js'
 import * as Account from '../Account.js'
+import type * as Adapter from '../Adapter.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
-import type * as Adapter from '../Adapter.js'
 import { local } from './local.js'
 
 describe('local', () => {
@@ -238,9 +238,7 @@ describe('local', () => {
 function makeLoadAccounts(
   index: number,
   captured: { digest: Hex | undefined }[],
-): (
-  params?: Adapter.loadAccounts.Parameters,
-) => Promise<Adapter.loadAccounts.ReturnType> {
+): (params?: Adapter.loadAccounts.Parameters) => Promise<Adapter.loadAccounts.ReturnType> {
   return async (params) => {
     captured.push({ digest: params?.digest })
     return {
