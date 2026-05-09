@@ -1,7 +1,9 @@
-import { Hex, Provider as ox_Provider } from 'ox'
-import { hashMessage, hashTypedData, isAddressEqual, serializeTransaction } from 'viem'
+import { Hex, Provider as ox_Provider, Signature } from 'ox'
+import { SignatureEnvelope } from 'ox/tempo'
+import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
 import type { Address } from 'viem/accounts'
 import { prepareTransactionRequest } from 'viem/actions'
+import { Transaction as TempoTransaction } from 'viem/tempo'
 
 import * as Adapter from '../Adapter.js'
 import * as Store from '../Store.js'
@@ -22,7 +24,9 @@ import * as Store from '../Store.js'
  *   adapter: turnkey({
  *     client: new TurnkeyClient({ organizationId, authProxyConfigId }),
  *     createAccount: async ({ client, parameters }) => {
- *       await client.signUpWithPasskey({ userName: parameters.name })
+ *       await client.signUpWithPasskey({
+ *         createSubOrgParams: { userName: parameters.name },
+ *       })
  *       return (await client.fetchWallets())
  *         .flatMap((wallet) => wallet.accounts)
  *         .find((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')!
@@ -112,15 +116,27 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       if (restore_promise) return await restore_promise
 
       restore_promise = (async () => {
+        const state = store.getState()
+        const persisted = state.accounts
+        if (persisted.length === 0) return
+
         const session = await getValidSession()
         if (!session) return
 
-        walletAccounts = await restoreAccounts()
+        const restored = await restoreAccounts()
+        walletAccounts = persisted
+          .map((account) =>
+            restored.find((walletAccount) =>
+              isAddressEqual(walletAccount.address, account.address),
+            ),
+          )
+          .filter((account): account is turnkey.WalletAccount => !!account)
+
         if (walletAccounts.length === 0) return
 
         store.setState({
           accounts: walletAccounts.map((account) => toStoreAccount(account)),
-          activeAccount: 0,
+          activeAccount: Math.min(state.activeAccount, walletAccounts.length - 1),
         })
       })()
 
@@ -206,20 +222,19 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       const client_ = await client()
       const account = await accountForSigning(parameters.from)
       const { feePayer, ...rest } = parameters
-      const client_tempo = getClient({
-        feePayer: (() => {
-          if (feePayer === false) return false
-          if (typeof feePayer === 'string') return feePayer
-          return undefined
-        })(),
-      })
+      const client_tempo = getClient({ feePayer: resolveFeePayer(feePayer) })
       const prepared = await prepareTransactionRequest(client_tempo, {
         account: account.address,
         ...rest,
         ...(feePayer ? { feePayer: true } : {}),
         type: 'tempo',
       } as never)
-      const unsignedTransaction = serializeTransaction(prepared as never)
+      const presign = (() => {
+        if ('feePayerSignature' in prepared && prepared.feePayerSignature)
+          return { ...prepared, feePayerSignature: null }
+        return prepared
+      })()
+      const unsignedTransaction = await TempoTransaction.serialize(presign as never)
 
       if (options.signTransaction)
         return await withSession(() =>
@@ -230,16 +245,21 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           }),
         )
 
-      const result = await withSession(
-        async () =>
-          await client_.signTransaction({
-            transactionType: 'TRANSACTION_TYPE_TEMPO',
-            unsignedTransaction,
-            walletAccount: account,
-          }),
+      const signature = await signPayload({
+        client: client_,
+        payload: keccak256(unsignedTransaction),
+        walletAccount: account,
+      })
+      return await TempoTransaction.serialize(
+        prepared as never,
+        SignatureEnvelope.from(Signature.fromHex(signature)) as never,
       )
-      if (typeof result === 'string') return result
-      return result.signedTransaction
+    }
+
+    function resolveFeePayer(feePayer: string | boolean | undefined) {
+      if (feePayer === false) return false
+      if (typeof feePayer === 'string') return feePayer
+      return undefined
     }
 
     function assertNoAccessKey(parameters: {
@@ -336,14 +356,20 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         },
         async sendTransaction(parameters) {
           const signed = await signTransaction(parameters)
-          return await getClient({ chainId: parameters.chainId }).request({
+          return await getClient({
+            chainId: parameters.chainId,
+            feePayer: resolveFeePayer(parameters.feePayer),
+          }).request({
             method: 'eth_sendRawTransaction' as never,
             params: [signed],
           })
         },
         async sendTransactionSync(parameters) {
           const signed = await signTransaction(parameters)
-          return await getClient({ chainId: parameters.chainId }).request({
+          return await getClient({
+            chainId: parameters.chainId,
+            feePayer: resolveFeePayer(parameters.feePayer),
+          }).request({
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],
           })
@@ -414,12 +440,6 @@ export declare namespace turnkey {
     init?: (() => Promise<void> | void) | undefined
     /** Clears the current Turnkey session. */
     logout: () => Promise<void> | void
-    /** High-level Turnkey transaction signing. */
-    signTransaction: (
-      parameters: TurnkeySignTransactionParameters & {
-        transactionType: 'TRANSACTION_TYPE_TEMPO'
-      },
-    ) => Promise<Hex.Hex | { signedTransaction: Hex.Hex }>
   }
 
   /** Minimal Turnkey session shape used by the adapter. */
@@ -493,14 +513,6 @@ export declare namespace turnkey {
   type SignTransactionParameters = {
     /** Initialized Turnkey client. */
     client: Client
-    /** Serialized unsigned transaction. */
-    unsignedTransaction: Hex.Hex
-    /** Turnkey wallet account to sign with. */
-    walletAccount: WalletAccount
-  }
-
-  /** Parameters for Turnkey's client transaction signing method. */
-  type TurnkeySignTransactionParameters = {
     /** Serialized unsigned transaction. */
     unsignedTransaction: Hex.Hex
     /** Turnkey wallet account to sign with. */

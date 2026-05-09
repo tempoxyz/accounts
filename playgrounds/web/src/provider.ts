@@ -1,4 +1,5 @@
-import { TurnkeyClient } from '@turnkey/core'
+import { TurnkeyClient, generateWalletAccountsFromAddressFormat } from '@turnkey/core'
+import type { TurnkeyClientMethods } from '@turnkey/core'
 import {
   type Dialog as DialogNs,
   WebAuthnCeremony,
@@ -18,9 +19,11 @@ export type Env = 'mainnet' | 'testnet' | 'devnet'
 export type DialogMode = 'iframe' | 'popup'
 export type ProviderValue = ReturnType<typeof Provider.create>
 type TurnkeyPlaygroundClient = turnkey.Client & {
-  loginWithPasskey: () => Promise<unknown>
-  signUpWithPasskey: () => Promise<unknown>
+  createWallet: TurnkeyClientMethods['createWallet']
+  loginWithPasskey: TurnkeyClientMethods['loginWithPasskey']
+  signUpWithPasskey: TurnkeyClientMethods['signUpWithPasskey']
 }
+const turnkeyEthereumAddressFormat = 'ADDRESS_FORMAT_ETHEREUM'
 
 export const env: Env = (() => {
   const param = new URLSearchParams(window.location.search).get('env')
@@ -100,15 +103,23 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
   }
 
   if (adapterType === 'turnkey') {
-    const client = getTurnkeyClient()
+    const client = getTurnkeyAdapterClient()
     return Provider.create({
       adapter: turnkey({
         client,
         async createAccount({ client }) {
           const client_ = client as TurnkeyPlaygroundClient
-          await client_.signUpWithPasskey()
-          const account = (await getEthereumAccounts(client_))[0]
-          if (!account) throw new Error('No Turnkey Ethereum account found.')
+          await client_.signUpWithPasskey({
+            createSubOrgParams: {
+              customWallet: {
+                walletName: 'Tempo Playground',
+                walletAccounts: generateWalletAccountsFromAddressFormat({
+                  addresses: [turnkeyEthereumAddressFormat],
+                }),
+              },
+            },
+          })
+          const account = (await getOrCreateEthereumAccounts(client_))[0]
           return account
         },
         async loadAccounts({ client }) {
@@ -116,7 +127,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
           const session = await client_.getSession()
           if (!session || (session.expiry && session.expiry * 1000 <= Date.now()))
             await client_.loginWithPasskey()
-          return await getEthereumAccounts(client_)
+          return await getOrCreateEthereumAccounts(client_)
         },
       }),
       mpp: true,
@@ -151,7 +162,7 @@ export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 't
   provider = createProvider(adapterType)
 }
 
-function getTurnkeyClient() {
+function getTurnkeyAdapterClient() {
   const organizationId = import.meta.env.VITE_TURNKEY_ORGANIZATION_ID
   if (!organizationId)
     throw new Error('VITE_TURNKEY_ORGANIZATION_ID is required for the Turnkey adapter.')
@@ -164,13 +175,28 @@ function getTurnkeyClient() {
     },
   })
 
-  return turnkeyClient as unknown as turnkey.Client
+  return turnkeyClient as unknown as TurnkeyPlaygroundClient
 }
 
 async function getEthereumAccounts(client: TurnkeyPlaygroundClient) {
   return (await client.fetchWallets())
     .flatMap((wallet) => wallet.accounts)
-    .filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')
+    .filter((account) => account.addressFormat === turnkeyEthereumAddressFormat)
+}
+
+async function getOrCreateEthereumAccounts(client: TurnkeyPlaygroundClient) {
+  const existing = await getEthereumAccounts(client)
+  if (existing.length > 0) return existing
+
+  await client.createWallet({
+    walletName: 'Tempo Playground',
+    accounts: [turnkeyEthereumAddressFormat],
+  })
+
+  const created = await getEthereumAccounts(client)
+  if (created.length > 0) return created
+
+  throw new Error('No Turnkey Ethereum account found after creating a wallet.')
 }
 
 export function switchTheme(

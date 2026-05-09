@@ -93,5 +93,9 @@ strictDepBuilds: true
 trustPolicy: no-downgrade
 
 trustPolicyExclude:
+  - '@noble/curves@1.8.0'
+  - '@noble/hashes@1.7.0'
   - chokidar@4.0.3
   - semver@6.3.1
+  - slow-redact@0.3.2
+  - undici-types@6.19.8

@@ -7,7 +7,6 @@ import { turnkey } from './turnkey.js'
 
 const address = '0x0000000000000000000000000000000000000001'
 const other = '0x0000000000000000000000000000000000000002'
-const signature = Hex.concat(Hex.padLeft('0x11', 32), Hex.padLeft('0x22', 32), '0x1b')
 
 describe('turnkey', () => {
   test('default: createAccount delegates registration and signs the requested digest', async () => {
@@ -68,6 +67,51 @@ describe('turnkey', () => {
 
     expect(client.fetchCalls).toMatchInlineSnapshot(`1`)
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
+  })
+
+  test('behavior: silent restore does not connect accounts when the provider store is empty', async () => {
+    const { adapter, client } = setup()
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
+    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: No Turnkey account connected.]')
+
+    expect(client.fetchCalls).toMatchInlineSnapshot(`0`)
+    expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: silent restore only reconnects persisted provider accounts', async () => {
+    const { adapter, client, store } = setup()
+    client.wallets = [
+      {
+        accounts: [
+          { address, addressFormat: 'ADDRESS_FORMAT_ETHEREUM' },
+          { address: other, addressFormat: 'ADDRESS_FORMAT_ETHEREUM' },
+        ],
+      },
+    ]
+    store.setState({ accounts: [{ address: other }], activeAccount: 0 })
+
+    await adapter.actions.signPersonalMessage(
+      { address: other, data: '0x68656c6c6f' },
+      { method: 'personal_sign', params: ['0x68656c6c6f', other] },
+    )
+
+    expect(client.signWith).toMatchInlineSnapshot(`
+      [
+        "0x0000000000000000000000000000000000000002",
+      ]
+    `)
+    expect(store.getState().accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x0000000000000000000000000000000000000002",
+        },
+      ]
+    `)
   })
 
   test('behavior: silent restore ignores non-Ethereum wallet accounts', async () => {
@@ -186,9 +230,6 @@ function createClient(options: setup.Options = {}) {
       client.initCalls++
     },
     logout() {},
-    async signTransaction() {
-      return signature
-    },
   } satisfies turnkey.Client & {
     fetchCalls: number
     initCalls: number
