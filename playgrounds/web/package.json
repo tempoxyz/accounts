@@ -11,6 +11,7 @@
     "preview": "vp preview"
   },
   "dependencies": {
+    "@turnkey/core": "1.13.0",
     "accounts": "workspace:*",
     "mppx": "catalog:",
     "react": "^19.2.5",
