@@ -33,7 +33,7 @@ export function TurnkeyEmailOtp() {
 
   if (!request) return null
 
-  const label = request.mode === 'register' ? 'Register' : 'Login'
+  const label = request.mode === 'register' ? 'Register' : 'Continue'
 
   async function submitEmail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -75,23 +75,25 @@ export function TurnkeyEmailOtp() {
     try {
       setError(undefined)
       setPending(true)
-      const publicKey = await request.client.createApiKeyPair()
-      const verified = await request.client.verifyOtp({
-        contact: email_,
-        otpCode: code_,
-        otpId,
-        otpType: OtpType.Email,
-        publicKey,
-      })
 
       if (request.mode === 'login') {
-        if (!verified.subOrganizationId) throw new Error('No Turnkey account found for that email.')
-        await request.client.loginWithOtp({
-          organizationId: verified.subOrganizationId,
-          publicKey,
-          verificationToken: verified.verificationToken,
+        await request.client.completeOtp({
+          contact: email_,
+          ...(request.createSubOrgParams ? { createSubOrgParams: request.createSubOrgParams } : {}),
+          otpCode: code_,
+          otpId,
+          otpType: OtpType.Email,
         })
       } else {
+        const publicKey = await request.client.createApiKeyPair()
+        const verified = await request.client.verifyOtp({
+          contact: email_,
+          otpCode: code_,
+          otpId,
+          otpType: OtpType.Email,
+          publicKey,
+        })
+
         if (verified.subOrganizationId)
           throw new Error('A Turnkey account already exists for that email.')
         await request.client.signUpWithOtp({

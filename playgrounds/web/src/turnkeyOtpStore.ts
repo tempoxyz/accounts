@@ -5,6 +5,8 @@ export type TurnkeyEmailOtpMode = 'login' | 'register'
 
 /** Minimal Turnkey client surface used by the playground email OTP UI. */
 export type TurnkeyEmailOtpClient = {
+  /** Completes OTP auth, logging in or registering when needed. */
+  completeOtp: TurnkeyClientMethods['completeOtp']
   /** Creates a session key pair used by OTP verification and auth. */
   createApiKeyPair: TurnkeyClientMethods['createApiKeyPair']
   /** Sends an OTP code to an email address. */

@@ -111,18 +111,9 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         client,
         async createAccount({ client, parameters }) {
           const client_ = client as TurnkeyPlaygroundClient
-          const createSubOrgParams = {
-            ...(parameters.name ? { userName: parameters.name } : {}),
-            customWallet: {
-              walletName: 'Tempo Playground',
-              walletAccounts: generateWalletAccountsFromAddressFormat({
-                addresses: [turnkeyEthereumAddressFormat],
-              }),
-            },
-          } satisfies CreateSubOrgParams
           await requestTurnkeyEmailOtp({
             client: client_,
-            createSubOrgParams,
+            createSubOrgParams: createTurnkeySubOrgParams(parameters.name),
             mode: 'register',
           })
           const account = (await getOrCreateEthereumAccounts(client_))[0]
@@ -130,7 +121,11 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         },
         async loadAccounts({ client }) {
           const client_ = client as TurnkeyPlaygroundClient
-          await requestTurnkeyEmailOtp({ client: client_, mode: 'login' })
+          await requestTurnkeyEmailOtp({
+            client: client_,
+            createSubOrgParams: createTurnkeySubOrgParams(),
+            mode: 'login',
+          })
           return await getOrCreateEthereumAccounts(client_)
         },
       }),
@@ -177,6 +172,18 @@ function getTurnkeyAdapterClient() {
   })
 
   return turnkeyClient as unknown as TurnkeyPlaygroundClient
+}
+
+function createTurnkeySubOrgParams(name?: string | undefined) {
+  return {
+    ...(name ? { userName: name } : {}),
+    customWallet: {
+      walletName: 'Tempo Playground',
+      walletAccounts: generateWalletAccountsFromAddressFormat({
+        addresses: [turnkeyEthereumAddressFormat],
+      }),
+    },
+  } satisfies CreateSubOrgParams
 }
 
 async function getEthereumAccounts(client: TurnkeyPlaygroundClient) {
