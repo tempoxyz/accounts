@@ -167,7 +167,6 @@ describe('verify (EOA, cookie mode)', () => {
     })
     expect(res.status).toBe(400)
   })
-
 })
 
 describe('logout', () => {
