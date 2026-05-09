@@ -108,11 +108,6 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
 
     async function restoreAccounts() {
       const client_ = await client()
-      if (options.restoreAccounts)
-        return await options.restoreAccounts({
-          client: client_,
-        })
-
       const wallets = await client_.fetchWallets()
       return wallets.flatMap((wallet) =>
         wallet.accounts.filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM'),
@@ -574,13 +569,6 @@ export declare namespace turnkey {
     rdns?: string | undefined
     /** Milliseconds before Turnkey session expiry to proactively disconnect. @default 10000 */
     sessionSkewMs?: number | undefined
-    /** Optional silent account restoration. Defaults to Ethereum accounts from `client.fetchWallets()`. */
-    restoreAccounts?:
-      | ((parameters: {
-          /** Initialized Turnkey client. */
-          client: Client
-        }) => Promise<readonly WalletAccount[]>)
-      | undefined
   }
 
   /** Minimal structural Turnkey client surface used by the adapter. */
