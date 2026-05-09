@@ -75,17 +75,20 @@ export function TurnkeyEmailOtp() {
     try {
       setError(undefined)
       setPending(true)
+      const publicKey = await request.client.createApiKeyPair()
       const verified = await request.client.verifyOtp({
         contact: email_,
         otpCode: code_,
         otpId,
         otpType: OtpType.Email,
+        publicKey,
       })
 
       if (request.mode === 'login') {
         if (!verified.subOrganizationId) throw new Error('No Turnkey account found for that email.')
         await request.client.loginWithOtp({
           organizationId: verified.subOrganizationId,
+          publicKey,
           verificationToken: verified.verificationToken,
         })
       } else {
@@ -95,6 +98,7 @@ export function TurnkeyEmailOtp() {
           contact: email_,
           ...(request.createSubOrgParams ? { createSubOrgParams: request.createSubOrgParams } : {}),
           otpType: OtpType.Email,
+          publicKey,
           verificationToken: verified.verificationToken,
         })
       }
