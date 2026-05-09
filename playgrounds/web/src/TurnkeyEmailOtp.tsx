@@ -1,7 +1,7 @@
 import { OtpType } from '@turnkey/core'
 import type { FormEvent } from 'react'
 import { useEffect, useSyncExternalStore, useState } from 'react'
-import { Button, Input, Otp } from 'regen-ui'
+import { Button, Input } from 'regen-ui'
 
 import {
   getTurnkeyEmailOtpSnapshot,
@@ -144,7 +144,19 @@ export function TurnkeyEmailOtp() {
             <div className="turnkey-otp-copy">
               <p>Enter the code sent to {email.trim()}.</p>
             </div>
-            <Otp disabled={pending} error={error} onChange={setCode} value={code} />
+            <Input
+              autoCapitalize="characters"
+              autoComplete="one-time-code"
+              autoFocus
+              disabled={pending}
+              error={error}
+              inputMode="text"
+              label="Verification code"
+              onChange={(event) => setCode(event.target.value)}
+              pattern="[A-Za-z0-9]*"
+              spellCheck={false}
+              value={code}
+            />
             <div className="turnkey-otp-actions">
               <Button disabled={pending} onClick={() => setOtpId(undefined)} type="button">
                 Back

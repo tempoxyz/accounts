@@ -342,6 +342,21 @@ html {
   outline: none;
 }
 
+.playground .turnkey-otp-panel input:not([type='checkbox']):not([type='radio']):not([type='color']),
+.playground
+  .turnkey-otp-panel
+  input:not([type='checkbox']):not([type='radio']):not([type='color']):hover,
+.playground
+  .turnkey-otp-panel
+  input:not([type='checkbox']):not([type='radio']):not([type='color']):focus {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  min-height: 0;
+  outline: none;
+  padding: 0;
+}
+
 .playground input[type='color'] {
   height: 32px;
   padding: 0;

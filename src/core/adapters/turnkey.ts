@@ -9,7 +9,7 @@ import * as Adapter from '../Adapter.js'
 import * as Store from '../Store.js'
 
 /**
- * Creates a Turnkey adapter backed by `@turnkey/core` client sessions and wallet accounts.
+ * Creates a Turnkey adapter backed by `@turnkey/core` client sessions and Ethereum wallet accounts.
  *
  * The adapter owns silent reconnect, session-expiry cleanup, and provider signing actions.
  * Apps provide the UI-bearing registration and login flows through `createAccount` and
@@ -201,9 +201,11 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       return Hex.concat(value.r, value.s, Hex.padLeft(v, 1))
     }
 
-    async function signPayload(parameters: turnkey.SignPayloadParameters) {
-      if (options.signPayload) return await withSession(() => options.signPayload!(parameters))
-
+    async function signPayload(parameters: {
+      client: turnkey.Client
+      payload: Hex.Hex
+      walletAccount: turnkey.WalletAccount
+    }) {
       const { client, payload, walletAccount } = parameters
       const result = await withSession(
         async () =>
@@ -235,15 +237,6 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         return prepared
       })()
       const unsignedTransaction = await TempoTransaction.serialize(presign as never)
-
-      if (options.signTransaction)
-        return await withSession(() =>
-          options.signTransaction!({
-            client: client_,
-            unsignedTransaction,
-            walletAccount: account,
-          }),
-        )
 
       const signature = await signPayload({
         client: client_,
@@ -419,10 +412,6 @@ export declare namespace turnkey {
           client: Client
         }) => Promise<readonly WalletAccount[]>)
       | undefined
-    /** Optional override for Turnkey payload signing across SDK versions. */
-    signPayload?: ((parameters: SignPayloadParameters) => Promise<Hex.Hex>) | undefined
-    /** Optional override for Turnkey transaction signing across SDK versions. */
-    signTransaction?: ((parameters: SignTransactionParameters) => Promise<Hex.Hex>) | undefined
   }
 
   /** Minimal structural Turnkey client surface used by the adapter. */
@@ -458,10 +447,10 @@ export declare namespace turnkey {
   type WalletAccount = {
     /** EVM address for the Turnkey wallet account. */
     address: Address
-    /** Turnkey address format. */
-    addressFormat?: string | undefined
-    /** Turnkey signing curve. */
-    curve?: string | undefined
+    /** Turnkey Ethereum address format. */
+    addressFormat?: 'ADDRESS_FORMAT_ETHEREUM' | undefined
+    /** Turnkey secp256k1 signing curve. */
+    curve?: 'CURVE_SECP256K1' | undefined
   }
 
   /** Supported Turnkey signature response shapes. */
@@ -487,16 +476,6 @@ export declare namespace turnkey {
     v: bigint | number | string
   }
 
-  /** Parameters for payload signing. */
-  type SignPayloadParameters = {
-    /** Initialized Turnkey client. */
-    client: Client
-    /** Payload digest to sign. */
-    payload: Hex.Hex
-    /** Turnkey wallet account to sign with. */
-    walletAccount: WalletAccount
-  }
-
   /** Parameters for low-level Turnkey raw payload signing. */
   type SignRawPayloadParameters = {
     /** Payload encoding. */
@@ -507,15 +486,5 @@ export declare namespace turnkey {
     payload: Hex.Hex
     /** Turnkey signer identifier. */
     signWith: Address
-  }
-
-  /** Parameters for Turnkey transaction signing. */
-  type SignTransactionParameters = {
-    /** Initialized Turnkey client. */
-    client: Client
-    /** Serialized unsigned transaction. */
-    unsignedTransaction: Hex.Hex
-    /** Turnkey wallet account to sign with. */
-    walletAccount: WalletAccount
   }
 }
