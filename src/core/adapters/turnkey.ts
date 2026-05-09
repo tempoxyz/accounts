@@ -1,10 +1,19 @@
-import { Hex, Provider as ox_Provider, Signature } from 'ox'
-import { SignatureEnvelope } from 'ox/tempo'
+import {
+  Address as core_Address,
+  Hex,
+  Provider as ox_Provider,
+  PublicKey,
+  Signature,
+  WebCryptoP256,
+} from 'ox'
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
 import type { Address } from 'viem/accounts'
 import { prepareTransactionRequest } from 'viem/actions'
+import type { Account as TempoAccount } from 'viem/tempo'
 import { Transaction as TempoTransaction } from 'viem/tempo'
 
+import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Store from '../Store.js'
 
@@ -45,7 +54,7 @@ import * as Store from '../Store.js'
 export function turnkey(options: turnkey.Options): Adapter.Adapter {
   const { icon, name = 'Turnkey', rdns = 'com.turnkey', sessionSkewMs = 10_000 } = options
 
-  return Adapter.define({ icon, name, rdns }, ({ getClient, store }) => {
+  return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
     let client_promise: Promise<turnkey.Client> | undefined
     let expiry_timeout: ReturnType<typeof setTimeout> | undefined
     let restore_promise: Promise<void> | undefined
@@ -220,6 +229,88 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       return signatureToHex(result)
     }
 
+    async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
+      const { expiry, limits, scopes } = options
+      const chainId = options.chainId ?? getClient().chain.id
+
+      if (options.publicKey || options.address) {
+        const address =
+          options.address ?? core_Address.fromPublicKey(PublicKey.from(options.publicKey!))
+        const keyAuthorization = KeyAuthorization.from({
+          address,
+          chainId: BigInt(chainId),
+          expiry,
+          limits,
+          scopes,
+          type: options.keyType ?? 'secp256k1',
+        })
+        return { keyAuthorization }
+      }
+
+      const keyPair = await WebCryptoP256.createKeyPair()
+      const address = core_Address.fromPublicKey(PublicKey.from(keyPair.publicKey))
+      const keyAuthorization = KeyAuthorization.from({
+        address,
+        chainId: BigInt(chainId),
+        expiry,
+        limits,
+        scopes,
+        type: 'p256',
+      })
+      return { keyAuthorization, keyPair }
+    }
+
+    async function signKeyAuthorization(
+      account: turnkey.WalletAccount,
+      prepared: Awaited<ReturnType<typeof prepareKeyAuthorization>>,
+      options: {
+        signature?: Hex.Hex | undefined
+      } = {},
+    ) {
+      const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
+      const signature =
+        options.signature ??
+        (await signPayload({ client: await client(), payload: digest, walletAccount: account }))
+      const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
+        signature: SignatureEnvelope.from(signature),
+      })
+
+      AccessKey.save({
+        address: account.address,
+        keyAuthorization,
+        ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
+        store,
+      })
+
+      return KeyAuthorization.toRpc(keyAuthorization)
+    }
+
+    async function withAccessKey<result>(
+      fn: (
+        account: TempoAccount.Account,
+        keyAuthorization?: KeyAuthorization.Signed,
+      ) => Promise<result>,
+    ) {
+      const account = (() => {
+        try {
+          return getAccount({ signable: true })
+        } catch {
+          return undefined
+        }
+      })()
+      if (!account || account.source !== 'accessKey') return undefined
+
+      const keyAuthorization = AccessKey.getPending(account, { store })
+      try {
+        const result = await fn(account, keyAuthorization ?? undefined)
+        AccessKey.removePending(account, { store })
+        return result
+      } catch {
+        AccessKey.remove(account, { store })
+        return undefined
+      }
+    }
+
     async function signTransaction(parameters: Adapter.signTransaction.Parameters) {
       const client_ = await client()
       const account = await accountForSigning(parameters.from)
@@ -255,15 +346,6 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       return undefined
     }
 
-    function assertNoAccessKey(parameters: {
-      authorizeAccessKey?: Adapter.authorizeAccessKey.Parameters | undefined
-    }) {
-      if (!parameters.authorizeAccessKey) return
-      throw new ox_Provider.UnsupportedMethodError({
-        message: '`authorizeAccessKey` is not supported by the Turnkey adapter.',
-      })
-    }
-
     function isSessionError(error: unknown) {
       if (options.isSessionError?.(error)) return true
       const message = error instanceof Error ? error.message : String(error)
@@ -280,7 +362,12 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       },
       actions: {
         async createAccount(parameters) {
-          assertNoAccessKey(parameters)
+          const { authorizeAccessKey, personalSign } = parameters
+          if (personalSign && parameters.digest)
+            throw new ox_Provider.ProviderRpcError(
+              -32602,
+              '`digest` and `personalSign` cannot both be set on `wallet_connect`.',
+            )
 
           const client_ = await client()
           const account = await options.createAccount({ client: client_, parameters })
@@ -288,37 +375,66 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           walletAccounts = [account]
           restore_promise = undefined
 
-          const digest = parameters.personalSign
-            ? hashMessage(parameters.personalSign.message)
-            : parameters.digest
+          const digest = personalSign ? hashMessage(personalSign.message) : parameters.digest
+          const keyAuthorization = authorizeAccessKey
+            ? await signKeyAuthorization(
+                account,
+                await prepareKeyAuthorization(authorizeAccessKey),
+                { signature: authorizeAccessKey.signature },
+              )
+            : undefined
 
           return {
             accounts: [toStoreAccount(account, parameters.name)],
+            ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
+            ...(keyAuthorization ? { keyAuthorization } : {}),
             signature: digest
               ? await signPayload({ client: client_, payload: digest, walletAccount: account })
               : undefined,
           }
         },
         async loadAccounts(parameters) {
-          assertNoAccessKey(parameters ?? {})
+          const { authorizeAccessKey, personalSign } =
+            parameters ?? ({} as Adapter.loadAccounts.Parameters)
+          if (personalSign && parameters?.digest)
+            throw new ox_Provider.ProviderRpcError(
+              -32602,
+              '`digest` and `personalSign` cannot both be set on `wallet_connect`.',
+            )
 
           const client_ = await client()
           walletAccounts = await options.loadAccounts({ client: client_, parameters })
           await assertSession()
           restore_promise = undefined
 
-          const digest = parameters?.personalSign
-            ? hashMessage(parameters.personalSign.message)
-            : parameters?.digest
+          const digest = personalSign ? hashMessage(personalSign.message) : parameters?.digest
           const account = walletAccounts[0]
+          const keyAuthorization =
+            authorizeAccessKey && account
+              ? await signKeyAuthorization(
+                  account,
+                  await prepareKeyAuthorization(authorizeAccessKey),
+                  { signature: authorizeAccessKey.signature },
+                )
+              : undefined
 
           return {
             accounts: walletAccounts.map((account) => toStoreAccount(account)),
+            ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
+            ...(keyAuthorization ? { keyAuthorization } : {}),
             signature:
               digest && account
                 ? await signPayload({ client: client_, payload: digest, walletAccount: account })
                 : undefined,
           }
+        },
+        async authorizeAccessKey(parameters) {
+          const account = await accountForSigning(undefined)
+          const prepared = await prepareKeyAuthorization(parameters)
+          const keyAuthorization = await signKeyAuthorization(account, prepared, {
+            signature: parameters.signature,
+          })
+          return { keyAuthorization, rootAddress: account.address }
         },
         async signPersonalMessage(parameters) {
           const client_ = await client()
@@ -330,6 +446,19 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           })
         },
         async signTransaction(parameters) {
+          const result = await withAccessKey(async (account, keyAuthorization) => {
+            const { feePayer, ...rest } = parameters
+            const client = getClient({ feePayer: resolveFeePayer(feePayer) })
+            const prepared = await prepareTransactionRequest(client, {
+              account,
+              ...rest,
+              ...(feePayer ? { feePayer: true } : {}),
+              keyAuthorization,
+              type: 'tempo',
+            } as never)
+            return await account.signTransaction(prepared as never)
+          })
+          if (result !== undefined) return result
           return await signTransaction(parameters)
         },
         async signTypedData(parameters) {
@@ -348,6 +477,26 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           })
         },
         async sendTransaction(parameters) {
+          const result = await withAccessKey(async (account, keyAuthorization) => {
+            const { feePayer, ...rest } = parameters
+            const client = getClient({
+              chainId: parameters.chainId,
+              feePayer: resolveFeePayer(feePayer),
+            })
+            const prepared = await prepareTransactionRequest(client, {
+              account,
+              ...rest,
+              ...(feePayer ? { feePayer: true } : {}),
+              keyAuthorization,
+              type: 'tempo',
+            } as never)
+            const signed = await account.signTransaction(prepared as never)
+            return await client.request({
+              method: 'eth_sendRawTransaction' as never,
+              params: [signed],
+            })
+          })
+          if (result !== undefined) return result
           const signed = await signTransaction(parameters)
           return await getClient({
             chainId: parameters.chainId,
@@ -358,6 +507,26 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           })
         },
         async sendTransactionSync(parameters) {
+          const result = await withAccessKey(async (account, keyAuthorization) => {
+            const { feePayer, ...rest } = parameters
+            const client = getClient({
+              chainId: parameters.chainId,
+              feePayer: resolveFeePayer(feePayer),
+            })
+            const prepared = await prepareTransactionRequest(client, {
+              account,
+              ...rest,
+              ...(feePayer ? { feePayer: true } : {}),
+              keyAuthorization,
+              type: 'tempo',
+            } as never)
+            const signed = await account.signTransaction(prepared as never)
+            return await client.request({
+              method: 'eth_sendRawTransactionSync' as never,
+              params: [signed],
+            })
+          })
+          if (result !== undefined) return result
           const signed = await signTransaction(parameters)
           return await getClient({
             chainId: parameters.chainId,

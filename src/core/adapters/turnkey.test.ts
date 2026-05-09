@@ -56,6 +56,84 @@ describe('turnkey', () => {
     )
   })
 
+  test('default: loadAccounts can provision an external access key', async () => {
+    const { adapter, client } = setup()
+
+    const result = await adapter.actions.loadAccounts(
+      {
+        authorizeAccessKey: {
+          address: other,
+          expiry: 123,
+          keyType: 'secp256k1',
+        },
+      },
+      { method: 'wallet_connect', params: undefined },
+    )
+
+    expect(client.signPayloads).toMatchInlineSnapshot(`
+      [
+        "0x219d0ef7a59d2a40d6ff9e115e32fb6b53eb7fa518ea3364b7b806990fad3944",
+      ]
+    `)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "keyAuthorization": {
+          "chainId": "0x1",
+          "expiry": "0x7b",
+          "keyId": "0x0000000000000000000000000000000000000002",
+          "keyType": "secp256k1",
+          "limits": undefined,
+          "signature": {
+            "r": "0x0000000000000000000000000000000000000000000000000000000000000011",
+            "s": "0x0000000000000000000000000000000000000000000000000000000000000022",
+            "type": "secp256k1",
+            "yParity": "0x0",
+          },
+        },
+        "signature": undefined,
+      }
+    `)
+  })
+
+  test('default: authorizeAccessKey signs with the connected Turnkey account', async () => {
+    const { adapter, client, store } = setup()
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    const result = await adapter.actions.authorizeAccessKey!(
+      {
+        address: other,
+        expiry: 123,
+        keyType: 'secp256k1',
+      },
+      { method: 'wallet_authorizeAccessKey', params: [{ expiry: 123 }] },
+    )
+
+    expect(client.fetchCalls).toMatchInlineSnapshot(`1`)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "keyAuthorization": {
+          "chainId": "0x1",
+          "expiry": "0x7b",
+          "keyId": "0x0000000000000000000000000000000000000002",
+          "keyType": "secp256k1",
+          "limits": undefined,
+          "signature": {
+            "r": "0x0000000000000000000000000000000000000000000000000000000000000011",
+            "s": "0x0000000000000000000000000000000000000000000000000000000000000022",
+            "type": "secp256k1",
+            "yParity": "0x0",
+          },
+        },
+        "rootAddress": "0x0000000000000000000000000000000000000001",
+      }
+    `)
+  })
+
   test('behavior: signing silently restores wallet accounts from an existing session', async () => {
     const { adapter, client, store } = setup()
     store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -183,9 +261,7 @@ function setup(options: setup.Options = {}) {
     getAccount: (() => {
       throw new Error('not implemented')
     }) as never,
-    getClient: (() => {
-      throw new Error('not implemented')
-    }) as never,
+    getClient: (() => ({ chain: { id: 1 } })) as never,
     storage,
     store,
   })
