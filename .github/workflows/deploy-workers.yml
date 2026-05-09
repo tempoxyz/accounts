@@ -27,6 +27,8 @@ jobs:
             build-env: |
               VITE_WALLET_HOST=https://wallet.tempo.xyz/embed
               VITE_ENV=mainnet
+              VITE_TURNKEY_ORGANIZATION_ID=1562c50f-1a48-4b10-8f42-87df4e8ef01d
+              VITE_TURNKEY_AUTH_PROXY_CONFIG_ID=eab55ad4-b2f4-414f-836b-a5e279f01ed2
           - name: Wagmi
             directory: playgrounds/wagmi
 
