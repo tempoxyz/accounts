@@ -1,5 +1,5 @@
 import { OtpType } from '@turnkey/core'
-import type { FormEvent } from 'react'
+import type { FormEvent, MouseEvent } from 'react'
 import { useEffect, useSyncExternalStore, useState } from 'react'
 import { Button, Input } from 'regen-ui'
 
@@ -34,6 +34,11 @@ export function TurnkeyEmailOtp() {
   if (!request) return null
 
   const label = request.mode === 'register' ? 'Register' : 'Continue'
+
+  function cancel(event: MouseEvent<HTMLDivElement>) {
+    if (pending || event.target !== event.currentTarget) return
+    rejectTurnkeyEmailOtp(new Error('Turnkey email OTP cancelled.'))
+  }
 
   async function submitEmail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -114,18 +119,10 @@ export function TurnkeyEmailOtp() {
   }
 
   return (
-    <div className="turnkey-otp-backdrop" role="presentation">
+    <div className="turnkey-otp-backdrop" onClick={cancel} role="presentation">
       <section aria-label="Turnkey email OTP" className="turnkey-otp-panel">
         <header className="turnkey-otp-header">
           <h2>{label} with Turnkey</h2>
-          <Button
-            disabled={pending}
-            onClick={() => rejectTurnkeyEmailOtp(new Error('Turnkey email OTP cancelled.'))}
-            size="small"
-            type="button"
-          >
-            Cancel
-          </Button>
         </header>
 
         {!otpId ? (
