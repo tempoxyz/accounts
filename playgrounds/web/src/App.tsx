@@ -27,6 +27,7 @@ import {
   testnet,
   tokens,
 } from './provider.js'
+import { TurnkeyEmailOtp } from './TurnkeyEmailOtp.js'
 
 const sectionLinks = [
   { id: 'provider', title: 'Provider' },
@@ -59,6 +60,7 @@ export function App() {
 
   return (
     <div className="playground min-h-dvh bg-background text-foreground" data-regen-radius="small">
+      <TurnkeyEmailOtp />
       <div className="playground-layout">
         <aside className="playground-rail">
           <div className="flex min-h-0 flex-col gap-[20px]">

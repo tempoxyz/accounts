@@ -250,6 +250,69 @@ html {
   border-top: 0;
 }
 
+.turnkey-otp-backdrop {
+  align-items: center;
+  background: color-mix(in oklch, var(--background-color-pane), transparent 18%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 20;
+}
+
+.turnkey-otp-panel {
+  background: var(--background-color-surface);
+  border: 1px solid var(--border-color-border-pane);
+  border-radius: var(--radius-body);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 24%);
+  display: grid;
+  gap: 16px;
+  max-width: 420px;
+  padding: 16px;
+  width: min(100%, 420px);
+}
+
+.turnkey-otp-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.turnkey-otp-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.turnkey-otp-form {
+  display: grid;
+  gap: 12px;
+}
+
+.turnkey-otp-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.turnkey-otp-copy p,
+.turnkey-otp-error {
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.turnkey-otp-copy p {
+  color: var(--text-color-foreground-secondary);
+}
+
+.turnkey-otp-error {
+  color: var(--text-color-negative-text);
+}
+
 .playground input:not([type='checkbox']):not([type='radio']):not([type='color']),
 .playground select,
 .playground textarea {
