@@ -331,44 +331,36 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
           if (!session) return c.json({ error: 'unauthenticated' }, 401)
           return c.json({ address: session.address, chainId: session.chainId })
         })
+        // Bad-challenge / bad-verify endpoints mounted on the same origin
+        // as `/auth` so the same-origin enforcement (`absolutizeAuth`)
+        // doesn't reject the request before the bad-content paths under
+        // test can run. `app.all` so we don't depend on the SDK's request
+        // method (POST).
+        app.all('/bad/verify-401', (c) => c.json({ error: 'unauthorized' }, 401))
+        app.all('/bad/challenge-500', (c) => c.json({ error: 'boom' }, 500))
+        app.all('/bad/challenge-empty', (c) => c.json({}))
+        app.all('/bad/challenge-evil-domain', (c) =>
+          c.json({
+            message: [
+              'evil.example wants you to sign in with your Ethereum account:',
+              '0x0000000000000000000000000000000000000000',
+              '',
+              '',
+              'URI: https://evil.example',
+              'Version: 1',
+              'Chain ID: 0',
+              'Nonce: deadbeef00',
+              'Issued At: 2025-01-01T00:00:00Z',
+            ].join('\n'),
+          }),
+        )
         server = await createServer(app.listener)
         authBase = `${server.url}/auth`
 
-        badServer = await createServer((req, res) => {
-          const url = req.url ?? ''
-          if (url.endsWith('/challenge-500')) {
-            res.statusCode = 500
-            res.end('{"error":"boom"}')
-            return
-          }
-          if (url.endsWith('/challenge-empty')) {
-            res.statusCode = 200
-            res.setHeader('content-type', 'application/json')
-            res.end('{}')
-            return
-          }
-          if (url.endsWith('/challenge-evil-domain')) {
-            res.statusCode = 200
-            res.setHeader('content-type', 'application/json')
-            // Auth message bound to attacker.com — the SDK must refuse to
-            // sign it since the auth endpoint is localhost.
-            res.end(
-              JSON.stringify({
-                message: [
-                  'evil.example wants you to sign in with your Ethereum account:',
-                  '0x0000000000000000000000000000000000000000',
-                  '',
-                  '',
-                  'URI: https://evil.example',
-                  'Version: 1',
-                  'Chain ID: 0',
-                  'Nonce: deadbeef00',
-                  'Issued At: 2025-01-01T00:00:00Z',
-                ].join('\n'),
-              }),
-            )
-            return
-          }
+        // Cross-origin bad server kept around for the same-origin enforcement
+        // tests below — its only job is to be on a different port from
+        // `server` so origins genuinely differ.
+        badServer = await createServer((_req, res) => {
           res.statusCode = 404
           res.end()
         })
@@ -426,33 +418,25 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         'error: verify endpoint returns 401 → InternalError; user already signed',
         async () => {
           const provider = Provider.create({ adapter: adapter() })
-          const failVerify = await createServer((_req, res) => {
-            res.statusCode = 401
-            res.end('{"error":"unauthorized"}')
-          })
 
-          try {
-            await expect(
-              provider.request({
-                method: 'wallet_connect',
-                params: [
-                  {
-                    capabilities: {
-                      method: 'register',
-                      auth: {
-                        challenge: `${authBase}/challenge`,
-                        verify: failVerify.url,
-                      },
+          await expect(
+            provider.request({
+              method: 'wallet_connect',
+              params: [
+                {
+                  capabilities: {
+                    method: 'register',
+                    auth: {
+                      challenge: `${authBase}/challenge`,
+                      verify: `${server.url}/bad/verify-401`,
                     },
                   },
-                ],
-              }),
-            ).rejects.toThrow(
-              /Server Authentication verify endpoint `http:\/\/localhost:\d+` returned 401\./,
-            )
-          } finally {
-            failVerify.close()
-          }
+                },
+              ],
+            }),
+          ).rejects.toThrow(
+            /Server Authentication verify endpoint `http:\/\/localhost:\d+\/bad\/verify-401` returned 401\./,
+          )
         },
       )
 
@@ -517,7 +501,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
                   capabilities: {
                     method: 'register',
                     auth: {
-                      challenge: `${badServer.url}/challenge-500`,
+                      challenge: `${server.url}/bad/challenge-500`,
                       verify: authBase,
                     },
                   },
@@ -525,7 +509,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
               ],
             }),
           ).rejects.toThrow(
-            /Server Authentication challenge endpoint `http:\/\/localhost:\d+\/challenge-500` returned 500\./,
+            /Server Authentication challenge endpoint `http:\/\/localhost:\d+\/bad\/challenge-500` returned 500\./,
           )
         },
       )
@@ -543,7 +527,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
                   capabilities: {
                     method: 'register',
                     auth: {
-                      challenge: `${badServer.url}/challenge-empty`,
+                      challenge: `${server.url}/bad/challenge-empty`,
                       verify: authBase,
                     },
                   },
@@ -551,7 +535,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
               ],
             }),
           ).rejects.toThrow(
-            /Server Authentication challenge endpoint `http:\/\/localhost:\d+\/challenge-empty` response missing `message`\./,
+            /Server Authentication challenge endpoint `http:\/\/localhost:\d+\/bad\/challenge-empty` response missing `message`\./,
           )
         },
       )
@@ -569,7 +553,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
                   capabilities: {
                     method: 'register',
                     auth: {
-                      challenge: `${badServer.url}/challenge-evil-domain`,
+                      challenge: `${server.url}/bad/challenge-evil-domain`,
                       verify: authBase,
                     },
                   },
@@ -577,6 +561,62 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
               ],
             }),
           ).rejects.toThrow(/returned a message bound to `evil\.example`/)
+        },
+      )
+
+      test(
+        'error: `challenge` and `verify` on different origins → InvalidParamsError',
+        async () => {
+          // Phishing guard: a malicious dapp must not be able to point
+          // `challenge` at the victim and `verify` at attacker.com to
+          // harvest a valid signed payload.
+          const provider = Provider.create({ adapter: adapter() })
+
+          await expect(
+            provider.request({
+              method: 'wallet_connect',
+              params: [
+                {
+                  capabilities: {
+                    method: 'register',
+                    auth: {
+                      challenge: `${authBase}/challenge`,
+                      verify: `${badServer.url}/collect`,
+                    },
+                  },
+                },
+              ],
+            }),
+          ).rejects.toThrow(
+            /`auth` endpoints \(`challenge`, `verify`, `logout`\) must share the same origin\./,
+          )
+        },
+      )
+
+      test(
+        'error: `logout` on a different origin → InvalidParamsError',
+        async () => {
+          const provider = Provider.create({ adapter: adapter() })
+
+          await expect(
+            provider.request({
+              method: 'wallet_connect',
+              params: [
+                {
+                  capabilities: {
+                    method: 'register',
+                    auth: {
+                      challenge: `${authBase}/challenge`,
+                      verify: authBase,
+                      logout: `${badServer.url}/logout`,
+                    },
+                  },
+                },
+              ],
+            }),
+          ).rejects.toThrow(
+            /`auth` endpoints \(`challenge`, `verify`, `logout`\) must share the same origin\./,
+          )
         },
       )
 

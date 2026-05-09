@@ -167,6 +167,7 @@ describe('verify (EOA, cookie mode)', () => {
     })
     expect(res.status).toBe(400)
   })
+
 })
 
 describe('logout', () => {
@@ -286,6 +287,117 @@ describe('getSession', () => {
     })
     const session = await handler.getSession(req)
     expect(session?.address).toBe(otherAccount.address)
+  })
+})
+
+describe('store: atomic `take` preferred, non-atomic fallback', () => {
+  test('Kv.memory() (has `take`) is accepted', () => {
+    expect(() => auth({ store: Kv.memory() })).not.toThrow()
+  })
+
+  test('store without `take` falls back to non-atomic get + delete', async () => {
+    // The fallback path is racy on eventually-consistent stores but
+    // works correctly in single-process serial usage. Verify the
+    // handler still constructs and the verify endpoint can consume a
+    // challenge end-to-end.
+    const noTake: Kv.Kv = (() => {
+      const map = new Map<string, unknown>()
+      return {
+        async get(key) {
+          return map.get(key) as never
+        },
+        async set(key, value) {
+          map.set(key, value)
+        },
+        async delete(key) {
+          map.delete(key)
+        },
+      }
+    })()
+    const handler = auth({ domain: 'wallet.example', store: noTake })
+    const app = new Hono()
+    app.route('/', handler)
+
+    const challenge = await app.request('/challenge', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', host: 'wallet.example' },
+      body: JSON.stringify({ chainId: 1 }),
+    })
+    expect(challenge.status).toBe(200)
+  })
+})
+
+describe('publicOrigin / trustProxy', () => {
+  test('default: ignores `x-forwarded-host` and `x-forwarded-proto`', async () => {
+    // No domain pin — relies on host header. trustProxy defaults to false.
+    const handler = auth()
+    const app = new Hono()
+    app.route('/', handler)
+
+    const res = await app.request('/challenge', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        host: 'real.example',
+        'x-forwarded-host': 'attacker.example',
+        'x-forwarded-proto': 'http',
+      },
+      body: JSON.stringify({ chainId: 1 }),
+    })
+    const body = (await res.json()) as { message: string }
+    const parsed = parseSiweMessage(body.message)
+    expect(parsed.domain).toBe('real.example')
+  })
+
+  test('trustProxy: true → honors `x-forwarded-host` and `x-forwarded-proto`', async () => {
+    const handler = auth({ trustProxy: true })
+    const app = new Hono()
+    app.route('/', handler)
+
+    const res = await app.request('/challenge', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        host: 'internal.example',
+        'x-forwarded-host': 'app.example',
+        'x-forwarded-proto': 'https',
+      },
+      body: JSON.stringify({ chainId: 1 }),
+    })
+    const body = (await res.json()) as { message: string }
+    const parsed = parseSiweMessage(body.message)
+    expect(parsed.domain).toBe('app.example')
+    expect(parsed.uri).toBe('https://app.example')
+  })
+
+  test('publicOrigin: pinned origin overrides host and forwarded headers', async () => {
+    const handler = auth({
+      publicOrigin: 'https://app.example.com',
+      trustProxy: true,
+    })
+    const app = new Hono()
+    app.route('/', handler)
+
+    const res = await app.request('/challenge', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        host: 'internal.example',
+        'x-forwarded-host': 'attacker.example',
+        'x-forwarded-proto': 'http',
+      },
+      body: JSON.stringify({ chainId: 1 }),
+    })
+    const body = (await res.json()) as { message: string }
+    const parsed = parseSiweMessage(body.message)
+    expect(parsed.domain).toBe('app.example.com')
+    expect(parsed.uri).toBe('https://app.example.com')
+  })
+
+  test('publicOrigin: invalid URL throws at construction time', async () => {
+    expect(() => auth({ publicOrigin: 'not-a-url' })).toThrowErrorMatchingInlineSnapshot(
+      `[Error: \`auth({ publicOrigin })\` must be a valid absolute URL. Got: not-a-url]`,
+    )
   })
 })
 

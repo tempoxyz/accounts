@@ -40,10 +40,21 @@ export type SessionPayload = {
  * payload because challenges are single-use and the address isn't bound at
  * challenge time — the account supplies the address at verify time and the
  * server uses the supplied address as the session subject.
+ *
+ * The full issued SIWE message is persisted so verify can require exact
+ * byte-equality between the submitted message and the one we issued.
+ * Without this, the wallet (or anyone who tampered with the message in
+ * flight) could swap fields the server doesn't otherwise check
+ * (`statement`, `resources`, `uri`, `version`, the address placeholder)
+ * while keeping `nonce`/`domain`/`chainId` and still pass verification.
  */
 type ChallengePayload = {
+  /** Echoed for defense-in-depth even though it's also in `message`. */
   chainId: number
+  /** Unix seconds. The Kv TTL also enforces this; kept for traceability. */
   expiresAt: number
+  /** Verbatim issued SIWE message. Verify rejects any mismatch. */
+  message: string
 }
 
 const challengeKey = (nonce: string) => `challenge:${nonce}`
@@ -108,11 +119,36 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     cookieName = defaults.cookieName,
     domain,
     path = '/',
+    publicOrigin: publicOrigin_option,
     store = Kv.memory(),
     transport = http(),
+    trustProxy = false,
     ttl: { challenge: challengeTtl = defaults.ttl.challenge, session: sessionTtl = defaults.ttl.session } = {},
     ...rest
   } = options
+
+  async function take(key: string): Promise<ChallengePayload | undefined> {
+    if (store.take) return store.take<ChallengePayload>(key)
+    const value = await store.get<ChallengePayload>(key)
+    if (value === undefined) return undefined
+    await store.delete(key)
+    return value
+  }
+
+  // Pre-parse `publicOrigin` so a misconfiguration fails loudly at handler
+  // construction time rather than per-request.
+  const pinnedOrigin = (() => {
+    if (!publicOrigin_option) return undefined
+    try {
+      const url = new URL(publicOrigin_option)
+      return { protocol: url.protocol, host: url.host }
+    } catch {
+      throw new Error(
+        `\`auth({ publicOrigin })\` must be a valid absolute URL. Got: ${publicOrigin_option}`,
+      )
+    }
+  })()
+  const resolveReqOrigin = (req: Request) => resolveOrigin(req, { pinnedOrigin, trustProxy })
 
   const client = createClient({ chain: tempo, transport })
 
@@ -124,7 +160,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
   router.post(challengePath, Hono.validate('json', schema.challenge.parameters), async (c) => {
     const { chainId = 0 } = c.req.valid('json')
 
-    const { protocol, host: reqHost } = publicOrigin(c.req.raw)
+    const { protocol, host: reqHost } = resolveReqOrigin(c.req.raw)
     const resolvedDomain = domain ?? reqHost
 
     const nonce = generateSiweNonce()
@@ -144,7 +180,11 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
 
     await store.set(
       challengeKey(nonce),
-      { chainId, expiresAt: Math.floor(expirationTime.getTime() / 1000) },
+      {
+        message,
+        chainId,
+        expiresAt: Math.floor(expirationTime.getTime() / 1000),
+      },
       { ttl: challengeTtl },
     )
 
@@ -157,7 +197,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     const parsed = parseSiweMessage(message)
     if (!parsed.nonce) return c.json({ error: 'message missing `nonce`' }, 400)
 
-    const { protocol, host: reqHost } = publicOrigin(c.req.raw)
+    const { protocol, host: reqHost } = resolveReqOrigin(c.req.raw)
     const resolvedDomain = domain ?? reqHost
     if (parsed.domain !== resolvedDomain)
       return c.json({ error: 'domain mismatch' }, 400)
@@ -168,10 +208,8 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     if (parsed.notBefore && parsed.notBefore.getTime() > now)
       return c.json({ error: 'message not yet valid' }, 400)
 
-    // Atomically consume the challenge: read + delete + assert it existed.
-    const challenge = await store.get<ChallengePayload>(challengeKey(parsed.nonce))
+    const challenge = await take(challengeKey(parsed.nonce))
     if (!challenge) return c.json({ error: 'invalid or replayed nonce' }, 409)
-    await store.delete(challengeKey(parsed.nonce))
 
     if (parsed.chainId !== challenge.chainId)
       return c.json({ error: 'chainId mismatch' }, 400)
@@ -250,6 +288,16 @@ export declare namespace auth {
     /** Path prefix for the auth endpoints. @default "/" */
     path?: string | undefined
     /**
+     * Pinned canonical public origin (e.g. `'https://app.example.com'`).
+     * When set, the SIWE `domain` and `uri`, and the cookie `Secure` flag,
+     * are derived from this URL — request `Host`, request URL, and
+     * `x-forwarded-*` headers are ignored. This is the recommended setting
+     * for production deployments behind a CDN or reverse proxy: it
+     * prevents a spoofed `x-forwarded-host` from shifting the SIWE domain
+     * and a spoofed `x-forwarded-proto: http` from disabling `Secure`.
+     */
+    publicOrigin?: string | undefined
+    /**
      * Backing store for both single-use challenges (nonces) and issued
      * sessions. Keys are namespaced internally (`challenge:…`, `session:…`).
      * @default `Kv.memory()`
@@ -263,6 +311,16 @@ export declare namespace auth {
      * @default `http()`
      */
     transport?: Transport | undefined
+    /**
+     * Honor `x-forwarded-proto` / `x-forwarded-host` to derive the public
+     * origin. Required when running behind a trusted reverse proxy that
+     * terminates TLS (OrbStack on `*.tempo.local`, a CDN, etc.). When
+     * `false`, forwarded headers are ignored to prevent spoofing on
+     * deployments that expose the origin server directly. Ignored when
+     * `publicOrigin` is set.
+     * @default false
+     */
+    trustProxy?: boolean | undefined
     /** TTLs in seconds. */
     ttl?:
       | {
@@ -276,19 +334,42 @@ export declare namespace auth {
 }
 
 /**
- * Resolves the public-facing protocol and host for a request, honoring
- * `x-forwarded-proto` / `x-forwarded-host` so SIWE `domain`/`uri` reflect
- * the browser-visible origin behind reverse proxies (OrbStack, Cloudflare
- * tunnels, etc.). Falls back to the `host` header and the request URL.
+ * Resolves the public-facing protocol and host for a request.
+ *
+ * - When `pinnedOrigin` is set (operator passed `auth({ publicOrigin })`),
+ *   that origin is the source of truth — forwarded headers and request URL
+ *   are ignored. This prevents a spoofed `x-forwarded-host` from shifting
+ *   SIWE `domain` and a spoofed `x-forwarded-proto: http` from disabling
+ *   the cookie `Secure` flag on an HTTPS deployment.
+ * - When `trustProxy` is set, `x-forwarded-proto` / `x-forwarded-host` are
+ *   honored (needed behind a reverse proxy like OrbStack or a CDN that
+ *   terminates TLS).
+ * - Default falls back to the request `host` header and request URL
+ *   protocol — safe even on multi-hop deployments because forwarded
+ *   headers are ignored.
  */
-function publicOrigin(req: Request): { protocol: string; host: string } {
+function resolveOrigin(
+  req: Request,
+  options: {
+    pinnedOrigin?: { protocol: string; host: string } | undefined
+    trustProxy?: boolean | undefined
+  },
+): { protocol: string; host: string } {
+  if (options.pinnedOrigin) return options.pinnedOrigin
   const headers = req.headers
-  const forwardedHost = headers.get('x-forwarded-host')?.split(',')[0]?.trim()
-  const forwardedProto = headers.get('x-forwarded-proto')?.split(',')[0]?.trim()
   const reqUrl = new URL(req.url)
-  const host = forwardedHost || headers.get('host') || reqUrl.host
-  const protocol = forwardedProto ? `${forwardedProto}:` : reqUrl.protocol
-  return { protocol, host }
+  if (options.trustProxy) {
+    const forwardedHost = headers.get('x-forwarded-host')?.split(',')[0]?.trim()
+    const forwardedProto = headers.get('x-forwarded-proto')?.split(',')[0]?.trim()
+    return {
+      protocol: forwardedProto ? `${forwardedProto}:` : reqUrl.protocol,
+      host: forwardedHost || headers.get('host') || reqUrl.host,
+    }
+  }
+  return {
+    protocol: reqUrl.protocol,
+    host: headers.get('host') || reqUrl.host,
+  }
 }
 
 function parseCookieValue(header: string, name: string): string | undefined {

@@ -609,10 +609,15 @@ export function create(options: create.Options = {}): create.ReturnType {
                       activeAccount: 0,
                       // Persist absolutized auth URLs so a later
                       // `wallet_disconnect` can hit logout even when the
-                      // URL was passed per-call.
-                      ...(auth_request && typeof auth_request === 'object'
-                        ? { auth: auth_request }
-                        : {}),
+                      // URL was passed per-call. Always overwrite (never
+                      // merge) so a connect WITHOUT auth clears stale
+                      // state from a prior connect — otherwise a later
+                      // disconnect could POST to a logout URL the
+                      // current page never opted into.
+                      auth:
+                        auth_request && typeof auth_request === 'object'
+                          ? auth_request
+                          : undefined,
                     })
 
                     const accountAddress = accounts[0]?.address
@@ -1002,12 +1007,39 @@ function absolutizeAuth(
   const hasChallenge = hasUrl || (typeof auth === 'object' && Boolean(auth.challenge))
   const hasVerify = hasUrl || (typeof auth === 'object' && Boolean(auth.verify))
   const hasLogout = hasUrl || (typeof auth === 'object' && Boolean(auth.logout))
-  return {
+  const resolved = {
     ...(hasChallenge ? { challenge: resolveAuthEndpoint(auth, 'challenge') } : {}),
     ...(hasVerify ? { verify: resolveAuthEndpoint(auth, 'verify') } : {}),
     ...(hasLogout ? { logout: resolveAuthEndpoint(auth, 'logout') } : {}),
     ...(typeof auth === 'object' && auth.returnToken ? { returnToken: true } : {}),
   }
+  assertSameAuthOrigin(resolved)
+  return resolved
+}
+
+function assertSameAuthOrigin(
+  auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
+): void {
+  if (typeof auth !== 'object') return
+  const urls = [auth.challenge, auth.verify, auth.logout].filter(
+    (u): u is string => typeof u === 'string',
+  )
+  if (urls.length < 2) return
+  const origins = urls.map((url) => {
+    try {
+      return new URL(url).origin
+    } catch {
+      throw new RpcResponse.InvalidParamsError({
+        message: `\`auth\` endpoint is not a valid URL: ${url}`,
+      })
+    }
+  })
+  const first = origins[0]!
+  if (origins.some((origin) => origin !== first))
+    throw new RpcResponse.InvalidParamsError({
+      message:
+        '`auth` endpoints (`challenge`, `verify`, `logout`) must share the same origin.',
+    })
 }
 
 /**
