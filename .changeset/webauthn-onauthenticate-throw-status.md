@@ -1,5 +1,5 @@
 ---
-'accounts': major
+'accounts': minor
 ---
 
 Changed `Handler.webAuthn`'s `onAuthenticate` hook rejection status from `400` to `401` when the hook throws.

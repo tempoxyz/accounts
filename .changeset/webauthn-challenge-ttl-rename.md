@@ -1,5 +1,5 @@
 ---
-'accounts': major
+'accounts': minor
 ---
 
 Renamed `Handler.webAuthn` option `challengeTtl` to `ttl.challenge`.
