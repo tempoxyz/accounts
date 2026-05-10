@@ -158,6 +158,37 @@ describe('verify (EOA, cookie mode)', () => {
     `)
   })
 
+  test('rejects tampered message (statement injection) with 400', async () => {
+    // Regression: an attacker could fetch a valid challenge, inject a
+    // benign-looking `statement` into the SIWE text, get a victim to sign
+    // it, and replay the signature here. The server must reject any
+    // message that doesn't byte-match the challenge it issued.
+    const { app } = setup()
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    // SIWE injects `statement` as the line between the address line and
+    // the blank line preceding `URI:`. Splice one in.
+    const tampered = message.replace(
+      /(0x0000000000000000000000000000000000000000\n)\n/,
+      '$1\nSign to prove you are human\n\n',
+    )
+    expect(tampered).not.toBe(message)
+    const signature = await account.signMessage({ message: tampered })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message: tampered,
+      signature,
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchInlineSnapshot(`
+      {
+        "error": "message mismatch",
+      }
+    `)
+  })
+
   test('rejects malformed body with 400', async () => {
     const { app } = setup()
     const res = await app.request('/', {
