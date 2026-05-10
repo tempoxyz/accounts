@@ -30,6 +30,10 @@ Cli.create('example', {
               token,
             },
           ],
+          scopes: [
+            { address: token, selector: 'transfer(address,uint256)' },
+            { address: token, selector: 'transferWithMemo(address,uint256,bytes32)' },
+          ],
         },
       },
     })

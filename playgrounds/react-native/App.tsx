@@ -39,6 +39,13 @@ const provider = Provider.create({
         limit: parseUnits('5', 6),
       },
     ],
+    scopes: [
+      { address: tokens.pathUSD, selector: 'transfer(address,uint256)' },
+      {
+        address: tokens.pathUSD,
+        selector: 'transferWithMemo(address,uint256,bytes32)',
+      },
+    ],
   }),
 })
 

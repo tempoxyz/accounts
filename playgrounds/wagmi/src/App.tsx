@@ -84,6 +84,16 @@ function Connect() {
                               limit: parseUnits('5', 6),
                             },
                           ],
+                          scopes: [
+                            {
+                              address: testnet ? tokens.pathUSD : tokens['USDC.e'],
+                              selector: 'transfer(address,uint256)',
+                            },
+                            {
+                              address: testnet ? tokens.pathUSD : tokens['USDC.e'],
+                              selector: 'transferWithMemo(address,uint256,bytes32)',
+                            },
+                          ],
                         },
                       },
                     }
