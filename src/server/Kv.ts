@@ -73,7 +73,11 @@ export function cloudflare(kv: cloudflare.Parameters): Kv {
 export declare namespace cloudflare {
   type Parameters = {
     get: <value = unknown>(key: string, format: 'json') => Promise<value | null>
-    put: (key: string, value: string, options?: { expirationTtl?: number } | undefined) => Promise<void>
+    put: (
+      key: string,
+      value: string,
+      options?: { expirationTtl?: number } | undefined,
+    ) => Promise<void>
     delete: (key: string) => Promise<void>
   }
 }
@@ -106,7 +110,7 @@ export declare namespace cloudflare {
  *   fetch(req, env) {
  *     const handler = Handler.auth({
  *       store: Kv.durableObject(env.NONCE_DO),
- *       publicOrigin: 'https://app.example.com',
+ *       origin: 'https://app.example.com',
  *     })
  *     return handler.fetch(req)
  *   }

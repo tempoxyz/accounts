@@ -596,9 +596,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                             digest: capabilities?.digest,
                             authorizeAccessKey,
                             selectAccount: capabilities?.selectAccount,
-                            ...(personalSign_request
-                              ? { personalSign: personalSign_request }
-                              : {}),
+                            ...(personalSign_request ? { personalSign: personalSign_request } : {}),
                           },
                           request,
                         )
@@ -615,9 +613,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                       // disconnect could POST to a logout URL the
                       // current page never opted into.
                       auth:
-                        auth_request && typeof auth_request === 'object'
-                          ? auth_request
-                          : undefined,
+                        auth_request && typeof auth_request === 'object' ? auth_request : undefined,
                     })
 
                     const accountAddress = accounts[0]?.address
@@ -1017,9 +1013,7 @@ function absolutizeAuth(
   return resolved
 }
 
-function assertSameAuthOrigin(
-  auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
-): void {
+function assertSameAuthOrigin(auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>): void {
   if (typeof auth !== 'object') return
   const urls = [auth.challenge, auth.verify, auth.logout].filter(
     (u): u is string => typeof u === 'string',
@@ -1037,8 +1031,7 @@ function assertSameAuthOrigin(
   const first = origins[0]!
   if (origins.some((origin) => origin !== first))
     throw new RpcResponse.InvalidParamsError({
-      message:
-        '`auth` endpoints (`challenge`, `verify`, `logout`) must share the same origin.',
+      message: '`auth` endpoints (`challenge`, `verify`, `logout`) must share the same origin.',
     })
 }
 

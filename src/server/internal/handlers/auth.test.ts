@@ -198,7 +198,6 @@ describe('verify (EOA, cookie mode)', () => {
     })
     expect(res.status).toBe(400)
   })
-
 })
 
 describe('logout', () => {
@@ -280,6 +279,222 @@ describe('verify (token mode)', () => {
   })
 })
 
+describe('cookie: false', () => {
+  test('verify always returns { token } in body and never sets a cookie', async () => {
+    const store = Kv.memory()
+    const { handler, app } = setup({ cookie: false, store })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const signature = await account.signMessage({ message })
+
+    // Even without `returnToken: true`, the body carries the token and
+    // no Set-Cookie is emitted.
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature,
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('set-cookie')).toBeNull()
+
+    const { token } = (await res.json()) as { token: string }
+    expect(token).toMatch(/^[a-z0-9]+$/)
+    expect(await store.get(`session:${token}`)).toBeDefined()
+
+    const followUp = new Request('http://wallet.example/', {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect((await handler.getSession(followUp))?.address).toBe(account.address)
+  })
+
+  test('getSession ignores cookies even when present', async () => {
+    const store = Kv.memory()
+    const { handler, app } = setup({ cookie: false, store })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const signature = await account.signMessage({ message })
+    const verify = await postVerify(app, {
+      address: account.address,
+      message,
+      signature,
+    })
+    const { token } = (await verify.json()) as { token: string }
+
+    // Cookie carrying the very token that's valid in the store — but
+    // cookie mode is disabled, so it must not resolve a session.
+    const req = new Request('http://wallet.example/', {
+      headers: { cookie: `accounts_auth=${token}` },
+    })
+    expect(await handler.getSession(req)).toBeUndefined()
+
+    // Bearer mode still works against the same token.
+    const bearerReq = new Request('http://wallet.example/', {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect((await handler.getSession(bearerReq))?.address).toBe(account.address)
+  })
+
+  test('logout via Authorization: Bearer revokes the session and skips Set-Cookie', async () => {
+    const store = Kv.memory()
+    const { handler, app } = setup({ cookie: false, store })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const signature = await account.signMessage({ message })
+    const verify = await postVerify(app, {
+      address: account.address,
+      message,
+      signature,
+    })
+    const { token } = (await verify.json()) as { token: string }
+    expect(await store.get(`session:${token}`)).toBeDefined()
+
+    const logout = await app.request('/logout', {
+      method: 'POST',
+      headers: { host: 'wallet.example', authorization: `Bearer ${token}` },
+    })
+    expect(logout.status).toBe(204)
+    expect(logout.headers.get('set-cookie')).toBeNull()
+
+    expect(await store.get(`session:${token}`)).toBeUndefined()
+    const followUp = new Request('http://wallet.example/', {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(await handler.getSession(followUp)).toBeUndefined()
+  })
+})
+
+describe('onAuthenticate', () => {
+  test('invoked with verified address, chainId, message, signature, request', async () => {
+    const calls: Array<{
+      address: string
+      chainId: number
+      message: string
+      signature: string
+      requestUrl: string
+    }> = []
+
+    const { app } = setup({
+      onAuthenticate: ({ address, chainId, message, signature, request }) => {
+        calls.push({
+          address,
+          chainId,
+          message,
+          signature,
+          requestUrl: request.url,
+        })
+      },
+    })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const signature = await account.signMessage({ message })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature,
+    })
+
+    expect(res.status).toBe(200)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({
+      address: account.address,
+      chainId: 1,
+      message,
+      signature,
+    })
+    expect(calls[0]?.requestUrl).toContain('/')
+  })
+
+  test('not invoked when signature verification fails', async () => {
+    let invoked = false
+    const { app } = setup({
+      onAuthenticate: () => {
+        invoked = true
+      },
+    })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const signature = await account.signMessage({ message })
+
+    const res = await postVerify(app, {
+      address: otherAccount.address,
+      message,
+      signature,
+    })
+
+    expect(res.status).toBe(401)
+    expect(invoked).toBe(false)
+  })
+
+  test('throwing rejects the request with 401 and surfaces the error message', async () => {
+    const store = Kv.memory()
+    const { app } = setup({
+      store,
+      onAuthenticate: () => {
+        throw new Error('user is blocked')
+      },
+    })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const signature = await account.signMessage({ message })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature,
+    })
+
+    expect(res.status).toBe(401)
+    expect(await res.json()).toMatchInlineSnapshot(`
+      {
+        "error": "user is blocked",
+      }
+    `)
+    expect(res.headers.get('set-cookie')).toBeNull()
+  })
+
+  test('async hook is awaited before issuing the session', async () => {
+    let resolveHook: (() => void) | undefined
+    const blocker = new Promise<void>((resolve) => {
+      resolveHook = resolve
+    })
+    let hookFinished = false
+
+    const { app } = setup({
+      onAuthenticate: async () => {
+        await blocker
+        hookFinished = true
+      },
+    })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const signature = await account.signMessage({ message })
+
+    const verifyPromise = postVerify(app, {
+      address: account.address,
+      message,
+      signature,
+    })
+
+    // Yield once to let verify dispatch into the hook.
+    await new Promise((r) => setTimeout(r, 10))
+    expect(hookFinished).toBe(false)
+
+    resolveHook!()
+    const res = await verifyPromise
+    expect(res.status).toBe(200)
+    expect(hookFinished).toBe(true)
+  })
+})
+
 describe('getSession', () => {
   test('returns undefined when no cookie is present', async () => {
     const { handler } = setup()
@@ -358,7 +573,7 @@ describe('store: atomic `take` preferred, non-atomic fallback', () => {
   })
 })
 
-describe('publicOrigin / trustProxy', () => {
+describe('origin / trustProxy', () => {
   test('default: ignores `x-forwarded-host` and `x-forwarded-proto`', async () => {
     // No domain pin — relies on host header. trustProxy defaults to false.
     const handler = auth()
@@ -401,9 +616,9 @@ describe('publicOrigin / trustProxy', () => {
     expect(parsed.uri).toBe('https://app.example')
   })
 
-  test('publicOrigin: pinned origin overrides host and forwarded headers', async () => {
+  test('origin: pinned origin overrides host and forwarded headers', async () => {
     const handler = auth({
-      publicOrigin: 'https://app.example.com',
+      origin: 'https://app.example.com',
       trustProxy: true,
     })
     const app = new Hono()
@@ -425,9 +640,9 @@ describe('publicOrigin / trustProxy', () => {
     expect(parsed.uri).toBe('https://app.example.com')
   })
 
-  test('publicOrigin: invalid URL throws at construction time', async () => {
-    expect(() => auth({ publicOrigin: 'not-a-url' })).toThrowErrorMatchingInlineSnapshot(
-      `[Error: \`auth({ publicOrigin })\` must be a valid absolute URL. Got: not-a-url]`,
+  test('origin: invalid URL throws at construction time', async () => {
+    expect(() => auth({ origin: 'not-a-url' })).toThrowErrorMatchingInlineSnapshot(
+      `[Error: \`auth({ origin })\` must be a valid absolute URL. Got: not-a-url]`,
     )
   })
 })

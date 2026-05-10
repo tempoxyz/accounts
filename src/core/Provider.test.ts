@@ -371,31 +371,48 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         badServer.close()
       })
 
-      test(
-        'default: auth as string shorthand fetches challenge, signs once, posts verify',
-        async () => {
-          const provider = Provider.create({ adapter: adapter() })
+      test('default: auth as string shorthand fetches challenge, signs once, posts verify', async () => {
+        const provider = Provider.create({ adapter: adapter() })
 
-          const result = await provider.request({
-            method: 'wallet_connect',
-            params: [{ capabilities: { method: 'register', auth: authBase } }],
-          })
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [{ capabilities: { method: 'register', auth: authBase } }],
+        })
 
-          const capabilities = result.accounts[0]!.capabilities
-          expect(capabilities.auth).toEqual({ token: expect.any(String) })
-          expect(capabilities.personalSign).toEqual({
-            message: expect.stringContaining('wants you to sign in'),
-          })
-          expect(capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
-        },
-      )
+        const capabilities = result.accounts[0]!.capabilities
+        expect(capabilities.auth).toEqual({ token: expect.any(String) })
+        expect(capabilities.personalSign).toEqual({
+          message: expect.stringContaining('wants you to sign in'),
+        })
+        expect(capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
+      })
 
-      test(
-        'default: object-form auth with explicit endpoints uses the override URLs',
-        async () => {
-          const provider = Provider.create({ adapter: adapter() })
+      test('default: object-form auth with explicit endpoints uses the override URLs', async () => {
+        const provider = Provider.create({ adapter: adapter() })
 
-          const result = await provider.request({
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [
+            {
+              capabilities: {
+                method: 'register',
+                auth: {
+                  challenge: `${authBase}/challenge`,
+                  verify: authBase,
+                },
+              },
+            },
+          ],
+        })
+
+        expect(result.accounts[0]!.capabilities.auth).toEqual({ token: expect.any(String) })
+      })
+
+      test('error: verify endpoint returns 401 → InternalError; user already signed', async () => {
+        const provider = Provider.create({ adapter: adapter() })
+
+        await expect(
+          provider.request({
             method: 'wallet_connect',
             params: [
               {
@@ -403,42 +420,16 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
                   method: 'register',
                   auth: {
                     challenge: `${authBase}/challenge`,
-                    verify: authBase,
+                    verify: `${server.url}/bad/verify-401`,
                   },
                 },
               },
             ],
-          })
-
-          expect(result.accounts[0]!.capabilities.auth).toEqual({ token: expect.any(String) })
-        },
-      )
-
-      test(
-        'error: verify endpoint returns 401 → InternalError; user already signed',
-        async () => {
-          const provider = Provider.create({ adapter: adapter() })
-
-          await expect(
-            provider.request({
-              method: 'wallet_connect',
-              params: [
-                {
-                  capabilities: {
-                    method: 'register',
-                    auth: {
-                      challenge: `${authBase}/challenge`,
-                      verify: `${server.url}/bad/verify-401`,
-                    },
-                  },
-                },
-              ],
-            }),
-          ).rejects.toThrow(
-            /Server Authentication verify endpoint `http:\/\/localhost:\d+\/bad\/verify-401` returned 401\./,
-          )
-        },
-      )
+          }),
+        ).rejects.toThrow(
+          /Server Authentication verify endpoint `http:\/\/localhost:\d+\/bad\/verify-401` returned 401\./,
+        )
+      })
 
       test('error: auth + personalSign throws InvalidParamsError synchronously', async () => {
         const provider = Provider.create({ adapter: adapter() })
@@ -461,164 +452,146 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         )
       })
 
-      test(
-        'default: auth + authorizeAccessKey surfaces both capabilities (two ceremonies)',
-        async () => {
-          const provider = Provider.create({ adapter: adapter() })
+      test('default: auth + authorizeAccessKey surfaces both capabilities (two ceremonies)', async () => {
+        const provider = Provider.create({ adapter: adapter() })
 
-          const result = await provider.request({
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [
+            {
+              capabilities: {
+                method: 'register',
+                auth: authBase,
+                authorizeAccessKey: { expiry: 0 },
+              },
+            },
+          ],
+        })
+
+        expect(result.accounts[0]!.capabilities.auth).toEqual({ token: expect.any(String) })
+        expect(result.accounts[0]!.capabilities.keyAuthorization).toBeDefined()
+        expect(result.accounts[0]!.capabilities.personalSign).toEqual({
+          message: expect.any(String),
+        })
+        expect(result.accounts[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
+      })
+
+      test('error: challenge endpoint returns 500 → InvalidParamsError; no verify', async () => {
+        const provider = Provider.create({ adapter: adapter() })
+
+        await expect(
+          provider.request({
             method: 'wallet_connect',
             params: [
               {
                 capabilities: {
                   method: 'register',
-                  auth: authBase,
-                  authorizeAccessKey: { expiry: 0 },
+                  auth: {
+                    challenge: `${server.url}/bad/challenge-500`,
+                    verify: authBase,
+                  },
                 },
               },
             ],
-          })
+          }),
+        ).rejects.toThrow(
+          /Server Authentication challenge endpoint `http:\/\/localhost:\d+\/bad\/challenge-500` returned 500\./,
+        )
+      })
 
-          expect(result.accounts[0]!.capabilities.auth).toEqual({ token: expect.any(String) })
-          expect(result.accounts[0]!.capabilities.keyAuthorization).toBeDefined()
-          expect(result.accounts[0]!.capabilities.personalSign).toEqual({
-            message: expect.any(String),
-          })
-          expect(result.accounts[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
-        },
-      )
+      test('error: challenge response missing `message` → InvalidParamsError', async () => {
+        const provider = Provider.create({ adapter: adapter() })
 
-      test(
-        'error: challenge endpoint returns 500 → InvalidParamsError; no verify',
-        async () => {
-          const provider = Provider.create({ adapter: adapter() })
-
-          await expect(
-            provider.request({
-              method: 'wallet_connect',
-              params: [
-                {
-                  capabilities: {
-                    method: 'register',
-                    auth: {
-                      challenge: `${server.url}/bad/challenge-500`,
-                      verify: authBase,
-                    },
+        await expect(
+          provider.request({
+            method: 'wallet_connect',
+            params: [
+              {
+                capabilities: {
+                  method: 'register',
+                  auth: {
+                    challenge: `${server.url}/bad/challenge-empty`,
+                    verify: authBase,
                   },
                 },
-              ],
-            }),
-          ).rejects.toThrow(
-            /Server Authentication challenge endpoint `http:\/\/localhost:\d+\/bad\/challenge-500` returned 500\./,
-          )
-        },
-      )
+              },
+            ],
+          }),
+        ).rejects.toThrow(
+          /Server Authentication challenge endpoint `http:\/\/localhost:\d+\/bad\/challenge-empty` response missing `message`\./,
+        )
+      })
 
-      test(
-        'error: challenge response missing `message` → InvalidParamsError',
-        async () => {
-          const provider = Provider.create({ adapter: adapter() })
+      test('error: challenge bound to a different domain → InvalidParamsError; never signs', async () => {
+        const provider = Provider.create({ adapter: adapter() })
 
-          await expect(
-            provider.request({
-              method: 'wallet_connect',
-              params: [
-                {
-                  capabilities: {
-                    method: 'register',
-                    auth: {
-                      challenge: `${server.url}/bad/challenge-empty`,
-                      verify: authBase,
-                    },
+        await expect(
+          provider.request({
+            method: 'wallet_connect',
+            params: [
+              {
+                capabilities: {
+                  method: 'register',
+                  auth: {
+                    challenge: `${server.url}/bad/challenge-evil-domain`,
+                    verify: authBase,
                   },
                 },
-              ],
-            }),
-          ).rejects.toThrow(
-            /Server Authentication challenge endpoint `http:\/\/localhost:\d+\/bad\/challenge-empty` response missing `message`\./,
-          )
-        },
-      )
+              },
+            ],
+          }),
+        ).rejects.toThrow(/returned a message bound to `evil\.example`/)
+      })
 
-      test(
-        'error: challenge bound to a different domain → InvalidParamsError; never signs',
-        async () => {
-          const provider = Provider.create({ adapter: adapter() })
+      test('error: `challenge` and `verify` on different origins → InvalidParamsError', async () => {
+        // Phishing guard: a malicious dapp must not be able to point
+        // `challenge` at the victim and `verify` at attacker.com to
+        // harvest a valid signed payload.
+        const provider = Provider.create({ adapter: adapter() })
 
-          await expect(
-            provider.request({
-              method: 'wallet_connect',
-              params: [
-                {
-                  capabilities: {
-                    method: 'register',
-                    auth: {
-                      challenge: `${server.url}/bad/challenge-evil-domain`,
-                      verify: authBase,
-                    },
+        await expect(
+          provider.request({
+            method: 'wallet_connect',
+            params: [
+              {
+                capabilities: {
+                  method: 'register',
+                  auth: {
+                    challenge: `${authBase}/challenge`,
+                    verify: `${badServer.url}/collect`,
                   },
                 },
-              ],
-            }),
-          ).rejects.toThrow(/returned a message bound to `evil\.example`/)
-        },
-      )
+              },
+            ],
+          }),
+        ).rejects.toThrow(
+          /`auth` endpoints \(`challenge`, `verify`, `logout`\) must share the same origin\./,
+        )
+      })
 
-      test(
-        'error: `challenge` and `verify` on different origins → InvalidParamsError',
-        async () => {
-          // Phishing guard: a malicious dapp must not be able to point
-          // `challenge` at the victim and `verify` at attacker.com to
-          // harvest a valid signed payload.
-          const provider = Provider.create({ adapter: adapter() })
+      test('error: `logout` on a different origin → InvalidParamsError', async () => {
+        const provider = Provider.create({ adapter: adapter() })
 
-          await expect(
-            provider.request({
-              method: 'wallet_connect',
-              params: [
-                {
-                  capabilities: {
-                    method: 'register',
-                    auth: {
-                      challenge: `${authBase}/challenge`,
-                      verify: `${badServer.url}/collect`,
-                    },
+        await expect(
+          provider.request({
+            method: 'wallet_connect',
+            params: [
+              {
+                capabilities: {
+                  method: 'register',
+                  auth: {
+                    challenge: `${authBase}/challenge`,
+                    verify: authBase,
+                    logout: `${badServer.url}/logout`,
                   },
                 },
-              ],
-            }),
-          ).rejects.toThrow(
-            /`auth` endpoints \(`challenge`, `verify`, `logout`\) must share the same origin\./,
-          )
-        },
-      )
-
-      test(
-        'error: `logout` on a different origin → InvalidParamsError',
-        async () => {
-          const provider = Provider.create({ adapter: adapter() })
-
-          await expect(
-            provider.request({
-              method: 'wallet_connect',
-              params: [
-                {
-                  capabilities: {
-                    method: 'register',
-                    auth: {
-                      challenge: `${authBase}/challenge`,
-                      verify: authBase,
-                      logout: `${badServer.url}/logout`,
-                    },
-                  },
-                },
-              ],
-            }),
-          ).rejects.toThrow(
-            /`auth` endpoints \(`challenge`, `verify`, `logout`\) must share the same origin\./,
-          )
-        },
-      )
+              },
+            ],
+          }),
+        ).rejects.toThrow(
+          /`auth` endpoints \(`challenge`, `verify`, `logout`\) must share the same origin\./,
+        )
+      })
 
       test('default: no auth capability → no auth/personalSign on result', async () => {
         const provider = Provider.create({ adapter: adapter() })
@@ -632,69 +605,61 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         expect(result.accounts[0]!.capabilities.personalSign).toBeUndefined()
       })
 
-      test(
-        'default: login (post-register) + auth populates capabilities.auth',
-        async () => {
-          const provider = Provider.create({ adapter: adapter() })
+      test('default: login (post-register) + auth populates capabilities.auth', async () => {
+        const provider = Provider.create({ adapter: adapter() })
 
-          // Register first so login has an account to load.
-          await provider.request({
-            method: 'wallet_connect',
-            params: [{ capabilities: { method: 'register' } }],
-          })
+        // Register first so login has an account to load.
+        await provider.request({
+          method: 'wallet_connect',
+          params: [{ capabilities: { method: 'register' } }],
+        })
 
-          const result = await provider.request({
-            method: 'wallet_connect',
-            params: [{ capabilities: { auth: authBase } }],
-          })
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [{ capabilities: { auth: authBase } }],
+        })
 
-          expect(result.accounts[0]!.capabilities.auth).toEqual({ token: expect.any(String) })
-          expect(result.accounts[0]!.capabilities.personalSign).toEqual({
-            message: expect.stringContaining(
-              'wants you to sign in',
-            ),
-          })
-          expect(result.accounts[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
-        },
-      )
+        expect(result.accounts[0]!.capabilities.auth).toEqual({ token: expect.any(String) })
+        expect(result.accounts[0]!.capabilities.personalSign).toEqual({
+          message: expect.stringContaining('wants you to sign in'),
+        })
+        expect(result.accounts[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
+      })
 
-      test(
-        'end-to-end: connect → call protected /me with bearer token',
-        async () => {
-          const provider = Provider.create({ adapter: adapter() })
+      test('end-to-end: connect → call protected /me with bearer token', async () => {
+        const provider = Provider.create({ adapter: adapter() })
 
-          // Token mode: the server returns the session token in the body
-          // (no cookie) and the SDK surfaces it on `capabilities.auth.token`.
-          const result = await provider.request({
-            method: 'wallet_connect',
-            params: [
-              {
-                capabilities: {
-                  method: 'register',
-                  auth: { url: authBase, returnToken: true },
-                },
+        // Token mode: the server returns the session token in the body
+        // (no cookie) and the SDK surfaces it on `capabilities.auth.token`.
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [
+            {
+              capabilities: {
+                method: 'register',
+                auth: { url: authBase, returnToken: true },
               },
-            ],
-          })
+            },
+          ],
+        })
 
-          const token = result.accounts[0]!.capabilities.auth?.token
-          expect(token).toMatch(/^[a-z0-9]+$/)
+        const token = result.accounts[0]!.capabilities.auth?.token
+        expect(token).toMatch(/^[a-z0-9]+$/)
 
-          // Authenticated request resolves the connected address.
-          const me = await fetch(`${server.url}/me`, {
-            headers: { authorization: `Bearer ${token}` },
-          })
-          expect(me.status).toBe(200)
-          expect(await me.json()).toEqual({
-            address: result.accounts[0]!.address,
-            chainId: expect.any(Number),
-          })
+        // Authenticated request resolves the connected address.
+        const me = await fetch(`${server.url}/me`, {
+          headers: { authorization: `Bearer ${token}` },
+        })
+        expect(me.status).toBe(200)
+        expect(await me.json()).toEqual({
+          address: result.accounts[0]!.address,
+          chainId: expect.any(Number),
+        })
 
-          // Unauthenticated request is rejected.
-          const anon = await fetch(`${server.url}/me`)
-          expect(anon.status).toBe(401)
-        },
-      )
+        // Unauthenticated request is rejected.
+        const anon = await fetch(`${server.url}/me`)
+        expect(anon.status).toBe(401)
+      })
     })
   })
 

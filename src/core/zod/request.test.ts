@@ -189,9 +189,7 @@ describe('validate', () => {
   test('default: validates wallet_connect with personalSign capability (register branch)', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'wallet_connect',
-      params: [
-        { capabilities: { method: 'register', personalSign: { message: 'hello' } } },
-      ],
+      params: [{ capabilities: { method: 'register', personalSign: { message: 'hello' } } }],
     })
     expect(result._decoded).toMatchInlineSnapshot(`
       {

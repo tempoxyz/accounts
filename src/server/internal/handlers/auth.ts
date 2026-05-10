@@ -1,4 +1,5 @@
-import { getCookie, setCookie } from 'hono/cookie'
+import { setCookie } from 'hono/cookie'
+import { Hex } from 'ox'
 import type { Address, Transport } from 'viem'
 import { createClient, http, zeroAddress } from 'viem'
 import { verifyMessage } from 'viem/actions'
@@ -116,14 +117,19 @@ export namespace schema {
  */
 export function auth(options: auth.Options = {}): auth.ReturnType {
   const {
+    cookie = true,
     cookieName = defaults.cookieName,
     domain,
+    onAuthenticate,
     path = '/',
-    publicOrigin: publicOrigin_option,
+    origin: origin_option,
     store = Kv.memory(),
     transport = http(),
     trustProxy = false,
-    ttl: { challenge: challengeTtl = defaults.ttl.challenge, session: sessionTtl = defaults.ttl.session } = {},
+    ttl: {
+      challenge: challengeTtl = defaults.ttl.challenge,
+      session: sessionTtl = defaults.ttl.session,
+    } = {},
     ...rest
   } = options
 
@@ -135,16 +141,16 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     return value
   }
 
-  // Pre-parse `publicOrigin` so a misconfiguration fails loudly at handler
+  // Pre-parse `origin` so a misconfiguration fails loudly at handler
   // construction time rather than per-request.
   const pinnedOrigin = (() => {
-    if (!publicOrigin_option) return undefined
+    if (!origin_option) return undefined
     try {
-      const url = new URL(publicOrigin_option)
+      const url = new URL(origin_option)
       return { protocol: url.protocol, host: url.host }
     } catch {
       throw new Error(
-        `\`auth({ publicOrigin })\` must be a valid absolute URL. Got: ${publicOrigin_option}`,
+        `\`auth({ origin })\` must be a valid absolute URL. Got: ${origin_option}`,
       )
     }
   })()
@@ -199,8 +205,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
 
     const { protocol, host: reqHost } = resolveReqOrigin(c.req.raw)
     const resolvedDomain = domain ?? reqHost
-    if (parsed.domain !== resolvedDomain)
-      return c.json({ error: 'domain mismatch' }, 400)
+    if (parsed.domain !== resolvedDomain) return c.json({ error: 'domain mismatch' }, 400)
 
     const now = Date.now()
     if (parsed.expirationTime && parsed.expirationTime.getTime() < now)
@@ -218,11 +223,9 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     // while keeping `nonce`/`domain`/`chainId` and still pass verification —
     // enabling a phishing-style takeover where a victim signs a benign-looking
     // message bound to an attacker's session.
-    if (message !== challenge.message)
-      return c.json({ error: 'message mismatch' }, 400)
+    if (message !== challenge.message) return c.json({ error: 'message mismatch' }, 400)
 
-    if (parsed.chainId !== challenge.chainId)
-      return c.json({ error: 'chainId mismatch' }, 400)
+    if (parsed.chainId !== challenge.chainId) return c.json({ error: 'chainId mismatch' }, 400)
 
     // Signature verification via viem's `verifyMessage`. Tempo's chain
     // override unwraps `SignatureEnvelope` for WebAuthn / P256 / keychain
@@ -242,12 +245,34 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
       issuedAt,
       expiresAt: issuedAt + sessionTtl,
     }
+
+    // Hook for side effects (e.g. user provisioning, analytics). Throwing
+    // rejects the authentication and surfaces a 401 so the caller can
+    // gate auth on application-level checks.
+    if (onAuthenticate) {
+      try {
+        await onAuthenticate({
+          address,
+          chainId: parsed.chainId,
+          message,
+          request: c.req.raw,
+          signature,
+        })
+      } catch (error) {
+        return c.json(
+          { error: error instanceof Error ? error.message : 'authentication rejected' },
+          401,
+        )
+      }
+    }
+
     const token = generateSiweNonce()
     await store.set(sessionKey(token), session, { ttl: sessionTtl })
 
-    // Token mode (opt-in): caller will send `Authorization: Bearer <token>`.
+    // Token mode: caller sends `Authorization: Bearer <token>`. Forced when
+    // `cookie: false`, opt-in via `returnToken: true` otherwise.
     // Cookie mode (default): browser carries the cookie automatically.
-    if (returnToken) return c.json(z.encode(schema.verify.returns, { token }))
+    if (!cookie || returnToken) return c.json(z.encode(schema.verify.returns, { token }))
 
     setCookie(c, cookieName, token, {
       httpOnly: true,
@@ -260,22 +285,26 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     return c.json(z.encode(schema.verify.returns, {}))
   })
 
+  // Resolves the session token from a request. Prefers
+  // `Authorization: Bearer <token>` over the cookie. When `cookie: false`,
+  // the cookie is ignored even if present.
+  const tokenFromRequest = (req: Request): string | undefined => {
+    const bearer = bearerToken(req.headers.get('authorization'))
+    if (bearer) return bearer
+    if (!cookie) return undefined
+    const cookieHeader = req.headers.get('cookie')
+    return cookieHeader ? parseCookieValue(cookieHeader, cookieName) : undefined
+  }
+
   router.post(logoutPath, async (c) => {
-    const token = getCookie(c, cookieName)
+    const token = tokenFromRequest(c.req.raw)
     if (token) await store.delete(sessionKey(token))
-    setCookie(c, cookieName, '', { path: '/', maxAge: 0 })
+    if (cookie) setCookie(c, cookieName, '', { path: '/', maxAge: 0 })
     return c.body(null, 204)
   })
 
   const getSession: auth.getSession = async (req) => {
-    // Prefer `Authorization: Bearer <token>` (token mode) over cookie
-    // (cookie mode). Either is accepted on every request.
-    const authz = req.headers.get('authorization')
-    const bearer = authz?.toLowerCase().startsWith('bearer ')
-      ? authz.slice(7).trim()
-      : undefined
-    const cookieHeader = req.headers.get('cookie')
-    const token = bearer ?? (cookieHeader ? parseCookieValue(cookieHeader, cookieName) : undefined)
+    const token = tokenFromRequest(req)
     if (!token) return undefined
     return await store.get<SessionPayload>(sessionKey(token))
   }
@@ -290,11 +319,48 @@ export declare namespace auth {
   /** Resolves the current session from a request's cookie. */
   type getSession = (req: Request) => Promise<SessionPayload | undefined>
 
+  /**
+   * Hook invoked after a SIWE signature is verified but before the
+   * session token is issued. Throw to reject the authentication.
+   */
+  type onAuthenticate = (params: {
+    /** Verified address that signed the SIWE message. */
+    address: Address
+    /** Chain ID parsed from the SIWE message. */
+    chainId: number
+    /** Verbatim SIWE message that was signed. */
+    message: string
+    /** Underlying request — useful for headers, IP, etc. */
+    request: Request
+    /** Signature provided by the wallet. */
+    signature: Hex.Hex
+  }) => void | Promise<void>
+
   type Options = from.Options & {
+    /**
+     * Whether to issue a session cookie on successful verify. When
+     * `false`, the verify response always contains `{ token }` in the
+     * body (the per-request `returnToken` flag is ignored), no
+     * `Set-Cookie` header is sent, logout does not clear a cookie, and
+     * `getSession` ignores any incoming cookie — only
+     * `Authorization: Bearer <token>` is honored. Use this when the SDK
+     * lives in a non-browser context (CLI, server-to-server) or when
+     * the host app already manages auth cookies.
+     * @default true
+     */
+    cookie?: boolean | undefined
     /** Cookie name for the session token. @default "accounts_auth" */
     cookieName?: string | undefined
     /** Domain echoed into challenge messages. @default request `Host` header */
     domain?: string | undefined
+    /**
+     * Hook invoked after the SIWE signature is verified but before the
+     * session token is issued. Use to provision a user record, emit
+     * analytics, or apply application-level allow/deny rules. Throwing
+     * from this hook rejects the request with `401` and the thrown
+     * error's `message` is surfaced as the response `error` field.
+     */
+    onAuthenticate?: onAuthenticate | undefined
     /** Path prefix for the auth endpoints. @default "/" */
     path?: string | undefined
     /**
@@ -306,7 +372,7 @@ export declare namespace auth {
      * prevents a spoofed `x-forwarded-host` from shifting the SIWE domain
      * and a spoofed `x-forwarded-proto: http` from disabling `Secure`.
      */
-    publicOrigin?: string | undefined
+    origin?: string | undefined
     /**
      * Backing store for both single-use challenges (nonces) and issued
      * sessions. Keys are namespaced internally (`challenge:…`, `session:…`).
@@ -327,7 +393,7 @@ export declare namespace auth {
      * terminates TLS (OrbStack on `*.tempo.local`, a CDN, etc.). When
      * `false`, forwarded headers are ignored to prevent spoofing on
      * deployments that expose the origin server directly. Ignored when
-     * `publicOrigin` is set.
+     * `origin` is set.
      * @default false
      */
     trustProxy?: boolean | undefined
@@ -346,7 +412,7 @@ export declare namespace auth {
 /**
  * Resolves the public-facing protocol and host for a request.
  *
- * - When `pinnedOrigin` is set (operator passed `auth({ publicOrigin })`),
+ * - When `pinnedOrigin` is set (operator passed `auth({ origin })`),
  *   that origin is the source of truth — forwarded headers and request URL
  *   are ignored. This prevents a spoofed `x-forwarded-host` from shifting
  *   SIWE `domain` and a spoofed `x-forwarded-proto: http` from disabling
@@ -380,6 +446,12 @@ function resolveOrigin(
     protocol: reqUrl.protocol,
     host: headers.get('host') || reqUrl.host,
   }
+}
+
+function bearerToken(authorization: string | null): string | undefined {
+  if (!authorization) return undefined
+  if (!authorization.toLowerCase().startsWith('bearer ')) return undefined
+  return authorization.slice(7).trim() || undefined
 }
 
 function parseCookieValue(header: string, name: string): string | undefined {
