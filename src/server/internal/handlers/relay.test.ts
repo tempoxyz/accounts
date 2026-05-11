@@ -284,6 +284,90 @@ describe('behavior: with feePayer', () => {
   })
 })
 
+describe('behavior: with feePayer.feeToken', () => {
+  let server: Server
+  let client: ReturnType<typeof getClient<typeof chain>>
+
+  const sponsorFeeToken = '0x20c0000000000000000000000000000000000000' as const // pathUSD
+
+  beforeAll(async () => {
+    server = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+        feePayer: {
+          account: feePayerAccount,
+          feeToken: sponsorFeeToken,
+        },
+        resolveTokens: () => localnetTokens,
+      }).listener,
+    )
+    client = getClient({ transport: http(server.url) })
+  })
+
+  afterAll(() => {
+    server.close()
+  })
+
+  test('default: sponsor.feeToken is used when request omits feeToken', async () => {
+    const { transaction } = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+    expect(transaction.feeToken?.toLowerCase()).toBe(sponsorFeeToken)
+    expect(transaction.feePayerSignature).toBeDefined()
+  })
+
+  test('behavior: sponsor.feeToken overrides request feeToken on sponsored fills', async () => {
+    const { transaction } = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feeToken: addresses.alphaUsd as Address,
+    })
+    expect(transaction.feeToken?.toLowerCase()).toBe(sponsorFeeToken)
+    expect(transaction.feePayerSignature).toBeDefined()
+  })
+
+  test('behavior: request feeToken wins when sponsorship is opted out via feePayer:false', async () => {
+    const { transaction } = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feePayer: false,
+      feeToken: addresses.alphaUsd as Address,
+    })
+    expect(transaction.feeToken?.toLowerCase()).toBe(addresses.alphaUsd.toLowerCase())
+    expect(transaction.feePayerSignature).toBeUndefined()
+  })
+
+  test('behavior: broadcast tx receipt records the sponsor.feeToken', async () => {
+    // Fill via relay (where override kicks in), then sign + broadcast manually.
+    // viem's `sendTransactionSync` with a hydrated account does local prep and
+    // would skip the relay's `eth_fillTransaction`, bypassing the override.
+    const { transaction } = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feeToken: addresses.alphaUsd as Address,
+    })
+    expect(transaction.feeToken?.toLowerCase()).toBe(sponsorFeeToken)
+
+    const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
+    const envelope = TxEnvelopeTempo.deserialize(serialized)
+    const signature = await userAccount.sign({
+      hash: TxEnvelopeTempo.getSignPayload(envelope),
+    })
+    const signed = TxEnvelopeTempo.serialize(envelope, {
+      signature: SignatureEnvelope.from(signature),
+    })
+    const receipt = (await getClient().request({
+      method: 'eth_sendRawTransactionSync' as never,
+      params: [signed],
+    })) as { feePayer?: string | undefined; feeToken?: string | undefined }
+
+    expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    expect(receipt.feeToken?.toLowerCase()).toBe(sponsorFeeToken)
+  })
+})
+
 describe('behavior: with app-provided feePayer URL', () => {
   let appServer: Server
   let walletServer: Server
@@ -488,6 +572,65 @@ describe('behavior: with app-provided feePayer URL + autoSwap', () => {
     expect(capabilities?.autoSwap?.maxIn.symbol).toBe('AlphaUSD')
     expect(capabilities?.autoSwap?.minOut.symbol).toBe('EXTBASE')
     expect(capabilities?.autoSwap?.minOut.formatted).toBe('5')
+  })
+})
+
+describe('behavior: app-provided feePayer URL bypasses wallet validate', () => {
+  let appServer: Server
+  let walletServer: Server
+  let client: ReturnType<typeof getClient<typeof chain>>
+
+  beforeAll(async () => {
+    // App relay is the authoritative sponsor — it has its own fee payer
+    // account and signs sponsored transactions.
+    appServer = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+        feePayer: {
+          account: feePayerAccount,
+          name: 'App Sponsor',
+          url: 'https://app.example.com',
+        },
+      }).listener,
+    )
+
+    // Wallet relay has its own fee payer with a `validate` that ALWAYS
+    // rejects. This guards the wallet's own fee payer; it must NOT gate
+    // sponsorship when the dapp supplies its own external feePayer URL.
+    walletServer = await createServer(
+      relay({
+        chains: [chain],
+        features: 'all',
+        transports: { [chain.id]: http() },
+        feePayer: {
+          account: feePayerAccount,
+          name: 'Wallet Sponsor',
+          validate: () => false,
+        },
+      }).listener,
+    )
+
+    client = getClient({ transport: http(walletServer.url) })
+  })
+
+  afterAll(() => {
+    appServer.close()
+    walletServer.close()
+  })
+
+  test('behavior: external feePayer URL is sponsored even when wallet validate rejects', async () => {
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feePayer: appServer.url as never,
+    })
+
+    expect(result.transaction.feePayerSignature).toBeDefined()
+    expect(result.transaction.maxFeePerGas).toBeDefined()
+    expect(result.transaction.maxFeePerGas).not.toBe(0n)
+    expect(result.capabilities?.sponsored).toBe(true)
+    expect(result.capabilities?.sponsor?.name).toBe('App Sponsor')
   })
 })
 

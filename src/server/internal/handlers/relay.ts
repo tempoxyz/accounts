@@ -160,15 +160,24 @@ export function relay(options: relay.Options = {}): Handler {
 
           const { feePayer: _feePayer, ...normalized } =
             Utils.normalizeFillTransactionRequest(parameters)
+
+          // When sponsoring, the sponsor's preferred fee token (if set)
+          // overrides whatever the consumer asked for — the sponsor is
+          // paying, so the sponsor picks. Falls back to the request's
+          // feeToken otherwise.
+          const sponsoredFeeToken = requestsSponsorship
+            ? (feePayerOptions?.feeToken ?? requestFeeToken)
+            : requestFeeToken
+
           const baseTx = {
             ...normalized,
             ...(typeof chainId !== 'undefined' ? { chainId } : {}),
-            ...(requestFeeToken ? { feeToken: requestFeeToken } : {}),
+            ...(sponsoredFeeToken ? { feeToken: sponsoredFeeToken } : {}),
           }
 
           let filled: Awaited<ReturnType<typeof fill>>
           let sponsored = false
-          let feeToken = requestFeeToken
+          let feeToken = sponsoredFeeToken
 
           // Lazily resolve a swap source token when autoSwap needs one.
           const resolveFeeTokenForSwap = from
@@ -206,9 +215,13 @@ export function relay(options: relay.Options = {}): Handler {
               })
             : client
 
-          if (requestsSponsorship && !feePayerOptions?.validate) {
-            // Path A: sponsorship guaranteed (no validate) — skip fee token
-            // resolution, fill once with feePayer, then parallelize the rest.
+          if (requestsSponsorship && (externalFeePayerUrl || !feePayerOptions?.validate)) {
+            // Path A: sponsorship guaranteed — skip fee token resolution,
+            // fill once with feePayer, then parallelize the rest. Taken when:
+            //   - no validate is configured (no gating), OR
+            //   - the app supplied its own external fee payer URL (that
+            //     relay is the sponsorship authority — the wallet's own
+            //     `validate` only governs the wallet's own fee payer).
             const transaction = { ...baseTx, feePayer: true }
             if (Sponsorship.isPreparedTransaction(transaction)) {
               filled = {
@@ -579,6 +592,8 @@ export namespace relay {
       | {
           /** Account to use as the fee payer. */
           account: LocalAccount
+          /** Preferred fee token the sponsor wants to pay fees in. */
+          feeToken?: Address | undefined
           /**
            * Validates whether to sponsor the transaction. When omitted, all
            * transactions are sponsored. Return `false` to reject sponsorship.
@@ -695,15 +710,17 @@ async function fill(client: Client, options: fill.Options) {
     const sponsor = upstreamCapabilities?.sponsor as
       | { address: Address; name?: string; url?: string }
       | undefined
-    // External fee-payer relays surface chain reverts (e.g. InsufficientBalance)
-    // inside `capabilities.error` with a stub `tx` instead of throwing. Detect
-    // that here and re-throw so the autoSwap branch below can recover the same
-    // way it does for the direct-chain path.
+    // External fee-payer relays surface chain reverts (e.g. InsufficientBalance,
+    // InsufficientAllowance) inside `capabilities.error` with a stub `tx`
+    // instead of throwing. Re-throw all upstream errors so the outer handler
+    // either recovers via autoSwap (InsufficientBalance) or propagates the
+    // error to the caller. Without this, the wallet would otherwise sign the
+    // zero-stub tx with its own fee payer and broadcast garbage.
     const upstreamError = upstreamCapabilities?.error as
       | { errorName?: string; message?: string; data?: `0x${string}` }
       | undefined
-    if (upstreamError?.errorName === 'InsufficientBalance') {
-      const synthetic = new Error(upstreamError.message ?? 'InsufficientBalance')
+    if (upstreamError) {
+      const synthetic = new Error(upstreamError.message ?? upstreamError.errorName ?? 'UpstreamRevert')
       synthetic.name = 'UpstreamRevertError'
       ;(synthetic as { data?: `0x${string}` | undefined }).data = upstreamError.data
       throw synthetic
