@@ -1,3 +1,7 @@
+import Privy, {
+  LocalStorage as PrivyLocalStorage,
+  getAllUserEmbeddedEthereumWallets,
+} from '@privy-io/js-sdk-core'
 import { TurnkeyClient, generateWalletAccountsFromAddressFormat } from '@turnkey/core'
 import type { CreateSubOrgParams } from '@turnkey/core'
 import type { TurnkeyClientMethods } from '@turnkey/core'
@@ -7,17 +11,26 @@ import {
   dialog,
   Dialog,
   local,
+  privy,
   Provider,
   turnkey,
   webAuthn,
 } from 'accounts'
 import { Mppx } from 'mppx/client'
+import { Hex } from 'ox'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
+import { requestPrivyEmailOtp } from './privyOtpStore.js'
 import { requestTurnkeyEmailOtp, type TurnkeyEmailOtpClient } from './turnkeyOtpStore.js'
 
-export type AdapterType = 'secp256k1' | 'webAuthn' | 'turnkey' | 'tempoWallet' | 'dialogRefImpl'
+export type AdapterType =
+  | 'secp256k1'
+  | 'webAuthn'
+  | 'turnkey'
+  | 'privy'
+  | 'tempoWallet'
+  | 'dialogRefImpl'
 export type Env = 'mainnet' | 'testnet' | 'devnet'
 export type DialogMode = 'iframe' | 'popup'
 export type ProviderValue = ReturnType<typeof Provider.create>
@@ -71,6 +84,7 @@ export let dialogMode: DialogMode = 'iframe'
 export let theme: DialogNs.Theme | undefined
 export let provider: ProviderValue = createProvider('tempoWallet')
 let turnkeyClient: TurnkeyClient | undefined
+let privyClient: Privy | undefined
 
 export function createProvider(adapterType: AdapterType): ProviderValue {
   if (adapterType === 'tempoWallet')
@@ -127,6 +141,31 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
             mode: 'login',
           })
           return await getOrCreateEthereumAccounts(client_)
+        },
+      }),
+      mpp: true,
+      testnet,
+    })
+  }
+
+  if (adapterType === 'privy') {
+    const client = getPrivyAdapterClient()
+    return Provider.create({
+      adapter: privy({
+        client,
+        async createAccount({ client }) {
+          const client_ = client as Privy
+          await requestPrivyEmailOtp({ client: client_.auth, mode: 'register' })
+          const wallets = await getPrivyEmbeddedWallets(client_)
+          const wallet = wallets[0]
+          if (!wallet) throw new Error('No Privy embedded Ethereum wallet was created.')
+          return wallet
+        },
+        async loadAccounts({ client }) {
+          const client_ = client as Privy
+          if (!(await client_.getAccessToken().catch(() => null)))
+            await requestPrivyEmailOtp({ client: client_.auth, mode: 'login' })
+          return await getPrivyEmbeddedWallets(client_)
         },
       }),
       mpp: true,
@@ -205,6 +244,39 @@ async function getOrCreateEthereumAccounts(client: TurnkeyPlaygroundClient) {
   if (created.length > 0) return created
 
   throw new Error('No Turnkey Ethereum account found after creating a wallet.')
+}
+
+function getPrivyAdapterClient() {
+  const appId = import.meta.env.VITE_PRIVY_APP_ID
+  if (!appId) throw new Error('VITE_PRIVY_APP_ID is required for the Privy adapter.')
+
+  privyClient ??= new Privy({
+    appId,
+    ...(import.meta.env.VITE_PRIVY_CLIENT_ID
+      ? { clientId: import.meta.env.VITE_PRIVY_CLIENT_ID }
+      : {}),
+    storage: new PrivyLocalStorage(),
+  })
+
+  return privyClient
+}
+
+async function getPrivyEmbeddedWallets(client: Privy): Promise<readonly privy.EmbeddedWallet[]> {
+  const { user } = await client.user.get()
+  const wallets = getAllUserEmbeddedEthereumWallets(user)
+  return Promise.all(
+    wallets.map(async (wallet) => {
+      const provider = await client.embeddedWallet.getProvider(wallet)
+      return {
+        address: wallet.address,
+        signRawHash: async (hash) =>
+          (await provider.request({
+            method: 'secp256k1_sign',
+            params: [hash],
+          })) as Hex.Hex,
+      }
+    }),
+  )
 }
 
 export function switchTheme(

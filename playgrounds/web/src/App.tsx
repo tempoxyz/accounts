@@ -14,6 +14,7 @@ import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 
+import { PrivyEmailOtp } from './PrivyEmailOtp.js'
 import {
   type AdapterType,
   type DialogMode,
@@ -60,6 +61,7 @@ export function App() {
 
   return (
     <div className="playground min-h-dvh bg-background text-foreground" data-regen-radius="small">
+      <PrivyEmailOtp />
       <TurnkeyEmailOtp />
       <div className="playground-layout">
         <aside className="playground-rail">
@@ -180,6 +182,7 @@ function ConfigPanel(props: {
             <option value="tempoWallet">tempoWallet</option>
             <option value="dialogRefImpl">dialogRefImpl</option>
             <option value="turnkey">turnkey</option>
+            <option value="privy">privy</option>
             <option value="webAuthn">webAuthn</option>
             <option value="secp256k1">secp256k1</option>
           </select>
