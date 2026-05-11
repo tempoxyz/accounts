@@ -24,11 +24,11 @@ export const tokens = testnet ? tokensMap.testnet : tokensMap.mainnet
 
 export const config = createConfig({
   chains: testnet ? [tempoModerato, tempo] : [tempo, tempoModerato],
-  connectors: [tempoWallet()],
+  connectors: [tempoWallet({ mpp: true, relay: '/relay' })],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempo.id]: http(),
-    [tempoModerato.id]: http(),
+    [tempo.id]: http(`/relay/${tempo.id}`),
+    [tempoModerato.id]: http(`/relay/${tempoModerato.id}`),
   },
 })
 

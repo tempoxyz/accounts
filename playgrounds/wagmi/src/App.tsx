@@ -1,5 +1,5 @@
 import { Expiry } from 'accounts'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { formatUnits, parseUnits, stringify, type Hex } from 'viem'
 import { Actions } from 'viem/tempo'
 import {
@@ -43,8 +43,59 @@ export default function App() {
 
           <h2>Sign Typed Data</h2>
           <SignTypedData />
+
+          <h2>MPP</h2>
+          <Fortune />
+          <MppZeroDollarAuth />
         </>
       )}
+    </div>
+  )
+}
+
+function useRequest() {
+  const [result, setResult] = useState<unknown>()
+  const [error, setError] = useState<Error>()
+  const execute = useCallback(async (fn: () => Promise<unknown>) => {
+    try {
+      setError(undefined)
+      setResult(await fn())
+    } catch (e) {
+      setResult(undefined)
+      setError(e instanceof Error ? e : new Error(String(e)))
+    }
+  }, [])
+  return [result, error, execute] as const
+}
+
+function Fortune() {
+  const [result, error, execute] = useRequest()
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => execute(() => fetch('/fortune').then((r) => r.json()))}
+      >
+        Get Fortune (0.01 pathUSD)
+      </button>
+      {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
+      {result !== undefined && <pre>{stringify(result, null, 2)}</pre>}
+    </div>
+  )
+}
+
+function MppZeroDollarAuth() {
+  const [result, error, execute] = useRequest()
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => execute(() => fetch('/zero-dollar-auth').then((r) => r.json()))}
+      >
+        Zero-Dollar Auth
+      </button>
+      {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
+      {result !== undefined && <pre>{stringify(result, null, 2)}</pre>}
     </div>
   )
 }
