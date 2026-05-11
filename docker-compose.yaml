@@ -28,7 +28,7 @@ services:
       - '5173:5173'
     labels:
       dev.orbstack.domains: playground.accounts.local
-    command: ['sh', '-c', 'corepack enable && pnpm --filter playground dev -- --host']
+    command: ['sh', '-c', 'corepack enable && pnpm --filter playground dev -- --host --force']
     healthcheck:
       test:
         [
@@ -55,7 +55,7 @@ services:
       - '5175:5175'
     labels:
       dev.orbstack.domains: wagmi.accounts.local
-    command: ['sh', '-c', 'corepack enable && pnpm --filter wagmi-playground dev -- --host --port 5175']
+    command: ['sh', '-c', 'corepack enable && pnpm --filter wagmi-playground dev -- --host --port 5175 --force']
     healthcheck:
       test:
         [
@@ -82,7 +82,7 @@ services:
       - '5174:5174'
     labels:
       dev.orbstack.domains: dialog-ref.accounts.local
-    command: ['sh', '-c', 'corepack enable && pnpm --filter dialog-ref dev -- --host']
+    command: ['sh', '-c', 'corepack enable && pnpm --filter dialog-ref dev -- --host --force']
     healthcheck:
       test:
         [
