@@ -24,11 +24,13 @@ services:
     volumes:
       - .:/app
       - node_modules:/app/node_modules
+    tmpfs:
+      - /app/playgrounds/web/node_modules/.vite
     ports:
       - '5173:5173'
     labels:
       dev.orbstack.domains: playground.accounts.local
-    command: ['sh', '-c', 'corepack enable && pnpm --filter playground dev -- --host --force']
+    command: ['sh', '-c', 'corepack enable && pnpm --filter playground dev -- --host']
     healthcheck:
       test:
         [
@@ -51,11 +53,13 @@ services:
     volumes:
       - .:/app
       - node_modules:/app/node_modules
+    tmpfs:
+      - /app/playgrounds/wagmi/node_modules/.vite
     ports:
       - '5175:5175'
     labels:
       dev.orbstack.domains: wagmi.accounts.local
-    command: ['sh', '-c', 'corepack enable && pnpm --filter wagmi-playground dev -- --host --port 5175 --force']
+    command: ['sh', '-c', 'corepack enable && pnpm --filter wagmi-playground dev -- --host --port 5175']
     healthcheck:
       test:
         [
@@ -78,11 +82,13 @@ services:
     volumes:
       - .:/app
       - node_modules:/app/node_modules
+    tmpfs:
+      - /app/ref-impls/dialog/node_modules/.vite
     ports:
       - '5174:5174'
     labels:
       dev.orbstack.domains: dialog-ref.accounts.local
-    command: ['sh', '-c', 'corepack enable && pnpm --filter dialog-ref dev -- --host --force']
+    command: ['sh', '-c', 'corepack enable && pnpm --filter dialog-ref dev -- --host']
     healthcheck:
       test:
         [
