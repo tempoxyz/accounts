@@ -1,0 +1,42 @@
+---
+title: Handler.feePayer (Deprecated)
+description: Deprecated — use Handler.relay with feePayer option instead.
+---
+
+# `Handler.feePayer` (Deprecated)
+
+:::warning
+`Handler.feePayer` has been deprecated. Use [`Handler.relay`](/accounts/server/handler.relay) with the [`feePayer`](/accounts/server/handler.relay#feepayer) option instead.
+:::
+
+## Migration
+
+Replace `Handler.feePayer` calls with `Handler.relay` and nest the `account` under `feePayer`:
+
+```diff
+- const handler = Handler.feePayer({
+-   account: privateKeyToAccount('0x...'),
+- })
++ const handler = Handler.relay({
++   feePayer: {
++     account: privateKeyToAccount('0x...'),
++   },
++ })
+```
+
+All other options (`chains`, `transports`, `path`, `onRequest`) remain the same — `validate` moves inside `feePayer`:
+
+```diff
+- const handler = Handler.feePayer({
+-   account: privateKeyToAccount('0x...'),
+-   validate: (request) => request.from !== blocked,
+- })
++ const handler = Handler.relay({
++   feePayer: {
++     account: privateKeyToAccount('0x...'),
++     validate: (request) => request.from !== blocked,
++   },
++ })
+```
+
+See [`Handler.relay`](/accounts/server/handler.relay) for the full API reference.

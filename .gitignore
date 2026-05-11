@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 .wrangler
+.vocs
 data
 dist
 node_modules

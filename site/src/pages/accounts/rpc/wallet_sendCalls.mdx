@@ -1,0 +1,48 @@
+---
+title: wallet_sendCalls
+description: Send a batch of calls from the connected account.
+---
+
+# `wallet_sendCalls`
+
+Sends a batch of calls from the connected account. Supports atomic execution.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_sendCalls'
+  params?: [{
+    calls: { to: Address; data?: Hex; value?: Hex }[]
+    from?: Address
+    chainId?: number
+    capabilities?: { sync?: boolean }
+    atomicRequired?: boolean
+  }]
+}
+```
+
+## Response
+
+```ts
+type Response = {
+  id: string
+  status?: number
+  receipts?: TransactionReceipt[]
+  chainId?: number
+  atomic?: boolean
+}
+```
+
+## Example
+
+```ts
+const result = await provider.request({
+  method: 'wallet_sendCalls',
+  params: [{
+    calls: [
+      { to: '0x...', data: '0x...' },
+    ],
+  }],
+})
+```

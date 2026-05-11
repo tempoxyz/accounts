@@ -1,0 +1,53 @@
+---
+title: wallet_authorizeAccessKey
+description: Authorize an access key for delegated transaction signing.
+---
+
+# `wallet_authorizeAccessKey`
+
+Authorizes an access key with an expiry and optional spending limits for delegated transaction signing.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_authorizeAccessKey'
+  params: [{
+    /** Unix timestamp (seconds) when the key expires. */
+    expiry: number
+    /** TIP-20 spending limits. */
+    limits?: { token: Address; limit: Hex }[]
+    /** Public key to authorize. */
+    publicKey?: Hex
+    /** Key type. */
+    keyType?: 'secp256k1' | 'p256' | 'webAuthn'
+    /** Address of the key (alternative to publicKey). */
+    address?: Address
+  }]
+}
+```
+
+## Response
+
+```ts
+type Response = {
+  keyAuthorization: KeyAuthorization
+  rootAddress: Address
+}
+```
+
+## Example
+
+```ts
+import { Expiry } from 'accounts'
+
+const result = await provider.request({
+  method: 'wallet_authorizeAccessKey',
+  params: [{
+    expiry: Expiry.days(1),
+    limits: [
+      { token: '0x20c0000000000000000000000000000000000001', limit: '0x5F5E100' },
+    ],
+  }],
+})
+```

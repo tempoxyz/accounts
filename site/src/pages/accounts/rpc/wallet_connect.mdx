@@ -1,0 +1,54 @@
+---
+title: wallet_connect
+description: Connect account(s) with optional capabilities like access key authorization.
+---
+
+# `wallet_connect`
+
+Requests to connect account(s) with optional capabilities.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_connect'
+  params?: [{
+    capabilities?: {
+      /** Authorize an access key on connect. */
+      authorizeAccessKey?: {
+        expiry: number
+        limits?: { token: Address; limit: Hex }[]
+        publicKey?: Hex
+      }
+      /** Authentication method. */
+      method?: 'register' | 'login'
+    }
+  }]
+}
+```
+
+## Response
+
+```ts
+type Response = {
+  accounts: {
+    address: Address
+    capabilities: {
+      keyAuthorization?: KeyAuthorization
+      signature?: Hex
+    }
+  }[]
+}
+```
+
+## Example
+
+```ts
+import { Provider } from 'accounts'
+
+const provider = Provider.create()
+
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
+})
+```

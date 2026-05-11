@@ -1,0 +1,35 @@
+---
+title: wallet_getCapabilities
+description: Get account capabilities for specified chains.
+---
+
+# `wallet_getCapabilities`
+
+Returns capabilities for the connected account across chains.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_getCapabilities'
+  params?: [Address] | [Address, Hex[]]
+}
+```
+
+## Response
+
+```ts
+type Response = Record<Hex, {
+  accessKeys?: { status: 'supported' | 'unsupported' }
+  atomic: { status: 'supported' | 'ready' | 'unsupported' }
+}>
+```
+
+## Example
+
+```ts
+const capabilities = await provider.request({
+  method: 'wallet_getCapabilities',
+  params: ['0x...'],
+})
+```

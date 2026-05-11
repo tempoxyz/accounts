@@ -76,6 +76,7 @@ pnpm test             # run tests
 | ---------------- | ----------------------------------- |
 | Playground       | `https://playground.accounts.local` |
 | Dialog Reference | `https://dialog-ref.accounts.local` |
+| Docs             | `https://docs.accounts.local`       |
 | Wagmi Playground | `https://wagmi.accounts.local`      |
 
 ### Playgrounds

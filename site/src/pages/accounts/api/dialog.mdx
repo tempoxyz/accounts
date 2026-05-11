@@ -1,0 +1,105 @@
+---
+title: dialog
+description: Adapter for the Tempo Wallet dialog, an embedded iframe or popup for account management.
+---
+
+# `dialog`
+
+Enables universal wallet experiences by delegating signing to an external origin dialog. Also exported as `tempoWallet`.
+
+## Usage
+
+```ts twoslash
+import { dialog, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: dialog(),
+})
+```
+
+## Parameters
+
+### dialog
+
+- **Type:** `Dialog`
+- **Default:** `Dialog.iframe()` (or `Dialog.popup()` in Safari/insecure contexts)
+
+Dialog to use for the embed app.
+
+```ts twoslash
+import { dialog, Dialog, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: dialog({
+    dialog: Dialog.popup(), // [!code focus]
+  }),
+})
+```
+
+### host
+
+- **Type:** `string`
+- **Default:** `'https://wallet.tempo.xyz/embed'`
+
+URL of the embed app.
+
+```ts twoslash
+import { dialog, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: dialog({
+    host: 'https://wallet.tempo.xyz/embed', // [!code focus]
+  }),
+})
+```
+
+### icon
+
+- **Type:** `` `data:image/${string}` ``
+- **Optional**
+
+Data URI of the provider icon.
+
+```ts twoslash
+import { dialog, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: dialog({
+    icon: 'data:image/svg+xml,...', // [!code focus]
+  }),
+})
+```
+
+### name
+
+- **Type:** `string`
+- **Default:** `'Tempo Wallet'`
+
+Display name of the provider.
+
+```ts twoslash
+import { dialog, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: dialog({
+    name: 'My Wallet', // [!code focus]
+  }),
+})
+```
+
+### rdns
+
+- **Type:** `string`
+- **Default:** `'xyz.tempo'`
+
+Reverse DNS identifier for [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963) provider discovery.
+
+```ts twoslash
+import { dialog, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: dialog({
+    rdns: 'com.example.wallet', // [!code focus]
+  }),
+})
+```

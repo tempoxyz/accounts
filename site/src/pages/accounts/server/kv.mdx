@@ -1,0 +1,54 @@
+---
+title: Kv
+description: Key-value store adapters for server-side persistence.
+---
+
+# `Kv`
+
+Key-value store interface used by server handlers for persistence (challenges, credentials, device codes).
+
+## Usage
+
+```ts
+import { Kv } from 'accounts/server'
+
+// In-memory (for development/testing)
+const kv = Kv.memory()
+
+// Cloudflare Workers KV
+const kv = Kv.cloudflare(env.MY_KV_NAMESPACE)
+```
+
+## Adapters
+
+### Kv.memory()
+
+Creates an in-memory key-value store. Useful for development and testing.
+
+### Kv.cloudflare(namespace)
+
+Creates a key-value store backed by Cloudflare Workers KV.
+
+- **namespace** — Cloudflare KV namespace binding.
+
+### Kv.from(kv)
+
+Creates a key-value store from a custom implementation.
+
+```ts
+const kv = Kv.from({
+  async get(key) { /* ... */ },
+  async set(key, value) { /* ... */ },
+  async delete(key) { /* ... */ },
+})
+```
+
+## Interface
+
+```ts
+type Kv = {
+  get: <value = unknown>(key: string) => Promise<value>
+  set: (key: string, value: unknown) => Promise<void>
+  delete: (key: string) => Promise<void>
+}
+```

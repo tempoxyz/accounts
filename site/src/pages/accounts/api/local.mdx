@@ -1,0 +1,117 @@
+---
+title: local
+description: Key-agnostic adapter for defining arbitrary account types and signing mechanisms.
+---
+
+# `local`
+
+Creates a local adapter where the app manages keys and signing in-process. Use this when you need full control over account creation and transaction signing.
+
+## Usage
+
+```ts
+import { local, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: local({
+    loadAccounts: async () => ({
+      accounts: [{ address: '0x...' }],
+    }),
+  }),
+})
+```
+
+## Parameters
+
+### createAccount
+
+- **Type:** `(params) => Promise<{ accounts: Account[] }>`
+- **Optional**
+
+Create a new account. Omit for login-only flows.
+
+```ts twoslash
+import { local, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: local({
+    loadAccounts: async () => ({ accounts: [{ address: '0x...' }] }),
+    createAccount: async () => ({ // [!code focus]
+      accounts: [{ address: '0x...' }], // [!code focus]
+    }), // [!code focus]
+  }),
+})
+```
+
+### icon
+
+- **Type:** `` `data:image/${string}` ``
+- **Optional**
+
+Data URI of the provider icon.
+
+```ts twoslash
+import { local, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: local({
+    loadAccounts: async () => ({ accounts: [{ address: '0x...' }] }),
+    icon: 'data:image/svg+xml,...', // [!code focus]
+  }),
+})
+```
+
+### loadAccounts
+
+- **Type:** `(params?) => Promise<{ accounts: Account[] }>`
+- **Required**
+
+Discover existing accounts (e.g. via WebAuthn assertion or key lookup).
+
+```ts twoslash
+import { local, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: local({
+    loadAccounts: async () => ({ // [!code focus]
+      accounts: [{ address: '0x...' }], // [!code focus]
+    }), // [!code focus]
+  }),
+})
+```
+
+### name
+
+- **Type:** `string`
+- **Default:** `'Injected Wallet'`
+
+Display name of the provider.
+
+```ts twoslash
+import { local, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: local({
+    loadAccounts: async () => ({ accounts: [{ address: '0x...' }] }),
+    name: 'My Wallet', // [!code focus]
+  }),
+})
+```
+
+### rdns
+
+- **Type:** `string`
+- **Optional**
+
+Reverse DNS identifier.
+
+```ts twoslash
+import { local, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: local({
+    loadAccounts: async () => ({ accounts: [{ address: '0x...' }] }),
+    rdns: 'com.example.wallet', // [!code focus]
+  }),
+})
+```

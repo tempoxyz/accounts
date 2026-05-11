@@ -1,0 +1,197 @@
+---
+title: Provider
+description: Create an EIP-1193 provider for managing accounts on Tempo.
+---
+
+# `Provider`
+
+Creates an EIP-1193 provider with a pluggable adapter for managing accounts on Tempo.
+
+## Usage
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create()
+```
+
+### Using JSON-RPC Methods
+
+You can interact with accounts via the provider's `request` method.
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+
+const provider = Provider.create()
+
+const { accounts } = await provider.request({ // [!code focus]
+  method: 'wallet_connect', // [!code focus]
+}) // [!code focus]
+```
+
+### Using Viem Actions
+
+If you prefer to use Viem actions over raw JSON-RPC calls, the provider exposes a `getClient` accessor.
+
+```ts twoslash
+// @noErrors
+import { parseUnits } from 'viem'
+import { tempoActions } from 'viem/tempo'
+import { Provider } from 'accounts'
+
+const provider = Provider.create()
+
+const client = provider.getClient().extend(tempoActions()) // [!code focus]
+
+const { receipt } = await client.token.transferSync({ // [!code focus]
+  amount: parseUnits('100', 6), // [!code focus]
+  to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEbb', // [!code focus]
+  token: '0x20c0000000000000000000000000000000000001', // [!code focus]
+}) // [!code focus]
+```
+
+## Parameters
+
+### adapter
+
+- **Type:** `Adapter`
+- **Default:** `dialog()`
+
+Adapter to use for account management.
+
+```ts twoslash
+import { Provider, webAuthn } from 'accounts'
+
+const provider = Provider.create({
+  adapter: webAuthn({ authUrl: '/auth' }), // [!code focus]
+})
+```
+
+### authorizeAccessKey
+
+- **Type:** `() => { expiry: number; limits?: { token: Address; limit: bigint }[] }`
+- **Optional**
+
+Default access key parameters for `wallet_connect`. When set, `wallet_connect` will automatically authorize an access key.
+
+```ts twoslash
+import { parseUnits } from 'viem'
+import { Expiry, Provider } from 'accounts'
+
+const provider = Provider.create({
+  authorizeAccessKey: () => ({ // [!code focus]
+    expiry: Expiry.days(7), // [!code focus]
+    limits: [{ // [!code focus]
+      token: '0x20c0000000000000000000000000000000000001', // [!code focus]
+      limit: parseUnits('500', 6), // [!code focus]
+    }], // [!code focus]
+  }), // [!code focus]
+})
+```
+
+### chains
+
+- **Type:** `readonly [Chain, ...Chain[]]`
+- **Default:** `[tempo, tempoModerato]`
+
+Supported chains. The first chain is the default.
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { tempo } from 'viem/chains'
+
+const provider = Provider.create({
+  chains: [tempo], // [!code focus]
+})
+```
+
+### feePayer
+
+- **Type:** `string | { url: string; precedence?: 'fee-payer-first' | 'user-first' }`
+- **Optional**
+
+Fee payer configuration for interacting with a service running [`Handler.relay`](/accounts/server/handler.relay) from `accounts/server`. Pass a URL string, or an object with `url` and optional `precedence` to control whether the fee payer or the user pays first.
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create({
+  feePayer: 'https://myapp.com/fee-payer', // [!code focus]
+})
+```
+
+Or with precedence:
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create({
+  feePayer: { // [!code focus]
+    url: 'https://myapp.com/fee-payer', // [!code focus]
+    precedence: 'user-first', // [!code focus]
+  }, // [!code focus]
+})
+```
+
+### mpp
+
+- **Type:** `boolean`
+- **Default:** `false`
+
+Enable [Machine Payment Protocol](https://mpp.dev) support.
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create({
+  mpp: true, // [!code focus]
+})
+```
+
+### storage
+
+- **Type:** `Storage`
+- **Default:** `Storage.idb()` in browser, `Storage.memory()` otherwise
+
+Storage adapter for persistence.
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+const provider = Provider.create({
+  storage: Storage.memory(), // [!code focus]
+})
+```
+
+### testnet
+
+- **Type:** `boolean`
+- **Default:** `false`
+
+Use testnet. When `true`, the default chain will be the first testnet chain in `chains`.
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create({
+  testnet: true, // [!code focus]
+})
+```
+
+## Return Type
+
+```ts
+type ReturnType = {
+  /** EIP-1193 request method. */
+  request(args: RequestArguments): Promise<unknown>
+  /** Returns a Viem Client for the current (or specified) chain. */
+  getClient(options?: { chainId?: number }): Client
+  /** Returns a Viem Account for the given address (or active account). */
+  getAccount(options?: { address?: Address }): Account
+  /** Reactive state store with account and chain state. */
+  store: Store
+  /** Configured chains. */
+  chains: readonly [Chain, ...Chain[]]
+}
+```

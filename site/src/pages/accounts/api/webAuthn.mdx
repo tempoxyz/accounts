@@ -1,0 +1,116 @@
+---
+title: webAuthn
+description: Adapter for passkey-based accounts using WebAuthn registration and authentication.
+---
+
+# `webAuthn`
+
+Enables domain-bound passkey experiences by wrapping the `local` adapter with WebAuthn registration and authentication flows.
+
+## Usage
+
+```ts
+import { webAuthn, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: webAuthn({ authUrl: '/auth' }),
+})
+```
+
+## Parameters
+
+### authUrl
+
+- **Type:** `string`
+- **Optional**
+
+URL of a [WebAuthn server handler](/accounts/server/handler.webAuthn) (shorthand for `WebAuthnCeremony.server({ url }){:js}`)
+
+:::warning
+Cannot be used with `ceremony`.
+:::
+
+```ts twoslash
+import { webAuthn, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: webAuthn({
+    authUrl: '/auth', // [!code focus]
+  }),
+})
+```
+
+### ceremony
+
+- **Type:** `WebAuthnCeremony`
+- **Default:** `WebAuthnCeremony.server({ url: authUrl }){:js}`
+
+Ceremony strategy for WebAuthn registration and authentication. [See more](/accounts/api/webauthnceremony).
+
+:::warning
+Cannot be used with `authUrl`.
+:::
+
+```ts twoslash
+import { webAuthn, WebAuthnCeremony, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: webAuthn({
+    ceremony: WebAuthnCeremony.server({ url: '/auth' }), // [!code focus]
+  }),
+})
+```
+
+### icon
+
+- **Type:** `` `data:image/${string}` ``
+- **Optional**
+
+Data URI of the provider icon.
+
+```ts twoslash
+import { webAuthn, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: webAuthn({
+    authUrl: '/auth',
+    icon: 'data:image/svg+xml,...', // [!code focus]
+  }),
+})
+```
+
+### name
+
+- **Type:** `string`
+- **Default:** `'Injected Wallet'`
+
+Display name of the provider.
+
+```ts twoslash
+import { webAuthn, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: webAuthn({
+    authUrl: '/auth',
+    name: 'My Wallet', // [!code focus]
+  }),
+})
+```
+
+### rdns
+
+- **Type:** `string`
+- **Optional**
+
+Reverse DNS identifier.
+
+```ts twoslash
+import { webAuthn, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: webAuthn({
+    authUrl: '/auth',
+    rdns: 'com.example.wallet', // [!code focus]
+  }),
+})
+```

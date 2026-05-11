@@ -1,0 +1,39 @@
+---
+title: wallet_getCallsStatus
+description: Get the status of a batch of calls sent via wallet_sendCalls.
+---
+
+# `wallet_getCallsStatus`
+
+Returns the status and receipts of a previously submitted batch of calls.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_getCallsStatus'
+  params?: [string]
+}
+```
+
+## Response
+
+```ts
+type Response = {
+  atomic: boolean
+  chainId: number
+  id: string
+  receipts?: TransactionReceipt[]
+  status: number
+  version: string
+}
+```
+
+## Example
+
+```ts
+const status = await provider.request({
+  method: 'wallet_getCallsStatus',
+  params: ['0x...'],
+})
+```

@@ -1,0 +1,414 @@
+---
+title: eth_fillTransaction
+description: Fills missing transaction fields and returns wallet-aware metadata.
+---
+
+# `eth_fillTransaction`
+
+Fills missing transaction fields (gas, nonce, fees) via the node, with wallet-aware enrichment — fee token resolution, simulation-based balance diffs, conditional sponsorship, and automatic AMM resolution for insufficient balances.
+
+When sent through [`Handler.relay`](/accounts/server/handler.relay), the response is enriched with a `capabilities` object containing balance diffs, fee estimates, sponsor info, and swap details.
+
+## Request
+
+```ts
+type Request = {
+  method: 'eth_fillTransaction'
+  params: [{
+    /** Access list entries. */
+    accessList?: { address: `0x${string}`; storageKeys: `0x${string}`[] }[]
+    /** Batch of calls. */
+    calls?: {
+      /** Calldata. */
+      data?: `0x${string}`
+      /** Recipient. */
+      to?: `0x${string}`
+      /** Value to transfer. */
+      value?: `0x${string}`
+    }[]
+    /** Chain ID. */
+    chainId?: `0x${string}`
+    /** Fee token to use. If omitted, the relay picks the user's best token. */
+    feeToken?: `0x${string}`
+    /** Sender address. */
+    from?: `0x${string}`
+    /** Gas limit. */
+    gas?: `0x${string}`
+    /** Key authorization for access key transactions. */
+    keyAuthorization?: KeyAuthorization
+    /** Max fee per gas. */
+    maxFeePerGas?: `0x${string}`
+    /** Max priority fee per gas. */
+    maxPriorityFeePerGas?: `0x${string}`
+    /** Nonce. */
+    nonce?: `0x${string}`
+    /** Nonce key. */
+    nonceKey?: `0x${string}`
+    /** Valid after timestamp. */
+    validAfter?: number
+    /** Valid before timestamp. */
+    validBefore?: number
+  }]
+}
+```
+
+## Response
+
+```ts
+type Response = {
+  /** Wallet-specific capabilities computed during fill. */
+  capabilities: {
+    /** AMM swap injected to cover an insufficient balance. */
+    autoSwap?: {
+      /** Max input amount with slippage applied. */
+      maxIn: SwapAmount
+      /** Deficit amount that triggered the swap. */
+      minOut: SwapAmount
+      /** Slippage tolerance (e.g. 0.05 = 5%). */
+      slippage: number
+    }
+
+    /** Per-account balance diffs from simulation (swap-related diffs excluded). */
+    balanceDiffs?: {
+      [account: `0x${string}`]: BalanceDiff[]
+    }
+
+    /** Fee estimate for the transaction. */
+    fee?: {
+      /** Raw fee amount in token units. */
+      amount: `0x${string}`
+      /** Token decimals (e.g. 6). */
+      decimals: number
+      /** Human-readable fee (e.g. "0.028022"). */
+      formatted: string
+      /** Token symbol (e.g. "AlphaUSD"). */
+      symbol: string
+    }
+
+    /** Structured error details when the fill fails. */
+    error?: {
+      /** Revert error name (e.g. "InsufficientBalance"). */
+      errorName: string
+      /** Human-readable error message. */
+      message: string
+    }
+
+    /** Funding requirement when InsufficientBalance is encountered. */
+    requireFunds?: {
+      /** Deficit amount in token units. */
+      amount: `0x${string}`
+      /** Token decimals (e.g. 6). */
+      decimals: number
+      /** Human-readable deficit (e.g. "100.000000"). */
+      formatted: string
+      /** Token address. */
+      token: `0x${string}`
+      /** Token symbol (e.g. "USDC.e"). */
+      symbol: string
+    }
+
+    /** Sponsor details, present when `sponsored` is `true`. */
+    sponsor?: {
+      /** Sponsor address. */
+      address: `0x${string}`
+      /** Sponsor display name. */
+      name?: string
+      /** Sponsor URL. */
+      url?: string
+    }
+    
+    /** Whether the transaction is sponsored by a fee payer. */
+    sponsored: boolean
+  }
+  /** Fully filled transaction. */
+  tx: Record<string, unknown>
+}
+
+type BalanceDiff = {
+  /** Token address. */
+  address: `0x${string}`
+  /** Token decimals (e.g. 6). */
+  decimals: number
+  /** Direction relative to the user. */
+  direction: 'incoming' | 'outgoing'
+  /** Human-readable formatted amount (e.g. "100.00"). */
+  formatted: string
+  /** Token name (e.g. "USDC.e"). */
+  name: string
+  /** Addresses receiving this asset. */
+  recipients: readonly `0x${string}`[]
+  /** Token symbol (e.g. "USDC.e"). */
+  symbol: string
+  /** Token amount. */
+  value: `0x${string}`
+}
+
+type SwapAmount = {
+  /** Token decimals. */
+  decimals: number
+  /** Human-readable formatted amount. */
+  formatted: string
+  /** Token name (e.g. "AlphaUSD"). */
+  name: string
+  /** Token symbol (e.g. "AlphaUSD"). */
+  symbol: string
+  /** Token address. */
+  token: `0x${string}`
+  /** Amount. */
+  value: `0x${string}`
+}
+```
+
+## Example
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+
+const provider = Provider.create()
+
+const [account] = await provider.request({
+  method: 'eth_accounts',
+})
+
+// ---cut---
+const result = await provider.request({
+  method: 'eth_fillTransaction',
+  params: [{
+    from: account,
+    calls: [{
+      to: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+      // transfer 100 USDC.e
+      data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe0000000000000000000000000000000000000000000000000000000005f5e100',
+    }],
+  }],
+})
+
+result.capabilities
+// {
+//   balanceDiffs: {
+//     '0x1234567890abcdef1234567890abcdef12345678': [{
+//       address: '0x20c000000000000000000000b9537d11c60e8b50',
+//       decimals: 6,
+//       direction: 'outgoing',
+//       formatted: '100.000000',
+//       name: 'USDC.e',
+//       recipients: ['0xcafebabecafebabecafebabecafebabecafebabe'],
+//       symbol: 'USDC.e',
+//       value: '0x5f5e100',
+//     }],
+//   },
+//   fee: {
+//     amount: '0x6b86',
+//     decimals: 6,
+//     formatted: '0.027526',
+//     symbol: 'pathUSD',
+//   },
+//   sponsored: false,
+// }
+```
+
+### With Fee Token
+
+Pay fees with a specific stablecoin.
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+const provider = Provider.create()
+const [account] = await provider.request({ method: 'eth_accounts' })
+// ---cut---
+const result = await provider.request({
+  method: 'eth_fillTransaction',
+  params: [{
+    from: account,
+    calls: [{
+      to: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+      // transfer 100 USDC.e
+      data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe0000000000000000000000000000000000000000000000000000000005f5e100',
+    }],
+    feeToken: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+  }],
+})
+
+result.capabilities.fee
+// {
+//   amount: '0x6b86',
+//   decimals: 6,
+//   formatted: '0.027526',
+//   symbol: 'USDC.e',
+// }
+```
+
+### With Sponsorship
+
+When the relay is configured with a [`feePayer`](/accounts/server/handler.relay#feepayer), validated transactions are sponsored. The response includes `sponsored: true` and `sponsor` details.
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+const provider = Provider.create()
+const [account] = await provider.request({ method: 'eth_accounts' })
+// ---cut---
+const result = await provider.request({
+  method: 'eth_fillTransaction',
+  params: [{
+    from: account,
+    calls: [{
+      to: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+      // transfer 100 USDC.e
+      data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe0000000000000000000000000000000000000000000000000000000005f5e100',
+    }],
+  }],
+})
+
+result.capabilities.sponsored
+// true
+
+result.capabilities.sponsor
+// {
+//   address: '0x1234567890abcdef1234567890abcdef12345678',
+//   name: 'My App',
+//   url: 'https://myapp.com',
+// }
+```
+
+### AMM Resolution
+
+When the user has insufficient balance of a required token, the relay automatically injects swap calls (approve + buy) via the [Stablecoin DEX](https://docs.tempo.xyz/guide/stablecoin-dex). The swap details are reported in `meta.autoSwap`, and swap-related balance diffs are excluded from `meta.balanceDiffs`.
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+const provider = Provider.create()
+const [account] = await provider.request({ method: 'eth_accounts' })
+// ---cut---
+const result = await provider.request({
+  method: 'eth_fillTransaction',
+  params: [{
+    from: account,
+    calls: [{
+      to: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+      // transfer 100 USDC.e
+      data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe0000000000000000000000000000000000000000000000000000000005f5e100',
+    }],
+  }],
+})
+
+result.capabilities.balanceDiffs
+// {
+//   '0x1234567890abcdef1234567890abcdef12345678': [{
+//     address: '0x20c0000000000000000000000000000000000001',
+//     decimals: 6,
+//     direction: 'outgoing',
+//     formatted: '100.000000',
+//     name: 'AlphaUSD',
+//     recipients: ['0xcafebabecafebabecafebabecafebabecafebabe'],
+//     symbol: 'AlphaUSD',
+//     value: '0x5f5e100',
+//   }],
+// }
+
+result.capabilities.autoSwap
+// {
+//   maxIn: {
+//     decimals: 6,
+//     formatted: '105.000000',
+//     name: 'AlphaUSD',
+//     symbol: 'AlphaUSD',
+//     token: '0x20c0000000000000000000000000000000000001',
+//     value: '0x6422c40',
+//   },
+//   minOut: {
+//     decimals: 6,
+//     formatted: '100.000000',
+//     name: 'USDC.e',
+//     symbol: 'USDC.e',
+//     token: '0x20c000000000000000000000b9537d11c60e8b50',
+//     value: '0x5f5e100',
+//   },
+//   slippage: 0.05,
+// }
+
+result.capabilities.fee
+// {
+//   amount: '0x6b86',
+//   decimals: 6,
+//   formatted: '0.027526',
+//   symbol: 'pathUSD',
+// }
+```
+
+### Error Details
+
+When `eth_fillTransaction` fails, the relay returns structured error details in `capabilities.error` instead of throwing.
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+const provider = Provider.create()
+const [account] = await provider.request({ method: 'eth_accounts' })
+// ---cut---
+const result = await provider.request({
+  method: 'eth_fillTransaction',
+  params: [{
+    from: account,
+    calls: [{
+      to: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+      data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe0000000000000000000000000000000000000000000000000000000005f5e100',
+    }],
+  }],
+})
+
+result.capabilities.error
+// {
+//   errorName: 'BelowMinimumOrderSize',
+//   message: 'Below minimum order size: 1000000.',
+// }
+```
+
+### Require Funds
+
+For `InsufficientBalance` errors, the relay also returns a `capabilities.requireFunds` object with the exact deficit amount and token metadata.
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+const provider = Provider.create()
+const [account] = await provider.request({ method: 'eth_accounts' })
+// ---cut---
+const result = await provider.request({
+  method: 'eth_fillTransaction',
+  params: [{
+    from: account,
+    calls: [{
+      to: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+      // transfer 100 USDC.e (but account has 0)
+      data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe0000000000000000000000000000000000000000000000000000000005f5e100',
+    }],
+  }],
+})
+
+result.capabilities.requireFunds
+// {
+//   amount: '0x5f5e100',
+//   decimals: 6,
+//   formatted: '100.000000',
+//   token: '0x20c000000000000000000000b9537d11c60e8b50',
+//   symbol: 'USDC.e',
+// }
+
+result.capabilities.balanceDiffs
+// {
+//   '0x1234567890abcdef1234567890abcdef12345678': [{
+//     address: '0x20c000000000000000000000b9537d11c60e8b50',
+//     decimals: 6,
+//     direction: 'outgoing',
+//     formatted: '100.000000',
+//     name: 'USDC.e',
+//     recipients: ['0xcafebabecafebabecafebabecafebabecafebabe'],
+//     symbol: 'USDC.e',
+//     value: '0x5f5e100',
+//   }],
+// }
+```

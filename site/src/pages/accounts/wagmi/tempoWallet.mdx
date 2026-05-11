@@ -1,0 +1,179 @@
+---
+title: tempoWallet
+description: Wagmi connector for the Tempo Wallet dialog.
+---
+
+# `tempoWallet`
+
+Creates a Wagmi connector backed by the Tempo Wallet dialog adapter.
+
+## Usage
+
+```ts
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [tempoWallet()],
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+
+## Parameters
+
+Accepts all [`dialog`](/accounts/api/dialog) adapter options, plus all [`Provider`](/accounts/api/provider) options except `adapter`.
+
+### authorizeAccessKey
+
+- **Type:** `() => { expiry: number; limits?: { token: Address; limit: bigint }[] }`
+- **Optional**
+
+Default access key parameters for `wallet_connect`.
+
+```ts twoslash
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { parseUnits } from 'viem'
+import { Expiry } from 'accounts'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [
+    tempoWallet({
+      authorizeAccessKey: () => ({ // [!code focus]
+        expiry: Expiry.days(7), // [!code focus]
+        limits: [{ // [!code focus]
+          token: '0x20c0000000000000000000000000000000000001', // [!code focus]
+          limit: parseUnits('500', 6), // [!code focus]
+        }], // [!code focus]
+      }), // [!code focus]
+    }),
+  ],
+  transports: { [tempo.id]: http() },
+})
+```
+
+### dialog
+
+- **Type:** `Dialog`
+- **Default:** `Dialog.iframe()` (or `Dialog.popup()` in Safari/insecure contexts)
+
+Dialog to use for the embed app.
+
+```ts twoslash
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { Dialog } from 'accounts'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [
+    tempoWallet({
+      dialog: Dialog.popup(), // [!code focus]
+    }),
+  ],
+  transports: { [tempo.id]: http() },
+})
+```
+
+### feePayer
+
+- **Type:** `string | { url: string; precedence?: 'fee-payer-first' | 'user-first' }`
+- **Optional**
+
+Fee payer configuration for interacting with a service running [`Handler.relay`](/accounts/server/handler.relay) from `accounts/server`. Pass a URL string, or an object with `url` and optional `precedence`.
+
+:::info
+[See the guide](https://docs.tempo.xyz/guide/payments/sponsor-user-fees)
+:::
+
+```ts twoslash
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [
+    tempoWallet({
+      feePayer: 'https://myapp.com/fee-payer', // [!code focus]
+    }),
+  ],
+  transports: { [tempo.id]: http() },
+})
+```
+
+### host
+
+- **Type:** `string`
+- **Default:** `'https://wallet.tempo.xyz/embed'`
+
+URL of the embed app.
+
+```ts twoslash
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [
+    tempoWallet({
+      host: 'https://wallet.tempo.xyz/embed', // [!code focus]
+    }),
+  ],
+  transports: { [tempo.id]: http() },
+})
+```
+
+### mpp
+
+- **Type:** `boolean`
+- **Default:** `false`
+
+Enable [Machine Payment Protocol](https://mpp.dev) support.
+
+```ts twoslash
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [
+    tempoWallet({
+      mpp: true, // [!code focus]
+    }),
+  ],
+  transports: { [tempo.id]: http() },
+})
+```
+
+### testnet
+
+- **Type:** `boolean`
+- **Default:** `false`
+
+Use testnet. When `true`, the default chain will be the first testnet chain in `chains`.
+
+```ts twoslash
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [
+    tempoWallet({
+      testnet: true, // [!code focus]
+    }),
+  ],
+  transports: { [tempo.id]: http() },
+})
+```

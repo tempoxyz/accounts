@@ -1,0 +1,177 @@
+---
+title: Handler.webAuthn
+description: Server-side WebAuthn ceremony handler for registration and authentication.
+---
+
+# `Handler.webAuthn`
+
+Creates a WebAuthn ceremony handler that manages registration and authentication flows server-side.
+
+:::info
+[See the guide](https://docs.tempo.xyz/guide/use-accounts/embed-passkeys)
+:::
+
+Exposes 4 POST endpoints:
+
+- `POST /register/options` — Generate credential creation options
+- `POST /register` — Verify registration and store credential
+- `POST /login/options` — Generate credential request options
+- `POST /login` — Verify authentication
+
+## Usage
+
+```ts
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://example.com',
+  rpId: 'example.com',
+})
+```
+
+Then plug `handler` into your server framework of choice:
+
+```ts
+createServer(handler.listener) // Node.js
+Bun.serve(handler) // Bun
+Deno.serve(handler) // Deno
+app.all('*', c => handler.fetch(c.request)) // Elysia
+app.use(handler.listener) // Express
+app.use(c => handler.fetch(c.req.raw)) // Hono
+export const GET = handler.fetch // Next.js
+export const POST = handler.fetch // Next.js
+```
+
+:::warning
+`Kv.memory()` is not recommended for production use. Instead, use a persistent store like Cloudflare or Vercel KV, or a Redis instance. See [`Kv`](/accounts/server/kv) for available adapters.
+:::
+
+## Parameters
+
+### challengeTtl
+
+- **Type:** `number`
+- **Default:** `300` (5 minutes)
+
+Maximum age of a challenge in seconds before it expires.
+
+```ts twoslash
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://example.com',
+  rpId: 'example.com',
+  challengeTtl: 600, // [!code focus]
+})
+```
+
+### kv
+
+- **Type:** [`Kv`](/accounts/server/kv)
+- **Required**
+
+Key-value store for challenges and credentials. [See `Kv`](/accounts/server/kv) for available adapters.
+
+```ts twoslash
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(), // [!code focus]
+  origin: 'https://example.com',
+  rpId: 'example.com',
+})
+```
+
+### onAuthenticate
+
+- **Type:** `(params: { credentialId, publicKey, userId?, request }) => Response | void`
+- **Optional**
+
+Called after a successful authentication.
+
+```ts twoslash
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://example.com',
+  rpId: 'example.com',
+  onAuthenticate: ({ credentialId, publicKey }) => { // [!code focus]
+    console.log('Authenticated:', credentialId) // [!code focus]
+  }, // [!code focus]
+})
+```
+
+### onRegister
+
+- **Type:** `(params: { credentialId, publicKey, request }) => Response | void`
+- **Optional**
+
+Called after a successful registration. The returned response is merged onto the default JSON response.
+
+```ts twoslash
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://example.com',
+  rpId: 'example.com',
+  onRegister: ({ credentialId, publicKey }) => { // [!code focus]
+    console.log('Registered:', credentialId) // [!code focus]
+  }, // [!code focus]
+})
+```
+
+### origin
+
+- **Type:** `string | readonly string[]`
+- **Required**
+
+Expected origin(s) for WebAuthn verification (e.g. `'https://example.com'`).
+
+```ts twoslash
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://example.com', // [!code focus]
+  rpId: 'example.com',
+})
+```
+
+### path
+
+- **Type:** `string`
+- **Default:** `''`
+
+Path prefix for the WebAuthn endpoints.
+
+```ts twoslash
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://example.com',
+  rpId: 'example.com',
+  path: '/webauthn', // [!code focus]
+})
+```
+
+### rpId
+
+- **Type:** `string`
+- **Required**
+
+Relying Party ID (e.g. `'example.com'`).
+
+```ts twoslash
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://example.com',
+  rpId: 'example.com', // [!code focus]
+})
+```

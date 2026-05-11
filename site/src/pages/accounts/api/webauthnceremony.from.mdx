@@ -1,0 +1,47 @@
+---
+title: WebAuthnCeremony.from
+description: Create a WebAuthnCeremony from a custom implementation.
+---
+
+# `WebAuthnCeremony.from`
+
+Creates a `WebAuthnCeremony` from a custom implementation.
+
+## Usage
+
+```ts
+import { WebAuthnCeremony } from 'accounts'
+
+const ceremony = WebAuthnCeremony.from({
+  async getRegistrationOptions(params) { /* ... */ },
+  async verifyRegistration(credential) { /* ... */ },
+  async getAuthenticationOptions(params) { /* ... */ },
+  async verifyAuthentication(response) { /* ... */ },
+})
+```
+
+## Properties
+
+### getRegistrationOptions
+
+- **Type:** `(params: { name: string; userId?: string; excludeCredentialIds?: readonly string[] }) => Promise<{ options: Registration.Options }>`
+
+Get credential creation options for `navigator.credentials.create(){:js}`.
+
+### verifyRegistration
+
+- **Type:** `(credential: Registration.Credential, options?: { name?: string }) => Promise<{ credentialId: string; publicKey: Hex }>`
+
+Verify a registration response and extract the public key.
+
+### getAuthenticationOptions
+
+- **Type:** `(params?: { allowCredentialIds?: readonly string[]; challenge?: Hex; credentialId?: string; mediation?: 'conditional' | 'optional' | 'required' | 'silent' }) => Promise<{ options: Authentication.Options }>`
+
+Get credential request options for `navigator.credentials.get(){:js}`.
+
+### verifyAuthentication
+
+- **Type:** `(response: Authentication.Response) => Promise<{ credentialId: string; publicKey: Hex; userId?: string }>`
+
+Verify an authentication response and extract the public key.

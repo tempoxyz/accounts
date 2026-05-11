@@ -1,0 +1,36 @@
+---
+title: eth_sendTransaction
+description: Send a transaction from the connected account.
+---
+
+# `eth_sendTransaction`
+
+Signs and broadcasts a transaction, returning the transaction hash.
+
+## Request
+
+```ts
+type Request = {
+  method: 'eth_sendTransaction'
+  params: [TransactionRequest]
+}
+```
+
+## Response
+
+```ts
+type Response = Hex // transaction hash
+```
+
+## Example
+
+```ts
+const hash = await provider.request({
+  method: 'eth_sendTransaction',
+  params: [{
+    to: '0x...',
+    value: '0x0',
+    data: '0x...',
+  }],
+})
+```

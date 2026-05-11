@@ -2,6 +2,7 @@ allowBuilds:
   bufferutil: true
   cloudflared: true
   cpu-features: true
+  es5-ext: true
   esbuild: true
   protobufjs: true
   sharp: true
@@ -81,6 +82,7 @@ packages:
   - examples/*
   - playgrounds/*
   - ref-impls/*
+  - site
 
 peerDependencyRules:
   allowedVersions:

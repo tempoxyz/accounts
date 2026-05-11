@@ -1,0 +1,25 @@
+---
+title: WebAuthnCeremony
+description: Pluggable strategy for WebAuthn registration and authentication ceremonies.
+---
+
+import { Cards, Card } from 'vocs'
+
+# `WebAuthnCeremony`
+
+Pluggable strategy for WebAuthn registration and authentication ceremonies. A `WebAuthnCeremony` controls how challenges are generated and responses are verified during passkey registration and login.
+
+<Cards>
+  <Card
+    description="Create a WebAuthnCeremony from a custom implementation"
+    icon="lucide:code"
+    to="/accounts/api/webauthnceremony.from"
+    title=".from"
+  />
+  <Card
+    description="Server-backed ceremony that delegates to a remote handler"
+    icon="lucide:server"
+    to="/accounts/api/webauthnceremony.server"
+    title=".server"
+  />
+</Cards>

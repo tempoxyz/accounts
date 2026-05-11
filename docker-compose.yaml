@@ -105,5 +105,35 @@ services:
       install:
         condition: service_completed_successfully
 
+  docs:
+    image: node:24-slim
+    working_dir: /app
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    tmpfs:
+      - /app/site/node_modules/.vite
+      - /app/site/.vocs
+    ports:
+      - '5176:5176'
+    labels:
+      dev.orbstack.domains: docs.accounts.local
+    command: ['sh', '-c', 'corepack enable && cd site && pnpm dev --host 0.0.0.0']
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "require('http').get('http://localhost:5176',r=>{process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 3s
+      start_period: 60s
+      retries: 3
+    depends_on:
+      install:
+        condition: service_completed_successfully
+
 volumes:
   node_modules:

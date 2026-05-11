@@ -1,0 +1,674 @@
+---
+title: Handler.relay
+description: Server handler that proxies certain RPC requests with wallet-aware enrichment.
+---
+
+import { Cards, Card } from 'vocs'
+
+# `Handler.relay`
+
+Creates a server handler that proxies certain RPC requests (like `eth_fillTransaction`) with wallet-aware enrichment — fee token resolution, simulation-based balance diffs, conditional sponsorship, and automatic AMM resolution for insufficient balances.
+
+## Usage
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.relay()
+```
+
+Then plug `handler` into your server framework of choice:
+
+```ts twoslash
+// @noErrors
+import { Handler } from 'accounts/server'
+const handler = Handler.relay()
+// ---cut---
+createServer(handler.listener) // Node.js
+Bun.serve(handler) // Bun
+Deno.serve(handler) // Deno
+app.all('*', c => handler.fetch(c.request)) // Elysia
+app.use(handler.listener) // Express
+app.use(c => handler.fetch(c.req.raw)) // Hono
+export const GET = handler.fetch // Next.js
+export const POST = handler.fetch // Next.js
+```
+
+## Features
+
+<Cards>
+  <Card
+    description="Sponsor transactions with a fee payer account and optional validation"
+    icon="lucide:hand-coins"
+    title="Sponsorship"
+    to="#sponsorship"
+  />
+  <Card
+    description="Auto-swap via the Stablecoin DEX when a user has insufficient balance"
+    icon="lucide:arrow-left-right"
+    title="Auto Swap"
+    to="#auto-swap"
+  />
+  <Card
+    description="Automatically resolve the user's optimal fee token"
+    icon="lucide:coins"
+    title="Best Fee Tokens"
+    to="#best-fee-tokens"
+  />
+  <Card
+    description="Simulate transactions and return per-account token balance diffs"
+    icon="lucide:arrow-down-up"
+    title="Balance Diffs"
+    to="#balance-diffs"
+  />
+  <Card
+    description="Derive fee estimates as raw and human-readable values"
+    icon="lucide:receipt"
+    title="Fee Derivation"
+    to="#fee-derivation"
+  />
+  <Card
+    description="Exact deficit amount and token metadata when funds are insufficient"
+    icon="lucide:wallet"
+    title="Require Funds"
+    to="#require-funds"
+  />
+</Cards>
+
+### Sponsorship
+
+Configure a [`feePayer`](#feepayer) to sponsor transactions. The relay signs `feePayerSignature` on the filled transaction and returns sponsor details in the response metadata. Use a [`validate`](#feepayervalidate) callback for conditional sponsorship — rejected transactions are re-filled for self-payment.
+
+:::code-group
+
+```ts twoslash [server.ts]
+import { privateKeyToAccount } from 'viem/accounts'
+import { Handler } from 'accounts/server'
+
+const blockedAddress = '0x...'
+// ---cut---
+const handler = Handler.relay({
+  feePayer: {
+    account: privateKeyToAccount('0x...'),
+    name: 'My App',
+    url: 'https://myapp.com',
+    // Optional — validate sponsorship approval.
+    validate: (request) => request.from !== blockedAddress,
+  },
+})
+```
+
+```ts twoslash [client.ts]
+// @noErrors
+import { Provider } from 'accounts'
+const provider = Provider.create()
+const [account] = await provider.request({ method: 'eth_accounts' })
+// ---cut---
+const result = await provider.request({
+  method: 'eth_fillTransaction',
+  params: [{
+    from: account,
+    calls: [{
+      to: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+      // transfer 100 USDC.e
+      data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe0000000000000000000000000000000000000000000000000000000005f5e100',
+    }],
+  }],
+})
+
+result.capabilities.sponsored
+// true
+
+result.capabilities.sponsor
+// {
+//   address: '0x1234567890abcdef1234567890abcdef12345678',
+//   name: 'My App',
+//   url: 'https://myapp.com',
+// }
+```
+
+:::
+
+### Auto Swap
+
+When a user has insufficient balance of a required token, the relay automatically injects swap calls (approve + buy) via the [Stablecoin DEX](https://docs.tempo.xyz/guide/stablecoin-dex). Swap details are reported in `capabilities.autoSwap`, and swap-related balance diffs are excluded from `capabilities.balanceDiffs`. Enabled by [`features: 'all'`](#features), configurable via [`autoSwap`](#autoswap).
+
+:::code-group
+
+```ts twoslash [client.ts]
+// @noErrors
+import { Provider } from 'accounts'
+const provider = Provider.create()
+const [account] = await provider.request({ method: 'eth_accounts' })
+// ---cut---
+const result = await provider.request({
+  method: 'eth_fillTransaction',
+  params: [{
+    from: account,
+    calls: [{
+      to: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+      // transfer 100 USDC.e
+      data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe0000000000000000000000000000000000000000000000000000000005f5e100',
+    }],
+  }],
+})
+
+result.capabilities.autoSwap
+// {
+//   maxIn: {
+//     decimals: 6,
+//     formatted: '105.000000',
+//     name: 'AlphaUSD',
+//     symbol: 'AlphaUSD',
+//     token: '0x20c0000000000000000000000000000000000001',
+//     value: '0x6422c40',
+//   },
+//   minOut: {
+//     decimals: 6,
+//     formatted: '100.000000',
+//     name: 'USDC.e',
+//     symbol: 'USDC.e',
+//     token: '0x20c000000000000000000000b9537d11c60e8b50',
+//     value: '0x5f5e100',
+//   },
+//   slippage: 0.05,
+// }
+```
+
+```ts [server.ts]
+import { Handler } from 'accounts/server'
+
+const handler = Handler.relay({
+  autoSwap: { slippage: 0.05 }, // 5% (default)
+})
+```
+
+:::
+
+### Best Fee Tokens
+
+Picks the user's optimal `feeToken` automatically:
+
+1. On-chain preference via `fee.getUserToken` (if set and has balance)
+2. Highest-balance token from the [`resolveTokens`](#resolvetokens) list
+3. Validator fallback
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+const provider = Provider.create()
+const [account] = await provider.request({ method: 'eth_accounts' })
+// ---cut---
+const result = await provider.request({
+  method: 'eth_fillTransaction',
+  params: [{
+    from: account,
+    calls: [{
+      to: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+      // transfer 100 USDC.e
+      data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe0000000000000000000000000000000000000000000000000000000005f5e100',
+    }],
+  }],
+})
+
+result.capabilities.fee
+// {
+//   amount: '0x6b86',
+//   decimals: 6,
+//   formatted: '0.027526',
+//   symbol: 'USDC.e',
+// }
+```
+
+### Balance Diffs
+
+Simulates the transaction and returns per-account token balance diffs in `capabilities.balanceDiffs`.
+
+:::code-group
+
+```ts twoslash [client.ts]
+// @noErrors
+import { Provider } from 'accounts'
+const provider = Provider.create()
+const [account] = await provider.request({ method: 'eth_accounts' })
+// ---cut---
+const result = await provider.request({
+  method: 'eth_fillTransaction',
+  params: [{
+    from: account,
+    calls: [{
+      to: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+      // transfer 100 USDC.e
+      data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe0000000000000000000000000000000000000000000000000000000005f5e100',
+    }],
+  }],
+})
+
+result.capabilities.balanceDiffs
+// {
+//   '0x1234567890abcdef1234567890abcdef12345678': [{
+//     address: '0x20c000000000000000000000b9537d11c60e8b50',
+//     decimals: 6,
+//     direction: 'outgoing',
+//     formatted: '100.000000',
+//     name: 'USDC.e',
+//     recipients: ['0xcafebabecafebabecafebabecafebabecafebabe'],
+//     symbol: 'USDC.e',
+//     value: '0x5f5e100',
+//   }],
+// }
+```
+
+```ts twoslash [server.ts]
+import { Handler } from 'accounts/server'
+// ---cut---
+// Balance diffs are included by default — no extra config needed.
+const handler = Handler.relay()
+```
+
+:::
+
+### Fee Derivation
+
+Derives fee estimates from the filled transaction and returns them as both raw and human-readable values, so the UI can display costs without additional computation.
+
+:::code-group
+
+```ts twoslash [client.ts]
+// @noErrors
+import { Provider } from 'accounts'
+const provider = Provider.create()
+const [account] = await provider.request({ method: 'eth_accounts' })
+// ---cut---
+const result = await provider.request({
+  method: 'eth_fillTransaction',
+  params: [{
+    from: account,
+    calls: [{
+      to: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+      // transfer 100 USDC.e
+      data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe0000000000000000000000000000000000000000000000000000000005f5e100',
+    }],
+  }],
+})
+
+result.capabilities.fee
+// {
+//   amount: '0x6b86',
+//   decimals: 6,
+//   formatted: '0.027526',
+//   symbol: 'pathUSD',
+// }
+```
+
+```ts twoslash [server.ts]
+import { Handler } from 'accounts/server'
+// ---cut---
+// Formatted fees are included by default — no extra config needed.
+const handler = Handler.relay()
+```
+
+:::
+
+### Require Funds
+
+For insufficient balance errors, the relay also returns a `capabilities.requireFunds` object with the exact deficit amount and token metadata — enabling UIs to prompt the user to fund their account.
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+const provider = Provider.create()
+const [account] = await provider.request({ method: 'eth_accounts' })
+// ---cut---
+const result = await provider.request({
+  method: 'eth_fillTransaction',
+  params: [{
+    from: account,
+    calls: [{
+      to: '0x20c000000000000000000000b9537d11c60e8b50', // USDC.e
+      // transfer 100 USDC.e (but account has 40)
+      data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe0000000000000000000000000000000000000000000000000000000005f5e100',
+    }],
+  }],
+})
+
+result.capabilities.requireFunds
+// {
+//   amount: '0x3938700',
+//   decimals: 6,
+//   formatted: '60.000000',
+//   token: '0x20c000000000000000000000b9537d11c60e8b50',
+//   symbol: 'USDC.e',
+// }
+
+result.capabilities.balanceDiffs
+// {
+//   '0x1234567890abcdef1234567890abcdef12345678': [{
+//     address: '0x20c000000000000000000000b9537d11c60e8b50',
+//     decimals: 6,
+//     direction: 'outgoing',
+//     formatted: '100.000000',
+//     name: 'USDC.e',
+//     recipients: ['0xcafebabecafebabecafebabecafebabecafebabe'],
+//     symbol: 'USDC.e',
+//     value: '0x5f5e100',
+//   }],
+// }
+```
+
+### Enabling Features
+
+By default, only a minimum set of features are enabled, given on what options you pass to `Handler.relay(){:js}` (e.g. `feePayer`, `autoSwap`, etc).
+
+Set [`features: 'all'`](#features) to enable all features by default such as: **fee token resolution**, **auto-swap**, and **simulation** (balance diffs + fee breakdown). This will come at the cost of slightly increased network latency.
+
+```ts twoslash
+// @noErrors
+import { privateKeyToAccount } from 'viem/accounts'
+import { Handler } from 'accounts/server'
+
+const handler = Handler.relay({
+  features: 'all', // [!code focus]
+})
+```
+
+## Parameters
+
+### autoSwap
+
+- **Type:** `false | { slippage?: number }`
+
+AMM swap options for automatic insufficient balance resolution. When a user doesn't hold enough of a token, the relay auto-swaps from their fee token via the [Stablecoin DEX](https://docs.tempo.xyz/guide/stablecoin-dex). Set to `false` to disable even when `features: 'all'` is set.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.relay({
+  autoSwap: { slippage: 0.02 }, // 2% slippage // [!code focus]
+})
+```
+
+#### autoSwap.slippage
+
+- **Type:** `number`
+- **Default:** `0.05` (5%)
+
+Slippage tolerance for AMM swaps. The relay sets `maxAmountIn = deficit + deficit * slippage`.
+
+### chains
+
+- **Type:** `readonly [Chain, ...Chain[]]`
+- **Default:** `[tempo, tempoModerato]`
+
+Supported chains. The handler resolves the client based on the `chainId` in the incoming transaction.
+
+```ts twoslash
+import { tempo } from 'viem/chains'
+import { Handler } from 'accounts/server'
+
+const handler = Handler.relay({
+  chains: [tempo], // [!code focus]
+})
+```
+
+### features
+
+- **Type:** `'all'`
+- **Optional**
+
+Controls which relay features are enabled. By default, only fee payer sponsorship is active.
+
+- `'all'`: enables all features (fee token resolution, auto-swap, balance diffs, fee breakdown, etc).
+- `undefined` (default): enables only features that are configured via options (e.g. `feePayer`, `autoSwap`, etc).
+
+```ts twoslash
+// @noErrors
+import { Handler } from 'accounts/server'
+
+const handler = Handler.relay({
+  features: 'all', // [!code focus]
+})
+```
+
+### feePayer
+
+- **Type:** `object`
+- **Optional**
+
+Fee payer configuration. When provided, the relay will sign `feePayerSignature` on the filled transaction.
+
+```ts twoslash
+import { privateKeyToAccount } from 'viem/accounts'
+import { Handler } from 'accounts/server'
+
+const handler = Handler.relay({
+  feePayer: { // [!code focus]
+    account: privateKeyToAccount('0x...'), // [!code focus]
+    name: 'My App', // [!code focus]
+    url: 'https://myapp.com', // [!code focus]
+  }, // [!code focus]
+})
+```
+
+#### feePayer.account
+
+- **Type:** `LocalAccount`
+- **Required**
+
+The account to use as the fee payer.
+
+#### feePayer.name
+
+- **Type:** `string`
+- **Optional**
+
+Sponsor display name returned in the response metadata.
+
+#### feePayer.url
+
+- **Type:** `string`
+- **Optional**
+
+Sponsor URL returned in the response metadata.
+
+#### feePayer.validate
+
+- **Type:** `(request: TransactionRequest) => boolean | Promise<boolean>`
+- **Optional**
+
+Validates whether to sponsor a transaction. When omitted, all transactions are sponsored. Return `false` to reject sponsorship — the relay will re-fill without `feePayer` so gas/nonce are correct for self-payment.
+
+```ts twoslash
+import { privateKeyToAccount } from 'viem/accounts'
+import { Handler } from 'accounts/server'
+
+const blocked = '0x...'
+
+const handler = Handler.relay({
+  feePayer: {
+    account: privateKeyToAccount('0x...'),
+    validate: (request) => request.from !== blocked, // [!code focus]
+  },
+})
+```
+
+### onRequest
+
+- **Type:** `(request: RpcRequest) => Promise<void>`
+- **Optional**
+
+Callback called before processing each request. Useful for logging, rate limiting, or custom validation.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.relay({
+  onRequest: async (request) => { // [!code focus]
+    console.log('Processing request:', request.method) // [!code focus]
+  }, // [!code focus]
+})
+```
+
+### path
+
+- **Type:** `string`
+- **Default:** `'/'`
+
+Path where the handler listens for requests.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.relay({
+  path: '/relay', // [!code focus]
+})
+```
+
+### resolveTokens
+
+- **Type:** `(chainId: number) => readonly Token[] | Promise<readonly Token[]>`
+- **Default:** Fetches `https://tokenlist.tempo.xyz/list/:chainId`
+
+Resolves the list of tokens to check balances for during fee token resolution. The relay checks `balanceOf` for each token and picks the one with the highest balance.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.relay({
+  resolveTokens: (chainId) => [ // [!code focus]
+    { // [!code focus]
+      address: '0x20c0000000000000000000000000000000000000', // [!code focus]
+      decimals: 6, // [!code focus]
+      name: 'pathUSD', // [!code focus]
+      symbol: 'pathUSD', // [!code focus]
+    }, // [!code focus]
+    { // [!code focus]
+      address: '0x20c000000000000000000000b9537d11c60e8b50', // [!code focus]
+      decimals: 6, // [!code focus]
+      name: 'USDC.e', // [!code focus]
+      symbol: 'USDC.e', // [!code focus]
+    }, // [!code focus]
+  ], // [!code focus]
+})
+```
+
+### transports
+
+- **Type:** `Record<number, Transport>`
+- **Default:** `http()` for each chain
+
+Transports keyed by chain ID.
+
+```ts twoslash
+import { http } from 'viem'
+import { tempo } from 'viem/chains'
+import { Handler } from 'accounts/server'
+
+const handler = Handler.relay({
+  transports: { // [!code focus]
+    [tempo.id]: http('https://rpc.tempo.xyz'), // [!code focus]
+  }, // [!code focus]
+})
+```
+
+The relay enriches the standard `eth_fillTransaction` response with a `capabilities` object:
+
+```ts
+type Response = {
+  /** Wallet-specific capabilities computed during fill. */
+  capabilities: {
+    /** Per-account balance diffs from simulation (swap-related diffs excluded). */
+    balanceDiffs?: {
+      [account: Address]: BalanceDiff[]
+    }
+    /** Fee estimate for the transaction. */
+    fee: {
+      /** Raw fee amount in token units (hex-encoded). */
+      amount: Hex
+      /** Token decimals (e.g. 6). */
+      decimals: number
+      /** Human-readable fee (e.g. "0.028022"). */
+      formatted: string
+      /** Token symbol (e.g. "AlphaUSD"). */
+      symbol: string
+    } | null
+    /** AMM swap injected to cover an insufficient balance. */
+    autoSwap?: {
+      /** Max input amount with slippage. */
+      maxIn: SwapAmount
+      /** Deficit amount that triggered the swap. */
+      minOut: SwapAmount
+      /** Slippage tolerance (e.g. 0.05 = 5%). */
+      slippage: number
+    }
+    /** Structured error details when the fill fails (e.g. InsufficientBalance). */
+    error?: {
+      /** ABI item that caused the error. */
+      abiItem: AbiItem
+      /** Data that caused the error. */
+      data: Hex
+      /** Revert error name (e.g. "InsufficientBalance"). */
+      errorName: string
+      /** Human-readable error message. */
+      message: string
+    }
+    /** Funding requirement when InsufficientBalance is encountered. */
+    requireFunds?: {
+      /** Deficit amount in token units (hex-encoded). */
+      amount: Hex
+      /** Token decimals (e.g. 6). */
+      decimals: number
+      /** Human-readable deficit (e.g. "100.000000"). */
+      formatted: string
+      /** Token address. */
+      token: Address
+      /** Token symbol (e.g. "USDC.e"). */
+      symbol: string
+    }
+    /** Sponsor details (when sponsored). */
+    sponsor?: { address: Address; name: string; url: string }
+    /** Whether the transaction is sponsored by a fee payer. */
+    sponsored: boolean
+  }
+  /** Fully filled transaction. */
+  tx: {
+    // ...filled tx fields
+    /** Resolved fee token used for this transaction. */
+    feeToken: Address
+  }
+}
+
+type BalanceDiff = {
+  /** Token address. */
+  address: Address
+  /** Token decimals (e.g. 6). */
+  decimals: number
+  /** Direction relative to the user. */
+  direction: 'incoming' | 'outgoing'
+  /** Human-readable formatted amount (e.g. "100.00"). */
+  formatted: string
+  /** Token name (e.g. "USDC.e"). */
+  name: string
+  /** Addresses receiving this asset. */
+  recipients: readonly Address[]
+  /** Token symbol (e.g. "USDC.e"). */
+  symbol: string
+  /** Token amount (hex-encoded). */
+  value: Hex
+}
+
+type SwapAmount = {
+  /** Token decimals. */
+  decimals: number
+  /** Human-readable formatted amount. */
+  formatted: string
+  /** Token name (e.g. "AlphaUSD"). */
+  name: string
+  /** Token symbol (e.g. "AlphaUSD"). */
+  symbol: string
+  /** Token address. */
+  token: Address
+  /** Amount (hex-encoded). */
+  value: Hex
+}
+```

@@ -1,0 +1,20 @@
+---
+title: Dialog.iframe
+description: Embed the Tempo Wallet auth UI in an iframe dialog element.
+---
+
+# `Dialog.iframe`
+
+Creates an iframe dialog that embeds the auth app in a `<dialog>` element. This is the default on most browsers in secure (HTTPS) contexts.
+
+Falls back to a popup on Safari (which does not support WebAuthn in cross-origin iframes) and insecure (HTTP) origins.
+
+## Usage
+
+```ts
+import { dialog, Dialog, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: dialog({ dialog: Dialog.iframe() }),
+})
+```

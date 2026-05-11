@@ -1,0 +1,27 @@
+---
+title: Dialog.popup
+description: Open the Tempo Wallet auth UI in a popup window.
+---
+
+# `Dialog.popup`
+
+Opens the auth app in a new browser window. Used as the default on Safari and insecure (HTTP) origins.
+
+## Usage
+
+```ts
+import { dialog, Dialog, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: dialog({ dialog: Dialog.popup() }),
+})
+```
+
+## Parameters
+
+### size
+
+- **Type:** `{ width: number; height: number }`
+- **Default:** `{ width: 360, height: 440 }`
+
+Popup window dimensions.

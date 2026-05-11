@@ -1,0 +1,53 @@
+---
+title: Tempo Accounts Server Handlers
+description: Configure server-side Tempo Accounts SDK handlers for relaying wallet RPC requests, composing backends, and managing WebAuthn ceremonies.
+---
+
+import { Cards, Card } from 'vocs'
+
+# Handlers
+
+Server handlers are framework-agnostic handlers that run on your backend to manage protocol operations that require server-side logic. 
+
+Handlers are compatible with any server framework that supports the:
+- [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API), and is exposed via the `Handler#fetch` function
+- [Node.js `RequestListener` API](https://nodejs.org/api/http.html#http_class_http_serverrequestlistener), and is exposed via the `Handler#listener` function
+
+```ts
+import { Handler } from 'accounts/server'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const handler = Handler.relay({
+  feePayer: { account: privateKeyToAccount('0x...') },
+})
+
+createServer(handler.listener) // Node.js
+Bun.serve(handler) // Bun
+Deno.serve(handler) // Deno
+app.all('*', c => handler.fetch(c.request)) // Elysia
+app.use(handler.listener) // Express
+app.use(c => handler.fetch(c.req.raw)) // Hono
+export const GET = handler.fetch // Next.js
+export const POST = handler.fetch // Next.js
+```
+
+<Cards>
+  <Card
+    description="Compose multiple handlers into a single handler"
+    icon="lucide:layers"
+    to="/accounts/server/handler.compose"
+    title="Handler.compose"
+  />
+  <Card
+    description="Proxy RPC requests with sponsorship, auto-swap, and balance diffs"
+    icon="lucide:radio"
+    to="/accounts/server/handler.relay"
+    title="Handler.relay"
+  />
+  <Card
+    description="Handle WebAuthn credential registration and authentication"
+    icon="lucide:fingerprint"
+    to="/accounts/server/handler.webAuthn"
+    title="Handler.webAuthn"
+  />
+</Cards>

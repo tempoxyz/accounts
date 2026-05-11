@@ -1,0 +1,36 @@
+---
+title: eth_sendTransactionSync
+description: Send a transaction and wait for the receipt.
+---
+
+# `eth_sendTransactionSync`
+
+Signs, broadcasts, and waits for a transaction receipt. Returns the full receipt instead of just the hash.
+
+## Request
+
+```ts
+type Request = {
+  method: 'eth_sendTransactionSync'
+  params: [TransactionRequest]
+}
+```
+
+## Response
+
+```ts
+type Response = TransactionReceipt
+```
+
+## Example
+
+```ts
+const receipt = await provider.request({
+  method: 'eth_sendTransactionSync',
+  params: [{
+    to: '0x...',
+    value: '0x0',
+    data: '0x...',
+  }],
+})
+```

@@ -1,0 +1,25 @@
+---
+title: WebAuthnCeremony.server
+description: Server-backed WebAuthn ceremony that delegates to a remote handler.
+---
+
+# `WebAuthnCeremony.server`
+
+Creates a server-backed ceremony that delegates to a remote [WebAuthn server handler](/accounts/server/handler.webAuthn). All challenge generation, verification, and credential storage happen server-side.
+
+## Usage
+
+```ts
+import { WebAuthnCeremony } from 'accounts'
+
+const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+```
+
+## Parameters
+
+### url
+
+- **Type:** `string`
+- **Required**
+
+Base URL of the WebAuthn handler (e.g. `"https://example.com/webauthn"{:js}`).

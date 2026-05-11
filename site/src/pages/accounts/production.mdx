@@ -1,0 +1,24 @@
+---
+title: Deploying to Production
+description: Things to consider before deploying your application with the Tempo Accounts SDK to production.
+---
+
+# Deploying to Production
+
+Below are some things to consider before deploying to production.
+
+## Trusted Hosts
+
+To enable the `iframe` dialog on all browsers in production, ensure your website hostname is added to the [trusted hosts list](https://github.com/tempoxyz/accounts/blob/main/src/trusted-hosts.json). 
+
+Without this, the `iframe` dialog will fallback to a popup on browsers that do not support the [IntersectionObserver v2 API](https://web.dev/articles/intersectionobserver-v2).
+
+## Content Security Policy
+
+If you've deployed a Content Security Policy, ensure that you have the Tempo Accounts SDK configured with your CSPs.
+
+The full set of directives that the Tempo Accounts SDK requires are:
+
+| Directive | Value |
+| --- | --- |
+| `frame-src` | `https://wallet.tempo.xyz` |

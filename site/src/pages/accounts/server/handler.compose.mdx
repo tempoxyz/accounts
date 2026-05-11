@@ -1,0 +1,54 @@
+---
+title: Handler.compose
+description: Compose multiple server handlers into a single handler.
+---
+
+# `Handler.compose`
+
+Composes multiple handlers into a single handler, routing requests to the handler that matches the request path.
+
+## Usage
+
+```ts
+import { Handler } from 'accounts/server'
+
+const handler = Handler.compose([
+  Handler.relay({ 
+    feePayer: { account: privateKeyToAccount('0x...') },
+  }),
+  Handler.webAuthn({ 
+    kv: Kv.memory(), 
+    origin: 'https://example.com', 
+    rpId: 'example.com' 
+  }),
+])
+```
+
+Then plug `handler` into your server framework of choice:
+
+```ts
+createServer(handler.listener) // Node.js
+Bun.serve(handler) // Bun
+Deno.serve(handler) // Deno
+app.all('*', c => handler.fetch(c.request)) // Elysia
+app.use(handler.listener) // Express
+app.use(c => handler.fetch(c.req.raw)) // Hono
+export const GET = handler.fetch // Next.js
+export const POST = handler.fetch // Next.js
+```
+
+## Parameters
+
+### handlers
+
+- **Type:** `Handler[]`
+- **Required**
+
+Array of handlers to compose. Requests are routed to each handler in order.
+
+### path
+
+- **Type:** `string`
+- **Default:** `'/'`
+
+Base path prefix for all composed handlers.
