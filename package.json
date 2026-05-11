@@ -68,7 +68,7 @@
   "type": "module",
   "version": "0.10.0",
   "dependencies": {
-    "hono": "^4.12.14",
+    "hono": "^4.12.18",
     "idb-keyval": "^6.2.2",
     "mipd": "^0.0.7",
     "mppx": "catalog:",
