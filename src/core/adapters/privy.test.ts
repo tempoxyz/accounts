@@ -53,15 +53,9 @@ describe('privy', () => {
 
     expect(client.initCalls).toMatchInlineSnapshot(`1`)
     expect(client.loadCalls).toMatchInlineSnapshot(`1`)
-    expect(provider.requests).toMatchInlineSnapshot(`
+    expect(provider.signPayloads).toMatchInlineSnapshot(`
       [
-        {
-          "method": "personal_sign",
-          "params": [
-            "0x68656c6c6f",
-            "0x0000000000000000000000000000000000000001",
-          ],
-        },
+        "0x50b2c43fd39106bafbba0da34fc430e1f91e3c96ea2acee2bc34119f92b37750",
       ]
     `)
     expect(result).toMatchInlineSnapshot(
@@ -187,20 +181,14 @@ describe('privy', () => {
 
     expect(loadCalls).toMatchInlineSnapshot(`0`)
     expect(restoreCalls).toMatchInlineSnapshot(`1`)
-    expect(provider.requests).toMatchInlineSnapshot(`
+    expect(provider.signPayloads).toMatchInlineSnapshot(`
       [
-        {
-          "method": "personal_sign",
-          "params": [
-            "0x68656c6c6f",
-            "0x0000000000000000000000000000000000000001",
-          ],
-        },
+        "0x50b2c43fd39106bafbba0da34fc430e1f91e3c96ea2acee2bc34119f92b37750",
       ]
     `)
   })
 
-  test('default: signTypedData forwards to the EIP-1193 provider', async () => {
+  test('default: signTypedData hashes typed data before raw signing', async () => {
     const { adapter, provider } = setup()
     await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
 
@@ -215,15 +203,9 @@ describe('privy', () => {
       { method: 'eth_signTypedData_v4', params: [address, data] },
     )
 
-    expect(provider.requests).toMatchInlineSnapshot(`
+    expect(provider.signPayloads).toMatchInlineSnapshot(`
       [
-        {
-          "method": "eth_signTypedData_v4",
-          "params": [
-            "0x0000000000000000000000000000000000000001",
-            "{"domain":{"name":"Tempo"},"message":{"value":"hello"},"primaryType":"Message","types":{"Message":[{"name":"value","type":"string"}]}}",
-          ],
-        },
+        "0x000c5fe9b9bfeb5fbf1e40fa0dd7fe5e1c9896e4ecb892bd20f162e3ea66278a",
       ]
     `)
   })
@@ -270,15 +252,9 @@ describe('privy', () => {
         "0x0000000000000000000000000000000000000001",
       ]
     `)
-    expect(provider.requests).toMatchInlineSnapshot(`
+    expect(provider.signPayloads).toMatchInlineSnapshot(`
       [
-        {
-          "method": "personal_sign",
-          "params": [
-            "0x68656c6c6f",
-            "0x0000000000000000000000000000000000000001",
-          ],
-        },
+        "0x50b2c43fd39106bafbba0da34fc430e1f91e3c96ea2acee2bc34119f92b37750",
       ]
     `)
   })

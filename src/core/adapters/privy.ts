@@ -7,7 +7,7 @@ import {
   WebCryptoP256,
 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
-import { isAddressEqual, keccak256 } from 'viem'
+import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
 import type { Address } from 'viem/accounts'
 import { prepareTransactionRequest } from 'viem/actions'
 import type { Account as TempoAccount } from 'viem/tempo'
@@ -359,10 +359,15 @@ export function privy<const client extends privy.Client>(
       walletAccount: privy.WalletAccount
     }) {
       const { message, walletAccount } = parameters
-      return await requestHex(walletAccount, {
-        method: 'personal_sign',
-        params: [message, core_Address.from(walletAccount.address)],
-      })
+      return await signPayload({ payload: hashMessage(message), walletAccount })
+    }
+
+    async function signRawPersonalMessage(parameters: {
+      data: Hex.Hex
+      walletAccount: privy.WalletAccount
+    }) {
+      const { data, walletAccount } = parameters
+      return await signPayload({ payload: hashMessage({ raw: data }), walletAccount })
     }
 
     async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
@@ -628,8 +633,8 @@ export function privy<const client extends privy.Client>(
         },
         async signPersonalMessage(parameters) {
           const account = await accountForSigning(parameters.address)
-          return await signPersonalMessage({
-            message: parameters.data,
+          return await signRawPersonalMessage({
+            data: parameters.data,
             walletAccount: account,
           })
         },
@@ -653,9 +658,15 @@ export function privy<const client extends privy.Client>(
         },
         async signTypedData(parameters) {
           const account = await accountForSigning(parameters.address)
-          return await requestHex(account, {
-            method: 'eth_signTypedData_v4',
-            params: [core_Address.from(account.address), parameters.data],
+          const typedData = JSON.parse(parameters.data) as {
+            domain: Record<string, unknown>
+            message: Record<string, unknown>
+            primaryType: string
+            types: Record<string, unknown>
+          }
+          return await signPayload({
+            payload: hashTypedData(typedData as never),
+            walletAccount: account,
           })
         },
         async sendTransaction(parameters) {
