@@ -5,18 +5,15 @@ import { privy } from './privy.js'
 describe('privy', () => {
   test('accepts a structural Core client', () => {
     expectTypeOf<privy.Client>().toMatchTypeOf<{
-      auth?:
-        | {
-            logout: (
-              parameters?: { userId?: string | undefined } | undefined,
-            ) => Promise<void> | void
-          }
-        | undefined
-      getAccessToken?: (() => Promise<string | null | undefined>) | undefined
-      getAuthenticatedUser?: (() => Promise<{ id: string } | null | undefined>) | undefined
+      auth: {
+        logout: (parameters?: { userId: string } | undefined) => Promise<void> | void
+      }
+      embeddedWallet: {
+        getProvider: (wallet: privy.EmbeddedWallet) => Promise<privy.EthereumProvider>
+      }
+      getAccessToken: () => Promise<string | null>
       initialize?: (() => Promise<void> | void) | undefined
-      logout?: (() => Promise<void> | void) | undefined
-      user?: { get: () => Promise<{ user?: { id: string } | null | undefined }> } | undefined
+      user: { get: () => Promise<{ user: { id: string } }> }
     }>()
   })
 
@@ -33,18 +30,16 @@ describe('privy', () => {
 
   test('accepts structural Privy embedded wallet restore APIs', () => {
     expectTypeOf<{
-      embeddedWallet?: {
-        getProvider?: (wallet: privy.EmbeddedWallet) => Promise<privy.EthereumProvider>
+      auth: {
+        logout: (parameters?: { userId: string } | undefined) => Promise<void> | void
       }
-      getAuthenticatedUser?:
-        | (() => Promise<{
-            id: string
-            linkedAccounts?: readonly privy.LinkedAccount[] | undefined
-          } | null>)
-        | undefined
-      user?: {
+      embeddedWallet: {
+        getProvider: (wallet: privy.EmbeddedWallet) => Promise<privy.EthereumProvider>
+      }
+      getAccessToken: () => Promise<string | null>
+      user: {
         get: () => Promise<{
-          user?: { id: string; linked_accounts?: readonly privy.LinkedAccount[] | undefined }
+          user: { id: string; linked_accounts?: readonly privy.LinkedAccount[] | undefined }
         }>
       }
     }>().toMatchTypeOf<privy.Client>()
@@ -54,6 +49,17 @@ describe('privy', () => {
     const client = {
       custom: {
         getWallets: async () => [] as privy.WalletAccount[],
+      },
+      auth: {
+        async logout() {},
+      },
+      embeddedWallet: {
+        async getProvider() {
+          return { request: async () => '0x0' }
+        },
+      },
+      async getAccessToken() {
+        return 'token'
       },
       initialize() {},
       user: {
@@ -88,7 +94,23 @@ describe('privy', () => {
       custom: {
         getWallets: async () => [] as privy.WalletAccount[],
       },
+      auth: {
+        async logout() {},
+      },
+      embeddedWallet: {
+        async getProvider() {
+          return { request: async () => '0x0' }
+        },
+      },
+      async getAccessToken() {
+        return 'token'
+      },
       initialize() {},
+      user: {
+        async get() {
+          return { user: { id: 'user_1' } }
+        },
+      },
     }
     privy({
       client,

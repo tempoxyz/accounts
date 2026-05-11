@@ -151,7 +151,7 @@ describe('privy', () => {
     const store = Store.create({ chainId: 1, storage })
     store.setState({ accounts: [{ address }], activeAccount: 0 })
     const provider = createProvider()
-    const client = createClient({ accounts: [], embeddedWallet: false })
+    const client = createClient({ accounts: [] })
     let restoreCalls = 0
     let loadCalls = 0
     const adapter = privy({
@@ -238,27 +238,6 @@ describe('privy', () => {
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
-  test('behavior: restore supports React authenticated user shapes', async () => {
-    const { adapter, client, provider, store } = setup({ user_shape: 'react' })
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
-
-    await adapter.actions.signPersonalMessage(
-      { address, data: '0x68656c6c6f' },
-      { method: 'personal_sign', params: ['0x68656c6c6f', address] },
-    )
-
-    expect(client.providerCalls.map((wallet) => wallet.address)).toMatchInlineSnapshot(`
-      [
-        "0x0000000000000000000000000000000000000001",
-      ]
-    `)
-    expect(provider.signPayloads).toMatchInlineSnapshot(`
-      [
-        "0x50b2c43fd39106bafbba0da34fc430e1f91e3c96ea2acee2bc34119f92b37750",
-      ]
-    `)
-  })
-
   test('behavior: Privy session errors clear provider accounts', async () => {
     const { adapter, store } = setup({
       requestError: { code: 'attempted_rpc_call_before_logged_in', message: 'Not logged in' },
@@ -331,6 +310,16 @@ describe('privy', () => {
       async getAccessToken() {
         return 'token'
       },
+      embeddedWallet: {
+        async getProvider() {
+          return createProvider()
+        },
+      },
+      user: {
+        async get() {
+          return { user: { id: 'user_1' } }
+        },
+      },
     }
     const adapter = privy({
       client,
@@ -350,36 +339,6 @@ describe('privy', () => {
     expect(logoutCalls).toMatchInlineSnapshot(`1`)
   })
 
-  test('default: disconnect supports React client logout shapes', async () => {
-    const storage = Storage.memory()
-    const store = Store.create({ chainId: 1, storage })
-    const provider = createProvider()
-    let logoutCalls = 0
-    const client = {
-      async getAuthenticatedUser() {
-        return { id: 'user_1' }
-      },
-      logout() {
-        logoutCalls++
-      },
-    }
-    const adapter = privy({
-      client,
-      createAccount: async () => ({ address, provider }),
-      loadAccounts: async () => [{ address, provider }],
-    })({
-      getAccount: (() => {
-        throw new Error('not implemented')
-      }) as never,
-      getClient: (() => ({ chain: { id: 1 } })) as never,
-      storage,
-      store,
-    })
-
-    await adapter.actions.disconnect!()
-
-    expect(logoutCalls).toMatchInlineSnapshot(`1`)
-  })
 })
 
 function setup(options: setup.Options = {}) {
@@ -390,7 +349,6 @@ function setup(options: setup.Options = {}) {
   const client = createClient({
     accessToken: options.accessToken,
     accounts,
-    user_shape: options.user_shape,
   })
   const adapter = privy({
     client,
@@ -416,7 +374,6 @@ declare namespace setup {
     accounts?: readonly privy.WalletAccount[] | undefined
     rawSigning?: boolean | undefined
     requestError?: unknown
-    user_shape?: 'core' | 'react' | undefined
   }
 }
 
@@ -448,9 +405,9 @@ function createProvider(options: setup.Options = {}) {
 }
 
 function createClient(options: createClient.Options = {}) {
-  const { accessToken, accounts = [], embeddedWallet = true, user_shape = 'core' } = options
+  const { accessToken = 'token', accounts = [] } = options
   const linked = accounts.map((account, index) =>
-    linkedAccount({ address: account.address, index, user_shape }),
+    linkedAccount({ address: account.address, index }),
   )
   const client = {
     initCalls: 0,
@@ -458,46 +415,29 @@ function createClient(options: createClient.Options = {}) {
     logoutCalls: [] as { userId: string }[],
     providerCalls: [] as privy.EmbeddedWallet[],
     auth: {
-      logout(parameters?: { userId?: string | undefined } | undefined) {
+      logout(parameters?: { userId: string } | undefined) {
         if (parameters?.userId) client.logoutCalls.push({ userId: parameters.userId })
       },
     },
-    ...(embeddedWallet
-      ? {
-          embeddedWallet: {
-            async getProvider(wallet: privy.EmbeddedWallet) {
-              client.providerCalls.push(wallet)
-              const account = accounts.find((account) => account.address === wallet.address)
-              if (!account) throw { code: 'embedded_wallet_does_not_exist' }
-              return account.provider
-            },
-          },
-        }
-      : {}),
-    ...(accessToken !== undefined
-      ? {
-          async getAccessToken() {
-            return accessToken
-          },
-        }
-      : {}),
+    embeddedWallet: {
+      async getProvider(wallet: privy.EmbeddedWallet) {
+        client.providerCalls.push(wallet)
+        const account = accounts.find((account) => account.address === wallet.address)
+        if (!account) throw { code: 'embedded_wallet_does_not_exist' }
+        return account.provider
+      },
+    },
+    async getAccessToken() {
+      return accessToken
+    },
     initialize() {
       client.initCalls++
     },
-    ...(user_shape === 'react'
-      ? {
-          async getAuthenticatedUser() {
-            return { id: 'user_1', linkedAccounts: linked }
-          },
-          logout() {},
-        }
-      : {
-          user: {
-            async get() {
-              return { user: { id: 'user_1', linked_accounts: linked } }
-            },
-          },
-        }),
+    user: {
+      async get() {
+        return { user: { id: 'user_1', linked_accounts: linked } }
+      },
+    },
   } satisfies privy.Client & {
     initCalls: number
     loadCalls: number
@@ -512,28 +452,11 @@ declare namespace createClient {
   type Options = {
     accessToken?: string | null | undefined
     accounts?: readonly privy.WalletAccount[] | undefined
-    embeddedWallet?: boolean | undefined
-    user_shape?: 'core' | 'react' | undefined
   }
 }
 
-function linkedAccount(parameters: {
-  address: string
-  index: number
-  user_shape: 'core' | 'react'
-}): privy.LinkedAccount {
-  const { address, index, user_shape } = parameters
-  if (user_shape === 'react')
-    return {
-      address,
-      chainType: 'ethereum',
-      connectorType: 'embedded',
-      recoveryMethod: 'privy',
-      type: 'wallet',
-      walletClientType: 'privy',
-      walletIndex: index,
-    }
-
+function linkedAccount(parameters: { address: string; index: number }): privy.LinkedAccount {
+  const { address, index } = parameters
   return {
     address,
     chain_type: 'ethereum',
