@@ -40,23 +40,54 @@ const privySessionErrorCodes = new Set([
  *
  * @example
  * ```ts
- * import { Privy } from '@privy-io/js-sdk-core'
+ * import Privy, {
+ *   LocalStorage,
+ *   getAllUserEmbeddedEthereumWallets,
+ *   getEntropyDetailsFromUser,
+ * } from '@privy-io/js-sdk-core'
  * import { Provider, privy } from 'accounts'
  *
- * const client = new Privy({ appId, storage: localStorage })
+ * const client = new Privy({ appId, storage: new LocalStorage() })
+ * // App must mount the Privy secure-context iframe and call
+ * // `client.setMessagePoster(iframe.contentWindow)` per
+ * // https://docs.privy.io/recipes/core-js
+ *
+ * async function toEmbeddedWallets(client: Privy, user: any) {
+ *   const wallets = getAllUserEmbeddedEthereumWallets(user)
+ *   const entropy = getEntropyDetailsFromUser(user)
+ *   if (!entropy) return []
+ *   return Promise.all(
+ *     wallets.map(async (wallet) => {
+ *       const provider = await client.embeddedWallet.getEthereumProvider({
+ *         wallet,
+ *         entropyId: entropy.entropyId,
+ *         entropyIdVerifier: entropy.entropyIdVerifier,
+ *       })
+ *       return {
+ *         address: wallet.address,
+ *         signRawHash: async (hash) =>
+ *           (await provider.request({ method: 'secp256k1_sign', params: [hash] })) as `0x${string}`,
+ *       }
+ *     }),
+ *   )
+ * }
+ *
  * const provider = Provider.create({
  *   adapter: privy({
  *     client,
- *     createAccount: async ({ client, parameters }) => {
- *       await client.email.sendCode(email)
- *       const { user } = await client.email.loginWithCode(email, code, 'login-or-sign-up', {
+ *     createAccount: async ({ client }) => {
+ *       await client.auth.email.sendCode(email)
+ *       await client.auth.email.loginWithCode(email, code, 'login-or-sign-up', {
  *         embedded: { ethereum: { createOnLogin: 'users-without-wallets' } },
  *       })
- *       return toEmbeddedWallet(client, findEthereumWallet(user))
+ *       const { user } = await client.user.get()
+ *       const [account] = await toEmbeddedWallets(client, user)
+ *       if (!account) throw new Error('No Privy embedded Ethereum wallet')
+ *       return account
  *     },
  *     loadAccounts: async ({ client }) => {
  *       const { user } = await client.user.get()
- *       return Promise.all(findEthereumWallets(user).map((w) => toEmbeddedWallet(client, w)))
+ *       return toEmbeddedWallets(client, user)
  *     },
  *   }),
  * })
