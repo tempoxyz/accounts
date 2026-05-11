@@ -61,11 +61,10 @@ export type SessionRequest =
  * where values may be `string | string[] | undefined`.
  */
 function getHeader(req: SessionRequest, name: string): string | null {
-  if ('get' in req.headers && typeof req.headers.get === 'function')
-    return req.headers.get(name)
+  if ('get' in req.headers && typeof req.headers.get === 'function') return req.headers.get(name)
   const value = (req.headers as Record<string, string | string[] | undefined>)[name]
   if (value === undefined) return null
-  return Array.isArray(value) ? value.join(', ') : value
+  return Array.isArray(value) ? value.join('; ') : value
 }
 
 /**
