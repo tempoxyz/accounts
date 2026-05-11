@@ -132,6 +132,29 @@ export function privy<const client extends privy.Client>(
         })
     }
 
+    async function hasSession(client: client) {
+      if (client.getAccessToken)
+        return await client
+          .getAccessToken()
+          .then((token) => !!token)
+          .catch((error) => {
+            if (!isSessionError(error)) throw error
+            return false
+          })
+
+      if (!client.user?.get && !client.getAuthenticatedUser) return undefined
+      return !!(await getUser(client))
+    }
+
+    async function requireSession(client: client) {
+      const session = await hasSession(client)
+      if (session !== false) return
+      clear()
+      throw new ox_Provider.DisconnectedError({
+        message: 'Privy session disconnected.',
+      })
+    }
+
     function linkedAccounts(user: privy.User) {
       return user.linked_accounts ?? user.linkedAccounts ?? []
     }
@@ -177,26 +200,22 @@ export function privy<const client extends privy.Client>(
     async function providerFor(client: client, wallet: privy.EmbeddedWallet) {
       if (client.embeddedWallet?.getProvider) return await client.embeddedWallet.getProvider(wallet)
 
-      if (client.embeddedWallet?.getEthereumProvider)
-        return await client.embeddedWallet.getEthereumProvider({
-          entropyId: wallet.address,
-          entropyIdVerifier: 'ethereum-address-verifier',
-          wallet,
-        })
-
       throw new ox_Provider.UnsupportedMethodError({
         message:
-          'Privy adapter restore requires `embeddedWallet.getProvider` or `embeddedWallet.getEthereumProvider` on the Privy client.',
+          'Privy adapter restore requires `restoreAccounts` or `embeddedWallet.getProvider` on the Privy client.',
       })
     }
 
     async function restoreAccounts() {
       const client = await getPrivyClient()
+      await requireSession(client)
       const user = await getUser(client)
       if (!user)
         throw new ox_Provider.DisconnectedError({
           message: 'Privy session disconnected.',
         })
+
+      if (options.restoreAccounts) return await options.restoreAccounts({ client, user })
 
       return await Promise.all(
         embeddedWallets(user).map(async (wallet) => ({
@@ -238,7 +257,7 @@ export function privy<const client extends privy.Client>(
           .filter((account): account is privy.WalletAccount => !!account)
 
         const matched = (() => {
-          if (!address) return restored.length > 0
+          if (!address) return restored.length > 0 && restored.length === persisted.length
           return restored.some((account) =>
             isAddressEqual(core_Address.from(account.address), address),
           )
@@ -515,6 +534,8 @@ export function privy<const client extends privy.Client>(
       return typeof value === 'object' && value !== null
     }
 
+    void restore().catch(() => undefined)
+
     return {
       actions: {
         async createAccount(parameters) {
@@ -527,6 +548,7 @@ export function privy<const client extends privy.Client>(
 
           const client = await getPrivyClient()
           const account = await options.createAccount({ client, parameters })
+          await requireSession(client)
           cache([account])
           restore_promise = undefined
 
@@ -565,6 +587,7 @@ export function privy<const client extends privy.Client>(
 
           const client = await getPrivyClient()
           const accounts = await options.loadAccounts({ client, parameters })
+          await requireSession(client)
           cache(accounts)
           restore_promise = undefined
 
@@ -700,7 +723,10 @@ export function privy<const client extends privy.Client>(
         async disconnect() {
           const client = await getPrivyClient()
           const user = await getUser(client)
-          if (user && client.auth?.logout) await client.auth.logout({ userId: user.id })
+          if (client.auth?.logout) {
+            if (user && client.auth.logout.length > 0) await client.auth.logout({ userId: user.id })
+            else await client.auth.logout()
+          }
           else if (client.logout) await client.logout()
           clear()
         },
@@ -730,6 +756,18 @@ export declare namespace privy {
       /** Provider load-accounts parameters. */
       parameters?: Adapter.loadAccounts.Parameters | undefined
     }) => Promise<readonly WalletAccount[]>
+    /**
+     * Loads accounts from the current Privy session without showing UI.
+     *
+     * Use this with Privy Core clients that require app-owned entropy or secure-context
+     * handling before an embedded wallet provider can be rebuilt.
+     */
+    restoreAccounts?: (parameters: {
+      /** Initialized Privy client. */
+      client: client
+      /** Current authenticated Privy user. */
+      user: User
+    }) => Promise<readonly WalletAccount[]>
     /** Display name of the provider. @default "Privy" */
     name?: string | undefined
     /** Reverse DNS identifier. @default "io.privy" */
@@ -742,31 +780,12 @@ export declare namespace privy {
     auth?:
       | {
           /** Clears the current Privy session for the given user. */
-          logout: (parameters: { userId: string }) => Promise<void> | void
+          logout: (parameters?: { userId?: string | undefined } | undefined) => Promise<void> | void
         }
       | undefined
     /** Embedded wallet namespace used for silent restore when available. */
     embeddedWallet?:
       | {
-          /** Returns an EIP-1193 provider for a Privy embedded Ethereum wallet. */
-          getEthereumProvider?:
-            | ((parameters: {
-                /** Wallet account returned by the current Privy user. */
-                wallet: EmbeddedWallet
-                /** Embedded wallet entropy id. Privy uses the EVM address for Ethereum wallets. */
-                entropyId: string
-                /** Verifier for the entropy id. */
-                entropyIdVerifier: 'ethereum-address-verifier'
-                /** Optional user recovery access token. */
-                recoveryAccessToken?: string | undefined
-                /** Optional user recovery encryption key. */
-                recoveryKey?: string | undefined
-                /** Optional user recovery password. */
-                recoveryPassword?: string | undefined
-                /** Optional user recovery secret override. */
-                recoverySecretOverride?: string | undefined
-              }) => Promise<EthereumProvider>)
-            | undefined
           /** Returns an EIP-1193 provider for a Privy embedded Ethereum wallet. */
           getProvider?:
             | ((
@@ -781,6 +800,8 @@ export declare namespace privy {
       | undefined
     /** Returns the current Privy user on React client shapes when available. */
     getAuthenticatedUser?: (() => Promise<User | null | undefined>) | undefined
+    /** Returns the current access token when available, or null if no session exists. */
+    getAccessToken?: (() => Promise<string | null | undefined>) | undefined
     /** Initializes the client. Called once by the adapter when available. */
     initialize?: (() => Promise<void> | void) | undefined
     /** Clears the current Privy session on React client shapes when available. */

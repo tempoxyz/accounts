@@ -5,7 +5,14 @@ import { privy } from './privy.js'
 describe('privy', () => {
   test('accepts a structural Core client', () => {
     expectTypeOf<privy.Client>().toMatchTypeOf<{
-      auth?: { logout: (parameters: { userId: string }) => Promise<void> | void } | undefined
+      auth?:
+        | {
+            logout: (
+              parameters?: { userId?: string | undefined } | undefined,
+            ) => Promise<void> | void
+          }
+        | undefined
+      getAccessToken?: (() => Promise<string | null | undefined>) | undefined
       getAuthenticatedUser?: (() => Promise<{ id: string } | null | undefined>) | undefined
       initialize?: (() => Promise<void> | void) | undefined
       logout?: (() => Promise<void> | void) | undefined
@@ -27,11 +34,6 @@ describe('privy', () => {
   test('accepts structural Privy embedded wallet restore APIs', () => {
     expectTypeOf<{
       embeddedWallet?: {
-        getEthereumProvider?: (parameters: {
-          entropyId: string
-          entropyIdVerifier: 'ethereum-address-verifier'
-          wallet: privy.EmbeddedWallet
-        }) => Promise<privy.EthereumProvider>
         getProvider?: (wallet: privy.EmbeddedWallet) => Promise<privy.EthereumProvider>
       }
       getAuthenticatedUser?:
@@ -46,6 +48,32 @@ describe('privy', () => {
         }>
       }
     }>().toMatchTypeOf<privy.Client>()
+  })
+
+  test('restoreAccounts preserves the concrete client type', () => {
+    const client = {
+      custom: {
+        getWallets: async () => [] as privy.WalletAccount[],
+      },
+      initialize() {},
+      user: {
+        async get() {
+          return { user: { id: 'user_1' } }
+        },
+      },
+    }
+    privy({
+      client,
+      createAccount: async () => {
+        return { address: '0x0', provider: { request: async () => '0x0' } }
+      },
+      loadAccounts: async () => [],
+      restoreAccounts: async ({ client, user }) => {
+        expectTypeOf(client.custom.getWallets).toEqualTypeOf<() => Promise<privy.WalletAccount[]>>()
+        expectTypeOf(user.id).toEqualTypeOf<string>()
+        return []
+      },
+    })
   })
 
   test('callback accounts only require address and provider', () => {
