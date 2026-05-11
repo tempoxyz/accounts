@@ -7,15 +7,20 @@ import { cli } from './adapter.js'
  */
 export function create(options: create.Options): create.ReturnType {
   const {
-    // TODO: use the new host
-    // host = 'https://wallet-next.tempo.xyz/api/auth/cli',
-    host = 'https://wallet.tempo.xyz/cli-auth',
+    host = 'https://wallet.tempo.xyz/api/auth/cli',
     keysPath,
     open,
     pollIntervalMs,
     timeoutMs,
     ...rest
   } = options
+
+  // CLI defaults `mode` to `'pull'` (local account friendly path).
+  const mpp = (() => {
+    if (!options.mpp) return undefined
+    if (typeof options.mpp === 'object') return { mode: 'pull' as const, ...options.mpp }
+    return { mode: 'pull' as const }
+  })()
 
   return CoreProvider.create({
     ...rest,
@@ -26,6 +31,7 @@ export function create(options: create.Options): create.ReturnType {
       ...(typeof pollIntervalMs !== 'undefined' ? { pollIntervalMs } : {}),
       ...(typeof timeoutMs !== 'undefined' ? { timeoutMs } : {}),
     }),
+    ...(mpp ? { mpp } : {}),
   })
 }
 
@@ -34,7 +40,7 @@ export declare namespace create {
     CoreProvider.create.Options & cli.Options,
     'adapter' | 'authorizeAccessKey' | 'host'
   > & {
-    /** Host URL for the device-code flow. @default "https://wallet-next.tempo.xyz/remote/auth/cli" */
+    /** Host URL for the device-code flow. @default "https://wallet.tempo.xyz/api/auth/cli" */
     host?: string | undefined
   }
   export type ReturnType = CoreProvider.create.ReturnType

@@ -8,7 +8,6 @@ import { Actions } from 'viem/tempo'
 import { Provider } from '../../src/cli/index.js'
 
 const provider = Provider.create({
-  feePayer: 'https://sponsor.moderato.tempo.xyz',
   mpp: true,
   testnet: true,
 })
@@ -46,6 +45,7 @@ Cli.create('example', {
       to: account.address,
       token,
     })
+    console.log('receipt', receipt)
 
     // 3. Fetch a paid API endpoint via MPP.
     const response = await fetch('https://mpp.dev/api/ping/paid')
