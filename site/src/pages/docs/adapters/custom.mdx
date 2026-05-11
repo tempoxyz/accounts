@@ -1,0 +1,48 @@
+---
+title: Custom Adapter
+description: Author an adapter for your own auth and signing infrastructure.
+---
+
+# Custom Adapter
+
+Custom adapters connect the Accounts SDK to auth and signing systems you already operate. Use one when you want Privy, AWS KMS, Turnkey, internal signers, or a wallet on your own domain to plug into Tempo account features.
+
+## What the adapter owns
+
+- Authentication and session state.
+- Key custody or signer delegation.
+- User approval surfaces.
+- Request translation between the Accounts SDK and your signer.
+- Error mapping back into the provider contract.
+
+## Walkthrough
+
+::::steps
+
+### Define the signer boundary
+
+Decide whether signing happens in the browser, on a server, in an HSM/KMS, or through a third-party wallet service.
+
+### Implement the adapter contract
+
+Translate provider requests into your auth and signing flow.
+
+### Map errors deliberately
+
+Return errors that app code can handle without knowing the signer implementation.
+
+### Test against shared guides
+
+Run connect, payment, and access-key flows through the same app code used by hosted adapters.
+
+::::
+
+## Human Pass Needed
+
+This page needs concrete adapter interface examples after the custom adapter API stabilizes.
+
+## Next Steps
+
+- [Bring Your Auth](/docs/enterprise/bring-your-auth)
+- [Hosted Universal Wallets](/docs/enterprise/hosted-universal-wallets)
+- [Adapter API reference](/docs/api/adapters)

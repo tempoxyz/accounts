@@ -1,0 +1,36 @@
+---
+title: Adapters
+description: Choose the signing adapter for your Accounts SDK integration.
+---
+
+# Adapters
+
+Adapters decide where keys live, who runs authentication, and how account requests are approved. Your app talks to the Accounts SDK through one provider surface while the adapter handles signing.
+
+| Adapter | Who owns auth | Best for |
+| --- | --- | --- |
+| [Tempo Wallet](/docs/adapters/tempo-wallet) | Tempo Wallet | Apps that want a universal wallet without owning signing infrastructure. |
+| [WebAuthn](/docs/adapters/webauthn) | Your app origin | Teams that want domain-bound passkeys and Tempo account features. |
+| [Custom](/docs/adapters/custom) | Your infrastructure | Privy, AWS KMS, Turnkey, internal signers, and hosted wallet products. |
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant SDK as Accounts SDK
+    participant Adapter
+    participant Signer
+
+    App->>SDK: JSON-RPC request
+    SDK->>Adapter: route request
+    Adapter->>Signer: authenticate and sign
+    Signer-->>Adapter: signed result
+    Adapter-->>SDK: response
+    SDK-->>App: response
+```
+
+## Next Steps
+
+- [Tempo Wallet](/docs/adapters/tempo-wallet)
+- [WebAuthn](/docs/adapters/webauthn)
+- [Custom adapter](/docs/adapters/custom)
+- [Adapter API reference](/docs/api/adapters)

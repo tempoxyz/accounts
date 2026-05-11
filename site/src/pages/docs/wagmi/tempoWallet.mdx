@@ -1,22 +1,22 @@
 ---
-title: webAuthn
-description: Wagmi connector for passkey-based WebAuthn accounts.
+title: tempoWallet
+description: Wagmi connector for the Tempo Wallet dialog.
 ---
 
-# `webAuthn`
+# `tempoWallet`
 
-Creates a Wagmi connector backed by the WebAuthn adapter.
+Creates a Wagmi connector backed by the Tempo Wallet dialog adapter.
 
 ## Usage
 
 ```ts
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
-import { webAuthn } from 'wagmi/tempo'
+import { tempoWallet } from 'wagmi/connectors'
 
 export const config = createConfig({
   chains: [tempo],
-  connectors: [webAuthn({ authUrl: '/auth' })],
+  connectors: [tempoWallet()],
   transports: {
     [tempo.id]: http(),
   },
@@ -25,38 +25,7 @@ export const config = createConfig({
 
 ## Parameters
 
-Accepts all [`webAuthn`](/accounts/api/webAuthn) adapter options, plus all [`Provider`](/accounts/api/provider) options except `adapter`.
-
-### authUrl
-
-- **Type:** `string`
-- **Optional**
-
-URL of a [WebAuthn server handler](/accounts/server/handler.webAuthn).
-
-:::info
-[See the guide](https://docs.tempo.xyz/guide/use-accounts/embed-passkeys)
-:::
-
-:::warning
-Cannot be used with `ceremony`.
-:::
-
-```ts twoslash
-import { createConfig, http } from 'wagmi'
-import { tempo } from 'wagmi/chains'
-import { webAuthn } from 'wagmi/tempo'
-
-export const config = createConfig({
-  chains: [tempo],
-  connectors: [
-    webAuthn({
-      authUrl: '/auth', // [!code focus]
-    }),
-  ],
-  transports: { [tempo.id]: http() },
-})
-```
+Accepts all [`dialog`](/docs/api/dialog) adapter options, plus all [`Provider`](/docs/api/provider) options except `adapter`.
 
 ### authorizeAccessKey
 
@@ -70,13 +39,12 @@ import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
 import { parseUnits } from 'viem'
 import { Expiry } from 'accounts'
-import { webAuthn } from 'wagmi/tempo'
+import { tempoWallet } from 'wagmi/connectors'
 
 export const config = createConfig({
   chains: [tempo],
   connectors: [
-    webAuthn({
-      authUrl: '/auth',
+    tempoWallet({
       authorizeAccessKey: () => ({ // [!code focus]
         expiry: Expiry.days(7), // [!code focus]
         limits: [{ // [!code focus]
@@ -90,32 +58,24 @@ export const config = createConfig({
 })
 ```
 
-### ceremony
+### dialog
 
-- **Type:** `WebAuthnCeremony`
-- **Default:** `WebAuthnCeremony.server({ url: authUrl }){:js}`
+- **Type:** `Dialog`
+- **Default:** `Dialog.iframe()` (or `Dialog.popup()` in Safari/insecure contexts)
 
-Ceremony strategy for WebAuthn registration and authentication. [See more](/accounts/api/webauthnceremony).
-
-:::info
-[See the guide](https://docs.tempo.xyz/guide/use-accounts/embed-passkeys)
-:::
-
-:::warning
-Cannot be used with `authUrl`.
-:::
+Dialog to use for the embed app.
 
 ```ts twoslash
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
-import { WebAuthnCeremony } from 'accounts'
-import { webAuthn } from 'wagmi/tempo'
+import { Dialog } from 'accounts'
+import { tempoWallet } from 'wagmi/connectors'
 
 export const config = createConfig({
   chains: [tempo],
   connectors: [
-    webAuthn({
-      ceremony: WebAuthnCeremony.server({ url: '/auth' }), // [!code focus]
+    tempoWallet({
+      dialog: Dialog.popup(), // [!code focus]
     }),
   ],
   transports: { [tempo.id]: http() },
@@ -127,7 +87,7 @@ export const config = createConfig({
 - **Type:** `string | { url: string; precedence?: 'fee-payer-first' | 'user-first' }`
 - **Optional**
 
-Fee payer configuration for interacting with a service running [`Handler.relay`](/accounts/server/handler.relay) from `accounts/server`. Pass a URL string, or an object with `url` and optional `precedence`.
+Fee payer configuration for interacting with a service running [`Handler.relay`](/docs/server/handler.relay) from `accounts/server`. Pass a URL string, or an object with `url` and optional `precedence`.
 
 :::info
 [See the guide](https://docs.tempo.xyz/guide/payments/sponsor-user-fees)
@@ -136,14 +96,36 @@ Fee payer configuration for interacting with a service running [`Handler.relay`]
 ```ts twoslash
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
-import { webAuthn } from 'wagmi/tempo'
+import { tempoWallet } from 'wagmi/connectors'
 
 export const config = createConfig({
   chains: [tempo],
   connectors: [
-    webAuthn({
-      authUrl: '/auth',
+    tempoWallet({
       feePayer: 'https://myapp.com/fee-payer', // [!code focus]
+    }),
+  ],
+  transports: { [tempo.id]: http() },
+})
+```
+
+### host
+
+- **Type:** `string`
+- **Default:** `'https://wallet.tempo.xyz/embed'`
+
+URL of the embed app.
+
+```ts twoslash
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [
+    tempoWallet({
+      host: 'https://wallet.tempo.xyz/embed', // [!code focus]
     }),
   ],
   transports: { [tempo.id]: http() },
@@ -160,13 +142,12 @@ Enable [Machine Payment Protocol](https://mpp.dev) support.
 ```ts twoslash
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
-import { webAuthn } from 'wagmi/tempo'
+import { tempoWallet } from 'wagmi/connectors'
 
 export const config = createConfig({
   chains: [tempo],
   connectors: [
-    webAuthn({
-      authUrl: '/auth',
+    tempoWallet({
       mpp: true, // [!code focus]
     }),
   ],
@@ -184,13 +165,12 @@ Use testnet. When `true`, the default chain will be the first testnet chain in `
 ```ts twoslash
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
-import { webAuthn } from 'wagmi/tempo'
+import { tempoWallet } from 'wagmi/connectors'
 
 export const config = createConfig({
   chains: [tempo],
   connectors: [
-    webAuthn({
-      authUrl: '/auth',
+    tempoWallet({
       testnet: true, // [!code focus]
     }),
   ],

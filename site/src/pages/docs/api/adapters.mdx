@@ -11,9 +11,9 @@ Adapters control how accounts are created and managed. Pass an adapter to `Provi
 
 | Adapter | Uses | Best for |
 | --- | --- | --- |
-| [`dialog`](/accounts/api/dialog) (default) | Hosted dialog | Apps wanting a universal account experience |
-| [`webAuthn`](/accounts/api/webAuthn) | Domain-bound passkeys | Wallets integrating Passkey accounts, or Apps wanting to host and manage their own Passkey accounts |
-| [`local`](/accounts/api/local) | Arbitrary keys | Custom signing and key management |
+| [`dialog`](/docs/api/dialog) (default) | Hosted dialog | Apps wanting a universal account experience |
+| [`webAuthn`](/docs/api/webAuthn) | Domain-bound passkeys | Wallets integrating Passkey accounts, or Apps wanting to host and manage their own Passkey accounts |
+| [`local`](/docs/api/local) | Arbitrary keys | Custom signing and key management |
 
 ---
 
@@ -21,19 +21,19 @@ Adapters control how accounts are created and managed. Pass an adapter to `Provi
   <Card
     description="Embeds a universal Tempo Wallet dialog into your app"
     icon="lucide:wallet"
-    to="/accounts/api/dialog"
+    to="/docs/api/dialog"
     title="dialog"
   />
   <Card
     description="Embeds domain-bound passkey accounts into your app"
     icon="lucide:fingerprint"
-    to="/accounts/api/webAuthn"
+    to="/docs/api/webAuthn"
     title="webAuthn"
   />
   <Card
     description="Uses arbitrary keys for account management"
     icon="lucide:key"
-    to="/accounts/api/local"
+    to="/docs/api/local"
     title="local"
   />
 </Cards>

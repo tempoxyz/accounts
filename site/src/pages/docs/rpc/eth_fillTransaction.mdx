@@ -7,7 +7,7 @@ description: Fills missing transaction fields and returns wallet-aware metadata.
 
 Fills missing transaction fields (gas, nonce, fees) via the node, with wallet-aware enrichment — fee token resolution, simulation-based balance diffs, conditional sponsorship, and automatic AMM resolution for insufficient balances.
 
-When sent through [`Handler.relay`](/accounts/server/handler.relay), the response is enriched with a `capabilities` object containing balance diffs, fee estimates, sponsor info, and swap details.
+When sent through [`Handler.relay`](/docs/server/handler.relay), the response is enriched with a `capabilities` object containing balance diffs, fee estimates, sponsor info, and swap details.
 
 ## Request
 
@@ -242,7 +242,7 @@ result.capabilities.fee
 
 ### With Sponsorship
 
-When the relay is configured with a [`feePayer`](/accounts/server/handler.relay#feepayer), validated transactions are sponsored. The response includes `sponsored: true` and `sponsor` details.
+When the relay is configured with a [`feePayer`](/docs/server/handler.relay#feepayer), validated transactions are sponsored. The response includes `sponsored: true` and `sponsor` details.
 
 ```ts twoslash
 // @noErrors

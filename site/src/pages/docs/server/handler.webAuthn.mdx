@@ -44,7 +44,7 @@ export const POST = handler.fetch // Next.js
 ```
 
 :::warning
-`Kv.memory()` is not recommended for production use. Instead, use a persistent store like Cloudflare or Vercel KV, or a Redis instance. See [`Kv`](/accounts/server/kv) for available adapters.
+`Kv.memory()` is not recommended for production use. Instead, use a persistent store like Cloudflare or Vercel KV, or a Redis instance. See [`Kv`](/docs/server/kv) for available adapters.
 :::
 
 ## Parameters
@@ -69,10 +69,10 @@ const handler = Handler.webAuthn({
 
 ### kv
 
-- **Type:** [`Kv`](/accounts/server/kv)
+- **Type:** [`Kv`](/docs/server/kv)
 - **Required**
 
-Key-value store for challenges and credentials. [See `Kv`](/accounts/server/kv) for available adapters.
+Key-value store for challenges and credentials. [See `Kv`](/docs/server/kv) for available adapters.
 
 ```ts twoslash
 import { Handler, Kv } from 'accounts/server'

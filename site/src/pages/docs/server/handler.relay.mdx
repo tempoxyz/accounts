@@ -82,7 +82,7 @@ Configure a [`feePayer`](#feepayer) to sponsor transactions. The relay signs `fe
 :::code-group
 
 ```ts twoslash [server.ts]
-import { privateKeyToAccount } from 'viem/accounts'
+import { privateKeyToAccount } from 'viem/docs'
 import { Handler } from 'accounts/server'
 
 const blockedAddress = '0x...'
@@ -364,7 +364,7 @@ Set [`features: 'all'`](#features) to enable all features by default such as: **
 
 ```ts twoslash
 // @noErrors
-import { privateKeyToAccount } from 'viem/accounts'
+import { privateKeyToAccount } from 'viem/docs'
 import { Handler } from 'accounts/server'
 
 const handler = Handler.relay({
@@ -438,7 +438,7 @@ const handler = Handler.relay({
 Fee payer configuration. When provided, the relay will sign `feePayerSignature` on the filled transaction.
 
 ```ts twoslash
-import { privateKeyToAccount } from 'viem/accounts'
+import { privateKeyToAccount } from 'viem/docs'
 import { Handler } from 'accounts/server'
 
 const handler = Handler.relay({
@@ -479,7 +479,7 @@ Sponsor URL returned in the response metadata.
 Validates whether to sponsor a transaction. When omitted, all transactions are sponsored. Return `false` to reject sponsorship — the relay will re-fill without `feePayer` so gas/nonce are correct for self-payment.
 
 ```ts twoslash
-import { privateKeyToAccount } from 'viem/accounts'
+import { privateKeyToAccount } from 'viem/docs'
 import { Handler } from 'accounts/server'
 
 const blocked = '0x...'

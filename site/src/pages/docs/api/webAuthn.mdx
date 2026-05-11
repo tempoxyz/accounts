@@ -24,7 +24,7 @@ const provider = Provider.create({
 - **Type:** `string`
 - **Optional**
 
-URL of a [WebAuthn server handler](/accounts/server/handler.webAuthn) (shorthand for `WebAuthnCeremony.server({ url }){:js}`)
+URL of a [WebAuthn server handler](/docs/server/handler.webAuthn) (shorthand for `WebAuthnCeremony.server({ url }){:js}`)
 
 :::warning
 Cannot be used with `ceremony`.
@@ -45,7 +45,7 @@ const provider = Provider.create({
 - **Type:** `WebAuthnCeremony`
 - **Default:** `WebAuthnCeremony.server({ url: authUrl }){:js}`
 
-Ceremony strategy for WebAuthn registration and authentication. [See more](/accounts/api/webauthnceremony).
+Ceremony strategy for WebAuthn registration and authentication. [See more](/docs/api/webauthnceremony).
 
 :::warning
 Cannot be used with `authUrl`.

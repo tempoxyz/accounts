@@ -1,30 +1,86 @@
 ---
-description: Tempo Accounts SDK documentation.
+title: Accounts SDK
+description: Adapter-based account infrastructure for apps and wallets building on Tempo.
 ---
 
 import { Cards, Card } from 'vocs'
 
-# Accounts SDK [Documentation for apps and wallets building on Tempo]
+# Accounts SDK
 
-The Tempo Accounts SDK is a TypeScript library for creating, managing, and interacting with accounts on Tempo.
+Build account experiences on Tempo without locking your app to one signing model. The Accounts SDK routes app requests through adapters, so the same product flow can run through Tempo Wallet, domain-bound WebAuthn, or your own signing infrastructure.
 
 <Cards>
   <Card
-    title="Getting Started"
-    description="Install the SDK and connect an app with Tempo Wallet or domain-bound passkeys."
-    to="/accounts"
-    icon="lucide:rocket"
+    title="Start with Tempo Wallet"
+    description="Use the hosted universal wallet when you want embedded account creation, signing, onramp, and transaction orchestration."
+    to="/docs/adapters/tempo-wallet"
+    icon="lucide:wallet"
   />
   <Card
-    title="Production"
-    description="Configure origins, trusted hosts, deployment settings, and operational requirements."
-    to="/accounts/production"
-    icon="lucide:shield-check"
+    title="Bring passkeys to your domain"
+    description="Use WebAuthn when you want to own the passkey ceremony and plug those accounts into Tempo features."
+    to="/docs/adapters/webauthn"
+    icon="lucide:fingerprint"
   />
   <Card
-    title="API Reference"
-    description="Browse providers, adapters, server handlers, and JSON-RPC methods."
-    to="/accounts/api/provider"
+    title="Bring your auth"
+    description="Use a custom adapter for Privy, AWS KMS, Turnkey, internal signers, or hosted wallet infrastructure."
+    to="/docs/adapters/custom"
+    icon="lucide:key-round"
+  />
+  <Card
+    title="Read the docs"
+    description="Install the SDK, choose an adapter, and pair guides with runnable examples."
+    to="/docs"
     icon="lucide:book-open"
+  />
+</Cards>
+
+## Choose an adapter
+
+| Adapter | Use it when |
+| --- | --- |
+| [Tempo Wallet](/docs/adapters/tempo-wallet) | You want a universal wallet without owning auth or signing infrastructure. |
+| [WebAuthn](/docs/adapters/webauthn) | You want domain-bound passkey accounts on your own app origin. |
+| [Custom adapter](/docs/adapters/custom) | You want to connect Privy, AWS KMS, Turnkey, internal signers, or your own hosted wallet. |
+
+## Demo
+
+:::warning[Stub]
+The live demo shell belongs here. The first pass pins the IA and copy; the real demo should mount the same connect, pay, and authorize flows behind an adapter toggle for Tempo Wallet and WebAuthn.
+:::
+
+| Flow | Tempo Wallet | WebAuthn |
+| --- | --- | --- |
+| Connect account | Stub | Stub |
+| Make a payment | Stub | Stub |
+| Authorize access | Stub | Stub |
+
+## Build paths
+
+<Cards>
+  <Card
+    title="Connect Accounts"
+    description="Connect users with Tempo Wallet or WebAuthn and read their account state."
+    to="/docs/guides/connect-accounts"
+    icon="lucide:user-plus"
+  />
+  <Card
+    title="Payments"
+    description="Send stablecoin payments through the same app code across adapters."
+    to="/docs/guides/payments"
+    icon="lucide:send"
+  />
+  <Card
+    title="Fee Sponsorship"
+    description="Sponsor user transactions from a server-side policy and fee payer."
+    to="/docs/guides/fee-sponsorship"
+    icon="lucide:badge-dollar-sign"
+  />
+  <Card
+    title="Enterprise"
+    description="Plan BYO auth, hosted universal wallets, and custom adapter integrations."
+    to="/docs/enterprise/bring-your-auth"
+    icon="lucide:building-2"
   />
 </Cards>

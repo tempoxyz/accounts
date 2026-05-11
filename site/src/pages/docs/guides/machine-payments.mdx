@@ -1,0 +1,50 @@
+---
+title: Machine Payments (MPP)
+description: Build machine-to-machine payment flows with the Accounts SDK.
+---
+
+# Machine Payments (MPP)
+
+Build machine payment flows that use Accounts SDK signing and Tempo payment primitives.
+
+## Demo
+
+Target workspace: `examples/machine-payments/`.
+
+:::warning[Stub]
+This page needs a protocol-focused pass before implementation. The guide should define the MPP request lifecycle, settlement proof, and where human approval is or is not expected.
+:::
+
+## Walkthrough
+
+::::steps
+
+### Install the SDK
+
+```bash
+pnpm add accounts mppx viem
+```
+
+### Configure the Provider
+
+Choose the account adapter that signs machine payment requests.
+
+### Connect the account
+
+Load the account or access key used by the machine actor.
+
+### Submit the request
+
+Create and submit the MPP payment request.
+
+### Verify the result
+
+Confirm the payment status and persist the settlement result.
+
+::::
+
+## Next Steps
+
+- [Spend Permissions](/docs/guides/spend-permissions)
+- [Payments](/docs/guides/payments)
+- [Custom adapter](/docs/adapters/custom)

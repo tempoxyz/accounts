@@ -15,7 +15,7 @@ Handlers are compatible with any server framework that supports the:
 
 ```ts
 import { Handler } from 'accounts/server'
-import { privateKeyToAccount } from 'viem/accounts'
+import { privateKeyToAccount } from 'viem/docs'
 
 const handler = Handler.relay({
   feePayer: { account: privateKeyToAccount('0x...') },
@@ -35,19 +35,19 @@ export const POST = handler.fetch // Next.js
   <Card
     description="Compose multiple handlers into a single handler"
     icon="lucide:layers"
-    to="/accounts/server/handler.compose"
+    to="/docs/server/handler.compose"
     title="Handler.compose"
   />
   <Card
     description="Proxy RPC requests with sponsorship, auto-swap, and balance diffs"
     icon="lucide:radio"
-    to="/accounts/server/handler.relay"
+    to="/docs/server/handler.relay"
     title="Handler.relay"
   />
   <Card
     description="Handle WebAuthn credential registration and authentication"
     icon="lucide:fingerprint"
-    to="/accounts/server/handler.webAuthn"
+    to="/docs/server/handler.webAuthn"
     title="Handler.webAuthn"
   />
 </Cards>

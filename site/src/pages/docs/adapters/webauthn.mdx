@@ -1,0 +1,40 @@
+---
+title: WebAuthn Adapter
+description: Use domain-bound passkeys as the account signing adapter.
+---
+
+# WebAuthn Adapter
+
+The WebAuthn adapter is for apps and enterprises that want account keys bound to their own domain. Your app owns the passkey ceremony and the Accounts SDK plugs those signatures into Tempo account flows.
+
+Use it when you want:
+
+- Passkeys created on your own origin.
+- Your app to own registration and authentication UX.
+- Tempo account features without using the hosted Tempo Wallet surface.
+
+## Configure
+
+```tsx
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { webAuthn } from 'wagmi/tempo'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [webAuthn({ authUrl: '/auth' })],
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+
+## Human Pass Needed
+
+This page should be expanded with origin requirements, server ceremony boundaries, recovery expectations, and production security guidance.
+
+## Next Steps
+
+- [Authentication](/docs/guides/authentication)
+- [WebAuthn API reference](/docs/api/webAuthn)
+- [WebAuthnCeremony reference](/docs/api/webauthnceremony)
