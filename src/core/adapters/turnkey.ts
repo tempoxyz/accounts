@@ -183,12 +183,18 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }) {
       const { client, payload, walletAccount } = parameters
       await requireSession()
-      const result = await client.httpClient.signRawPayload({
-        encoding: 'PAYLOAD_ENCODING_HEXADECIMAL',
-        hashFunction: 'HASH_FUNCTION_NO_OP',
-        payload,
-        signWith: walletAccount.address,
-      })
+      const result = await client.httpClient
+        .signRawPayload({
+          encoding: 'PAYLOAD_ENCODING_HEXADECIMAL',
+          hashFunction: 'HASH_FUNCTION_NO_OP',
+          payload,
+          signWith: walletAccount.address,
+        })
+        .catch((error) => {
+          if (!isSessionError(error)) throw error
+          clear()
+          throw new ox_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
+        })
 
       return signatureToHex(result)
     }
@@ -308,6 +314,13 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       if (feePayer === false) return false
       if (typeof feePayer === 'string') return feePayer
       return undefined
+    }
+
+    function isSessionError(error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      return /"turnkeyErrorCode":"(API_KEY_EXPIRED|UNAUTHENTICATED|SIGNATURE_MISSING|SIGNATURE_INVALID|REQUEST_NOT_AUTHORIZED)"|turnkeyErrorCode['":\s]+(API_KEY_EXPIRED|UNAUTHENTICATED|SIGNATURE_MISSING|SIGNATURE_INVALID|REQUEST_NOT_AUTHORIZED)|expired api key|no valid authentication signature found|could not verify api key signature|cannot authenticate public API activity request without a stamp|request not authorized/i.test(
+        message,
+      )
     }
 
     void restore()

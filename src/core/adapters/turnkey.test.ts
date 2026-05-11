@@ -231,6 +231,24 @@ describe('turnkey', () => {
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: server session errors clear provider accounts', async () => {
+    const { adapter, store } = setup({
+      signError: new Error(
+        'Turnkey Public API error: expired api key (Details: [{"turnkeyErrorCode":"API_KEY_EXPIRED"}])',
+      ),
+    })
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
+    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: Turnkey session expired.]')
+
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
   test('error: signing an unconnected account fails', async () => {
     const { adapter } = setup()
     await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
@@ -271,6 +289,7 @@ function setup(options: setup.Options = {}) {
 declare namespace setup {
   type Options = {
     session?: turnkey.Session | null | undefined
+    signError?: Error | undefined
   }
 }
 
@@ -293,6 +312,7 @@ function createClient(options: setup.Options = {}) {
     },
     httpClient: {
       async signRawPayload(parameters: turnkey.SignRawPayloadParameters) {
+        if (options.signError) throw options.signError
         client.signPayloads.push(parameters.payload)
         client.signWith.push(parameters.signWith)
         return {
