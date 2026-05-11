@@ -108,15 +108,11 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         }),
       })
 
-      await provider.request({ method: 'eth_requestAccounts' })
+      const first = await provider.request({ method: 'eth_requestAccounts' })
       const result = await provider.request({ method: 'eth_requestAccounts' })
 
-      expect(calls).toMatchInlineSnapshot(`1`)
-      expect(result).toMatchInlineSnapshot(`
-        [
-          "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-        ]
-      `)
+      expect(calls).toBe(1)
+      expect(result).toEqual(first)
     })
   })
 
