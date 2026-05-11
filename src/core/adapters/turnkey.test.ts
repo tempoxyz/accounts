@@ -233,9 +233,7 @@ describe('turnkey', () => {
 
   test('behavior: server session errors clear provider accounts', async () => {
     const { adapter, store } = setup({
-      signError: new Error(
-        'Turnkey Public API error: expired api key (Details: [{"turnkeyErrorCode":"API_KEY_EXPIRED"}])',
-      ),
+      signError: { details: [{ turnkeyErrorCode: 'API_KEY_EXPIRED' }] },
     })
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
@@ -289,7 +287,7 @@ function setup(options: setup.Options = {}) {
 declare namespace setup {
   type Options = {
     session?: turnkey.Session | null | undefined
-    signError?: Error | undefined
+    signError?: unknown
   }
 }
 

@@ -17,6 +17,17 @@ import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Store from '../Store.js'
 
+const turnkeySessionErrorCodes = new Set([
+  'API_KEY_EXPIRED',
+  'NO_SESSION_FOUND',
+  'REQUEST_NOT_AUTHORIZED',
+  'SESSION_EXPIRED',
+  'SIGNATURE_INVALID',
+  'SIGNATURE_MISSING',
+  'UNAUTHENTICATED',
+  'UNAUTHORIZED',
+])
+
 /**
  * Creates a Turnkey adapter backed by `@turnkey/core` client sessions and Ethereum wallet accounts.
  *
@@ -317,10 +328,32 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }
 
     function isSessionError(error: unknown) {
+      const code = getTurnkeyErrorCode(error)
+      if (code && turnkeySessionErrorCodes.has(code)) return true
+
       const message = error instanceof Error ? error.message : String(error)
-      return /"turnkeyErrorCode":"(API_KEY_EXPIRED|UNAUTHENTICATED|SIGNATURE_MISSING|SIGNATURE_INVALID|REQUEST_NOT_AUTHORIZED)"|turnkeyErrorCode['":\s]+(API_KEY_EXPIRED|UNAUTHENTICATED|SIGNATURE_MISSING|SIGNATURE_INVALID|REQUEST_NOT_AUTHORIZED)|expired api key|no valid authentication signature found|could not verify api key signature|cannot authenticate public API activity request without a stamp|request not authorized/i.test(
+      return /expired api key|no valid authentication signature found|could not find public key in organization or its parent organization|could not verify api key signature|cannot authenticate public API activity request without a stamp|request not authorized/i.test(
         message,
       )
+    }
+
+    function getTurnkeyErrorCode(error: unknown): string | undefined {
+      if (!isObject(error)) return undefined
+
+      if (typeof error.code === 'string') return error.code
+
+      if (Array.isArray(error.details)) {
+        for (const detail of error.details) {
+          if (!isObject(detail)) continue
+          if (typeof detail.turnkeyErrorCode === 'string') return detail.turnkeyErrorCode
+        }
+      }
+
+      return getTurnkeyErrorCode(error.cause)
+    }
+
+    function isObject(value: unknown): value is Record<string, unknown> {
+      return typeof value === 'object' && value !== null
     }
 
     void restore()
