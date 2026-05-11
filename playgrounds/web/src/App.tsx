@@ -90,7 +90,7 @@ export function App() {
           </PlaygroundSection>
 
           <PlaygroundSection id="connection" title="Connection">
-            <WalletConnect />
+            <WalletConnect adapterType={adapterType} />
             <EthRequestAccounts />
             <WalletDisconnect />
           </PlaygroundSection>
@@ -597,7 +597,8 @@ function ProviderState() {
   )
 }
 
-function WalletConnect() {
+function WalletConnect(props: { adapterType: AdapterType }) {
+  const { adapterType } = props
   const [result, error, execute] = useRequest()
   const tokenlist = useTokenlist()
   const [accessKeyEnabled, setAccessKeyEnabled] = useState(false)
@@ -605,6 +606,7 @@ function WalletConnect() {
   const [limits, setLimits] = useState<LimitInput[]>([{ token: '', amount: '100', period: '' }])
   const [scopeSelector, setScopeSelector] = useState('transfer(address,uint256)')
   const [authEnabled, setAuthEnabled] = useState(false)
+  const turnkey = adapterType === 'turnkey'
 
   // Once the tokenlist resolves, hydrate any unselected limit row with the first token.
   useEffect(() => {
@@ -629,7 +631,7 @@ function WalletConnect() {
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = new FormData(e.currentTarget)
-    const name = form.get('name') as string
+    const name = turnkey ? undefined : (form.get('name') as string)
     const digest = form.get('digest') as Hex.Hex
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
 
@@ -689,10 +691,12 @@ function WalletConnect() {
   return (
     <Method method="wallet_connect" result={result} error={error}>
       <form onSubmit={submit}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-          <label>Name</label>
-          <input name="name" placeholder="Account name (optional)" style={{ flex: 1 }} />
-        </div>
+        {!turnkey && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+            <label>Name</label>
+            <input name="name" placeholder="Account name (optional)" style={{ flex: 1 }} />
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Digest</label>
           <input
