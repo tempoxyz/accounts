@@ -145,20 +145,6 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       }
     }
 
-    async function withSession<result>(fn: () => Promise<result>) {
-      await requireSession()
-
-      try {
-        return await fn()
-      } catch (error) {
-        if (isSessionError(error)) {
-          clear()
-          throw new ox_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
-        }
-        throw error
-      }
-    }
-
     async function requireSession() {
       const session = await getValidSession()
       if (!session) throw new ox_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
@@ -196,15 +182,13 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       walletAccount: turnkey.WalletAccount
     }) {
       const { client, payload, walletAccount } = parameters
-      const result = await withSession(
-        async () =>
-          await client.httpClient.signRawPayload({
-            encoding: 'PAYLOAD_ENCODING_HEXADECIMAL',
-            hashFunction: 'HASH_FUNCTION_NO_OP',
-            payload,
-            signWith: walletAccount.address,
-          }),
-      )
+      await requireSession()
+      const result = await client.httpClient.signRawPayload({
+        encoding: 'PAYLOAD_ENCODING_HEXADECIMAL',
+        hashFunction: 'HASH_FUNCTION_NO_OP',
+        payload,
+        signWith: walletAccount.address,
+      })
 
       return signatureToHex(result)
     }
@@ -324,14 +308,6 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       if (feePayer === false) return false
       if (typeof feePayer === 'string') return feePayer
       return undefined
-    }
-
-    function isSessionError(error: unknown) {
-      if (options.isSessionError?.(error)) return true
-      const message = error instanceof Error ? error.message : String(error)
-      return /API_KEY_EXPIRED|UNAUTHENTICATED|SIGNATURE_MISSING|SIGNATURE_INVALID|expired api key|cannot authenticate|no active session|session expired|not authenticated/i.test(
-        message,
-      )
     }
 
     void restore()
@@ -539,8 +515,6 @@ export declare namespace turnkey {
     }) => Promise<WalletAccount>
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
-    /** Optional hook for classifying Turnkey session/auth failures. */
-    isSessionError?: ((error: unknown) => boolean) | undefined
     /** Loads/logs into existing Turnkey wallet accounts. UI is allowed. */
     loadAccounts: (parameters: {
       /** Initialized Turnkey client. */
