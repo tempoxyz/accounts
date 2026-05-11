@@ -7,11 +7,13 @@
     "check:types": "tsc -b",
     "dev": "vp dev",
     "build": "tsc -b && vp build",
+    "postinstall": "wrangler types",
     "preview": "vp preview"
   },
   "dependencies": {
     "@tanstack/react-query": "latest",
     "accounts": "workspace:*",
+    "mppx": "catalog:",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "viem": "catalog:",

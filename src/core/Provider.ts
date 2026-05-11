@@ -2,7 +2,7 @@ import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import type { Chain, Client as ViemClient, Transport } from 'viem'
+import { http, type Chain, type Client as ViemClient, type Transport } from 'viem'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { parseSiweMessage } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
@@ -53,9 +53,22 @@ export function create(options: create.Options = {}): create.ReturnType {
     chains = [tempo, tempoModerato, tempoDevnet],
     maxAccounts,
     persistCredentials,
+    relay,
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
   } = options
+
+  // Build per-chain transports from `relay` (if set), then layer caller-provided
+  // `transports` on top so explicit per-chain overrides win.
+  const transports = (() => {
+    if (!relay && !options.transports) return undefined
+    const base = relay
+      ? Object.fromEntries(
+          chains.map((c) => [c.id, http(`${relay.replace(/\/$/, '')}/${c.id}`)] as const),
+        )
+      : {}
+    return { ...base, ...(options.transports ?? {}) } as Record<number, Transport>
+  })()
 
   const feePayerConfig = (() => {
     if (!options.feePayer) return undefined
@@ -96,6 +109,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         return undefined
       })(),
       store,
+      transports,
     })
   }
 
@@ -178,7 +192,7 @@ export function create(options: create.Options = {}): create.ReturnType {
               } catch (e) {
                 if (!(e instanceof ox_Provider.UnsupportedMethodError)) throw e
                 // Proxy unknown methods to the RPC node.
-                return await Client.fromChainId(undefined, { chains, store }).request({
+                return await Client.fromChainId(undefined, { chains, store, transports }).request({
                   method: method as any,
                   params: params as any,
                 })
@@ -410,7 +424,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                       throw new RpcResponse.InvalidParamsError({
                         message: '`tokens` is required.',
                       })
-                    const client = Client.fromChainId(decoded?.chainId, { chains, store })
+                    const client = Client.fromChainId(decoded?.chainId, {
+                      chains,
+                      store,
+                      transports,
+                    })
                     return (await Promise.all(
                       tokens.map(async (token) => {
                         const [balance, metadata] = await Promise.all([
@@ -441,7 +459,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                     Hex.assert(id)
                     const hash = Hex.slice(id, 0, 32)
                     const chainId = Hex.fromNumber(Number(Hex.slice(id, 32, 64)))
-                    const client = Client.fromChainId(Number(chainId), { chains, store })
+                    const client = Client.fromChainId(Number(chainId), {
+                      chains,
+                      store,
+                      transports,
+                    })
                     const receipt = await client.request({
                       method: 'eth_getTransactionReceipt',
                       params: [hash],
@@ -839,7 +861,13 @@ export function create(options: create.Options = {}): create.ReturnType {
       getAccount,
       getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
         const { chainId, feePayer } = options
-        return Client.fromChainId(chainId, { chains, feePayer, provider: providerRef, store })
+        return Client.fromChainId(chainId, {
+          chains,
+          feePayer,
+          provider: providerRef,
+          store,
+          transports,
+        })
       },
       store,
     },
@@ -863,7 +891,9 @@ export function create(options: create.Options = {}): create.ReturnType {
     }
   }
 
-  if (options.mpp)
+  if (options.mpp) {
+    const mppOptions = typeof options.mpp === 'object' ? options.mpp : {}
+    const { mode = 'push' } = mppOptions
     Mppx.create({
       methods: [
         mppx_tempo({
@@ -872,10 +902,11 @@ export function create(options: create.Options = {}): create.ReturnType {
             const account = provider.getAccount()
             return Object.assign(client, { account })
           },
-          mode: 'pull',
+          mode,
         }),
       ],
     })
+  }
 
   providerRef = provider
 
@@ -913,10 +944,30 @@ export declare namespace create {
     feePayer?: Client.fromChainId.Options['feePayer']
     /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
     maxAccounts?: number | undefined
-    /** Enable Machine Payment Protocol (mppx) support. @default false */
-    mpp?: boolean | undefined
+    /**
+     * Enable Machine Payment Protocol (mppx) support.
+     *
+     * Pass `true` to enable with defaults, or an options object to configure.
+     *
+     * @default false
+     */
+    mpp?: boolean | mpp.Options | undefined
     /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
     persistCredentials?: boolean | undefined
+    /**
+     * Base URL for a wallet relay endpoint. When set, every chain's transport
+     * defaults to `http(`${relay}/${chainId}`)` — a single endpoint that
+     * routes by chain ID via the path. Per-chain entries in `transports`
+     * override this on a chain-by-chain basis.
+     *
+     * @example
+     * ```ts
+     * const provider = Provider.create({ relay: '/relay' })
+     * // tempo (33139) → http('/relay/33139')
+     * // tempoModerato → http('/relay/<id>')
+     * ```
+     */
+    relay?: string | undefined
     /** Storage adapter for persistence. @default Storage.idb() in browser, Storage.memory() otherwise. */
     storage?: Storage.Storage | undefined
     /**
@@ -924,8 +975,41 @@ export declare namespace create {
      * @default false
      */
     testnet?: boolean | undefined
+    /**
+     * Per-chain transports keyed by chain ID. When omitted, defaults to
+     * `http()` for each chain (uses the chain's default RPC URL).
+     *
+     * @example
+     * ```ts
+     * import { http } from 'viem'
+     * import { tempo, tempoModerato } from 'viem/chains'
+     *
+     * const provider = Provider.create({
+     *   transports: {
+     *     [tempo.id]: http('/relay/' + tempo.id),
+     *     [tempoModerato.id]: http('/relay/' + tempoModerato.id),
+     *   },
+     * })
+     * ```
+     */
+    transports?: Record<number, Transport> | undefined
   }
   type ReturnType = Provider
+}
+
+export declare namespace mpp {
+  /** Options for Machine Payment Protocol (mppx) integration. */
+  type Options = {
+    /**
+     * Charge mode for `mppx/tempo`.
+     *
+     * - `'push'`: Client broadcasts the transaction and sends the tx hash to the server.
+     * - `'pull'`: Client signs the transaction and sends the serialized tx to the server for broadcast.
+     *
+     * @default 'push'
+     */
+    mode?: 'push' | 'pull' | undefined
+  }
 }
 
 /**

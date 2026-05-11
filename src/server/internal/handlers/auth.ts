@@ -217,6 +217,15 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     const challenge = await take(challengeKey(parsed.nonce))
     if (!challenge) return c.json({ error: 'invalid or replayed nonce' }, 409)
 
+    // Require exact byte-equality between the submitted message and the one
+    // we issued. Without this, the wallet (or anyone tampering with the
+    // message in flight) could swap fields we don't otherwise check
+    // (`statement`, `resources`, `uri`, `version`, the address placeholder)
+    // while keeping `nonce`/`domain`/`chainId` and still pass verification —
+    // enabling a phishing-style takeover where a victim signs a benign-looking
+    // message bound to an attacker's session.
+    if (message !== challenge.message) return c.json({ error: 'message mismatch' }, 400)
+
     if (parsed.chainId !== challenge.chainId) return c.json({ error: 'chainId mismatch' }, 400)
 
     // Signature verification via viem's `verifyMessage`. Tempo's chain

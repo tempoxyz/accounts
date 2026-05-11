@@ -2573,3 +2573,88 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
     })
   })
 })
+
+describe('transports', () => {
+  test('default: proxies unknown RPC methods through configured transport', async () => {
+    const calls: { method: string; params?: unknown }[] = []
+    const provider = Provider.create({
+      adapter: secp256k1(),
+      chains: [tempo],
+      storage: Storage.memory(),
+      transports: {
+        [tempo.id]: custom({
+          async request({ method, params }) {
+            calls.push({ method, params })
+            if (method === 'eth_blockNumber') return '0x1234'
+            return null
+          },
+        }),
+      },
+    })
+
+    const result = await provider.request({ method: 'eth_blockNumber' as never })
+    expect(result).toMatchInlineSnapshot(`"0x1234"`)
+    expect(calls.map((c) => c.method)).toMatchInlineSnapshot(`
+      [
+        "eth_blockNumber",
+      ]
+    `)
+  })
+
+  test('behavior: caller-provided transports override relay for the same chain', async () => {
+    const calls: { method: string; params?: unknown }[] = []
+    const provider = Provider.create({
+      adapter: secp256k1(),
+      chains: [tempo],
+      relay: 'http://0.0.0.0:1',
+      storage: Storage.memory(),
+      transports: {
+        [tempo.id]: custom({
+          async request({ method, params }) {
+            calls.push({ method, params })
+            if (method === 'eth_blockNumber') return '0x999'
+            return null
+          },
+        }),
+      },
+    })
+
+    const result = await provider.request({ method: 'eth_blockNumber' as never })
+    expect(result).toMatchInlineSnapshot(`"0x999"`)
+    expect(calls.length).toMatchInlineSnapshot(`1`)
+  })
+
+  test('behavior: relay builds per-chain transport from base URL', async () => {
+    const provider = Provider.create({
+      adapter: secp256k1(),
+      chains: [tempo],
+      relay: 'http://relay.invalid',
+      storage: Storage.memory(),
+    })
+    let url: string | undefined
+    try {
+      await provider.request({ method: 'eth_blockNumber' as never })
+    } catch (e) {
+      const match = (e as Error).message.match(/URL: (\S+)/)
+      url = match?.[1]
+    }
+    expect(url).toMatchInlineSnapshot(`"http://relay.invalid/4217"`)
+  })
+
+  test('behavior: relay strips trailing slash from base URL', async () => {
+    const provider = Provider.create({
+      adapter: secp256k1(),
+      chains: [tempo],
+      relay: 'http://relay.invalid/',
+      storage: Storage.memory(),
+    })
+    let url: string | undefined
+    try {
+      await provider.request({ method: 'eth_blockNumber' as never })
+    } catch (e) {
+      const match = (e as Error).message.match(/URL: (\S+)/)
+      url = match?.[1]
+    }
+    expect(url).toMatchInlineSnapshot(`"http://relay.invalid/4217"`)
+  })
+})

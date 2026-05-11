@@ -12,14 +12,15 @@ import { Transaction } from 'viem/tempo'
 
 import type * as Store from './Store.js'
 
-const clients = new Map<string, Client>()
+const defaultClients = new Map<string, Client>()
+const clients = new WeakMap<object, Map<string, Client>>()
 
 /** Resolves a viem Client for a given chain ID (cached). */
 export function fromChainId(
   chainId: number | undefined,
   options: fromChainId.Options,
 ): Client<Transport, typeof tempo> {
-  const { chains, feePayer: feePayerOption, provider, store } = options
+  const { chains, feePayer: feePayerOption, provider, store, transports } = options
   const feePayerUrl = (() => {
     if (feePayerOption === false) return undefined
     if (typeof feePayerOption === 'string') return normalizeFeePayerUrl(feePayerOption)
@@ -33,16 +34,31 @@ export function fromChainId(
   })()
   const id = chainId ?? store.getState().chainId
   const key = `${id}:${provider ? 'p' : ''}:${feePayerOption === false ? 'no-fp' : (feePayerUrl ?? '')}:${precedence}`
-  let client = clients.get(key)
+  // Scope the cache by `provider` (preferred) or `transports`, falling back
+  // to a shared module-level map. The cache key only encodes a boolean for
+  // `provider`, so without scoping, two providers sharing the same chainId
+  // would hit each other's cached clients and route requests to the wrong
+  // adapter via `providerTransport`.
+  const scope = provider ?? transports
+  const cache = (() => {
+    if (!scope) return defaultClients
+    let map = clients.get(scope)
+    if (!map) {
+      map = new Map()
+      clients.set(scope, map)
+    }
+    return map
+  })()
+  let client = cache.get(key)
   if (!client) {
     const chain = chains.find((c) => c.id === id) ?? chains[0]!
-    const base = http()
+    const base = transports?.[id] ?? http()
     const transport_base = provider ? providerTransport(provider, base) : base
     const transport = feePayerUrl
       ? feePayerTransport(transport_base, feePayerUrl, precedence)
       : transport_base
     client = createClient({ chain, transport, pollingInterval: 1000 })
-    clients.set(key, client)
+    cache.set(key, client)
   }
   return client as never
 }
@@ -66,6 +82,8 @@ export declare namespace fromChainId {
     provider?: ox_Provider.Provider | undefined
     /** Reactive state store. */
     store: Store.Store
+    /** Per-chain transports keyed by chain ID. When omitted, defaults to `http()` (uses the chain's default RPC URL). */
+    transports?: Record<number, Transport> | undefined
   }
 }
 
