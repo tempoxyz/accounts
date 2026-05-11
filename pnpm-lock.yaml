@@ -816,6 +816,9 @@ importers:
 
   playgrounds/web:
     dependencies:
+      '@privy-io/js-sdk-core':
+        specifier: ^0.61.3
+        version: 0.61.3(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))
       '@turnkey/core':
         specifier: 1.13.0
         version: 1.13.0(@react-native-async-storage/async-storage@3.0.2(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5))(typescript@5.9.3)(zod@4.4.3)
@@ -3129,6 +3132,37 @@ packages:
   '@poppinss/exception@1.2.3':
     resolution: {integrity: sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw==}
 
+  '@privy-io/api-base@1.9.0':
+    resolution: {integrity: sha512-8OJ2chadFcgUwr+Kqim0z5paIdadEdMH8pW94WJz0O3s2X4aX7vhN1eqiNZqcdgSIk9FHm8c3A+/epJUwiTYuQ==}
+
+  '@privy-io/api-types@0.10.0':
+    resolution: {integrity: sha512-nhEQFyVAtNEyDg/fKDOy83Irug3/RIVo5nVRveCZFHcLXcOsJgYHiDfRrKPe2dciblAEOFzwxjhdNOXBcWQ93w==}
+
+  '@privy-io/chains@0.2.0':
+    resolution: {integrity: sha512-JdBpqwR47jLVCPKYTsXZnU8uVpJvPtpFnxLTtHgwNxVP+cDf1N/J6zhktjHZ1nrCbBLjcViIlSMV4LN2tOpI6w==}
+
+  '@privy-io/encoding@0.1.3':
+    resolution: {integrity: sha512-tvSuC0umDmkfmdKe339P/IZzqh04y7WQ7fOB5iU0aQoxdEivjO0hAD4GHxNOTdn9be9hS2WfIp7u/q6h7ZvvTg==}
+
+  '@privy-io/ethereum@0.0.11':
+    resolution: {integrity: sha512-8G63lwvBGqov1stRtQvvH+PdWRz/WWrNbL2RrT7i91DXHQ+pEBwMP0HtblRoP3RStHn7LqKCH+7aT/5IQUfgZw==}
+    peerDependencies:
+      viem: ^2.48.8
+
+  '@privy-io/js-sdk-core@0.61.3':
+    resolution: {integrity: sha512-JsfHGACfP6C6j1HbNvl0YxeR68MOgRKvE1X60tNabrXjyMv5hRFgN3yrnc1vkJTWilzeMW/CtphriEpDTKsy4w==}
+    peerDependencies:
+      permissionless: ^0.2.47
+      viem: ^2.48.8
+    peerDependenciesMeta:
+      permissionless:
+        optional: true
+      viem:
+        optional: true
+
+  '@privy-io/routes@0.0.13':
+    resolution: {integrity: sha512-t+w0NfhnX+H4GGEehHis/BQfa/OTHa0hH+/ALGabE0qGjzUOhMLltSBx3rcWGiFXy7Ke8zqvfk8H4/TF5tUorg==}
+
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
 
@@ -5170,6 +5204,10 @@ packages:
   caniuse-lite@1.0.30001790:
     resolution: {integrity: sha512-bOoxfJPyYo+ds6W0YfptaCWbFnJYjh2Y1Eow5lRv+vI2u8ganPZqNm1JwNh0t2ELQCqIWg4B3dWEusgAmsoyOw==}
 
+  canonicalize@2.1.0:
+    resolution: {integrity: sha512-F705O3xrsUtgt98j7leetNhTWPe+5S72rlL5O4jA1pKqBVQ/dT1O1D6PFxmSXvc0SUOinWS57DKx0I3CHrXJHQ==}
+    hasBin: true
+
   cbor-js@0.1.0:
     resolution: {integrity: sha512-7sQ/TvDZPl7csT1Sif9G0+MA0I0JOVah8+wWlJVQdVEgIbCzlN/ab3x+uvMNsc34TUvO6osQTAmB2ls80JX6tw==}
 
@@ -6147,6 +6185,9 @@ packages:
   fetch-nodeshim@0.4.10:
     resolution: {integrity: sha512-m6I8ALe4L4XpdETy7MJZWs6L1IVMbjs99bwbpIKphxX+0CTns4IKDWJY0LWfr4YsFjfg+z1TjzTMU8lKl8rG0w==}
 
+  fetch-retry@6.0.0:
+    resolution: {integrity: sha512-BUFj1aMubgib37I3v4q78fYo63Po7t4HUPTpQ6/QE6yK6cIQrP+W43FYToeTEyg5m2Y7eFUtijUuAv/PDlWuag==}
+
   figures@6.1.0:
     resolution: {integrity: sha512-d+l3qxjSesT4V7v2fh+QnmFnUWv9lSpjarhShNTgBOfA0ttejbQUAlHLitbjkoRiDulW0OPoQPYIGhIC8ohejg==}
     engines: {node: '>=18'}
@@ -6628,8 +6669,12 @@ packages:
     resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
     hasBin: true
 
-  jose@6.2.3:
-    resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
+  jose@4.15.9:
+    resolution: {integrity: sha512-1vUQX+IdDMVPj4k8kOxgUqlcK518yluMuGZwqlr44FS1ppZB/5GWh4rZG89erpOBOJjU/OBsnCVFfapsRz6nEA==}
+
+  js-cookie@3.0.5:
+    resolution: {integrity: sha512-cEiJEAEoIbWfCZYKWhVwFuvPX1gETRYPw6LlaTKoxD3s2AkXzkCjnp6h0V77ozyqj0jakteJ4YqDJT830+lVGw==}
+    engines: {node: '>=14'}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -6712,6 +6757,9 @@ packages:
   leven@3.1.0:
     resolution: {integrity: sha512-qsda+H8jTaUaN/x5vzW2rzc+8Rw4TAQ/4KjB46IwK5VH+IlVeeeje/EoZRpiXvIqjFgK84QffqPztGI3VBLG1A==}
     engines: {node: '>=6'}
+
+  libphonenumber-js@1.13.0:
+    resolution: {integrity: sha512-N12qmdu0BM1wVNkMKYOoJR4fTOZDblrKNsOqGbKoUZrYsYLX2zx1O5X+vhK0WJPBU/+/kh9tCr8x0a7t1puGWg==}
 
   lighthouse-logger@1.4.2:
     resolution: {integrity: sha512-gPWxznF6TKmUHrOQjlVo2UbaL2EJ71mb2CCeRs/2qBpi4L/g4LUVc9+3lKQ6DTUZwJswfM7ainGrLO1+fOqa2g==}
@@ -8288,6 +8336,9 @@ packages:
     resolution: {integrity: sha512-61g9pCh0Vnh7IutZjtLGGpTA355+OPn2TyDv/6ivP2h/AdAVX9azsoxmg2/M6nZeQZNYBEwIcsne1mJd9oQItQ==}
     engines: {node: '>= 18'}
 
+  set-cookie-parser@2.7.2:
+    resolution: {integrity: sha512-oeM1lpU/UvhTxw+g3cIfxXHyJRc/uidd3yK1P242gzHds0udQBYzs3y8j4gCCW+ZJ7ad0yctld8RYO+bdurlvw==}
+
   setprototypeof@1.2.0:
     resolution: {integrity: sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==}
 
@@ -9031,6 +9082,11 @@ packages:
 
   uuid@7.0.3:
     resolution: {integrity: sha512-DPSke0pXhTZgoF/d+WSt2QaKMCFSfx7QegxEWT+JOuHF5aWrKEn0G+ztjuJg/gG8/ItK+rbPCD/yNv8yyih6Cg==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+    hasBin: true
+
+  uuid@9.0.1:
+    resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
     deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
@@ -11794,6 +11850,45 @@ snapshots:
 
   '@poppinss/exception@1.2.3': {}
 
+  '@privy-io/api-base@1.9.0':
+    dependencies:
+      zod: 3.25.76
+
+  '@privy-io/api-types@0.10.0': {}
+
+  '@privy-io/chains@0.2.0': {}
+
+  '@privy-io/encoding@0.1.3':
+    dependencies:
+      '@scure/base': 1.2.6
+
+  '@privy-io/ethereum@0.0.11(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))':
+    dependencies:
+      viem: 2.48.8(typescript@5.9.3)(zod@4.4.3)
+
+  '@privy-io/js-sdk-core@0.61.3(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))':
+    dependencies:
+      '@privy-io/api-base': 1.9.0
+      '@privy-io/api-types': 0.10.0
+      '@privy-io/chains': 0.2.0
+      '@privy-io/encoding': 0.1.3
+      '@privy-io/ethereum': 0.0.11(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))
+      '@privy-io/routes': 0.0.13
+      canonicalize: 2.1.0
+      eventemitter3: 5.0.1
+      fetch-retry: 6.0.0
+      jose: 4.15.9
+      js-cookie: 3.0.5
+      libphonenumber-js: 1.13.0
+      set-cookie-parser: 2.7.2
+      uuid: 9.0.1
+    optionalDependencies:
+      viem: 2.48.8(typescript@5.9.3)(zod@4.4.3)
+
+  '@privy-io/routes@0.0.13':
+    dependencies:
+      '@privy-io/api-types': 0.10.0
+
   '@protobufjs/aspromise@1.1.2': {}
 
   '@protobufjs/base64@1.1.2': {}
@@ -14401,6 +14496,8 @@ snapshots:
 
   caniuse-lite@1.0.30001790: {}
 
+  canonicalize@2.1.0: {}
+
   cbor-js@0.1.0: {}
 
   ccount@2.0.1: {}
@@ -15494,6 +15591,8 @@ snapshots:
 
   fetch-nodeshim@0.4.10: {}
 
+  fetch-retry@6.0.0: {}
+
   figures@6.1.0:
     dependencies:
       is-unicode-supported: 2.1.0
@@ -16013,7 +16112,9 @@ snapshots:
 
   jiti@2.6.1: {}
 
-  jose@6.2.3: {}
+  jose@4.15.9: {}
+
+  js-cookie@3.0.5: {}
 
   js-tokens@4.0.0: {}
 
@@ -16074,6 +16175,8 @@ snapshots:
       readable-stream: 2.3.8
 
   leven@3.1.0: {}
+
+  libphonenumber-js@1.13.0: {}
 
   lighthouse-logger@1.4.2:
     dependencies:
@@ -18350,6 +18453,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  set-cookie-parser@2.7.2: {}
+
   setprototypeof@1.2.0: {}
 
   sha256-uint8array@0.10.7: {}
@@ -19046,6 +19151,8 @@ snapshots:
   uuid@11.1.1: {}
 
   uuid@7.0.3: {}
+
+  uuid@9.0.1: {}
 
   valibot@1.3.1(typescript@5.9.3):
     optionalDependencies:
