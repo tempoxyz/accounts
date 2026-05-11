@@ -254,15 +254,61 @@ function getPrivyAdapterClient() {
   const appId = import.meta.env.VITE_PRIVY_APP_ID
   if (!appId) throw new Error('VITE_PRIVY_APP_ID is required for the Privy adapter.')
 
-  privyClient ??= new Privy({
-    appId,
-    ...(import.meta.env.VITE_PRIVY_CLIENT_ID
-      ? { clientId: import.meta.env.VITE_PRIVY_CLIENT_ID }
-      : {}),
-    storage: new PrivyLocalStorage(),
-  })
+  if (!privyClient) {
+    privyClient = new Privy({
+      appId,
+      ...(import.meta.env.VITE_PRIVY_CLIENT_ID
+        ? { clientId: import.meta.env.VITE_PRIVY_CLIENT_ID }
+        : {}),
+      storage: new PrivyLocalStorage(),
+    })
+    mountPrivyEmbeddedWalletIframe(privyClient)
+  }
 
   return privyClient
+}
+
+/**
+ * Mount the Privy embedded-wallet iframe and wire it to the SDK so signing works.
+ *
+ * `@privy-io/js-sdk-core` does not ship its own iframe — that is normally provided
+ * by `PrivyProvider` in `@privy-io/react-auth`. Without an iframe, any signing call
+ * fails with `Embedded wallet proxy not initialized`. The React provider does the
+ * exact same wiring under the hood.
+ */
+function mountPrivyEmbeddedWalletIframe(client: Privy) {
+  const iframe = document.createElement('iframe')
+  iframe.src = client.embeddedWallet.getURL()
+  iframe.title = 'Privy embedded wallet'
+  iframe.allow = 'publickey-credentials-get *; clipboard-write *'
+  iframe.style.position = 'fixed'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  iframe.style.visibility = 'hidden'
+
+  iframe.addEventListener('load', () => {
+    if (!iframe.contentWindow) return
+    const targetOrigin = new URL(iframe.src).origin
+    client.setMessagePoster({
+      postMessage: (message, _targetOrigin, transfer) =>
+        iframe.contentWindow!.postMessage(
+          message,
+          targetOrigin,
+          transfer ? [transfer] : undefined,
+        ),
+      reload: () => {
+        iframe.src = client.embeddedWallet.getURL()
+      },
+    })
+  })
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== iframe.contentWindow) return
+    client.embeddedWallet.onMessage(event.data)
+  })
+
+  document.body.appendChild(iframe)
 }
 
 async function getPrivyEmbeddedWallets(client: Privy): Promise<readonly privy.EmbeddedWallet[]> {
