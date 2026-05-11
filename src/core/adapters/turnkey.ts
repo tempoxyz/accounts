@@ -193,7 +193,6 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       walletAccount: turnkey.WalletAccount
     }) {
       const { client, payload, walletAccount } = parameters
-      await requireSession()
       const result = await client.httpClient
         .signRawPayload({
           encoding: 'PAYLOAD_ENCODING_HEXADECIMAL',
