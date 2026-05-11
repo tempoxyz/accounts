@@ -329,12 +329,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
 
     function isSessionError(error: unknown) {
       const code = getTurnkeyErrorCode(error)
-      if (code && turnkeySessionErrorCodes.has(code)) return true
-
-      const message = error instanceof Error ? error.message : String(error)
-      return /expired api key|no valid authentication signature found|could not find public key in organization or its parent organization|could not verify api key signature|cannot authenticate public API activity request without a stamp|request not authorized/i.test(
-        message,
-      )
+      return !!code && turnkeySessionErrorCodes.has(code)
     }
 
     function getTurnkeyErrorCode(error: unknown): string | undefined {
