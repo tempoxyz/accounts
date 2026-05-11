@@ -145,6 +145,20 @@ export function create(options: create.Options = {}): create.ReturnType {
       throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
   }
 
+  /** Returns connected account addresses with the active account first. */
+  function getAccountAddresses() {
+    const { accounts, activeAccount } = store.getState()
+    if (accounts.length === 0) return []
+    const active = accounts[activeAccount]?.address
+    const activeIdx = accounts.findIndex((a) => a.address === active)
+    const sorted = [...accounts]
+    if (activeIdx >= 0) {
+      const [account] = sorted.splice(activeIdx, 1)
+      return [account!.address, ...sorted.map((a) => a.address)]
+    }
+    return sorted.map((a) => a.address)
+  }
+
   /** Returns accounts to persist. When `persistAccounts` is set, merges new accounts with existing ones. */
   function resolveAccounts(accounts: readonly Account.Store[]) {
     if (!instance.persistAccounts) return accounts
@@ -200,20 +214,8 @@ export function create(options: create.Options = {}): create.ReturnType {
 
               const result = await (async () => {
                 switch (request.method) {
-                  case 'eth_accounts': {
-                    const { accounts, activeAccount } = store.getState()
-                    if (accounts.length === 0) return []
-                    const activeAddr = accounts[activeAccount]?.address
-                    const activeIdx = accounts.findIndex((a) => a.address === activeAddr)
-                    const sorted = [...accounts]
-                    if (activeIdx >= 0) {
-                      const [active] = sorted.splice(activeIdx, 1)
-                      return [active!.address, ...sorted.map((a) => a.address)]
-                    }
-                    return sorted.map(
-                      (a) => a.address,
-                    ) satisfies Rpc.eth_accounts.Encoded['returns']
-                  }
+                  case 'eth_accounts':
+                    return getAccountAddresses() satisfies Rpc.eth_accounts.Encoded['returns']
 
                   case 'eth_chainId':
                     return Hex.fromNumber(
@@ -221,6 +223,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                     ) satisfies Rpc.eth_chainId.Encoded['returns']
 
                   case 'eth_requestAccounts': {
+                    const existing = getAccountAddresses()
+                    if (existing.length > 0)
+                      return existing satisfies Rpc.eth_requestAccounts.Encoded['returns']
+
                     const { accounts } = await actions.loadAccounts(undefined, {
                       method: 'wallet_connect',
                       params: undefined,

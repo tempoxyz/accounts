@@ -56,27 +56,6 @@ describe('turnkey', () => {
     )
   })
 
-  test('behavior: plain loadAccounts reuses an existing connection', async () => {
-    const { adapter, client } = setup()
-
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
-    const result = await adapter.actions.loadAccounts(undefined, {
-      method: 'wallet_connect',
-      params: undefined,
-    })
-
-    expect(client.loadCalls).toMatchInlineSnapshot(`1`)
-    expect(result).toMatchInlineSnapshot(`
-      {
-        "accounts": [
-          {
-            "address": "0x0000000000000000000000000000000000000001",
-          },
-        ],
-      }
-    `)
-  })
-
   test('default: loadAccounts can provision an external access key', async () => {
     const { adapter, client } = setup()
 

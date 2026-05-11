@@ -18,6 +18,7 @@ import { headlessWebAuthn, secp256k1 } from '../../test/adapters.js'
 import { accounts, chain, getClient, http } from '../../test/config.js'
 import { createServer, type Server } from '../../test/utils.js'
 import * as Handler from '../server/Handler.js'
+import { local as core_local } from './adapters/local.js'
 import * as Expiry from './Expiry.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
@@ -94,6 +95,28 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       await connect(provider)
       const result = await provider.request({ method: 'eth_requestAccounts' })
       expect(result.length).toBeGreaterThanOrEqual(1)
+    })
+
+    test('behavior: returns connected accounts without reloading', async () => {
+      let calls = 0
+      const provider = Provider.create({
+        adapter: core_local({
+          loadAccounts: async () => {
+            calls++
+            return { accounts: [accounts[0]!] }
+          },
+        }),
+      })
+
+      await provider.request({ method: 'eth_requestAccounts' })
+      const result = await provider.request({ method: 'eth_requestAccounts' })
+
+      expect(calls).toMatchInlineSnapshot(`1`)
+      expect(result).toMatchInlineSnapshot(`
+        [
+          "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        ]
+      `)
     })
   })
 

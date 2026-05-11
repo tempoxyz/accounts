@@ -402,18 +402,6 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
               '`digest` and `personalSign` cannot both be set on `wallet_connect`.',
             )
 
-          if (
-            !authorizeAccessKey &&
-            !personalSign &&
-            !parameters?.digest &&
-            !parameters?.selectAccount
-          ) {
-            await restore()
-            const session = walletAccounts.length > 0 ? await getValidSession() : undefined
-            if (session && walletAccounts.length > 0)
-              return { accounts: walletAccounts.map((account) => toStoreAccount(account)) }
-          }
-
           const turnkeyClient = await getTurnkeyClient()
           walletAccounts = await options.loadAccounts({ client: turnkeyClient, parameters })
           await requireSession()
