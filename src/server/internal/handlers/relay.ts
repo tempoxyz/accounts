@@ -496,6 +496,23 @@ export function relay(options: relay.Options = {}): Handler {
       case 'eth_sendRawTransactionSync': {
         try {
           if (!feePayerOptions) {
+            // For eth_sendRawTransaction(Sync), the RPC node can handle
+            // these natively. But eth_signRawTransaction is a signing
+            // method that only the relay can fulfill — forwarding it to
+            // the node will return an opaque "Method not found".
+            if (request.method === 'eth_signRawTransaction') {
+              return RpcResponse.from(
+                {
+                  error: {
+                    code: -32601,
+                    message:
+                      'eth_signRawTransaction requires a fee payer to be configured on the relay. ' +
+                      'Set the `feePayer` option in `Handler.relay()` to enable transaction sponsorship.',
+                  },
+                },
+                { request },
+              )
+            }
             const result = await client.request(request as never)
             return RpcResponse.from({ result }, { request })
           }
