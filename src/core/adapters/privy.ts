@@ -178,7 +178,7 @@ export function privy<const client extends privy.Client>(
       return await client.embeddedWallet.getProvider(wallet)
     }
 
-    async function restoreAccounts() {
+    async function restoreWalletAccounts() {
       const client = await getPrivyClient()
       await requireSession(client)
       const user = await getUser(client)
@@ -186,8 +186,6 @@ export function privy<const client extends privy.Client>(
         throw new ox_Provider.DisconnectedError({
           message: 'Privy session disconnected.',
         })
-
-      if (options.restoreAccounts) return await options.restoreAccounts({ client, user })
 
       return await Promise.all(
         embeddedWallets(user).map(async (wallet) => ({
@@ -214,7 +212,7 @@ export function privy<const client extends privy.Client>(
       }
 
       restore_promise = (async () => {
-        const loaded = await restoreAccounts().catch((error) => {
+        const loaded = await restoreWalletAccounts().catch((error) => {
           if (!isSessionError(error) && !(error instanceof ox_Provider.DisconnectedError))
             throw error
           clear()
@@ -734,18 +732,6 @@ export declare namespace privy {
       client: client
       /** Provider load-accounts parameters. */
       parameters?: Adapter.loadAccounts.Parameters | undefined
-    }) => Promise<readonly WalletAccount[]>
-    /**
-     * Loads accounts from the current Privy session without showing UI.
-     *
-     * Use this with Privy Core clients that require app-owned entropy or secure-context
-     * handling before an embedded wallet provider can be rebuilt.
-     */
-    restoreAccounts?: (parameters: {
-      /** Initialized Privy client. */
-      client: client
-      /** Current authenticated Privy user. */
-      user: User
     }) => Promise<readonly WalletAccount[]>
     /** Display name of the provider. @default "Privy" */
     name?: string | undefined

@@ -146,48 +146,6 @@ describe('privy', () => {
     `)
   })
 
-  test('default: restore can use an app-provided silent account loader', async () => {
-    const storage = Storage.memory()
-    const store = Store.create({ chainId: 1, storage })
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
-    const provider = createProvider()
-    const client = createClient({ accounts: [] })
-    let restoreCalls = 0
-    let loadCalls = 0
-    const adapter = privy({
-      client,
-      createAccount: async () => ({ address, provider }),
-      loadAccounts: async () => {
-        loadCalls++
-        return []
-      },
-      restoreAccounts: async () => {
-        restoreCalls++
-        return [{ address, provider }]
-      },
-    })({
-      getAccount: (() => {
-        throw new Error('not implemented')
-      }) as never,
-      getClient: (() => ({ chain: { id: 1 } })) as never,
-      storage,
-      store,
-    })
-
-    await adapter.actions.signPersonalMessage(
-      { address, data: '0x68656c6c6f' },
-      { method: 'personal_sign', params: ['0x68656c6c6f', address] },
-    )
-
-    expect(loadCalls).toMatchInlineSnapshot(`0`)
-    expect(restoreCalls).toMatchInlineSnapshot(`1`)
-    expect(provider.signPayloads).toMatchInlineSnapshot(`
-      [
-        "0x50b2c43fd39106bafbba0da34fc430e1f91e3c96ea2acee2bc34119f92b37750",
-      ]
-    `)
-  })
-
   test('default: signTypedData hashes typed data before raw signing', async () => {
     const { adapter, provider } = setup()
     await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })

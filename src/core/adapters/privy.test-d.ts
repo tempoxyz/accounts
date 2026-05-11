@@ -45,43 +45,6 @@ describe('privy', () => {
     }>().toMatchTypeOf<privy.Client>()
   })
 
-  test('restoreAccounts preserves the concrete client type', () => {
-    const client = {
-      custom: {
-        getWallets: async () => [] as privy.WalletAccount[],
-      },
-      auth: {
-        async logout() {},
-      },
-      embeddedWallet: {
-        async getProvider() {
-          return { request: async () => '0x0' }
-        },
-      },
-      async getAccessToken() {
-        return 'token'
-      },
-      initialize() {},
-      user: {
-        async get() {
-          return { user: { id: 'user_1' } }
-        },
-      },
-    }
-    privy({
-      client,
-      createAccount: async () => {
-        return { address: '0x0', provider: { request: async () => '0x0' } }
-      },
-      loadAccounts: async () => [],
-      restoreAccounts: async ({ client, user }) => {
-        expectTypeOf(client.custom.getWallets).toEqualTypeOf<() => Promise<privy.WalletAccount[]>>()
-        expectTypeOf(user.id).toEqualTypeOf<string>()
-        return []
-      },
-    })
-  })
-
   test('callback accounts only require address and provider', () => {
     expectTypeOf<privy.WalletAccount>().toMatchTypeOf<{
       address: string
