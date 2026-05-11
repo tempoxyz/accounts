@@ -43,14 +43,17 @@ export function normalizeFillTransactionRequest(
   return { ...rest, ...withKeyAuthorization, calls: [call] }
 }
 
+/**
+ * Forwards `keyAuthorization` to the chain in RPC shape. Pass-through
+ * when already RPC; convert via `KeyAuthorization.toRpc` when internal.
+ */
 function normalizeKeyAuthorization(value: unknown) {
   if (!value || typeof value !== 'object') return undefined
   const ka = value as Record<string, unknown>
   const signature = ka.signature as Record<string, unknown> | undefined
   if (!signature || typeof signature !== 'object') return undefined
   const isInternal = typeof signature.signature === 'object' && signature.signature !== null
-  if (isInternal) return undefined
-  return KeyAuthorization.fromRpc(value as never)
+  return isInternal ? KeyAuthorization.toRpc(value as never) : value
 }
 
 function normalizeFillValue(value: unknown) {
