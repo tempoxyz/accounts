@@ -1,4 +1,5 @@
 import type { CreateSubOrgParams, TurnkeyClientMethods } from '@turnkey/core'
+import { useSyncExternalStore } from 'react'
 
 /** Turnkey email OTP flow mode requested by the playground adapter. */
 export type TurnkeyEmailOtpMode = 'login' | 'register'
@@ -11,8 +12,6 @@ export type TurnkeyEmailOtpClient = {
   createApiKeyPair: TurnkeyClientMethods['createApiKeyPair']
   /** Sends an OTP code to an email address. */
   initOtp: TurnkeyClientMethods['initOtp']
-  /** Logs in with a verified OTP token. */
-  loginWithOtp: TurnkeyClientMethods['loginWithOtp']
   /** Registers with a verified OTP token. */
   signUpWithOtp: TurnkeyClientMethods['signUpWithOtp']
   /** Verifies an OTP code. */
@@ -40,15 +39,9 @@ export type TurnkeyEmailOtpRequest = TurnkeyEmailOtpOptions & {
 let request: TurnkeyEmailOtpRequest | undefined
 const listeners = new Set<() => void>()
 
-/** Subscribe to active email OTP request changes. */
-export function subscribeTurnkeyEmailOtp(listener: () => void) {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
-
-/** Returns the current email OTP request for `useSyncExternalStore`. */
-export function getTurnkeyEmailOtpSnapshot() {
-  return request
+/** Returns the active email OTP request for React rendering. */
+export function useTurnkeyEmailOtpRequest() {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
 /** Request an email OTP ceremony from the React playground UI. */
@@ -81,4 +74,13 @@ export function rejectTurnkeyEmailOtp(error: Error) {
 
 function emit() {
   for (const listener of listeners) listener()
+}
+
+function getSnapshot() {
+  return request
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }

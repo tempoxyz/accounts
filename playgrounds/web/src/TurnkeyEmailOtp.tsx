@@ -1,22 +1,17 @@
 import { OtpType } from '@turnkey/core'
 import type { FormEvent, MouseEvent } from 'react'
-import { useEffect, useSyncExternalStore, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Input } from 'regen-ui'
 
 import {
-  getTurnkeyEmailOtpSnapshot,
   rejectTurnkeyEmailOtp,
   resolveTurnkeyEmailOtp,
-  subscribeTurnkeyEmailOtp,
+  useTurnkeyEmailOtpRequest,
 } from './turnkeyOtpStore.js'
 
 /** Email OTP dialog used by the Turnkey playground adapter. */
 export function TurnkeyEmailOtp() {
-  const request = useSyncExternalStore(
-    subscribeTurnkeyEmailOtp,
-    getTurnkeyEmailOtpSnapshot,
-    getTurnkeyEmailOtpSnapshot,
-  )
+  const request = useTurnkeyEmailOtpRequest()
   const [code, setCode] = useState('')
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string>()
