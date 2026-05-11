@@ -85,6 +85,7 @@ export let theme: DialogNs.Theme | undefined
 export let provider: ProviderValue = createProvider('tempoWallet')
 let turnkeyClient: TurnkeyClient | undefined
 let privyClient: Privy | undefined
+let privyIframeReady: Promise<void> | undefined
 
 export function createProvider(adapterType: AdapterType): ProviderValue {
   if (adapterType === 'tempoWallet')
@@ -283,19 +284,24 @@ function mountPrivyEmbeddedWalletIframe(client: Privy) {
   iframe.style.border = '0'
   iframe.style.visibility = 'hidden'
 
-  iframe.addEventListener('load', () => {
-    if (!iframe.contentWindow) return
-    const targetOrigin = new URL(iframe.src).origin
-    client.setMessagePoster({
-      postMessage: (message, _targetOrigin, transfer) =>
-        iframe.contentWindow!.postMessage(
-          message,
-          targetOrigin,
-          transfer ? [transfer] : undefined,
-        ),
-      reload: () => {
-        iframe.src = client.embeddedWallet.getURL()
-      },
+  privyIframeReady = new Promise<void>((resolve) => {
+    iframe.addEventListener('load', async () => {
+      if (!iframe.contentWindow) return
+      const targetOrigin = new URL(iframe.src).origin
+      client.setMessagePoster({
+        postMessage: (message, _targetOrigin, transfer) =>
+          iframe.contentWindow!.postMessage(
+            message,
+            targetOrigin,
+            transfer ? [transfer] : undefined,
+          ),
+        reload: () => {
+          iframe.src = client.embeddedWallet.getURL()
+        },
+      })
+      // Wait for the iframe-side proxy to acknowledge it's ready before any wallet ops.
+      await client.embeddedWallet.ping(15_000)
+      resolve()
     })
   })
 
@@ -308,6 +314,7 @@ function mountPrivyEmbeddedWalletIframe(client: Privy) {
 }
 
 async function getPrivyEmbeddedWallets(client: Privy): Promise<readonly privy.EmbeddedWallet[]> {
+  await privyIframeReady
   const { user } = await client.user.get()
   const wallets = getAllUserEmbeddedEthereumWallets(user)
   return Promise.all(
