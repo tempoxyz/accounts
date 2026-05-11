@@ -24,7 +24,7 @@ catalog:
   '@types/react-dom': ^19.2.3
   '@vitejs/devtools': ^0.1.15
   '@vitejs/plugin-react': ^5.2.0
-  '@wagmi/core': ^3.4.9
+  '@wagmi/core': ^3.4.10
   hono: ^4.12.18
   mppx: ^0.6.19
   ox: ~0.14.18
@@ -38,7 +38,7 @@ catalog:
   vite: ^8.0.5
   vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
-  wagmi: ^3.6.11
+  wagmi: ^3.6.12
   wrangler: ^4.85.0
   zod: ^4.3.6
 
@@ -46,6 +46,8 @@ minimumReleaseAge: 1440
 
 minimumReleaseAgeExclude:
   - '@voidzero-dev/*'
+  - '@wagmi/connectors'
+  - '@wagmi/core'
   - incur
   - mppx
   - ox
@@ -53,6 +55,7 @@ minimumReleaseAgeExclude:
   - secretlint
   - viem
   - vite-plus
+  - wagmi
 
 nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=DeprecationWarning'
 
