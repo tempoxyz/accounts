@@ -1,8 +1,14 @@
-packages:
-  - .
-  - examples/*
-  - playgrounds/*
-  - ref-impls/*
+allowBuilds:
+  bufferutil: true
+  cloudflared: true
+  cpu-features: true
+  esbuild: true
+  protobufjs: true
+  sharp: true
+  simple-git-hooks: true
+  ssh2: true
+  utf-8-validate: true
+  workerd: true
 
 blockExoticSubdeps: true
 
@@ -18,8 +24,9 @@ catalog:
   '@types/react-dom': ^19.2.3
   '@vitejs/devtools': ^0.1.15
   '@vitejs/plugin-react': ^5.2.0
-  '@wagmi/core': ^3.4.7
+  '@wagmi/core': ^3.4.9
   hono: ^4.12.14
+  mppx: ^0.6.19
   ox: ~0.14.18
   prool: ~0.2.4
   react: ^19.2.5
@@ -31,12 +38,14 @@ catalog:
   vite: ^8.0.5
   vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
-  wagmi: ^3.6.8
+  wagmi: ^3.6.11
   wrangler: ^4.85.0
   zod: ^4.3.6
+
 minimumReleaseAge: 1440
 
 minimumReleaseAgeExclude:
+  - '@voidzero-dev/*'
   - incur
   - mppx
   - ox
@@ -44,25 +53,36 @@ minimumReleaseAgeExclude:
   - secretlint
   - viem
   - vite-plus
-  - '@voidzero-dev/*'
+
 nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=DeprecationWarning'
 
-allowBuilds:
-  bufferutil: true
-  cloudflared: true
-  cpu-features: true
-  esbuild: true
-  protobufjs: true
-  sharp: true
-  simple-git-hooks: true
-  ssh2: true
-  utf-8-validate: true
-  workerd: true
+overrides:
+  accounts: 'workspace:*'
+  ox: '~0.14.18'
+  protobufjs: '7.5.5'
+  react: 'catalog:'
+  react-dom: 'catalog:'
+  viem: 'catalog:'
+  vite-plus: 'catalog:'
+  vp: 'catalog:'
+  wrangler: 'catalog:'
+
+packages:
+  - .
+  - examples/*
+  - playgrounds/*
+  - ref-impls/*
+
+peerDependencyRules:
+  allowedVersions:
+    accounts: '*'
 
 shellEmulator: true
 
 strictDepBuilds: true
+
 trustPolicy: no-downgrade
+
 trustPolicyExclude:
   - chokidar@4.0.3
   - semver@6.3.1

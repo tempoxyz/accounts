@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "accounts": "workspace:*",
-    "mppx": "0.6.5",
+    "mppx": "catalog:",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "regen-ui": "^0.3.0",
