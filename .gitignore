@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 .wrangler
+.vercel
 .vocs
 data
 dist
