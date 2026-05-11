@@ -163,6 +163,29 @@ describe('default', () => {
     `)
   })
 
+  test('behavior: returns actionable error for eth_signRawTransaction without feePayer', async () => {
+    const response = await fetch(server.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_signRawTransaction',
+        params: ['0x00'],
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      id: number
+      jsonrpc: string
+      error: { code: number; message: string }
+    }
+    expect(body.error.code).toBe(-32601)
+    expect(body.error.message).toContain('fee payer')
+    expect(body.error.message).toContain('Handler.relay()')
+  })
+
   test('behavior: handles JSON-RPC batch requests', async () => {
     const response = await fetch(server.url, {
       method: 'POST',
