@@ -1,5 +1,11 @@
 # accounts
 
+## 0.10.1
+
+### Patch Changes
+
+- f1cddef: Bumped `hono` to `^4.12.18`.
+
 ## 0.10.0
 
 ### Minor Changes
