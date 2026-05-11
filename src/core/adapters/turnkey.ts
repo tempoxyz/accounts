@@ -146,8 +146,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }
 
     async function withSession<result>(fn: () => Promise<result>) {
-      const session = await getValidSession()
-      if (!session) throw new ox_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
+      await requireSession()
 
       try {
         return await fn()
@@ -160,17 +159,14 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       }
     }
 
-    async function assertSession() {
+    async function requireSession() {
       const session = await getValidSession()
-      if (session) return
-      throw new ox_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
+      if (!session) throw new ox_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
     }
 
     async function accountForSigning(address: Address | undefined) {
       await restore()
-
-      const session = await getValidSession()
-      if (!session) throw new ox_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
+      await requireSession()
 
       const address_ = address ?? store.getState().accounts[store.getState().activeAccount]?.address
       if (!address_) throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
@@ -355,7 +351,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
 
           const client_ = await client()
           const account = await options.createAccount({ client: client_, parameters })
-          await assertSession()
+          await requireSession()
           walletAccounts = [account]
           restore_promise = undefined
 
@@ -388,7 +384,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
 
           const client_ = await client()
           walletAccounts = await options.loadAccounts({ client: client_, parameters })
-          await assertSession()
+          await requireSession()
           restore_promise = undefined
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters?.digest
