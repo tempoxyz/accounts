@@ -602,6 +602,9 @@ importers:
       regen-ui:
         specifier: ^0.3.0
         version: 0.3.0(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(typescript@5.9.3)(vite@8.0.10)(zod@4.4.3)
+      use-sync-external-store:
+        specifier: ^1.6.0
+        version: 1.6.0(react@19.2.5)
       viem:
         specifier: ^2.48.8
         version: 2.48.8(typescript@5.9.3)(zod@4.4.3)
