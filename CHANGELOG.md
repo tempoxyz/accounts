@@ -1,5 +1,12 @@
 # accounts
 
+## 0.10.2
+
+### Patch Changes
+
+- 4095a24: Fixed support for external `feePayer` URLs on `Handler.relay`.
+- 4095a24: Added `feeToken` to `Handler.relay`'s `feePayer` option so the sponsor can pin the fee token used on sponsored fills.
+
 ## 0.10.1
 
 ### Patch Changes

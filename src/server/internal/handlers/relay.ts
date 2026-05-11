@@ -720,7 +720,9 @@ async function fill(client: Client, options: fill.Options) {
       | { errorName?: string; message?: string; data?: `0x${string}` }
       | undefined
     if (upstreamError) {
-      const synthetic = new Error(upstreamError.message ?? upstreamError.errorName ?? 'UpstreamRevert')
+      const synthetic = new Error(
+        upstreamError.message ?? upstreamError.errorName ?? 'UpstreamRevert',
+      )
       synthetic.name = 'UpstreamRevertError'
       ;(synthetic as { data?: `0x${string}` | undefined }).data = upstreamError.data
       throw synthetic
