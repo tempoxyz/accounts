@@ -1,5 +1,5 @@
 import { Hex, RpcRequest, RpcResponse } from 'ox'
-import { Transaction as core_Transaction } from 'ox/tempo'
+import { Transaction as core_Transaction, KeyAuthorization } from 'ox/tempo'
 import { type Client, BaseError } from 'viem'
 import * as z from 'zod/mini'
 
@@ -24,9 +24,12 @@ export function normalizeFillTransactionRequest(
   tx: Record<string, unknown>,
 ): Record<string, unknown> & { calls: unknown[] } {
   const { to, data, value, ...rest } = tx
+  const keyAuthorization = normalizeKeyAuthorization(tx.keyAuthorization)
+  const withKeyAuthorization = keyAuthorization ? { keyAuthorization } : {}
   if (Array.isArray(tx.calls) && tx.calls.length > 0)
     return {
       ...tx,
+      ...withKeyAuthorization,
       calls: tx.calls.map((call) => ({
         ...call,
         value: normalizeFillValue(call.value),
@@ -37,7 +40,18 @@ export function normalizeFillTransactionRequest(
     ...(typeof data !== 'undefined' ? { data } : {}),
     ...(typeof value !== 'undefined' ? { value: normalizeFillValue(value) } : {}),
   }
-  return { ...rest, calls: [call] }
+  return { ...rest, ...withKeyAuthorization, calls: [call] }
+}
+
+function normalizeKeyAuthorization(value: unknown) {
+  if (!value || typeof value !== 'object') return undefined
+  const ka = value as Record<string, unknown>
+  const signature = ka.signature as Record<string, unknown> | undefined
+  if (!signature || typeof signature !== 'object') return undefined
+  const isInternal =
+    typeof signature.signature === 'object' && signature.signature !== null
+  if (isInternal) return undefined
+  return KeyAuthorization.fromRpc(value as never)
 }
 
 function normalizeFillValue(value: unknown) {
@@ -96,8 +110,24 @@ function resolveError(error: unknown): {
   data?: unknown
 } {
   if (!error || typeof error !== 'object') return {}
-  const e = error as Record<string, unknown>
-  // Use viem's walk() to find the innermost error with a numeric code.
+  // Walk the `cause` chain to the deepest object that looks like an upstream
+  // JSON-RPC error (`{ code, message }`). This unwraps viem's
+  // `RpcRequestError`, whose own `message` is the verbose
+  // "RPC Request failed.\nURL: …\nRequest body: …" formatting, and surfaces
+  // the raw upstream error instead.
+  let deepest:
+    | { message?: string | undefined; code?: number | undefined; data?: unknown }
+    | undefined
+  let current: unknown = error
+  const seen = new Set<unknown>()
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current)
+    const e = current as Record<string, unknown>
+    if (typeof e.code === 'number' && typeof e.message === 'string')
+      deepest = { code: e.code, message: e.message, data: e.data }
+    current = e.cause
+  }
+  if (deepest) return deepest
   if (error instanceof BaseError) {
     const inner = error.walk(
       (e) => typeof (e as Record<string, unknown>).code === 'number',
@@ -105,7 +135,5 @@ function resolveError(error: unknown): {
     if (inner && typeof inner.code === 'number' && typeof inner.message === 'string')
       return { message: inner.message, code: inner.code, data: inner.data }
   }
-  if (typeof e.code === 'number' && typeof e.message === 'string')
-    return { message: e.message, code: e.code, data: e.data }
   return {}
 }
