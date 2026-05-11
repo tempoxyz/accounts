@@ -105,14 +105,6 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       return session
     }
 
-    async function restoreAccounts() {
-      const client_ = await client()
-      const wallets = await client_.fetchWallets()
-      return wallets.flatMap((wallet) =>
-        wallet.accounts.filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM'),
-      )
-    }
-
     async function restore() {
       await Store.waitForHydration(store)
       if (walletAccounts.length > 0) return
@@ -126,7 +118,10 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         const session = await getValidSession()
         if (!session) return
 
-        const restored = await restoreAccounts()
+        const client_ = await client()
+        const restored = (await client_.fetchWallets()).flatMap((wallet) =>
+          wallet.accounts.filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM'),
+        )
         walletAccounts = persisted
           .map((account) =>
             restored.find((walletAccount) =>
