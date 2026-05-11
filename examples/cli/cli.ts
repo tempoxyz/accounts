@@ -45,7 +45,6 @@ Cli.create('example', {
       to: account.address,
       token,
     })
-    console.log('receipt', receipt)
 
     // 3. Fetch a paid API endpoint via MPP.
     const response = await fetch('https://mpp.dev/api/ping/paid')
