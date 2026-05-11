@@ -1,6 +1,7 @@
 import Privy, {
   LocalStorage as PrivyLocalStorage,
   getAllUserEmbeddedEthereumWallets,
+  getEntropyDetailsFromUser,
 } from '@privy-io/js-sdk-core'
 import { TurnkeyClient, generateWalletAccountsFromAddressFormat } from '@turnkey/core'
 import type { CreateSubOrgParams } from '@turnkey/core'
@@ -270,60 +271,56 @@ function getPrivyAdapterClient() {
 }
 
 /**
- * Mount the Privy embedded-wallet iframe and wire it to the SDK so signing works.
+ * Mount the Privy secure-context iframe and wire it to the SDK.
  *
- * `@privy-io/js-sdk-core` does not ship its own iframe — that is normally provided
- * by `PrivyProvider` in `@privy-io/react-auth`. Without an iframe, any signing call
- * fails with `Embedded wallet proxy not initialized`. The React provider does the
- * exact same wiring under the hood.
+ * `@privy-io/js-sdk-core` ships no iframe of its own — `PrivyProvider` in the React
+ * SDK does this for you. We follow the official vanilla-JS recipe verbatim:
+ *   1. Create an iframe pointed at `client.embeddedWallet.getURL()`.
+ *   2. Append it to the DOM and call `client.setMessagePoster(iframe.contentWindow)`
+ *      synchronously so the SDK's internal proxy is initialized immediately.
+ *   3. Forward `message` events from the iframe to `client.embeddedWallet.onMessage`,
+ *      JSON-parsing string payloads.
+ *
+ * See https://docs.privy.io/recipes/core-js
  */
 function mountPrivyEmbeddedWalletIframe(client: Privy) {
   const iframe = document.createElement('iframe')
   iframe.src = client.embeddedWallet.getURL()
   iframe.title = 'Privy embedded wallet'
-  iframe.allow = 'publickey-credentials-get *; clipboard-write *'
-  iframe.style.position = 'fixed'
-  iframe.style.width = '0'
-  iframe.style.height = '0'
-  iframe.style.border = '0'
-  iframe.style.visibility = 'hidden'
+  iframe.style.display = 'none'
 
   privyIframeReady = new Promise<void>((resolve) => {
-    iframe.addEventListener('load', async () => {
-      if (!iframe.contentWindow) return
-      const targetOrigin = new URL(iframe.src).origin
-      client.setMessagePoster({
-        postMessage: (message, _targetOrigin, transfer) =>
-          iframe.contentWindow!.postMessage(
-            message,
-            targetOrigin,
-            transfer ? [transfer] : undefined,
-          ),
-        reload: () => {
-          iframe.src = client.embeddedWallet.getURL()
-        },
-      })
-      // Wait for the iframe-side proxy to acknowledge it's ready before any wallet ops.
-      await client.embeddedWallet.ping(15_000)
-      resolve()
-    })
-  })
-
-  window.addEventListener('message', (event) => {
-    if (event.source !== iframe.contentWindow) return
-    client.embeddedWallet.onMessage(event.data)
+    iframe.addEventListener('load', () => resolve())
   })
 
   document.body.appendChild(iframe)
+
+  client.setMessagePoster(iframe.contentWindow as unknown as PrivyMessagePoster)
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== iframe.contentWindow) return
+    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+    client.embeddedWallet.onMessage(data)
+  })
 }
+
+/** `iframe.contentWindow` satisfies what Privy's proxy uses at runtime. */
+type PrivyMessagePoster = Parameters<Privy['setMessagePoster']>[0]
 
 async function getPrivyEmbeddedWallets(client: Privy): Promise<readonly privy.EmbeddedWallet[]> {
   await privyIframeReady
   const { user } = await client.user.get()
   const wallets = getAllUserEmbeddedEthereumWallets(user)
+  const entropy = getEntropyDetailsFromUser(user)
+  if (!entropy) return []
+  const { entropyId, entropyIdVerifier } = entropy
   return Promise.all(
     wallets.map(async (wallet) => {
-      const provider = await client.embeddedWallet.getProvider(wallet)
+      const provider = await client.embeddedWallet.getEthereumProvider({
+        wallet,
+        entropyId,
+        entropyIdVerifier,
+      })
       return {
         address: wallet.address,
         signRawHash: async (hash) =>
