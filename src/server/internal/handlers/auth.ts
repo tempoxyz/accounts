@@ -317,8 +317,8 @@ export declare namespace auth {
   /** Return type of `auth()` — a `Handler` extended with `getSession`. */
   type ReturnType = Handler & { getSession: getSession }
 
-  /** Resolves the current session from a request's cookie. */
-  type getSession = (req: Request) => Promise<SessionPayload | undefined>
+  /** Resolves the current session from a request's cookie or bearer token. */
+  type getSession = (req: Session.SessionRequest) => Promise<SessionPayload | undefined>
 
   /**
    * Hook invoked after a SIWE signature is verified but before the
