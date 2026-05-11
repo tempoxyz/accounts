@@ -296,7 +296,9 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       const client_ = await client()
       const account = await accountForSigning(parameters.from)
       const { feePayer, ...rest } = parameters
-      const client_tempo = getClient({ feePayer: resolveFeePayer(feePayer) })
+      const client_tempo = getClient({
+        feePayer: feePayer === true ? undefined : feePayer,
+      })
       const prepared = await prepareTransactionRequest(client_tempo, {
         account: core_Address.from(account.address),
         ...rest,
@@ -319,12 +321,6 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         prepared as never,
         SignatureEnvelope.from(Signature.fromHex(signature)) as never,
       )
-    }
-
-    function resolveFeePayer(feePayer: string | boolean | undefined) {
-      if (feePayer === false) return false
-      if (typeof feePayer === 'string') return feePayer
-      return undefined
     }
 
     function isSessionError(error: unknown) {
@@ -445,7 +441,9 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         async signTransaction(parameters) {
           const result = await withAccessKey(async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
-            const client = getClient({ feePayer: resolveFeePayer(feePayer) })
+            const client = getClient({
+              feePayer: feePayer === true ? undefined : feePayer,
+            })
             const prepared = await prepareTransactionRequest(client, {
               account,
               ...rest,
@@ -478,7 +476,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
             const { feePayer, ...rest } = parameters
             const client = getClient({
               chainId: parameters.chainId,
-              feePayer: resolveFeePayer(feePayer),
+              feePayer: feePayer === true ? undefined : feePayer,
             })
             const prepared = await prepareTransactionRequest(client, {
               account,
@@ -497,7 +495,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           const signed = await signTransaction(parameters)
           return await getClient({
             chainId: parameters.chainId,
-            feePayer: resolveFeePayer(parameters.feePayer),
+            feePayer: parameters.feePayer === true ? undefined : parameters.feePayer,
           }).request({
             method: 'eth_sendRawTransaction' as never,
             params: [signed],
@@ -508,7 +506,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
             const { feePayer, ...rest } = parameters
             const client = getClient({
               chainId: parameters.chainId,
-              feePayer: resolveFeePayer(feePayer),
+              feePayer: feePayer === true ? undefined : feePayer,
             })
             const prepared = await prepareTransactionRequest(client, {
               account,
@@ -527,7 +525,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           const signed = await signTransaction(parameters)
           return await getClient({
             chainId: parameters.chainId,
-            feePayer: resolveFeePayer(parameters.feePayer),
+            feePayer: parameters.feePayer === true ? undefined : parameters.feePayer,
           }).request({
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],
