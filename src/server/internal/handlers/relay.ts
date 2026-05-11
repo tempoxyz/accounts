@@ -141,8 +141,10 @@ export function relay(options: relay.Options = {}): Handler {
 
     switch (request.method) {
       case 'eth_fillTransaction': {
+        const parameters = params[0] as Record<string, unknown>
+        const capabilities = (parameters.capabilities ?? {}) as Record<string, unknown>
+
         try {
-          const parameters = params[0] as Record<string, unknown>
           const from =
             typeof parameters.from === 'string' ? (parameters.from as Address) : undefined
           const requestFeeToken =
@@ -151,7 +153,6 @@ export function relay(options: relay.Options = {}): Handler {
             typeof parameters.feePayer === 'string' ? parameters.feePayer : undefined
           const requestsSponsorship =
             (!!feePayerOptions || !!externalFeePayerUrl) && parameters.feePayer !== false
-          const capabilities = (parameters.capabilities ?? {}) as Record<string, unknown>
           // Default to `true`. Dapps that don't render diffs can pass
           // `capabilities.balanceDiffs: false` to skip the post-fill
           // `tempo_simulateV1` round trip (~250-400ms).
@@ -384,9 +385,10 @@ export function relay(options: relay.Options = {}): Handler {
           )
         } catch (error) {
           if (!(error instanceof Error)) return Utils.rpcErrorJson(request, error)
-
+          if (capabilities.errors !== true) return Utils.rpcErrorJson(request, error)
+              
           const revert = ExecutionError.parse(error)
-
+              
           const parameters = request.params[0]
           const stub = {
             from: parameters.from,

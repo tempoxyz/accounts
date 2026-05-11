@@ -1,6 +1,6 @@
 import type { RpcRequest } from 'ox'
 import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
-import { parseUnits, type Address } from 'viem'
+import { parseUnits, type Address, type BaseError } from 'viem'
 import { fillTransaction, sendTransactionSync } from 'viem/actions'
 import { tempo, tempoModerato } from 'viem/chains'
 import { Actions, Addresses, Capabilities, Tick, Transaction, VirtualAddress } from 'viem/tempo'
@@ -267,8 +267,11 @@ describe('behavior: with feePayer', () => {
     expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
   })
 
-  test('behavior: missing from returns error capability', async () => {
-    const result = await fillTransaction(client, { calls: [transferCall()] })
+  test('behavior: missing from returns error capability when errors capability is enabled', async () => {
+    const result = await fillTransaction(client, {
+      calls: [transferCall()],
+      capabilities: { errors: true },
+    })
     expect(result.capabilities).toMatchInlineSnapshot(`
     	{
     	  "error": {
@@ -642,6 +645,7 @@ describe('behavior: capabilities', () => {
           token: addresses.alphaUsd,
         }),
       ],
+      capabilities: { errors: true },
     })
 
     expect(virtualAddresses(result.capabilities)).toMatchInlineSnapshot(`
@@ -1063,11 +1067,12 @@ describe('behavior: AMM resolution', () => {
     // Should return error capability instead of auto-swapping.
     const result = await fillTransaction(customClient, {
       account: sender.address,
-      ...Actions.token.transfer.call({
+      calls: [Actions.token.transfer.call({
         token: base,
         to: accounts[7]!.address,
         amount: parseUnits('5', 6),
-      }),
+      })],
+      capabilities: { errors: true },
     })
     const error = result.capabilities?.error
     expect({ ...error, data: undefined }).toMatchInlineSnapshot(`
@@ -1548,7 +1553,7 @@ describe('behavior: error capabilities', () => {
     server.close()
   })
 
-  test('behavior: returns requireFunds on InsufficientBalance', async () => {
+  test('behavior: returns requireFunds on InsufficientBalance when errors capability is enabled', async () => {
     const sender = accounts[10]!
 
     const result = await fillTransaction(client, {
@@ -1560,6 +1565,7 @@ describe('behavior: error capabilities', () => {
           amount: parseUnits('100', 6),
         }),
       ],
+      capabilities: { errors: true },
     })
 
     expect(result.capabilities).toMatchInlineSnapshot(`
@@ -1615,7 +1621,7 @@ describe('behavior: error capabilities', () => {
     `)
   })
 
-  test('behavior: returns error capability on generic revert', async () => {
+  test('behavior: returns error capability on generic revert when errors capability is enabled', async () => {
     const sender = accounts[10]!
 
     const result = await fillTransaction(client, {
@@ -1627,6 +1633,7 @@ describe('behavior: error capabilities', () => {
           to: sender.address,
         }),
       ],
+      capabilities: { errors: true },
     })
 
     expect(result.capabilities).toMatchInlineSnapshot(`
@@ -1645,7 +1652,76 @@ describe('behavior: error capabilities', () => {
     	}
     `)
   })
+
+  test('default: throws JSON-RPC error on InsufficientBalance', async () => {
+    const sender = accounts[10]!
+    const error = await fillTransaction(client, {
+      account: sender.address,
+      calls: [
+        Actions.token.transfer.call({
+          token: addresses.alphaUsd,
+          to: recipient.address,
+          amount: parseUnits('100', 6),
+        }),
+      ],
+    }).then(
+      () => undefined,
+      (e: BaseError) => e,
+    )
+    expect(error).toBeDefined()
+    // Walk the viem error chain to the underlying RPC error. The default path
+    // surfaces the chain revert as a JSON-RPC error (`code: 3`) with the
+    // ABI-encoded `InsufficientBalance(uint256, uint256, address)` selector.
+    const rpc = error?.walk(isRpcError) as { data?: string } | undefined
+    expect(rpc?.data?.startsWith('0x832f98b5')).toBe(true)
+  })
+
+  test('default: throws JSON-RPC error on generic revert', async () => {
+    const sender = accounts[10]!
+    const error = await fillTransaction(client, {
+      account: sender.address,
+      calls: [
+        Actions.token.grantRoles.call({
+          token: addresses.alphaUsd,
+          role: 'issuer',
+          to: sender.address,
+        }),
+      ],
+    }).then(
+      () => undefined,
+      (e: BaseError) => e,
+    )
+    expect(error).toBeDefined()
+    const rpc = error?.walk(isRpcError) as { data?: string } | undefined
+    // ABI-encoded `Unauthorized()`.
+    expect(rpc?.data).toBe('0x82b42900')
+  })
+
+  test('behavior: explicit `errors: false` matches default JSON-RPC error behavior', async () => {
+    const sender = accounts[10]!
+    const error = await fillTransaction(client, {
+      account: sender.address,
+      calls: [
+        Actions.token.transfer.call({
+          token: addresses.alphaUsd,
+          to: recipient.address,
+          amount: parseUnits('100', 6),
+        }),
+      ],
+      capabilities: { errors: false } as never,
+    }).then(
+      () => undefined,
+      (e: BaseError) => e,
+    )
+    expect(error).toBeDefined()
+    const rpc = error?.walk(isRpcError) as { data?: string } | undefined
+    expect(rpc?.data?.startsWith('0x832f98b5')).toBe(true)
+  })
 })
+
+function isRpcError(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && 'code' in e && (e as { code: unknown }).code === 3
+}
 
 describe('behavior: mainnet autoSwap with USDC.e → PathUSD', () => {
   let server: Server
