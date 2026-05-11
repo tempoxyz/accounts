@@ -66,18 +66,18 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
   const { icon, name = 'Turnkey', rdns = 'com.turnkey', sessionSkewMs = 10_000 } = options
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
-    let client_promise: Promise<turnkey.Client> | undefined
+    let turnkeyClient_promise: Promise<turnkey.Client> | undefined
     let expiry_timeout: ReturnType<typeof setTimeout> | undefined
     let restore_promise: Promise<void> | undefined
     let walletAccounts: readonly turnkey.WalletAccount[] = []
 
-    async function client() {
-      client_promise ??= (async () => {
+    async function getTurnkeyClient() {
+      turnkeyClient_promise ??= (async () => {
         const { client } = options
         await client.init?.()
         return client
       })()
-      return await client_promise
+      return await turnkeyClient_promise
     }
 
     function toStoreAccount(account: turnkey.WalletAccount, label?: string | undefined) {
@@ -104,8 +104,8 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }
 
     async function getValidSession() {
-      const client_ = await client()
-      const session = await client_.getSession()
+      const turnkeyClient = await getTurnkeyClient()
+      const session = await turnkeyClient.getSession()
 
       if (!session || session.expiry * 1000 - sessionSkewMs <= Date.now()) {
         clear()
@@ -129,8 +129,8 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         const session = await getValidSession()
         if (!session) return
 
-        const client_ = await client()
-        const restored = (await client_.fetchWallets()).flatMap((wallet) =>
+        const turnkeyClient = await getTurnkeyClient()
+        const restored = (await turnkeyClient.fetchWallets()).flatMap((wallet) =>
           wallet.accounts.filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM'),
         )
         walletAccounts = persisted
@@ -188,12 +188,12 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }
 
     async function signPayload(parameters: {
-      client: turnkey.Client
       payload: Hex.Hex
+      turnkeyClient: turnkey.Client
       walletAccount: turnkey.WalletAccount
     }) {
-      const { client, payload, walletAccount } = parameters
-      const result = await client.httpClient
+      const { payload, turnkeyClient, walletAccount } = parameters
+      const result = await turnkeyClient.httpClient
         .signRawPayload({
           encoding: 'PAYLOAD_ENCODING_HEXADECIMAL',
           hashFunction: 'HASH_FUNCTION_NO_OP',
@@ -250,7 +250,11 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
       const signature =
         options.signature ??
-        (await signPayload({ client: await client(), payload: digest, walletAccount: account }))
+        (await signPayload({
+          payload: digest,
+          turnkeyClient: await getTurnkeyClient(),
+          walletAccount: account,
+        }))
       const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
         signature: SignatureEnvelope.from(signature),
       })
@@ -292,13 +296,13 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }
 
     async function signTransaction(parameters: Adapter.signTransaction.Parameters) {
-      const client_ = await client()
+      const turnkeyClient = await getTurnkeyClient()
       const account = await accountForSigning(parameters.from)
       const { feePayer, ...rest } = parameters
-      const client_tempo = getClient({
+      const viemClient = getClient({
         feePayer: feePayer === true ? undefined : feePayer,
       })
-      const prepared = await prepareTransactionRequest(client_tempo, {
+      const prepared = await prepareTransactionRequest(viemClient, {
         account: core_Address.from(account.address),
         ...rest,
         ...(feePayer ? { feePayer: true } : {}),
@@ -312,8 +316,8 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       const unsignedTransaction = await TempoTransaction.serialize(presign as never)
 
       const signature = await signPayload({
-        client: client_,
         payload: keccak256(unsignedTransaction),
+        turnkeyClient,
         walletAccount: account,
       })
       return await TempoTransaction.serialize(
@@ -361,8 +365,8 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
               '`digest` and `personalSign` cannot both be set on `wallet_connect`.',
             )
 
-          const client_ = await client()
-          const account = await options.createAccount({ client: client_, parameters })
+          const turnkeyClient = await getTurnkeyClient()
+          const account = await options.createAccount({ client: turnkeyClient, parameters })
           await requireSession()
           walletAccounts = [account]
           restore_promise = undefined
@@ -381,7 +385,11 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
             ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
             ...(keyAuthorization ? { keyAuthorization } : {}),
             signature: digest
-              ? await signPayload({ client: client_, payload: digest, walletAccount: account })
+              ? await signPayload({
+                  payload: digest,
+                  turnkeyClient,
+                  walletAccount: account,
+                })
               : undefined,
           }
         },
@@ -394,8 +402,8 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
               '`digest` and `personalSign` cannot both be set on `wallet_connect`.',
             )
 
-          const client_ = await client()
-          walletAccounts = await options.loadAccounts({ client: client_, parameters })
+          const turnkeyClient = await getTurnkeyClient()
+          walletAccounts = await options.loadAccounts({ client: turnkeyClient, parameters })
           await requireSession()
           restore_promise = undefined
 
@@ -416,7 +424,11 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
             ...(keyAuthorization ? { keyAuthorization } : {}),
             signature:
               digest && account
-                ? await signPayload({ client: client_, payload: digest, walletAccount: account })
+                ? await signPayload({
+                    payload: digest,
+                    turnkeyClient,
+                    walletAccount: account,
+                  })
                 : undefined,
           }
         },
@@ -429,21 +441,21 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           return { keyAuthorization, rootAddress: core_Address.from(account.address) }
         },
         async signPersonalMessage(parameters) {
-          const client_ = await client()
+          const turnkeyClient = await getTurnkeyClient()
           const account = await accountForSigning(parameters.address)
           return await signPayload({
-            client: client_,
             payload: hashMessage({ raw: parameters.data }),
+            turnkeyClient,
             walletAccount: account,
           })
         },
         async signTransaction(parameters) {
           const result = await withAccessKey(async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
-            const client = getClient({
+            const viemClient = getClient({
               feePayer: feePayer === true ? undefined : feePayer,
             })
-            const prepared = await prepareTransactionRequest(client, {
+            const prepared = await prepareTransactionRequest(viemClient, {
               account,
               ...rest,
               ...(feePayer ? { feePayer: true } : {}),
@@ -456,7 +468,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           return await signTransaction(parameters)
         },
         async signTypedData(parameters) {
-          const client_ = await client()
+          const turnkeyClient = await getTurnkeyClient()
           const account = await accountForSigning(parameters.address)
           const typedData = JSON.parse(parameters.data) as {
             domain: Record<string, unknown>
@@ -465,19 +477,19 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
             types: Record<string, unknown>
           }
           return await signPayload({
-            client: client_,
             payload: hashTypedData(typedData as never),
+            turnkeyClient,
             walletAccount: account,
           })
         },
         async sendTransaction(parameters) {
           const result = await withAccessKey(async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
-            const client = getClient({
+            const viemClient = getClient({
               chainId: parameters.chainId,
               feePayer: feePayer === true ? undefined : feePayer,
             })
-            const prepared = await prepareTransactionRequest(client, {
+            const prepared = await prepareTransactionRequest(viemClient, {
               account,
               ...rest,
               ...(feePayer ? { feePayer: true } : {}),
@@ -485,17 +497,18 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
               type: 'tempo',
             } as never)
             const signed = await account.signTransaction(prepared as never)
-            return await client.request({
+            return await viemClient.request({
               method: 'eth_sendRawTransaction' as never,
               params: [signed],
             })
           })
           if (result !== undefined) return result
           const signed = await signTransaction(parameters)
-          return await getClient({
+          const viemClient = getClient({
             chainId: parameters.chainId,
             feePayer: parameters.feePayer === true ? undefined : parameters.feePayer,
-          }).request({
+          })
+          return await viemClient.request({
             method: 'eth_sendRawTransaction' as never,
             params: [signed],
           })
@@ -503,11 +516,11 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         async sendTransactionSync(parameters) {
           const result = await withAccessKey(async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
-            const client = getClient({
+            const viemClient = getClient({
               chainId: parameters.chainId,
               feePayer: feePayer === true ? undefined : feePayer,
             })
-            const prepared = await prepareTransactionRequest(client, {
+            const prepared = await prepareTransactionRequest(viemClient, {
               account,
               ...rest,
               ...(feePayer ? { feePayer: true } : {}),
@@ -515,23 +528,24 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
               type: 'tempo',
             } as never)
             const signed = await account.signTransaction(prepared as never)
-            return await client.request({
+            return await viemClient.request({
               method: 'eth_sendRawTransactionSync' as never,
               params: [signed],
             })
           })
           if (result !== undefined) return result
           const signed = await signTransaction(parameters)
-          return await getClient({
+          const viemClient = getClient({
             chainId: parameters.chainId,
             feePayer: parameters.feePayer === true ? undefined : parameters.feePayer,
-          }).request({
+          })
+          return await viemClient.request({
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],
           })
         },
         async disconnect() {
-          await (await client()).logout()
+          await (await getTurnkeyClient()).logout()
           clear()
         },
       },
