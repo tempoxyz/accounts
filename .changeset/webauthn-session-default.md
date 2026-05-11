@@ -2,7 +2,7 @@
 'accounts': minor
 ---
 
-Made `Handler.webAuthn` issue a session cookie and persist a session entry under `session:<token>` in `kv` on successful `/login` by default -- opt out via `session: false` or `cookie: false`.
+**Breaking:** Made `Handler.webAuthn` issue a session cookie and persist a session entry under `session:<token>` in `kv` on successful `/login` by default -- opt out via `session: false` or `cookie: false`.
 
 ```diff
   // Default behavior -- `/login` now sets a cookie and writes to kv.

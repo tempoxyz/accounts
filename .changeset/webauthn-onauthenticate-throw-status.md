@@ -2,7 +2,7 @@
 'accounts': minor
 ---
 
-Changed `Handler.webAuthn`'s `onAuthenticate` hook rejection status from `400` to `401` when the hook throws.
+**Breaking:** Changed `Handler.webAuthn`'s `onAuthenticate` hook rejection status from `400` to `401` when the hook throws.
 
 ```diff
   // POST /login response when `onAuthenticate` throws `new Error('blocked')`:

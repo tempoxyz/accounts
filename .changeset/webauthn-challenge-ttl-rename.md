@@ -2,7 +2,7 @@
 'accounts': minor
 ---
 
-Renamed `Handler.webAuthn` option `challengeTtl` to `ttl.challenge`.
+**Breaking:** Renamed `Handler.webAuthn` option `challengeTtl` to `ttl.challenge`.
 
 ```diff
   Handler.webAuthn({
