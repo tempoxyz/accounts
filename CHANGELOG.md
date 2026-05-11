@@ -1,5 +1,12 @@
 # accounts
 
+## 0.10.3
+
+### Patch Changes
+
+- a5ca0be: Fixed `Handler.relay` forwarding `keyAuthorization` to `eth_fillTransaction` in the internal envelope shape instead of the RPC shape the chain expects.
+- dccc343: Added a Turnkey adapter for connecting and signing with app-provided Turnkey wallet accounts.
+
 ## 0.10.2
 
 ### Patch Changes
