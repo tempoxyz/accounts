@@ -72,10 +72,7 @@ function Fortune() {
   const [result, error, execute] = useRequest()
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => execute(() => fetch('/fortune').then((r) => r.json()))}
-      >
+      <button type="button" onClick={() => execute(() => fetch('/fortune').then((r) => r.json()))}>
         Get Fortune (0.01 pathUSD)
       </button>
       {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}

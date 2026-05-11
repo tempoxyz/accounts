@@ -1,5 +1,59 @@
 # accounts
 
+## 0.10.0
+
+### Minor Changes
+
+- 1334969: **Breaking:** Made the `errors` capability opt-in on `Handler.relay`'s `eth_fillTransaction` so reverts now throw JSON-RPC errors by default unless `capabilities.errors: true` is set.
+- e995c28: **Breaking:** Renamed `Handler.webAuthn` option `challengeTtl` to `ttl.challenge`.
+
+  ```diff
+    Handler.webAuthn({
+      kv,
+      origin: 'https://example.com',
+      rpId: 'example.com',
+  -   challengeTtl: 600,
+  +   ttl: { challenge: 600 },
+    })
+  ```
+
+- e995c28: **Breaking:** Changed `Handler.webAuthn`'s `onAuthenticate` hook rejection status from `400` to `401` when the hook throws.
+
+  ```diff
+    // POST /login response when `onAuthenticate` throws `new Error('blocked')`:
+  - HTTP/1.1 400 Bad Request
+  + HTTP/1.1 401 Unauthorized
+    Content-Type: application/json
+
+    {"error":"blocked"}
+  ```
+
+- e995c28: **Breaking:** Made `Handler.webAuthn` issue a session cookie and persist a session entry under `session:<token>` in `kv` on successful `/login` by default -- opt out via `session: false` or `cookie: false`.
+
+  ```diff
+    // Default behavior -- `/login` now sets a cookie and writes to kv.
+    Handler.webAuthn({ kv, origin, rpId })
+
+    // Pre-PR behavior (no cookie, no kv session writes, no `/logout`):
+  + Handler.webAuthn({ kv, origin, rpId, session: false })
+
+    // Or just disable cookie issuance and return the token in the body:
+  + Handler.webAuthn({ kv, origin, rpId, cookie: false })
+  ```
+
+### Patch Changes
+
+- 340509d: Added an `auth` capability to `wallet_connect`.
+- 1a2cdfa: Required byte-equality between the submitted SIWE message and the stored challenge in the `auth` server handler's verify endpoint.
+- e995c28: Added `session` option to `Handler.auth` and allowed `onAuthenticate` to return a `Response` whose body and status are merged onto the verify response.
+- 1334969: Changed the default `host` on the CLI `Provider.create` from `https://wallet.tempo.xyz/cli-auth` to `https://wallet.tempo.xyz/api/auth/cli`.
+- 1334969: Fixed the `dialog` adapter to fall through to the dialog (instead of removing the access key) when a sign action reverts with `InsufficientBalance`.
+- 38a840a: Added a `personalSign` capability to `wallet_connect`.
+- 1334969: Widened `mpp` on `Provider.create` to accept an options object with a `mode: 'push' | 'pull'` field and changed the default mode to `'push'` (the CLI `Provider` still defaults to `'pull'`).
+- 1334969: Added `relay` and `transports` options to `Provider.create` for per-chain RPC routing.
+- 1334969: Surfaced the underlying upstream JSON-RPC error from `Handler.relay` instead of viem's `RpcRequestError` wrapper, and forwarded `keyAuthorization` through `eth_fillTransaction` normalization.
+- e995c28: Added `cookie`, `cookieName`, `session`, and `ttl.session` options, a `getSession()` method, and a `/logout` route to `Handler.webAuthn`.
+
 ## 0.9.1
 
 ### Patch Changes

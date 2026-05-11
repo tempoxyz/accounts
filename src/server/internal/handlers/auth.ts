@@ -150,9 +150,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
       const url = new URL(origin_option)
       return { protocol: url.protocol, host: url.host }
     } catch {
-      throw new Error(
-        `\`auth({ origin })\` must be a valid absolute URL. Got: ${origin_option}`,
-      )
+      throw new Error(`\`auth({ origin })\` must be a valid absolute URL. Got: ${origin_option}`)
     }
   })()
   const resolveReqOrigin = (req: Request) => resolveOrigin(req, { pinnedOrigin, trustProxy })
@@ -464,5 +462,3 @@ function resolveOrigin(
     host: headers.get('host') || reqUrl.host,
   }
 }
-
-

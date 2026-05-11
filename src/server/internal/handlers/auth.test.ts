@@ -553,8 +553,7 @@ describe('onAuthenticate', () => {
 
   test('returning a Response merges body fields and status onto the verify response', async () => {
     const { app } = setup({
-      onAuthenticate: () =>
-        Response.json({ jwt: 'eyJ...', userId: 'u_42' }, { status: 201 }),
+      onAuthenticate: () => Response.json({ jwt: 'eyJ...', userId: 'u_42' }, { status: 201 }),
     })
 
     const { body: challengeBody } = await getChallenge(app, { chainId: 1 })

@@ -1067,11 +1067,13 @@ describe('behavior: AMM resolution', () => {
     // Should return error capability instead of auto-swapping.
     const result = await fillTransaction(customClient, {
       account: sender.address,
-      calls: [Actions.token.transfer.call({
-        token: base,
-        to: accounts[7]!.address,
-        amount: parseUnits('5', 6),
-      })],
+      calls: [
+        Actions.token.transfer.call({
+          token: base,
+          to: accounts[7]!.address,
+          amount: parseUnits('5', 6),
+        }),
+      ],
       capabilities: { errors: true },
     })
     const error = result.capabilities?.error

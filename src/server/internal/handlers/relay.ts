@@ -386,9 +386,9 @@ export function relay(options: relay.Options = {}): Handler {
         } catch (error) {
           if (!(error instanceof Error)) return Utils.rpcErrorJson(request, error)
           if (capabilities.errors !== true) return Utils.rpcErrorJson(request, error)
-              
+
           const revert = ExecutionError.parse(error)
-              
+
           const parameters = request.params[0]
           const stub = {
             from: parameters.from,

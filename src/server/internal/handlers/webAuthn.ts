@@ -398,5 +398,3 @@ export declare namespace webAuthn {
       | undefined
   }
 }
-
-

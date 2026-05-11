@@ -67,7 +67,7 @@ export function create(options: create.Options = {}): create.ReturnType {
           chains.map((c) => [c.id, http(`${relay.replace(/\/$/, '')}/${c.id}`)] as const),
         )
       : {}
-    return { ...base, ...(options.transports ?? {}) } as Record<number, Transport>
+    return { ...base, ...options.transports } as Record<number, Transport>
   })()
 
   const feePayerConfig = (() => {
