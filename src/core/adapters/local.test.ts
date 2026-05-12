@@ -272,7 +272,6 @@ function setup(overrides: Partial<local.Options> = {}) {
   })({
     getAccount: (options) => Account.find({ ...options, signable: true, store }),
     getClient: () => getClient({ chain: tempoLocalnet }) as never,
-    getRequestAccount: (options) => Account.request({ ...options, store }),
     storage,
     store,
   })

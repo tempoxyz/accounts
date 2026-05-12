@@ -181,6 +181,32 @@ describe('request', () => {
     )
   })
 
+  test('behavior: skips scoped access key metadata without calls', () => {
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const store = setup(
+      [{ address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] }],
+      [
+        {
+          address: accounts[1].address,
+          access: accounts[0].address,
+          keyType: 'p256',
+          privateKey: privateKeys[1],
+          scopes: [{ address: token, selector: '0xa9059cbb' }],
+        },
+      ],
+    )
+
+    const result = Account.request({ store })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "address": "${accounts[0].address}",
+        "keyType": "secp256k1",
+        "type": "json-rpc",
+      }
+    `)
+  })
+
   test('behavior: can force root account metadata', () => {
     const store = setup(
       [{ address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] }],
@@ -536,7 +562,7 @@ describe('find', () => {
     expect(result.source).toMatchInlineSnapshot(`"accessKey"`)
   })
 
-  test('behavior: scoped access key used when no calls provided', async () => {
+  test('behavior: scoped access key skipped when no calls provided', async () => {
     const keyPair = await WebCryptoP256.createKeyPair()
     const store = setup(
       [{ address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] }],
@@ -553,6 +579,6 @@ describe('find', () => {
 
     const result = Account.find({ signable: true, store })
 
-    expect(result.source).toMatchInlineSnapshot(`"accessKey"`)
+    expect(result.source).toMatchInlineSnapshot(`"root"`)
   })
 })

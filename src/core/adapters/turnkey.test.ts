@@ -309,7 +309,6 @@ function setup(options: setup.Options = {}) {
       throw new Error('not implemented')
     }) as never,
     getClient: (() => ({ chain: { id: 1 } })) as never,
-    getRequestAccount: (options) => Account.request({ ...options, store }),
     storage,
     store,
   })

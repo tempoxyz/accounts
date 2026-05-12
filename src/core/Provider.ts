@@ -26,8 +26,6 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     chains: readonly [Chain, ...Chain[]]
     /** Returns a viem Account for the given address (or active account). */
     getAccount: Account.Find
-    /** Returns request account metadata for transaction preparation. */
-    getRequestAccount: Account.GetRequest
     /** Returns a viem Client for the given (or current) chain ID. */
     getClient(options?: {
       chainId?: number | undefined
@@ -94,9 +92,6 @@ export function create(options: create.Options = {}): create.ReturnType {
   })
 
   const getAccount: Account.Find = (options = {}) => Account.find({ ...options, store }) as never
-  const getRequestAccount: Account.GetRequest = (options = {}) =>
-    Account.request({ ...options, store })
-
   // Lazy reference — assigned after the provider is created so the client
   // transport can route provider methods (wallet_connect, etc.) through it.
   let providerRef: ox_Provider.Provider | undefined
@@ -117,7 +112,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
   }
 
-  const instance = adapter({ getAccount, getClient, getRequestAccount, storage, store })
+  const instance = adapter({ getAccount, getClient, storage, store })
   const { actions } = instance
 
   const emitter = ox_Provider.createEmitter()
@@ -883,7 +878,6 @@ export function create(options: create.Options = {}): create.ReturnType {
     {
       chains,
       getAccount,
-      getRequestAccount,
       getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
         const { chainId, feePayer } = options
         return Client.fromChainId(chainId, {

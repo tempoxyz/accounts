@@ -123,11 +123,6 @@ export type Find = {
   (options?: Omit<find.Options, 'store'>): TempoAccount.Account | JsonRpcAccount
 }
 
-/** Overloaded signature for `request` without `store` (pre-bound by the provider). */
-export type GetRequest = (
-  options?: Omit<request.Options, 'store'> | undefined,
-) => Request | undefined
-
 /** Resolves request account metadata without exposing local signing material. */
 export function request(options: request.Options): Request | undefined {
   const { accessKey = true, address, store } = options
@@ -168,13 +163,15 @@ function findAccessKey(
   },
 ): AccessKey | undefined {
   const { accessKeys, options, store } = parameters
+  let accessKeys_next = accessKeys
   for (const key of accessKeys) {
     if (key.access.toLowerCase() !== root.address.toLowerCase()) continue
     if (!('keyPair' in key && !!key.keyPair) && !('privateKey' in key && !!key.privateKey)) continue
 
     // Remove expired access keys.
     if (key.expiry && key.expiry < Date.now() / 1000) {
-      store.setState({ accessKeys: accessKeys.filter((a) => a !== key) })
+      accessKeys_next = accessKeys_next.filter((a) => a !== key)
+      store.setState({ accessKeys: accessKeys_next })
       continue
     }
 
@@ -276,7 +273,8 @@ export declare namespace hydrate {
 
 /** Returns true if the access key's scopes cover the requested calls (or key is unscoped). */
 function scopesMatch(key: AccessKey, options: find.Options): boolean {
-  if (!options.calls || !key.scopes) return true
+  if (!key.scopes) return true
+  if (!options.calls) return false
   return options.calls!.every((call) => {
     if (!call.to) return false
     const callTo = call.to.toLowerCase()
