@@ -1,0 +1,42 @@
+---
+title: Storage.combine
+description: Combine multiple Storage adapters into one.
+---
+
+# `Storage.combine`
+
+Combines multiple [`Storage`](/docs/api/storage) adapters into one.
+
+Reads return the first non-null result; writes propagate to every storage. Failures during reads or writes are isolated via `Promise.allSettled` so a single failing backend will not break the others.
+
+A common use case is layering an in-memory cache in front of a persistent backend, or mirroring writes between cookies and `localStorage` so server-rendered code can see what the client wrote.
+
+## Usage
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+const provider = Provider.create({
+  storage: Storage.combine(Storage.cookie(), Storage.localStorage()),
+})
+```
+
+## Parameters
+
+### storages
+
+- **Type:** `readonly Storage[]`
+- **Required**
+
+The storage adapters to combine, in priority order. The first storage that returns a non-null value for `getItem` wins. `setItem` and `removeItem` are dispatched to every storage in parallel.
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+const provider = Provider.create({
+  storage: Storage.combine( // [!code focus]
+    Storage.memory(), // [!code focus]
+    Storage.idb(), // [!code focus]
+  ), // [!code focus]
+})
+```
