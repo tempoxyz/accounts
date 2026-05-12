@@ -15,8 +15,8 @@ export type Store = {
   label?: string | undefined
 } & OneOf<
   | {}
-  | RootMetadata
-  | (RootMetadata & Pick<TempoAccount.Account, 'sign'>)
+  | SignerMetadata
+  | Pick<TempoAccount.Account, 'keyType' | 'sign'>
   | { keyType: 'secp256k1'; privateKey: Hex }
   | { keyType: 'p256'; privateKey: Hex }
   | { keyType: 'webAuthn'; credential: { id: string; publicKey: Hex; rpId: string } }
@@ -32,11 +32,8 @@ export type Store = {
     }
 >
 
-/** Non-secret signer metadata for a root account. */
-export type RootMetadata = {
-  /** Root signer key type. Does not imply local signing material is available. */
-  keyType: TempoAccount.Account['keyType']
-}
+/** Non-secret signer metadata. Does not imply local signing material is available. */
+export type SignerMetadata = Pick<TempoAccount.Account, 'keyType'>
 
 /** Access key entry stored alongside accounts. */
 export type AccessKey = {
