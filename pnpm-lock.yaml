@@ -732,6 +732,9 @@ importers:
 
   site:
     dependencies:
+      '@tailwindcss/vite':
+        specifier: ^4
+        version: 4.2.4(vite@8.0.10)
       '@types/react':
         specifier: 'catalog:'
         version: 19.2.14
@@ -756,6 +759,9 @@ importers:
       react-dom:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
+      tailwindcss:
+        specifier: ^4
+        version: 4.2.4
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
