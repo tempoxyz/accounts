@@ -54,7 +54,7 @@ export function base(options: base.Options): Adapter.Instance {
   }
 
   async function signKeyAuthorization(
-    account: base.Signer,
+    account: TempoAccount.Account,
     prepared: Awaited<ReturnType<typeof prepareKeyAuthorization>>,
     options: signKeyAuthorization.Options = {},
   ) {
@@ -87,7 +87,7 @@ export function base(options: base.Options): Adapter.Instance {
       | Adapter.signTransaction.Parameters
       | Adapter.sendTransaction.Parameters
       | Adapter.sendTransactionSync.Parameters,
-    account: base.Signer,
+    account: TempoAccount.Account,
     keyAuthorization?: KeyAuthorization.Signed | undefined,
   ) {
     const { feePayer, ...rest } = parameters
@@ -97,11 +97,11 @@ export function base(options: base.Options): Adapter.Instance {
       ...(feePayer ? { feePayer: true } : {}),
       keyAuthorization,
       type: 'tempo',
-    } as never)
+    })
   }
 
   async function signTempoTransaction(
-    account: base.Signer,
+    account: TempoAccount.Account,
     transaction: Awaited<ReturnType<typeof prepareTempoTransaction>>,
   ) {
     return await account.signTransaction(transaction as never)
@@ -159,7 +159,7 @@ export function base(options: base.Options): Adapter.Instance {
   async function withAccessKey<result>(
     parameters: { calls?: Adapter.signTransaction.Parameters['calls'] | undefined },
     fn: (
-      account: base.Signer,
+      account: TempoAccount.Account,
       keyAuthorization?: KeyAuthorization.Signed | undefined,
     ) => Promise<result>,
   ) {
@@ -220,7 +220,7 @@ export function base(options: base.Options): Adapter.Instance {
           await Actions.accessKey.revoke(client, {
             account,
             accessKey: parameters.accessKeyAddress,
-          } as never)
+          })
         } catch (error) {
           const isKeyNotFound =
             error instanceof BaseError && !!error.walk((e) => getErrorName(e) === 'KeyNotFound')
@@ -317,12 +317,6 @@ declare namespace signKeyAuthorization {
 }
 
 export declare namespace base {
-  /** Minimal signer shape required by shared wallet actions. */
-  type Signer = Pick<
-    TempoAccount.Account,
-    'address' | 'keyType' | 'sign' | 'signTransaction' | 'type'
-  >
-
   /** Options for {@link base}. */
   type Options = Adapter.SetupFn.Parameters & {
     /** Creates/registers an account and returns the selected signer when available. */
@@ -334,13 +328,15 @@ export declare namespace base {
     /** Discovers existing accounts and returns the selected signer when available. */
     loadAccounts: (parameters: Adapter.loadAccounts.Parameters) => Promise<ConnectResult>
     /** Resolves a signable root account for future signing requests. */
-    resolveAccount: (parameters?: ResolveAccountParameters | undefined) => Promise<Signer>
+    resolveAccount: (
+      parameters?: ResolveAccountParameters | undefined,
+    ) => Promise<TempoAccount.Account>
   }
 
   /** Account acquisition result returned by a signer source. */
   type ConnectResult = {
     /** Signable account selected by the connect flow. */
-    account?: Signer | undefined
+    account?: TempoAccount.Account | undefined
     /** Serializable accounts to put in provider state. */
     accounts: readonly Account.Store[]
     /** Email associated with the selected account. */

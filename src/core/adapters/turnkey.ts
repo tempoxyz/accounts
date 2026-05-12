@@ -1,8 +1,7 @@
-import { Address as core_Address, Hex, Provider as core_Provider, Signature } from 'ox'
-import { SignatureEnvelope } from 'ox/tempo'
-import { isAddressEqual, keccak256 } from 'viem'
+import { Address as core_Address, Hex, Provider as core_Provider, PublicKey, Secp256k1 } from 'ox'
+import { isAddressEqual } from 'viem'
 import type { Address } from 'viem/accounts'
-import { Transaction as TempoTransaction } from 'viem/tempo'
+import { Account as TempoAccount } from 'viem/tempo'
 
 import * as Adapter from '../Adapter.js'
 import * as Store from '../Store.js'
@@ -79,8 +78,11 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       }
     }
 
-    function toTempoAccount(account: turnkey.WalletAccount): base.Signer {
-      const address = core_Address.from(account.address)
+    function toTempoAccount(account: turnkey.WalletAccount): TempoAccount.Account {
+      const key = account.publicKey.startsWith('0x') ? account.publicKey : `0x${account.publicKey}`
+      Hex.assert(key, { strict: true })
+      const publicKey = PublicKey.from(Secp256k1.noble.ProjectivePoint.fromHex(key.slice(2)))
+
       const sign = async (parameters: { hash: Hex.Hex }) =>
         await signPayload({
           payload: parameters.hash,
@@ -88,25 +90,11 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           walletAccount: account,
         })
 
-      return {
-        address,
+      return TempoAccount.from({
         keyType: 'secp256k1',
-        type: 'local',
+        publicKey,
         sign,
-        async signTransaction(transaction) {
-          const presign = (() => {
-            if ('feePayerSignature' in transaction && transaction.feePayerSignature)
-              return { ...transaction, feePayerSignature: null }
-            return transaction
-          })()
-          const unsignedTransaction = await TempoTransaction.serialize(presign)
-          const signature = await sign({ hash: keccak256(unsignedTransaction) })
-          return await TempoTransaction.serialize(
-            transaction,
-            SignatureEnvelope.from(Signature.fromHex(signature)),
-          )
-        },
-      }
+      })
     }
 
     function clear() {
@@ -206,9 +194,13 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }
 
     function signatureToHex(value: turnkey.SignatureResponse): Hex.Hex {
-      const v = value.v.startsWith('0x') ? (value.v as Hex.Hex) : Hex.fromNumber(Number(value.v))
+      const { r, s } = value
+      const v = value.v.startsWith('0x') ? value.v : Hex.fromNumber(Number(value.v))
+      Hex.assert(r, { strict: true })
+      Hex.assert(s, { strict: true })
+      Hex.assert(v, { strict: true })
 
-      return Hex.concat(value.r as Hex.Hex, value.s as Hex.Hex, Hex.padLeft(v, 1))
+      return Hex.concat(r, s, Hex.padLeft(v, 1))
     }
 
     async function signPayload(parameters: {
@@ -358,6 +350,8 @@ export declare namespace turnkey {
     address: string
     /** Turnkey Ethereum address format. */
     addressFormat?: 'ADDRESS_FORMAT_ETHEREUM' | undefined
+    /** Compressed secp256k1 public key for the Turnkey wallet account. */
+    publicKey: string
   }
 
   /** Signature parts returned by Turnkey raw-payload signing. */

@@ -1,12 +1,15 @@
-import { Hex } from 'ox'
+import { Hex, PublicKey } from 'ox'
 import { describe, expect, test } from 'vp/test'
 
+import { accounts as core_accounts } from '../../../test/config.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { turnkey } from './turnkey.js'
 
-const address = '0x0000000000000000000000000000000000000001'
-const other = '0x0000000000000000000000000000000000000002'
+const account = core_accounts[0]
+const account_other = core_accounts[1]
+const address = account.address
+const other = account_other.address
 
 describe('turnkey', () => {
   test('default: createAccount delegates registration and signs the requested digest', async () => {
@@ -27,7 +30,7 @@ describe('turnkey', () => {
       {
         "accounts": [
           {
-            "address": "0x0000000000000000000000000000000000000001",
+            "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
             "label": "Ada",
           },
         ],
@@ -48,7 +51,7 @@ describe('turnkey', () => {
     expect(client.loadCalls).toMatchInlineSnapshot(`1`)
     expect(client.signWith).toMatchInlineSnapshot(`
       [
-        "0x0000000000000000000000000000000000000001",
+        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
       ]
     `)
     expect(result).toMatchInlineSnapshot(
@@ -72,20 +75,20 @@ describe('turnkey', () => {
 
     expect(client.signPayloads).toMatchInlineSnapshot(`
       [
-        "0x219d0ef7a59d2a40d6ff9e115e32fb6b53eb7fa518ea3364b7b806990fad3944",
+        "0xea47721547363fc82a5dca62b4544e4718d861b3df10bfac65d30102594b5c26",
       ]
     `)
     expect(result).toMatchInlineSnapshot(`
       {
         "accounts": [
           {
-            "address": "0x0000000000000000000000000000000000000001",
+            "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
           },
         ],
         "keyAuthorization": {
           "chainId": "0x1",
           "expiry": "0x7b",
-          "keyId": "0x0000000000000000000000000000000000000002",
+          "keyId": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
           "keyType": "secp256k1",
           "limits": undefined,
           "signature": {
@@ -119,7 +122,7 @@ describe('turnkey', () => {
     expect(client.signPayloads).toMatchInlineSnapshot(`
       [
         "0x0000000000000000000000000000000000000000000000000000000000000012",
-        "0x219d0ef7a59d2a40d6ff9e115e32fb6b53eb7fa518ea3364b7b806990fad3944",
+        "0xea47721547363fc82a5dca62b4544e4718d861b3df10bfac65d30102594b5c26",
       ]
     `)
     expect(result.signature).toMatchInlineSnapshot(
@@ -147,7 +150,7 @@ describe('turnkey', () => {
         "keyAuthorization": {
           "chainId": "0x1",
           "expiry": "0x7b",
-          "keyId": "0x0000000000000000000000000000000000000002",
+          "keyId": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
           "keyType": "secp256k1",
           "limits": undefined,
           "signature": {
@@ -157,7 +160,7 @@ describe('turnkey', () => {
             "yParity": "0x0",
           },
         },
-        "rootAddress": "0x0000000000000000000000000000000000000001",
+        "rootAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
       }
     `)
   })
@@ -193,10 +196,7 @@ describe('turnkey', () => {
     const { adapter, client, store } = setup()
     client.wallets = [
       {
-        accounts: [
-          { address, addressFormat: 'ADDRESS_FORMAT_ETHEREUM' },
-          { address: other, addressFormat: 'ADDRESS_FORMAT_ETHEREUM' },
-        ],
+        accounts: [toWalletAccount(account), toWalletAccount(account_other)],
       },
     ]
     store.setState({ accounts: [{ address: other }], activeAccount: 0 })
@@ -208,13 +208,13 @@ describe('turnkey', () => {
 
     expect(client.signWith).toMatchInlineSnapshot(`
       [
-        "0x0000000000000000000000000000000000000002",
+        "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
       ]
     `)
     expect(store.getState().accounts).toMatchInlineSnapshot(`
       [
         {
-          "address": "0x0000000000000000000000000000000000000002",
+          "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
         },
       ]
     `)
@@ -285,7 +285,7 @@ describe('turnkey', () => {
         { method: 'personal_sign', params: ['0x68656c6c6f', other] },
       ),
     ).rejects.toMatchInlineSnapshot(
-      '[Provider.UnauthorizedError: Account "0x0000000000000000000000000000000000000002" not found.]',
+      `[Provider.UnauthorizedError: Account "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650" not found.]`,
     )
   })
 })
@@ -296,10 +296,10 @@ function setup(options: setup.Options = {}) {
   const client = createClient(options)
   const adapter = turnkey({
     client,
-    createAccount: async () => ({ address }),
+    createAccount: async () => toWalletAccount(account),
     loadAccounts: async () => {
       client.loadCalls++
-      return [{ address }]
+      return [toWalletAccount(account)]
     },
   })({
     getAccount: (() => {
@@ -320,16 +320,20 @@ declare namespace setup {
 }
 
 function createClient(options: setup.Options = {}) {
-  type WalletShape = { accounts: { address: string; addressFormat: string }[] }
+  type WalletShape = {
+    accounts: {
+      address: string
+      addressFormat?: string | undefined
+      publicKey?: string | undefined
+    }[]
+  }
   const state = {
     fetchCalls: 0,
     initCalls: 0,
     loadCalls: 0,
     signPayloads: [] as Hex.Hex[],
     signWith: [] as string[],
-    wallets: [
-      { accounts: [{ address, addressFormat: 'ADDRESS_FORMAT_ETHEREUM' }] },
-    ] as WalletShape[],
+    wallets: [{ accounts: [toWalletAccount(account)] }] as WalletShape[],
   }
   const client = {
     get fetchCalls() {
@@ -390,4 +394,12 @@ function createClient(options: setup.Options = {}) {
   }
 
   return client
+}
+
+function toWalletAccount(account: (typeof core_accounts)[number]): turnkey.WalletAccount {
+  return {
+    address: account.address,
+    addressFormat: 'ADDRESS_FORMAT_ETHEREUM',
+    publicKey: PublicKey.toHex(PublicKey.compress(PublicKey.from(account.publicKey))),
+  }
 }
