@@ -14,6 +14,10 @@ const config: Config = defineConfig({
   cacheDir: '.vocs/cache',
   checkDeadlinks: 'warn',
   description: 'Tempo Accounts SDK documentation',
+  iconUrl: {
+    dark: '/favicon-dark.svg',
+    light: '/favicon-light.svg',
+  },
   editLink: {
     link: 'https://github.com/tempoxyz/accounts/edit/main/site/src/pages/:path',
     text: 'Suggest changes to this page',

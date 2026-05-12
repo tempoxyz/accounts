@@ -1,0 +1,98 @@
+import { useEffect, useRef, useState } from "react";
+
+export function ScrollableTabs<T extends string>({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: readonly T[];
+  value: T;
+  onChange: (t: T) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => {
+      const left = el.scrollLeft > 4;
+      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
+      setEdges((prev) =>
+        prev.left === left && prev.right === right ? prev : { left, right },
+      );
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, []);
+
+  // Auto-scroll the active tab into view when value changes.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const target = el.querySelector<HTMLButtonElement>(
+      `button[data-tab="${value}"]`,
+    );
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    const parentRect = el.getBoundingClientRect();
+    if (rect.left < parentRect.left || rect.right > parentRect.right) {
+      target.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
+  }, [value]);
+
+  return (
+    <div className="relative w-full">
+      <div
+        ref={scrollRef}
+        className="scrollbar-hide flex w-full items-center justify-start gap-0 overflow-x-auto px-6"
+        style={{ scrollSnapType: "x proximity" }}
+      >
+        <div className="mx-auto flex shrink-0 items-center">
+          {tabs.map((t) => {
+            const active = t === value;
+            return (
+              <button
+                key={t}
+                type="button"
+                data-tab={t}
+                onClick={() => onChange(t)}
+                className="flex shrink-0 items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none transition-colors duration-150"
+                style={{
+                  background: active ? "#141414" : "#0c0c0c",
+                  border: active
+                    ? "1px solid #2e2e2e"
+                    : "1px solid transparent",
+                  color: active ? "#ffffff" : "rgba(255,255,255,0.5)",
+                  scrollSnapAlign: "center",
+                }}
+              >
+                {t}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-[#0c0c0c] to-transparent transition-opacity duration-200"
+        style={{ opacity: edges.left ? 1 : 0 }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-[#0c0c0c] to-transparent transition-opacity duration-200"
+        style={{ opacity: edges.right ? 1 : 0 }}
+      />
+    </div>
+  );
+}
