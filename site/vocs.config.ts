@@ -1,4 +1,4 @@
-import { defineConfig, McpSource } from 'vocs/config'
+import { type Config, defineConfig, McpSource } from 'vocs/config'
 
 const baseUrl = (() => {
   if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'production') return ''
@@ -9,7 +9,7 @@ const baseUrl = (() => {
   return ''
 })()
 
-export default defineConfig({
+const config: Config = defineConfig({
   baseUrl: baseUrl || undefined,
   cacheDir: '.vocs/cache',
   checkDeadlinks: 'warn',
@@ -84,20 +84,21 @@ export default defineConfig({
         text: 'Reference',
         items: [
           {
+            text: 'Adapters',
+            collapsed: true,
+            items: [
+              { text: 'Overview', link: '/docs/api/adapters' },
+              { text: 'dialog', link: '/docs/api/dialog' },
+              { text: 'local', link: '/docs/api/local' },
+              { text: 'secp256k1 🚧', disabled: true },
+              { text: 'turnkey 🚧', disabled: true },
+              { text: 'webAuthn', link: '/docs/api/webAuthn' },
+            ],
+          },
+          {
             text: 'Core',
             collapsed: true,
             items: [
-              { text: 'Provider', link: '/docs/api/provider' },
-              {
-                text: 'Adapters',
-                collapsed: true,
-                items: [
-                  { text: 'Overview', link: '/docs/api/adapters' },
-                  { text: 'dialog / tempoWallet', link: '/docs/api/dialog' },
-                  { text: 'webAuthn', link: '/docs/api/webAuthn' },
-                  { text: 'local', link: '/docs/api/local' },
-                ],
-              },
               {
                 text: 'Dialog',
                 collapsed: true,
@@ -108,6 +109,22 @@ export default defineConfig({
                 ],
               },
               { text: 'Expiry', link: '/docs/api/expiry' },
+              { text: 'Provider', link: '/docs/api/provider' },
+              { text: 'Rpc 🚧', disabled: true },
+              { text: 'Schema 🚧', disabled: true },
+              {
+                text: 'Storage',
+                collapsed: true,
+                items: [
+                  { text: '.combine 🚧', disabled: true },
+                  { text: '.cookie 🚧', disabled: true },
+                  { text: '.from 🚧', disabled: true },
+                  { text: '.idb 🚧', disabled: true },
+                  { text: '.localStorage 🚧', disabled: true },
+                  { text: '.memory 🚧', disabled: true },
+                ],
+              },
+              { text: 'TrustedHosts 🚧', disabled: true },
               {
                 text: 'WebAuthnCeremony',
                 collapsed: true,
@@ -119,12 +136,45 @@ export default defineConfig({
               },
             ],
           },
+          { text: 'CLI 🚧', disabled: true },
           {
-            text: 'Wagmi',
+            text: 'JSON-RPC',
             collapsed: true,
             items: [
-              { text: 'tempoWallet', link: '/docs/wagmi/tempoWallet' },
-              { text: 'webAuthn', link: '/docs/wagmi/webAuthn' },
+              { text: 'eth_accounts 🚧', disabled: true },
+              { text: 'eth_chainId 🚧', disabled: true },
+              { text: 'eth_fillTransaction', link: '/docs/rpc/eth_fillTransaction' },
+              { text: 'eth_requestAccounts 🚧', disabled: true },
+              { text: 'eth_sendTransaction', link: '/docs/rpc/eth_sendTransaction' },
+              { text: 'eth_sendTransactionSync', link: '/docs/rpc/eth_sendTransactionSync' },
+              { text: 'eth_signTransaction 🚧', disabled: true },
+              { text: 'eth_signTypedData_v4 🚧', disabled: true },
+              { text: 'personal_sign', link: '/docs/rpc/personal_sign' },
+              { text: 'wallet_authorizeAccessKey', link: '/docs/rpc/wallet_authorizeAccessKey' },
+              { text: 'wallet_connect', link: '/docs/rpc/wallet_connect' },
+              { text: 'wallet_deposit 🚧', disabled: true },
+              { text: 'wallet_depositZone 🚧', disabled: true },
+              { text: 'wallet_disconnect', link: '/docs/rpc/wallet_disconnect' },
+              { text: 'wallet_getBalances', link: '/docs/rpc/wallet_getBalances' },
+              { text: 'wallet_getCallsStatus', link: '/docs/rpc/wallet_getCallsStatus' },
+              { text: 'wallet_getCapabilities', link: '/docs/rpc/wallet_getCapabilities' },
+              { text: 'wallet_revokeAccessKey', link: '/docs/rpc/wallet_revokeAccessKey' },
+              { text: 'wallet_send 🚧', disabled: true },
+              { text: 'wallet_sendCalls', link: '/docs/rpc/wallet_sendCalls' },
+              { text: 'wallet_swap 🚧', disabled: true },
+              { text: 'wallet_switchEthereumChain 🚧', disabled: true },
+              { text: 'wallet_withdrawZone 🚧', disabled: true },
+            ],
+          },
+          {
+            text: 'Remote',
+            collapsed: true,
+            items: [
+              { text: '.create 🚧', disabled: true },
+              { text: '.useEnsureVisibility 🚧', disabled: true },
+              { text: '.useState 🚧', disabled: true },
+              { text: '.useTheme 🚧', disabled: true },
+              { text: '.validateSearch 🚧', disabled: true },
             ],
           },
           {
@@ -132,29 +182,29 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: 'Overview', link: '/docs/server' },
-              { text: '.compose', link: '/docs/server/handler.compose' },
-              { text: '.feePayer', link: '/docs/server/handler.feePayer' },
-              { text: '.relay', link: '/docs/server/handler.relay' },
-              { text: '.webAuthn', link: '/docs/server/handler.webAuthn' },
-              { text: 'Kv', link: '/docs/server/kv' },
-            ],
-          },
-          {
-            text: 'JSON-RPC',
-            collapsed: true,
-            items: [
-              { text: 'wallet_connect', link: '/docs/rpc/wallet_connect' },
-              { text: 'wallet_disconnect', link: '/docs/rpc/wallet_disconnect' },
-              { text: 'wallet_authorizeAccessKey', link: '/docs/rpc/wallet_authorizeAccessKey' },
-              { text: 'wallet_revokeAccessKey', link: '/docs/rpc/wallet_revokeAccessKey' },
-              { text: 'wallet_getBalances', link: '/docs/rpc/wallet_getBalances' },
-              { text: 'wallet_getCapabilities', link: '/docs/rpc/wallet_getCapabilities' },
-              { text: 'wallet_getCallsStatus', link: '/docs/rpc/wallet_getCallsStatus' },
-              { text: 'wallet_sendCalls', link: '/docs/rpc/wallet_sendCalls' },
-              { text: 'eth_sendTransaction', link: '/docs/rpc/eth_sendTransaction' },
-              { text: 'eth_sendTransactionSync', link: '/docs/rpc/eth_sendTransactionSync' },
-              { text: 'eth_fillTransaction', link: '/docs/rpc/eth_fillTransaction' },
-              { text: 'personal_sign', link: '/docs/rpc/personal_sign' },
+              {
+                text: 'Handlers',
+                collapsed: true,
+                items: [
+                  { text: '.auth 🚧', disabled: true },
+                  { text: '.codeAuth 🚧', disabled: true },
+                  { text: '.compose', link: '/docs/server/handler.compose' },
+                  { text: '.exchange 🚧', disabled: true },
+                  { text: '.relay', link: '/docs/server/handler.relay' },
+                  { text: '.webAuthn', link: '/docs/server/handler.webAuthn' },
+                ],
+              },
+              { text: 'hc 🚧', disabled: true },
+              {
+                text: 'Kv',
+                collapsed: true,
+                items: [
+                  { text: '.cloudflare 🚧', disabled: true },
+                  { text: '.durableObject 🚧', disabled: true },
+                  { text: '.from 🚧', disabled: true },
+                  { text: '.memory 🚧', disabled: true },
+                ],
+              },
             ],
           },
         ],
@@ -183,3 +233,5 @@ export default defineConfig({
     },
   },
 })
+
+export default config
