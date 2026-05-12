@@ -136,7 +136,11 @@ const config: Config = defineConfig({
               },
             ],
           },
-          { text: 'CLI 🚧', disabled: true },
+          {
+            text: 'CLI',
+            collapsed: true,
+            items: [{ text: 'Provider', link: '/docs/cli/provider' }],
+          },
           {
             text: 'JSON-RPC',
             collapsed: true,
