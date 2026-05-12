@@ -145,6 +145,8 @@ export declare namespace SetupFn {
   export type Parameters = {
     /** Returns the rehydrated local account for the given address, or the active account if omitted. */
     getAccount: Account.Find
+    /** Returns request account metadata without exposing signing material. */
+    getRequestAccount: Account.GetRequest
     /** Get the viem client for a given chain ID. Defaults to the active chain. */
     getClient: (options?: getClient.Options | undefined) => Client<Transport, typeof tempo>
     /** Storage adapter used by the provider. */

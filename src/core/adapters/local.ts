@@ -93,12 +93,13 @@ export function local(options: local.Options): Adapter.Adapter {
     }
 
     async function withAccessKey<result>(
+      options: Pick<Account.find.Options, 'address' | 'calls'>,
       fn: (
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
       ) => Promise<result>,
     ): Promise<result> {
-      const account = getAccount({ signable: true })
+      const account = getAccount({ ...options, signable: true })
       const keyAuthorization = AccessKey.getPending(account, { store })
       try {
         const result = await fn(account, keyAuthorization ?? undefined)
@@ -107,7 +108,7 @@ export function local(options: local.Options): Adapter.Adapter {
       } catch (error) {
         if (account.source !== 'accessKey') throw error
         AccessKey.remove(account, { store })
-        const root = getAccount({ accessKey: false, signable: true })
+        const root = getAccount({ accessKey: false, address: options.address, signable: true })
         return await fn(root, undefined)
       }
     }
@@ -272,16 +273,19 @@ export function local(options: local.Options): Adapter.Adapter {
               return undefined
             })(),
           })
-          const { account, prepared } = await withAccessKey(async (account, keyAuthorization) => ({
-            account,
-            prepared: await prepareTransactionRequest(client, {
+          const { account, prepared } = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls },
+            async (account, keyAuthorization) => ({
               account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
+              prepared: await prepareTransactionRequest(client, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                keyAuthorization,
+                type: 'tempo',
+              }),
             }),
-          }))
+          )
           return await account.signTransaction(prepared as never)
         },
         async signTypedData({ data, address }) {
@@ -303,16 +307,19 @@ export function local(options: local.Options): Adapter.Adapter {
               return undefined
             })(),
           })
-          const { account, prepared } = await withAccessKey(async (account, keyAuthorization) => ({
-            account,
-            prepared: await prepareTransactionRequest(client, {
+          const { account, prepared } = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls },
+            async (account, keyAuthorization) => ({
               account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
+              prepared: await prepareTransactionRequest(client, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                keyAuthorization,
+                type: 'tempo',
+              }),
             }),
-          }))
+          )
           const signed = await account.signTransaction(prepared as never)
           return await client.request({
             method: 'eth_sendRawTransaction' as never,
@@ -328,16 +335,19 @@ export function local(options: local.Options): Adapter.Adapter {
               return undefined
             })(),
           })
-          const { account, prepared } = await withAccessKey(async (account, keyAuthorization) => ({
-            account,
-            prepared: await prepareTransactionRequest(client, {
+          const { account, prepared } = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls },
+            async (account, keyAuthorization) => ({
               account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
+              prepared: await prepareTransactionRequest(client, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                keyAuthorization,
+                type: 'tempo',
+              }),
             }),
-          }))
+          )
           const signed = await account.signTransaction(prepared as never)
           return await client.request({
             method: 'eth_sendRawTransactionSync' as never,

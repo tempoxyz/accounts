@@ -1,6 +1,7 @@
 import { Hex } from 'ox'
 import { describe, expect, test } from 'vp/test'
 
+import * as Account from '../Account.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { turnkey } from './turnkey.js'
@@ -28,6 +29,7 @@ describe('turnkey', () => {
         "accounts": [
           {
             "address": "0x0000000000000000000000000000000000000001",
+            "keyType": "secp256k1",
             "label": "Ada",
           },
         ],
@@ -56,6 +58,33 @@ describe('turnkey', () => {
     )
   })
 
+  test('behavior: stores secp256k1 request account metadata', async () => {
+    const { adapter, store } = setup()
+    const loaded = await adapter.actions.loadAccounts(undefined, {
+      method: 'wallet_connect',
+      params: undefined,
+    })
+    store.setState({ accounts: loaded.accounts, activeAccount: 0 })
+
+    const result = Account.request({ store })
+
+    expect(store.getState().accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x0000000000000000000000000000000000000001",
+          "keyType": "secp256k1",
+        },
+      ]
+    `)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "address": "0x0000000000000000000000000000000000000001",
+        "keyType": "secp256k1",
+        "type": "json-rpc",
+      }
+    `)
+  })
+
   test('default: loadAccounts can provision an external access key', async () => {
     const { adapter, client } = setup()
 
@@ -80,6 +109,7 @@ describe('turnkey', () => {
         "accounts": [
           {
             "address": "0x0000000000000000000000000000000000000001",
+            "keyType": "secp256k1",
           },
         ],
         "keyAuthorization": {
@@ -187,6 +217,7 @@ describe('turnkey', () => {
       [
         {
           "address": "0x0000000000000000000000000000000000000002",
+          "keyType": "secp256k1",
         },
       ]
     `)
@@ -278,6 +309,7 @@ function setup(options: setup.Options = {}) {
       throw new Error('not implemented')
     }) as never,
     getClient: (() => ({ chain: { id: 1 } })) as never,
+    getRequestAccount: (options) => Account.request({ ...options, store }),
     storage,
     store,
   })

@@ -5,6 +5,7 @@ import { Account as TempoAccount } from 'viem/tempo'
 import { z } from 'zod/mini'
 
 import * as AccessKey from '../AccessKey.js'
+import type * as Account from '../Account.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
 import * as ExecutionError from '../ExecutionError.js'
@@ -44,405 +45,466 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       'due to lack of WebAuthn passkey support in non-secure contexts.',
     )
 
-  return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
-    const listeners = new Set<(requestQueue: readonly Store.QueuedRequest[]) => void>()
-    const requestStore = ox_RpcRequest.createStore()
+  return Adapter.define(
+    { icon, name, rdns },
+    ({ getAccount, getClient, getRequestAccount, store }) => {
+      const listeners = new Set<(requestQueue: readonly Store.QueuedRequest[]) => void>()
+      const requestStore = ox_RpcRequest.createStore()
 
-    /** Wait for a queued request to be resolved via the store. */
-    function waitForQueuedRequest(requestId: number) {
-      return new Promise((resolve, reject) => {
-        const listener = (requestQueue: readonly Store.QueuedRequest[]) => {
-          const queued = requestQueue.find((x) => x.request.id === requestId)
+      /** Wait for a queued request to be resolved via the store. */
+      function waitForQueuedRequest(requestId: number) {
+        return new Promise((resolve, reject) => {
+          const listener = (requestQueue: readonly Store.QueuedRequest[]) => {
+            const queued = requestQueue.find((x) => x.request.id === requestId)
 
-          // Request removed and queue empty — cancelled or dialog closed.
-          if (!queued && requestQueue.length === 0) {
+            // Request removed and queue empty — cancelled or dialog closed.
+            if (!queued && requestQueue.length === 0) {
+              listeners.delete(listener)
+              reject(new ox_Provider.UserRejectedRequestError())
+              return
+            }
+
+            // Request not found but queue has other requests — wait.
+            if (!queued) return
+
+            // Request found but not yet resolved — wait.
+            if (queued.status !== 'success' && queued.status !== 'error') return
+
             listeners.delete(listener)
-            reject(new ox_Provider.UserRejectedRequestError())
-            return
+
+            if (queued.status === 'success') resolve(queued.result)
+            else reject(new ox_Provider.UserRejectedRequestError({ message: queued.error.message }))
+
+            // Remove the resolved request from the queue.
+            store.setState((x) => ({
+              ...x,
+              requestQueue: x.requestQueue.filter((x) => x.request.id !== requestId),
+            }))
           }
 
-          // Request not found but queue has other requests — wait.
-          if (!queued) return
+          listeners.add(listener)
 
-          // Request found but not yet resolved — wait.
-          if (queued.status !== 'success' && queued.status !== 'error') return
+          // Notify immediately with current state so the store subscription
+          // picks up the request that was just added (setState fires
+          // synchronously before this listener is registered).
+          listener(store.getState().requestQueue)
+        })
+      }
 
-          listeners.delete(listener)
+      /**
+       * An ox provider that queues RPC requests in the store. The store
+       * subscription syncs the pending queue to the dialog via `syncRequests`.
+       */
+      const provider = ox_Provider.from(
+        {
+          async request(r) {
+            const request = requestStore.prepare(r as never)
+            const account = getQueuedAccount(request)
 
-          if (queued.status === 'success') resolve(queued.result)
-          else reject(new ox_Provider.UserRejectedRequestError({ message: queued.error.message }))
+            store.setState((x) => ({
+              ...x,
+              requestQueue: [
+                ...x.requestQueue,
+                { ...(account ? { account } : {}), request, status: 'pending' as const },
+              ],
+            }))
 
-          // Remove the resolved request from the queue.
-          store.setState((x) => ({
-            ...x,
-            requestQueue: x.requestQueue.filter((x) => x.request.id !== requestId),
-          }))
+            return waitForQueuedRequest(request.id)
+          },
+        },
+        { schema: Schema.ox },
+      )
+
+      function getQueuedAccount(
+        request: Store.QueuedRequest['request'],
+      ): Account.Request | undefined {
+        const options = getQueuedAccountOptions(request)
+        if (!options) return undefined
+        return getRequestAccount(options)
+      }
+
+      function getQueuedAccountOptions(
+        request: Store.QueuedRequest['request'],
+      ): Omit<Account.request.Options, 'store'> | undefined {
+        if (request.method === 'personal_sign') {
+          const [, address] = (request.params ?? []) as readonly [unknown, Address.Address?]
+          return address ? { accessKey: false, address } : undefined
         }
 
-        listeners.add(listener)
+        if (request.method === 'eth_signTypedData_v4') {
+          const [address] = (request.params ?? []) as readonly [Address.Address?]
+          return address ? { accessKey: false, address } : undefined
+        }
 
-        // Notify immediately with current state so the store subscription
-        // picks up the request that was just added (setState fires
-        // synchronously before this listener is registered).
-        listener(store.getState().requestQueue)
-      })
-    }
+        if (
+          request.method !== 'eth_sendTransaction' &&
+          request.method !== 'eth_sendTransactionSync' &&
+          request.method !== 'eth_signTransaction'
+        )
+          return undefined
 
-    /**
-     * An ox provider that queues RPC requests in the store. The store
-     * subscription syncs the pending queue to the dialog via `syncRequests`.
-     */
-    const provider = ox_Provider.from(
-      {
-        async request(r) {
-          const request = requestStore.prepare(r as never)
+        const [encoded] = (request.params ?? []) as readonly unknown[]
+        if (!encoded) return undefined
 
-          store.setState((x) => ({
-            ...x,
-            requestQueue: [...x.requestQueue, { request, status: 'pending' as const }],
-          }))
-
-          return waitForQueuedRequest(request.id)
-        },
-      },
-      { schema: Schema.ox },
-    )
-
-    /**
-     * Prepares a local key pair when `authorizeAccessKey` is requested without
-     * an external publicKey/address, and returns the params to inject into the
-     * RPC request so the dialog signs the authorization.
-     */
-    async function generateAccessKey(options: Adapter.authorizeAccessKey.Parameters | undefined) {
-      if (!options) return undefined
-      if (options.publicKey || options.address) return undefined
-
-      const { accessKey, keyPair } = await AccessKey.generate()
-      return {
-        accessKey,
-        keyPair,
-        request: {
-          ...options,
-          publicKey: accessKey.publicKey,
-          keyType: 'p256' as const,
-        },
-      }
-    }
-
-    /**
-     * After the dialog returns a signed key authorization, saves the local
-     * key pair + key authorization into the store.
-     */
-    function saveAccessKey(
-      address: Address.Address,
-      keyAuth: KeyAuthorization.Rpc,
-      keyPair: AccessKey.generate.ReturnType['keyPair'],
-    ) {
-      const keyAuthorization = KeyAuthorization.fromRpc(keyAuth)
-      AccessKey.save({ address, keyAuthorization, keyPair, store })
-    }
-
-    /**
-     * Tries to execute `fn` with the local access key. Returns `undefined`
-     * when no access key exists so the caller can fall through to the dialog.
-     * On access key errors, removes the stale key and also returns `undefined`.
-     * On insufficient-balance reverts, keeps the key (it's still valid) and
-     * falls through to the dialog so the user can fund or retry.
-     */
-    async function withAccessKey<result>(
-      fn: (
-        account: TempoAccount.Account,
-        keyAuthorization?: KeyAuthorization.Signed,
-      ) => Promise<result>,
-    ): Promise<result | undefined> {
-      const account = (() => {
         try {
-          return getAccount({ signable: true })
+          const tx = z.decode(Rpc.transactionRequest, encoded as never)
+          const calls = tx.calls ?? (tx.to ? [{ data: tx.data, to: tx.to }] : undefined)
+          return {
+            ...(tx.from ? { address: tx.from } : {}),
+            ...(calls ? { calls } : {}),
+            ...(tx.chainId ? { chainId: tx.chainId } : {}),
+          }
         } catch {
           return undefined
         }
-      })()
-      if (!account) return undefined
-      if (account.source !== 'accessKey') return undefined
-      const keyAuthorization = AccessKey.getPending(account, { store })
-      try {
-        const result = await fn(account, keyAuthorization ?? undefined)
-        AccessKey.removePending(account, { store })
-        return result
-      } catch (err) {
-        const revert = err instanceof Error ? ExecutionError.parse(err) : undefined
-        if (revert?.errorName === 'InsufficientBalance') {
-          // Access key is still valid — fall through to dialog so the user can
-          // address the funding issue without losing their authorization.
+      }
+
+      /**
+       * Prepares a local key pair when `authorizeAccessKey` is requested without
+       * an external publicKey/address, and returns the params to inject into the
+       * RPC request so the dialog signs the authorization.
+       */
+      async function generateAccessKey(options: Adapter.authorizeAccessKey.Parameters | undefined) {
+        if (!options) return undefined
+        if (options.publicKey || options.address) return undefined
+
+        const { accessKey, keyPair } = await AccessKey.generate()
+        return {
+          accessKey,
+          keyPair,
+          request: {
+            ...options,
+            publicKey: accessKey.publicKey,
+            keyType: 'p256' as const,
+          },
+        }
+      }
+
+      /**
+       * After the dialog returns a signed key authorization, saves the local
+       * key pair + key authorization into the store.
+       */
+      function saveAccessKey(
+        address: Address.Address,
+        keyAuth: KeyAuthorization.Rpc,
+        keyPair: AccessKey.generate.ReturnType['keyPair'],
+      ) {
+        const keyAuthorization = KeyAuthorization.fromRpc(keyAuth)
+        AccessKey.save({ address, keyAuthorization, keyPair, store })
+      }
+
+      /**
+       * Tries to execute `fn` with the local access key. Returns `undefined`
+       * when no access key exists so the caller can fall through to the dialog.
+       * On access key errors, removes the stale key and also returns `undefined`.
+       * On insufficient-balance reverts, keeps the key (it's still valid) and
+       * falls through to the dialog so the user can fund or retry.
+       */
+      async function withAccessKey<result>(
+        options: Pick<Account.find.Options, 'address' | 'calls'>,
+        fn: (
+          account: TempoAccount.Account,
+          keyAuthorization?: KeyAuthorization.Signed,
+        ) => Promise<result>,
+      ): Promise<result | undefined> {
+        const account = (() => {
+          try {
+            return getAccount({ ...options, signable: true })
+          } catch {
+            return undefined
+          }
+        })()
+        if (!account) return undefined
+        if (account.source !== 'accessKey') return undefined
+        const keyAuthorization = AccessKey.getPending(account, { store })
+        try {
+          const result = await fn(account, keyAuthorization ?? undefined)
+          AccessKey.removePending(account, { store })
+          return result
+        } catch (err) {
+          const revert = err instanceof Error ? ExecutionError.parse(err) : undefined
+          if (revert?.errorName === 'InsufficientBalance') {
+            // Access key is still valid — fall through to dialog so the user can
+            // address the funding issue without losing their authorization.
+            return undefined
+          }
+          console.warn('[accounts] silent sign with access key failed, removing key:', err)
+          AccessKey.remove(account, { store })
           return undefined
         }
-        console.warn('[accounts] silent sign with access key failed, removing key:', err)
-        AccessKey.remove(account, { store })
-        return undefined
       }
-    }
 
-    const dialogInstance = dialog({ host, store, theme })
+      const dialogInstance = dialog({ host, store, theme })
 
-    // Sync store → dialog: whenever the request queue changes, notify
-    // listeners and sync pending requests to the dialog.
-    const unsubscribe = store.subscribe(
-      (x) => x.requestQueue,
-      (requestQueue) => {
-        for (const listener of listeners) listener(requestQueue)
+      // Sync store → dialog: whenever the request queue changes, notify
+      // listeners and sync pending requests to the dialog.
+      const unsubscribe = store.subscribe(
+        (x) => x.requestQueue,
+        (requestQueue) => {
+          for (const listener of listeners) listener(requestQueue)
 
-        const pending = requestQueue.filter(
-          (x): x is Store.QueuedRequest & { status: 'pending' } => x.status === 'pending',
-        )
+          const pending = requestQueue.filter(
+            (x): x is Store.QueuedRequest & { status: 'pending' } => x.status === 'pending',
+          )
 
-        dialogInstance?.syncRequests(pending)
-        if (pending.length === 0) dialogInstance?.close()
-      },
-    )
+          dialogInstance?.syncRequests(pending)
+          if (pending.length === 0) dialogInstance?.close()
+        },
+      )
 
-    return {
-      cleanup() {
-        unsubscribe()
-        dialogInstance?.destroy()
-      },
-      forwardsAuth: true,
-      actions: {
-        async createAccount(parameters, request) {
-          const accessKey = await generateAccessKey(parameters.authorizeAccessKey)
+      return {
+        cleanup() {
+          unsubscribe()
+          dialogInstance?.destroy()
+        },
+        forwardsAuth: true,
+        actions: {
+          async createAccount(parameters, request) {
+            const accessKey = await generateAccessKey(parameters.authorizeAccessKey)
 
-          const { accounts } = await provider.request({
-            ...request,
-            params: [
-              {
-                ...request.params?.[0],
-                capabilities: {
-                  ...request.params?.[0]?.capabilities,
-                  ...(accessKey
-                    ? {
-                        authorizeAccessKey: z.encode(
-                          Rpc.wallet_connect.authorizeAccessKey,
-                          accessKey.request,
-                        ),
-                      }
-                    : {}),
+            const { accounts } = await provider.request({
+              ...request,
+              params: [
+                {
+                  ...request.params?.[0],
+                  capabilities: {
+                    ...request.params?.[0]?.capabilities,
+                    ...(accessKey
+                      ? {
+                          authorizeAccessKey: z.encode(
+                            Rpc.wallet_connect.authorizeAccessKey,
+                            accessKey.request,
+                          ),
+                        }
+                      : {}),
+                  },
                 },
-              },
-            ] as const,
-          })
+              ] as const,
+            })
 
-          const address = accounts[0]?.address
-          const keyAuthorization = accounts[0]?.capabilities.keyAuthorization
+            const address = accounts[0]?.address
+            const keyAuthorization = accounts[0]?.capabilities.keyAuthorization
 
-          if (accessKey && address && keyAuthorization)
-            saveAccessKey(address, keyAuthorization, accessKey.keyPair)
+            if (accessKey && address && keyAuthorization)
+              saveAccessKey(address, keyAuthorization, accessKey.keyPair)
 
-          return {
-            accounts: accounts.map((a) => ({ address: a.address })),
-            ...(keyAuthorization ? { keyAuthorization } : {}),
-            ...(accounts[0]?.capabilities.signature
-              ? { signature: accounts[0].capabilities.signature }
-              : {}),
-            ...(accounts[0]?.capabilities.personalSign
-              ? { personalSign: accounts[0].capabilities.personalSign }
-              : {}),
-          }
-        },
+            return {
+              accounts: accounts.map((a) => ({ address: a.address })),
+              ...(keyAuthorization ? { keyAuthorization } : {}),
+              ...(accounts[0]?.capabilities.signature
+                ? { signature: accounts[0].capabilities.signature }
+                : {}),
+              ...(accounts[0]?.capabilities.personalSign
+                ? { personalSign: accounts[0].capabilities.personalSign }
+                : {}),
+            }
+          },
 
-        async loadAccounts(parameters, request) {
-          const accessKey = await generateAccessKey(parameters?.authorizeAccessKey)
+          async loadAccounts(parameters, request) {
+            const accessKey = await generateAccessKey(parameters?.authorizeAccessKey)
 
-          const { accounts } = await provider.request({
-            ...request,
-            params: [
-              {
-                ...request.params?.[0],
-                capabilities: {
-                  ...request.params?.[0]?.capabilities,
-                  ...(accessKey
-                    ? {
-                        authorizeAccessKey: z.encode(
-                          Rpc.wallet_connect.authorizeAccessKey,
-                          accessKey.request,
-                        ),
-                      }
-                    : {}),
+            const { accounts } = await provider.request({
+              ...request,
+              params: [
+                {
+                  ...request.params?.[0],
+                  capabilities: {
+                    ...request.params?.[0]?.capabilities,
+                    ...(accessKey
+                      ? {
+                          authorizeAccessKey: z.encode(
+                            Rpc.wallet_connect.authorizeAccessKey,
+                            accessKey.request,
+                          ),
+                        }
+                      : {}),
+                  },
                 },
+              ] as const,
+            })
+
+            const address = accounts[0]?.address
+            const keyAuthorization = accounts[0]?.capabilities.keyAuthorization
+
+            if (accessKey && address && keyAuthorization)
+              saveAccessKey(address, keyAuthorization, accessKey.keyPair)
+
+            return {
+              accounts: accounts.map((a) => ({ address: a.address })),
+              ...(keyAuthorization ? { keyAuthorization } : {}),
+              ...(accounts[0]?.capabilities.signature
+                ? { signature: accounts[0].capabilities.signature }
+                : {}),
+              ...(accounts[0]?.capabilities.personalSign
+                ? { personalSign: accounts[0].capabilities.personalSign }
+                : {}),
+            }
+          },
+
+          async signPersonalMessage(_params, request) {
+            return await provider.request(request)
+          },
+
+          async signTransaction(parameters, request) {
+            const result = await withAccessKey(
+              { address: parameters.from, calls: parameters.calls },
+              async (account, keyAuthorization) => {
+                const { feePayer, ...rest } = parameters
+                const client = getClient({
+                  feePayer: (() => {
+                    if (feePayer === false) return false
+                    if (typeof feePayer === 'string') return feePayer
+                    return undefined
+                  })(),
+                })
+                const prepared = await prepareTransactionRequest(client, {
+                  account,
+                  ...rest,
+                  ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
+                  keyAuthorization,
+                  type: 'tempo',
+                })
+                return await account.signTransaction(prepared as never)
               },
-            ] as const,
-          })
-
-          const address = accounts[0]?.address
-          const keyAuthorization = accounts[0]?.capabilities.keyAuthorization
-
-          if (accessKey && address && keyAuthorization)
-            saveAccessKey(address, keyAuthorization, accessKey.keyPair)
-
-          return {
-            accounts: accounts.map((a) => ({ address: a.address })),
-            ...(keyAuthorization ? { keyAuthorization } : {}),
-            ...(accounts[0]?.capabilities.signature
-              ? { signature: accounts[0].capabilities.signature }
-              : {}),
-            ...(accounts[0]?.capabilities.personalSign
-              ? { personalSign: accounts[0].capabilities.personalSign }
-              : {}),
-          }
-        },
-
-        async signPersonalMessage(_params, request) {
-          return await provider.request(request)
-        },
-
-        async signTransaction(parameters, request) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
-            const { feePayer, ...rest } = parameters
-            const client = getClient({
-              feePayer: (() => {
-                if (feePayer === false) return false
-                if (typeof feePayer === 'string') return feePayer
-                return undefined
-              })(),
+            )
+            if (result !== undefined) return result
+            return await provider.request({
+              ...request,
+              params: [z.encode(Rpc.transactionRequest, parameters)] as const,
             })
-            const prepared = await prepareTransactionRequest(client, {
-              account,
-              ...rest,
-              ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-              keyAuthorization,
-              type: 'tempo',
+          },
+
+          async signTypedData(_params, request) {
+            return await provider.request(request)
+          },
+
+          async sendTransaction(parameters, request) {
+            const result = await withAccessKey(
+              { address: parameters.from, calls: parameters.calls },
+              async (account, keyAuthorization) => {
+                const { feePayer, ...rest } = parameters
+                const client = getClient({
+                  feePayer: (() => {
+                    if (feePayer === false) return false
+                    if (typeof feePayer === 'string') return feePayer
+                    return undefined
+                  })(),
+                })
+                const prepared = await prepareTransactionRequest(client, {
+                  account,
+                  ...rest,
+                  ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
+                  keyAuthorization,
+                  type: 'tempo',
+                })
+                const signed = await account.signTransaction(prepared as never)
+                return await client.request({
+                  method: 'eth_sendRawTransaction' as never,
+                  params: [signed],
+                })
+              },
+            )
+            if (result !== undefined) return result
+            return await provider.request({
+              ...request,
+              params: [z.encode(Rpc.transactionRequest, parameters)] as const,
             })
-            return await account.signTransaction(prepared as never)
-          })
-          if (result !== undefined) return result
-          return await provider.request({
-            ...request,
-            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
-          })
-        },
+          },
 
-        async signTypedData(_params, request) {
-          return await provider.request(request)
-        },
-
-        async sendTransaction(parameters, request) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
-            const { feePayer, ...rest } = parameters
-            const client = getClient({
-              feePayer: (() => {
-                if (feePayer === false) return false
-                if (typeof feePayer === 'string') return feePayer
-                return undefined
-              })(),
+          async sendTransactionSync(parameters, request) {
+            const result = await withAccessKey(
+              { address: parameters.from, calls: parameters.calls },
+              async (account, keyAuthorization) => {
+                const { feePayer, ...rest } = parameters
+                const client = getClient({
+                  feePayer: (() => {
+                    if (feePayer === false) return false
+                    if (typeof feePayer === 'string') return feePayer
+                    return undefined
+                  })(),
+                })
+                const prepared = await prepareTransactionRequest(client, {
+                  account,
+                  ...rest,
+                  ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
+                  keyAuthorization,
+                  type: 'tempo',
+                })
+                const signed = await account.signTransaction(prepared as never)
+                return await client.request({
+                  method: 'eth_sendRawTransactionSync' as never,
+                  params: [signed],
+                })
+              },
+            )
+            if (result !== undefined) return result
+            return await provider.request({
+              ...request,
+              params: [z.encode(Rpc.transactionRequest, parameters)] as const,
             })
-            const prepared = await prepareTransactionRequest(client, {
-              account,
-              ...rest,
-              ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-              keyAuthorization,
-              type: 'tempo',
+          },
+
+          async authorizeAccessKey(parameters, request) {
+            const accessKey = await generateAccessKey(parameters)
+
+            const result = await provider.request({
+              ...request,
+              params: [
+                z.encode(
+                  Rpc.wallet_connect.authorizeAccessKey,
+                  accessKey ? accessKey.request : parameters,
+                )!,
+              ],
             })
-            const signed = await account.signTransaction(prepared as never)
-            return await client.request({
-              method: 'eth_sendRawTransaction' as never,
-              params: [signed],
+
+            if (accessKey) {
+              const account = getAccount({ accessKey: false, signable: false })
+              saveAccessKey(account.address, result.keyAuthorization, accessKey.keyPair)
+            }
+
+            return result
+          },
+
+          async revokeAccessKey(_params, request) {
+            await provider.request(request)
+          },
+
+          async deposit(_params, request) {
+            return await provider.request(request)
+          },
+
+          async send(params, request) {
+            return await provider.request({
+              ...request,
+              params: [z.encode(Rpc.wallet_send.parameters, params)] as const,
             })
-          })
-          if (result !== undefined) return result
-          return await provider.request({
-            ...request,
-            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
-          })
-        },
+          },
 
-        async sendTransactionSync(parameters, request) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
-            const { feePayer, ...rest } = parameters
-            const client = getClient({
-              feePayer: (() => {
-                if (feePayer === false) return false
-                if (typeof feePayer === 'string') return feePayer
-                return undefined
-              })(),
+          async swap(_params, request) {
+            return await provider.request(request)
+          },
+
+          async depositZone(params, request) {
+            return await provider.request({
+              ...request,
+              params: [z.encode(Rpc.wallet_depositZone.parameters, params)] as const,
             })
-            const prepared = await prepareTransactionRequest(client, {
-              account,
-              ...rest,
-              ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-              keyAuthorization,
-              type: 'tempo',
+          },
+
+          async withdrawZone(params, request) {
+            return await provider.request({
+              ...request,
+              params: [z.encode(Rpc.wallet_withdrawZone.parameters, params)] as const,
             })
-            const signed = await account.signTransaction(prepared as never)
-            return await client.request({
-              method: 'eth_sendRawTransactionSync' as never,
-              params: [signed],
-            })
-          })
-          if (result !== undefined) return result
-          return await provider.request({
-            ...request,
-            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
-          })
+          },
+
+          async disconnect() {
+            store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
+          },
         },
-
-        async authorizeAccessKey(parameters, request) {
-          const accessKey = await generateAccessKey(parameters)
-
-          const result = await provider.request({
-            ...request,
-            params: [
-              z.encode(
-                Rpc.wallet_connect.authorizeAccessKey,
-                accessKey ? accessKey.request : parameters,
-              )!,
-            ],
-          })
-
-          if (accessKey) {
-            const account = getAccount({ accessKey: false, signable: false })
-            saveAccessKey(account.address, result.keyAuthorization, accessKey.keyPair)
-          }
-
-          return result
-        },
-
-        async revokeAccessKey(_params, request) {
-          await provider.request(request)
-        },
-
-        async deposit(_params, request) {
-          return await provider.request(request)
-        },
-
-        async send(params, request) {
-          return await provider.request({
-            ...request,
-            params: [z.encode(Rpc.wallet_send.parameters, params)] as const,
-          })
-        },
-
-        async swap(_params, request) {
-          return await provider.request(request)
-        },
-
-        async depositZone(params, request) {
-          return await provider.request({
-            ...request,
-            params: [z.encode(Rpc.wallet_depositZone.parameters, params)] as const,
-          })
-        },
-
-        async withdrawZone(params, request) {
-          return await provider.request({
-            ...request,
-            params: [z.encode(Rpc.wallet_withdrawZone.parameters, params)] as const,
-          })
-        },
-
-        async disconnect() {
-          store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
-        },
-      },
-    }
-  })
+      }
+    },
+  )
 }
 
 export declare namespace dialog {

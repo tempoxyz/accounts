@@ -1,3 +1,4 @@
+import type * as Account from './Account.js'
 import * as IO from './IntersectionObserver.js'
 import * as Messenger from './Messenger.js'
 import type * as Store from './Store.js'
@@ -568,11 +569,13 @@ function handleResponse(
       if (queued.request.id !== response.id) return queued
       if (response.error)
         return {
+          ...(queued.account ? { account: queued.account } : {}),
           request: queued.request,
           error: response.error,
           status: 'error' as const,
         }
       return {
+        ...(queued.account ? { account: queued.account } : {}),
         request: queued.request,
         result: response.result,
         status: 'success' as const,
@@ -588,6 +591,7 @@ function handleBlur(store: Store.Store) {
     requestQueue: x.requestQueue.map((queued) =>
       queued.status === 'pending'
         ? {
+            ...(queued.account ? { account: queued.account } : {}),
             request: queued.request,
             error: { code: 4001, message: 'User rejected the request.' },
             status: 'error' as const,
@@ -606,11 +610,11 @@ function syncAccounts(messenger: Messenger.Bridge) {
 }
 
 /** Returns the active account from the store, or `undefined` if none. */
-function getAccount(store: Store.Store): { address: string } | undefined {
+function getAccount(store: Store.Store): Account.Request | undefined {
   const { accounts, activeAccount } = store.getState()
   const account = accounts[activeAccount]
   if (!account) return undefined
-  return { address: account.address }
+  return { address: account.address, type: 'json-rpc' }
 }
 
 /**

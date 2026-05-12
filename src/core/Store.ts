@@ -5,10 +5,14 @@ import { subscribeWithSelector } from 'zustand/middleware'
 import { createStore } from 'zustand/vanilla'
 
 import type { OneOf } from '../internal/types.js'
-import type { AccessKey, Store as Account } from './Account.js'
+import type * as core_Account from './Account.js'
 import * as Storage from './Storage.js'
 
-export type { AccessKey, Account }
+/** Stored access key entry. */
+export type AccessKey = core_Account.AccessKey
+
+/** Stored account entry. */
+export type Account = core_Account.Store
 
 /** Reactive state for the provider. */
 export type State = {
@@ -59,15 +63,21 @@ export type Options = {
 /** A queued JSON-RPC request tracked in the store. */
 export type QueuedRequest<result = unknown> = OneOf<
   | {
+      /** Account metadata resolved for this request. */
+      account?: core_Account.Request | undefined
       request: RpcRequest.RpcRequest
       status: 'pending'
     }
   | {
+      /** Account metadata resolved for this request. */
+      account?: core_Account.Request | undefined
       request: RpcRequest.RpcRequest
       result: result
       status: 'success'
     }
   | {
+      /** Account metadata resolved for this request. */
+      account?: core_Account.Request | undefined
       request: RpcRequest.RpcRequest
       error: RpcResponse.ErrorObject
       status: 'error'

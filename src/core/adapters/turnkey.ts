@@ -83,6 +83,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     function toStoreAccount(account: turnkey.WalletAccount, label?: string | undefined) {
       return {
         address: core_Address.from(account.address),
+        keyType: 'secp256k1' as const,
         ...(label ? { label } : {}),
       }
     }
@@ -270,6 +271,10 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }
 
     async function withAccessKey<result>(
+      options: {
+        address?: Address | undefined
+        calls?: Adapter.signTransaction.Parameters['calls']
+      },
       fn: (
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
@@ -277,7 +282,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     ) {
       const account = (() => {
         try {
-          return getAccount({ signable: true })
+          return getAccount({ ...options, signable: true })
         } catch {
           return undefined
         }
@@ -450,20 +455,23 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           })
         },
         async signTransaction(parameters) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
-            const { feePayer, ...rest } = parameters
-            const viemClient = getClient({
-              feePayer: feePayer === true ? undefined : feePayer,
-            })
-            const prepared = await prepareTransactionRequest(viemClient, {
-              account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
-            } as never)
-            return await account.signTransaction(prepared as never)
-          })
+          const result = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls },
+            async (account, keyAuthorization) => {
+              const { feePayer, ...rest } = parameters
+              const viemClient = getClient({
+                feePayer: feePayer === true ? undefined : feePayer,
+              })
+              const prepared = await prepareTransactionRequest(viemClient, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                keyAuthorization,
+                type: 'tempo',
+              } as never)
+              return await account.signTransaction(prepared as never)
+            },
+          )
           if (result !== undefined) return result
           return await signTransaction(parameters)
         },
@@ -483,25 +491,28 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           })
         },
         async sendTransaction(parameters) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
-            const { feePayer, ...rest } = parameters
-            const viemClient = getClient({
-              chainId: parameters.chainId,
-              feePayer: feePayer === true ? undefined : feePayer,
-            })
-            const prepared = await prepareTransactionRequest(viemClient, {
-              account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
-            } as never)
-            const signed = await account.signTransaction(prepared as never)
-            return await viemClient.request({
-              method: 'eth_sendRawTransaction' as never,
-              params: [signed],
-            })
-          })
+          const result = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls },
+            async (account, keyAuthorization) => {
+              const { feePayer, ...rest } = parameters
+              const viemClient = getClient({
+                chainId: parameters.chainId,
+                feePayer: feePayer === true ? undefined : feePayer,
+              })
+              const prepared = await prepareTransactionRequest(viemClient, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                keyAuthorization,
+                type: 'tempo',
+              } as never)
+              const signed = await account.signTransaction(prepared as never)
+              return await viemClient.request({
+                method: 'eth_sendRawTransaction' as never,
+                params: [signed],
+              })
+            },
+          )
           if (result !== undefined) return result
           const signed = await signTransaction(parameters)
           const viemClient = getClient({
@@ -514,25 +525,28 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           })
         },
         async sendTransactionSync(parameters) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
-            const { feePayer, ...rest } = parameters
-            const viemClient = getClient({
-              chainId: parameters.chainId,
-              feePayer: feePayer === true ? undefined : feePayer,
-            })
-            const prepared = await prepareTransactionRequest(viemClient, {
-              account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
-            } as never)
-            const signed = await account.signTransaction(prepared as never)
-            return await viemClient.request({
-              method: 'eth_sendRawTransactionSync' as never,
-              params: [signed],
-            })
-          })
+          const result = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls },
+            async (account, keyAuthorization) => {
+              const { feePayer, ...rest } = parameters
+              const viemClient = getClient({
+                chainId: parameters.chainId,
+                feePayer: feePayer === true ? undefined : feePayer,
+              })
+              const prepared = await prepareTransactionRequest(viemClient, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                keyAuthorization,
+                type: 'tempo',
+              } as never)
+              const signed = await account.signTransaction(prepared as never)
+              return await viemClient.request({
+                method: 'eth_sendRawTransactionSync' as never,
+                params: [signed],
+              })
+            },
+          )
           if (result !== undefined) return result
           const signed = await signTransaction(parameters)
           const viemClient = getClient({

@@ -26,6 +26,8 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     chains: readonly [Chain, ...Chain[]]
     /** Returns a viem Account for the given address (or active account). */
     getAccount: Account.Find
+    /** Returns request account metadata for transaction preparation. */
+    getRequestAccount: Account.GetRequest
     /** Returns a viem Client for the given (or current) chain ID. */
     getClient(options?: {
       chainId?: number | undefined
@@ -92,6 +94,8 @@ export function create(options: create.Options = {}): create.ReturnType {
   })
 
   const getAccount: Account.Find = (options = {}) => Account.find({ ...options, store }) as never
+  const getRequestAccount: Account.GetRequest = (options = {}) =>
+    Account.request({ ...options, store })
 
   // Lazy reference — assigned after the provider is created so the client
   // transport can route provider methods (wallet_connect, etc.) through it.
@@ -113,7 +117,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
   }
 
-  const instance = adapter({ getAccount, getClient, storage, store })
+  const instance = adapter({ getAccount, getClient, getRequestAccount, storage, store })
   const { actions } = instance
 
   const emitter = ox_Provider.createEmitter()
@@ -288,7 +292,21 @@ export function create(options: create.Options = {}): create.ReturnType {
                     if (!parameters.keyAuthorization) {
                       const account = (() => {
                         try {
-                          return getAccount({ signable: true })
+                          const calls =
+                            parameters.calls ??
+                            (parameters.to
+                              ? [
+                                  {
+                                    data: parameters.data,
+                                    to: parameters.to,
+                                  },
+                                ]
+                              : undefined)
+                          return getAccount({
+                            address: parameters.from,
+                            calls,
+                            signable: true,
+                          })
                         } catch {
                           return undefined
                         }
@@ -865,6 +883,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     {
       chains,
       getAccount,
+      getRequestAccount,
       getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
         const { chainId, feePayer } = options
         return Client.fromChainId(chainId, {
