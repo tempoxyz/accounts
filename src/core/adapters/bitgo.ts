@@ -18,50 +18,40 @@ import * as Adapter from '../Adapter.js'
 import * as Store from '../Store.js'
 
 /**
- * Creates a BitGo adapter backed by the BitGo SDK or REST API for custodial
- * wallet signing.
+ * Creates a BitGo adapter backed by a BitGo wallet for custodial signing.
  *
- * The adapter owns session validation, provider signing actions, and
- * access-key management. Apps provide the wallet-selection and authentication
- * flows through `createAccount` and `loadAccounts`.
+ * BitGo wallets use TSS (threshold signature scheme) / MPC for signing.
+ * The adapter accepts a structurally typed client that wraps the BitGo REST
+ * API or JavaScript SDK. Because BitGo's signing protocol is multi-round
+ * (user key share + BitGo HSM co-sign), raw digest signing must go through
+ * the BitGo `sendcoins` / `prebuildAndSignTransaction` flow.
+ *
+ * Use {@link createBitGoClient} to construct a client from a BitGo access
+ * token and wallet configuration, or provide your own structural client.
  *
  * @example
  * ```ts
  * import { Provider, bitgo } from 'accounts'
+ * import { createBitGoClient } from 'accounts/bitgo'
+ *
+ * const client = createBitGoClient({
+ *   accessToken: 'v2x...',
+ *   walletId: '63bd84ea...',
+ *   walletPassphrase: 'my-passphrase',
+ *   coin: 'hteth',
+ *   env: 'test',
+ * })
  *
  * const provider = Provider.create({
  *   adapter: bitgo({
- *     client: {
- *       accessToken: 'v2x...',
- *       coin: 'eth',
- *       walletId: '...',
- *       walletPassphrase: '...',
- *       baseUrl: 'https://app.bitgo.com',
- *       signRawHash: async ({ hash, walletId, coin }) => {
- *         // Call BitGo Express /api/v2/{coin}/wallet/{walletId}/signtx
- *         // or use the BitGo SDK wallet.signTransaction()
- *         const res = await fetch(...)
- *         return '0x...'
- *       },
- *       getWalletAddresses: async ({ walletId, coin }) => {
- *         return [{ address: '0x...', publicKey: '0x...' }]
- *       },
- *     },
+ *     client,
  *     createAccount: async ({ client }) => {
- *       const addresses = await client.getWalletAddresses({
- *         walletId: client.walletId,
- *         coin: client.coin,
- *       })
+ *       const addresses = await client.getAddresses()
  *       const first = addresses[0]
  *       if (!first) throw new Error('No BitGo wallet address found.')
  *       return first
  *     },
- *     loadAccounts: async ({ client }) => {
- *       return await client.getWalletAddresses({
- *         walletId: client.walletId,
- *         coin: client.coin,
- *       })
- *     },
+ *     loadAccounts: async ({ client }) => client.getAddresses(),
  *   }),
  * })
  * ```
@@ -306,6 +296,11 @@ export function bitgo(options: bitgo.Options): Adapter.Adapter {
       if (typeof error.code === 'string') return error.code
       if (typeof error.status === 'number' && (error.status === 401 || error.status === 403))
         return 'unauthorized'
+      if (typeof error.message === 'string') {
+        const msg = error.message.toLowerCase()
+        if (msg.includes('unauthorized') || msg.includes('authentication'))
+          return 'unauthorized'
+      }
       return getBitGoErrorCode(error.cause)
     }
 
@@ -516,10 +511,155 @@ const bitgoSessionErrorCodes = new Set([
   'needs_unlock',
 ])
 
+/**
+ * Constructs a {@link bitgo.Client} from a BitGo access token and wallet
+ * configuration by wrapping the BitGo REST API directly.
+ *
+ * This avoids pulling in the full `bitgo` npm package (which bundles every
+ * coin module) and keeps the dependency footprint small.
+ *
+ * The returned client implements `isAuthenticated` via `GET /api/v2/me`,
+ * `getAddresses` via `GET /api/v2/{coin}/wallet/{walletId}`, and
+ * `signRawHash` via `POST /api/v2/{coin}/wallet/{walletId}/signmessage`
+ * (available on MPC/TSS wallets running BitGo Express or the hosted API).
+ *
+ * @example
+ * ```ts
+ * import { createBitGoClient } from 'accounts/bitgo'
+ *
+ * const client = createBitGoClient({
+ *   accessToken: 'v2x...',
+ *   walletId: '63bd84ea...',
+ *   walletPassphrase: 'my-passphrase',
+ *   coin: 'hteth',        // or 'eth' for mainnet
+ *   env: 'test',           // 'test' | 'prod' | custom base URL
+ * })
+ * ```
+ */
+export function createBitGoClient(options: createBitGoClient.Options): bitgo.Client & {
+  /** Lists wallet addresses usable as {@link bitgo.WalletAccount}. */
+  getAddresses: () => Promise<readonly bitgo.WalletAccount[]>
+} {
+  const { accessToken, coin, walletId, walletPassphrase } = options
+
+  const baseUrl = (() => {
+    if (options.env === 'test') return 'https://app.bitgo-test.com'
+    if (options.env === 'prod' || !options.env) return 'https://app.bitgo.com'
+    return options.env
+  })()
+
+  const expressUrl = options.expressUrl
+
+  async function apiFetch(path: string, init: RequestInit = {}) {
+    const url = `${baseUrl}${path}`
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        ...(init.headers as Record<string, string> | undefined),
+      },
+    })
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      throw Object.assign(new Error(`BitGo API error: ${response.status} ${body}`), {
+        status: response.status,
+        body,
+      })
+    }
+    return await response.json()
+  }
+
+  async function expressFetch(path: string, init: RequestInit = {}) {
+    const url = `${expressUrl ?? baseUrl}${path}`
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        ...(init.headers as Record<string, string> | undefined),
+      },
+    })
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      throw Object.assign(new Error(`BitGo API error: ${response.status} ${body}`), {
+        status: response.status,
+        body,
+      })
+    }
+    return await response.json()
+  }
+
+  function makeWalletAccount(address: string): bitgo.WalletAccount {
+    return {
+      address,
+      async signRawHash(hash) {
+        const result = await expressFetch(
+          `/api/v2/${coin}/wallet/${walletId}/signmessage`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              message: { messageRaw: hash },
+              walletPassphrase,
+            }),
+          },
+        )
+        if (typeof result.signature === 'string') return result.signature as Hex.Hex
+        throw new Error('BitGo signmessage did not return a signature.')
+      },
+    }
+  }
+
+  return {
+    async isAuthenticated() {
+      try {
+        await apiFetch('/api/v2/me')
+        return true
+      } catch {
+        return false
+      }
+    },
+
+    async getAddresses() {
+      const wallet = await apiFetch(`/api/v2/${coin}/wallet/${walletId}`)
+      const baseAddress: string | undefined =
+        wallet.receiveAddress?.address ?? wallet.coinSpecific?.baseAddress
+      if (!baseAddress) throw new Error('BitGo wallet has no base address.')
+      return [makeWalletAccount(baseAddress)]
+    },
+
+    logout() {
+      // BitGo access tokens are long-lived; there is no session to clear
+      // client-side. To revoke, call DELETE /api/v2/user/session.
+    },
+  }
+}
+
+export declare namespace createBitGoClient {
+  type Options = {
+    /** BitGo API access token (`v2x...`). */
+    accessToken: string
+    /** Coin ticker (e.g. `'eth'`, `'hteth'`, `'polygon'`). */
+    coin: string
+    /** BitGo environment. `'test'` for testnet, `'prod'` for mainnet, or a custom base URL. @default 'prod' */
+    env?: 'test' | 'prod' | string | undefined
+    /**
+     * BitGo Express URL for signing operations. If not set, signing
+     * requests go to the same `baseUrl` (works for hosted BitGo API when
+     * your wallet is custodial or uses server-side signing).
+     */
+    expressUrl?: string | undefined
+    /** Wallet ID. */
+    walletId: string
+    /** Wallet passphrase to decrypt the user key for signing. */
+    walletPassphrase: string
+  }
+}
+
 export declare namespace bitgo {
   /** Options for {@link bitgo}. */
   type Options = {
-    /** Existing BitGo client. */
+    /** BitGo client. Use {@link createBitGoClient} or provide your own. */
     client: Client
     /** Creates/registers a BitGo wallet account. UI is allowed. */
     createAccount: (parameters: {
@@ -546,8 +686,9 @@ export declare namespace bitgo {
   /**
    * Minimal structural BitGo client surface used by the adapter.
    *
-   * Apps construct this from the BitGo SDK (`bitgo` or `@bitgo/sdk-api`) or
-   * by wrapping the BitGo REST API / Express endpoints directly.
+   * Use {@link createBitGoClient} to construct one from a BitGo access
+   * token, or provide your own implementation wrapping the BitGo SDK
+   * (`bitgo` or `@bitgo/sdk-api`).
    */
   type Client = {
     /** Returns `true` if the current access token is still valid. */
@@ -559,13 +700,16 @@ export declare namespace bitgo {
   }
 
   /**
-   * Minimal wallet account shape used by the adapter. Apps construct this in
-   * their `createAccount`/`loadAccounts` callbacks.
+   * Wallet account shape used by the adapter.
    *
-   * `signRawHash` should sign a 32-byte hex digest using the wallet's key
-   * material (via BitGo Express `signtx`, the SDK `wallet.signTransaction`,
-   * or any other BitGo signing path) and return a compact `0x{r}{s}{v}`
-   * signature.
+   * `signRawHash` signs a 32-byte hex digest using the wallet's key
+   * material. For MPC/TSS wallets this goes through BitGo's
+   * `signmessage` endpoint (which performs the multi-round TSS signing
+   * protocol with BitGo's HSM). For multisig wallets it goes through
+   * BitGo Express `signtx`.
+   *
+   * Use {@link createBitGoClient} to get accounts with `signRawHash`
+   * pre-wired to the BitGo API, or construct them yourself.
    */
   type WalletAccount = {
     /** EVM address for the wallet account. */

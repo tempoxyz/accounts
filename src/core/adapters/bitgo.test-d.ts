@@ -1,7 +1,7 @@
 import { describe, expectTypeOf, test } from 'vp/test'
 
 import * as Adapter from '../Adapter.js'
-import { bitgo } from './bitgo.js'
+import { bitgo, createBitGoClient } from './bitgo.js'
 
 describe('bitgo', () => {
   test('accepts a structural BitGo client', () => {
@@ -64,5 +64,20 @@ describe('bitgo', () => {
         return []
       },
     })
+  })
+
+  test('createBitGoClient returns a client with getAddresses', () => {
+    const client = createBitGoClient({
+      accessToken: 'v2x...',
+      coin: 'hteth',
+      walletId: '123',
+      walletPassphrase: 'pass',
+      env: 'test',
+    })
+    expectTypeOf(client.isAuthenticated).toEqualTypeOf<() => Promise<boolean>>()
+    expectTypeOf(client.getAddresses).toEqualTypeOf<
+      () => Promise<readonly bitgo.WalletAccount[]>
+    >()
+    expectTypeOf(client).toMatchTypeOf<bitgo.Client>()
   })
 })

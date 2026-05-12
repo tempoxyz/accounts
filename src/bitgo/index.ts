@@ -1,1 +1,1 @@
-export { bitgo } from '../core/adapters/bitgo.js'
+export { bitgo, createBitGoClient } from '../core/adapters/bitgo.js'
