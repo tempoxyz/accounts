@@ -1,0 +1,196 @@
+---
+title: turnkey
+description: Adapter backed by Turnkey client sessions.
+---
+
+# `turnkey`
+
+Creates a Turnkey adapter backed by `@turnkey/core` client sessions and Ethereum wallet accounts.
+
+The adapter owns silent reconnect, session-expiry cleanup, and provider signing actions. Apps provide the UI-bearing registration and login flows through [`createAccount`](#createaccount) and [`loadAccounts`](#loadaccounts).
+
+## Usage
+
+```ts
+import { TurnkeyClient } from '@turnkey/core'
+import { Provider, turnkey } from 'accounts'
+
+const provider = Provider.create({
+  adapter: turnkey({
+    client: new TurnkeyClient({ organizationId, authProxyConfigId }),
+    createAccount: async ({ client, parameters }) => {
+      await client.signUpWithPasskey({
+        createSubOrgParams: { userName: parameters.name },
+      })
+      return (await client.fetchWallets())
+        .flatMap((wallet) => wallet.accounts)
+        .find((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')!
+    },
+    loadAccounts: async ({ client }) => {
+      const session = await client.getSession()
+      if (!session || session.expiry * 1000 <= Date.now()) await client.loginWithPasskey()
+      return (await client.fetchWallets())
+        .flatMap((wallet) => wallet.accounts)
+        .filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')
+    },
+  }),
+})
+```
+
+## Parameters
+
+### client
+
+- **Type:** `turnkey.Client`
+- **Required**
+
+Existing Turnkey client, such as `TurnkeyClient` from `@turnkey/core`. The adapter calls `client.init?.()` once on first use, and uses `getSession`, `fetchWallets`, `httpClient.signRawPayload`, and `logout` for the rest of the lifecycle.
+
+```ts
+import { TurnkeyClient } from '@turnkey/core'
+import { Provider, turnkey } from 'accounts'
+
+const provider = Provider.create({
+  adapter: turnkey({
+    client: new TurnkeyClient({ organizationId, authProxyConfigId }), // [!code focus]
+    createAccount: async ({ client, parameters }) => { /* ... */ },
+    loadAccounts: async ({ client }) => { /* ... */ },
+  }),
+})
+```
+
+### createAccount
+
+- **Type:** `(params: { client; parameters }) => Promise<turnkey.WalletAccount>`
+- **Required**
+
+Creates/registers a Turnkey wallet account. UI is allowed (e.g. passkey prompts).
+
+Receives the initialized Turnkey `client` and the provider create-account `parameters` (display name, optional `digest`, `personalSign`, `userId`, etc.). Must return a single Ethereum-format Turnkey wallet account.
+
+```ts
+import { Provider, turnkey } from 'accounts'
+
+const provider = Provider.create({
+  adapter: turnkey({
+    client,
+    createAccount: async ({ client, parameters }) => { // [!code focus]
+      await client.signUpWithPasskey({ // [!code focus]
+        createSubOrgParams: { userName: parameters.name }, // [!code focus]
+      }) // [!code focus]
+      return (await client.fetchWallets()) // [!code focus]
+        .flatMap((wallet) => wallet.accounts) // [!code focus]
+        .find((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')! // [!code focus]
+    }, // [!code focus]
+    loadAccounts: async ({ client }) => { /* ... */ },
+  }),
+})
+```
+
+### icon
+
+- **Type:** `` `data:image/${string}` ``
+- **Optional**
+
+Data URI of the provider icon.
+
+```ts
+import { Provider, turnkey } from 'accounts'
+
+const provider = Provider.create({
+  adapter: turnkey({
+    client,
+    createAccount: async () => { /* ... */ },
+    loadAccounts: async () => { /* ... */ },
+    icon: 'data:image/svg+xml,...', // [!code focus]
+  }),
+})
+```
+
+### loadAccounts
+
+- **Type:** `(params: { client; parameters? }) => Promise<readonly turnkey.WalletAccount[]>`
+- **Required**
+
+Loads/logs into existing Turnkey wallet accounts. UI is allowed (e.g. passkey prompts to start a new session).
+
+Receives the initialized Turnkey `client` and the optional provider load-accounts `parameters` (e.g. `authorizeAccessKey`, `digest`, `personalSign`, `selectAccount`). Must return all Ethereum-format Turnkey wallet accounts that should be exposed to the provider.
+
+```ts
+import { Provider, turnkey } from 'accounts'
+
+const provider = Provider.create({
+  adapter: turnkey({
+    client,
+    createAccount: async () => { /* ... */ },
+    loadAccounts: async ({ client }) => { // [!code focus]
+      const session = await client.getSession() // [!code focus]
+      if (!session || session.expiry * 1000 <= Date.now()) // [!code focus]
+        await client.loginWithPasskey() // [!code focus]
+      return (await client.fetchWallets()) // [!code focus]
+        .flatMap((wallet) => wallet.accounts) // [!code focus]
+        .filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM') // [!code focus]
+    }, // [!code focus]
+  }),
+})
+```
+
+### name
+
+- **Type:** `string`
+- **Default:** `'Turnkey'`
+
+Display name of the provider.
+
+```ts
+import { Provider, turnkey } from 'accounts'
+
+const provider = Provider.create({
+  adapter: turnkey({
+    client,
+    createAccount: async () => { /* ... */ },
+    loadAccounts: async () => { /* ... */ },
+    name: 'My Wallet', // [!code focus]
+  }),
+})
+```
+
+### rdns
+
+- **Type:** `string`
+- **Default:** `'com.turnkey'`
+
+Reverse DNS identifier.
+
+```ts
+import { Provider, turnkey } from 'accounts'
+
+const provider = Provider.create({
+  adapter: turnkey({
+    client,
+    createAccount: async () => { /* ... */ },
+    loadAccounts: async () => { /* ... */ },
+    rdns: 'com.example.wallet', // [!code focus]
+  }),
+})
+```
+
+### sessionSkewMs
+
+- **Type:** `number`
+- **Default:** `10000`
+
+Milliseconds before Turnkey session expiry to proactively disconnect. Used both when scheduling the auto-disconnect timer and when deciding whether the current session is still valid for signing.
+
+```ts
+import { Provider, turnkey } from 'accounts'
+
+const provider = Provider.create({
+  adapter: turnkey({
+    client,
+    createAccount: async () => { /* ... */ },
+    loadAccounts: async () => { /* ... */ },
+    sessionSkewMs: 30_000, // [!code focus]
+  }),
+})
+```
