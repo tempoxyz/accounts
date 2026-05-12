@@ -1,7 +1,6 @@
 import { Hex } from 'ox'
 import { describe, expect, test } from 'vp/test'
 
-import * as Account from '../Account.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { turnkey } from './turnkey.js'
@@ -56,33 +55,6 @@ describe('turnkey', () => {
     expect(result).toMatchInlineSnapshot(
       `"0x000000000000000000000000000000000000000000000000000000000000001100000000000000000000000000000000000000000000000000000000000000221b"`,
     )
-  })
-
-  test('behavior: stores secp256k1 request account metadata', async () => {
-    const { adapter, store } = setup()
-    const loaded = await adapter.actions.loadAccounts(undefined, {
-      method: 'wallet_connect',
-      params: undefined,
-    })
-    store.setState({ accounts: loaded.accounts, activeAccount: 0 })
-
-    const result = Account.request({ store })
-
-    expect(store.getState().accounts).toMatchInlineSnapshot(`
-      [
-        {
-          "address": "0x0000000000000000000000000000000000000001",
-          "keyType": "secp256k1",
-        },
-      ]
-    `)
-    expect(result).toMatchInlineSnapshot(`
-      {
-        "address": "0x0000000000000000000000000000000000000001",
-        "keyType": "secp256k1",
-        "type": "json-rpc",
-      }
-    `)
   })
 
   test('default: loadAccounts can provision an external access key', async () => {

@@ -5,7 +5,6 @@ import { Account as TempoAccount } from 'viem/tempo'
 import { z } from 'zod/mini'
 
 import * as AccessKey from '../AccessKey.js'
-import * as Account from '../Account.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
 import * as ExecutionError from '../ExecutionError.js'
@@ -97,14 +96,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       {
         async request(r) {
           const request = requestStore.prepare(r as never)
-          const account = getQueuedAccount(request)
 
           store.setState((x) => ({
             ...x,
-            requestQueue: [
-              ...x.requestQueue,
-              { ...(account ? { account } : {}), request, status: 'pending' as const },
-            ],
+            requestQueue: [...x.requestQueue, { request, status: 'pending' as const }],
           }))
 
           return waitForQueuedRequest(request.id)
@@ -112,50 +107,6 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       },
       { schema: Schema.ox },
     )
-
-    function getQueuedAccount(
-      request: Store.QueuedRequest['request'],
-    ): Account.Request | undefined {
-      const options = getQueuedAccountOptions(request)
-      if (!options) return undefined
-      return Account.request({ ...options, store })
-    }
-
-    function getQueuedAccountOptions(
-      request: Store.QueuedRequest['request'],
-    ): Omit<Account.request.Options, 'store'> | undefined {
-      if (request.method === 'personal_sign') {
-        const [, address] = (request.params ?? []) as readonly [unknown, Address.Address?]
-        return address ? { accessKey: false, address } : undefined
-      }
-
-      if (request.method === 'eth_signTypedData_v4') {
-        const [address] = (request.params ?? []) as readonly [Address.Address?]
-        return address ? { accessKey: false, address } : undefined
-      }
-
-      if (
-        request.method !== 'eth_sendTransaction' &&
-        request.method !== 'eth_sendTransactionSync' &&
-        request.method !== 'eth_signTransaction'
-      )
-        return undefined
-
-      const [encoded] = (request.params ?? []) as readonly unknown[]
-      if (!encoded) return undefined
-
-      try {
-        const tx = z.decode(Rpc.transactionRequest, encoded as never)
-        const calls = tx.calls ?? (tx.to ? [{ data: tx.data, to: tx.to }] : undefined)
-        return {
-          ...(tx.from ? { address: tx.from } : {}),
-          ...(calls ? { calls } : {}),
-          ...(tx.chainId ? { chainId: tx.chainId } : {}),
-        }
-      } catch {
-        return undefined
-      }
-    }
 
     /**
      * Prepares a local key pair when `authorizeAccessKey` is requested without
@@ -199,7 +150,6 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
      * falls through to the dialog so the user can fund or retry.
      */
     async function withAccessKey<result>(
-      options: Pick<Account.find.Options, 'address' | 'calls'>,
       fn: (
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
@@ -207,7 +157,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     ): Promise<result | undefined> {
       const account = (() => {
         try {
-          return getAccount({ ...options, signable: true })
+          return getAccount({ signable: true })
         } catch {
           return undefined
         }
@@ -344,27 +294,24 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async signTransaction(parameters, request) {
-          const result = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls },
-            async (account, keyAuthorization) => {
-              const { feePayer, ...rest } = parameters
-              const client = getClient({
-                feePayer: (() => {
-                  if (feePayer === false) return false
-                  if (typeof feePayer === 'string') return feePayer
-                  return undefined
-                })(),
-              })
-              const prepared = await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-                keyAuthorization,
-                type: 'tempo',
-              })
-              return await account.signTransaction(prepared as never)
-            },
-          )
+          const result = await withAccessKey(async (account, keyAuthorization) => {
+            const { feePayer, ...rest } = parameters
+            const client = getClient({
+              feePayer: (() => {
+                if (feePayer === false) return false
+                if (typeof feePayer === 'string') return feePayer
+                return undefined
+              })(),
+            })
+            const prepared = await prepareTransactionRequest(client, {
+              account,
+              ...rest,
+              ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
+              keyAuthorization,
+              type: 'tempo',
+            })
+            return await account.signTransaction(prepared as never)
+          })
           if (result !== undefined) return result
           return await provider.request({
             ...request,
@@ -377,31 +324,28 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async sendTransaction(parameters, request) {
-          const result = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls },
-            async (account, keyAuthorization) => {
-              const { feePayer, ...rest } = parameters
-              const client = getClient({
-                feePayer: (() => {
-                  if (feePayer === false) return false
-                  if (typeof feePayer === 'string') return feePayer
-                  return undefined
-                })(),
-              })
-              const prepared = await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-                keyAuthorization,
-                type: 'tempo',
-              })
-              const signed = await account.signTransaction(prepared as never)
-              return await client.request({
-                method: 'eth_sendRawTransaction' as never,
-                params: [signed],
-              })
-            },
-          )
+          const result = await withAccessKey(async (account, keyAuthorization) => {
+            const { feePayer, ...rest } = parameters
+            const client = getClient({
+              feePayer: (() => {
+                if (feePayer === false) return false
+                if (typeof feePayer === 'string') return feePayer
+                return undefined
+              })(),
+            })
+            const prepared = await prepareTransactionRequest(client, {
+              account,
+              ...rest,
+              ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
+              keyAuthorization,
+              type: 'tempo',
+            })
+            const signed = await account.signTransaction(prepared as never)
+            return await client.request({
+              method: 'eth_sendRawTransaction' as never,
+              params: [signed],
+            })
+          })
           if (result !== undefined) return result
           return await provider.request({
             ...request,
@@ -410,31 +354,28 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async sendTransactionSync(parameters, request) {
-          const result = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls },
-            async (account, keyAuthorization) => {
-              const { feePayer, ...rest } = parameters
-              const client = getClient({
-                feePayer: (() => {
-                  if (feePayer === false) return false
-                  if (typeof feePayer === 'string') return feePayer
-                  return undefined
-                })(),
-              })
-              const prepared = await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-                keyAuthorization,
-                type: 'tempo',
-              })
-              const signed = await account.signTransaction(prepared as never)
-              return await client.request({
-                method: 'eth_sendRawTransactionSync' as never,
-                params: [signed],
-              })
-            },
-          )
+          const result = await withAccessKey(async (account, keyAuthorization) => {
+            const { feePayer, ...rest } = parameters
+            const client = getClient({
+              feePayer: (() => {
+                if (feePayer === false) return false
+                if (typeof feePayer === 'string') return feePayer
+                return undefined
+              })(),
+            })
+            const prepared = await prepareTransactionRequest(client, {
+              account,
+              ...rest,
+              ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
+              keyAuthorization,
+              type: 'tempo',
+            })
+            const signed = await account.signTransaction(prepared as never)
+            return await client.request({
+              method: 'eth_sendRawTransactionSync' as never,
+              params: [signed],
+            })
+          })
           if (result !== undefined) return result
           return await provider.request({
             ...request,

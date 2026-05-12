@@ -72,11 +72,6 @@ export type AccessKey = {
     }
 >
 
-/** JSON-RPC account metadata attached to a request before it reaches wallet UI. */
-export type Request = JsonRpcAccount &
-  Partial<Pick<TempoAccount.Account, 'keyType'>> &
-  Partial<Pick<TempoAccount.AccessKeyAccount, 'accessKeyAddress'>>
-
 /** Resolves a viem Account from the store by address (or active account). */
 export function find(options: find.Options & { signable: true }): TempoAccount.Account
 export function find(options: find.Options): TempoAccount.Account | JsonRpcAccount
@@ -123,37 +118,6 @@ export type Find = {
   (options?: Omit<find.Options, 'store'>): TempoAccount.Account | JsonRpcAccount
 }
 
-/** Resolves request account metadata without exposing local signing material. */
-export function request(options: request.Options): Request | undefined {
-  const { accessKey = true, address, store } = options
-  const { accounts, activeAccount } = store.getState()
-  const activeAddr = accounts[activeAccount]?.address
-  const root = address
-    ? accounts.find((a) => a.address.toLowerCase() === address.toLowerCase())
-    : accounts.find((a) => activeAddr && a.address.toLowerCase() === activeAddr.toLowerCase())
-  if (!root) return undefined
-
-  if (accessKey) {
-    const key = findAccessKey(root, { accessKeys: store.getState().accessKeys, options, store })
-    if (key) {
-      const keyType = toRequestKeyType(key.keyType)
-      return {
-        address: root.address,
-        type: 'json-rpc',
-        ...(keyType ? { keyType } : {}),
-        accessKeyAddress: key.address,
-      }
-    }
-  }
-
-  const keyType = toRequestKeyType(root.keyType)
-  return {
-    address: root.address,
-    type: 'json-rpc',
-    ...(keyType ? { keyType } : {}),
-  }
-}
-
 function findAccessKey(
   root: Store,
   parameters: {
@@ -179,27 +143,6 @@ function findAccessKey(
     if (scopesMatch(key, options)) return key
   }
   return undefined
-}
-
-function toRequestKeyType(keyType: Store['keyType'] | AccessKey['keyType']): Request['keyType'] {
-  if (keyType === 'webAuthn_headless') return 'webAuthn'
-  if (keyType === 'webCrypto') return 'p256'
-  return keyType
-}
-
-export declare namespace request {
-  type Options = {
-    /** Whether access keys may be returned. @default true */
-    accessKey?: boolean | undefined
-    /** Address to resolve. Defaults to the active account. */
-    address?: Address | undefined
-    /** Calls to match against access key scopes. */
-    calls?: find.Options['calls'] | undefined
-    /** Chain ID associated with the request. Used by external resolvers. */
-    chainId?: number | undefined
-    /** Reactive state store. */
-    store: core_Store.Store
-  }
 }
 
 /** Hydrates an access key entry to a viem Account. Only works for locally-generated keys with a `keyPair`. */

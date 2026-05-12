@@ -4,7 +4,6 @@ import * as RpcResponse from 'ox/RpcResponse'
 import type { StoreApi } from 'zustand/vanilla'
 import { createStore } from 'zustand/vanilla'
 
-import type * as Account from '../core/Account.js'
 import type * as Messenger from '../core/Messenger.js'
 import type * as CoreProvider from '../core/Provider.js'
 import * as Schema from '../core/Schema.js'
@@ -64,7 +63,7 @@ export type Remote = {
     cb: (
       requests: readonly Store.QueuedRequest[],
       event: MessageEvent,
-      extra: { account: Account.Request | undefined },
+      extra: { account: { address: string } | undefined },
     ) => void,
   ) => () => void
   /**
@@ -94,7 +93,7 @@ export type Remote = {
 export declare namespace onUserRequest {
   type Payload = {
     /** Active account on the host side. */
-    account: Account.Request | undefined
+    account: { address: string } | undefined
     /** Origin of the host that opened this dialog. */
     origin: string
     /** The pending request to display, or `null` when the dialog should close. */
@@ -146,14 +145,11 @@ export function create(options: create.Options): Remote {
 
     onUserRequest(cb) {
       return this.onRequests(async (requests, event, { account }) => {
-        const pending = requests.find((r) => r.status === 'pending')
-        const account_request = pending?.account ?? account
-
         // Sync the active account with the host.
-        if (account_request) {
+        if (account) {
           const state = provider.store.getState()
           const index = state.accounts.findIndex(
-            (a) => a.address.toLowerCase() === account_request.address.toLowerCase(),
+            (a) => a.address.toLowerCase() === account.address.toLowerCase(),
           )
           if (index < 0) {
             messenger.send('sync', { valid: false })
@@ -163,12 +159,13 @@ export function create(options: create.Options): Remote {
           if (index !== state.activeAccount) provider.store.setState({ activeAccount: index })
         }
 
+        const pending = requests.find((r) => r.status === 'pending')
         store.setState({
           origin: event.origin,
           ready: false,
         })
         await cb({
-          account: account_request,
+          account,
           origin: event.origin,
           request: pending?.request ?? null,
         })
@@ -380,7 +377,6 @@ export declare namespace validateSearch {
     jsonrpc: '2.0'
     _decoded: Extract<Schema.Request, { method: method }>
     _returnType: unknown
-    account?: Account.Request | undefined
   }
 }
 

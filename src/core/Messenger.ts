@@ -1,6 +1,5 @@
 import type { RpcRequest, RpcResponse } from 'ox'
 
-import type * as Account from './Account.js'
 import type * as Store from './Store.js'
 
 /** Messenger interface for cross-frame communication. */
@@ -46,7 +45,7 @@ export type Schema = [
   {
     topic: 'rpc-requests'
     payload: {
-      account: Account.Request | undefined
+      account: { address: string } | undefined
       chainId: number
       requests: readonly Store.QueuedRequest[]
     }
