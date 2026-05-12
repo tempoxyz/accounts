@@ -61,6 +61,8 @@ const config: Config = defineConfig({
           { text: 'Overview', link: '/docs/adapters' },
           { text: 'Tempo Wallet', link: '/docs/adapters/tempo-wallet' },
           { text: 'WebAuthn', link: '/docs/adapters/webauthn' },
+          { text: 'Turnkey', link: '/docs/adapters/turnkey' },
+          { text: 'Secp256k1', link: '/docs/adapters/secp256k1' },
           { text: 'Custom', link: '/docs/adapters/custom' },
         ],
       },

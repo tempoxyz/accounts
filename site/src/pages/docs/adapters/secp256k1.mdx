@@ -1,0 +1,38 @@
+---
+title: Secp256k1 Adapter
+description: Sign in-process with a `secp256k1` private key.
+---
+
+# Secp256k1 Adapter
+
+The `secp256k1` adapter signs in-process with a `secp256k1` private key. Use it when you have a key the host environment owns (server-side signers, fee payers, scripts) or when you need a quick development signer that persists a generated key in storage.
+
+Use it when you want:
+
+- A pinned private key supplied by your environment (e.g. server-side signers, scripted flows).
+- A development-only signer that generates and persists a random key in the provider's storage.
+- A lightweight signing layer without passkey or hosted wallet UX.
+
+:::warning
+Storing keys in browser storage in plaintext is dangerous — only use the unpinned form for development, testing, or when the threat model allows it.
+:::
+
+## Configure
+
+```ts twoslash
+import { Provider, secp256k1 } from 'accounts'
+
+const provider = Provider.create({
+  adapter: secp256k1({ privateKey: '0x...' }),
+})
+```
+
+## Human Pass Needed
+
+This page should be expanded with key-rotation guidance, server-side deployment patterns, and storage warnings for browser environments.
+
+## Next Steps
+
+- [Custom adapter](/docs/adapters/custom)
+- [`secp256k1` API reference](/docs/api/secp256k1)
+- [`local` API reference](/docs/api/local)

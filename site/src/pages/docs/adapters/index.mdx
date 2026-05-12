@@ -11,7 +11,9 @@ Adapters decide where keys live, who runs authentication, and how account reques
 | --- | --- | --- |
 | [Tempo Wallet](/docs/adapters/tempo-wallet) | Tempo Wallet | Apps that want a universal wallet without owning signing infrastructure. |
 | [WebAuthn](/docs/adapters/webauthn) | Your app origin | Teams that want domain-bound passkeys and Tempo account features. |
-| [Custom](/docs/adapters/custom) | Your infrastructure | Privy, AWS KMS, Turnkey, internal signers, and hosted wallet products. |
+| [Turnkey](/docs/adapters/turnkey) | Turnkey | Apps that want Turnkey to own key custody and authentication. |
+| [Secp256k1](/docs/adapters/secp256k1) | Your environment | Server-side signers with a pinned key, or development with a random in-storage key. |
+| [Custom](/docs/adapters/custom) | Your infrastructure | Privy, AWS KMS, internal signers, and hosted wallet products. |
 
 ```mermaid
 sequenceDiagram
@@ -32,5 +34,7 @@ sequenceDiagram
 
 - [Tempo Wallet](/docs/adapters/tempo-wallet)
 - [WebAuthn](/docs/adapters/webauthn)
+- [Turnkey](/docs/adapters/turnkey)
+- [Secp256k1](/docs/adapters/secp256k1)
 - [Custom adapter](/docs/adapters/custom)
 - [Adapter API reference](/docs/api/adapters)

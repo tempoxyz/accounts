@@ -98,7 +98,9 @@ type Page =
 | { path: '/docs/api/webauthnceremony.server'; render: 'static' }
 | { path: '/docs/adapters/custom'; render: 'static' }
 | { path: '/docs/adapters'; render: 'static' }
+| { path: '/docs/adapters/secp256k1'; render: 'static' }
 | { path: '/docs/adapters/tempo-wallet'; render: 'static' }
+| { path: '/docs/adapters/turnkey'; render: 'static' }
 | { path: '/docs/adapters/webauthn'; render: 'static' };
 
 // prettier-ignore

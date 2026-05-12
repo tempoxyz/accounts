@@ -1,0 +1,52 @@
+---
+title: Turnkey Adapter
+description: Use Turnkey-managed wallet accounts as the account signing adapter.
+---
+
+# Turnkey Adapter
+
+The Turnkey adapter is for apps that want Turnkey to own key custody and authentication while plugging into Tempo account features. Your app keeps the registration and login UX (passkey prompts, OTP, etc.); the adapter handles silent reconnect, session expiry, and provider signing.
+
+Use it when you want:
+
+- Turnkey to own key custody and policy.
+- Passkey or other Turnkey-supported authentication on your own organization.
+- Tempo account features without managing your own signer infrastructure.
+
+## Configure
+
+```tsx
+import { TurnkeyClient } from '@turnkey/core'
+import { Provider, turnkey } from 'accounts'
+
+const provider = Provider.create({
+  adapter: turnkey({
+    client: new TurnkeyClient({ organizationId, authProxyConfigId }),
+    createAccount: async ({ client, parameters }) => {
+      await client.signUpWithPasskey({
+        createSubOrgParams: { userName: parameters.name },
+      })
+      return (await client.fetchWallets())
+        .flatMap((wallet) => wallet.accounts)
+        .find((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')!
+    },
+    loadAccounts: async ({ client }) => {
+      const session = await client.getSession()
+      if (!session || session.expiry * 1000 <= Date.now()) await client.loginWithPasskey()
+      return (await client.fetchWallets())
+        .flatMap((wallet) => wallet.accounts)
+        .filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')
+    },
+  }),
+})
+```
+
+## Human Pass Needed
+
+This page should be expanded with sub-org setup, session lifetime guidance, recovery flows, and production policy expectations.
+
+## Next Steps
+
+- [Bring Your Auth — Turnkey](/docs/enterprise/bring-your-auth/turnkey)
+- [Authentication](/docs/guides/authentication)
+- [`turnkey` API reference](/docs/api/turnkey)
