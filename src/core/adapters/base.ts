@@ -12,7 +12,7 @@ import { prepareTransactionRequest } from 'viem/actions'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
-import * as Account from '../Account.js'
+import type * as Account from '../Account.js'
 import * as Adapter from '../Adapter.js'
 
 /**
@@ -89,13 +89,6 @@ export function base(options: base.Options): Adapter.Instance {
     return undefined
   }
 
-  function getConnectedAccount(parameters: base.ConnectResult) {
-    if (parameters.account) return parameters.account
-    const account = parameters.accounts[0]
-    if (!account) return undefined
-    return Account.hydrate(account, { signable: true })
-  }
-
   async function connect<
     const parameters extends Adapter.createAccount.Parameters | Adapter.loadAccounts.Parameters,
   >(parameters: parameters, fn: (parameters: parameters) => Promise<base.ConnectResult>) {
@@ -118,10 +111,11 @@ export function base(options: base.Options): Adapter.Instance {
       ...parameters,
       ...(digest ? { digest } : {}),
     } as parameters)
-    const account =
-      signatureDigest || prepared || !result.signature
-        ? getConnectedAccount(result)
-        : result.account
+    const needsAccount = !!signatureDigest || !!prepared
+    const account = needsAccount ? result.account : undefined
+    if (needsAccount && result.accounts.length > 0 && !account)
+      throw new core_Provider.UnauthorizedError({ message: 'Connected account cannot sign.' })
+
     const signature =
       signatureDigest && account
         ? (result.signature ?? (await account.sign({ hash: signatureDigest })))
