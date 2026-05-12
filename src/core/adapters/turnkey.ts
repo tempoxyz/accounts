@@ -59,8 +59,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     const { store } = parameters
     let turnkeyClient_promise: Promise<turnkey.Client> | undefined
     let expiry_timeout: ReturnType<typeof setTimeout> | undefined
-    let restore_promise: Promise<void> | undefined
-    let walletAccounts: readonly turnkey.WalletAccount[] = []
+    let remoteAccounts_promise: Promise<ReadonlyMap<Address, turnkey.WalletAccount>> | undefined
 
     async function getTurnkeyClient() {
       turnkeyClient_promise ??= (async () => {
@@ -100,8 +99,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     function clear() {
       if (expiry_timeout) clearTimeout(expiry_timeout)
       expiry_timeout = undefined
-      restore_promise = undefined
-      walletAccounts = []
+      remoteAccounts_promise = undefined
       store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
     }
 
@@ -126,71 +124,71 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       return session
     }
 
-    async function restore() {
-      await Store.waitForHydration(store)
-      if (walletAccounts.length > 0) return
-      if (restore_promise) return await restore_promise
-
-      restore_promise = (async () => {
-        const state = store.getState()
-        const persisted = state.accounts
-        if (persisted.length === 0) return
-
-        const session = await getValidSession()
-        if (!session) return
-
-        const turnkeyClient = await getTurnkeyClient()
-        const restored = (await turnkeyClient.fetchWallets()).flatMap((wallet) =>
-          wallet.accounts.filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM'),
-        )
-        walletAccounts = persisted
-          .map((account) =>
-            restored.find((walletAccount) =>
-              isAddressEqual(core_Address.from(walletAccount.address), account.address),
-            ),
-          )
-          .filter((account): account is turnkey.WalletAccount => !!account)
-
-        if (walletAccounts.length === 0) return
-
-        store.setState({
-          accounts: walletAccounts.map((account) => toStoreAccount(account)),
-          activeAccount: Math.min(state.activeAccount, walletAccounts.length - 1),
-        })
-      })()
-
-      try {
-        await restore_promise
-      } finally {
-        restore_promise = undefined
-      }
-    }
-
     async function requireSession() {
       const session = await getValidSession()
       if (!session)
         throw new core_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
     }
 
-    async function accountForSigning(address: Address | undefined) {
-      await restore()
-      await requireSession()
+    async function getRemoteAccounts() {
+      if (remoteAccounts_promise) return await remoteAccounts_promise
 
-      const address_ = address ?? store.getState().accounts[store.getState().activeAccount]?.address
-      if (!address_)
-        throw new core_Provider.DisconnectedError({ message: 'No accounts connected.' })
+      remoteAccounts_promise = (async () => {
+        await requireSession()
 
-      const account = walletAccounts.find((account) =>
-        isAddressEqual(core_Address.from(account.address), address_),
-      )
+        const turnkeyClient = await getTurnkeyClient()
+        const accounts = (await turnkeyClient.fetchWallets()).flatMap((wallet) =>
+          wallet.accounts.filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM'),
+        )
+
+        return new Map<Address, turnkey.WalletAccount>(
+          accounts.map((account) => [core_Address.from(account.address), account]),
+        )
+      })()
+
+      try {
+        return await remoteAccounts_promise
+      } catch (error) {
+        remoteAccounts_promise = undefined
+        throw error
+      }
+    }
+
+    async function getWalletAccount(address: Address) {
+      const account = (await getRemoteAccounts()).get(address)
       if (account) return account
 
-      if (walletAccounts.length === 0)
+      remoteAccounts_promise = undefined
+      const refreshed = await getRemoteAccounts()
+      const account_refreshed = refreshed.get(address)
+      if (account_refreshed) return account_refreshed
+
+      if (refreshed.size === 0)
         throw new core_Provider.DisconnectedError({
           message: 'No Turnkey account connected.',
         })
 
-      throw new core_Provider.UnauthorizedError({ message: `Account "${address_}" not found.` })
+      throw new core_Provider.UnauthorizedError({ message: `Account "${address}" not found.` })
+    }
+
+    async function accountForSigning(address: Address | undefined) {
+      await Store.waitForHydration(store)
+
+      const state = store.getState()
+      if (state.accounts.length === 0)
+        throw new core_Provider.DisconnectedError({
+          message: 'No Turnkey account connected.',
+        })
+
+      const address_target = address ?? state.accounts[state.activeAccount]?.address
+      if (!address_target)
+        throw new core_Provider.DisconnectedError({ message: 'No accounts connected.' })
+
+      const address_ = core_Address.from(address_target)
+      if (!state.accounts.some((account) => isAddressEqual(account.address, address_)))
+        throw new core_Provider.UnauthorizedError({ message: `Account "${address_}" not found.` })
+
+      return await getWalletAccount(address_)
     }
 
     function signatureToHex(value: turnkey.SignatureResponse): Hex.Hex {
@@ -249,16 +247,15 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       return typeof value === 'object' && value !== null
     }
 
-    void restore()
-
     return base({
       ...parameters,
       async createAccount(parameters) {
         const turnkeyClient = await getTurnkeyClient()
         const account = await options.createAccount({ client: turnkeyClient, parameters })
         await requireSession()
-        walletAccounts = [account]
-        restore_promise = undefined
+        remoteAccounts_promise = Promise.resolve(
+          new Map([[core_Address.from(account.address), account]]),
+        )
         return {
           account: toTempoAccount(account),
           accounts: [toStoreAccount(account, parameters.name)],
@@ -270,13 +267,15 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       },
       async loadAccounts(parameters) {
         const turnkeyClient = await getTurnkeyClient()
-        walletAccounts = await options.loadAccounts({ client: turnkeyClient, parameters })
+        const accounts = await options.loadAccounts({ client: turnkeyClient, parameters })
         await requireSession()
-        restore_promise = undefined
-        const account = walletAccounts[0]
+        remoteAccounts_promise = Promise.resolve(
+          new Map(accounts.map((account) => [core_Address.from(account.address), account])),
+        )
+        const account = accounts[0]
         return {
           ...(account ? { account: toTempoAccount(account) } : {}),
-          accounts: walletAccounts.map((account) => toStoreAccount(account)),
+          accounts: accounts.map((account) => toStoreAccount(account)),
         }
       },
       async resolveAccount(parameters = {}) {

@@ -39,16 +39,21 @@ describe('turnkey', () => {
     `)
   })
 
-  test('default: loadAccounts delegates login and caches wallet accounts for signing', async () => {
-    const { adapter, client } = setup()
+  test('default: loadAccounts delegates login and seeds remote accounts for signing', async () => {
+    const { adapter, client, store } = setup()
 
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+    const connected = await adapter.actions.loadAccounts(undefined, {
+      method: 'wallet_connect',
+      params: undefined,
+    })
+    store.setState({ accounts: connected.accounts, activeAccount: 0 })
     const result = await adapter.actions.signPersonalMessage(
       { address, data: '0x68656c6c6f' },
       { method: 'personal_sign', params: ['0x68656c6c6f', address] },
     )
 
     expect(client.loadCalls).toMatchInlineSnapshot(`1`)
+    expect(client.fetchCalls).toMatchInlineSnapshot(`0`)
     expect(client.signWith).toMatchInlineSnapshot(`
       [
         "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
@@ -165,7 +170,7 @@ describe('turnkey', () => {
     `)
   })
 
-  test('behavior: signing silently restores wallet accounts from an existing session', async () => {
+  test('behavior: signing fetches remote accounts for a persisted provider account', async () => {
     const { adapter, client, store } = setup()
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
@@ -178,7 +183,7 @@ describe('turnkey', () => {
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
   })
 
-  test('behavior: silent restore does not connect accounts when the provider store is empty', async () => {
+  test('behavior: remote account lookup does not connect an empty provider store', async () => {
     const { adapter, client } = setup()
 
     await expect(
@@ -192,7 +197,7 @@ describe('turnkey', () => {
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
   })
 
-  test('behavior: silent restore only reconnects persisted provider accounts', async () => {
+  test('behavior: remote account lookup only signs persisted provider accounts', async () => {
     const { adapter, client, store } = setup()
     client.wallets = [
       {
@@ -220,7 +225,36 @@ describe('turnkey', () => {
     `)
   })
 
-  test('behavior: silent restore ignores non-Ethereum wallet accounts', async () => {
+  test('behavior: remote account cache refreshes once on a miss', async () => {
+    const { adapter, client, store } = setup()
+    const connected = await adapter.actions.loadAccounts(undefined, {
+      method: 'wallet_connect',
+      params: undefined,
+    })
+    store.setState({
+      accounts: [...connected.accounts, { address: other }],
+      activeAccount: 1,
+    })
+    client.wallets = [
+      {
+        accounts: [toWalletAccount(account), toWalletAccount(account_other)],
+      },
+    ]
+
+    await adapter.actions.signPersonalMessage(
+      { address: other, data: '0x68656c6c6f' },
+      { method: 'personal_sign', params: ['0x68656c6c6f', other] },
+    )
+
+    expect(client.fetchCalls).toMatchInlineSnapshot(`1`)
+    expect(client.signWith).toMatchInlineSnapshot(`
+      [
+        "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+      ]
+    `)
+  })
+
+  test('behavior: remote account lookup ignores non-Ethereum wallet accounts', async () => {
     const { adapter, client, store } = setup()
     client.wallets = [
       {
@@ -276,8 +310,12 @@ describe('turnkey', () => {
   })
 
   test('error: signing an unconnected account fails', async () => {
-    const { adapter } = setup()
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+    const { adapter, store } = setup()
+    const connected = await adapter.actions.loadAccounts(undefined, {
+      method: 'wallet_connect',
+      params: undefined,
+    })
+    store.setState({ accounts: connected.accounts, activeAccount: 0 })
 
     await expect(
       adapter.actions.signPersonalMessage(
