@@ -3,6 +3,70 @@
 
 @source "./**/*.{ts,tsx}";
 
+@font-face {
+  font-family: "Pilat";
+  src: url("/fonts/Pilat/Pilat-Thin.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100;
+}
+
+@font-face {
+  font-family: "Pilat";
+  src: url("/fonts/Pilat/Pilat-Light.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 300;
+}
+
+@font-face {
+  font-family: "Pilat";
+  src: url("/fonts/Pilat/Pilat-Book.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 350;
+}
+
+@font-face {
+  font-family: "Pilat";
+  src: url("/fonts/Pilat/Pilat-Regular.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "Pilat";
+  src: url("/fonts/Pilat/Pilat-Demi.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 600;
+}
+
+@font-face {
+  font-family: "Pilat";
+  src: url("/fonts/Pilat/Pilat-Bold.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 700;
+}
+
+@font-face {
+  font-family: "Pilat";
+  src: url("/fonts/Pilat/Pilat-Heavy.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 800;
+}
+
+@font-face {
+  font-family: "Pilat";
+  src: url("/fonts/Pilat/Pilat-Black.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 900;
+}
+
 :root {
   color-scheme: dark;
   --background: #0a0a0a;
@@ -17,7 +81,7 @@
   --dash-length: 5px;
   --dash-gap: 1.5px;
   --dash-thickness: 1px;
-  --font-pilat: Arial, Helvetica, sans-serif;
+  --font-pilat: "Pilat", Arial, Helvetica, sans-serif;
   --font-geist-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
@@ -34,6 +98,21 @@
   --font-mono: var(--font-geist-mono);
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+[data-layout="blank"]:has(.accounts-landing) [data-v-main],
+[data-layout="blank"]:has(.accounts-landing) [data-v-content] {
+  max-width: none;
+  width: 100%;
+  padding: 0;
+}
+
+[data-layout="blank"]:has(.accounts-landing) [data-v-main] {
+  padding-bottom: 0;
+}
+
+[data-layout="blank"]:has(.accounts-landing) [data-v-content] {
+  margin: 0;
 }
 
 .accounts-landing {
