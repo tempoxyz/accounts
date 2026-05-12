@@ -31,7 +31,9 @@ describe('turnkey', () => {
         "accounts": [
           {
             "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "keyType": "secp256k1",
             "label": "Ada",
+            "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
           },
         ],
         "signature": "0x000000000000000000000000000000000000000000000000000000000000001100000000000000000000000000000000000000000000000000000000000000221b",
@@ -39,7 +41,7 @@ describe('turnkey', () => {
     `)
   })
 
-  test('default: loadAccounts delegates login and seeds remote accounts for signing', async () => {
+  test('default: loadAccounts delegates login and persists signing metadata', async () => {
     const { adapter, client, store } = setup()
 
     const connected = await adapter.actions.loadAccounts(undefined, {
@@ -88,6 +90,8 @@ describe('turnkey', () => {
         "accounts": [
           {
             "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "keyType": "secp256k1",
+            "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
           },
         ],
         "keyAuthorization": {
@@ -138,7 +142,7 @@ describe('turnkey', () => {
 
   test('default: authorizeAccessKey signs with the connected Turnkey account', async () => {
     const { adapter, client, store } = setup()
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
+    store.setState({ accounts: [toStoreAccount(account)], activeAccount: 0 })
 
     const result = await adapter.actions.authorizeAccessKey!(
       {
@@ -149,7 +153,7 @@ describe('turnkey', () => {
       { method: 'wallet_authorizeAccessKey', params: [{ expiry: 123 }] },
     )
 
-    expect(client.fetchCalls).toMatchInlineSnapshot(`1`)
+    expect(client.fetchCalls).toMatchInlineSnapshot(`0`)
     expect(result).toMatchInlineSnapshot(`
       {
         "keyAuthorization": {
@@ -170,20 +174,20 @@ describe('turnkey', () => {
     `)
   })
 
-  test('behavior: signing fetches remote accounts for a persisted provider account', async () => {
+  test('behavior: signing uses persisted provider metadata', async () => {
     const { adapter, client, store } = setup()
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
+    store.setState({ accounts: [toStoreAccount(account)], activeAccount: 0 })
 
     await adapter.actions.signPersonalMessage(
       { address, data: '0x68656c6c6f' },
       { method: 'personal_sign', params: ['0x68656c6c6f', address] },
     )
 
-    expect(client.fetchCalls).toMatchInlineSnapshot(`1`)
+    expect(client.fetchCalls).toMatchInlineSnapshot(`0`)
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
   })
 
-  test('behavior: remote account lookup does not connect an empty provider store', async () => {
+  test('behavior: store-only signing does not connect an empty provider store', async () => {
     const { adapter, client } = setup()
 
     await expect(
@@ -197,14 +201,9 @@ describe('turnkey', () => {
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
   })
 
-  test('behavior: remote account lookup only signs persisted provider accounts', async () => {
+  test('behavior: store-only signing only signs persisted provider accounts', async () => {
     const { adapter, client, store } = setup()
-    client.wallets = [
-      {
-        accounts: [toWalletAccount(account), toWalletAccount(account_other)],
-      },
-    ]
-    store.setState({ accounts: [{ address: other }], activeAccount: 0 })
+    store.setState({ accounts: [toStoreAccount(account_other)], activeAccount: 0 })
 
     await adapter.actions.signPersonalMessage(
       { address: other, data: '0x68656c6c6f' },
@@ -220,52 +219,15 @@ describe('turnkey', () => {
       [
         {
           "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+          "keyType": "secp256k1",
+          "publicKey": "0x03037f40766fbc839e1b69a19685ce42f967a74a87d597a52ef525810484908b33",
         },
       ]
     `)
   })
 
-  test('behavior: remote account cache refreshes once on a miss', async () => {
+  test('behavior: old persisted accounts without public keys must reconnect', async () => {
     const { adapter, client, store } = setup()
-    const connected = await adapter.actions.loadAccounts(undefined, {
-      method: 'wallet_connect',
-      params: undefined,
-    })
-    store.setState({
-      accounts: [...connected.accounts, { address: other }],
-      activeAccount: 1,
-    })
-    client.wallets = [
-      {
-        accounts: [toWalletAccount(account), toWalletAccount(account_other)],
-      },
-    ]
-
-    await adapter.actions.signPersonalMessage(
-      { address: other, data: '0x68656c6c6f' },
-      { method: 'personal_sign', params: ['0x68656c6c6f', other] },
-    )
-
-    expect(client.fetchCalls).toMatchInlineSnapshot(`1`)
-    expect(client.signWith).toMatchInlineSnapshot(`
-      [
-        "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
-      ]
-    `)
-  })
-
-  test('behavior: remote account lookup ignores non-Ethereum wallet accounts', async () => {
-    const { adapter, client, store } = setup()
-    client.wallets = [
-      {
-        accounts: [
-          {
-            address,
-            addressFormat: 'ADDRESS_FORMAT_SUI',
-          },
-        ],
-      },
-    ]
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
@@ -273,14 +235,16 @@ describe('turnkey', () => {
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
-    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: No Turnkey account connected.]')
+    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: Turnkey account must reconnect.]')
 
+    expect(client.fetchCalls).toMatchInlineSnapshot(`0`)
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: expired sessions clear provider accounts', async () => {
     const { adapter, client, store } = setup({ session: { expiry: 1 } })
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
+    store.setState({ accounts: [toStoreAccount(account)], activeAccount: 0 })
 
     await expect(
       adapter.actions.signPersonalMessage(
@@ -297,7 +261,7 @@ describe('turnkey', () => {
     const { adapter, store } = setup({
       signError: { details: [{ turnkeyErrorCode: 'API_KEY_EXPIRED' }] },
     })
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
+    store.setState({ accounts: [toStoreAccount(account)], activeAccount: 0 })
 
     await expect(
       adapter.actions.signPersonalMessage(
@@ -439,5 +403,16 @@ function toWalletAccount(account: (typeof core_accounts)[number]): turnkey.Walle
     address: account.address,
     addressFormat: 'ADDRESS_FORMAT_ETHEREUM',
     publicKey: PublicKey.toHex(PublicKey.compress(PublicKey.from(account.publicKey))),
+  }
+}
+
+function toStoreAccount(account: (typeof core_accounts)[number]): Store.Account {
+  const walletAccount = toWalletAccount(account)
+  const publicKey = walletAccount.publicKey
+  Hex.assert(publicKey, { strict: true })
+  return {
+    address: account.address,
+    keyType: 'secp256k1',
+    publicKey,
   }
 }

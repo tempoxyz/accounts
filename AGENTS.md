@@ -97,4 +97,4 @@
 - **Turnkey adapter stays structurally typed** — avoid importing `@turnkey/core` directly from the root SDK adapter so non-Turnkey consumers do not inherit a hard dependency; accept an app-provided client with the minimal client shape instead.
 - **Turnkey wallet account public keys are compressed** — `fetchWallets()` returns compressed secp256k1 public keys (33 bytes, `0x02`/`0x03`) for Ethereum wallet accounts; decompress them before constructing `TempoAccount.Account` so the derived account address matches `eth_accounts`.
 - **Turnkey signature parts can be bare hex** — `signRawPayload()` may return `r`/`s` without a `0x` prefix; normalize those parts before `Hex.assert()` or concatenation.
-- **Turnkey remote accounts are cache-only** — `store.accounts` is the canonical connected provider state; Turnkey-fetched wallet accounts should stay as disposable signing metadata keyed by address, not as a shadow account list.
+- **Turnkey signing is store-only** — `store.accounts` is the canonical connected provider state; Turnkey entries store the compressed public key and use the account address as `signWith`, without a separate wallet-account cache.
