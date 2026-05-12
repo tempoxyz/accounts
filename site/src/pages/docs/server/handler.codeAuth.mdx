@@ -1,0 +1,222 @@
+---
+title: Handler.codeAuth
+description: Server handler for the device-code (PKCE) access-key bootstrap flow.
+---
+
+# `Handler.codeAuth`
+
+Creates a generic device-code handler used to bootstrap access keys for non-browser SDK contexts (CLIs, scripts). Mounts four endpoints under `path`:
+
+- `POST {path}/code` — create a pending device code from an SDK request
+- `GET  {path}/pending/:code` — return the pending request bound to a code, for the approval UI
+- `POST {path}/poll/:code` — poll until the device code is authorized, then exchange for the granted access key
+- `POST {path}` — authorize a pending device code with a signed key authorization
+
+Each endpoint applies the configured [`rateLimit`](#ratelimit) and reads JSON bodies up to [`maxBodyBytes`](#maxbodybytes).
+
+## Usage
+
+```ts
+import { Handler, CliAuth } from 'accounts/server'
+
+const handler = Handler.codeAuth({
+  store: CliAuth.Store.memory(),
+})
+```
+
+Then plug `handler` into your server framework of choice:
+
+```ts
+createServer(handler.listener)              // Node.js
+Bun.serve({ fetch: handler.fetch })         // Bun
+Deno.serve({ fetch: handler.fetch })        // Deno
+app.all('*', c => handler.fetch(c.request)) // Elysia
+app.use(handler.listener)                   // Express
+app.use(c => handler.fetch(c.req.raw))      // Hono
+export const GET = handler.fetch            // Next.js
+export const POST = handler.fetch           // Next.js
+```
+
+## Parameters
+
+### chains
+
+- **Type:** `readonly [Chain, ...Chain[]]` (from `viem`)
+- **Default:** `[tempo, tempoModerato, tempoDevnet]`
+
+Supported chains. The handler resolves the client based on chain IDs carried by device-code requests and key authorizations. The first chain is used as the default when a request omits `chainId`.
+
+```ts twoslash
+import { tempo } from 'viem/chains'
+import { Handler } from 'accounts/server'
+
+const handler = Handler.codeAuth({
+  chains: [tempo], // [!code focus]
+})
+```
+
+### maxBodyBytes
+
+- **Type:** `number`
+- **Default:** `16384`
+
+Maximum JSON request body size in bytes. Requests exceeding this limit are rejected with a `400` before parsing.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.codeAuth({
+  maxBodyBytes: 8_192, // [!code focus]
+})
+```
+
+### now
+
+- **Type:** `() => number`
+- **Optional**
+
+Time source used for TTL evaluation. Defaults to `Date.now`. Useful for tests that need a deterministic clock.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.codeAuth({
+  now: () => 1_700_000_000_000, // [!code focus]
+})
+```
+
+### path
+
+- **Type:** `string`
+- **Default:** `'/auth/pkce'`
+
+Path prefix for the code-auth endpoints.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.codeAuth({
+  path: '/cli-auth', // [!code focus]
+})
+```
+
+### policy
+
+- **Type:** `CliAuth.Policy`
+- **Optional**
+
+Validates and optionally rewrites requested defaults (expiry, spending limits) before the pending entry is stored. Use this to enforce server-side policy on what the SDK is allowed to ask for.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.codeAuth({
+  policy: { // [!code focus]
+    validate: ({ expiry }) => ({ // [!code focus]
+      expiry: Math.min(expiry ?? 0, Math.floor(Date.now() / 1000) + 3600), // [!code focus]
+    }), // [!code focus]
+  }, // [!code focus]
+})
+```
+
+### random
+
+- **Type:** `(size: number) => Uint8Array`
+- **Optional**
+
+Random byte generator used for device-code allocation. Defaults to the platform's `crypto.getRandomValues`. Override only for tests.
+
+### rateLimit
+
+- **Type:** `CliAuth.RateLimit | false`
+- **Default:** `CliAuth.RateLimit.memory({ max: 120, windowMs: 60_000 })`
+
+Shared rate limiter applied to every code-auth endpoint. Pass `false` to disable rate limiting entirely (not recommended in production).
+
+```ts twoslash
+// @noErrors
+import { Handler, CliAuth } from 'accounts/server'
+
+const handler = Handler.codeAuth({
+  rateLimit: CliAuth.RateLimit.cloudflare(env.RATE_LIMITER), // [!code focus]
+})
+```
+
+### rateLimitKey
+
+- **Type:** `(request: Request) => string`
+- **Default:** Cloudflare's `cf-connecting-ip` header, falling back to `'unknown'`
+
+Derives the rate-limit key from the incoming request. Override when fronting the handler with a different proxy that exposes the real client IP under another header.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.codeAuth({
+  rateLimitKey: (req) => req.headers.get('x-real-ip') ?? 'unknown', // [!code focus]
+})
+```
+
+### store
+
+- **Type:** `CliAuth.Store`
+- **Default:** `CliAuth.Store.memory()`
+
+Device-code store. Persists pending, authorized, and consumed device-code entries. Use a durable backend in production so device codes survive process restarts.
+
+```ts twoslash
+// @noErrors
+import { Handler, CliAuth } from 'accounts/server'
+
+const handler = Handler.codeAuth({
+  store: CliAuth.Store.kv(env.KV), // [!code focus]
+})
+```
+
+### transports
+
+- **Type:** `Record<number, Transport>` (from `viem`)
+- **Default:** `http()` for each configured chain
+
+Transports keyed by chain ID. Override per chain to point at a private RPC endpoint.
+
+```ts twoslash
+import { http } from 'viem'
+import { tempo } from 'viem/chains'
+import { Handler } from 'accounts/server'
+
+const handler = Handler.codeAuth({
+  transports: { // [!code focus]
+    [tempo.id]: http('https://rpc.tempo.xyz'), // [!code focus]
+  }, // [!code focus]
+})
+```
+
+### ttlMs
+
+- **Type:** `number`
+- **Default:** `600000` (10 minutes)
+
+Pending entry TTL in milliseconds. After this duration, pending device codes can no longer be authorized or polled.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.codeAuth({
+  ttlMs: 5 * 60 * 1000, // [!code focus]
+})
+```
+
+### cors
+
+- **Type:** `boolean | Cors`
+- **Default:** `true`
+
+Inherited from [`from.Options`](/docs/server/handler.compose#optionscors). CORS configuration applied to every response.
+
+### headers
+
+- **Type:** `Headers | Record<string, string>`
+- **Optional**
+
+Inherited from [`from.Options`](/docs/server/handler.compose#optionsheaders). Additional headers merged onto every response.

@@ -1,0 +1,199 @@
+---
+title: Handler.exchange
+description: Server handler that returns Stablecoin DEX quotes and ready-to-submit calls.
+---
+
+# `Handler.exchange`
+
+Creates a stablecoin-exchange handler that returns swap quotes plus the matching `calls` (approve + buy/sell) for the [Tempo Stablecoin DEX](https://docs.tempo.xyz/guide/stablecoin-dex). Mounts two endpoints under `path`:
+
+- `GET  {path}/tokens` — list known tokens for a chain (defaults to the first configured chain; pass `?chainId=N` to pick a different one)
+- `POST {path}/quote` — return a quote (`token` + `pairToken` amounts, slippage) and ready-to-submit `calls`
+
+The route schema is preserved on the return type so consumers can derive a typed RPC client with [`hc<typeof handler>`](/docs/server/hc).
+
+## Usage
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.exchange()
+```
+
+Then plug `handler` into your server framework of choice:
+
+```ts twoslash
+// @noErrors
+import { Handler } from 'accounts/server'
+const handler = Handler.exchange()
+// ---cut---
+createServer(handler.listener)              // Node.js
+Bun.serve({ fetch: handler.fetch })         // Bun
+Deno.serve({ fetch: handler.fetch })        // Deno
+app.all('*', c => handler.fetch(c.request)) // Elysia
+app.use(handler.listener)                   // Express
+app.use(c => handler.fetch(c.req.raw))      // Hono
+export const GET = handler.fetch            // Next.js
+export const POST = handler.fetch           // Next.js
+```
+
+## Typed RPC
+
+Pass `typeof handler` to [`hc`](/docs/server/hc) for a fully-typed RPC client:
+
+```ts twoslash
+import { Handler, hc } from 'accounts/server'
+
+const handler = Handler.exchange()
+
+const client = hc<typeof handler>('https://example.com')
+
+const res = await client.exchange.quote.$post({
+  json: {
+    amount: '1',
+    pairToken: 'pathUSD',
+    slippage: 0.01,
+    token: 'USDC',
+    type: 'sell',
+  },
+})
+if (res.ok) {
+  const { calls, pairToken, token } = await res.json()
+}
+```
+
+## Parameters
+
+### cacheTtl
+
+- **Type:** `number`
+- **Default:** `600` (10 minutes)
+
+TTL in seconds for cached tokenlist responses. On-chain token metadata is cached without expiry (immutable per address).
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.exchange({
+  cacheTtl: 60, // [!code focus]
+})
+```
+
+### chains
+
+- **Type:** `readonly [Chain, ...Chain[]]` (from `viem`)
+- **Default:** `[tempo, tempoModerato, tempoDevnet]`
+
+Supported chains. The first chain is used to resolve the default client when a request omits `chainId`.
+
+```ts twoslash
+import { tempo } from 'viem/chains'
+import { Handler } from 'accounts/server'
+
+const handler = Handler.exchange({
+  chains: [tempo], // [!code focus]
+})
+```
+
+### kv
+
+- **Type:** [`Kv`](/docs/server/kv)
+- **Default:** `Kv.memory()`
+
+Key-value store used to cache tokenlist and on-chain metadata responses across requests. Provide [`Kv.cloudflare(env.KV)`](/docs/server/kv.cloudflare) for cross-instance caching, or omit for an in-process cache. Shared with [`Handler.relay`](/docs/server/handler.relay) — providing the same adapter on both handlers reuses a single cache.
+
+```ts twoslash
+// @noErrors
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.exchange({
+  kv: Kv.cloudflare(env.KV), // [!code focus]
+})
+```
+
+### onRequest
+
+- **Type:** `(request: Request) => void | Promise<void>`
+- **Optional**
+
+Callback called before processing each request. Useful for logging, custom rate limiting, or auth.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.exchange({
+  onRequest: async (request) => { // [!code focus]
+    console.log('Exchange request:', request.url) // [!code focus]
+  }, // [!code focus]
+})
+```
+
+### path
+
+- **Type:** `string`
+- **Default:** `'/exchange'`
+
+Path prefix for the exchange endpoints.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.exchange({
+  path: '/swap', // [!code focus]
+})
+```
+
+### resolveTokens
+
+- **Type:** `(chainId: number) => readonly Token[] | Promise<readonly Token[]>`
+- **Default:** Fetches `https://tokenlist.tempo.xyz/list/:chainId`
+
+Resolves the list of known tokens for a chain. Used to resolve symbol references (e.g. `"USDC.e"`) to addresses + metadata. Address references are matched against this list first, falling back to on-chain metadata.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.exchange({
+  resolveTokens: (chainId) => [ // [!code focus]
+    { // [!code focus]
+      address: '0x20c0000000000000000000000000000000000001', // [!code focus]
+      decimals: 6, // [!code focus]
+      name: 'pathUSD', // [!code focus]
+      symbol: 'pathUSD', // [!code focus]
+    }, // [!code focus]
+  ], // [!code focus]
+})
+```
+
+### transports
+
+- **Type:** `Record<number, Transport>` (from `viem`)
+- **Default:** `http()` for each chain
+
+Transports keyed by chain ID.
+
+```ts twoslash
+import { http } from 'viem'
+import { tempo } from 'viem/chains'
+import { Handler } from 'accounts/server'
+
+const handler = Handler.exchange({
+  transports: { // [!code focus]
+    [tempo.id]: http('https://rpc.tempo.xyz'), // [!code focus]
+  }, // [!code focus]
+})
+```
+
+### cors
+
+- **Type:** `boolean | Cors`
+- **Default:** `true`
+
+Inherited from [`from.Options`](/docs/server/handler.compose#optionscors). CORS configuration applied to every response.
+
+### headers
+
+- **Type:** `Headers | Record<string, string>`
+- **Optional**
+
+Inherited from [`from.Options`](/docs/server/handler.compose#optionsheaders). Additional headers merged onto every response.
