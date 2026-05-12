@@ -1,5 +1,12 @@
 # accounts
 
+## 0.10.4
+
+### Patch Changes
+
+- f36c350: Widened `getSession` to accept Node.js `http.IncomingMessage` in addition to Fetch API `Request`.
+- ef44a68: Fixed `Handler.relay()` to return an actionable error when `eth_signRawTransaction` is called without a fee payer configured, instead of forwarding to the RPC node which returns an opaque "Method not found".
+
 ## 0.10.3
 
 ### Patch Changes

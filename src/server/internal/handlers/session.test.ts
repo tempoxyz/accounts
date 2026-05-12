@@ -4,12 +4,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 
 import * as Kv from '../../Kv.js'
 import { auth } from './auth.js'
-import {
-  bearerToken,
-  parseCookieValue,
-  type SessionRequest,
-  tokenFromRequest,
-} from './session.js'
+import { bearerToken, parseCookieValue, type SessionRequest, tokenFromRequest } from './session.js'
 
 const cookieOptions = { cookie: true, cookieName: 'sid' } as const
 const noCookieOptions = { cookie: false, cookieName: 'sid' } as const
