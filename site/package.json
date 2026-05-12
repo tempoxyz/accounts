@@ -12,15 +12,16 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "accounts": "workspace:*",
+    "mermaid": "^11.14.0",
     "ox": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "tsx": "catalog:",
     "viem": "catalog:",
     "vite": "catalog:",
-    "vocs": "https://pkg.pr.new/wevm/vocs@2fb25c2",
+    "vocs": "https://pkg.pr.new/wevm/vocs@dc18ab3",
     "wagmi": "catalog:",
-    "waku": "1.0.0-alpha.4"
+    "waku": "1.0.0-alpha.10"
   },
   "devDependencies": {
     "@types/node": "catalog:",

@@ -84,10 +84,12 @@ export default defineConfig({
         items: [
           {
             text: 'Core',
+            collapsed: true,
             items: [
               { text: 'Provider', link: '/docs/api/provider' },
               {
                 text: 'Adapters',
+                collapsed: true,
                 items: [
                   { text: 'Overview', link: '/docs/api/adapters' },
                   { text: 'dialog / tempoWallet', link: '/docs/api/dialog' },
@@ -97,6 +99,7 @@ export default defineConfig({
               },
               {
                 text: 'Dialog',
+                collapsed: true,
                 items: [
                   { text: 'Overview', link: '/docs/api/dialogs' },
                   { text: '.iframe', link: '/docs/api/dialog.iframe' },
@@ -106,6 +109,7 @@ export default defineConfig({
               { text: 'Expiry', link: '/docs/api/expiry' },
               {
                 text: 'WebAuthnCeremony',
+                collapsed: true,
                 items: [
                   { text: 'Overview', link: '/docs/api/webauthnceremony' },
                   { text: '.from', link: '/docs/api/webauthnceremony.from' },
@@ -116,6 +120,7 @@ export default defineConfig({
           },
           {
             text: 'Wagmi',
+            collapsed: true,
             items: [
               { text: 'tempoWallet', link: '/docs/wagmi/tempoWallet' },
               { text: 'webAuthn', link: '/docs/wagmi/webAuthn' },
@@ -123,6 +128,7 @@ export default defineConfig({
           },
           {
             text: 'Server',
+            collapsed: true,
             items: [
               { text: 'Overview', link: '/docs/server' },
               { text: '.compose', link: '/docs/server/handler.compose' },
@@ -134,6 +140,7 @@ export default defineConfig({
           },
           {
             text: 'JSON-RPC',
+            collapsed: true,
             items: [
               { text: 'wallet_connect', link: '/docs/rpc/wallet_connect' },
               { text: 'wallet_disconnect', link: '/docs/rpc/wallet_disconnect' },

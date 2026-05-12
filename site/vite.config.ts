@@ -3,6 +3,9 @@ import { defineConfig } from 'vite'
 import { vocs } from 'vocs/vite'
 
 export default defineConfig({
+  optimizeDeps: {
+    include: ['mermaid', 'dayjs'],
+  },
   server: {
     allowedHosts: true,
     host: process.env.VITE_HOST ?? 'localhost',
