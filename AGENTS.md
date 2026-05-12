@@ -41,6 +41,7 @@
 ## Documentation Conventions
 
 - **JSDoc on all exports** — every exported function, type, and constant gets a JSDoc comment. Type properties get JSDoc too. Namespace types (e.g. `declare namespace create { type Options }`) get JSDoc too. Doc-driven development: write the JSDoc before or alongside the implementation, not after.
+- **Docs writing guide** — use `docs/documentation-writing-guide.md` as the internal source of truth for Accounts SDK documentation positioning, voice, terminology, and page structure.
 
 ## Protocol Conventions
 
