@@ -20,8 +20,12 @@ type Request = {
 
 ```ts
 type Response = Record<Hex, {
+  /** Access key (delegated signing) support. */
   accessKeys?: { status: 'supported' | 'unsupported' }
+  /** EIP-5792 atomic execution support. */
   atomic: { status: 'supported' | 'ready' | 'unsupported' }
+  /** Whether the relay can sponsor fees on this chain. */
+  feePayer?: { status: 'supported' | 'unsupported' }
 }>
 ```
 

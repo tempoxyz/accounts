@@ -9,21 +9,90 @@ Requests to connect account(s) with optional capabilities.
 
 ## Request
 
+`capabilities` is a discriminated union over `method` — `'register'` or
+`'login'`. Both branches share the `digest`, `authorizeAccessKey`, `auth`, and
+`personalSign` fields.
+
 ```ts
 type Request = {
   method: 'wallet_connect'
   params?: [{
-    capabilities?: {
-      /** Authorize an access key on connect. */
-      authorizeAccessKey?: {
-        expiry: number
-        limits?: { token: Address; limit: Hex }[]
-        publicKey?: Hex
-      }
-      /** Authentication method. */
-      method?: 'register' | 'login'
-    }
+    capabilities?: ConnectRegisterCapabilities | ConnectLoginCapabilities
+    /** Chain ID to connect to (hex-encoded number on the wire). */
+    chainId?: number
+    /** Caller-supplied protocol version string. */
+    version?: string
   }]
+}
+
+type ConnectRegisterCapabilities = {
+  method: 'register'
+  /** Optional digest to bind into the registration ceremony. */
+  digest?: `0x${string}`
+  /** Authorize an access key during the same ceremony. */
+  authorizeAccessKey?: AuthorizeAccessKeyCapability
+  /** SIWE round-trip configuration. See `Auth` below. */
+  auth?: Auth
+  /** Display name to associate with the new account. */
+  name?: string
+  /** Sign an EIP-191 message in the same passkey ceremony. */
+  personalSign?: { message: string }
+  /** Stable user identifier passed to the WebAuthn credential. */
+  userId?: string
+}
+
+type ConnectLoginCapabilities = {
+  method?: 'login'
+  /** Optional digest to bind into the login ceremony. */
+  digest?: `0x${string}`
+  /** Specific WebAuthn credential ID to authenticate with. */
+  credentialId?: string
+  /** Authorize an access key during the same ceremony. */
+  authorizeAccessKey?: AuthorizeAccessKeyCapability
+  /** SIWE round-trip configuration. See `Auth` below. */
+  auth?: Auth
+  /** Sign an EIP-191 message in the same passkey ceremony. */
+  personalSign?: { message: string }
+  /** Show an account picker before authenticating. */
+  selectAccount?: boolean
+}
+
+type AuthorizeAccessKeyCapability = {
+  address?: Address
+  /** Hex on the wire, decoded to `bigint`. */
+  chainId?: bigint
+  expiry: number
+  keyType?: 'secp256k1' | 'p256' | 'webAuthn'
+  limits?: {
+    token: Address
+    /** Hex on the wire, decoded to `bigint`. */
+    limit: bigint
+    /** Window length in seconds. Omit for an absolute cap. */
+    period?: number
+  }[]
+  publicKey?: Hex
+  scopes?: {
+    address: Address
+    selector?: Hex | string
+    recipients?: Address[]
+  }[]
+}
+
+type Auth = string | {
+  /**
+   * Base URL. The SDK derives `${url}/challenge` and `${url}/logout`;
+   * `${url}` itself is the verify endpoint.
+   */
+  url?: string
+  /** Override individual endpoints. Either `url` or both `challenge` + `verify` must be set. */
+  challenge?: string
+  verify?: string
+  logout?: string
+  /**
+   * Ask the verify endpoint to also return `{ token }` in the JSON body.
+   * Default `false` — cookie mode relies on `Set-Cookie` only.
+   */
+  returnToken?: boolean
 }
 ```
 
@@ -34,8 +103,27 @@ type Response = {
   accounts: {
     address: Address
     capabilities: {
+      /** Authenticated email address, if available. May be `null`. */
+      email?: string | null
+      /** Authorized access key, if `authorizeAccessKey` was requested. */
       keyAuthorization?: KeyAuthorization
+      /**
+       * Echo of the `personalSign` request, present iff the caller set
+       * `capabilities.personalSign` (or `capabilities.auth` folded a SIWE
+       * message into the same slot). The signature itself lives on
+       * `capabilities.signature`.
+       */
+      personalSign?: { message: string }
+      /** Signature for `personalSign` / SIWE message, if requested. */
       signature?: Hex
+      /** Authenticated username, if available. May be `null`. */
+      username?: string | null
+      /**
+       * SIWE round-trip output, populated when the request `auth`
+       * capability was set. `token` is present in JWT mode or when the
+       * request set `returnToken: true`. Cookie-mode default = `{}`.
+       */
+      auth?: { token?: string }
     }
   }[]
 }

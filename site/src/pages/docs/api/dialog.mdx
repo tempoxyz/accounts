@@ -103,3 +103,24 @@ const provider = Provider.create({
   }),
 })
 ```
+
+### theme
+
+- **Type:** `Dialog.Theme`
+- **Optional**
+
+Visual theme overrides applied to the wallet dialog. Supports an `accent` color (preset or CSS value), a `radius` preset (`'none' | 'small' | 'medium' | 'large' | 'full'`), and a `scheme` (`'light' | 'dark'`). Defaults follow the user's OS color scheme.
+
+```ts twoslash
+import { dialog, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: dialog({
+    theme: { // [!code focus]
+      accent: 'purple', // [!code focus]
+      radius: 'medium', // [!code focus]
+      scheme: 'dark', // [!code focus]
+    }, // [!code focus]
+  }),
+})
+```

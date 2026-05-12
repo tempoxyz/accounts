@@ -19,9 +19,11 @@ const provider = Provider.create({
 
 ## Parameters
 
+Accepts a [`Dialog.popup.Options`](https://github.com/tempoxyz/accounts/blob/main/src/core/Dialog.ts) object.
+
 ### size
 
-- **Type:** `{ width: number; height: number }`
-- **Default:** `{ width: 360, height: 440 }`
+- **Type:** `{ width: number; height: number } | undefined`
+- **Default:** [`Dialog.defaultSize`](/docs/api/dialogs#dialogdefaultsize) — `{ width: 360, height: 440 }`
 
 Popup window dimensions.

@@ -11,12 +11,13 @@ Creates a WebAuthn ceremony handler that manages registration and authentication
 [See the guide](https://docs.tempo.xyz/guide/use-accounts/embed-passkeys)
 :::
 
-Exposes 4 POST endpoints:
+Mounts 5 POST endpoints under `path`:
 
-- `POST /register/options` — Generate credential creation options
-- `POST /register` — Verify registration and store credential
-- `POST /login/options` — Generate credential request options
-- `POST /login` — Verify authentication
+- `POST {path}/register/options` — Generate credential creation options
+- `POST {path}/register` — Verify registration and store credential
+- `POST {path}/login/options` — Generate credential request options
+- `POST {path}/login` — Verify authentication and issue a session (cookie via `Set-Cookie`, or `{ token }` body when `cookie: false` or the request opts in via `returnToken: true`)
+- `POST {path}/logout` — Revoke the session and clear the cookie. Only mounted when [`session`](#session) is `true` (the default); otherwise calls fall through as `404`.
 
 ## Usage
 
@@ -33,28 +34,85 @@ const handler = Handler.webAuthn({
 Then plug `handler` into your server framework of choice:
 
 ```ts
-createServer(handler.listener) // Node.js
-Bun.serve(handler) // Bun
-Deno.serve(handler) // Deno
+createServer(handler.listener)              // Node.js
+Bun.serve({ fetch: handler.fetch })         // Bun
+Deno.serve({ fetch: handler.fetch })        // Deno
 app.all('*', c => handler.fetch(c.request)) // Elysia
-app.use(handler.listener) // Express
-app.use(c => handler.fetch(c.req.raw)) // Hono
-export const GET = handler.fetch // Next.js
-export const POST = handler.fetch // Next.js
+app.use(handler.listener)                   // Express
+app.use(c => handler.fetch(c.req.raw))      // Hono
+export const GET = handler.fetch            // Next.js
+export const POST = handler.fetch           // Next.js
 ```
 
 :::warning
 `Kv.memory()` is not recommended for production use. Instead, use a persistent store like Cloudflare or Vercel KV, or a Redis instance. See [`Kv`](/docs/server/kv) for available adapters.
 :::
 
+## Return Type
+
+`Handler.webAuthn` returns a [`Handler`](/docs/server/handler.compose#handler) extended with a `getSession` helper for resolving the current session from a follow-up request:
+
+```ts
+type ReturnType = Handler & {
+  getSession: (req: Request) => Promise<SessionPayload | undefined>
+}
+```
+
+#### `getSession`
+
+Resolves the current session from a request's session cookie or `Authorization: Bearer <token>` header. Returns `undefined` when no token is present, the token has been revoked, or the session has been disabled (`session: false`).
+
+```ts
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://example.com',
+  rpId: 'example.com',
+})
+
+// Inside another route on the same server:
+app.get('/me', async (req) => {
+  const session = await handler.getSession(req)
+  if (!session) return new Response('unauthorized', { status: 401 })
+  return Response.json({ credentialId: session.credentialId })
+})
+```
+
+### `SessionPayload`
+
+```ts
+type SessionPayload = {
+  /** Credential ID returned by the authenticator. */
+  credentialId: string
+  /** Credential public key (hex). */
+  publicKey: string
+  /** Optional `userHandle` returned by the authenticator. */
+  userId?: string | undefined
+  /** Unix timestamp (seconds) when the session was issued. */
+  issuedAt: number
+  /** Unix timestamp (seconds) when the session expires. */
+  expiresAt: number
+}
+```
+
+The session payload is persisted in [`kv`](#kv) under `session:{token}` and is also the value returned by [`getSession`](#getsessionreq).
+
 ## Parameters
 
-### challengeTtl
+### cookie
 
-- **Type:** `number`
-- **Default:** `300` (5 minutes)
+- **Type:** `boolean`
+- **Default:** `true`
 
-Maximum age of a challenge in seconds before it expires.
+Whether to issue a session cookie on successful login. When `false`, the login response always contains `{ token }` in the body, no `Set-Cookie` header is sent, logout does not clear a cookie, and `getSession` ignores any incoming cookie — only `Authorization: Bearer <token>` is honored. Use this when the SDK lives in a non-browser context or the host app already manages its own auth cookies.
+
+### cookieName
+
+- **Type:** `string`
+- **Default:** `'accounts_webauthn'`
+
+Cookie name for the session token.
 
 ```ts twoslash
 import { Handler, Kv } from 'accounts/server'
@@ -63,7 +121,7 @@ const handler = Handler.webAuthn({
   kv: Kv.memory(),
   origin: 'https://example.com',
   rpId: 'example.com',
-  challengeTtl: 600, // [!code focus]
+  cookieName: 'my_app_session', // [!code focus]
 })
 ```
 
@@ -72,7 +130,7 @@ const handler = Handler.webAuthn({
 - **Type:** [`Kv`](/docs/server/kv)
 - **Required**
 
-Key-value store for challenges and credentials. [See `Kv`](/docs/server/kv) for available adapters.
+Key-value store for challenges, credentials, and sessions. [See `Kv`](/docs/server/kv) for available adapters.
 
 ```ts twoslash
 import { Handler, Kv } from 'accounts/server'
@@ -86,10 +144,14 @@ const handler = Handler.webAuthn({
 
 ### onAuthenticate
 
-- **Type:** `(params: { credentialId, publicKey, userId?, request }) => Response | void`
+- **Type:** `(params: { credentialId: string; publicKey: string; userId?: string; request: Request }) => Response | Promise<Response> | void | Promise<void>`
 - **Optional**
 
-Called after a successful authentication.
+Called after a successful authentication, before the session token is issued.
+
+- Returning a `Response` merges its JSON body and status onto the default login response.
+- Returning `void` (or a `Promise<void>`) leaves the default response untouched.
+- Throwing rejects the request with `401`. The thrown error's `message` is surfaced as the response `error` field, the challenge is consumed, and no session is issued.
 
 ```ts twoslash
 import { Handler, Kv } from 'accounts/server'
@@ -98,18 +160,18 @@ const handler = Handler.webAuthn({
   kv: Kv.memory(),
   origin: 'https://example.com',
   rpId: 'example.com',
-  onAuthenticate: ({ credentialId, publicKey }) => { // [!code focus]
-    console.log('Authenticated:', credentialId) // [!code focus]
+  onAuthenticate: async ({ credentialId, publicKey, request }) => { // [!code focus]
+    if (await isBlocked(credentialId)) throw new Error('credential blocked') // [!code focus]
   }, // [!code focus]
 })
 ```
 
 ### onRegister
 
-- **Type:** `(params: { credentialId, publicKey, request }) => Response | void`
+- **Type:** `(params: { credentialId: string; name: string; publicKey: string; request: Request }) => Response | Promise<Response> | void | Promise<void>`
 - **Optional**
 
-Called after a successful registration. The returned response is merged onto the default JSON response.
+Called after a successful registration. `name` is the value passed to `POST /register/options`. Returning a `Response` merges its JSON body and status onto the default registration response; throwing surfaces as a `400` error response.
 
 ```ts twoslash
 import { Handler, Kv } from 'accounts/server'
@@ -118,8 +180,8 @@ const handler = Handler.webAuthn({
   kv: Kv.memory(),
   origin: 'https://example.com',
   rpId: 'example.com',
-  onRegister: ({ credentialId, publicKey }) => { // [!code focus]
-    console.log('Registered:', credentialId) // [!code focus]
+  onRegister: ({ credentialId, name, publicKey }) => { // [!code focus]
+    console.log('Registered:', name, credentialId) // [!code focus]
   }, // [!code focus]
 })
 ```
@@ -175,3 +237,67 @@ const handler = Handler.webAuthn({
   rpId: 'example.com', // [!code focus]
 })
 ```
+
+### session
+
+- **Type:** `boolean`
+- **Default:** `true`
+
+Whether to issue a session on successful login. When `false`, login acts as a stateless WebAuthn verification — no token is generated, no entry is written to the kv, and no cookie is sent. The login response still carries `{ credentialId, publicKey, userId? }`. `getSession` always returns `undefined` and the `/logout` route is not mounted (so it returns `404`). Use this when the host application mints its own session token (e.g. a JWT inside `onAuthenticate`).
+
+### ttl
+
+- **Type:** `{ challenge?: number; session?: number }`
+- **Optional**
+
+TTLs in seconds for stored challenges and issued sessions.
+
+#### ttl.challenge
+
+- **Type:** `number`
+- **Default:** `300` (5 minutes)
+
+Maximum age of a challenge in seconds before it expires.
+
+```ts twoslash
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://example.com',
+  rpId: 'example.com',
+  ttl: { challenge: 600 }, // [!code focus]
+})
+```
+
+#### ttl.session
+
+- **Type:** `number`
+- **Default:** `86400` (24 hours)
+
+Lifetime of an issued session in seconds. After expiry, `getSession` returns `undefined` and the kv entry is evicted by the underlying store.
+
+```ts twoslash
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://example.com',
+  rpId: 'example.com',
+  ttl: { session: 60 * 60 * 24 * 7 }, // 7 days // [!code focus]
+})
+```
+
+### cors
+
+- **Type:** `boolean | Cors`
+- **Default:** `true`
+
+Inherited from [`from.Options`](/docs/server/handler.compose#optionscors). CORS configuration applied to every response.
+
+### headers
+
+- **Type:** `Headers | Record<string, string>`
+- **Optional**
+
+Inherited from [`from.Options`](/docs/server/handler.compose#optionsheaders). Additional headers merged onto every response.

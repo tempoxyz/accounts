@@ -7,6 +7,13 @@ description: Server-backed WebAuthn ceremony that delegates to a remote handler.
 
 Creates a server-backed ceremony that delegates to a remote [WebAuthn server handler](/docs/server/handler.webAuthn). All challenge generation, verification, and credential storage happen server-side.
 
+The client `fetch()`s four `POST` endpoints derived from the base `url`:
+
+- `POST {url}/register/options` — called by `getRegistrationOptions`.
+- `POST {url}/register` — called by `verifyRegistration`.
+- `POST {url}/login/options` — called by `getAuthenticationOptions`.
+- `POST {url}/login` — called by `verifyAuthentication`.
+
 ## Usage
 
 ```ts

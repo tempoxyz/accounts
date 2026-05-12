@@ -7,7 +7,9 @@ description: Embed the Tempo Wallet auth UI in an iframe dialog element.
 
 Creates an iframe dialog that embeds the auth app in a `<dialog>` element. This is the default on most browsers in secure (HTTPS) contexts.
 
-Falls back to a popup on Safari (which does not support WebAuthn in cross-origin iframes) and insecure (HTTP) origins.
+The instance is a **host-keyed singleton** — calling `Dialog.iframe()` repeatedly with the same `host` returns the cached instance and swaps in the latest store/theme rather than re-mounting the iframe. Switching to a different host tears down the previous iframe and creates a fresh one.
+
+Visual appearance is configured via [`Dialog.Theme`](/docs/api/dialogs#dialogtheme), passed through the [`dialog`](/docs/api/dialog) adapter.
 
 ## Usage
 
@@ -18,3 +20,13 @@ const provider = Provider.create({
   adapter: dialog({ dialog: Dialog.iframe() }),
 })
 ```
+
+## Fallback behavior
+
+The iframe instance falls back to a popup in the following cases, all triggered from `syncRequests`:
+
+- **Safari** — when a request uses `wallet_connect` or `eth_requestAccounts`. Safari does not support WebAuthn credential creation inside cross-origin iframes, so these methods are forwarded to a popup.
+- **Untrusted host without IntersectionObserver v2** — when the host page is not in the wallet's trusted hosts list and the browser does not support IntersectionObserver v2 (used to detect iframe occlusion / clickjacking). A warning is logged and the request is forwarded to a popup. To opt the iframe back in, add your hostname to the trusted hosts list.
+- **Mode switch from the auth app** — if the embedded auth app sends a `switch-mode` message, the iframe is hidden and any pending requests are forwarded to the popup for the remainder of the session.
+
+In SSR environments (no `window`), `Dialog.iframe()` returns `Dialog.noop()`.

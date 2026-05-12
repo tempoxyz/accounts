@@ -25,10 +25,41 @@ const provider = Provider.create({
 
 ### createAccount
 
-- **Type:** `(params) => Promise<{ accounts: Account[] }>`
+- **Type:** `(params: Adapter.createAccount.Parameters) => Promise<Adapter.createAccount.ReturnType>`
 - **Optional**
 
 Create a new account. Omit for login-only flows.
+
+```ts
+declare function createAccount(parameters: {
+  /** Access key to grant during the ceremony. */
+  authorizeAccessKey?: Adapter.authorizeAccessKey.Parameters | undefined
+  /** Digest the caller asked the wallet to sign during the create-account ceremony. */
+  digest?: Hex | undefined
+  /** Display name for the new account (e.g. credential name for WebAuthn). */
+  name: string
+  /**
+   * EIP-191 message folded into the create-account ceremony. The wallet hashes it
+   * and signs it in the same prompt; conflicts with a caller-supplied `digest`.
+   */
+  personalSign?: { message: string } | undefined
+  /** Opaque user identifier (e.g. for WebAuthn `user.id`). */
+  userId?: string | undefined
+}): Promise<{
+  /** Accounts created by the ceremony (required). */
+  accounts: readonly Account[]
+  /** Email associated with the account. */
+  email?: string | null | undefined
+  /** Signed key authorization, if an access key was granted. */
+  keyAuthorization?: KeyAuthorization.Rpc | undefined
+  /** Echo of the caller-supplied `personalSign` message. */
+  personalSign?: { message: string } | undefined
+  /** Signature over the digest. The adapter signs the digest itself if you don't return one. */
+  signature?: Hex | undefined
+  /** Username associated with the account. */
+  username?: string | null | undefined
+}>
+```
 
 ```ts twoslash
 import { local, Provider } from 'accounts'
@@ -36,7 +67,7 @@ import { local, Provider } from 'accounts'
 const provider = Provider.create({
   adapter: local({
     loadAccounts: async () => ({ accounts: [{ address: '0x...' }] }),
-    createAccount: async () => ({ // [!code focus]
+    createAccount: async (params) => ({ // [!code focus]
       accounts: [{ address: '0x...' }], // [!code focus]
     }), // [!code focus]
   }),
@@ -63,17 +94,48 @@ const provider = Provider.create({
 
 ### loadAccounts
 
-- **Type:** `(params?) => Promise<{ accounts: Account[] }>`
+- **Type:** `(params?: Adapter.loadAccounts.Parameters | undefined) => Promise<Adapter.loadAccounts.ReturnType>`
 - **Required**
 
 Discover existing accounts (e.g. via WebAuthn assertion or key lookup).
+
+```ts
+declare function loadAccounts(parameters?: {
+  /** Access key to grant during the ceremony. */
+  authorizeAccessKey?: Adapter.authorizeAccessKey.Parameters | undefined
+  /** Restrict authentication to a specific credential (WebAuthn). */
+  credentialId?: string | undefined
+  /** Digest the caller asked the wallet to sign during the load-accounts ceremony. */
+  digest?: Hex | undefined
+  /**
+   * EIP-191 message folded into the load-accounts ceremony.
+   * Conflicts with a caller-supplied `digest`.
+   */
+  personalSign?: { message: string } | undefined
+  /** Prompt the user to pick from all available credentials instead of the last-used one. */
+  selectAccount?: boolean | undefined
+}): Promise<{
+  /** Loaded accounts (required). */
+  accounts: readonly Account[]
+  /** Email associated with the account. */
+  email?: string | null | undefined
+  /** Signed key authorization, if an access key was granted. */
+  keyAuthorization?: KeyAuthorization.Rpc | undefined
+  /** Echo of the caller-supplied `personalSign` message. */
+  personalSign?: { message: string } | undefined
+  /** Signature over the digest. The adapter signs the digest itself if you don't return one. */
+  signature?: Hex | undefined
+  /** Username associated with the account. */
+  username?: string | null | undefined
+}>
+```
 
 ```ts twoslash
 import { local, Provider } from 'accounts'
 
 const provider = Provider.create({
   adapter: local({
-    loadAccounts: async () => ({ // [!code focus]
+    loadAccounts: async (params) => ({ // [!code focus]
       accounts: [{ address: '0x...' }], // [!code focus]
     }), // [!code focus]
   }),
@@ -101,7 +163,7 @@ const provider = Provider.create({
 ### rdns
 
 - **Type:** `string`
-- **Optional**
+- **Default:** `` `com.{lowercase name}` ``
 
 Reverse DNS identifier.
 

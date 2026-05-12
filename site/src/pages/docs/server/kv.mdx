@@ -5,50 +5,183 @@ description: Key-value store adapters for server-side persistence.
 
 # `Kv`
 
-Key-value store interface used by server handlers for persistence (challenges, credentials, device codes).
+Minimal key-value store interface used by the SDK's server primitives (e.g. SIWE nonce store, WebAuthn session store, CLI device-code store).
+
+Values are JSON-serialized when stored. TTLs are optional; consumers that need expiry pass `{ ttl }` (in seconds) to `set` and the implementation lazily evicts (memory) or relies on the backing store's native expiry (Cloudflare KV).
 
 ## Usage
 
 ```ts
 import { Kv } from 'accounts/server'
 
-// In-memory (for development/testing)
+// In-memory (for development/testing).
 const kv = Kv.memory()
 
-// Cloudflare Workers KV
+// Cloudflare Workers KV (eventually consistent — no atomic `take`).
 const kv = Kv.cloudflare(env.MY_KV_NAMESPACE)
+
+// Cloudflare Durable Object (linearizable — atomic `take` available).
+const kv = Kv.durableObject(env.NONCE_DO)
 ```
 
 ## Adapters
 
-### Kv.memory()
+### Kv.memory(options?)
 
-Creates an in-memory key-value store. Useful for development and testing.
+Creates an in-memory key-value store backed by a `Map`. Lazily evicts expired entries on read/write. Useful for development and testing, and for single-process deployments.
+
+```ts
+const kv = Kv.memory()
+const kv = Kv.memory({ now: () => fakeClock.now })
+```
+
+#### memory.Options
+
+```ts
+type memory.Options = {
+  /** Clock function for TTL accounting. Defaults to `Date.now`. */
+  now?: (() => number) | undefined
+}
+```
 
 ### Kv.cloudflare(namespace)
 
-Creates a key-value store backed by Cloudflare Workers KV.
+Creates a key-value store backed by a Cloudflare Workers KV namespace (or compatible binding). Uses the underlying store's native `expirationTtl` for TTL — Cloudflare KV's minimum TTL is 60 seconds, enforced by the platform independent of what's passed here.
+
+**Not safe for one-time-consume semantics.** Cloudflare KV is eventually consistent across data centers — concurrent read+delete races can let the same key be "consumed" twice. The optional [`take`](#take-key-optional) method is intentionally NOT implemented. Use [`Kv.durableObject`](#kv-durableobject-namespace-options) (or another linearizable backend) for the SIWE challenge nonce store.
 
 - **namespace** — Cloudflare KV namespace binding.
 
+### Kv.durableObject(namespace, options?)
+
+Adapts a Cloudflare Durable Object namespace into a `Kv` with atomic [`take`](#take-key-optional). Unlike `Kv.cloudflare`, a Durable Object's storage is single-actor and linearizable — `take` (read+delete) is guaranteed atomic across concurrent callers, which makes this the recommended backend for SIWE challenge nonce storage on Cloudflare Workers.
+
+Pair with [`NonceStorage`](#noncestorage) (or your own DO class implementing the same fetch protocol).
+
+```ts
+// wrangler.jsonc
+// {
+//   "durable_objects": {
+//     "bindings": [{ "name": "NONCE_DO", "class_name": "NonceStorage" }]
+//   },
+//   "migrations": [{ "tag": "v1", "new_classes": ["NonceStorage"] }]
+// }
+
+// worker.ts
+import { Handler, Kv, NonceStorage } from 'accounts/server'
+export { NonceStorage }
+
+export default {
+  fetch(req, env) {
+    const handler = Handler.auth({
+      store: Kv.durableObject(env.NONCE_DO),
+      origin: 'https://app.example.com',
+    })
+    return handler.fetch(req)
+  },
+}
+```
+
+#### durableObject.Namespace
+
+Minimal shape of a Cloudflare Durable Object namespace binding. Compatible with `DurableObjectNamespace` from `@cloudflare/workers-types`.
+
+```ts
+type durableObject.Namespace = {
+  idFromName: (name: string) => unknown
+  get: (id: unknown) => { fetch: (input: string, init?: unknown) => Promise<Response> }
+}
+```
+
+#### durableObject.Options
+
+```ts
+type durableObject.Options = {
+  /**
+   * Durable Object instance name. Defaults to `'default'` (a single
+   * shared actor). Use a per-tenant name if you need isolation.
+   */
+  name?: string | undefined
+}
+```
+
 ### Kv.from(kv)
 
-Creates a key-value store from a custom implementation.
+Wraps an existing `Kv`-shaped object so the SDK accepts it as a `Kv`. Useful when adapting a custom backend.
 
 ```ts
 const kv = Kv.from({
   async get(key) { /* ... */ },
-  async set(key, value) { /* ... */ },
+  async set(key, value, options) { /* ... */ },
   async delete(key) { /* ... */ },
+  async take(key) { /* ... */ }, // optional
 })
+```
+
+## NonceStorage
+
+Reference Durable Object class implementing the [`Kv.durableObject`](#kv-durableobject-namespace-options) fetch protocol. Export from your Worker entry and bind it under `class_name: "NonceStorage"` in `wrangler.jsonc`.
+
+The class is framework-agnostic — it doesn't import `cloudflare:workers` so it works with both the legacy DO API (`fetch(req)` only) and the newer `extends DurableObject` API.
+
+```ts
+import { NonceStorage } from 'accounts/server'
+
+export { NonceStorage }
+```
+
+### NonceStorage.State
+
+Subset of `DurableObjectState` actually used by `NonceStorage`.
+
+```ts
+type NonceStorage.State = {
+  storage: {
+    get: <T = unknown>(key: string) => Promise<T | undefined>
+    put: (key: string, value: unknown) => Promise<void>
+    delete: (key: string) => Promise<void>
+  }
+}
+```
+
+### NonceStorage.Entry
+
+Internal storage shape: value plus optional absolute expiry timestamp (ms).
+
+```ts
+type NonceStorage.Entry = { value: unknown; expiresAt?: number }
 ```
 
 ## Interface
 
 ```ts
 type Kv = {
-  get: <value = unknown>(key: string) => Promise<value>
-  set: (key: string, value: unknown) => Promise<void>
+  /** Read a value by key. Returns `undefined` when missing or expired. */
+  get: <value = unknown>(key: string) => Promise<value | undefined>
+  /** Write a value. When `ttl` is set, the entry expires after the given duration in seconds. */
+  set: (key: string, value: unknown, options?: set.Options) => Promise<void>
+  /** Delete a value by key. */
   delete: (key: string) => Promise<void>
+  /**
+   * Atomic read-and-delete. Optional — see below.
+   */
+  take?: <value = unknown>(key: string) => Promise<value | undefined>
+}
+
+type set.Options = {
+  /** Time-to-live in seconds. After this duration, `get` returns `undefined`. */
+  ttl?: number | undefined
 }
 ```
+
+### `take(key)` (optional)
+
+Atomic read-and-delete. Returns the value if present, `undefined` if missing or expired. Across concurrent callers, exactly one observer receives a non-`undefined` return for a given key, and the key is removed exactly once.
+
+Required for one-time-consume semantics (e.g. SIWE challenge nonces). Backends without a linearizable read+delete primitive (e.g. eventually-consistent stores like Cloudflare KV) should leave this undefined; the consuming handler will refuse to accept the store at construction time and fall back to a different backend (e.g. a Durable Object).
+
+| Adapter            | `take` implemented? |
+| ------------------ | ------------------- |
+| `Kv.memory`        | ✅ atomic in-process |
+| `Kv.durableObject` | ✅ linearizable      |
+| `Kv.cloudflare`    | ❌ (eventually consistent — see [`Kv.cloudflare`](#kv-cloudflare-namespace)) |

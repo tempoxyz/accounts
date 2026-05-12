@@ -24,14 +24,14 @@ Then plug `handler` into your server framework of choice:
 import { Handler } from 'accounts/server'
 const handler = Handler.relay()
 // ---cut---
-createServer(handler.listener) // Node.js
-Bun.serve(handler) // Bun
-Deno.serve(handler) // Deno
+createServer(handler.listener)              // Node.js
+Bun.serve({ fetch: handler.fetch })         // Bun
+Deno.serve({ fetch: handler.fetch })        // Deno
 app.all('*', c => handler.fetch(c.request)) // Elysia
-app.use(handler.listener) // Express
-app.use(c => handler.fetch(c.req.raw)) // Hono
-export const GET = handler.fetch // Next.js
-export const POST = handler.fetch // Next.js
+app.use(handler.listener)                   // Express
+app.use(c => handler.fetch(c.req.raw))      // Hono
+export const GET = handler.fetch            // Next.js
+export const POST = handler.fetch           // Next.js
 ```
 
 ## Features
@@ -82,7 +82,7 @@ Configure a [`feePayer`](#feepayer) to sponsor transactions. The relay signs `fe
 :::code-group
 
 ```ts twoslash [server.ts]
-import { privateKeyToAccount } from 'viem/docs'
+import { privateKeyToAccount } from 'viem/accounts'
 import { Handler } from 'accounts/server'
 
 const blockedAddress = '0x...'
@@ -131,7 +131,7 @@ result.capabilities.sponsor
 
 ### Auto Swap
 
-When a user has insufficient balance of a required token, the relay automatically injects swap calls (approve + buy) via the [Stablecoin DEX](https://docs.tempo.xyz/guide/stablecoin-dex). Swap details are reported in `capabilities.autoSwap`, and swap-related balance diffs are excluded from `capabilities.balanceDiffs`. Enabled by [`features: 'all'`](#features), configurable via [`autoSwap`](#autoswap).
+When a user has insufficient balance of a required token, the relay automatically injects swap calls (approve + buy) via the [Stablecoin DEX](https://docs.tempo.xyz/guide/stablecoin-dex). Swap details are reported in `capabilities.autoSwap` (including the prepended `calls`), and swap-related balance diffs are excluded from `capabilities.balanceDiffs`. Auto-swap is enabled when either [`autoSwap`](#autoswap) is set to a truthy value OR [`features: 'all'`](#features) is set.
 
 :::code-group
 
@@ -155,11 +155,17 @@ const result = await provider.request({
 
 result.capabilities.autoSwap
 // {
+//   calls: [
+//     // Stablecoin DEX `approve(...)` call.
+//     { to: '0x20c0...', data: '0x095ea7b3...' },
+//     // Stablecoin DEX `buy(...)` call.
+//     { to: '0x20c0...', data: '0x...' },
+//   ],
 //   maxIn: {
 //     decimals: 6,
 //     formatted: '105.000000',
-//     name: 'AlphaUSD',
-//     symbol: 'AlphaUSD',
+//     name: 'pathUSD',
+//     symbol: 'pathUSD',
 //     token: '0x20c0000000000000000000000000000000000001',
 //     value: '0x6422c40',
 //   },
@@ -187,11 +193,12 @@ const handler = Handler.relay({
 
 ### Best Fee Tokens
 
-Picks the user's optimal `feeToken` automatically:
+Picks the user's optimal `feeToken` automatically. Internally, `resolveFeeToken` walks the candidates in this order and returns the first match:
 
-1. On-chain preference via `fee.getUserToken` (if set and has balance)
-2. Highest-balance token from the [`resolveTokens`](#resolvetokens) list
-3. Validator fallback
+1. **Explicit `feeToken`** — if the request (or sponsor's `feePayer.feeToken`) supplies a `feeToken`, it is used as-is and the rest of the resolution is skipped.
+2. **On-chain preference (with balance)** — `fee.getUserToken(account)` (cached via [`kv`](#kv) for ~60s under `fee.userToken:{chainId}:{account}`). If the user has set a preference, `resolveFeeToken` uses it when the user holds a balance — first by checking the [`resolveTokens`](#resolvetokens) list, then falling back to a direct on-chain `balanceOf` for the preferred token if it isn't in the list.
+3. **Highest-balance token** — across the [`resolveTokens`](#resolvetokens) list (extended with any TIP20 token addressed by the transaction's calls so a user transferring `USDC.e` can pay gas in `USDC.e` even when the configured list defaults to `pathUSD`).
+4. **Undefined** — when no candidate has a positive balance, `resolveFeeToken` returns `undefined` and the relay falls back to the chain's first configured fee token (`getTokens(chainId)[0]`).
 
 ```ts twoslash
 // @noErrors
@@ -297,7 +304,7 @@ result.capabilities.fee
 //   amount: '0x6b86',
 //   decimals: 6,
 //   formatted: '0.027526',
-//   symbol: 'pathUSD',
+//   symbol: 'USDC.e',
 // }
 ```
 
@@ -364,7 +371,7 @@ Set [`features: 'all'`](#features) to enable all features by default such as: **
 
 ```ts twoslash
 // @noErrors
-import { privateKeyToAccount } from 'viem/docs'
+import { privateKeyToAccount } from 'viem/accounts'
 import { Handler } from 'accounts/server'
 
 const handler = Handler.relay({
@@ -395,10 +402,25 @@ const handler = Handler.relay({
 
 Slippage tolerance for AMM swaps. The relay sets `maxAmountIn = deficit + deficit * slippage`.
 
+### cacheTtl
+
+- **Type:** `number`
+- **Default:** `600` (10 minutes)
+
+TTL in seconds for cached [`resolveTokens`](#resolvetokens) results. Cached entries are stored in [`kv`](#kv).
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.relay({
+  cacheTtl: 60, // [!code focus]
+})
+```
+
 ### chains
 
 - **Type:** `readonly [Chain, ...Chain[]]`
-- **Default:** `[tempo, tempoModerato]`
+- **Default:** `[tempo, tempoModerato, tempoDevnet]`
 
 Supported chains. The handler resolves the client based on the `chainId` in the incoming transaction.
 
@@ -438,7 +460,7 @@ const handler = Handler.relay({
 Fee payer configuration. When provided, the relay will sign `feePayerSignature` on the filled transaction.
 
 ```ts twoslash
-import { privateKeyToAccount } from 'viem/docs'
+import { privateKeyToAccount } from 'viem/accounts'
 import { Handler } from 'accounts/server'
 
 const handler = Handler.relay({
@@ -457,6 +479,13 @@ const handler = Handler.relay({
 
 The account to use as the fee payer.
 
+#### feePayer.feeToken
+
+- **Type:** `Address`
+- **Optional**
+
+Sponsor's preferred fee-token override. When sponsoring, this overrides whatever `feeToken` the consumer asked for — the sponsor is paying, so the sponsor picks. Falls back to the request's `feeToken` when omitted.
+
 #### feePayer.name
 
 - **Type:** `string`
@@ -473,13 +502,13 @@ Sponsor URL returned in the response metadata.
 
 #### feePayer.validate
 
-- **Type:** `(request: TransactionRequest) => boolean | Promise<boolean>`
+- **Type:** `(request: Transaction.TransactionRequest) => boolean | Promise<boolean>`
 - **Optional**
 
-Validates whether to sponsor a transaction. When omitted, all transactions are sponsored. Return `false` to reject sponsorship — the relay will re-fill without `feePayer` so gas/nonce are correct for self-payment.
+Validates whether to sponsor a transaction. The `request` parameter is a [`Transaction.TransactionRequest`](https://wevm.dev/viem/tempo/Transaction.TransactionRequest) from `viem/tempo` — the typed Tempo envelope built for sponsorship signing. When omitted, all transactions are sponsored. Return `false` to reject sponsorship — the relay will re-fill without `feePayer` so gas/nonce are correct for self-payment.
 
 ```ts twoslash
-import { privateKeyToAccount } from 'viem/docs'
+import { privateKeyToAccount } from 'viem/accounts'
 import { Handler } from 'accounts/server'
 
 const blocked = '0x...'
@@ -489,6 +518,22 @@ const handler = Handler.relay({
     account: privateKeyToAccount('0x...'),
     validate: (request) => request.from !== blocked, // [!code focus]
   },
+})
+```
+
+### kv
+
+- **Type:** [`Kv`](/docs/server/kv)
+- **Default:** `Kv.memory()`
+
+Key-value store used to cache `resolveTokens` results across requests, and to cache the `fee.getUserToken` lookup used by [Best Fee Tokens](#best-fee-tokens). Shared with `Handler.exchange` — providing `Kv.cloudflare(env.KV)` (or any other adapter) on both handlers reuses a single cache.
+
+```ts twoslash
+// @noErrors
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.relay({
+  kv: Kv.cloudflare(env.KV), // [!code focus]
 })
 ```
 
@@ -571,6 +616,35 @@ const handler = Handler.relay({
 })
 ```
 
+### cors
+
+- **Type:** `boolean | Cors`
+- **Default:** `true`
+
+Inherited from [`from.Options`](/docs/server/handler.compose#optionscors). CORS configuration applied to every response.
+
+### headers
+
+- **Type:** `Headers | Record<string, string>`
+- **Optional**
+
+Inherited from [`from.Options`](/docs/server/handler.compose#optionsheaders). Additional headers merged onto every response.
+
+## Request
+
+The relay accepts standard JSON-RPC `eth_fillTransaction` requests. In addition to the chain's parameter shape, the relay reads the following wallet-level fields from the first parameter object:
+
+- `from` (`Address`) — used for fee-token resolution and sponsor validation.
+- `feeToken` (`Address`) — explicit fee token request. Wins over `resolveTokens`-based resolution. The sponsor's [`feePayer.feeToken`](#feepayerfeetoken) overrides this when sponsoring.
+- `feePayer` (`string | false`):
+  - **`string`** — an external fee-payer URL. The relay forwards the fill through that URL (so a third-party sponsor service can sign), and re-emits its `capabilities.sponsor` and (if present) `capabilities.autoSwap` on the response. The handler's own [`feePayer`](#feepayer) is _not_ required — providing an external URL alone is enough to enable sponsorship for the request.
+  - **`false`** — opt out of sponsorship for this request even if the relay has [`feePayer`](#feepayer) configured.
+  - **omitted** — sponsorship is applied when [`feePayer`](#feepayer) is configured on the handler.
+- `capabilities.balanceDiffs` (`boolean`, default `true`) — set to `false` to skip the post-fill `tempo_simulateV1` round trip that derives [Balance Diffs](#balance-diffs) (~250-400ms saving).
+- `capabilities.errors` (`boolean`) — when `true`, a failed fill returns a structured `capabilities.error` instead of a raw RPC error.
+
+## Response
+
 The relay enriches the standard `eth_fillTransaction` response with a `capabilities` object:
 
 ```ts
@@ -589,11 +663,13 @@ type Response = {
       decimals: number
       /** Human-readable fee (e.g. "0.028022"). */
       formatted: string
-      /** Token symbol (e.g. "AlphaUSD"). */
+      /** Token symbol (e.g. "USDC.e"). */
       symbol: string
     } | null
     /** AMM swap injected to cover an insufficient balance. */
     autoSwap?: {
+      /** Stablecoin DEX calls prepended to the transaction (approve + buy). */
+      calls: readonly { to: Address; data: Hex }[]
       /** Max input amount with slippage. */
       maxIn: SwapAmount
       /** Deficit amount that triggered the swap. */
@@ -662,9 +738,9 @@ type SwapAmount = {
   decimals: number
   /** Human-readable formatted amount. */
   formatted: string
-  /** Token name (e.g. "AlphaUSD"). */
+  /** Token name (e.g. "pathUSD"). */
   name: string
-  /** Token symbol (e.g. "AlphaUSD"). */
+  /** Token symbol (e.g. "pathUSD"). */
   symbol: string
   /** Token address. */
   token: Address

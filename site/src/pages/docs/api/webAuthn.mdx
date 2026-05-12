@@ -19,12 +19,16 @@ const provider = Provider.create({
 
 ## Parameters
 
+`ceremony` and `authUrl` are mutually exclusive — the `Options` type is constrained as `OneOf<{ ceremony } | { authUrl }>`.
+
 ### authUrl
 
 - **Type:** `string`
 - **Optional**
 
-URL of a [WebAuthn server handler](/docs/server/handler.webAuthn) (shorthand for `WebAuthnCeremony.server({ url }){:js}`)
+URL of a [WebAuthn server handler](/docs/server/handler.webAuthn) (shorthand for `WebAuthnCeremony.server({ url }){:js}`).
+
+When supplied (and `ceremony` is omitted), the adapter falls back to `WebAuthnCeremony.server({ url: authUrl }){:js}`.
 
 :::warning
 Cannot be used with `ceremony`.
@@ -43,7 +47,7 @@ const provider = Provider.create({
 ### ceremony
 
 - **Type:** `WebAuthnCeremony`
-- **Default:** `WebAuthnCeremony.server({ url: authUrl }){:js}`
+- **Default:** `WebAuthnCeremony.local({ storage }){:js}` when `authUrl` is also omitted, otherwise `WebAuthnCeremony.server({ url: authUrl }){:js}`.
 
 Ceremony strategy for WebAuthn registration and authentication. [See more](/docs/api/webauthnceremony).
 
@@ -100,7 +104,7 @@ const provider = Provider.create({
 ### rdns
 
 - **Type:** `string`
-- **Optional**
+- **Default:** `` `com.{lowercase name}` ``
 
 Reverse DNS identifier.
 

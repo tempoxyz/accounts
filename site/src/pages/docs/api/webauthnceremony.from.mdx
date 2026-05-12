@@ -24,24 +24,74 @@ const ceremony = WebAuthnCeremony.from({
 
 ### getRegistrationOptions
 
-- **Type:** `(params: { name: string; userId?: string; excludeCredentialIds?: readonly string[] }) => Promise<{ options: Registration.Options }>`
-
 Get credential creation options for `navigator.credentials.create(){:js}`.
+
+```ts
+declare function getRegistrationOptions(parameters: {
+  /** Credential IDs to exclude (prevents re-registering existing credentials). */
+  excludeCredentialIds?: readonly string[] | undefined
+  /** Credential display name (e.g. `"alice"`). */
+  name: string
+  /** Opaque user identifier. Encoded as `user.id` in the WebAuthn creation options. */
+  userId?: string | undefined
+}): Promise<{ options: Registration.Options }>
+```
 
 ### verifyRegistration
 
-- **Type:** `(credential: Registration.Credential, options?: { name?: string }) => Promise<{ credentialId: string; publicKey: Hex }>`
-
 Verify a registration response and extract the public key.
+
+```ts
+declare function verifyRegistration(
+  credential: Registration.Credential,
+  options?: {
+    /** Credential display name forwarded from `getRegistrationOptions`. */
+    name?: string | undefined
+  } | undefined,
+): Promise<{
+  /** The registered credential's ID. */
+  credentialId: string
+  /** Email associated with the account. */
+  email?: string | null | undefined
+  /** The credential's public key (uncompressed P256, hex-encoded). */
+  publicKey: Hex
+  /** Username associated with the account. */
+  username?: string | null | undefined
+}>
+```
 
 ### getAuthenticationOptions
 
-- **Type:** `(params?: { allowCredentialIds?: readonly string[]; challenge?: Hex; credentialId?: string; mediation?: 'conditional' | 'optional' | 'required' | 'silent' }) => Promise<{ options: Authentication.Options }>`
-
 Get credential request options for `navigator.credentials.get(){:js}`.
+
+```ts
+declare function getAuthenticationOptions(parameters?: {
+  /** Credential IDs to allow (restricts which credentials can be used). */
+  allowCredentialIds?: readonly string[] | undefined
+  /** Challenge to use. */
+  challenge?: Hex | undefined
+  /** Credential ID to restrict authentication to a specific credential. */
+  credentialId?: string | undefined
+  /** Mediation hint for passkey autofill / conditional UI. */
+  mediation?: 'conditional' | 'optional' | 'required' | 'silent' | undefined
+} | undefined): Promise<{ options: Authentication.Options }>
+```
 
 ### verifyAuthentication
 
-- **Type:** `(response: Authentication.Response) => Promise<{ credentialId: string; publicKey: Hex; userId?: string }>`
-
 Verify an authentication response and extract the public key.
+
+```ts
+declare function verifyAuthentication(response: Authentication.Response): Promise<{
+  /** The authenticated credential's ID. */
+  credentialId: string
+  /** Email associated with the account. */
+  email?: string | null | undefined
+  /** The credential's public key (uncompressed P256, hex-encoded). */
+  publicKey: Hex
+  /** User identifier from the authenticator's `userHandle` (discoverable / conditional flows). */
+  userId?: string | undefined
+  /** Username associated with the account. */
+  username?: string | null | undefined
+}>
+```

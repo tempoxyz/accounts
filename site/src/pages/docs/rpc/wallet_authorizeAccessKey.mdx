@@ -13,16 +13,37 @@ Authorizes an access key with an expiry and optional spending limits for delegat
 type Request = {
   method: 'wallet_authorizeAccessKey'
   params: [{
+    /** Address of the key (alternative to `publicKey`). */
+    address?: Address
+    /**
+     * Chain ID to scope the authorization to.
+     * Hex-encoded (`0x...`) on the wire, decoded to `bigint`.
+     */
+    chainId?: bigint
     /** Unix timestamp (seconds) when the key expires. */
     expiry: number
-    /** TIP-20 spending limits. */
-    limits?: { token: Address; limit: Hex }[]
-    /** Public key to authorize. */
-    publicKey?: Hex
     /** Key type. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn'
-    /** Address of the key (alternative to publicKey). */
-    address?: Address
+    /** TIP-20 spending limits. */
+    limits?: {
+      /** Token contract address. */
+      token: Address
+      /** Spending cap. Hex-encoded (`0x...`) on the wire, decoded to `bigint`. */
+      limit: bigint
+      /** Window length in seconds. Omit for an absolute (non-resetting) cap. */
+      period?: number
+    }[]
+    /** Public key to authorize. */
+    publicKey?: Hex
+    /** Per-target call scopes. The key may only call these targets. */
+    scopes?: {
+      /** Target contract address the key may call. */
+      address: Address
+      /** Function selector (4-byte `0x...`) or human-readable signature. */
+      selector?: Hex | string
+      /** Allowed call recipients (e.g. `transfer(to, ...)`). */
+      recipients?: Address[]
+    }[]
   }]
 }
 ```
@@ -31,8 +52,31 @@ type Request = {
 
 ```ts
 type Response = {
+  /** The signed authorization payload. */
   keyAuthorization: KeyAuthorization
+  /** Root account address that issued the authorization. */
   rootAddress: Address
+}
+
+type KeyAuthorization = {
+  /** Address of the access key. */
+  address: Address
+  /** Chain ID the authorization is scoped to. Hex on the wire. */
+  chainId: bigint
+  /** Unix timestamp (seconds) when the authorization expires. May be `null`. */
+  expiry: number | null | undefined
+  /** Address derived from the key. */
+  keyId: Address
+  /** Key type. */
+  keyType: 'secp256k1' | 'p256' | 'webAuthn'
+  /** Signed spending limits, if any. */
+  limits?: readonly {
+    token: Address
+    limit: bigint
+    period?: number
+  }[]
+  /** Signature envelope from the root account. */
+  signature: SignatureEnvelope
 }
 ```
 

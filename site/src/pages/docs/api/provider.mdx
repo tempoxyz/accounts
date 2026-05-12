@@ -7,6 +7,8 @@ description: Create an EIP-1193 provider for managing accounts on Tempo.
 
 Creates an EIP-1193 provider with a pluggable adapter for managing accounts on Tempo.
 
+The returned object implements [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193) (`request`, `on`, `removeListener`, `emit`, ...) and exposes a few convenience helpers (`getAccount`, `getClient`, `store`, `chains`). See [Return Type](#return-type) for the full surface.
+
 ## Usage
 
 ```ts twoslash
@@ -68,12 +70,72 @@ const provider = Provider.create({
 })
 ```
 
+### auth
+
+- **Type:** `string | { url?: string; challenge?: string; verify?: string; logout?: string; returnToken?: boolean }`
+- **Optional**
+
+Default Server Authentication configuration for `wallet_connect`. When set, every `wallet_connect` call orchestrates the SIWE round-trip against this endpoint unless the caller passes their own `capabilities.auth` (per-call override).
+
+Designed to point at a service running [`Handler.webAuthn`](/docs/server/handler.webAuthn) from `accounts/server`.
+
+Pass a base URL string (endpoints are derived as `${url}/challenge`, `${url}` for verify, and `${url}/logout`), or an object with explicit endpoints.
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create({
+  auth: '/api/auth', // [!code focus]
+})
+```
+
+Or with explicit endpoints:
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create({
+  auth: { // [!code focus]
+    challenge: '/api/auth/challenge', // [!code focus]
+    verify: '/api/auth/verify', // [!code focus]
+    logout: '/api/auth/logout', // [!code focus]
+    returnToken: true, // [!code focus]
+  }, // [!code focus]
+})
+```
+
 ### authorizeAccessKey
 
-- **Type:** `() => { expiry: number; limits?: { token: Address; limit: bigint }[] }`
+- **Type:** `() => Adapter.authorizeAccessKey.Parameters`
 - **Optional**
 
 Default access key parameters for `wallet_connect`. When set, `wallet_connect` will automatically authorize an access key.
+
+```ts
+declare function authorizeAccessKey(): {
+  /** Access key address. Alternative to `publicKey` when the caller already knows the derived address. */
+  address?: Address | undefined
+  /** Chain ID the key authorization is scoped to. Defaults to the active chain. */
+  chainId?: bigint | undefined
+  /** Unix timestamp (seconds) when the key expires. */
+  expiry: number
+  /** Key type of the external public key. Required when `publicKey` or `address` is provided. */
+  keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
+  /** TIP-20 spending limits. Optional `period` (seconds) makes the limit roll over each period. */
+  limits?: { limit: bigint; period?: number; token: Address }[] | undefined
+  /**
+   * External public key to authorize. When provided, no key pair is generated —
+   * the caller holds the signing material.
+   */
+  publicKey?: Hex | undefined
+  /** Call scopes restricting which contracts/selectors this key can call. */
+  scopes?:
+    | { address: Address; recipients?: readonly Address[]; selector?: Hex | string }[]
+    | undefined
+  /** Pre-computed signature over the key authorization digest (skips a second signing ceremony). */
+  signature?: Hex | undefined
+}
+```
 
 ```ts twoslash
 import { parseUnits } from 'viem'
@@ -85,7 +147,28 @@ const provider = Provider.create({
     limits: [{ // [!code focus]
       token: '0x20c0000000000000000000000000000000000001', // [!code focus]
       limit: parseUnits('500', 6), // [!code focus]
+      period: 60 * 60 * 24, // rolling daily limit // [!code focus]
     }], // [!code focus]
+    scopes: [{ // [!code focus]
+      address: '0x20c0000000000000000000000000000000000001', // [!code focus]
+      selector: 'transfer(address,uint256)', // [!code focus]
+    }], // [!code focus]
+  }), // [!code focus]
+})
+```
+
+You can also pre-derive the access key locally and authorize it without a second signing ceremony by passing `publicKey`/`address`/`keyType`/`signature`:
+
+```ts twoslash
+// @noErrors
+import { Expiry, Provider } from 'accounts'
+
+const provider = Provider.create({
+  authorizeAccessKey: () => ({ // [!code focus]
+    expiry: Expiry.days(7), // [!code focus]
+    keyType: 'p256', // [!code focus]
+    publicKey: '0x...', // [!code focus]
+    signature: '0x...', // already-signed authorization digest // [!code focus]
   }), // [!code focus]
 })
 ```
@@ -93,7 +176,7 @@ const provider = Provider.create({
 ### chains
 
 - **Type:** `readonly [Chain, ...Chain[]]`
-- **Default:** `[tempo, tempoModerato]`
+- **Default:** `[tempo, tempoModerato, tempoDevnet]`
 
 Supported chains. The first chain is the default.
 
@@ -108,10 +191,10 @@ const provider = Provider.create({
 
 ### feePayer
 
-- **Type:** `string | { url: string; precedence?: 'fee-payer-first' | 'user-first' }`
+- **Type:** `string | false | { url: string; precedence?: 'fee-payer-first' | 'user-first' }`
 - **Optional**
 
-Fee payer configuration for interacting with a service running [`Handler.relay`](/docs/server/handler.relay) from `accounts/server`. Pass a URL string, or an object with `url` and optional `precedence` to control whether the fee payer or the user pays first.
+Fee payer configuration for interacting with a service running [`Handler.relay`](/docs/server/handler.relay) from `accounts/server`. Pass a URL string, an object with `url` and optional `precedence` to control whether the fee payer or the user pays first, or `false` to opt out.
 
 ```ts twoslash
 import { Provider } from 'accounts'
@@ -134,12 +217,27 @@ const provider = Provider.create({
 })
 ```
 
+### maxAccounts
+
+- **Type:** `number`
+- **Optional**
+
+Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU).
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create({
+  maxAccounts: 5, // [!code focus]
+})
+```
+
 ### mpp
 
-- **Type:** `boolean`
+- **Type:** `boolean | Provider.mpp.Options`
 - **Default:** `false`
 
-Enable [Machine Payment Protocol](https://mpp.dev) support.
+Enable [Machine Payment Protocol](https://mpp.dev) (mppx) support. Pass `true` to enable with defaults, or an options object to configure.
 
 ```ts twoslash
 import { Provider } from 'accounts'
@@ -149,12 +247,46 @@ const provider = Provider.create({
 })
 ```
 
+### persistCredentials
+
+- **Type:** `boolean`
+- **Default:** `true`
+
+Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted (the user must re-authenticate on each session).
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create({
+  persistCredentials: false, // [!code focus]
+})
+```
+
+### relay
+
+- **Type:** `string`
+- **Optional**
+
+Base URL for a wallet relay endpoint. When set, every chain's transport defaults to `http("${relay}/${chainId}")` — a single endpoint that routes by chain ID via the path. Per-chain entries in `transports` override this on a chain-by-chain basis.
+
+Designed to point at a service running [`Handler.relay`](/docs/server/handler.relay) from `accounts/server`.
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create({
+  relay: '/relay', // [!code focus]
+  // tempo (33139) → http('/relay/33139')
+  // tempoModerato → http('/relay/<id>')
+})
+```
+
 ### storage
 
 - **Type:** `Storage`
 - **Default:** `Storage.idb()` in browser, `Storage.memory()` otherwise
 
-Storage adapter for persistence.
+Storage adapter for persistence. The default uses IndexedDB in browsers (via `Storage.idb()`) and an in-memory map elsewhere.
 
 ```ts twoslash
 import { Provider, Storage } from 'accounts'
@@ -179,19 +311,46 @@ const provider = Provider.create({
 })
 ```
 
+### transports
+
+- **Type:** `Record<number, Transport>`
+- **Optional**
+
+Per-chain transports keyed by chain ID. When omitted, defaults to `http()` for each chain (uses the chain's default RPC URL). Layered on top of `relay`, so explicit per-chain entries win over `relay`-derived defaults.
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { http } from 'viem'
+import { tempo, tempoModerato } from 'viem/chains'
+
+const provider = Provider.create({
+  transports: { // [!code focus]
+    [tempo.id]: http('/relay/' + tempo.id), // [!code focus]
+    [tempoModerato.id]: http('/relay/' + tempoModerato.id), // [!code focus]
+  }, // [!code focus]
+})
+```
+
 ## Return Type
 
+The provider type is exported as `Provider` and is the intersection of [`ox.Provider.Provider`](https://oxlib.sh/Provider) (the EIP-1193 surface) and [`ox.Provider.Emitter`](https://oxlib.sh/Provider#emitter) plus a few extra accessors:
+
 ```ts
-type ReturnType = {
-  /** EIP-1193 request method. */
-  request(args: RequestArguments): Promise<unknown>
-  /** Returns a Viem Client for the current (or specified) chain. */
-  getClient(options?: { chainId?: number }): Client
-  /** Returns a Viem Account for the given address (or active account). */
-  getAccount(options?: { address?: Address }): Account
-  /** Reactive state store with account and chain state. */
-  store: Store
+import type { Account, Provider as ox_Provider } from 'ox'
+import type { Chain, Client as ViemClient, Transport } from 'viem'
+import type { tempo } from 'viem/chains'
+
+export type Provider = ox_Provider.Provider & ox_Provider.Emitter & {
   /** Configured chains. */
   chains: readonly [Chain, ...Chain[]]
+  /** Returns a viem Account for the given address (or active account). */
+  getAccount: Account.Find
+  /** Returns a viem Client for the given (or current) chain ID. */
+  getClient(options?: {
+    chainId?: number | undefined
+    feePayer?: string | undefined
+  }): ViemClient<Transport, typeof tempo>
+  /** Reactive state store. */
+  store: Store
 }
 ```

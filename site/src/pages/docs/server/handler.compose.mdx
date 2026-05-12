@@ -5,21 +5,24 @@ description: Compose multiple server handlers into a single handler.
 
 # `Handler.compose`
 
-Composes multiple handlers into a single handler, routing requests to the handler that matches the request path.
+Composes multiple handlers into a single handler mounted on a fresh Hono app at `path` (default `/`). Routing is dispatched by Hono's trie deterministically per path — there is no "try each handler in order until one returns non-404" fallback.
+
+The returned handler preserves each sub-handler's route schema so the composed app stays usable from Hono's typed RPC client (see [Typed RPC](#typed-rpc) below).
 
 ## Usage
 
 ```ts
-import { Handler } from 'accounts/server'
+import { Handler, Kv } from 'accounts/server'
+import { privateKeyToAccount } from 'viem/accounts'
 
 const handler = Handler.compose([
-  Handler.relay({ 
+  Handler.relay({
     feePayer: { account: privateKeyToAccount('0x...') },
   }),
-  Handler.webAuthn({ 
-    kv: Kv.memory(), 
-    origin: 'https://example.com', 
-    rpId: 'example.com' 
+  Handler.webAuthn({
+    kv: Kv.memory(),
+    origin: 'https://example.com',
+    rpId: 'example.com',
   }),
 ])
 ```
@@ -27,28 +30,93 @@ const handler = Handler.compose([
 Then plug `handler` into your server framework of choice:
 
 ```ts
-createServer(handler.listener) // Node.js
-Bun.serve(handler) // Bun
-Deno.serve(handler) // Deno
+createServer(handler.listener)              // Node.js
+Bun.serve({ fetch: handler.fetch })         // Bun
+Deno.serve({ fetch: handler.fetch })        // Deno
 app.all('*', c => handler.fetch(c.request)) // Elysia
-app.use(handler.listener) // Express
-app.use(c => handler.fetch(c.req.raw)) // Hono
-export const GET = handler.fetch // Next.js
-export const POST = handler.fetch // Next.js
+app.use(handler.listener)                   // Express
+app.use(c => handler.fetch(c.req.raw))      // Hono
+export const GET = handler.fetch            // Next.js
+export const POST = handler.fetch           // Next.js
 ```
 
 ## Parameters
 
 ### handlers
 
-- **Type:** `Handler[]`
+- **Type:** `readonly Handler[]`
 - **Required**
 
-Array of handlers to compose. Requests are routed to each handler in order.
+Array of handlers to compose. Each handler is mounted at `options.path` on a fresh Hono app; Hono's trie picks the matching route deterministically.
 
-### path
+### options
+
+- **Type:** `{ path?: string; cors?: boolean | Cors; headers?: Headers | Record<string, string> }`
+- **Default:** `{}`
+
+Configuration for the composed app. Inherits the [`from.Options`](#cors) shape used by every other server handler.
+
+#### options.path
 
 - **Type:** `string`
 - **Default:** `'/'`
 
-Base path prefix for all composed handlers.
+Base path prefix where every sub-handler is mounted on the composed Hono app.
+
+#### options.cors
+
+- **Type:** `boolean | Cors`
+- **Default:** `true`
+
+CORS configuration applied to every response.
+
+- `true` — allow all origins with default methods/headers.
+- `false` — disable CORS headers entirely.
+- Object — fine-grained `{ origin?, methods?, headers?, credentials?, exposeHeaders?, maxAge? }` override.
+
+#### options.headers
+
+- **Type:** `Headers | Record<string, string>`
+- **Optional**
+
+Additional headers merged onto every response (after CORS headers).
+
+## Return Type
+
+### Handler
+
+```ts
+import type { Hono } from 'hono'
+
+type Handler<app extends Hono<any, any, any> = Hono> = app & {
+  listener: (req: any, res: any) => void
+}
+```
+
+A `Handler` is the underlying Hono app extended with a Node.js `RequestListener` (`listener`). The generic `app` parameter flows the sub-handler route schemas through to consumers — most notably to Hono's typed RPC client (`hc<typeof handler>`).
+
+### ComposedSchema
+
+```ts
+import type { ExtractSchema, MergeSchemaPath, Schema } from 'hono/types'
+
+type ComposedSchema<subs extends readonly unknown[], path extends string>
+```
+
+Helper that merges the route schemas of every sub-handler into a single Hono schema, prefixing each route key with `path`. `Handler.compose` uses this internally so the composed app's type carries every sub-handler's routes — you typically interact with it indirectly via `typeof handler`.
+
+## Typed RPC
+
+Because the composed `Handler` is a Hono app, you can pass `typeof handler` to `hc` (re-exported from `accounts/server`) for a fully-typed RPC client:
+
+```ts
+import { Handler, hc } from 'accounts/server'
+
+const handler = Handler.compose(
+  [Handler.exchange(), Handler.codeAuth({ store })],
+  { path: '/api' },
+)
+
+const client = hc<typeof handler>('https://wallet.example.com')
+await client.api.exchange.quote.$post({ json: { /* ... */ } })
+```

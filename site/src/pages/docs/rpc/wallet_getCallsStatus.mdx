@@ -12,6 +12,7 @@ Returns the status and receipts of a previously submitted batch of calls.
 ```ts
 type Request = {
   method: 'wallet_getCallsStatus'
+  /** Bundle id returned from `wallet_sendCalls` (a plain string, not necessarily hex). */
   params?: [string]
 }
 ```
@@ -20,11 +21,17 @@ type Request = {
 
 ```ts
 type Response = {
+  /** Whether the bundle executed atomically. */
   atomic: boolean
+  /** Chain ID the bundle was submitted to. */
   chainId: number
+  /** Bundle id (echo of the request id). */
   id: string
+  /** Per-call receipts, present once the bundle has been mined. */
   receipts?: TransactionReceipt[]
+  /** EIP-5792 numeric status code. */
   status: number
+  /** Protocol version string. */
   version: string
 }
 ```
@@ -34,6 +41,6 @@ type Response = {
 ```ts
 const status = await provider.request({
   method: 'wallet_getCallsStatus',
-  params: ['0x...'],
+  params: ['0x9a8b7c...'],
 })
 ```

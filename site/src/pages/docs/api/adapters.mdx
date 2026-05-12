@@ -9,11 +9,13 @@ import { Cards, Card } from 'vocs'
 
 Adapters control how accounts are created and managed. Pass an adapter to `Provider.create()` to configure the account management strategy.
 
-| Adapter | Uses | Best for |
-| --- | --- | --- |
-| [`dialog`](/docs/api/dialog) (default) | Hosted dialog | Apps wanting a universal account experience |
-| [`webAuthn`](/docs/api/webAuthn) | Domain-bound passkeys | Wallets integrating Passkey accounts, or Apps wanting to host and manage their own Passkey accounts |
-| [`local`](/docs/api/local) | Arbitrary keys | Custom signing and key management |
+| Adapter                                | Uses                               | Best for                                                                                            |
+| -------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------- |
+| [`dialog`](/docs/api/dialog) (default) | Hosted dialog                      | Apps wanting a universal account experience                                                         |
+| [`webAuthn`](/docs/api/webAuthn)       | Domain-bound passkeys              | Wallets integrating Passkey accounts, or Apps wanting to host and manage their own Passkey accounts |
+| [`turnkey`](/docs/api/turnkey)         | `@turnkey/core` client sessions    | Apps using Turnkey-managed wallet accounts                                                          |
+| [`secp256k1`](/docs/api/secp256k1)     | In-process `secp256k1` private key | Server-side signers with a pinned key, or development with a random in-storage key                  |
+| [`local`](/docs/api/local)             | Arbitrary keys                     | Custom signing and key management                                                                   |
 
 ---
 
@@ -29,6 +31,18 @@ Adapters control how accounts are created and managed. Pass an adapter to `Provi
     icon="lucide:fingerprint"
     to="/docs/api/webAuthn"
     title="webAuthn"
+  />
+  <Card
+    description="Uses Turnkey-managed wallet accounts"
+    icon="lucide:shield"
+    to="/docs/api/turnkey"
+    title="turnkey"
+  />
+  <Card
+    description="Signs in-process with a secp256k1 private key (also exported as dangerous_secp256k1)"
+    icon="lucide:key-round"
+    to="/docs/api/secp256k1"
+    title="secp256k1"
   />
   <Card
     description="Uses arbitrary keys for account management"

@@ -13,11 +13,26 @@ Sends a batch of calls from the connected account. Supports atomic execution.
 type Request = {
   method: 'wallet_sendCalls'
   params?: [{
-    calls: { to: Address; data?: Hex; value?: Hex }[]
-    from?: Address
-    chainId?: number
-    capabilities?: { sync?: boolean }
+    /** Require atomic execution; reject if the wallet can't guarantee it. */
     atomicRequired?: boolean
+    /** Calls to execute. */
+    calls: { to?: Address; data?: Hex; value?: Hex }[]
+    capabilities?: {
+      /**
+       * Fee payer override. `true` enables the relay's default fee payer,
+       * `false` disables it, or a URL string points at a custom fee payer
+       * service.
+       */
+      feePayer?: boolean | string
+      /** Wait for receipts before returning. */
+      sync?: boolean
+    }
+    /** Chain ID to submit on. */
+    chainId?: number
+    /** Sender address. */
+    from?: Address
+    /** Caller-supplied protocol version string. */
+    version?: string
   }]
 }
 ```
@@ -26,11 +41,23 @@ type Request = {
 
 ```ts
 type Response = {
-  id: string
-  status?: number
-  receipts?: TransactionReceipt[]
-  chainId?: number
+  /** Whether the bundle executed atomically. */
   atomic?: boolean
+  /** Capabilities echoed back from the request. */
+  capabilities?: {
+    feePayer?: boolean | string
+    sync?: boolean
+  }
+  /** Chain ID the bundle was submitted to. */
+  chainId?: number
+  /** Bundle id (use with `wallet_getCallsStatus`). */
+  id: string
+  /** Per-call receipts when `sync: true`. */
+  receipts?: TransactionReceipt[]
+  /** EIP-5792 numeric status code. */
+  status?: number
+  /** Protocol version string. */
+  version?: string
 }
 ```
 
