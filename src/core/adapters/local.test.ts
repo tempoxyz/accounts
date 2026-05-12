@@ -116,7 +116,7 @@ describe('local', () => {
     })
 
     test('behavior: digest + authorizeAccessKey keeps the digest as the top-level signature', async () => {
-      const digest = `0x${'12'.repeat(32)}` as const
+      const digest: Hex = '0x1212121212121212121212121212121212121212121212121212121212121212'
       const captured: { digest: Hex | undefined }[] = []
       const { adapter } = setup({
         loadAccounts: makeLoadAccounts(0, captured),

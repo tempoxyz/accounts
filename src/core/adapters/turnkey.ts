@@ -1,8 +1,7 @@
 import { Address as core_Address, Hex, Provider as core_Provider, Signature } from 'ox'
 import { SignatureEnvelope } from 'ox/tempo'
-import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
+import { isAddressEqual, keccak256 } from 'viem'
 import type { Address } from 'viem/accounts'
-import type { Account as TempoAccount } from 'viem/tempo'
 import { Transaction as TempoTransaction } from 'viem/tempo'
 
 import * as Adapter from '../Adapter.js'
@@ -80,7 +79,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       }
     }
 
-    function toTempoAccount(account: turnkey.WalletAccount): TempoAccount.Account {
+    function toTempoAccount(account: turnkey.WalletAccount): base.Signer {
       const address = core_Address.from(account.address)
       const sign = async (parameters: { hash: Hex.Hex }) =>
         await signPayload({
@@ -94,26 +93,20 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         keyType: 'secp256k1',
         type: 'local',
         sign,
-        async signMessage(parameters) {
-          return await sign({ hash: hashMessage((parameters as { message: never }).message) })
-        },
         async signTransaction(transaction) {
           const presign = (() => {
             if ('feePayerSignature' in transaction && transaction.feePayerSignature)
               return { ...transaction, feePayerSignature: null }
             return transaction
           })()
-          const unsignedTransaction = await TempoTransaction.serialize(presign as never)
+          const unsignedTransaction = await TempoTransaction.serialize(presign)
           const signature = await sign({ hash: keccak256(unsignedTransaction) })
           return await TempoTransaction.serialize(
-            transaction as never,
-            SignatureEnvelope.from(Signature.fromHex(signature)) as never,
+            transaction,
+            SignatureEnvelope.from(Signature.fromHex(signature)),
           )
         },
-        async signTypedData(parameters) {
-          return await sign({ hash: hashTypedData(parameters as never) })
-        },
-      } as TempoAccount.Account
+      }
     }
 
     function clear() {

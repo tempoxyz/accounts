@@ -48,12 +48,12 @@ export function local(options: local.Options): Adapter.Adapter {
             },
           }
         : {}),
-      async loadAccounts(parameters) {
+      async loadAccounts(parameters = {}) {
         const {
           authorizeAccessKey: _authorizeAccessKey,
           personalSign: _personalSign,
           ...rest
-        } = parameters ?? ({} as Adapter.loadAccounts.Parameters)
+        } = parameters
         return withAccount(await loadAccounts(rest))
       },
       async resolveAccount(parameters = {}) {

@@ -54,7 +54,7 @@ export function base(options: base.Options): Adapter.Instance {
   }
 
   async function signKeyAuthorization(
-    account: TempoAccount.Account,
+    account: base.Signer,
     prepared: Awaited<ReturnType<typeof prepareKeyAuthorization>>,
     options: signKeyAuthorization.Options = {},
   ) {
@@ -81,6 +81,32 @@ export function base(options: base.Options): Adapter.Instance {
     return undefined
   }
 
+  async function prepareTempoTransaction(
+    client: ReturnType<typeof getClient>,
+    parameters:
+      | Adapter.signTransaction.Parameters
+      | Adapter.sendTransaction.Parameters
+      | Adapter.sendTransactionSync.Parameters,
+    account: base.Signer,
+    keyAuthorization?: KeyAuthorization.Signed | undefined,
+  ) {
+    const { feePayer, ...rest } = parameters
+    return await prepareTransactionRequest(client, {
+      account,
+      ...rest,
+      ...(feePayer ? { feePayer: true } : {}),
+      keyAuthorization,
+      type: 'tempo',
+    } as never)
+  }
+
+  async function signTempoTransaction(
+    account: base.Signer,
+    transaction: Awaited<ReturnType<typeof prepareTempoTransaction>>,
+  ) {
+    return await account.signTransaction(transaction as never)
+  }
+
   async function connect<
     const parameters extends Adapter.createAccount.Parameters | Adapter.loadAccounts.Parameters,
   >(parameters: parameters, fn: (parameters: parameters) => Promise<base.ConnectResult>) {
@@ -102,7 +128,7 @@ export function base(options: base.Options): Adapter.Instance {
     const result = await fn({
       ...parameters,
       ...(digest ? { digest } : {}),
-    } as parameters)
+    })
     const needsAccount = !!signatureDigest || !!prepared
     const account = needsAccount ? result.account : undefined
     if (needsAccount && result.accounts.length > 0 && !account)
@@ -133,7 +159,7 @@ export function base(options: base.Options): Adapter.Instance {
   async function withAccessKey<result>(
     parameters: { calls?: Adapter.signTransaction.Parameters['calls'] | undefined },
     fn: (
-      account: TempoAccount.Account,
+      account: base.Signer,
       keyAuthorization?: KeyAuthorization.Signed | undefined,
     ) => Promise<result>,
   ) {
@@ -197,10 +223,7 @@ export function base(options: base.Options): Adapter.Instance {
           } as never)
         } catch (error) {
           const isKeyNotFound =
-            error instanceof BaseError &&
-            !!error.walk(
-              (e) => (e as { data?: { errorName?: string } }).data?.errorName === 'KeyNotFound',
-            )
+            error instanceof BaseError && !!error.walk((e) => getErrorName(e) === 'KeyNotFound')
           if (!isKeyNotFound) throw error
         }
         store.setState((state) => ({
@@ -214,74 +237,77 @@ export function base(options: base.Options): Adapter.Instance {
         return await account.sign({ hash: hashMessage({ raw: data }) })
       },
       async signTransaction(parameters) {
-        const { feePayer, ...rest } = parameters
+        const { feePayer } = parameters
         const client = getClient({ feePayer: resolveFeePayer(feePayer) })
         return await withAccessKey(parameters, async (account, keyAuthorization) => {
-          const prepared = await prepareTransactionRequest(client, {
+          const prepared = await prepareTempoTransaction(
+            client,
+            parameters,
             account,
-            ...rest,
-            ...(feePayer ? { feePayer: true } : {}),
             keyAuthorization,
-            type: 'tempo',
-          } as never)
-          return await account.signTransaction(prepared as never)
+          )
+          return await signTempoTransaction(account, prepared)
         })
       },
       async signTypedData({ data, address }) {
         const account = await resolveAccount({ address })
-        const parsed = JSON.parse(data) as {
-          domain: Record<string, unknown>
-          message: Record<string, unknown>
-          primaryType: string
-          types: Record<string, unknown>
-        }
-        return await account.sign({ hash: hashTypedData(parsed as never) })
+        const parsed: Parameters<typeof hashTypedData>[0] = JSON.parse(data)
+        return await account.sign({ hash: hashTypedData(parsed) })
       },
       async sendTransaction(parameters) {
-        const { feePayer, ...rest } = parameters
+        const { feePayer } = parameters
         const client = getClient({
           chainId: parameters.chainId,
           feePayer: resolveFeePayer(feePayer),
         })
         const signed = await withAccessKey(parameters, async (account, keyAuthorization) => {
-          const prepared = await prepareTransactionRequest(client, {
+          const prepared = await prepareTempoTransaction(
+            client,
+            parameters,
             account,
-            ...rest,
-            ...(feePayer ? { feePayer: true } : {}),
             keyAuthorization,
-            type: 'tempo',
-          } as never)
-          return await account.signTransaction(prepared as never)
+          )
+          return await signTempoTransaction(account, prepared)
         })
         return await client.request({
-          method: 'eth_sendRawTransaction' as never,
+          method: 'eth_sendRawTransaction',
           params: [signed],
         })
       },
       async sendTransactionSync(parameters) {
-        const { feePayer, ...rest } = parameters
+        const { feePayer } = parameters
         const client = getClient({
           chainId: parameters.chainId,
           feePayer: resolveFeePayer(feePayer),
         })
         const signed = await withAccessKey(parameters, async (account, keyAuthorization) => {
-          const prepared = await prepareTransactionRequest(client, {
+          const prepared = await prepareTempoTransaction(
+            client,
+            parameters,
             account,
-            ...rest,
-            ...(feePayer ? { feePayer: true } : {}),
             keyAuthorization,
-            type: 'tempo',
-          } as never)
-          return await account.signTransaction(prepared as never)
+          )
+          return await signTempoTransaction(account, prepared)
         })
         return await client.request({
-          method: 'eth_sendRawTransactionSync' as never,
+          method: 'eth_sendRawTransactionSync',
           params: [signed],
         })
       },
       ...(disconnect ? { disconnect } : {}),
     },
   }
+}
+
+function getErrorName(error: unknown) {
+  if (typeof error !== 'object') return undefined
+  if (!error) return undefined
+  if (!('data' in error)) return undefined
+  const { data } = error
+  if (typeof data !== 'object') return undefined
+  if (!data) return undefined
+  if (!('errorName' in data)) return undefined
+  return typeof data.errorName === 'string' ? data.errorName : undefined
 }
 
 declare namespace signKeyAuthorization {
@@ -291,6 +317,12 @@ declare namespace signKeyAuthorization {
 }
 
 export declare namespace base {
+  /** Minimal signer shape required by shared wallet actions. */
+  type Signer = Pick<
+    TempoAccount.Account,
+    'address' | 'keyType' | 'sign' | 'signTransaction' | 'type'
+  >
+
   /** Options for {@link base}. */
   type Options = Adapter.SetupFn.Parameters & {
     /** Creates/registers an account and returns the selected signer when available. */
@@ -302,15 +334,13 @@ export declare namespace base {
     /** Discovers existing accounts and returns the selected signer when available. */
     loadAccounts: (parameters: Adapter.loadAccounts.Parameters) => Promise<ConnectResult>
     /** Resolves a signable root account for future signing requests. */
-    resolveAccount: (
-      parameters?: ResolveAccountParameters | undefined,
-    ) => Promise<TempoAccount.Account>
+    resolveAccount: (parameters?: ResolveAccountParameters | undefined) => Promise<Signer>
   }
 
   /** Account acquisition result returned by a signer source. */
   type ConnectResult = {
     /** Signable account selected by the connect flow. */
-    account?: TempoAccount.Account | undefined
+    account?: Signer | undefined
     /** Serializable accounts to put in provider state. */
     accounts: readonly Account.Store[]
     /** Email associated with the selected account. */
