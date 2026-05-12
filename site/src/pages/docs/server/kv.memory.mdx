@@ -1,0 +1,49 @@
+---
+title: Kv.memory
+description: In-memory Kv adapter for tests and single-process deployments.
+---
+
+# `Kv.memory`
+
+Creates an in-memory [`Kv`](/docs/server/kv) backed by a `Map`. Lazily evicts expired entries on read/write. Useful for development, tests, and single-process deployments where cross-instance consistency is not required.
+
+`Kv.memory` implements the optional [`take`](/docs/server/kv#take-key-optional) primitive — `take` is atomic in-process because the synchronous `Map.get` + `Map.delete` runs in a single microtask, so concurrent callers within the same Node/Bun/Worker process cannot both observe the value.
+
+:::warning
+Not suitable for multi-instance production deployments. State is per-process, so issued sessions and one-time challenge nonces will not be visible to other instances. Use [`Kv.cloudflare`](/docs/server/kv.cloudflare) or [`Kv.durableObject`](/docs/server/kv.durableObject) instead.
+:::
+
+## Usage
+
+```ts twoslash
+import { Kv } from 'accounts/server'
+
+const kv = Kv.memory()
+```
+
+## Parameters
+
+### options
+
+- **Type:** `Kv.memory.Options`
+- **Default:** `{}`
+
+#### options.now
+
+- **Type:** `() => number`
+- **Default:** `Date.now`
+
+Clock function used for TTL accounting. Override in tests to make TTL evaluation deterministic.
+
+```ts twoslash
+import { Kv } from 'accounts/server'
+
+let clock = 0
+const kv = Kv.memory({
+  now: () => clock, // [!code focus]
+})
+```
+
+## Return Type
+
+A [`Kv`](/docs/server/kv#interface) instance with `get`, `set`, `delete`, and the optional `take`.

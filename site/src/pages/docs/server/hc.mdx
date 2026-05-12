@@ -1,0 +1,82 @@
+---
+title: hc
+description: Typed RPC client for handlers built with the Accounts SDK.
+---
+
+# `hc`
+
+Hono's typed RPC client, re-exported from `accounts/server` for convenience. Use it to call routes mounted by [`Handler.compose`](/docs/server/handler.compose), [`Handler.exchange`](/docs/server/handler.exchange), or any other handler that returns a typed Hono app, with full end-to-end type safety.
+
+```ts
+import { hc } from 'accounts/server'
+// equivalent to:
+import { hc } from 'hono/client'
+```
+
+See [Hono's RPC documentation](https://hono.dev/docs/guides/rpc) for the complete client API.
+
+## Usage
+
+Pass `typeof handler` as the type argument to `hc` to derive a fully-typed client from your server handler's route schema:
+
+```ts twoslash
+import { Handler, hc } from 'accounts/server'
+
+const handler = Handler.exchange()
+
+const client = hc<typeof handler>('https://wallet.example.com')
+
+const res = await client.exchange.quote.$post({
+  json: {
+    amount: '1',
+    pairToken: 'pathUSD',
+    slippage: 0.01,
+    token: 'USDC',
+    type: 'sell',
+  },
+})
+if (res.ok) {
+  const { calls, pairToken, token } = await res.json()
+}
+```
+
+[`Handler.compose`](/docs/server/handler.compose) preserves every sub-handler's route schema on the composed app's type, so a single `hc<typeof handler>` covers every mounted handler:
+
+```ts twoslash
+// @noErrors
+import { Handler, hc } from 'accounts/server'
+
+const handler = Handler.compose(
+  [Handler.exchange(), Handler.codeAuth()],
+  { path: '/api' },
+)
+
+const client = hc<typeof handler>('https://wallet.example.com')
+await client.api.exchange.quote.$post({ json: { /* ... */ } })
+```
+
+## Parameters
+
+### baseUrl
+
+- **Type:** `string`
+- **Required**
+
+Base URL of the server hosting the handler.
+
+### options
+
+- **Type:** `ClientRequestOptions`
+- **Optional**
+
+Hono client options — `headers`, `init` (passed to `fetch`), and a custom `fetch` implementation. See [Hono's RPC documentation](https://hono.dev/docs/guides/rpc#init-option) for the full shape.
+
+```ts twoslash
+import { Handler, hc } from 'accounts/server'
+
+const handler = Handler.exchange()
+
+const client = hc<typeof handler>('https://wallet.example.com', {
+  headers: { authorization: 'Bearer ...' }, // [!code focus]
+})
+```
