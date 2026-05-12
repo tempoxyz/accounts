@@ -1,4 +1,5 @@
-import "../landing.css";
+"use client";
+import "../../landing.css";
 import Customize from "./customize";
 import Demo from "./demo/Demo";
 import Guides from "./guides";

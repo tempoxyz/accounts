@@ -1,4 +1,4 @@
-
+"use client";
 import { useRef, useState } from "react";
 import { Provider, Storage, tempoWallet } from "accounts";
 import type { Theme } from "./themes";
