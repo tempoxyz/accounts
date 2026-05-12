@@ -1,0 +1,83 @@
+---
+title: eth_signTypedData_v4
+description: Sign EIP-712 typed structured data with the connected account.
+---
+
+# `eth_signTypedData_v4`
+
+Signs an [EIP-712](https://eips.ethereum.org/EIPS/eip-712) typed data structure with the connected account's key. The typed data is supplied as a JSON-stringified payload following the v4 format.
+
+To sign an arbitrary message instead of structured data, use [`personal_sign`](/docs/rpc/personal_sign).
+
+## Request
+
+```ts
+type Request = {
+  method: 'eth_signTypedData_v4'
+  params: [
+    `0x${string}`, // signer address
+    string,        // JSON-stringified EIP-712 typed data payload
+  ]
+}
+```
+
+The typed data payload is a JSON string with the following shape:
+
+```ts
+type TypedData = {
+  domain: {
+    name?: string
+    version?: string
+    chainId?: number
+    verifyingContract?: `0x${string}`
+    salt?: `0x${string}`
+  }
+  types: Record<string, { name: string; type: string }[]>
+  primaryType: string
+  message: Record<string, unknown>
+}
+```
+
+## Response
+
+```ts
+type Response = `0x${string}` // signature
+```
+
+## Example
+
+```ts
+const signature = await provider.request({
+  method: 'eth_signTypedData_v4',
+  params: [
+    '0x...',
+    JSON.stringify({
+      domain: {
+        name: 'Example',
+        version: '1',
+        chainId: 1,
+        verifyingContract: '0x...',
+      },
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+          { name: 'verifyingContract', type: 'address' },
+        ],
+        Mail: [
+          { name: 'from', type: 'address' },
+          { name: 'to', type: 'address' },
+          { name: 'contents', type: 'string' },
+        ],
+      },
+      primaryType: 'Mail',
+      message: {
+        from: '0x...',
+        to: '0x...',
+        contents: 'Hello, Tempo!',
+      },
+    }),
+  ],
+})
+```

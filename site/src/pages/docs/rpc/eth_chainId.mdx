@@ -1,0 +1,30 @@
+---
+title: eth_chainId
+description: Get the chain ID of the currently active chain.
+---
+
+# `eth_chainId`
+
+Returns the chain ID of the currently active chain as a hex-encoded number. The active chain can be changed via [`wallet_switchEthereumChain`](/docs/rpc/wallet_switchEthereumChain).
+
+## Request
+
+```ts
+type Request = {
+  method: 'eth_chainId'
+}
+```
+
+## Response
+
+```ts
+type Response = `0x${string}` // chain id (hex-encoded number)
+```
+
+## Example
+
+```ts
+const chainId = await provider.request({
+  method: 'eth_chainId',
+})
+```

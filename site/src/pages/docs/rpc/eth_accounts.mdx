@@ -1,0 +1,32 @@
+---
+title: eth_accounts
+description: Get the addresses of the currently connected accounts.
+---
+
+# `eth_accounts`
+
+Returns the addresses of the accounts currently connected to the provider. Returns an empty array if no accounts are connected.
+
+Unlike [`eth_requestAccounts`](/docs/rpc/eth_requestAccounts), this method never prompts the user to connect.
+
+## Request
+
+```ts
+type Request = {
+  method: 'eth_accounts'
+}
+```
+
+## Response
+
+```ts
+type Response = readonly `0x${string}`[]
+```
+
+## Example
+
+```ts
+const accounts = await provider.request({
+  method: 'eth_accounts',
+})
+```

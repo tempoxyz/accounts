@@ -1,0 +1,63 @@
+---
+title: wallet_swap
+description: Open the wallet swap flow with optional pre-filled swap intent fields.
+---
+
+# `wallet_swap`
+
+Opens the wallet's swap flow so the user can swap one token for another. The wallet renders the swap UI using any pre-filled intent supplied in the request, then signs and broadcasts the swap once the user confirms.
+
+This method is only supported by adapters that opt in to the `swap` action (typically the [`dialog`](/docs/api/dialog) adapter). Other adapters reject the request as an unsupported method.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_swap'
+  params?: [{
+    /** Human-readable amount to pre-fill (e.g. `"1.5"`). */
+    amount?: string
+    /**
+     * Other side of the swap pair. For buys, this is the token to sell.
+     * For sells, this is the token to buy.
+     */
+    pairToken?: `0x${string}`
+    /**
+     * Maximum allowed slippage as a decimal fraction
+     * (for example `0.05` for 5%). Must be between `0` and `1`.
+     */
+    slippage?: number
+    /** Token to buy or sell. Omit to let the user choose. */
+    token?: `0x${string}`
+    /**
+     * Whether the amount is an exact buy amount (`swapExactAmountOut`)
+     * or sell amount (`swapExactAmountIn`).
+     */
+    type?: 'buy' | 'sell'
+  }]
+}
+```
+
+## Response
+
+```ts
+type Response = {
+  /** Receipt of the submitted swap. */
+  receipt: TransactionReceipt
+}
+```
+
+## Example
+
+```ts
+const { receipt } = await provider.request({
+  method: 'wallet_swap',
+  params: [{
+    type: 'sell',
+    token: '0x20c0000000000000000000000000000000000001',
+    pairToken: '0x20c0000000000000000000000000000000000002',
+    amount: '1.5',
+    slippage: 0.05,
+  }],
+})
+```
