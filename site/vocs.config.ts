@@ -170,11 +170,12 @@ const config: Config = defineConfig({
             text: 'Remote',
             collapsed: true,
             items: [
-              { text: '.create 🚧', disabled: true },
-              { text: '.useEnsureVisibility 🚧', disabled: true },
-              { text: '.useState 🚧', disabled: true },
-              { text: '.useTheme 🚧', disabled: true },
-              { text: '.validateSearch 🚧', disabled: true },
+              { text: 'Overview', link: '/docs/api/remote' },
+              { text: '.create', link: '/docs/api/remote.create' },
+              { text: '.useEnsureVisibility', link: '/docs/api/remote.useEnsureVisibility' },
+              { text: '.useState', link: '/docs/api/remote.useState' },
+              { text: '.useTheme', link: '/docs/api/remote.useTheme' },
+              { text: '.validateSearch', link: '/docs/api/remote.validateSearch' },
             ],
           },
           {
