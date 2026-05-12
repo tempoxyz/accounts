@@ -52,12 +52,14 @@ const turnkeySessionErrorCodes = new Set([
  * })
  * ```
  */
-export function turnkey(options: turnkey.Options): Adapter.Adapter {
+export function turnkey<const client extends turnkey.Client>(
+  options: turnkey.Options<client>,
+): Adapter.Adapter {
   const { icon, name = 'Turnkey', rdns = 'com.turnkey', sessionSkewMs = 10_000 } = options
 
   return Adapter.define({ icon, name, rdns }, (parameters) => {
     const { store } = parameters
-    let turnkeyClient_promise: Promise<turnkey.Client> | undefined
+    let turnkeyClient_promise: Promise<client> | undefined
     let expiry_timeout: ReturnType<typeof setTimeout> | undefined
 
     async function getTurnkeyClient() {
@@ -78,9 +80,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       label?: string | undefined
       publicKey: Hex.Hex
     } {
-      const publicKey = account.publicKey.startsWith('0x')
-        ? account.publicKey
-        : `0x${account.publicKey}`
+      const publicKey = account.publicKey
       Hex.assert(publicKey, { strict: true })
 
       return {
@@ -270,13 +270,13 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
 
 export declare namespace turnkey {
   /** Options for {@link turnkey}. */
-  type Options = {
+  type Options<client extends Client = Client> = {
     /** Existing Turnkey client, such as `TurnkeyClient` from `@turnkey/core`. */
-    client: Client
+    client: client
     /** Creates/registers a Turnkey wallet account. UI is allowed. */
     createAccount: (parameters: {
       /** Initialized Turnkey client. */
-      client: Client
+      client: client
       /** Provider create-account parameters. */
       parameters: Adapter.createAccount.Parameters
     }) => Promise<WalletAccount>
@@ -285,7 +285,7 @@ export declare namespace turnkey {
     /** Loads/logs into existing Turnkey wallet accounts. UI is allowed. */
     loadAccounts: (parameters: {
       /** Initialized Turnkey client. */
-      client: Client
+      client: client
       /** Provider load-accounts parameters. */
       parameters?: Adapter.loadAccounts.Parameters | undefined
     }) => Promise<readonly WalletAccount[]>
@@ -299,8 +299,6 @@ export declare namespace turnkey {
 
   /** Minimal structural Turnkey client surface used by the adapter. */
   type Client = {
-    /** Fetches wallets visible to the current Turnkey session. */
-    fetchWallets: () => Promise<readonly Wallet[]>
     /** Returns the current Turnkey session, if any. */
     getSession: () => Promise<Session | null | undefined>
     /** Low-level Turnkey HTTP client. */
@@ -318,12 +316,6 @@ export declare namespace turnkey {
   type Session = {
     /** Session expiry in Unix seconds. */
     expiry: number
-  }
-
-  /** Minimal structural Turnkey wallet shape used by the adapter. */
-  type Wallet = {
-    /** Wallet accounts. */
-    accounts: readonly WalletAccount[]
   }
 
   /** Minimal structural Turnkey wallet account used by the adapter. */

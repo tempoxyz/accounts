@@ -55,7 +55,6 @@ describe('turnkey', () => {
     )
 
     expect(client.loadCalls).toMatchInlineSnapshot(`1`)
-    expect(client.fetchCalls).toMatchInlineSnapshot(`0`)
     expect(client.signWith).toMatchInlineSnapshot(`
       [
         "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
@@ -141,7 +140,7 @@ describe('turnkey', () => {
   })
 
   test('default: authorizeAccessKey signs with the connected Turnkey account', async () => {
-    const { adapter, client, store } = setup()
+    const { adapter, store } = setup()
     store.setState({ accounts: [toStoreAccount(account)], activeAccount: 0 })
 
     const result = await adapter.actions.authorizeAccessKey!(
@@ -153,7 +152,6 @@ describe('turnkey', () => {
       { method: 'wallet_authorizeAccessKey', params: [{ expiry: 123 }] },
     )
 
-    expect(client.fetchCalls).toMatchInlineSnapshot(`0`)
     expect(result).toMatchInlineSnapshot(`
       {
         "keyAuthorization": {
@@ -183,7 +181,6 @@ describe('turnkey', () => {
       { method: 'personal_sign', params: ['0x68656c6c6f', address] },
     )
 
-    expect(client.fetchCalls).toMatchInlineSnapshot(`0`)
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
   })
 
@@ -197,7 +194,6 @@ describe('turnkey', () => {
       ),
     ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: No Turnkey account connected.]')
 
-    expect(client.fetchCalls).toMatchInlineSnapshot(`0`)
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
   })
 
@@ -237,7 +233,6 @@ describe('turnkey', () => {
       ),
     ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: Turnkey account must reconnect.]')
 
-    expect(client.fetchCalls).toMatchInlineSnapshot(`0`)
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
@@ -322,25 +317,13 @@ declare namespace setup {
 }
 
 function createClient(options: setup.Options = {}) {
-  type WalletShape = {
-    accounts: {
-      address: string
-      addressFormat?: string | undefined
-      publicKey?: string | undefined
-    }[]
-  }
   const state = {
-    fetchCalls: 0,
     initCalls: 0,
     loadCalls: 0,
     signPayloads: [] as Hex.Hex[],
     signWith: [] as string[],
-    wallets: [{ accounts: [toWalletAccount(account)] }] as WalletShape[],
   }
   const client = {
-    get fetchCalls() {
-      return state.fetchCalls
-    },
     get initCalls() {
       return state.initCalls
     },
@@ -355,16 +338,6 @@ function createClient(options: setup.Options = {}) {
     },
     get signWith() {
       return state.signWith
-    },
-    get wallets() {
-      return state.wallets
-    },
-    set wallets(value: WalletShape[]) {
-      state.wallets = value
-    },
-    fetchWallets: async () => {
-      state.fetchCalls++
-      return state.wallets as readonly turnkey.Wallet[]
     },
     getSession: async () =>
       options.session === undefined
@@ -387,12 +360,10 @@ function createClient(options: setup.Options = {}) {
     },
     logout: () => {},
   } satisfies turnkey.Client & {
-    fetchCalls: number
     initCalls: number
     loadCalls: number
     signPayloads: Hex.Hex[]
     signWith: string[]
-    wallets: WalletShape[]
   }
 
   return client

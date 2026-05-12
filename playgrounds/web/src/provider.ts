@@ -24,6 +24,7 @@ export type ProviderValue = ReturnType<typeof Provider.create>
 type TurnkeyPlaygroundClient = turnkey.Client &
   TurnkeyEmailOtpClient & {
     createWallet: TurnkeyClientMethods['createWallet']
+    fetchWallets: TurnkeyClientMethods['fetchWallets']
   }
 const turnkeyEthereumAddressFormat = 'ADDRESS_FORMAT_ETHEREUM'
 
@@ -110,23 +111,21 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       adapter: turnkey({
         client,
         async createAccount({ client, parameters }) {
-          const client_ = client as TurnkeyPlaygroundClient
           await requestTurnkeyEmailOtp({
-            client: client_,
+            client,
             createSubOrgParams: createTurnkeySubOrgParams(parameters.name),
             mode: 'register',
           })
-          const account = (await getOrCreateEthereumAccounts(client_))[0]
+          const account = (await getOrCreateEthereumAccounts(client))[0]
           return account
         },
         async loadAccounts({ client }) {
-          const client_ = client as TurnkeyPlaygroundClient
           await requestTurnkeyEmailOtp({
-            client: client_,
+            client,
             createSubOrgParams: createTurnkeySubOrgParams(),
             mode: 'login',
           })
-          return await getOrCreateEthereumAccounts(client_)
+          return await getOrCreateEthereumAccounts(client)
         },
       }),
       mpp: true,
