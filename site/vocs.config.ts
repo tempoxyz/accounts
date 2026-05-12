@@ -110,8 +110,8 @@ const config: Config = defineConfig({
               },
               { text: 'Expiry', link: '/docs/api/expiry' },
               { text: 'Provider', link: '/docs/api/provider' },
-              { text: 'Rpc 🚧', disabled: true },
-              { text: 'Schema 🚧', disabled: true },
+              { text: 'Rpc', link: '/docs/api/rpc' },
+              { text: 'Schema', link: '/docs/api/schema' },
               {
                 text: 'Storage',
                 collapsed: true,
@@ -125,7 +125,7 @@ const config: Config = defineConfig({
                   { text: '.memory', link: '/docs/api/storage.memory' },
                 ],
               },
-              { text: 'TrustedHosts 🚧', disabled: true },
+              { text: 'TrustedHosts', link: '/docs/api/trustedHosts' },
               {
                 text: 'WebAuthnCeremony',
                 collapsed: true,
@@ -137,7 +137,11 @@ const config: Config = defineConfig({
               },
             ],
           },
-          { text: 'CLI 🚧', disabled: true },
+          {
+            text: 'CLI',
+            collapsed: true,
+            items: [{ text: 'Provider', link: '/docs/cli/provider' }],
+          },
           {
             text: 'JSON-RPC',
             collapsed: true,
@@ -171,11 +175,12 @@ const config: Config = defineConfig({
             text: 'Remote',
             collapsed: true,
             items: [
-              { text: '.create 🚧', disabled: true },
-              { text: '.useEnsureVisibility 🚧', disabled: true },
-              { text: '.useState 🚧', disabled: true },
-              { text: '.useTheme 🚧', disabled: true },
-              { text: '.validateSearch 🚧', disabled: true },
+              { text: 'Overview', link: '/docs/api/remote' },
+              { text: '.create', link: '/docs/api/remote.create' },
+              { text: '.useEnsureVisibility', link: '/docs/api/remote.useEnsureVisibility' },
+              { text: '.useState', link: '/docs/api/remote.useState' },
+              { text: '.useTheme', link: '/docs/api/remote.useTheme' },
+              { text: '.validateSearch', link: '/docs/api/remote.validateSearch' },
             ],
           },
           {

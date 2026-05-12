@@ -1,0 +1,67 @@
+---
+title: TrustedHosts
+description: Trusted host mappings and matching helpers for dialog adapters.
+---
+
+# `TrustedHosts`
+
+Built-in mappings of dialog hosts (e.g. `tempo.xyz`) to the third-party origins they trust to embed them, plus helpers to test a hostname against a trusted-host list.
+
+The `dialog` adapter consults these mappings to decide whether the calling page is allowed to embed the dialog. Patterns starting with `*.` match any subdomain suffix (e.g. `*.workers.dev` matches `foo.workers.dev`).
+
+## Usage
+
+```ts twoslash
+import { TrustedHosts } from 'accounts'
+
+const trusted = TrustedHosts.hosts['tempo.xyz']!
+
+const ok = TrustedHosts.match(trusted, 'app.tempo.xyz')
+```
+
+## Properties
+
+### hosts
+
+- **Type:** `Record<string, readonly string[]>`
+
+Trusted host mappings. Each key is a dialog host, and its value is the list of third-party origins that the dialog trusts to embed it. Supports wildcard patterns (e.g. `*.workers.dev`).
+
+```ts twoslash
+import { TrustedHosts } from 'accounts'
+
+const trusted = TrustedHosts.hosts['tempo.xyz'] // [!code focus]
+```
+
+## Functions
+
+### match
+
+- **Type:** `(trustedHosts: readonly string[], hostname: string, source?: string) => boolean`
+
+Returns `true` if `hostname` matches any pattern in `trustedHosts`, or (when `source` is provided) if `hostname` shares the same registrable domain ("eTLD+1") as `source`.
+
+Patterns starting with `*.` match any subdomain suffix (e.g. `*.workers.dev` matches `foo.workers.dev`).
+
+```ts twoslash
+import { TrustedHosts } from 'accounts'
+
+const trusted = TrustedHosts.hosts['tempo.xyz']!
+
+const ok = TrustedHosts.match(trusted, 'app.tempo.xyz') // [!code focus]
+```
+
+### sameRegistrableDomain
+
+- **Type:** `(a: string, b: string) => boolean`
+
+Returns `true` if `a` and `b` share the same registrable domain ("eTLD+1").
+
+```ts twoslash
+import { TrustedHosts } from 'accounts'
+
+const ok = TrustedHosts.sameRegistrableDomain( // [!code focus]
+  'app.tempo.xyz', // [!code focus]
+  'docs.tempo.xyz', // [!code focus]
+) // [!code focus]
+```
