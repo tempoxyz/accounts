@@ -2,7 +2,8 @@ import { defineConfig, McpSource } from 'vocs/config'
 
 const baseUrl = (() => {
   if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'production') return ''
-  if (URL.canParse(process.env.VITE_BASE_URL)) return process.env.VITE_BASE_URL
+  if (process.env.VITE_BASE_URL && URL.canParse(process.env.VITE_BASE_URL))
+    return process.env.VITE_BASE_URL
   if (process.env.VERCEL_ENV === 'production')
     return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
   return ''

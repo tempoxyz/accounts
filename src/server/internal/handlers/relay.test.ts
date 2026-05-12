@@ -355,7 +355,7 @@ describe('behavior: with feePayer.feeToken', () => {
     const { transaction } = await fillTransaction(client, {
       account: userAccount.address,
       calls: [transferCall()],
-      feePayer: false,
+      feePayer: false as never,
       feeToken: addresses.alphaUsd as Address,
     })
     expect(transaction.feeToken?.toLowerCase()).toBe(addresses.alphaUsd.toLowerCase())

@@ -292,27 +292,55 @@ declare namespace setup {
 }
 
 function createClient(options: setup.Options = {}) {
-  const client = {
+  type WalletShape = { accounts: { address: string; addressFormat: string }[] }
+  const state = {
     fetchCalls: 0,
     initCalls: 0,
     loadCalls: 0,
     signPayloads: [] as Hex.Hex[],
     signWith: [] as string[],
-    wallets: [{ accounts: [{ address, addressFormat: 'ADDRESS_FORMAT_ETHEREUM' }] }],
-    async fetchWallets() {
-      client.fetchCalls++
-      return client.wallets
+    wallets: [
+      { accounts: [{ address, addressFormat: 'ADDRESS_FORMAT_ETHEREUM' }] },
+    ] as WalletShape[],
+  }
+  const client = {
+    get fetchCalls() {
+      return state.fetchCalls
     },
-    async getSession() {
-      return options.session === undefined
+    get initCalls() {
+      return state.initCalls
+    },
+    get loadCalls() {
+      return state.loadCalls
+    },
+    set loadCalls(value: number) {
+      state.loadCalls = value
+    },
+    get signPayloads() {
+      return state.signPayloads
+    },
+    get signWith() {
+      return state.signWith
+    },
+    get wallets() {
+      return state.wallets
+    },
+    set wallets(value: WalletShape[]) {
+      state.wallets = value
+    },
+    fetchWallets: async () => {
+      state.fetchCalls++
+      return state.wallets as readonly turnkey.Wallet[]
+    },
+    getSession: async () =>
+      options.session === undefined
         ? { expiry: Math.floor(Date.now() / 1000) + 60 }
-        : options.session
-    },
+        : options.session,
     httpClient: {
-      async signRawPayload(parameters: turnkey.SignRawPayloadParameters) {
+      signRawPayload: async (parameters: turnkey.SignRawPayloadParameters) => {
         if (options.signError) throw options.signError
-        client.signPayloads.push(parameters.payload)
-        client.signWith.push(parameters.signWith)
+        state.signPayloads.push(parameters.payload)
+        state.signWith.push(parameters.signWith)
         return {
           r: Hex.padLeft('0x11', 32),
           s: Hex.padLeft('0x22', 32),
@@ -320,17 +348,17 @@ function createClient(options: setup.Options = {}) {
         }
       },
     },
-    init() {
-      client.initCalls++
+    init: () => {
+      state.initCalls++
     },
-    logout() {},
+    logout: () => {},
   } satisfies turnkey.Client & {
     fetchCalls: number
     initCalls: number
     loadCalls: number
     signPayloads: Hex.Hex[]
     signWith: string[]
-    wallets: turnkey.Wallet[]
+    wallets: WalletShape[]
   }
 
   return client
