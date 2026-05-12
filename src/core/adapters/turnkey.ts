@@ -1,21 +1,13 @@
-import {
-  Address as core_Address,
-  Hex,
-  Provider as ox_Provider,
-  PublicKey,
-  Signature,
-  WebCryptoP256,
-} from 'ox'
-import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { Address as core_Address, Hex, Provider as core_Provider, Signature } from 'ox'
+import { SignatureEnvelope } from 'ox/tempo'
 import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
 import type { Address } from 'viem/accounts'
-import { prepareTransactionRequest } from 'viem/actions'
 import type { Account as TempoAccount } from 'viem/tempo'
 import { Transaction as TempoTransaction } from 'viem/tempo'
 
-import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Store from '../Store.js'
+import { base } from './base.js'
 
 const turnkeySessionErrorCodes = new Set([
   'API_KEY_EXPIRED',
@@ -65,7 +57,8 @@ const turnkeySessionErrorCodes = new Set([
 export function turnkey(options: turnkey.Options): Adapter.Adapter {
   const { icon, name = 'Turnkey', rdns = 'com.turnkey', sessionSkewMs = 10_000 } = options
 
-  return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
+  return Adapter.define({ icon, name, rdns }, (parameters) => {
+    const { store } = parameters
     let turnkeyClient_promise: Promise<turnkey.Client> | undefined
     let expiry_timeout: ReturnType<typeof setTimeout> | undefined
     let restore_promise: Promise<void> | undefined
@@ -85,6 +78,42 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         address: core_Address.from(account.address),
         ...(label ? { label } : {}),
       }
+    }
+
+    function toTempoAccount(account: turnkey.WalletAccount): TempoAccount.Account {
+      const address = core_Address.from(account.address)
+      const sign = async (parameters: { hash: Hex.Hex }) =>
+        await signPayload({
+          payload: parameters.hash,
+          turnkeyClient: await getTurnkeyClient(),
+          walletAccount: account,
+        })
+
+      return {
+        address,
+        keyType: 'secp256k1',
+        type: 'local',
+        sign,
+        async signMessage(parameters) {
+          return await sign({ hash: hashMessage((parameters as { message: never }).message) })
+        },
+        async signTransaction(transaction) {
+          const presign = (() => {
+            if ('feePayerSignature' in transaction && transaction.feePayerSignature)
+              return { ...transaction, feePayerSignature: null }
+            return transaction
+          })()
+          const unsignedTransaction = await TempoTransaction.serialize(presign as never)
+          const signature = await sign({ hash: keccak256(unsignedTransaction) })
+          return await TempoTransaction.serialize(
+            transaction as never,
+            SignatureEnvelope.from(Signature.fromHex(signature)) as never,
+          )
+        },
+        async signTypedData(parameters) {
+          return await sign({ hash: hashTypedData(parameters as never) })
+        },
+      } as TempoAccount.Account
     }
 
     function clear() {
@@ -158,7 +187,8 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
 
     async function requireSession() {
       const session = await getValidSession()
-      if (!session) throw new ox_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
+      if (!session)
+        throw new core_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
     }
 
     async function accountForSigning(address: Address | undefined) {
@@ -166,7 +196,8 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       await requireSession()
 
       const address_ = address ?? store.getState().accounts[store.getState().activeAccount]?.address
-      if (!address_) throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
+      if (!address_)
+        throw new core_Provider.DisconnectedError({ message: 'No accounts connected.' })
 
       const account = walletAccounts.find((account) =>
         isAddressEqual(core_Address.from(account.address), address_),
@@ -174,11 +205,11 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       if (account) return account
 
       if (walletAccounts.length === 0)
-        throw new ox_Provider.DisconnectedError({
+        throw new core_Provider.DisconnectedError({
           message: 'No Turnkey account connected.',
         })
 
-      throw new ox_Provider.UnauthorizedError({ message: `Account "${address_}" not found.` })
+      throw new core_Provider.UnauthorizedError({ message: `Account "${address_}" not found.` })
     }
 
     function signatureToHex(value: turnkey.SignatureResponse): Hex.Hex {
@@ -203,131 +234,10 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         .catch((error) => {
           if (!isSessionError(error)) throw error
           clear()
-          throw new ox_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
+          throw new core_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
         })
 
       return signatureToHex(result)
-    }
-
-    async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
-      const { expiry, limits, scopes } = options
-      const chainId = options.chainId ?? getClient().chain.id
-
-      if (options.publicKey || options.address) {
-        const address =
-          options.address ?? core_Address.fromPublicKey(PublicKey.from(options.publicKey!))
-        const keyAuthorization = KeyAuthorization.from({
-          address,
-          chainId: BigInt(chainId),
-          expiry,
-          limits,
-          scopes,
-          type: options.keyType ?? 'secp256k1',
-        })
-        return { keyAuthorization }
-      }
-
-      const keyPair = await WebCryptoP256.createKeyPair()
-      const address = core_Address.fromPublicKey(PublicKey.from(keyPair.publicKey))
-      const keyAuthorization = KeyAuthorization.from({
-        address,
-        chainId: BigInt(chainId),
-        expiry,
-        limits,
-        scopes,
-        type: 'p256',
-      })
-      return { keyAuthorization, keyPair }
-    }
-
-    async function signKeyAuthorization(
-      account: turnkey.WalletAccount,
-      prepared: Awaited<ReturnType<typeof prepareKeyAuthorization>>,
-      options: {
-        signature?: Hex.Hex | undefined
-      } = {},
-    ) {
-      const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
-      const signature =
-        options.signature ??
-        (await signPayload({
-          payload: digest,
-          turnkeyClient: await getTurnkeyClient(),
-          walletAccount: account,
-        }))
-      const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
-        signature: SignatureEnvelope.from(signature),
-      })
-
-      AccessKey.save({
-        address: core_Address.from(account.address),
-        keyAuthorization,
-        ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
-        store,
-      })
-
-      return KeyAuthorization.toRpc(keyAuthorization)
-    }
-
-    async function withAccessKey<result>(
-      options: {
-        address?: Address | undefined
-        calls?: Adapter.signTransaction.Parameters['calls']
-      },
-      fn: (
-        account: TempoAccount.Account,
-        keyAuthorization?: KeyAuthorization.Signed,
-      ) => Promise<result>,
-    ) {
-      const account = (() => {
-        try {
-          return getAccount({ ...options, signable: true })
-        } catch {
-          return undefined
-        }
-      })()
-      if (!account || account.source !== 'accessKey') return undefined
-
-      const keyAuthorization = AccessKey.getPending(account, { store })
-      try {
-        const result = await fn(account, keyAuthorization ?? undefined)
-        AccessKey.removePending(account, { store })
-        return result
-      } catch {
-        AccessKey.remove(account, { store })
-        return undefined
-      }
-    }
-
-    async function signTransaction(parameters: Adapter.signTransaction.Parameters) {
-      const turnkeyClient = await getTurnkeyClient()
-      const account = await accountForSigning(parameters.from)
-      const { feePayer, ...rest } = parameters
-      const viemClient = getClient({
-        feePayer: feePayer === true ? undefined : feePayer,
-      })
-      const prepared = await prepareTransactionRequest(viemClient, {
-        account: core_Address.from(account.address),
-        ...rest,
-        ...(feePayer ? { feePayer: true } : {}),
-        type: 'tempo',
-      } as never)
-      const presign = (() => {
-        if ('feePayerSignature' in prepared && prepared.feePayerSignature)
-          return { ...prepared, feePayerSignature: null }
-        return prepared
-      })()
-      const unsignedTransaction = await TempoTransaction.serialize(presign as never)
-
-      const signature = await signPayload({
-        payload: keccak256(unsignedTransaction),
-        turnkeyClient,
-        walletAccount: account,
-      })
-      return await TempoTransaction.serialize(
-        prepared as never,
-        SignatureEnvelope.from(Signature.fromHex(signature)) as never,
-      )
     }
 
     function isSessionError(error: unknown) {
@@ -356,213 +266,41 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
 
     void restore()
 
-    return {
+    return base({
+      ...parameters,
       cleanup() {
         if (expiry_timeout) clearTimeout(expiry_timeout)
       },
-      actions: {
-        async createAccount(parameters) {
-          const { authorizeAccessKey, personalSign } = parameters
-          if (personalSign && parameters.digest)
-            throw new ox_Provider.ProviderRpcError(
-              -32602,
-              '`digest` and `personalSign` cannot both be set on `wallet_connect`.',
-            )
-
-          const turnkeyClient = await getTurnkeyClient()
-          const account = await options.createAccount({ client: turnkeyClient, parameters })
-          await requireSession()
-          walletAccounts = [account]
-          restore_promise = undefined
-
-          const digest = personalSign ? hashMessage(personalSign.message) : parameters.digest
-          const keyAuthorization = authorizeAccessKey
-            ? await signKeyAuthorization(
-                account,
-                await prepareKeyAuthorization(authorizeAccessKey),
-                { signature: authorizeAccessKey.signature },
-              )
-            : undefined
-
-          return {
-            accounts: [toStoreAccount(account, parameters.name)],
-            ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
-            ...(keyAuthorization ? { keyAuthorization } : {}),
-            signature: digest
-              ? await signPayload({
-                  payload: digest,
-                  turnkeyClient,
-                  walletAccount: account,
-                })
-              : undefined,
-          }
-        },
-        async loadAccounts(parameters) {
-          const { authorizeAccessKey, personalSign } =
-            parameters ?? ({} as Adapter.loadAccounts.Parameters)
-          if (personalSign && parameters?.digest)
-            throw new ox_Provider.ProviderRpcError(
-              -32602,
-              '`digest` and `personalSign` cannot both be set on `wallet_connect`.',
-            )
-
-          const turnkeyClient = await getTurnkeyClient()
-          walletAccounts = await options.loadAccounts({ client: turnkeyClient, parameters })
-          await requireSession()
-          restore_promise = undefined
-
-          const digest = personalSign ? hashMessage(personalSign.message) : parameters?.digest
-          const account = walletAccounts[0]
-          const keyAuthorization =
-            authorizeAccessKey && account
-              ? await signKeyAuthorization(
-                  account,
-                  await prepareKeyAuthorization(authorizeAccessKey),
-                  { signature: authorizeAccessKey.signature },
-                )
-              : undefined
-
-          return {
-            accounts: walletAccounts.map((account) => toStoreAccount(account)),
-            ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
-            ...(keyAuthorization ? { keyAuthorization } : {}),
-            signature:
-              digest && account
-                ? await signPayload({
-                    payload: digest,
-                    turnkeyClient,
-                    walletAccount: account,
-                  })
-                : undefined,
-          }
-        },
-        async authorizeAccessKey(parameters) {
-          const account = await accountForSigning(undefined)
-          const prepared = await prepareKeyAuthorization(parameters)
-          const keyAuthorization = await signKeyAuthorization(account, prepared, {
-            signature: parameters.signature,
-          })
-          return { keyAuthorization, rootAddress: core_Address.from(account.address) }
-        },
-        async signPersonalMessage(parameters) {
-          const turnkeyClient = await getTurnkeyClient()
-          const account = await accountForSigning(parameters.address)
-          return await signPayload({
-            payload: hashMessage({ raw: parameters.data }),
-            turnkeyClient,
-            walletAccount: account,
-          })
-        },
-        async signTransaction(parameters) {
-          const result = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls },
-            async (account, keyAuthorization) => {
-              const { feePayer, ...rest } = parameters
-              const viemClient = getClient({
-                feePayer: feePayer === true ? undefined : feePayer,
-              })
-              const prepared = await prepareTransactionRequest(viemClient, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                keyAuthorization,
-                type: 'tempo',
-              } as never)
-              return await account.signTransaction(prepared as never)
-            },
-          )
-          if (result !== undefined) return result
-          return await signTransaction(parameters)
-        },
-        async signTypedData(parameters) {
-          const turnkeyClient = await getTurnkeyClient()
-          const account = await accountForSigning(parameters.address)
-          const typedData = JSON.parse(parameters.data) as {
-            domain: Record<string, unknown>
-            message: Record<string, unknown>
-            primaryType: string
-            types: Record<string, unknown>
-          }
-          return await signPayload({
-            payload: hashTypedData(typedData as never),
-            turnkeyClient,
-            walletAccount: account,
-          })
-        },
-        async sendTransaction(parameters) {
-          const result = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls },
-            async (account, keyAuthorization) => {
-              const { feePayer, ...rest } = parameters
-              const viemClient = getClient({
-                chainId: parameters.chainId,
-                feePayer: feePayer === true ? undefined : feePayer,
-              })
-              const prepared = await prepareTransactionRequest(viemClient, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                keyAuthorization,
-                type: 'tempo',
-              } as never)
-              const signed = await account.signTransaction(prepared as never)
-              return await viemClient.request({
-                method: 'eth_sendRawTransaction' as never,
-                params: [signed],
-              })
-            },
-          )
-          if (result !== undefined) return result
-          const signed = await signTransaction(parameters)
-          const viemClient = getClient({
-            chainId: parameters.chainId,
-            feePayer: parameters.feePayer === true ? undefined : parameters.feePayer,
-          })
-          return await viemClient.request({
-            method: 'eth_sendRawTransaction' as never,
-            params: [signed],
-          })
-        },
-        async sendTransactionSync(parameters) {
-          const result = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls },
-            async (account, keyAuthorization) => {
-              const { feePayer, ...rest } = parameters
-              const viemClient = getClient({
-                chainId: parameters.chainId,
-                feePayer: feePayer === true ? undefined : feePayer,
-              })
-              const prepared = await prepareTransactionRequest(viemClient, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                keyAuthorization,
-                type: 'tempo',
-              } as never)
-              const signed = await account.signTransaction(prepared as never)
-              return await viemClient.request({
-                method: 'eth_sendRawTransactionSync' as never,
-                params: [signed],
-              })
-            },
-          )
-          if (result !== undefined) return result
-          const signed = await signTransaction(parameters)
-          const viemClient = getClient({
-            chainId: parameters.chainId,
-            feePayer: parameters.feePayer === true ? undefined : parameters.feePayer,
-          })
-          return await viemClient.request({
-            method: 'eth_sendRawTransactionSync' as never,
-            params: [signed],
-          })
-        },
-        async disconnect() {
-          await (await getTurnkeyClient()).logout()
-          clear()
-        },
+      async createAccount(parameters) {
+        const turnkeyClient = await getTurnkeyClient()
+        const account = await options.createAccount({ client: turnkeyClient, parameters })
+        await requireSession()
+        walletAccounts = [account]
+        restore_promise = undefined
+        return {
+          account: toTempoAccount(account),
+          accounts: [toStoreAccount(account, parameters.name)],
+        }
       },
-    }
+      async disconnect() {
+        await (await getTurnkeyClient()).logout()
+        clear()
+      },
+      async loadAccounts(parameters) {
+        const turnkeyClient = await getTurnkeyClient()
+        walletAccounts = await options.loadAccounts({ client: turnkeyClient, parameters })
+        await requireSession()
+        restore_promise = undefined
+        const account = walletAccounts[0]
+        return {
+          ...(account ? { account: toTempoAccount(account) } : {}),
+          accounts: walletAccounts.map((account) => toStoreAccount(account)),
+        }
+      },
+      async resolveAccount(parameters = {}) {
+        return toTempoAccount(await accountForSigning(parameters.address))
+      },
+    })
   })
 }
 

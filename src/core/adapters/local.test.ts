@@ -115,6 +115,45 @@ describe('local', () => {
       expect(result.keyAuthorization?.signature).not.toBe(result.signature)
     })
 
+    test('behavior: digest + authorizeAccessKey keeps the digest as the top-level signature', async () => {
+      const digest = `0x${'12'.repeat(32)}` as const
+      const captured: { digest: Hex | undefined }[] = []
+      const { adapter } = setup({
+        loadAccounts: makeLoadAccounts(0, captured),
+      })
+
+      const result = await adapter.actions.loadAccounts(
+        {
+          digest,
+          authorizeAccessKey: { expiry: 0 },
+        },
+        { method: 'wallet_connect', params: undefined },
+      )
+
+      expect(captured[0]!.digest).toMatchInlineSnapshot(
+        `"0x1212121212121212121212121212121212121212121212121212121212121212"`,
+      )
+      expect(result.signature).toBeDefined()
+      expect(result.keyAuthorization?.signature).toBeDefined()
+      expect(result.keyAuthorization?.signature).not.toBe(result.signature)
+    })
+
+    test('behavior: authorizeAccessKey alone does not return a top-level signature', async () => {
+      const captured: { digest: Hex | undefined }[] = []
+      const { adapter } = setup({
+        loadAccounts: makeLoadAccounts(0, captured),
+      })
+
+      const result = await adapter.actions.loadAccounts(
+        { authorizeAccessKey: { expiry: 0 } },
+        { method: 'wallet_connect', params: undefined },
+      )
+
+      expect(captured[0]!.digest).toBeDefined()
+      expect(result.keyAuthorization).toBeDefined()
+      expect(result.signature).toMatchInlineSnapshot(`undefined`)
+    })
+
     test('error: rejects when personalSign and digest are both set', async () => {
       const { adapter } = setup()
 

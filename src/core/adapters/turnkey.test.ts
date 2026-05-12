@@ -100,6 +100,34 @@ describe('turnkey', () => {
     `)
   })
 
+  test('behavior: loadAccounts signs explicit digest separately from access-key authorization', async () => {
+    const { adapter, client } = setup()
+    const digest = Hex.padLeft('0x12', 32)
+
+    const result = await adapter.actions.loadAccounts(
+      {
+        digest,
+        authorizeAccessKey: {
+          address: other,
+          expiry: 123,
+          keyType: 'secp256k1',
+        },
+      },
+      { method: 'wallet_connect', params: undefined },
+    )
+
+    expect(client.signPayloads).toMatchInlineSnapshot(`
+      [
+        "0x0000000000000000000000000000000000000000000000000000000000000012",
+        "0x219d0ef7a59d2a40d6ff9e115e32fb6b53eb7fa518ea3364b7b806990fad3944",
+      ]
+    `)
+    expect(result.signature).toMatchInlineSnapshot(
+      `"0x000000000000000000000000000000000000000000000000000000000000001100000000000000000000000000000000000000000000000000000000000000221b"`,
+    )
+    expect(result.keyAuthorization?.signature).toBeDefined()
+  })
+
   test('default: authorizeAccessKey signs with the connected Turnkey account', async () => {
     const { adapter, client, store } = setup()
     store.setState({ accounts: [{ address }], activeAccount: 0 })
