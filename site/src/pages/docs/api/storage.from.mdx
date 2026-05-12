@@ -1,0 +1,83 @@
+---
+title: Storage.from
+description: Create a Storage adapter from a custom implementation.
+---
+
+# `Storage.from`
+
+Creates a [`Storage`](/docs/api/storage) adapter from a custom implementation, optionally scoping all keys under a prefix.
+
+All built-in storage adapters ([`.cookie`](/docs/api/storage.cookie), [`.idb`](/docs/api/storage.idb), [`.localStorage`](/docs/api/storage.localStorage), [`.memory`](/docs/api/storage.memory)) are built on top of `Storage.from` and share its `key` prefix option.
+
+## Usage
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+const storage = Storage.from({
+  getItem(name) {
+    return JSON.parse(globalThis.sessionStorage.getItem(name) ?? 'null')
+  },
+  setItem(name, value) {
+    globalThis.sessionStorage.setItem(name, JSON.stringify(value))
+  },
+  removeItem(name) {
+    globalThis.sessionStorage.removeItem(name)
+  },
+})
+
+const provider = Provider.create({ storage })
+```
+
+## Parameters
+
+### storage
+
+- **Type:** `Storage`
+- **Required**
+
+The underlying storage implementation to wrap. Must provide `getItem`, `setItem`, and `removeItem`. Each method may return synchronously or as a `Promise`.
+
+```ts twoslash
+import { Storage } from 'accounts'
+
+const storage = Storage.from({
+  getItem(name) { // [!code focus]
+    return JSON.parse(globalThis.sessionStorage.getItem(name) ?? 'null') // [!code focus]
+  }, // [!code focus]
+  setItem(name, value) { // [!code focus]
+    globalThis.sessionStorage.setItem(name, JSON.stringify(value)) // [!code focus]
+  }, // [!code focus]
+  removeItem(name) { // [!code focus]
+    globalThis.sessionStorage.removeItem(name) // [!code focus]
+  }, // [!code focus]
+})
+```
+
+### options.key
+
+- **Type:** `string`
+- **Default:** `'tempo'`
+
+Key prefix applied to every name passed through to the underlying storage. For example, with the default key, `getItem('foo')` reads from `'tempo.foo'`.
+
+```ts twoslash
+import { Storage } from 'accounts'
+
+const storage = Storage.from(
+  {
+    getItem(name) {
+      return JSON.parse(globalThis.sessionStorage.getItem(name) ?? 'null')
+    },
+    setItem(name, value) {
+      globalThis.sessionStorage.setItem(name, JSON.stringify(value))
+    },
+    removeItem(name) {
+      globalThis.sessionStorage.removeItem(name)
+    },
+  },
+  {
+    key: 'my-app', // [!code focus]
+  },
+)
+```
