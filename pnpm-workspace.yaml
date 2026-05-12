@@ -1,3 +1,7 @@
+auditConfig:
+  ignoreGhsas:
+    - GHSA-rmmr-r34h-pfm5 # affected versions have been removed from npm.
+
 allowBuilds:
   bufferutil: true
   cloudflared: true
