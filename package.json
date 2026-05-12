@@ -132,6 +132,11 @@
       "react-native": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./bitgo": {
+      "types": "./dist/bitgo/index.d.ts",
+      "src": "./src/bitgo/index.ts",
+      "default": "./dist/bitgo/index.js"
+    },
     "./server": {
       "types": "./dist/server/index.d.ts",
       "src": "./src/server/index.ts",
