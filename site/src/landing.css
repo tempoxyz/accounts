@@ -1,4 +1,5 @@
-@import "tailwindcss";
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/utilities" layer(utilities);
 
 @font-face { font-family: 'Pilat'; src: url('/fonts/Pilat/Pilat-Thin.woff2') format('woff2'), url('/fonts/Pilat/Pilat-Thin.woff') format('woff'); font-weight: 100; font-style: normal; font-display: swap; }
 @font-face { font-family: 'Pilat'; src: url('/fonts/Pilat/Pilat-Light.woff2') format('woff2'), url('/fonts/Pilat/Pilat-Light.woff') format('woff'); font-weight: 300; font-style: normal; font-display: swap; }
