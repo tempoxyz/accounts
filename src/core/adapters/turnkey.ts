@@ -268,9 +268,6 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
 
     return base({
       ...parameters,
-      cleanup() {
-        if (expiry_timeout) clearTimeout(expiry_timeout)
-      },
       async createAccount(parameters) {
         const turnkeyClient = await getTurnkeyClient()
         const account = await options.createAccount({ client: turnkeyClient, parameters })

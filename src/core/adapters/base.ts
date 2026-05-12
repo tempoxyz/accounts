@@ -19,16 +19,8 @@ import * as Adapter from '../Adapter.js'
  * Builds shared wallet actions from an account source that can resolve signers.
  */
 export function base(options: base.Options): Adapter.Instance {
-  const {
-    cleanup,
-    createAccount,
-    disconnect,
-    getAccount,
-    getClient,
-    loadAccounts,
-    resolveAccount,
-    store,
-  } = options
+  const { createAccount, disconnect, getAccount, getClient, loadAccounts, resolveAccount, store } =
+    options
 
   async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
     const { expiry, limits, scopes } = options
@@ -173,8 +165,6 @@ export function base(options: base.Options): Adapter.Instance {
   }
 
   return {
-    cleanup,
-    persistAccounts: options.persistAccounts,
     actions: {
       async createAccount(parameters) {
         if (!createAccount)
@@ -303,8 +293,6 @@ declare namespace signKeyAuthorization {
 export declare namespace base {
   /** Options for {@link base}. */
   type Options = Adapter.SetupFn.Parameters & {
-    /** Cleanup hook for source-owned resources. */
-    cleanup?: (() => void) | undefined
     /** Creates/registers an account and returns the selected signer when available. */
     createAccount?:
       | ((parameters: Adapter.createAccount.Parameters) => Promise<ConnectResult>)
@@ -313,8 +301,6 @@ export declare namespace base {
     disconnect?: (() => Promise<void>) | undefined
     /** Discovers existing accounts and returns the selected signer when available. */
     loadAccounts: (parameters: Adapter.loadAccounts.Parameters) => Promise<ConnectResult>
-    /** When true, provider account merges should preserve prior accounts. */
-    persistAccounts?: boolean | undefined
     /** Resolves a signable root account for future signing requests. */
     resolveAccount: (
       parameters?: ResolveAccountParameters | undefined,
