@@ -18,3 +18,14 @@ const provider = Provider.create({
   adapter: dialog({ dialog: Dialog.iframe() }),
 })
 ```
+
+## Behavior
+
+- Tempo Wallet owns the embedded UI and signing flow.
+- The app owns the button or route that opens the dialog, the pending state, and the success state after the request resolves.
+- Production apps should allow the Tempo Wallet host in CSP `frame-src` and test the fallback path in Safari.
+
+## Related guides
+
+- [Tempo Wallet adapter](/docs/adapters/tempo-wallet)
+- [Production checklist](/docs/production)

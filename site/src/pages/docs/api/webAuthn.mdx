@@ -7,6 +7,8 @@ description: Adapter for passkey-based accounts using WebAuthn registration and 
 
 Enables domain-bound passkey experiences by wrapping the `local` adapter with WebAuthn registration and authentication flows.
 
+The WebAuthn adapter is bring-your-own UI. The SDK runs the passkey ceremony and signs through the resulting domain-bound account, but your app owns registration screens, login screens, account recovery, approval copy, and error states.
+
 ## Usage
 
 ```ts
@@ -114,3 +116,16 @@ const provider = Provider.create({
   }),
 })
 ```
+
+## Production notes
+
+- WebAuthn requires HTTPS outside local development.
+- The server handler `origin` and `rpId` must match the production domain.
+- Use persistent credential storage. `Kv.memory()` is only for development and tests.
+- Plan recovery before launch because passkeys are bound to the app origin and authenticator ecosystem.
+
+## Related guides
+
+- [Authentication guide](/docs/guides/authentication)
+- [WebAuthn adapter](/docs/adapters/webauthn)
+- [Handler.webAuthn](/docs/server/handler.webAuthn)

@@ -5,52 +5,58 @@ description: Use the Accounts SDK from an Expo or React Native app.
 
 # React Native
 
+## Outcome
+
 Connect account flows from an Expo or React Native app while accounting for mobile storage, browser, and passkey differences.
 
 ## Demo
 
-Target workspace: `examples/react-native/`.
-
-Seed implementation: `playgrounds/react-native/`.
-
-:::warning[Stub]
-This guide needs a mobile pass before it moves from playground to example. Keep platform caveats explicit because React Native differs from browser WebAuthn and IndexedDB behavior.
+:::info[Phase 2 demo]
+This section will become an interactive demo in Phase 2.
 :::
 
-## Walkthrough
+| Item | Value |
+| --- | --- |
+| Final interaction | Connect from an Expo app, return from the browser flow, then submit a simple account request. |
+| Target workspace | `examples/react-native/`, seeded from `playgrounds/react-native/`. |
+| Success state | The app shows the connected account after browser return on iOS and Android. |
+| Implementation owner surface | Tempo Wallet uses hosted browser UI. React Native WebAuthn/custom flows are bring-your-own mobile UI. |
 
-::::steps
+## Prerequisites
 
-### Install the SDK
+- An Expo or React Native app.
+- Mobile-safe storage and browser dependencies.
+- Device coverage for iOS and Android return-state testing.
+
+## Setup
+
+Install the SDK packages.
 
 ```bash
 pnpm add accounts expo-secure-store expo-web-browser
 ```
 
-### Configure the Provider
-
 Use the React Native entrypoint and storage appropriate for the app.
 
-### Connect the user's account
+React Native can expose `window` without browser APIs such as `CustomEvent` or IndexedDB. Use the React Native entrypoint and mobile-safe storage instead of assuming browser defaults.
+
+## Implementation
 
 Open the wallet or auth flow from the mobile shell.
-
-### Submit the request
-
 Submit a simple account request and handle mobile browser return state.
 
-### Verify the result
+## Verification
 
 Test iOS and Android behavior before publishing the guide.
 
-::::
-
-## Notes / Gotchas
+## Production notes
 
 - React Native can expose `window` without browser APIs such as `CustomEvent` or IndexedDB.
 - Expo playgrounds in this workspace need local app entrypoints and Metro-safe package resolution.
+- Test browser return state, cancelled approvals, and app restarts.
+- Do not assume browser WebAuthn ceremonies behave the same way inside a mobile shell.
 
-## Next Steps
+## Next steps
 
 - [Connect Accounts](/docs/guides/connect-accounts)
 - [Deploying to Production](/docs/production)

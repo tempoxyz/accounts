@@ -1,26 +1,32 @@
 ---
 title: AWS KMS
-description: Stub for integrating AWS KMS-backed signing with the Accounts SDK.
+description: Connect AWS KMS-backed signing to the Accounts SDK.
 ---
 
 # AWS KMS
 
 Use a custom adapter when account signing should happen through AWS-controlled infrastructure.
 
-## Demo
+## Integration shape
 
-Target workspace: `examples/enterprise-aws-kms/`.
+An AWS KMS integration usually keeps signing server-side. The app or enterprise service proves user intent, applies authorization policy, asks KMS to sign, and maps the response back through the custom adapter.
 
-:::warning[Stub]
-This page needs a concrete KMS signing design before implementation: key type, address derivation, latency, authorization policy, and audit logging.
-:::
+Target workspace for a future runnable example: `examples/enterprise-aws-kms/`.
 
 ## Integration Checklist
 
 - Define the KMS key lifecycle and signer address derivation.
 - Keep authorization policy server-side.
+- Define the approval UI that proves user intent before signing.
 - Map KMS failures into app-readable provider errors.
 - Test payment and revocation flows.
+
+## Review gates
+
+- Key type, address derivation, and signer compatibility are documented.
+- KMS latency and retry behavior are acceptable for approval flows.
+- Audit logs connect each signature to user intent and policy decision.
+- Denied, expired, and partially failed requests map to provider errors the app can show.
 
 ## Next Steps
 

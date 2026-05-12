@@ -15,7 +15,7 @@ Handlers are compatible with any server framework that supports the:
 
 ```ts
 import { Handler } from 'accounts/server'
-import { privateKeyToAccount } from 'viem/docs'
+import { privateKeyToAccount } from 'viem/accounts'
 
 const handler = Handler.relay({
   feePayer: { account: privateKeyToAccount('0x...') },
@@ -31,6 +31,15 @@ export const GET = handler.fetch // Next.js
 export const POST = handler.fetch // Next.js
 ```
 
+## Choose a handler
+
+| Handler | Use it for | Production responsibility |
+| --- | --- | --- |
+| [`Handler.relay`](/docs/server/handler.relay) | Fee sponsorship, transaction enrichment, automatic fee token selection, and optional auto-swap | Own the relay host, fee payer key, sponsorship policy, logs, and abuse controls |
+| [`Handler.webAuthn`](/docs/server/handler.webAuthn) | Server-backed passkey registration and authentication | Own the relying party origin, credential storage, recovery policy, and challenge expiry |
+| [`Handler.compose`](/docs/server/handler.compose) | Combine server handlers under one endpoint | Keep path routing explicit and test each composed handler |
+| [`Handler.feePayer`](/docs/server/handler.feePayer) | Deprecated fee payer handler | Migrate to `Handler.relay({ feePayer })` |
+
 <Cards>
   <Card
     description="Compose multiple handlers into a single handler"
@@ -45,9 +54,21 @@ export const POST = handler.fetch // Next.js
     title="Handler.relay"
   />
   <Card
+    description="Deprecated fee payer handler; use Handler.relay with feePayer"
+    icon="lucide:circle-alert"
+    to="/docs/server/handler.feePayer"
+    title="Handler.feePayer"
+  />
+  <Card
     description="Handle WebAuthn credential registration and authentication"
     icon="lucide:fingerprint"
     to="/docs/server/handler.webAuthn"
     title="Handler.webAuthn"
   />
 </Cards>
+
+## Related guides
+
+- [Fee sponsorship](/docs/guides/fee-sponsorship)
+- [Authentication](/docs/guides/authentication)
+- [Production checklist](/docs/production)

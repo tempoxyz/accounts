@@ -5,46 +5,59 @@ description: Authorize and use accounts from command-line tools.
 
 # CLI
 
+## Outcome
+
 Authorize a local CLI to use an account, poll for approval, and store credentials for future commands.
 
 ## Demo
 
-Example workspace: `examples/cli/`.
+:::info[Phase 2 demo]
+This section will become an interactive demo in Phase 2.
+:::
 
-## Walkthrough
+| Item | Value |
+| --- | --- |
+| Final interaction | Start device-code auth, open the approval URL, approve access, and run an authorized CLI command. |
+| Target workspace | `examples/cli/`. |
+| Success state | The CLI stores the authorized account and completes a command that requires account access. |
+| Implementation owner surface | Tempo Wallet hosts the browser approval UI. A custom CLI auth server must provide its own approval UI. |
 
-::::steps
+## Prerequisites
 
-### Install the SDK
+- A CLI command that needs account access.
+- An approval URL backed by Tempo Wallet or an app-owned auth server.
+- A storage location for the authorized local credential.
+
+## Setup
+
+Install the SDK packages.
 
 ```bash
 pnpm add accounts viem
 ```
 
-### Configure the CLI
-
 Create the CLI auth provider and point it at the auth server for the environment.
 
-### Connect the user's account
+Support both an explicit URL flag and an environment-based default so examples do not hardcode a personal hostname.
+
+## Implementation
 
 Print the authorization URL and poll for the device-code result.
-
-### Submit the request
-
+Device codes stay raw in protocol. Render hyphenated codes only for humans.
 Use the authorized local key to make the CLI request.
 
-### Verify the result
+## Verification
 
 Confirm the stored account and run a command that requires authorization.
 
-::::
-
-## Notes / Gotchas
+## Production notes
 
 - Device codes stay raw in protocol and should only be hyphenated for human display.
 - Keep spinner text short and print long URLs as static log lines.
+- Trace the full request flow before changing CLI UX: CLI, server, browser, server, CLI polling.
+- Expire pending approvals and make denial states explicit.
 
-## Next Steps
+## Next steps
 
 - [Authentication](/docs/guides/authentication)
 - [Spend Permissions](/docs/guides/spend-permissions)

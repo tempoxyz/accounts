@@ -9,6 +9,13 @@ import { Cards, Card } from 'vocs'
 
 Dialog modes control how the Tempo Wallet is embedded into your app. Pass a dialog to the `dialog()` adapter to configure the embed mode.
 
+Tempo Wallet owns the hosted account creation, signing, and approval UI. Your app owns the surrounding connect button, loading state, error state, and any post-approval product flow.
+
+| Mode | Surface | Use when | Fallback behavior |
+| --- | --- | --- | --- |
+| [`Dialog.iframe`](/docs/api/dialog.iframe) | Inline `<dialog>` with an iframe | The app runs on HTTPS and the browser supports the required cross-origin WebAuthn behavior | Falls back to popup in Safari and insecure origins |
+| [`Dialog.popup`](/docs/api/dialog.popup) | Separate browser window | The app needs a popup-only flow or is in a browser context where iframe signing is not available | Requires popups to be allowed |
+
 <Cards>
   <Card
     description="Embed the Tempo Wallet in an inline iframe"
@@ -23,3 +30,8 @@ Dialog modes control how the Tempo Wallet is embedded into your app. Pass a dial
     title="Dialog.popup"
   />
 </Cards>
+
+## Related guides
+
+- [Tempo Wallet adapter](/docs/adapters/tempo-wallet)
+- [Production checklist](/docs/production)

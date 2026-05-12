@@ -5,45 +5,58 @@ description: Build recurring payment flows with account permissions.
 
 # Subscriptions
 
+## Outcome
+
 Build a recurring payment flow that uses account permissions for repeat charges.
 
 ## Demo
 
-Target workspace: `examples/subscriptions/`.
-
-:::warning[Stub]
-This guide needs product and protocol decisions before implementation: billing cadence, cancellation UX, spend caps, and how the server proves each charge is authorized.
+:::info[Phase 2 demo]
+This section will become an interactive demo in Phase 2.
 :::
 
-## Walkthrough
+| Item | Value |
+| --- | --- |
+| Final interaction | Approve subscription terms, run one scheduled charge, and cancel the subscription. |
+| Target workspace | `examples/subscriptions/`. |
+| Success state | The app shows active terms, last charge receipt, next scheduled charge, spend cap, and cancellation state. |
+| Implementation owner surface | Tempo Wallet can host the initial approval. WebAuthn and custom adapters must provide app-owned subscription approval and management UI. |
 
-::::steps
+## Prerequisites
 
-### Install the SDK
+- A connected account flow.
+- Subscription terms that name cadence, maximum amount, token, recipient, expiry, and cancellation path.
+- A server process that can schedule charges and store receipts.
+
+## Setup
+
+Install the SDK packages.
 
 ```bash
 pnpm add accounts wagmi viem
 ```
 
-### Configure the Provider
+Use Tempo Wallet when you want hosted approval for the initial permission. Use WebAuthn or a custom adapter when your app owns subscription terms, approval UI, recovery, and cancellation UX.
 
-Use Tempo Wallet, WebAuthn, or a custom adapter depending on who owns signing.
-
-### Connect the user's account
+## Implementation
 
 Connect the subscriber account and display the subscription terms.
-
-### Submit the request
-
 Request the permission needed for recurring charges.
 
-### Verify the result
+The request should make the cadence, maximum amount, token, recipient, expiry, and cancellation path visible before approval.
+
+## Verification
 
 Run one scheduled charge in the example workspace and show cancellation state.
 
-::::
+## Production notes
 
-## Next Steps
+- Make cancellation discoverable from the same product surface that shows active subscription terms.
+- Keep the server-side scheduler, access key use, and receipt storage auditable.
+- Fail closed when cadence, cap, token, recipient, or expiry does not match the approved permission.
+- Show users when the next charge can occur and what permission will be used.
+
+## Next steps
 
 - [Spend Permissions](/docs/guides/spend-permissions)
 - [Payments](/docs/guides/payments)

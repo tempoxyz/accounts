@@ -5,7 +5,7 @@ description: Use Tempo Wallet as the hosted universal wallet adapter.
 
 # Tempo Wallet Adapter
 
-Tempo Wallet is the hosted adapter for apps that want embedded account creation and signing without owning auth, passkeys, or wallet infrastructure.
+Tempo Wallet is the hosted adapter for apps that want embedded account creation, approvals, onramp, and signing without owning auth, passkeys, or wallet UI infrastructure.
 
 Use it when you want:
 
@@ -13,6 +13,18 @@ Use it when you want:
 - Hosted approval surfaces through iframe or popup dialogs.
 - Tempo-managed passkey and signing infrastructure.
 - A fast path for app teams that do not need to build a wallet.
+
+## What Tempo Wallet owns
+
+Tempo Wallet owns the hosted account and approval surfaces. Your app still owns the surrounding product flow: when to request connection, what action the user is approving, how success is shown, and how failures are recovered.
+
+| Surface | Owner |
+| --- | --- |
+| Account creation and sign-in | Tempo Wallet |
+| Approval UI | Tempo Wallet |
+| Onramp and account management surfaces | Tempo Wallet |
+| Product context before and after approval | Your app |
+| Error, loading, and retry states around the dialog | Your app |
 
 ## Configure
 
@@ -30,9 +42,13 @@ export const config = createConfig({
 })
 ```
 
-## Human Pass Needed
+## Production notes
 
-This page should be expanded with the final hosted wallet positioning, approval screenshots, onramp notes, and production readiness guidance.
+- Use HTTPS so embedded iframe and passkey flows work consistently.
+- Decide iframe versus popup behavior before launch and test both browser-blocking and cancellation states.
+- Keep Content Security Policy directives aligned with the hosted wallet origin.
+- Keep user-facing copy short before opening the hosted approval surface.
+- Show the selected account, requested action, and result inside your app after the hosted flow returns.
 
 ## Next Steps
 

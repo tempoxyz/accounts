@@ -7,6 +7,8 @@ description: Adapter for the Tempo Wallet dialog, an embedded iframe or popup fo
 
 Enables universal wallet experiences by delegating signing to an external origin dialog. Also exported as `tempoWallet`.
 
+Use this adapter when the app wants Tempo Wallet to own account creation, signing, approval UI, onramp surfaces, and access key approval. The app still owns the surrounding connect controls, loading states, and product-specific verification.
+
 ## Usage
 
 ```ts twoslash
@@ -103,3 +105,15 @@ const provider = Provider.create({
   }),
 })
 ```
+
+## Production notes
+
+- Run the app on HTTPS before relying on iframe mode.
+- Allow the configured `host` in CSP `frame-src` and `connect-src`.
+- Use [`Dialog.popup`](/docs/api/dialog.popup) when popup-only behavior is required or iframe WebAuthn support is unavailable.
+
+## Related guides
+
+- [Tempo Wallet adapter](/docs/adapters/tempo-wallet)
+- [Connect accounts](/docs/guides/connect-accounts)
+- [Production checklist](/docs/production)

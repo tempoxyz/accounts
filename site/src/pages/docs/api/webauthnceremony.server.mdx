@@ -23,3 +23,14 @@ const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' }
 - **Required**
 
 Base URL of the WebAuthn handler (e.g. `"https://example.com/webauthn"{:js}`).
+
+## Production notes
+
+- The handler must run on HTTPS.
+- The handler `origin` and `rpId` must match the domain where users create and use passkeys.
+- Use persistent storage for challenges and credentials.
+
+## Related guides
+
+- [Authentication guide](/docs/guides/authentication)
+- [Handler.webAuthn](/docs/server/handler.webAuthn)

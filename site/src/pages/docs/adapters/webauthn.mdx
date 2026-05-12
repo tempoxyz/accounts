@@ -13,6 +13,18 @@ Use it when you want:
 - Your app to own registration and authentication UX.
 - Tempo account features without using the hosted Tempo Wallet surface.
 
+## What your app owns
+
+WebAuthn is bring-your-own UI. The adapter handles the account signing path, but your app must provide every user-facing surface around it.
+
+| Surface | Owner |
+| --- | --- |
+| Account creation and sign-in | Your app |
+| Passkey ceremony trigger and copy | Your app |
+| Approval UI | Your app |
+| Recovery and re-enrollment | Your app |
+| Server challenge, credential, and session storage | Your server |
+
 ## Configure
 
 ```tsx
@@ -29,9 +41,13 @@ export const config = createConfig({
 })
 ```
 
-## Human Pass Needed
+## Production notes
 
-This page should be expanded with origin requirements, server ceremony boundaries, recovery expectations, and production security guidance.
+- WebAuthn credentials are origin-bound. Use the same production origin model that users will rely on long term.
+- Use `Handler.webAuthn` or an equivalent server ceremony to generate challenges, verify responses, store credentials, and issue sessions.
+- Define recovery before launch. Tempo Wallet recovery UI does not apply to domain-bound passkey accounts.
+- Test browser passkey support, password manager behavior, cancellation, and new-device sign-in.
+- Keep approval copy precise because the app owns the UI.
 
 ## Next Steps
 

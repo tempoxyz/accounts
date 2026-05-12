@@ -1,6 +1,6 @@
 ---
 title: Hosted Universal Wallets
-description: Stub for hosting a universal wallet on your own domain.
+description: Host a universal wallet on your own domain and connect it through the Accounts SDK.
 ---
 
 # Hosted Universal Wallets
@@ -22,9 +22,24 @@ flowchart LR
     App --> SDK --> Adapter --> Wallet --> Signer
 ```
 
-## Human Pass Needed
+## Responsibilities
 
-This page needs product and security input before implementation. The final version should define domain trust, iframe or popup behavior, account portability, and operational responsibilities.
+Hosted universal wallets are bring-your-own UI. The wallet operator owns account creation, approval, account management, recovery, and support surfaces. The Accounts SDK integration owns the adapter boundary that lets partner apps request account actions through one provider surface.
+
+| Area | Owner |
+| --- | --- |
+| Wallet domain and trust model | Wallet operator |
+| Account and approval UI | Wallet operator |
+| Signer service and key lifecycle | Wallet operator |
+| App product context before requests | Partner app |
+| Adapter request translation | Wallet operator or integration team |
+
+## Production notes
+
+- Define whether partner apps embed the wallet in an iframe, open a popup, or redirect users to the wallet domain.
+- Keep account portability explicit: what travels across apps, what stays app-local, and how recovery works.
+- Document allowed origins, CSP requirements, signer availability, audit logs, and support escalation.
+- Test the shared connect, payment, and spend-permission flows before onboarding partner apps.
 
 ## Next Steps
 

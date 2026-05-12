@@ -1,26 +1,48 @@
 ---
 title: Custom Auth
-description: Stub for first-party enterprise auth and signing integrations.
+description: Connect first-party enterprise auth and signing systems to the Accounts SDK.
 ---
 
 # Custom Auth
 
 Use a custom adapter when your own infrastructure owns identity, authorization, and signing.
 
-## Demo
+## Integration shape
 
-Target workspace: `examples/enterprise-custom-auth/`.
+Use this path when a first-party service already owns user identity, session state, approval UI, signing, and audit logging. The custom adapter should be the narrow boundary between the Accounts SDK provider and that service.
 
-:::warning[Stub]
-This page needs customer-pattern input before implementation. The final guide should pick one concrete architecture instead of describing every possible signer shape.
-:::
+Target workspace for a future runnable example: `examples/enterprise-custom-auth/`.
 
 ## Integration Checklist
 
 - Define the trust boundary between browser, server, and signer.
 - Decide which service proves user intent.
 - Keep signer credentials out of app code.
+- Define app-owned account, approval, recovery, and error UI.
 - Run the shared guide suite through the adapter.
+
+## Reference architecture
+
+```mermaid
+flowchart LR
+    Browser["App UI"]
+    API["Auth and policy API"]
+    Adapter["Custom adapter"]
+    Signer["Signer service"]
+    Tempo["Tempo"]
+
+    Browser --> Adapter
+    Adapter --> API
+    API --> Signer
+    Signer --> Tempo
+```
+
+## Review gates
+
+- Browser code cannot bypass server authorization policy.
+- Every signature is tied to user intent, session state, and audit context.
+- Provider errors map to UI states the app can show.
+- Shared connect, payment, spend-permission, and fee-sponsorship flows are tested.
 
 ## Next Steps
 

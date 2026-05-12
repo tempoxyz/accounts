@@ -5,53 +5,59 @@ description: Authorize scoped access for repeat account activity.
 
 # Spend Permissions
 
+## Outcome
+
 Authorize scoped account access so an app or service can perform repeat activity without prompting the user for every request.
 
 ## Demo
 
-Target workspace: `examples/spend-permissions/`.
-
-Seed implementations: `examples/with-access-key/` and `examples/with-access-key-and-webauthn/`.
-
-:::warning[Stub]
-This page needs a human pass to define the product language around spend limits, expiry, and revocation before the example is renamed to the guide slug.
+:::info[Phase 2 demo]
+This section will become an interactive demo in Phase 2.
 :::
 
-## Walkthrough
+| Item | Value |
+| --- | --- |
+| Final interaction | Request scoped access, use it for one transaction, then revoke it. |
+| Target workspace | `examples/spend-permissions/`, seeded from `examples/with-access-key/` and `examples/with-access-key-and-webauthn/`. |
+| Success state | The app shows the authorized key, scope, expiry, latest use, and revocation state. |
+| Implementation owner surface | Tempo Wallet uses hosted approval UI. WebAuthn and custom adapters use app-owned approval and management UI. |
 
-::::steps
+## Prerequisites
 
-### Install the SDK
+- A connected account flow.
+- A clear permission scope: token, limit, expiry, destination, and revocation path.
+- A storage location for the access key material that matches the trust model.
+
+## Setup
+
+Install the SDK packages.
 
 ```bash
 pnpm add accounts wagmi viem
 ```
 
-### Configure the Provider
-
 Use the adapter that owns user approval for the access request.
 
-### Connect the user's account
+Most apps should start with Tempo Wallet so users approve access through hosted UI. Use WebAuthn or a custom adapter when the app owns the approval surface and must explain the permission terms itself.
+
+## Implementation
 
 Connect the account before requesting scoped access.
+Call the access-key authorization flow with the intended expiry and permissions. Present the permission in product language before opening the approval surface.
 
-### Submit the request
-
-Call the access-key authorization flow with the intended expiry and permissions.
-
-### Verify the result
+## Verification
 
 Store the returned access key material only in the environment that is allowed to use it, then test revocation.
 
-::::
-
-## Best Practices
+## Production notes
 
 - Keep permissions as narrow as the workflow allows.
 - Prefer short expiries for automation and longer-lived access only after explicit user approval.
 - Show users where they can revoke access.
+- Treat access key storage as sensitive key material.
+- Show failed authorization, expired permission, and revoked permission states.
 
-## Next Steps
+## Next steps
 
 - [wallet_authorizeAccessKey](/docs/rpc/wallet_authorizeAccessKey)
 - [wallet_revokeAccessKey](/docs/rpc/wallet_revokeAccessKey)

@@ -9,6 +9,8 @@ import { Cards, Card } from 'vocs'
 
 Pluggable strategy for WebAuthn registration and authentication ceremonies. A `WebAuthnCeremony` controls how challenges are generated and responses are verified during passkey registration and login.
 
+Use the server-backed ceremony for most apps. Use `.from` only when you already operate a WebAuthn ceremony service and need to adapt it to the SDK.
+
 <Cards>
   <Card
     description="Create a WebAuthnCeremony from a custom implementation"
@@ -23,3 +25,8 @@ Pluggable strategy for WebAuthn registration and authentication ceremonies. A `W
     title=".server"
   />
 </Cards>
+
+## Related guides
+
+- [Authentication guide](/docs/guides/authentication)
+- [WebAuthn adapter](/docs/adapters/webauthn)

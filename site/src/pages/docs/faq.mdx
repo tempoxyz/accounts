@@ -7,48 +7,61 @@ description: Frequently asked questions about the Tempo Accounts SDK.
 
 ## What adapter should I use?
 
-Most apps should use [Tempo Wallet](/docs/adapters/tempo-wallet) - it provides a universal account experience with a central account for users that includes embedded onramp, access keys, and transaction orchestration out of the box.
+Most apps should start with [Tempo Wallet](/docs/adapters/tempo-wallet). It provides hosted account creation, approval UI, onramp, access keys, and transaction orchestration.
 
-Use [domain-bound passkeys](/docs/adapters/webauthn) when you want to build your own wallet experience or when your app needs to manage and own the WebAuthn ceremony directly.
+Use [WebAuthn](/docs/adapters/webauthn) when your app needs domain-bound passkeys and is prepared to own account creation, approval, recovery, and error UI.
 
-[Learn more](/docs/guides/connect-accounts).
+Use a [custom adapter](/docs/adapters/custom) when another system already owns authentication, signing, custody, or wallet UI.
+
+## Who owns the UI?
+
+Tempo Wallet owns hosted account and approval UI. Your app owns the product context before and after the hosted flow.
+
+WebAuthn and custom adapters are bring-your-own UI. Your app or enterprise integration must provide account creation, approval, recovery, denial, loading, and error states.
+
+## What are access keys?
+
+Access keys are secondary keys authorized for scoped signing. They let a user approve limited account activity without approving every request one by one.
+
+Use access keys for flows such as repeat payments, automation, subscriptions, or CLI authorization. Keep scopes narrow, set expiries deliberately, and show users where they can revoke access.
+
+## How does fee sponsorship work?
+
+Fee sponsorship lets a fee payer cover transaction fees for the user. The user still signs the account action; the server applies sponsorship policy and pays the fee when the request is eligible.
+
+Use [Handler.relay](/docs/server/handler.relay) with a `feePayer` configuration for new integrations. Keep policy server-side and show rejection states in the app.
+
+## What is MPP?
+
+MPP is Machine Payments Protocol. A service can return an HTTP `402` Challenge, a client can pay and retry with a Credential, and the service can return the resource with a Receipt.
+
+The Accounts SDK is useful when the MPP client or app needs Tempo account signing. MPP itself is payment-method agnostic.
 
 ## Which browsers are supported?
 
-The Tempo Accounts SDK supports the following browsers:
+The Accounts SDK relies on modern browser APIs used by Wagmi, Viem, iframe or popup wallet flows, and WebAuthn.
 
-- Safari
-- Chrome
-- Firefox
-- Brave
-- Arc
-
-If a browser is not listed above, it likely works but is not officially supported.
+Tempo Wallet flows should be tested in the browsers your users rely on. WebAuthn flows need extra testing across browsers, operating systems, and password managers because credential behavior is origin-bound and platform-dependent.
 
 ## Which password managers are supported?
 
-The Tempo Accounts SDK supports the following password managers:
+Support depends on the adapter path.
 
-- iCloud Keychain
-- Google Password Manager
-- 1Password
-- Bitwarden
-
-If a password manager is not listed above, it likely works but is not officially supported.
+Tempo Wallet owns its hosted passkey and account experience. For WebAuthn, your app owns the passkey ceremony and should test the password managers and platform authenticators your users will use.
 
 ## Which operating systems are supported?
 
-The Tempo Accounts SDK supports the following operating systems:
+Browser-based Tempo Wallet flows should work anywhere the target browser and embedded or popup behavior are supported.
 
-- iOS
-- iPadOS
-- macOS
-- Android
-- Linux
-- Windows
-
-If an operating system is not listed above, it likely works but is not officially supported.
+For WebAuthn and React Native flows, test each platform directly. React Native may expose `window` without browser APIs such as IndexedDB or `CustomEvent`.
 
 ## How does the Tempo Accounts SDK work with my Content Security Policy?
 
-If you've deployed a Content Security Policy, see the [Deploying to Production](/docs/production) page for the full set of required directives.
+If you use Tempo Wallet, allow the hosted wallet origin in `frame-src` and `connect-src`.
+
+```http
+frame-src https://wallet.tempo.xyz;
+connect-src https://wallet.tempo.xyz https://rpc.moderato.tempo.xyz;
+```
+
+Add your auth, relay, RPC, and custom wallet origins as needed. See [Deploying to Production](/docs/production).

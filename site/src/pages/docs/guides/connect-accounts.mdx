@@ -5,23 +5,30 @@ description: Connect a user account with Tempo Wallet or WebAuthn.
 
 # Connect Accounts
 
-Connect a user account, read its address, and keep the app code independent from the adapter that handles signing.
+## Outcome
+
+Connect a user account, read its address, and keep the app code on one provider surface while the adapter handles signing and account UI.
 
 ## Demo
 
-Target workspace: `examples/connect-accounts/`.
-
-Seed implementation: `examples/basic/`.
-
-:::warning[Stub]
-The runnable workspace should be renamed or copied to `examples/connect-accounts/` after the example naming pass.
+:::info[Phase 2 demo]
+This section will become an interactive demo in Phase 2.
 :::
 
-## Walkthrough
+| Item | Value |
+| --- | --- |
+| Final interaction | Connect an account with Tempo Wallet, then repeat the same app flow with WebAuthn. |
+| Target workspace | `examples/connect-accounts/`, seeded from `examples/basic/`. |
+| Success state | The app shows the connected address, connection status, and selected adapter. |
+| Implementation owner surface | Tempo Wallet uses hosted account and approval UI. WebAuthn uses app-owned UI. |
 
-::::steps
+## Prerequisites
 
-### Install the SDK
+- A React app configured with Wagmi.
+- The Tempo chain in your Wagmi config.
+- An adapter choice. Most apps should start with Tempo Wallet.
+
+## Setup
 
 Install `accounts` together with Wagmi and Viem.
 
@@ -29,9 +36,7 @@ Install `accounts` together with Wagmi and Viem.
 pnpm add accounts wagmi viem
 ```
 
-### Configure the Provider
-
-Choose an adapter. Most apps should start with Tempo Wallet.
+Choose an adapter. Most apps should start with Tempo Wallet because it includes hosted account and approval UI. Use WebAuthn when the app owns passkey registration, authentication, recovery, and UI.
 
 ```tsx
 import { createConfig, http } from 'wagmi'
@@ -47,7 +52,9 @@ export const config = createConfig({
 })
 ```
 
-### Connect the user's account
+For a domain-bound passkey flow, switch the connector to `webAuthn({ authUrl: '/auth' })` and provide the matching server handler from [Authentication](/docs/guides/authentication).
+
+## Implementation
 
 Render the configured connector and call `connect`.
 
@@ -66,7 +73,7 @@ function Connect() {
 }
 ```
 
-### Verify the result
+## Verification
 
 Read the connected address from Wagmi connection state.
 
@@ -79,9 +86,13 @@ function Account() {
 }
 ```
 
-::::
+## Production notes
 
-## Next Steps
+- Use HTTPS for embedded Tempo Wallet iframe flows and all browser passkey flows.
+- Keep adapter selection explicit in app code so UI ownership is clear to future maintainers.
+- Treat WebAuthn and custom adapters as bring-your-own UI. The app must handle account creation, approvals, recovery, errors, and empty states.
+
+## Next steps
 
 - [Authentication](/docs/guides/authentication)
 - [Payments](/docs/guides/payments)

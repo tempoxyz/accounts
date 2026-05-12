@@ -5,35 +5,42 @@ description: Send a stablecoin payment from a connected account.
 
 # Payments
 
-Send a stablecoin payment from the connected account and keep the payment flow portable across adapters.
+## Outcome
+
+Send a stablecoin payment from a connected account and show the receipt that proves the payment settled.
 
 ## Demo
 
-Target workspace: `examples/payments/`.
-
-:::warning[Stub]
-This guide needs a dedicated runnable payment example. The current examples contain payment-like calls, but the final guide should choose the exact token, faucet behavior, and success state before publishing.
+:::info[Phase 2 demo]
+This section will become an interactive demo in Phase 2.
 :::
 
-## Walkthrough
+| Item | Value |
+| --- | --- |
+| Final interaction | Connect an account, fund it if needed, send a small stablecoin payment, and display the receipt. |
+| Target workspace | `examples/payments/`. |
+| Success state | The app shows the transaction receipt, token amount, recipient, and refreshed balance. |
+| Implementation owner surface | Tempo Wallet uses hosted approval UI. WebAuthn and custom adapters use app-owned approval UI. |
 
-::::steps
+## Prerequisites
 
-### Install the SDK
+- A connected account from [Connect Accounts](/docs/guides/connect-accounts).
+- A stablecoin token address, decimals, and recipient address for the target environment.
+- Enough balance for the transfer and fee, unless the app uses fee sponsorship.
+
+## Setup
+
+Install the SDK packages.
 
 ```bash
 pnpm add accounts wagmi viem
 ```
 
-### Configure the Provider
-
 Use the same Wagmi configuration from [Connect Accounts](/docs/guides/connect-accounts).
-
-### Connect the user's account
 
 Connect through Tempo Wallet, WebAuthn, or a custom adapter.
 
-### Submit the payment
+## Implementation
 
 Use Tempo actions or hooks to submit the transfer.
 
@@ -67,13 +74,18 @@ function Pay() {
 }
 ```
 
-### Verify the result
+## Verification
 
-Show the returned receipt and refresh the account balance.
+Show the returned receipt and refresh the account balance. The receipt should be enough for the app to show the amount, token, recipient, chain, and transaction status without asking the user to inspect a block explorer.
 
-::::
+## Production notes
 
-## Next Steps
+- Keep the token address, decimals, and display symbol in app configuration instead of scattering literals across components.
+- Show insufficient-balance states before opening an approval surface.
+- Pair this guide with [Fee Sponsorship](/docs/guides/fee-sponsorship) when the app pays network fees for the user.
+- For WebAuthn and custom adapters, design the payment confirmation UI. The SDK provides the provider surface, not hosted UI.
+
+## Next steps
 
 - [Fee Sponsorship](/docs/guides/fee-sponsorship)
 - [JSON-RPC wallet_sendCalls](/docs/rpc/wallet_sendCalls)

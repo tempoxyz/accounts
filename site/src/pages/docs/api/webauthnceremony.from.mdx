@@ -7,6 +7,8 @@ description: Create a WebAuthnCeremony from a custom implementation.
 
 Creates a `WebAuthnCeremony` from a custom implementation.
 
+Use this when your app already owns WebAuthn challenge generation, verification, and credential storage. The app also owns the UI around registration, login, recovery, and approval states.
+
 ## Usage
 
 ```ts
@@ -45,3 +47,8 @@ Get credential request options for `navigator.credentials.get(){:js}`.
 - **Type:** `(response: Authentication.Response) => Promise<{ credentialId: string; publicKey: Hex; userId?: string }>`
 
 Verify an authentication response and extract the public key.
+
+## Related guides
+
+- [Authentication guide](/docs/guides/authentication)
+- [WebAuthn adapter](/docs/adapters/webauthn)

@@ -14,9 +14,9 @@ Lead with the decision the reader needs to make:
 
 | Path | Position it as | Use it when |
 | --- | --- | --- |
-| Tempo Wallet | Hosted universal wallet for Tempo account creation, signing, onramp, access keys, and transaction orchestration. | Most apps want embedded account flows without owning auth or signing infrastructure. |
-| WebAuthn | Domain-bound passkey accounts controlled by the app origin. | The app needs to own the passkey ceremony, user account model, or recovery flow. |
-| Custom adapter | Integration layer for auth, custody, or signing systems the team already operates. | Privy, AWS KMS, Turnkey, internal signers, or enterprise wallet infrastructure already own the signing path. |
+| Tempo Wallet | Hosted universal wallet for Tempo account creation, signing, onramp, access keys, approval UI, and transaction orchestration. | Most apps want embedded account flows without owning auth, signing, or wallet UI infrastructure. |
+| WebAuthn | Domain-bound passkey accounts controlled by the app origin. | The app needs to own the passkey ceremony, user account model, recovery flow, and account UI. |
+| Custom adapter | Integration layer for auth, custody, signing, and UI systems the team already operates. | Privy, AWS KMS, Turnkey, internal signers, or enterprise wallet infrastructure already own the signing path and user-facing surfaces. |
 | MPP | Machine-to-machine payments over HTTP `402`, with Accounts SDK signing where needed. | The reader is building paid APIs, agents, sessions, subscriptions, or MCP tool payments. |
 
 Most docs should start from Tempo Wallet unless the page is explicitly about WebAuthn, custom adapters, or MPP. Make alternatives visible, but do not force every page to re-explain every adapter.
@@ -26,6 +26,8 @@ Most docs should start from Tempo Wallet unless the page is explicitly about Web
 Use this as the default mental model:
 
 > Your app talks to the Accounts SDK. The SDK routes account requests through an adapter. The adapter handles signing through Tempo Wallet, WebAuthn, or your own infrastructure.
+
+Make UI ownership explicit when comparing adapters. Tempo Wallet includes hosted account and approval surfaces. WebAuthn and custom adapters are bring-your-own UI: the app or enterprise integration owns account creation, approval, recovery, and error states.
 
 For product copy, connect the model to practical outcomes:
 
@@ -156,10 +158,10 @@ Use these terms consistently:
 | Accounts SDK | Product name. Do not shorten to Account SDK. |
 | Tempo Wallet | Hosted wallet surface. Use this spelling. |
 | adapter | Signing backend behind the SDK provider. Lowercase unless in a title. |
-| Tempo Wallet adapter | Adapter that delegates approval and signing to Tempo Wallet. |
-| WebAuthn adapter | Adapter for domain-bound passkey accounts. |
+| Tempo Wallet adapter | Adapter that delegates approval UI and signing to Tempo Wallet. |
+| WebAuthn adapter | Adapter for domain-bound passkey accounts. The app owns the UI. |
 | domain-bound passkey | Passkey credential bound to the app origin. |
-| custom adapter | Adapter for app-owned auth, custody, or signing systems. |
+| custom adapter | Adapter for app-owned auth, custody, signing, and UI systems. |
 | access key | Secondary key authorized for scoped signing. |
 | fee sponsorship | Third party paying fees on behalf of the user. |
 | fee payer | Account or service that sponsors the fee. |

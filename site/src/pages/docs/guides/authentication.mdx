@@ -5,31 +5,38 @@ description: Register and authenticate accounts through WebAuthn or a custom aut
 
 # Authentication
 
+## Outcome
+
 Register a user, authenticate future sessions, and route account requests through the selected adapter.
 
 ## Demo
 
-Target workspace: `examples/authentication/`.
-
-Seed implementation: `examples/domain-bound-webauthn/`.
-
-:::warning[Stub]
-This page needs a human pass to decide how much auth product surface belongs in the guide versus the WebAuthn and enterprise adapter docs.
+:::info[Phase 2 demo]
+This section will become an interactive demo in Phase 2.
 :::
 
-## Walkthrough
+| Item | Value |
+| --- | --- |
+| Final interaction | Register a domain-bound passkey account, sign out, and sign back in. |
+| Target workspace | `examples/authentication/`, seeded from `examples/domain-bound-webauthn/`. |
+| Success state | The app shows the authenticated account and the server can read session state. |
+| Implementation owner surface | WebAuthn is bring-your-own UI: the app owns registration, sign-in, recovery, errors, and empty states. |
 
-::::steps
+## Prerequisites
 
-### Install the SDK
+- A React app configured with Wagmi.
+- A WebAuthn-capable browser and secure origin for realistic passkey testing.
+- A server route for `Handler.webAuthn` or a custom `WebAuthnCeremony`.
+
+## Setup
+
+Install the SDK packages.
 
 ```bash
 pnpm add accounts wagmi viem
 ```
 
-### Configure the Provider
-
-Start with `webAuthn` when the app owns the passkey ceremony.
+Start with `webAuthn` when the app owns the passkey ceremony and account UI.
 
 ```tsx
 import { createConfig, http } from 'wagmi'
@@ -45,7 +52,9 @@ export const config = createConfig({
 })
 ```
 
-### Register an account
+Pair the connector with `Handler.webAuthn` on the server. The handler owns challenge generation, verification, credential persistence, and optional session issuance.
+
+## Implementation
 
 Call `connect` with the registration capability when creating the passkey-backed account.
 
@@ -56,22 +65,22 @@ connect({
 })
 ```
 
-### Sign in again
-
 Call `connect` with the same connector and let the adapter run the authentication ceremony.
 
-### Verify the result
+Your app should render the sign-in, passkey prompt trigger, loading state, cancellation state, and recovery path. The Accounts SDK routes the account request after the ceremony succeeds; it does not provide hosted UI for WebAuthn.
+
+## Verification
 
 Read the connected account and confirm server-side session state if your adapter creates one.
 
-::::
-
-## Notes / Gotchas
+## Production notes
 
 - WebAuthn is origin-bound. Local examples need a secure origin when testing browser passkeys.
-- Custom auth-backed adapters need a concrete session and signer boundary before this guide can be finalized.
+- Store challenges and credentials server-side through a durable `Kv` implementation in production.
+- Decide what account recovery means before launch. Domain-bound passkeys cannot rely on Tempo Wallet recovery UI.
+- Custom auth-backed adapters need a concrete session, signer boundary, approval UI, and error model.
 
-## Next Steps
+## Next steps
 
 - [WebAuthn adapter](/docs/adapters/webauthn)
 - [Bring Your Auth](/docs/enterprise/bring-your-auth)

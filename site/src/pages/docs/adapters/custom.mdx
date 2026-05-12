@@ -15,6 +15,8 @@ Custom adapters connect the Accounts SDK to auth and signing systems you already
 - Request translation between the Accounts SDK and your signer.
 - Error mapping back into the provider contract.
 
+Custom adapters are bring-your-own UI. If your signer needs user consent, your app or hosted wallet surface must render that consent flow before the adapter signs.
+
 ## Walkthrough
 
 ::::steps
@@ -27,6 +29,8 @@ Decide whether signing happens in the browser, on a server, in an HSM/KMS, or th
 
 Translate provider requests into your auth and signing flow.
 
+The adapter should return provider-compatible responses and errors so app code does not depend on the signer implementation.
+
 ### Map errors deliberately
 
 Return errors that app code can handle without knowing the signer implementation.
@@ -37,9 +41,12 @@ Run connect, payment, and access-key flows through the same app code used by hos
 
 ::::
 
-## Human Pass Needed
+## Production notes
 
-This page needs concrete adapter interface examples after the custom adapter API stabilizes.
+- Keep signer credentials out of browser code unless the signer is intentionally client-held.
+- Make approval UI, recovery, and denial states part of the adapter integration, not an afterthought.
+- Run the shared connect, payment, spend-permission, and fee-sponsorship guides against the adapter before treating it as production-ready.
+- Document which system owns identity, session state, signing, audit logs, and user support.
 
 ## Next Steps
 

@@ -46,15 +46,15 @@ Build account experiences on Tempo with common tooling for signing, payments, an
 
 ## Demo
 
-:::warning[Stub]
-The live demo shell belongs here. The first pass pins the IA and copy; the real demo should mount the same connect, pay, and authorize flows behind an adapter toggle for Tempo Wallet and WebAuthn.
+:::info[Phase 2 demo]
+This section will become an interactive demo in Phase 2. It will reuse the guide examples for connecting an account, making a payment, and authorizing scoped access.
 :::
 
-| Flow | Tempo Wallet | WebAuthn |
-| --- | --- | --- |
-| Connect account | Stub | Stub |
-| Make a payment | Stub | Stub |
-| Authorize access | Stub | Stub |
+| Flow | Target workspace | Success state | Implementation owner surface |
+| --- | --- | --- | --- |
+| Connect account | `examples/connect-accounts/` | The app shows the connected Tempo account address. | Tempo Wallet hosted UI by default; WebAuthn variant uses app-owned UI. |
+| Make a payment | `examples/payments/` | The app shows a receipt and refreshed balance. | Tempo Wallet approval UI by default; WebAuthn/custom variants use app-owned UI. |
+| Authorize access | `examples/spend-permissions/` | The app shows the authorized access key, limits, expiry, and revocation state. | Tempo Wallet approval UI by default; WebAuthn/custom variants use app-owned UI. |
 
 ## Build paths
 

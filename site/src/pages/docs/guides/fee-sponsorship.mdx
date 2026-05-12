@@ -5,54 +5,61 @@ description: Pay transaction fees for users from a server-controlled policy.
 
 # Fee Sponsorship
 
+## Outcome
+
 Sponsor fees for user transactions while keeping signing and sponsorship policy separate.
 
 ## Demo
 
-Target workspace: `examples/fee-sponsorship/`.
-
-Seed implementations: `examples/with-fee-payer/` and `examples/with-fee-payer-and-webauthn/`.
-
-:::warning[Stub]
-The existing examples should be consolidated under the guide slug after the adapter toggle and server policy shape are finalized.
+:::info[Phase 2 demo]
+This section will become an interactive demo in Phase 2.
 :::
 
-## Walkthrough
+| Item | Value |
+| --- | --- |
+| Final interaction | Send the same payment with and without sponsorship, then show which account paid fees. |
+| Target workspace | `examples/fee-sponsorship/`, seeded from `examples/with-fee-payer/` and `examples/with-fee-payer-and-webauthn/`. |
+| Success state | The receipt shows the user action succeeded and the configured fee payer sponsored the fee. |
+| Implementation owner surface | Tempo Wallet uses hosted approval UI. WebAuthn and custom adapters use app-owned approval UI. Sponsorship policy stays server-owned. |
 
-::::steps
+## Prerequisites
 
-### Install the SDK
+- A connected account flow.
+- A backend route that can run `Handler.relay`.
+- A server-controlled fee payer account and sponsorship policy.
+
+## Setup
+
+Install the SDK packages.
 
 ```bash
 pnpm add accounts wagmi viem
 ```
 
-### Configure the Provider
+Configure the client adapter and route eligible RPC requests through `Handler.relay({ feePayer })`.
 
-Configure the client adapter and a server handler that can attach fee payer behavior.
+The client owns the account connection. The server owns sponsorship policy, fee payer credentials, and rejection reasons.
 
-### Connect the user's account
+## Implementation
 
 Connect the account with Tempo Wallet or WebAuthn.
 
-### Submit the request
+Submit the transaction through the sponsored flow so the server can apply fee payer behavior before forwarding the request.
 
-Submit the transaction through the sponsored flow so the server can apply the fee payer.
+## Verification
 
-### Verify the result
+Inspect the receipt and show which address paid fees. Also test the rejection path by submitting a request outside the sponsorship policy.
 
-Inspect the receipt and show which address paid fees.
-
-::::
-
-## Best Practices
+## Production notes
 
 - Keep sponsorship policy server-side.
 - Log rejected sponsorship attempts with enough context to debug policy failures.
 - Keep spinner and approval text short in CLI or terminal flows.
+- Make the fee payer visible in product copy and logs so teams can tell who paid the fee.
+- Use `Handler.relay` for new integrations. `Handler.feePayer` is deprecated.
 
-## Next Steps
+## Next steps
 
-- [Handler.feePayer](/docs/server/handler.feePayer)
+- [Handler.relay](/docs/server/handler.relay)
 - [Payments](/docs/guides/payments)
 - [Tempo Wallet adapter](/docs/adapters/tempo-wallet)

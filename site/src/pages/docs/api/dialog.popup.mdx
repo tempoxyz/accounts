@@ -25,3 +25,14 @@ const provider = Provider.create({
 - **Default:** `{ width: 360, height: 440 }`
 
 Popup window dimensions.
+
+## Behavior
+
+- Tempo Wallet owns the popup UI and signing flow.
+- The app owns the opener state, popup-blocked error path, and post-approval success state.
+- Production apps should keep the popup tied to a direct user action so browsers do not block it.
+
+## Related guides
+
+- [Tempo Wallet adapter](/docs/adapters/tempo-wallet)
+- [Production checklist](/docs/production)

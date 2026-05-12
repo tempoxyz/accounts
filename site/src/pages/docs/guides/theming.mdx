@@ -5,50 +5,58 @@ description: Match embedded account surfaces to your product.
 
 # Theming
 
+## Outcome
+
 Configure the appearance of embedded account surfaces without changing the signing adapter contract.
 
 ## Demo
 
-Target workspace: `examples/theming/`.
-
-:::warning[Stub]
-This page needs product design input before implementation. The first pass should identify which surfaces are themeable and which are owned by hosted wallet infrastructure.
+:::info[Phase 2 demo]
+This section will become an interactive demo in Phase 2.
 :::
 
-## Walkthrough
+| Item | Value |
+| --- | --- |
+| Final interaction | Switch theme settings and compare Tempo Wallet iframe, popup, and app-owned WebAuthn UI. |
+| Target workspace | `examples/theming/`. |
+| Success state | The page shows which surfaces changed and which surfaces remain owned by hosted wallet infrastructure. |
+| Implementation owner surface | Tempo Wallet exposes supported hosted UI theme hooks. WebAuthn and custom adapters are fully bring-your-own UI. |
 
-::::steps
+## Prerequisites
 
-### Install the SDK
+- An adapter choice.
+- The account surfaces the app needs to theme.
+- Browser coverage for iframe and popup modes when using Tempo Wallet.
+
+## Setup
+
+Install the SDK package.
 
 ```bash
 pnpm add accounts
 ```
 
-### Configure the Provider
-
 Choose the adapter whose surfaces need theming.
 
-### Connect the user's account
+For Tempo Wallet, configure supported dialog theme options only. For WebAuthn and custom adapters, theme your own account, approval, recovery, and error surfaces as part of the app.
+
+## Implementation
 
 Open the embedded surface in the target browser contexts.
-
-### Submit the request
-
 Apply the supported theme options.
 
-### Verify the result
+## Verification
 
 Compare the embedded dialog, popup, and mobile behavior.
 
-::::
-
-## Notes / Gotchas
+## Production notes
 
 - Hosted wallet surfaces may intentionally limit theming to preserve trust and security cues.
 - Domain-bound and custom adapters may own more of the UI surface directly.
+- Do not hide or visually weaken approval, account, origin, or recovery cues.
+- Test iframe and popup modes separately because browser security constraints differ.
 
-## Next Steps
+## Next steps
 
 - [Tempo Wallet adapter](/docs/adapters/tempo-wallet)
 - [Dialog reference](/docs/api/dialogs)

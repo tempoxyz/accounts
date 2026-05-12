@@ -9,31 +9,39 @@ import { Cards, Card } from 'vocs'
 
 Adapters control how accounts are created and managed. Pass an adapter to `Provider.create()` to configure the account management strategy.
 
-| Adapter | Uses | Best for |
-| --- | --- | --- |
-| [`dialog`](/docs/api/dialog) (default) | Hosted dialog | Apps wanting a universal account experience |
-| [`webAuthn`](/docs/api/webAuthn) | Domain-bound passkeys | Wallets integrating Passkey accounts, or Apps wanting to host and manage their own Passkey accounts |
-| [`local`](/docs/api/local) | Arbitrary keys | Custom signing and key management |
+## Choose an adapter
+
+| Adapter | Uses | UI owner | Best for |
+| --- | --- | --- | --- |
+| [`dialog`](/docs/api/dialog) (default) | Tempo Wallet hosted dialog | Tempo Wallet owns account and approval UI | Apps that want the default hosted account path |
+| [`webAuthn`](/docs/api/webAuthn) | Domain-bound passkeys | App-owned UI | Apps that own passkey registration, authentication, recovery, and approval states |
+| [`local`](/docs/api/local) | Arbitrary account loading and signing | App-owned UI | Custom signing systems, enterprise custody, and adapter experiments |
 
 ---
 
 <Cards>
   <Card
-    description="Embeds a universal Tempo Wallet dialog into your app"
+    description="Delegates account and approval flows to the hosted Tempo Wallet dialog"
     icon="lucide:wallet"
     to="/docs/api/dialog"
     title="dialog"
   />
   <Card
-    description="Embeds domain-bound passkey accounts into your app"
+    description="Creates domain-bound passkey accounts with app-owned UI"
     icon="lucide:fingerprint"
     to="/docs/api/webAuthn"
     title="webAuthn"
   />
   <Card
-    description="Uses arbitrary keys for account management"
+    description="Uses app-provided account loading and signing"
     icon="lucide:key"
     to="/docs/api/local"
     title="local"
   />
 </Cards>
+
+## Related guides
+
+- [Getting started](/docs)
+- [Adapter overview](/docs/adapters)
+- [Connect accounts](/docs/guides/connect-accounts)

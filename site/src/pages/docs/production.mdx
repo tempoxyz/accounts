@@ -1,24 +1,75 @@
 ---
 title: Deploying to Production
-description: Things to consider before deploying your application with the Tempo Accounts SDK to production.
+description: Production checklist for deploying an application with the Tempo Accounts SDK.
 ---
 
 # Deploying to Production
 
-Below are some things to consider before deploying to production.
+Before launch, confirm the account adapter, browser security model, storage, and monitoring match the surface your app owns.
 
-## Trusted Hosts
+## Adapter ownership
 
-To enable the `iframe` dialog on all browsers in production, ensure your website hostname is added to the [trusted hosts list](https://github.com/tempoxyz/accounts/blob/main/src/trusted-hosts.json). 
+| Adapter | Production responsibility |
+| --- | --- |
+| Tempo Wallet | Configure hosted iframe or popup behavior, CSP, trusted hosts, and surrounding product states. |
+| WebAuthn | Own account UI, passkey ceremony UX, challenge storage, credential storage, sessions, and recovery. |
+| Custom adapter | Own auth, signing, account UI, approvals, signer availability, audit logs, and error mapping. |
 
-Without this, the `iframe` dialog will fallback to a popup on browsers that do not support the [IntersectionObserver v2 API](https://web.dev/articles/intersectionobserver-v2).
+## Secure origins
+
+Use HTTPS for production and for local development flows that exercise iframe or passkey behavior. Browser passkeys are origin-bound, and embedded WebAuthn flows have stricter behavior on insecure origins.
+
+If you use HTTP during local development, Tempo Wallet may fall back to popup behavior. Test the final HTTPS shape before launch.
 
 ## Content Security Policy
 
-If you've deployed a Content Security Policy, ensure that you have the Tempo Accounts SDK configured with your CSPs.
+If your app deploys a Content Security Policy, include the origins needed by the adapter you choose.
 
 The full set of directives that the Tempo Accounts SDK requires are:
 
-| Directive | Value |
-| --- | --- |
-| `frame-src` | `https://wallet.tempo.xyz` |
+```http
+frame-src https://wallet.tempo.xyz;
+connect-src https://wallet.tempo.xyz https://rpc.moderato.tempo.xyz;
+```
+
+Add your own API, relay, and auth handler origins to `connect-src`. If you self-host approval or wallet UI through a custom adapter, include that origin in the directives used by your app.
+
+## Trusted hosts
+
+Configure trusted hosts for any surface that receives messages or requests from the hosted wallet, local development domains, or partner apps. Keep the list narrow and environment-specific.
+
+For local development, prefer stable HTTPS origins. Avoid relying on one-off personal hostnames in committed examples.
+
+## WebAuthn storage and recovery
+
+For WebAuthn and custom passkey flows:
+
+- Store challenges, credentials, and sessions server-side through durable storage.
+- Decide how users recover on a new device before launch.
+- Test cancellation, denied permissions, expired challenges, and missing credentials.
+- Do not assume React Native or mobile web exposes browser APIs like IndexedDB or `CustomEvent`.
+
+## Fee sponsorship and relays
+
+Keep fee sponsorship policy server-side. Use `Handler.relay({ feePayer })` for new integrations and log rejected requests with enough context to debug policy failures.
+
+## Monitoring
+
+Log enough information to debug account flows without recording sensitive key material:
+
+- Adapter selected.
+- Request method and chain.
+- Approval result or cancellation.
+- Relay and sponsorship decision.
+- WebAuthn challenge/session result.
+- Transaction hash or receipt identifier.
+
+## Launch checklist
+
+- [ ] Adapter choice and UI ownership are documented.
+- [ ] HTTPS behavior is tested.
+- [ ] CSP includes wallet, RPC, auth, and relay origins.
+- [ ] WebAuthn recovery and new-device flows are tested when applicable.
+- [ ] Fee sponsorship rejection and success paths are tested when applicable.
+- [ ] Monitoring covers connect, approve, sign, relay, and failure states.
+- [ ] Shared guides for connect, payment, and spend permissions run in the production-like environment.

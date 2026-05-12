@@ -7,6 +7,8 @@ description: Key-agnostic adapter for defining arbitrary account types and signi
 
 Creates a local adapter where the app manages keys and signing in-process. Use this when you need full control over account creation and transaction signing.
 
+`local` is bring-your-own UI and bring-your-own signing. The SDK exposes the provider surface, but your app or infrastructure owns account discovery, approval prompts, recovery, storage, and signing policy.
+
 ## Usage
 
 ```ts
@@ -115,3 +117,14 @@ const provider = Provider.create({
   }),
 })
 ```
+
+## Production notes
+
+- Do not use `local` as a shortcut around key custody review. Treat it as the adapter boundary for a signer your app already trusts.
+- Keep account loading and signing tied to the same identity, session, and recovery model.
+- Use a custom adapter guide when the implementation depends on Privy, KMS, Turnkey, or internal signer infrastructure.
+
+## Related guides
+
+- [Custom adapter](/docs/adapters/custom)
+- [Bring your auth](/docs/enterprise/bring-your-auth)
