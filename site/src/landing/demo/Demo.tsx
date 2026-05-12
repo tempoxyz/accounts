@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useRef, useState } from "react";
 import AsciiBackground from "../ascii-bg";
 import { BrowserMockup } from "./components/BrowserMockup";

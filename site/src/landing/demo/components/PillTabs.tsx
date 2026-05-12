@@ -1,3 +1,5 @@
+"use client";
+
 export function PillTabs<T extends string>({
   tabs,
   value,

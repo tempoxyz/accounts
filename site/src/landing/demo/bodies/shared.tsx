@@ -1,3 +1,5 @@
+"use client";
+
 import type { Status } from "../types";
 
 const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";

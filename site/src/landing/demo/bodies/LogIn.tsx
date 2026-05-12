@@ -1,3 +1,5 @@
+"use client";
+
 import type { DemoBodyProps } from "../types";
 import { PrimaryButton, bodyAnimation } from "./shared";
 

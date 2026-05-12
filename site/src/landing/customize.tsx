@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 
 const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";

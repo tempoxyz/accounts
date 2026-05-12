@@ -1,3 +1,5 @@
+"use client";
+
 import Customize from "./customize";
 import Demo from "./demo/Demo";
 import Guides from "./guides";

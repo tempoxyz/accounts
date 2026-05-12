@@ -1,3 +1,5 @@
+"use client";
+
 export function GridBackdrop() {
   // Concentric horizontal dashed lines centered on the browser frame.
   // Extends past the section's px-6 so lines reach the container edges.

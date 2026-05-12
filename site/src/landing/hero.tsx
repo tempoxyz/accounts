@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useRef, useState } from "react";
 import { Provider } from "accounts";
 import AsciiBackground from "./ascii-bg";
