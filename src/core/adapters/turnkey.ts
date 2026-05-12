@@ -192,13 +192,18 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }
 
     function signatureToHex(value: turnkey.SignatureResponse): Hex.Hex {
-      const { r, s } = value
+      const r = hexFromSignaturePart(value.r)
+      const s = hexFromSignaturePart(value.s)
       const v = value.v.startsWith('0x') ? value.v : Hex.fromNumber(Number(value.v))
-      Hex.assert(r, { strict: true })
-      Hex.assert(s, { strict: true })
       Hex.assert(v, { strict: true })
 
       return Hex.concat(r, s, Hex.padLeft(v, 1))
+    }
+
+    function hexFromSignaturePart(value: string) {
+      const hex = value.startsWith('0x') ? value : `0x${value}`
+      Hex.assert(hex, { strict: true })
+      return hex
     }
 
     async function signPayload(parameters: {

@@ -412,8 +412,8 @@ function createClient(options: setup.Options = {}) {
         state.signPayloads.push(parameters.payload)
         state.signWith.push(parameters.signWith)
         return {
-          r: Hex.padLeft('0x11', 32),
-          s: Hex.padLeft('0x22', 32),
+          r: Hex.padLeft('0x11', 32).slice(2),
+          s: Hex.padLeft('0x22', 32).slice(2),
           v: '27',
         }
       },
