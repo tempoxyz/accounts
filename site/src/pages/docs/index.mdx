@@ -25,14 +25,14 @@ Read accounts.tempo.xyz/docs and integrate Tempo Wallet into my application
 
 ### Architecture
 
-The Accounts SDK is a router between your application and a signing [Adapter](/docs/adapters) (e.g. the Tempo Wallet dialog), exposed as an [EIP-1193 Provider](https://eips.ethereum.org/EIPS/eip-1193). 
+The Accounts SDK is a router between your application and a signing [Adapter](/docs/adapters) (e.g. the Tempo Wallet dialog), exposed as an [EIP-1193 Provider](https://eips.ethereum.org/EIPS/eip-1193).
 
 Adapters handle where keys live and who handles signing. The Accounts SDK currently ships with two adapters:
 
-| Adapter | Description | 
-| --- | --- |
-| [**Tempo Wallet**](https://docs.tempo.xyz/guide/use-accounts/embed-tempo-wallet) | Delegates signing to [`wallet.tempo.xyz`](https://wallet.tempo.xyz) via an iframe dialog or popup. One passkey, one account, portable across apps. 
-| [**Domain-bound Passkeys**](https://docs.tempo.xyz/guide/use-accounts/embed-passkeys) | The app (or wallet) handles passkey ceremonies and signing in-process on its own domain. 
+| Adapter                                                                               | Description                                                                                                                                        |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [**Tempo Wallet**](https://docs.tempo.xyz/guide/use-accounts/embed-tempo-wallet)      | Delegates signing to [`wallet.tempo.xyz`](https://wallet.tempo.xyz) via an iframe dialog or popup. One passkey, one account, portable across apps. |
+| [**Domain-bound Passkeys**](https://docs.tempo.xyz/guide/use-accounts/embed-passkeys) | The app (or wallet) handles passkey ceremonies and signing in-process on its own domain.                                                           |
 
 Your application interacts with the SDK through standard JSON-RPC methods (via [Wagmi](https://wagmi.sh/) or [Viem](https://viem.sh/)).
 
@@ -56,15 +56,19 @@ sequenceDiagram
 The Tempo Accounts SDK is available as an [NPM package](https://www.npmjs.com/package/accounts) under `accounts`
 
 :::code-group
+
 ```bash [npm]
 npm i accounts
 ```
+
 ```bash [pnpm]
 pnpm i accounts
 ```
+
 ```bash [bun]
 bun i accounts
 ```
+
 :::
 
 ## Wagmi Usage
@@ -82,6 +86,7 @@ Get started with Wagmi by following the [official guide](https://wagmi.sh/react/
 After you have set up Wagmi, you can configure the Tempo Accounts SDK with `tempoWallet` from `wagmi/connectors` or `webAuthn` from `wagmi/tempo`.
 
 :::code-group
+
 ```tsx twoslash [Tempo Wallet]
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
@@ -95,6 +100,7 @@ export const wagmiConfig = createConfig({
   },
 })
 ```
+
 ```tsx twoslash [Domain-bound Passkeys]
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
@@ -108,6 +114,7 @@ export const wagmiConfig = createConfig({
   },
 })
 ```
+
 :::
 
 :::info[What connector should I use?]
@@ -123,6 +130,7 @@ into the wallet connection library via [EIP-6963](https://eips.ethereum.org/EIPS
 import { Provider } from 'accounts'
 Provider.create()
 ```
+
 :::
 
 ### Use Accounts
@@ -221,15 +229,15 @@ const { receipt } = await client.token.transferSync({
 
 Check out these examples to get started with the Tempo Accounts SDK.
 
-| Example | Description | |
-| --- | --- | --- |
-| [Embed Tempo Wallet](https://github.com/tempoxyz/accounts/tree/main/examples/basic) | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallets. | [Guide](/docs/guides/connect-accounts) |
-| [Embed Domain-bound Passkeys](https://github.com/tempoxyz/accounts/tree/main/examples/domain-bound-webauthn) | Domain-bound passkey example using Wagmi and the `webAuthn` connector. | [Guide](/docs/guides/authentication) |
-| [CLI + Tempo Wallets](https://github.com/tempoxyz/accounts/tree/main/examples/cli) | Minimal CLI setup to connect and authorize local keys using Tempo Wallets. | |
-| [Access Keys + Tempo Wallets](https://github.com/tempoxyz/accounts/tree/main/examples/with-access-key) | Authorize access keys using Tempo Wallets to submit transactions without prompts. | |
-| [Access Keys + Domain-bound Passkeys](https://github.com/tempoxyz/accounts/tree/main/examples/with-access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys. | |
-| [Sponsor Fees + Tempo Wallets](https://github.com/tempoxyz/accounts/tree/main/examples/with-fee-payer) | Sponsor transactions via Tempo Wallets. | [Guide](/docs/guides/fee-sponsorship) |
-| [Sponsor Fees + Domain-bound Passkeys](https://github.com/tempoxyz/accounts/tree/main/examples/with-fee-payer-and-webauthn) | Sponsor transactions via domain-bound Passkeys. | [Guide](/docs/guides/fee-sponsorship) |
+| Example                                                                                                                     | Description                                                                       |                                        |
+| --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------- |
+| [Embed Tempo Wallet](https://github.com/tempoxyz/accounts/tree/main/examples/basic)                                         | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallets.  | [Guide](/docs/guides/connect-accounts) |
+| [Embed Domain-bound Passkeys](https://github.com/tempoxyz/accounts/tree/main/examples/domain-bound-webauthn)                | Domain-bound passkey example using Wagmi and the `webAuthn` connector.            | [Guide](/docs/guides/authentication)   |
+| [CLI + Tempo Wallets](https://github.com/tempoxyz/accounts/tree/main/examples/cli)                                          | Minimal CLI setup to connect and authorize local keys using Tempo Wallets.        |                                        |
+| [Access Keys + Tempo Wallets](https://github.com/tempoxyz/accounts/tree/main/examples/with-access-key)                      | Authorize access keys using Tempo Wallets to submit transactions without prompts. |                                        |
+| [Access Keys + Domain-bound Passkeys](https://github.com/tempoxyz/accounts/tree/main/examples/with-access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                                |                                        |
+| [Sponsor Fees + Tempo Wallets](https://github.com/tempoxyz/accounts/tree/main/examples/with-fee-payer)                      | Sponsor transactions via Tempo Wallets.                                           | [Guide](/docs/guides/fee-sponsorship)  |
+| [Sponsor Fees + Domain-bound Passkeys](https://github.com/tempoxyz/accounts/tree/main/examples/with-fee-payer-and-webauthn) | Sponsor transactions via domain-bound Passkeys.                                   | [Guide](/docs/guides/fee-sponsorship)  |
 
 ## Secure Origins (HTTPS)
 
@@ -267,6 +275,7 @@ npm i vite-plugin-mkcert
 ```
 
 :::code-group
+
 ```ts [vite.config.ts]
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -279,6 +288,7 @@ export default defineConfig({
   ],
 })
 ```
+
 :::
 
 ## Getting Help

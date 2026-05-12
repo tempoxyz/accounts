@@ -1,0 +1,172 @@
+---
+title: Rpc
+description: Per-method Zod schemas and shared building blocks for the Accounts JSON-RPC surface.
+---
+
+# `Rpc`
+
+A namespace of Zod schemas describing every JSON-RPC method the [`Provider`](/docs/api/provider) handles, alongside the shared building blocks (logs, receipts, key authorizations, transaction requests) those methods compose from.
+
+Each RPC method is exposed as its own sub-namespace with a `schema` (a [`Schema.Item`](/docs/api/schema#item)) and `Encoded` / `Decoded` types describing the wire and runtime shapes. The aggregated schema is re-exported as [`Schema.schema`](/docs/api/schema#schema) for use with [`Provider`](/docs/api/provider).
+
+For end-user JSON-RPC documentation (parameters, return values, examples), see the [JSON-RPC reference](/docs/rpc/wallet_connect).
+
+## Usage
+
+```ts twoslash
+import { Rpc } from 'accounts'
+
+const item = Rpc.eth_chainId.schema
+
+type Decoded = Rpc.wallet_connect.Decoded
+```
+
+## Method Namespaces
+
+Each method namespace exposes a uniform shape:
+
+```ts
+namespace eth_accounts {
+  /** Zod schema for the method (a `Schema.Item`). */
+  const schema: Schema.Item
+  /** Wire-format type — raw JSON-RPC `{ method, params, returns }`. */
+  type Encoded
+  /** Decoded type — the runtime shape after codec transforms. */
+  type Decoded
+}
+```
+
+The full list of method namespaces is:
+
+- `eth_accounts`
+- `eth_chainId`
+- `eth_fillTransaction`
+- `eth_requestAccounts`
+- `eth_sendTransaction`
+- `eth_sendTransactionSync`
+- `eth_signTransaction`
+- `eth_signTypedData_v4`
+- `personal_sign`
+- `wallet_authorizeAccessKey`
+- `wallet_connect`
+- `wallet_deposit`
+- `wallet_depositZone`
+- `wallet_disconnect`
+- `wallet_getBalances`
+- `wallet_getCallsStatus`
+- `wallet_getCapabilities`
+- `wallet_revokeAccessKey`
+- `wallet_send`
+- `wallet_sendCalls`
+- `wallet_swap`
+- `wallet_switchEthereumChain`
+- `wallet_withdrawZone`
+
+```ts twoslash
+import { Rpc } from 'accounts'
+
+const { schema } = Rpc.wallet_sendCalls // [!code focus]
+
+type Encoded = Rpc.wallet_sendCalls.Encoded // [!code focus]
+type Decoded = Rpc.wallet_sendCalls.Decoded // [!code focus]
+```
+
+## Shared Schemas
+
+Building-block Zod schemas reused across the per-method definitions.
+
+### call
+
+- **Type:** `z.ZodMiniObject`
+
+Single-call shape (`{ to?, data?, value? }`) used inside `wallet_sendCalls` and friends.
+
+```ts twoslash
+import { Rpc } from 'accounts'
+
+const schema = Rpc.call // [!code focus]
+```
+
+### keyAuthorization
+
+- **Type:** `z.ZodMiniObject`
+
+TIP-20 key authorization payload (`{ address, chainId, expiry, keyId, keyType, limits?, signature }`).
+
+```ts twoslash
+import { Rpc } from 'accounts'
+
+const schema = Rpc.keyAuthorization // [!code focus]
+```
+
+### keyType
+
+- **Type:** `z.ZodMiniUnion<['secp256k1', 'p256', 'webAuthn']>`
+
+Supported access key types.
+
+```ts twoslash
+import { Rpc } from 'accounts'
+
+const schema = Rpc.keyType // [!code focus]
+```
+
+### log
+
+- **Type:** `z.ZodMiniObject`
+
+EVM log shape included in transaction receipts.
+
+```ts twoslash
+import { Rpc } from 'accounts'
+
+const schema = Rpc.log // [!code focus]
+```
+
+### receipt
+
+- **Type:** `z.ZodMiniObject`
+
+Transaction receipt shape returned by [`eth_sendTransactionSync`](/docs/rpc/eth_sendTransactionSync).
+
+```ts twoslash
+import { Rpc } from 'accounts'
+
+const schema = Rpc.receipt // [!code focus]
+```
+
+### signatureEnvelope
+
+- **Type:** `z.ZodMiniType<SignatureEnvelope.SignatureEnvelopeRpc>`
+
+Signature envelope payload (passes through unchanged via `z.custom`).
+
+```ts twoslash
+import { Rpc } from 'accounts'
+
+const schema = Rpc.signatureEnvelope // [!code focus]
+```
+
+### transactionRequest
+
+- **Type:** `z.ZodMiniObject`
+
+Transaction request shape accepted by `eth_sendTransaction`, `eth_fillTransaction`, and `eth_signTransaction`.
+
+```ts twoslash
+import { Rpc } from 'accounts'
+
+const schema = Rpc.transactionRequest // [!code focus]
+```
+
+### strictParameters
+
+- **Type:** `Record<string, z.ZodMiniType>`
+
+Lookup of stricter parameter schemas (currently `wallet_authorizeAccessKey` and `wallet_connect`) used internally by [`Provider`](/docs/api/provider) to narrow validation beyond the wire-compatible default.
+
+```ts twoslash
+import { Rpc } from 'accounts'
+
+const strict = Rpc.strictParameters // [!code focus]
+```

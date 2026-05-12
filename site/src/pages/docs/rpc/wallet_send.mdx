@@ -1,0 +1,57 @@
+---
+title: wallet_send
+description: Open the wallet send-token flow with optional pre-filled fields.
+---
+
+# `wallet_send`
+
+Opens the wallet's send-token flow so the user can transfer a token to another address. The wallet renders the send UI using any pre-filled hints supplied in the request, then signs and broadcasts the transfer once the user confirms.
+
+To send raw transactions or batches without surfacing the wallet's send UI, use [`eth_sendTransaction`](/docs/rpc/eth_sendTransaction) or [`wallet_sendCalls`](/docs/rpc/wallet_sendCalls) instead.
+
+This method is only supported by adapters that opt in to the `send` action (typically the [`dialog`](/docs/api/dialog) adapter). Other adapters reject the request as an unsupported method.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_send'
+  params?: [{
+    /**
+     * Fee payer override. `false` disables the wallet's default fee
+     * payer, a URL string points at a custom fee payer service.
+     */
+    feePayer?: boolean | string
+    /** Recipient address to pre-fill. */
+    to?: `0x${string}`
+    /** Token contract address to pre-fill. Omit to let the user choose. */
+    token?: `0x${string}`
+    /** Human-readable amount to pre-fill (e.g. `"1.5"`). */
+    value?: string
+  }]
+}
+```
+
+## Response
+
+```ts
+type Response = {
+  /** Chain ID the send was submitted to. */
+  chainId: number
+  /** Receipt of the submitted send. */
+  receipt: TransactionReceipt
+}
+```
+
+## Example
+
+```ts
+const { receipt } = await provider.request({
+  method: 'wallet_send',
+  params: [{
+    to: '0x...',
+    token: '0x20c0000000000000000000000000000000000001',
+    value: '1.5',
+  }],
+})
+```

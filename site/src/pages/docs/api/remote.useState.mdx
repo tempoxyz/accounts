@@ -1,0 +1,72 @@
+---
+title: Remote.useState
+description: React hook to subscribe to a remote context's state store.
+---
+
+# `Remote.useState`
+
+React hook that subscribes to the [`Remote`](/docs/api/remote.create) context's Zustand store. Re-renders whenever the selected slice changes.
+
+## Usage
+
+```ts
+import { Remote } from 'accounts/react'
+
+import { remote } from '../lib/config.js'
+
+// Subscribe to the full state.
+const state = Remote.useState(remote)
+
+// Or subscribe to a slice via a selector.
+const ready = Remote.useState(remote, (s) => s.ready)
+```
+
+## Parameters
+
+### remote
+
+- **Type:** `Remote.Remote`
+- **Required**
+
+The remote context returned from [`Remote.create`](/docs/api/remote.create).
+
+```ts
+import { Remote } from 'accounts/react'
+
+import { remote } from '../lib/config.js'
+
+const state = Remote.useState(remote) // [!code focus]
+```
+
+### selector
+
+- **Type:** `(state: Remote.State) => selected`
+- **Optional**
+
+Function that picks a slice from the store's state. The component only re-renders when the selected value changes (using `Object.is` equality).
+
+```ts
+import { Remote } from 'accounts/react'
+
+import { remote } from '../lib/config.js'
+
+const ready = Remote.useState(remote, (s) => s.ready) // [!code focus]
+const mode = Remote.useState(remote, (s) => s.mode) // [!code focus]
+```
+
+## Returns
+
+The full `Remote.State` when no `selector` is provided, otherwise the selector's return value:
+
+```ts
+type State = {
+  /** Whether the dialog is rendered in an iframe or popup. */
+  mode: 'iframe' | 'popup' | undefined
+  /** Trusted host origin from MessageEvent. */
+  origin: string | undefined
+  /** Whether the dialog is ready to display content. */
+  ready: boolean
+  /** Queued RPC requests received from the host. */
+  requests: readonly Store.QueuedRequest[]
+}
+```

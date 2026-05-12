@@ -1,0 +1,88 @@
+---
+title: Remote.useEnsureVisibility
+description: React hook that monitors iframe visibility and falls back to a popup when occluded.
+---
+
+# `Remote.useEnsureVisibility`
+
+React hook that monitors element visibility using [IntersectionObserver v2](https://web.dev/articles/intersectionobserver-v2). When the wallet is rendered inside an iframe on an **untrusted host**, this hook detects occlusion / clickjacking attempts and exposes a `visible` flag plus an `invokePopup` action so the wallet can fall back to a popup.
+
+The hook is a no-op when the host is in [`remote.trustedHosts`](/docs/api/remote.create#trustedhosts), or when `enabled` is `false`. If IntersectionObserver v2 is not supported by the browser, `visible` is set to `false` so the wallet can immediately switch to a popup.
+
+## Usage
+
+```tsx
+import { Remote } from 'accounts/react'
+
+import { remote } from '../lib/config.js'
+
+function EnsureVisibility(props: { children: React.ReactNode }) {
+  const mode = Remote.useState(remote, (s) => s.mode)
+  const { invokePopup, ref, visible } = Remote.useEnsureVisibility(remote, {
+    enabled: mode === 'iframe',
+  })
+
+  return (
+    <div ref={ref}>
+      {visible ? props.children : <button onClick={invokePopup}>Continue in new window</button>}
+    </div>
+  )
+}
+```
+
+## Parameters
+
+### remote
+
+- **Type:** `Remote.Remote`
+- **Required**
+
+The remote context returned from [`Remote.create`](/docs/api/remote.create). Used to read `trustedHosts` and to send the `switch-mode` message when `invokePopup` is called.
+
+```tsx
+import { Remote } from 'accounts/react'
+
+import { remote } from '../lib/config.js'
+
+const { invokePopup, ref, visible } = Remote.useEnsureVisibility(
+  remote, // [!code focus]
+)
+```
+
+### options.enabled
+
+- **Type:** `boolean`
+- **Default:** `true`
+
+Whether visibility monitoring is enabled. Wire this to `mode === 'iframe'` so the hook is inert when the wallet is already rendered in a popup.
+
+```tsx
+import { Remote } from 'accounts/react'
+
+import { remote } from '../lib/config.js'
+
+const mode = Remote.useState(remote, (s) => s.mode)
+const { invokePopup, ref, visible } = Remote.useEnsureVisibility(remote, {
+  enabled: mode === 'iframe', // [!code focus]
+})
+```
+
+## Returns
+
+### invokePopup
+
+- **Type:** `() => void`
+
+Sends a `switch-mode` message to the host SDK requesting it tear down the iframe and reopen the wallet in a popup.
+
+### ref
+
+- **Type:** `React.RefObject<HTMLDivElement | null>`
+
+Ref that must be attached to the element being monitored for occlusion.
+
+### visible
+
+- **Type:** `boolean`
+
+Whether the monitored element is currently fully visible. `true` while it has a clear viewport intersection of at least 99%; `false` when it is covered or when IntersectionObserver v2 is unavailable.

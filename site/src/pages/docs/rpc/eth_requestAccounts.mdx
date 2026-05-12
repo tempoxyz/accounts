@@ -1,0 +1,32 @@
+---
+title: eth_requestAccounts
+description: Request access to user accounts, prompting the user to connect if needed.
+---
+
+# `eth_requestAccounts`
+
+Returns the addresses of the connected accounts. If no accounts are connected, prompts the user to connect via the wallet's connection flow (equivalent to calling [`wallet_connect`](/docs/rpc/wallet_connect) under the hood) and returns the resulting addresses.
+
+Unlike [`eth_accounts`](/docs/rpc/eth_accounts), this method may surface a UI to the user. Prefer [`wallet_connect`](/docs/rpc/wallet_connect) when you need to negotiate capabilities (such as authorizing an access key or running SIWE auth) at the same time.
+
+## Request
+
+```ts
+type Request = {
+  method: 'eth_requestAccounts'
+}
+```
+
+## Response
+
+```ts
+type Response = readonly `0x${string}`[]
+```
+
+## Example
+
+```ts
+const accounts = await provider.request({
+  method: 'eth_requestAccounts',
+})
+```

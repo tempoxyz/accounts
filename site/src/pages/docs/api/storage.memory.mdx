@@ -1,0 +1,41 @@
+---
+title: Storage.memory
+description: In-memory Storage adapter.
+---
+
+# `Storage.memory`
+
+Creates an in-memory [`Storage`](/docs/api/storage) adapter backed by a `Map`.
+
+Values are kept for the lifetime of the process and discarded when it exits. Useful for SSR, tests, and any non-browser environment where persistent storage is unavailable or undesirable.
+
+This is the default storage for [`Provider.create`](/docs/api/provider) outside the browser.
+
+## Usage
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+const provider = Provider.create({
+  storage: Storage.memory(),
+})
+```
+
+## Parameters
+
+### options.key
+
+- **Type:** `string`
+- **Default:** `'tempo'`
+
+Key prefix applied to every entry. Useful when multiple SDK instances share the same in-memory map (uncommon, but supported for parity with the persistent adapters).
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+const provider = Provider.create({
+  storage: Storage.memory({
+    key: 'my-app', // [!code focus]
+  }),
+})
+```
