@@ -8,10 +8,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "accounts": "workspace:*",
+    "tailwindcss": "^4",
     "mermaid": "^11.14.0",
     "ox": "catalog:",
     "react": "catalog:",

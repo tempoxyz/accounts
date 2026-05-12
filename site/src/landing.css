@@ -1,0 +1,238 @@
+@import "tailwindcss";
+
+@font-face { font-family: 'Pilat'; src: url('/fonts/Pilat/Pilat-Thin.woff2') format('woff2'), url('/fonts/Pilat/Pilat-Thin.woff') format('woff'); font-weight: 100; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Pilat'; src: url('/fonts/Pilat/Pilat-Light.woff2') format('woff2'), url('/fonts/Pilat/Pilat-Light.woff') format('woff'); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Pilat'; src: url('/fonts/Pilat/Pilat-Book.woff2') format('woff2'), url('/fonts/Pilat/Pilat-Book.woff') format('woff'); font-weight: 350; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Pilat'; src: url('/fonts/Pilat/Pilat-Regular.woff2') format('woff2'), url('/fonts/Pilat/Pilat-Regular.woff') format('woff'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Pilat'; src: url('/fonts/Pilat/Pilat-Demi.woff2') format('woff2'), url('/fonts/Pilat/Pilat-Demi.woff') format('woff'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Pilat'; src: url('/fonts/Pilat/Pilat-Bold.woff2') format('woff2'), url('/fonts/Pilat/Pilat-Bold.woff') format('woff'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Pilat'; src: url('/fonts/Pilat/Pilat-Heavy.woff2') format('woff2'), url('/fonts/Pilat/Pilat-Heavy.woff') format('woff'); font-weight: 800; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Pilat'; src: url('/fonts/Pilat/Pilat-Black.woff2') format('woff2'), url('/fonts/Pilat/Pilat-Black.woff') format('woff'); font-weight: 900; font-style: normal; font-display: swap; }
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-subtle: var(--foreground-subtle);
+  --font-sans: 'Pilat', Arial, Helvetica, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+.landing-page {
+  --background: #0a0a0a;
+  --surface: #131313;
+  --surface-2: #1a1a1a;
+  --border: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.1);
+  --foreground: #f5f5f5;
+  --foreground-muted: rgba(245, 245, 245, 0.6);
+  --foreground-subtle: rgba(245, 245, 245, 0.38);
+  --dash-color: #222;
+  --dash-length: 5px;
+  --dash-gap: 1.5px;
+  --dash-thickness: 1px;
+
+  font-family: 'Pilat', Arial, Helvetica, sans-serif;
+  font-weight: 350;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+}
+
+.landing-page button:not(:disabled) {
+  cursor: pointer;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  scrollbar-width: none;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes highlightFlash {
+  0% {
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+  }
+  100% {
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+}
+
+.code-pre,
+.code-pre * {
+  transition: color 220ms ease-out;
+}
+
+.code-pre:has(.hl-token:hover) *:not(.hl-token):not(.hl-token *) {
+  color: rgba(173, 187, 199, 0.25) !important;
+}
+
+.dash-y,
+.dash-t,
+.dash-b,
+.dash-l {
+  position: relative;
+}
+
+.dash-y::before,
+.dash-y::after,
+.dash-l::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--dash-thickness);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--dash-color) 0 var(--dash-length),
+    transparent var(--dash-length) calc(var(--dash-length) + var(--dash-gap))
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dash-y::before,
+.dash-l::before {
+  left: 0;
+}
+
+.dash-y::after {
+  right: 0;
+}
+
+.dash-t::before,
+.dash-b::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--dash-thickness);
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--dash-color) 0 var(--dash-length),
+    transparent var(--dash-length) calc(var(--dash-length) + var(--dash-gap))
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dash-t::before {
+  top: 0;
+}
+
+.dash-b::after {
+  bottom: 0;
+}
+
+.dash-tl {
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--dash-color) 0 var(--dash-length),
+      transparent var(--dash-length) calc(var(--dash-length) + var(--dash-gap))
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      var(--dash-color) 0 var(--dash-length),
+      transparent var(--dash-length) calc(var(--dash-length) + var(--dash-gap))
+    );
+  background-size:
+    100% var(--dash-thickness),
+    var(--dash-thickness) 100%;
+  background-position:
+    top left,
+    top left;
+  background-repeat: no-repeat;
+}
+
+.dash-frame {
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--dash-color) 0 var(--dash-length),
+      transparent var(--dash-length) calc(var(--dash-length) + var(--dash-gap))
+    ),
+    repeating-linear-gradient(
+      to right,
+      var(--dash-color) 0 var(--dash-length),
+      transparent var(--dash-length) calc(var(--dash-length) + var(--dash-gap))
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      var(--dash-color) 0 var(--dash-length),
+      transparent var(--dash-length) calc(var(--dash-length) + var(--dash-gap))
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      var(--dash-color) 0 var(--dash-length),
+      transparent var(--dash-length) calc(var(--dash-length) + var(--dash-gap))
+    );
+  background-size:
+    100% var(--dash-thickness),
+    100% var(--dash-thickness),
+    var(--dash-thickness) 100%,
+    var(--dash-thickness) 100%;
+  background-position:
+    top left,
+    bottom left,
+    top left,
+    top right;
+  background-repeat: no-repeat;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

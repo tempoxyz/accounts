@@ -1,0 +1,164 @@
+
+import { useEffect, useState } from "react";
+import AsciiBackground from "./ascii-bg";
+
+/**
+ * Delays opacity transition by one frame after mount so the canvas inside
+ * has time to size + draw its first frame. Without this the wrapper's
+ * opacity animation runs against an empty canvas, then dots snap in
+ * mid-fade — looks like an instant pop instead of a smooth reveal.
+ */
+function FadeInOnMount({ children }: { children: React.ReactNode }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const id = window.setTimeout(() => setShown(true), 30);
+    return () => window.clearTimeout(id);
+  }, []);
+  return (
+    <div
+      className="pointer-events-none absolute inset-0"
+      style={{
+        opacity: shown ? 1 : 0,
+        transition: "opacity 420ms cubic-bezier(0.23, 1, 0.32, 1)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
+
+// Tailwind v4 wasn't picking up the custom `.dash-tl` / `.dash-frame`
+// utilities from globals.css, so we inline the dash background-images
+// here. Reads `--dash-color/length/gap/thickness` from :root so the
+// design-token controls still apply.
+const HORIZONTAL_DASH = `repeating-linear-gradient(
+  to right,
+  var(--dash-color) 0 var(--dash-length),
+  transparent var(--dash-length) calc(var(--dash-length) + var(--dash-gap))
+)`;
+const VERTICAL_DASH = `repeating-linear-gradient(
+  to bottom,
+  var(--dash-color) 0 var(--dash-length),
+  transparent var(--dash-length) calc(var(--dash-length) + var(--dash-gap))
+)`;
+
+const cardDashStyle: React.CSSProperties = {
+  backgroundImage: `${HORIZONTAL_DASH}, ${VERTICAL_DASH}`,
+  backgroundSize:
+    "100% var(--dash-thickness), var(--dash-thickness) 100%",
+  backgroundPosition: "top left, top left",
+  backgroundRepeat: "no-repeat",
+};
+
+const frameDashStyle: React.CSSProperties = {
+  backgroundImage: `${HORIZONTAL_DASH}, ${HORIZONTAL_DASH}, ${VERTICAL_DASH}, ${VERTICAL_DASH}`,
+  backgroundSize:
+    "100% var(--dash-thickness), 100% var(--dash-thickness), var(--dash-thickness) 100%, var(--dash-thickness) 100%",
+  backgroundPosition: "top left, bottom left, top left, top right",
+  backgroundRepeat: "no-repeat",
+};
+
+type Guide = {
+  title: string;
+  href: string;
+};
+
+const GUIDES: readonly Guide[] = [
+  {
+    title: "Create & Use Accounts",
+    href: "https://docs.tempo.xyz/guide/use-accounts",
+  },
+  {
+    title: "Make Payments",
+    href: "https://docs.tempo.xyz/guide/payments",
+  },
+  {
+    title: "Sponsor Fees",
+    href: "https://docs.tempo.xyz/guide/payments/sponsor-user-fees",
+  },
+  {
+    title: "Issue Stablecoins",
+    href: "https://docs.tempo.xyz/guide/issuance",
+  },
+  {
+    title: "Exchange Stablecoins",
+    href: "https://docs.tempo.xyz/guide/stablecoin-dex",
+  },
+  {
+    title: "View all docs",
+    href: "https://docs.tempo.xyz/accounts",
+  },
+];
+
+function ArrowUpRight() {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+      className="transition-transform duration-200 ease-out group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+    >
+      <path
+        d="M8 17L17 8M17 8H9M17 8V16"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export default function Guides() {
+  const [hovered, setHovered] = useState<string | null>(null);
+
+  return (
+    <section
+      className="px-6 pt-12 pb-16 sm:pt-[55px] sm:pb-[100px]"
+      style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
+    >
+      <h2 className="text-[24px] leading-tight text-white sm:text-[24px]">
+        Guides
+      </h2>
+
+      <div
+        className="-mx-6 mt-8 grid grid-cols-1 sm:mt-12 sm:grid-cols-2 lg:grid-cols-3"
+        style={frameDashStyle}
+      >
+        {GUIDES.map((g) => {
+          const isHovered = hovered === g.title;
+          return (
+            <a
+              key={g.title}
+              href={g.href}
+              target="_blank"
+              rel="noreferrer"
+              onMouseEnter={() => setHovered(g.title)}
+              onMouseLeave={() =>
+                setHovered((prev) => (prev === g.title ? null : prev))
+              }
+              className="group relative flex min-h-[200px] flex-col justify-end gap-3 overflow-hidden p-6 text-white outline-none transition-colors duration-150 focus-visible:bg-white/[0.03] sm:min-h-[260px] sm:p-9"
+              style={cardDashStyle}
+            >
+              {isHovered ? (
+                <FadeInOnMount>
+                  <AsciiBackground />
+                </FadeInOnMount>
+              ) : null}
+              <span className="relative z-10 inline-flex">
+                <ArrowUpRight />
+              </span>
+              <span className="relative z-10 text-[20px] leading-tight tracking-[-0.01em] sm:text-[24px]">
+                {g.title}
+              </span>
+            </a>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
