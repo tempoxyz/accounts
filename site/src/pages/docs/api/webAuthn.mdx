@@ -13,22 +13,22 @@ Enables domain-bound passkey experiences by wrapping the `local` adapter with We
 import { webAuthn, Provider } from 'accounts'
 
 const provider = Provider.create({
-  adapter: webAuthn({ authUrl: '/auth' }),
+  adapter: webAuthn({ auth: '/auth' }),
 })
 ```
 
 ## Parameters
 
-`ceremony` and `authUrl` are mutually exclusive — the `Options` type is constrained as `OneOf<{ ceremony } | { authUrl }>`.
+`ceremony` and `auth` are mutually exclusive — the `Options` type is constrained as `OneOf<{ ceremony } | { auth }>`.
 
-### authUrl
+### auth
 
-- **Type:** `string`
+- **Type:** `string | { url?: string; challenge?: string; verify?: string; logout?: string; returnToken?: boolean }`
 - **Optional**
 
-URL of a [WebAuthn server handler](/docs/server/handler.webAuthn) (shorthand for `WebAuthnCeremony.server({ url }){:js}`).
+Server Authentication endpoint for WebAuthn ceremonies (shorthand for `WebAuthnCeremony.server({ url }){:js}`). Accepts the same shape as the [Provider `auth` capability](/docs/api/provider#auth) so the same value can be passed to both surfaces; the WebAuthn adapter only consumes the `url` field — SIWE-only fields (`challenge`, `verify`, `logout`, `returnToken`) are ignored by the ceremony.
 
-When supplied (and `ceremony` is omitted), the adapter falls back to `WebAuthnCeremony.server({ url: authUrl }){:js}`.
+When supplied (and `ceremony` is omitted), the adapter falls back to `WebAuthnCeremony.server({ url }){:js}`.
 
 :::warning
 Cannot be used with `ceremony`.
@@ -39,20 +39,28 @@ import { webAuthn, Provider } from 'accounts'
 
 const provider = Provider.create({
   adapter: webAuthn({
-    authUrl: '/auth', // [!code focus]
+    auth: '/auth', // [!code focus]
   }),
 })
 ```
 
+### authUrl
+
+- **Type:** `string`
+- **Optional**
+- **Deprecated** — use [`auth`](#auth) instead.
+
+URL of a [WebAuthn server handler](/docs/server/handler.webAuthn). Preserved as a backwards-compatible alias for `auth`. When both are supplied, `auth` wins.
+
 ### ceremony
 
 - **Type:** `WebAuthnCeremony`
-- **Default:** `WebAuthnCeremony.local({ storage }){:js}` when `authUrl` is also omitted, otherwise `WebAuthnCeremony.server({ url: authUrl }){:js}`.
+- **Default:** `WebAuthnCeremony.local({ storage }){:js}` when `auth` is also omitted, otherwise `WebAuthnCeremony.server({ url }){:js}`.
 
 Ceremony strategy for WebAuthn registration and authentication. [See more](/docs/api/webauthnceremony).
 
 :::warning
-Cannot be used with `authUrl`.
+Cannot be used with `auth`.
 :::
 
 ```ts twoslash
@@ -77,7 +85,7 @@ import { webAuthn, Provider } from 'accounts'
 
 const provider = Provider.create({
   adapter: webAuthn({
-    authUrl: '/auth',
+    auth: '/auth',
     icon: 'data:image/svg+xml,...', // [!code focus]
   }),
 })
@@ -95,7 +103,7 @@ import { webAuthn, Provider } from 'accounts'
 
 const provider = Provider.create({
   adapter: webAuthn({
-    authUrl: '/auth',
+    auth: '/auth',
     name: 'My Wallet', // [!code focus]
   }),
 })
@@ -113,7 +121,7 @@ import { webAuthn, Provider } from 'accounts'
 
 const provider = Provider.create({
   adapter: webAuthn({
-    authUrl: '/auth',
+    auth: '/auth',
     rdns: 'com.example.wallet', // [!code focus]
   }),
 })
