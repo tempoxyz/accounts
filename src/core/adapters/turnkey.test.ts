@@ -28,7 +28,6 @@ describe('turnkey', () => {
         "accounts": [
           {
             "address": "0x0000000000000000000000000000000000000001",
-            "keyType": "secp256k1",
             "label": "Ada",
           },
         ],
@@ -81,7 +80,6 @@ describe('turnkey', () => {
         "accounts": [
           {
             "address": "0x0000000000000000000000000000000000000001",
-            "keyType": "secp256k1",
           },
         ],
         "keyAuthorization": {
@@ -189,7 +187,6 @@ describe('turnkey', () => {
       [
         {
           "address": "0x0000000000000000000000000000000000000002",
-          "keyType": "secp256k1",
         },
       ]
     `)

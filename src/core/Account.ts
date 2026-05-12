@@ -15,7 +15,6 @@ export type Store = {
   label?: string | undefined
 } & OneOf<
   | {}
-  | SignerMetadata
   | Pick<TempoAccount.Account, 'keyType' | 'sign'>
   | { keyType: 'secp256k1'; privateKey: Hex }
   | { keyType: 'p256'; privateKey: Hex }
@@ -31,9 +30,6 @@ export type Store = {
       origin: string
     }
 >
-
-/** Non-secret signer metadata. Does not imply local signing material is available. */
-export type SignerMetadata = Pick<TempoAccount.Account, 'keyType'>
 
 /** Access key entry stored alongside accounts. */
 export type AccessKey = {
@@ -173,35 +169,27 @@ export function hydrate(
   if (!signable) return { address: account.address, type: 'json-rpc' }
   if ('sign' in account && typeof account.sign === 'function')
     return account as TempoAccount.Account
+  if (!account.keyType)
+    throw new Provider.UnauthorizedError({ message: `Account "${account.address}" cannot sign.` })
   switch (account.keyType) {
     case 'secp256k1':
-      if ('privateKey' in account && account.privateKey)
-        return TempoAccount.fromSecp256k1(account.privateKey)
-      break
+      return TempoAccount.fromSecp256k1(account.privateKey)
     case 'p256':
-      if ('privateKey' in account && account.privateKey)
-        return TempoAccount.fromP256(account.privateKey)
-      break
+      return TempoAccount.fromP256(account.privateKey)
     case 'webCrypto':
-      if ('keyPair' in account && account.keyPair)
-        return TempoAccount.fromWebCryptoP256(account.keyPair)
-      break
+      return TempoAccount.fromWebCryptoP256(account.keyPair)
     case 'webAuthn':
-      if ('credential' in account && account.credential)
-        return TempoAccount.fromWebAuthnP256(account.credential, {
-          rpId: account.credential.rpId,
-        })
-      break
+      return TempoAccount.fromWebAuthnP256(account.credential, {
+        rpId: account.credential.rpId,
+      })
     case 'webAuthn_headless':
-      if ('privateKey' in account && account.privateKey)
-        return TempoAccount.fromHeadlessWebAuthn(account.privateKey, {
-          rpId: account.rpId,
-          origin: account.origin,
-        })
-      break
+      return TempoAccount.fromHeadlessWebAuthn(account.privateKey, {
+        rpId: account.rpId,
+        origin: account.origin,
+      })
+    default:
+      throw new Provider.UnauthorizedError({ message: 'Unknown key type.' })
   }
-
-  throw new Provider.UnauthorizedError({ message: `Account "${account.address}" cannot sign.` })
 }
 
 export declare namespace hydrate {

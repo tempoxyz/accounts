@@ -83,7 +83,6 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     function toStoreAccount(account: turnkey.WalletAccount, label?: string | undefined) {
       return {
         address: core_Address.from(account.address),
-        keyType: 'secp256k1' as const,
         ...(label ? { label } : {}),
       }
     }
