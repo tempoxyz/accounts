@@ -15,14 +15,8 @@ export type Store = {
   label?: string | undefined
 } & OneOf<
   | {}
-  | Pick<TempoAccount.Account, 'keyType' | 'publicKey' | 'sign'>
+  | Pick<TempoAccount.Account, 'keyType' | 'sign'>
   | { keyType: 'secp256k1'; privateKey: Hex }
-  | {
-      /** Remote signer key type. */
-      keyType: 'secp256k1'
-      /** Public key used by a remote secp256k1 signer. */
-      publicKey: Hex
-    }
   | { keyType: 'p256'; privateKey: Hex }
   | { keyType: 'webAuthn'; credential: { id: string; publicKey: Hex; rpId: string } }
   | {
@@ -179,10 +173,6 @@ export function hydrate(
     throw new Provider.UnauthorizedError({ message: `Account "${account.address}" cannot sign.` })
   switch (account.keyType) {
     case 'secp256k1':
-      if (!('privateKey' in account) || !account.privateKey)
-        throw new Provider.UnauthorizedError({
-          message: `Account "${account.address}" cannot sign locally.`,
-        })
       return TempoAccount.fromSecp256k1(account.privateKey)
     case 'p256':
       return TempoAccount.fromP256(account.privateKey)

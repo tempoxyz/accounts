@@ -27,9 +27,11 @@ describe('turnkey', () => {
         "accounts": [
           {
             "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-            "keyType": "secp256k1",
             "label": "Ada",
-            "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
+            "turnkey": {
+              "keyType": "secp256k1",
+              "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
+            },
           },
         ],
       }
@@ -49,8 +51,10 @@ describe('turnkey', () => {
       [
         {
           "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-          "keyType": "secp256k1",
-          "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
+          "turnkey": {
+            "keyType": "secp256k1",
+            "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
+          },
         },
       ]
     `)
@@ -216,8 +220,10 @@ describe('turnkey', () => {
       [
         {
           "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-          "keyType": "secp256k1",
-          "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
+          "turnkey": {
+            "keyType": "secp256k1",
+            "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
+          },
         },
       ]
     `)
@@ -363,13 +369,15 @@ function toWalletAccount(account: (typeof core_accounts)[number]): turnkey.Walle
   }
 }
 
-function toStoreAccount(account: (typeof core_accounts)[number]): Store.Account {
+function toStoreAccount(account: (typeof core_accounts)[number]): turnkey.Account {
   const walletAccount = toWalletAccount(account)
   const publicKey = walletAccount.publicKey
   Hex.assert(publicKey, { strict: true })
   return {
     address: account.address,
-    keyType: 'secp256k1',
-    publicKey,
+    turnkey: {
+      keyType: 'secp256k1',
+      publicKey,
+    },
   }
 }

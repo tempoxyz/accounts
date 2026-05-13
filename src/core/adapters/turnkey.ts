@@ -3,6 +3,7 @@ import { isAddressEqual } from 'viem'
 import type { Address } from 'viem/accounts'
 import { Account as TempoAccount } from 'viem/tempo'
 
+import type * as Account from '../Account.js'
 import * as Adapter from '../Adapter.js'
 import * as Store from '../Store.js'
 import { base } from './base.js'
@@ -71,32 +72,23 @@ export function turnkey<const client extends turnkey.Client>(
       return await turnkeyClient_promise
     }
 
-    function toStoreAccount(
-      account: turnkey.WalletAccount,
-      label?: string | undefined,
-    ): {
-      address: Address
-      keyType: 'secp256k1'
-      label?: string | undefined
-      publicKey: Hex.Hex
-    } {
+    function toStoreAccount(account: turnkey.WalletAccount, label?: string | undefined) {
       const publicKey = account.publicKey
       Hex.assert(publicKey, { strict: true })
 
       return {
         address: core_Address.from(account.address),
-        keyType: 'secp256k1',
         ...(label ? { label } : {}),
-        publicKey,
-      }
+        turnkey: {
+          keyType: 'secp256k1',
+          publicKey,
+        },
+      } satisfies turnkey.Account
     }
 
-    function toTempoAccount(account: {
-      address: Address
-      publicKey: Hex.Hex
-    }): TempoAccount.Account {
+    function toTempoAccount(account: turnkey.Account): TempoAccount.Account {
       const publicKey = PublicKey.from(
-        Secp256k1.noble.ProjectivePoint.fromHex(account.publicKey.slice(2)),
+        Secp256k1.noble.ProjectivePoint.fromHex(account.turnkey.publicKey.slice(2)),
       )
 
       const sign = async (parameters: { hash: Hex.Hex }) =>
@@ -164,7 +156,7 @@ export function turnkey<const client extends turnkey.Client>(
       const account = state.accounts.find((account) => isAddressEqual(account.address, address_))
       if (!account)
         throw new core_Provider.UnauthorizedError({ message: `Account "${address_}" not found.` })
-      if (account.keyType !== 'secp256k1' || !('publicKey' in account) || !account.publicKey) {
+      if (!isTurnkeyAccount(account)) {
         clear()
         throw new core_Provider.DisconnectedError({
           message: 'Turnkey account must reconnect.',
@@ -172,6 +164,20 @@ export function turnkey<const client extends turnkey.Client>(
       }
 
       return account
+    }
+
+    function isTurnkeyAccount(account: Account.Store): account is turnkey.Account {
+      if (!('turnkey' in account)) return false
+      const { turnkey } = account
+      if (!isObject(turnkey)) return false
+      if (turnkey.keyType !== 'secp256k1') return false
+      if (typeof turnkey.publicKey !== 'string') return false
+      try {
+        Hex.assert(turnkey.publicKey, { strict: true })
+        return true
+      } catch {
+        return false
+      }
     }
 
     function signatureToHex(value: turnkey.SignatureResponse): Hex.Hex {
@@ -326,6 +332,17 @@ export declare namespace turnkey {
     addressFormat?: string | undefined
     /** Compressed secp256k1 public key for the Turnkey wallet account. */
     publicKey: string
+  }
+
+  /** Stored Turnkey account metadata used to reconstruct a remote Tempo account. */
+  type Account = Store.Account & {
+    /** Turnkey-specific signer metadata. */
+    turnkey: {
+      /** Remote signer key type. */
+      keyType: 'secp256k1'
+      /** Compressed secp256k1 public key for the Turnkey signer. */
+      publicKey: Hex.Hex
+    }
   }
 
   /** Signature parts returned by Turnkey raw-payload signing. */
