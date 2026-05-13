@@ -484,6 +484,16 @@ describe('privy', () => {
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
+  test('disconnect: clears local state even when initialize throws', async () => {
+    // First call to `initialize` throws; disconnect must still clear local
+    // provider state so the user is not stuck with a stale connected session.
+    const { adapter, store } = setup({ initError: new Error('init failed') })
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(adapter.actions.disconnect!()).rejects.toThrowError('init failed')
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
   test('error: signature recovered from a different key is rejected as Unauthorized', async () => {
     // Wallet A is loaded, but the provider signs with key B's private key
     // (simulating a stale or mismatched provider). The adapter must refuse to
