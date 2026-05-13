@@ -375,7 +375,10 @@ describe('privy', () => {
     )
   })
 
-  test('error: signing an unconnected account fails', async () => {
+  test('error: signing for an unconnected address while others are connected throws Unauthorized', async () => {
+    // After loading wallet A, signing for wallet B (which is not connected)
+    // must distinguish "wrong account" (Unauthorized) from "no session"
+    // (Disconnected) so apps can recover gracefully.
     const { adapter } = setup()
     await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
 
@@ -384,7 +387,9 @@ describe('privy', () => {
         { address: other, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', other] },
       ),
-    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: No Privy account connected.]')
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnauthorizedError: Account "${other}" not found.]`,
+    )
   })
 
   test('error: unsupported secp256k1_sign maps to UnsupportedMethodError', async () => {
