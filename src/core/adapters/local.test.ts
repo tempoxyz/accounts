@@ -1,3 +1,4 @@
+import { verifyMessage } from 'viem'
 import { describe, expect, test } from 'vp/test'
 
 import { accounts as core_accounts, privateKeys } from '../../../test/config.js'
@@ -71,6 +72,140 @@ describe('local', () => {
     `)
   })
 
+  test('default: loadAccounts personalSign signs the local ceremony digest', async () => {
+    const calls: Adapter.loadAccounts.Parameters[] = []
+    const { adapter } = setup({
+      loadAccounts: makeLoadAccounts(0, calls),
+    })
+
+    const result = await adapter.actions.loadAccounts(
+      { personalSign: { message: 'hello' } },
+      { method: 'wallet_connect', params: undefined },
+    )
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "digest": "0x50b2c43fd39106bafbba0da34fc430e1f91e3c96ea2acee2bc34119f92b37750",
+        },
+      ]
+    `)
+    expect(result.personalSign).toMatchInlineSnapshot(`
+      {
+        "message": "hello",
+      }
+    `)
+    expect(
+      await verifyMessage({
+        address: account.address,
+        message: 'hello',
+        signature: result.signature!,
+      }),
+    ).toMatchInlineSnapshot(`true`)
+  })
+
+  test('default: loadAccounts empty personalSign message signs the local ceremony digest', async () => {
+    const calls: Adapter.loadAccounts.Parameters[] = []
+    const { adapter } = setup({
+      loadAccounts: makeLoadAccounts(0, calls),
+    })
+
+    const result = await adapter.actions.loadAccounts(
+      { personalSign: { message: '' } },
+      { method: 'wallet_connect', params: undefined },
+    )
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "digest": "0x5f35dce98ba4fba25530a026ed80b2cecdaa31091ba4958b99b52ea1d068adad",
+        },
+      ]
+    `)
+    expect(
+      await verifyMessage({
+        address: account.address,
+        message: '',
+        signature: result.signature!,
+      }),
+    ).toMatchInlineSnapshot(`true`)
+  })
+
+  test('default: loadAccounts personalSign and access-key authorization use separate local signatures', async () => {
+    const calls: Adapter.loadAccounts.Parameters[] = []
+    const { adapter } = setup({
+      loadAccounts: makeLoadAccounts(0, calls),
+    })
+
+    const result = await adapter.actions.loadAccounts(
+      {
+        authorizeAccessKey: { expiry: 0 },
+        personalSign: { message: 'hello' },
+      },
+      { method: 'wallet_connect', params: undefined },
+    )
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "digest": "0x50b2c43fd39106bafbba0da34fc430e1f91e3c96ea2acee2bc34119f92b37750",
+        },
+      ]
+    `)
+    expect(
+      await verifyMessage({
+        address: account.address,
+        message: 'hello',
+        signature: result.signature!,
+      }),
+    ).toMatchInlineSnapshot(`true`)
+    expect({
+      keyAuthorizationSigned: !!result.keyAuthorization?.signature,
+      signaturesMatch: result.keyAuthorization?.signature === result.signature,
+    }).toMatchInlineSnapshot(`
+      {
+        "keyAuthorizationSigned": true,
+        "signaturesMatch": false,
+      }
+    `)
+  })
+
+  test('default: createAccount personalSign signs with the created local account', async () => {
+    const calls: Adapter.createAccount.Parameters[] = []
+    const { adapter } = setup({
+      createAccount: async (parameters) => {
+        calls.push(parameters)
+        return { accounts: [storeAccountFor(account_other)] }
+      },
+    })
+
+    const result = await adapter.actions.createAccount(
+      { name: 'Ada', personalSign: { message: 'hello' } },
+      { method: 'wallet_connect', params: undefined },
+    )
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "digest": "0x50b2c43fd39106bafbba0da34fc430e1f91e3c96ea2acee2bc34119f92b37750",
+          "name": "Ada",
+        },
+      ]
+    `)
+    expect(result.personalSign).toMatchInlineSnapshot(`
+      {
+        "message": "hello",
+      }
+    `)
+    expect(
+      await verifyMessage({
+        address: account_other.address,
+        message: 'hello',
+        signature: result.signature!,
+      }),
+    ).toMatchInlineSnapshot(`true`)
+  })
+
   test('default: local hydrated accounts can sign through the base actions', async () => {
     const { adapter, store } = setup()
     store.setState({ accounts: [storeAccountFor(account)], activeAccount: 0 })
@@ -110,6 +245,18 @@ function setup(overrides: Partial<local.Options> = {}) {
     store,
   })
   return { adapter, store }
+}
+
+function makeLoadAccounts(
+  index: number,
+  calls: Adapter.loadAccounts.Parameters[],
+): (
+  parameters?: Adapter.loadAccounts.Parameters | undefined,
+) => Promise<Adapter.loadAccounts.ReturnType> {
+  return async (parameters = {}) => {
+    calls.push(parameters)
+    return { accounts: [storeAccountFor(core_accounts[index]!)] }
+  }
 }
 
 function storeAccountFor(account: (typeof core_accounts)[number]): Account.Store {
