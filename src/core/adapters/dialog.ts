@@ -149,6 +149,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
      * the dialog so the user can fund, approve, or retry.
      */
     async function withAccessKey<result>(
+      options: Pick<Adapter.sendTransaction.Parameters, 'calls' | 'from'>,
       fn: (
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
@@ -156,7 +157,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     ): Promise<result | undefined> {
       const account = (() => {
         try {
-          return getAccount({ signable: true })
+          return getAccount({ address: options.from, calls: options.calls, signable: true })
         } catch {
           return undefined
         }
@@ -287,7 +288,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async signTransaction(parameters, request) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
+          const result = await withAccessKey(parameters, async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
               feePayer: (() => {
@@ -317,7 +318,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async sendTransaction(parameters, request) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
+          const result = await withAccessKey(parameters, async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
               feePayer: (() => {
@@ -347,7 +348,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async sendTransactionSync(parameters, request) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
+          const result = await withAccessKey(parameters, async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
               feePayer: (() => {
