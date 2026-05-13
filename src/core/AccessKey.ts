@@ -90,11 +90,11 @@ export declare namespace generate {
 
 /** Prepares an unsigned key authorization and local key material when needed. */
 export async function prepare(options: prepare.Options): Promise<prepare.ReturnType> {
-  const { address, chainId, expiry, keyType, limits, scopes } = options
+  const { address, chainId, expiry, keyType, limits, publicKey, scopes } = options
 
-  if (address) {
+  if (address || publicKey) {
     const keyAuthorization = KeyAuthorization.from({
-      address,
+      address: address ?? Address.fromPublicKey(PublicKey.from(publicKey!)),
       chainId: BigInt(chainId),
       expiry,
       limits,
@@ -119,7 +119,7 @@ export async function prepare(options: prepare.Options): Promise<prepare.ReturnT
 export declare namespace prepare {
   /** Options for {@link prepare}. */
   type Options = {
-    /** External access key address. When omitted, a local P256 key is generated. */
+    /** External access key address. Alternative to `publicKey`. */
     address?: Address.Address | undefined
     /** Chain ID the key authorization is scoped to. */
     chainId: bigint | number
@@ -129,6 +129,8 @@ export declare namespace prepare {
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
     limits?: readonly KeyAuthorization.TokenLimit[] | undefined
+    /** External public key to derive the access key address from. */
+    publicKey?: Hex.Hex | undefined
     /** Call scopes restricting which contracts/selectors this key can call. */
     scopes?: readonly KeyAuthorization.Scope[] | undefined
   }

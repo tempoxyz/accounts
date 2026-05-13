@@ -344,6 +344,30 @@ describe('prepare', () => {
     `)
   })
 
+  test('behavior: prepares external key authorization from public key', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const account = TempoAccount.fromWebCryptoP256(keyPair)
+
+    const result = await AccessKey.prepare({
+      chainId: 123n,
+      expiry: 456,
+      keyType: 'p256',
+      publicKey: account.publicKey,
+    })
+
+    expect(result.keyPair).toBeUndefined()
+    expect(result.keyAuthorization).toMatchInlineSnapshot(`
+      {
+        "address": "${account.address.toLowerCase()}",
+        "chainId": 123n,
+        "expiry": 456,
+        "limits": undefined,
+        "scopes": undefined,
+        "type": "p256",
+      }
+    `)
+  })
+
   test('behavior: defaults external key type to secp256k1', async () => {
     const result = await AccessKey.prepare({
       address: accounts[1]!.address,
