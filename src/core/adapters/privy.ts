@@ -3,6 +3,7 @@ import {
   Hex,
   Provider as ox_Provider,
   PublicKey,
+  Secp256k1,
   Signature,
   WebCryptoP256,
 } from 'ox'
@@ -309,7 +310,26 @@ export function privy<const client extends privy.Client>(
           }
           throw error
         })
-      return assertHexResult(result)
+      const signature = assertHexResult(result)
+
+      // Verify the returned signature was actually produced by the wallet's
+      // private key. Privy embedded wallet providers are bound to a specific
+      // address, but a stale or app-supplied mismatched provider could return
+      // a perfectly-shaped signature for a different key. Failing closed here
+      // prevents persisting bad access keys or returning invalid signatures.
+      const expected = core_Address.from(walletAccount.address)
+      const recovered = (() => {
+        try {
+          return Secp256k1.recoverAddress({ payload, signature: Signature.fromHex(signature) })
+        } catch {
+          return undefined
+        }
+      })()
+      if (!recovered || !isAddressEqual(recovered, expected))
+        throw new ox_Provider.UnauthorizedError({
+          message: `Privy provider returned a signature for "${recovered ?? 'unknown'}" that does not match the requested wallet "${expected}".`,
+        })
+      return signature
     }
 
     function assertHexResult(result: unknown): Hex.Hex {
