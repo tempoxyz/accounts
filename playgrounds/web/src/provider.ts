@@ -18,7 +18,6 @@ import {
   webAuthn,
 } from 'accounts'
 import { Mppx } from 'mppx/client'
-import { Hex } from 'ox'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
@@ -311,21 +310,14 @@ async function getPrivyEmbeddedWallets(client: Privy): Promise<readonly privy.Em
   if (!entropy) return []
   const { entropyId, entropyIdVerifier } = entropy
   return Promise.all(
-    wallets.map(async (wallet) => {
-      const provider = await client.embeddedWallet.getEthereumProvider({
+    wallets.map(async (wallet) => ({
+      address: wallet.address,
+      provider: await client.embeddedWallet.getEthereumProvider({
         wallet,
         entropyId,
         entropyIdVerifier,
-      })
-      return {
-        address: wallet.address,
-        signRawHash: async (hash) =>
-          (await provider.request({
-            method: 'secp256k1_sign',
-            params: [hash],
-          })) as Hex.Hex,
-      }
-    }),
+      }),
+    })),
   )
 }
 
