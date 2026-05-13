@@ -78,17 +78,16 @@ export function turnkey<const client extends turnkey.Client>(
 
       return {
         address: core_Address.from(account.address),
+        keyType: 'secp256k1',
         ...(label ? { label } : {}),
-        turnkey: {
-          keyType: 'secp256k1',
-          publicKey,
-        },
+        publicKey,
+        source: 'turnkey',
       } satisfies turnkey.Account
     }
 
     function toTempoAccount(account: turnkey.Account): TempoAccount.Account {
       const publicKey = PublicKey.from(
-        Secp256k1.noble.ProjectivePoint.fromHex(account.turnkey.publicKey.slice(2)),
+        Secp256k1.noble.ProjectivePoint.fromHex(account.publicKey.slice(2)),
       )
 
       const sign = async (parameters: { hash: Hex.Hex }) =>
@@ -167,13 +166,11 @@ export function turnkey<const client extends turnkey.Client>(
     }
 
     function isTurnkeyAccount(account: Account.Store): account is turnkey.Account {
-      if (!('turnkey' in account)) return false
-      const { turnkey } = account
-      if (!isObject(turnkey)) return false
-      if (turnkey.keyType !== 'secp256k1') return false
-      if (typeof turnkey.publicKey !== 'string') return false
+      if (account.source !== 'turnkey') return false
+      if (account.keyType !== 'secp256k1') return false
+      if (typeof account.publicKey !== 'string') return false
       try {
-        Hex.assert(turnkey.publicKey, { strict: true })
+        Hex.assert(account.publicKey, { strict: true })
         return true
       } catch {
         return false
@@ -336,13 +333,12 @@ export declare namespace turnkey {
 
   /** Stored Turnkey account metadata used to reconstruct a remote Tempo account. */
   type Account = Store.Account & {
-    /** Turnkey-specific signer metadata. */
-    turnkey: {
-      /** Remote signer key type. */
-      keyType: 'secp256k1'
-      /** Compressed secp256k1 public key for the Turnkey signer. */
-      publicKey: Hex.Hex
-    }
+    /** Turnkey-managed remote signer. */
+    source: 'turnkey'
+    /** Remote signer key type. */
+    keyType: 'secp256k1'
+    /** Compressed secp256k1 public key for the Turnkey signer. */
+    publicKey: Hex.Hex
   }
 
   /** Signature parts returned by Turnkey raw-payload signing. */

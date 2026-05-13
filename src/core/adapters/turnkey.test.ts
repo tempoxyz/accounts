@@ -27,11 +27,10 @@ describe('turnkey', () => {
         "accounts": [
           {
             "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "keyType": "secp256k1",
             "label": "Ada",
-            "turnkey": {
-              "keyType": "secp256k1",
-              "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
-            },
+            "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
+            "source": "turnkey",
           },
         ],
       }
@@ -51,10 +50,9 @@ describe('turnkey', () => {
       [
         {
           "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-          "turnkey": {
-            "keyType": "secp256k1",
-            "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
-          },
+          "keyType": "secp256k1",
+          "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
+          "source": "turnkey",
         },
       ]
     `)
@@ -220,10 +218,9 @@ describe('turnkey', () => {
       [
         {
           "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-          "turnkey": {
-            "keyType": "secp256k1",
-            "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
-          },
+          "keyType": "secp256k1",
+          "publicKey": "0x038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75",
+          "source": "turnkey",
         },
       ]
     `)
@@ -375,9 +372,8 @@ function toStoreAccount(account: (typeof core_accounts)[number]): turnkey.Accoun
   Hex.assert(publicKey, { strict: true })
   return {
     address: account.address,
-    turnkey: {
-      keyType: 'secp256k1',
-      publicKey,
-    },
+    keyType: 'secp256k1',
+    publicKey,
+    source: 'turnkey',
   }
 }

@@ -15,8 +15,16 @@ export type Store = {
   label?: string | undefined
 } & OneOf<
   | {}
-  | Pick<TempoAccount.Account, 'keyType' | 'sign'>
+  | Pick<TempoAccount.Account, 'keyType' | 'publicKey' | 'sign' | 'source'>
   | { keyType: 'secp256k1'; privateKey: Hex }
+  | {
+      /** Turnkey-managed remote signer. */
+      source: 'turnkey'
+      /** Remote signer key type. */
+      keyType: 'secp256k1'
+      /** Compressed secp256k1 public key for the remote signer. */
+      publicKey: Hex
+    }
   | { keyType: 'p256'; privateKey: Hex }
   | { keyType: 'webAuthn'; credential: { id: string; publicKey: Hex; rpId: string } }
   | {
@@ -167,8 +175,11 @@ export function hydrate(
 ): TempoAccount.Account | JsonRpcAccount {
   const { signable = false } = options
   if (!signable) return { address: account.address, type: 'json-rpc' }
-  if ('sign' in account && typeof account.sign === 'function')
-    return account as TempoAccount.Account
+  if ('sign' in account && typeof account.sign === 'function') return account as never
+  if (account.source === 'turnkey')
+    throw new Provider.UnauthorizedError({
+      message: `Turnkey account "${account.address}" must be resolved by the Turnkey adapter.`,
+    })
   if (!account.keyType)
     throw new Provider.UnauthorizedError({ message: `Account "${account.address}" cannot sign.` })
   switch (account.keyType) {
