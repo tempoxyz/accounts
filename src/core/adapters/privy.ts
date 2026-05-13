@@ -197,16 +197,14 @@ export function privy<const client extends privy.Client>(
       )
     }
 
-    async function restore(address?: Address | undefined) {
+    async function restore() {
       await Store.waitForHydration(store)
+      // Address resolution and the Disconnected-vs-Unauthorized split are
+      // delegated to the caller (see `accountForSigning`); never `clear()`
+      // or throw here purely because the requested address is unknown,
+      // since other accounts may remain validly connected.
       if (restore_promise) {
         await restore_promise
-        if (address && !accountByAddress(address)) {
-          clear()
-          throw new ox_Provider.DisconnectedError({
-            message: 'No Privy account connected.',
-          })
-        }
         return
       }
 
@@ -281,18 +279,17 @@ export function privy<const client extends privy.Client>(
 
       await requireSession()
 
-      // Re-read state since `requireSession` may have called `clear()`.
-      const persisted = store
-        .getState()
-        .accounts.some((account) => isAddressEqual(account.address, address_))
-      await restore(persisted ? address_ : undefined)
+      await restore()
 
       const restored = accountByAddress(address_)
       if (restored) return restored
 
-      throw new ox_Provider.DisconnectedError({
-        message: 'No Privy account connected.',
-      })
+      if (walletAccounts.length === 0)
+        throw new ox_Provider.DisconnectedError({
+          message: 'No Privy account connected.',
+        })
+
+      throw new ox_Provider.UnauthorizedError({ message: `Account "${address_}" not found.` })
     }
 
     async function signPayload(parameters: {
