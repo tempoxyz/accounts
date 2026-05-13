@@ -828,7 +828,10 @@ export declare namespace privy {
   /** Minimal EIP-1193 provider surface used by the adapter for `secp256k1_sign`. */
   type EthereumProvider = {
     /** Sends a JSON-RPC request to the Privy embedded wallet provider. */
-    request(parameters: { method: string; params?: unknown[] | undefined }): Promise<unknown>
+    request(parameters: {
+      method: string
+      params?: readonly unknown[] | undefined
+    }): Promise<unknown>
   }
 
   /**
