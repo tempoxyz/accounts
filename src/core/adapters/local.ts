@@ -1,4 +1,4 @@
-import { Address as ox_Address, Hex, Provider as ox_Provider, PublicKey, WebCryptoP256 } from 'ox'
+import { Hex, Provider as ox_Provider } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { BaseError, hashMessage } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
@@ -29,41 +29,19 @@ export function local(options: local.Options): Adapter.Adapter {
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
     /**
-     * Resolves access key params and computes the key authorization digest.
-     *
-     * For external keys: derives the address from the provided publicKey/address.
-     * For local keys: generates a P256 key pair via `AccessKey.generate`.
+     * Resolves access key params into an unsigned key authorization.
      */
     async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
-      const { expiry, limits, scopes } = options
-      const chainId = options.chainId ?? getClient().chain.id
-
-      if (options.publicKey || options.address) {
-        const accessKeyAddress =
-          options.address ?? ox_Address.fromPublicKey(PublicKey.from(options.publicKey!))
-        const keyType = options.keyType ?? 'secp256k1'
-        const keyAuthorization = KeyAuthorization.from({
-          address: accessKeyAddress,
-          chainId: BigInt(chainId),
-          expiry,
-          limits,
-          scopes,
-          type: keyType,
-        })
-        return { keyAuthorization }
-      }
-
-      const keyPair = await WebCryptoP256.createKeyPair()
-      const address = ox_Address.fromPublicKey(PublicKey.from(keyPair.publicKey))
-      const keyAuthorization = KeyAuthorization.from({
+      const { address, expiry, keyType, limits, publicKey, scopes } = options
+      return await AccessKey.prepare({
         address,
-        chainId: BigInt(chainId),
+        chainId: options.chainId ?? getClient().chain.id,
         expiry,
+        keyType,
         limits,
+        publicKey,
         scopes,
-        type: 'p256',
       })
-      return { keyAuthorization, keyPair }
     }
 
     /**

@@ -1,5 +1,4 @@
 import { Provider, type WebCryptoP256 } from 'ox'
-import { type KeyAuthorization } from 'ox/tempo'
 import type { Hex } from 'viem'
 import type { Address, JsonRpcAccount } from 'viem/accounts'
 import { Account as TempoAccount } from 'viem/tempo'
@@ -29,40 +28,6 @@ export type Store = {
       privateKey: Hex
       rpId: string
       origin: string
-    }
->
-
-/** Access key entry stored alongside accounts. */
-export type AccessKey = {
-  /** Access key address. */
-  address: Address
-  /** Owner of the access key. */
-  access: Address
-  /** Unix timestamp when the access key expires. */
-  expiry?: number | undefined
-  /** Signed key authorization to attach to the first transaction. Consumed on use. */
-  keyAuthorization?: KeyAuthorization.Signed | undefined
-  /** Key type. */
-  keyType: 'secp256k1' | 'p256' | 'webAuthn' | 'webCrypto'
-  /** TIP-20 spending limits for the access key. */
-  limits?: { token: Address; limit: bigint; period?: number | undefined }[] | undefined
-  /** Call scopes restricting which contracts/selectors this key can call. */
-  scopes?:
-    | {
-        address: Address
-        selector?: Hex | string | undefined
-        recipients?: readonly Address[] | undefined
-      }[]
-    | undefined
-} & OneOf<
-  | {}
-  | {
-      /** The exported private key backing the access key. */
-      privateKey: Hex
-    }
-  | {
-      /** The WebCrypto key pair backing the access key. */
-      keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>
     }
 >
 

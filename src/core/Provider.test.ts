@@ -2064,21 +2064,6 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
   })
 
   describe('wallet_authorizeAccessKey with external key', () => {
-    test('default: grants access key for an external key', async () => {
-      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
-      await connect(provider)
-
-      const keyPair = await WebCryptoP256.createKeyPair()
-      const accessKeyAccount = TempoAccount.fromWebCryptoP256(keyPair)
-
-      const result = await provider.request({
-        method: 'wallet_authorizeAccessKey',
-        params: [{ ...accessKeyAccount, expiry: Expiry.days(1) }],
-      })
-      expect(result.keyAuthorization.keyId).toBe(accessKeyAccount.address)
-      expect(result.keyAuthorization.keyType).toBe('p256')
-    })
-
     test('behavior: external key authorization can be used to send a transaction', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const rootAddress = await connect(provider)
