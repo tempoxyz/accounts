@@ -332,14 +332,14 @@ export declare namespace turnkey {
   }
 
   /** Stored Turnkey account metadata used to reconstruct a remote Tempo account. */
-  type Account = Store.Account & {
+  type Account = Store.Account<{
     /** Turnkey-managed remote signer. */
     source: 'turnkey'
     /** Remote signer key type. */
     keyType: 'secp256k1'
     /** Compressed secp256k1 public key for the Turnkey signer. */
     publicKey: Hex.Hex
-  }
+  }>
 
   /** Signature parts returned by Turnkey raw-payload signing. */
   type SignatureResponse = {

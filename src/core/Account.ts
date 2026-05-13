@@ -8,35 +8,32 @@ import type { OneOf } from '../internal/types.js'
 import type * as core_Store from './Store.js'
 
 /** Account stored in the provider state. */
-export type Store = {
+export type Store<metadata extends object = globalThis.Record<string, unknown>> = {
   /** Account address. */
   address: Address
   /** Display label used during registration (e.g. email). */
   label?: string | undefined
-} & OneOf<
-  | {}
-  | Pick<TempoAccount.Account, 'keyType' | 'publicKey' | 'sign' | 'source'>
-  | { keyType: 'secp256k1'; privateKey: Hex }
-  | {
-      /** Turnkey-managed remote signer. */
-      source: 'turnkey'
-      /** Remote signer key type. */
-      keyType: 'secp256k1'
-      /** Compressed secp256k1 public key for the remote signer. */
-      publicKey: Hex
-    }
-  | { keyType: 'p256'; privateKey: Hex }
-  | { keyType: 'webAuthn'; credential: { id: string; publicKey: Hex; rpId: string } }
-  | {
-      keyType: 'webCrypto'
-      keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>
-    }
-  | {
-      keyType: 'webAuthn_headless'
-      privateKey: Hex
-      rpId: string
-      origin: string
-    }
+} & metadata
+
+/** Account store record that the generic Account module knows how to hydrate. */
+export type Hydratable = Store<
+  OneOf<
+    | {}
+    | Pick<TempoAccount.Account, 'keyType' | 'publicKey' | 'sign' | 'source'>
+    | { keyType: 'secp256k1'; privateKey: Hex }
+    | { keyType: 'p256'; privateKey: Hex }
+    | { keyType: 'webAuthn'; credential: { id: string; publicKey: Hex; rpId: string } }
+    | {
+        keyType: 'webCrypto'
+        keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>
+      }
+    | {
+        keyType: 'webAuthn_headless'
+        privateKey: Hex
+        rpId: string
+        origin: string
+      }
+  >
 >
 
 /** Access key entry stored alongside accounts. */
@@ -184,23 +181,38 @@ export function hydrate(
     throw new Provider.UnauthorizedError({ message: `Account "${account.address}" cannot sign.` })
   switch (account.keyType) {
     case 'secp256k1':
-      return TempoAccount.fromSecp256k1(account.privateKey)
+      if (isHex(account.privateKey)) return TempoAccount.fromSecp256k1(account.privateKey)
+      break
     case 'p256':
-      return TempoAccount.fromP256(account.privateKey)
+      if (isHex(account.privateKey)) return TempoAccount.fromP256(account.privateKey)
+      break
     case 'webCrypto':
-      return TempoAccount.fromWebCryptoP256(account.keyPair)
+      if (isWebCryptoKeyPair(account.keyPair))
+        return TempoAccount.fromWebCryptoP256(account.keyPair)
+      break
     case 'webAuthn':
-      return TempoAccount.fromWebAuthnP256(account.credential, {
-        rpId: account.credential.rpId,
-      })
+      if (isWebAuthnCredential(account.credential))
+        return TempoAccount.fromWebAuthnP256(account.credential, {
+          rpId: account.credential.rpId,
+        })
+      break
     case 'webAuthn_headless':
-      return TempoAccount.fromHeadlessWebAuthn(account.privateKey, {
-        rpId: account.rpId,
-        origin: account.origin,
-      })
+      if (
+        isHex(account.privateKey) &&
+        typeof account.rpId === 'string' &&
+        typeof account.origin === 'string'
+      )
+        return TempoAccount.fromHeadlessWebAuthn(account.privateKey, {
+          rpId: account.rpId,
+          origin: account.origin,
+        })
+      break
     default:
       throw new Provider.UnauthorizedError({ message: 'Unknown key type.' })
   }
+  throw new Provider.UnauthorizedError({
+    message: `Account "${account.address}" cannot sign locally.`,
+  })
 }
 
 export declare namespace hydrate {
@@ -208,6 +220,28 @@ export declare namespace hydrate {
     /** Whether to hydrate signing capability. @default false */
     signable?: boolean | undefined
   }
+}
+
+function isHex(value: unknown): value is Hex {
+  return typeof value === 'string' && value.startsWith('0x')
+}
+
+function isObject(value: unknown): value is globalThis.Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isWebAuthnCredential(
+  value: unknown,
+): value is { id: string; publicKey: Hex; rpId: string } {
+  if (!isObject(value)) return false
+  return typeof value.id === 'string' && isHex(value.publicKey) && typeof value.rpId === 'string'
+}
+
+function isWebCryptoKeyPair(
+  value: unknown,
+): value is Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>> {
+  if (!isObject(value)) return false
+  return isObject(value.publicKey) && isObject(value.privateKey)
 }
 
 /** Returns true if the access key's scopes cover the requested calls (or key is unscoped). */

@@ -167,6 +167,14 @@ export function create(options: create.Options = {}): create.ReturnType {
     return merged
   }
 
+  function getCredentialId(account: Account.Store) {
+    const { credential } = account
+    if (typeof credential !== 'object') return undefined
+    if (!credential) return undefined
+    if (!('id' in credential)) return undefined
+    return typeof credential.id === 'string' ? credential.id : undefined
+  }
+
   /** Resolves the `feePayer` field from a transaction request into an absolute URL string or `undefined`. */
   function resolveFeePayer(feePayer: string | boolean | undefined): string | false | undefined {
     if (feePayer === false) return false
@@ -609,7 +617,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                           if (existing && 'credential' in existing)
                             return await actions.loadAccounts(
                               {
-                                credentialId: existing.credential?.id,
+                                credentialId: getCredentialId(existing),
                                 digest: capabilities.digest,
                                 authorizeAccessKey,
                                 ...(personalSign_request
