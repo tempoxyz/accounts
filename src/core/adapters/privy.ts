@@ -712,14 +712,20 @@ export function privy<const client extends privy.Client>(
           })
         },
         async disconnect() {
-          const privyClient = await getPrivyClient()
-          const userId = await privyClient.user
-            .get()
-            .then(({ user }) => user.id)
-            .catch(() => undefined)
+          // Bump the epoch so any in-flight silent restore bails before
+          // resurrecting accounts after the user has logged out.
+          connect_version++
+          restore_promise = undefined
           try {
+            const privyClient = await getPrivyClient()
+            const userId = await privyClient.user
+              .get()
+              .then(({ user }) => user.id)
+              .catch(() => undefined)
             await privyClient.auth.logout(userId ? { userId } : undefined)
           } finally {
+            // Always clear local state, even if `initialize`/`logout` throws,
+            // so the user is not left with stale connected accounts.
             clear()
           }
         },
