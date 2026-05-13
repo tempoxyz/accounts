@@ -38,10 +38,27 @@ export type State = {
   requestQueue: readonly QueuedRequest[]
 }
 
+/** Provider state persisted as a refresh snapshot. */
+export type Persisted = {
+  /** Stored access keys. */
+  accessKeys?: readonly AccessKey[] | undefined
+  /** Connected accounts. */
+  accounts?: readonly Account[] | undefined
+  /** Index of the active account. */
+  activeAccount?: number | undefined
+  /**
+   * Absolutized Server Authentication endpoints from the most recent
+   * `wallet_connect` (or the Provider's `auth` option).
+   */
+  auth?: State['auth'] | undefined
+  /** Active chain ID. */
+  chainId?: number | undefined
+}
+
 /** Zustand vanilla store with `subscribeWithSelector` and `persist` middleware. */
 export type Store = Mutate<
   StoreApi<State>,
-  [['zustand/subscribeWithSelector', never], ['zustand/persist', State]]
+  [['zustand/subscribeWithSelector', never], ['zustand/persist', Persisted]]
 >
 
 /** Options for {@link create}. */
@@ -89,7 +106,7 @@ export function create(options: Options): Store {
 
   return createStore(
     subscribeWithSelector(
-      persist<State>(
+      persist<State, [], [], Persisted>(
         () => ({
           accessKeys: [],
           accounts: [],
@@ -98,43 +115,70 @@ export function create(options: Options): Store {
           requestQueue: [],
         }),
         {
-          merge(persisted, current) {
-            const state = persisted as State
-            return {
-              ...state,
-              ...current,
-              // Preserve in-memory credentials when persisted accounts only have addresses.
-              accounts:
-                state.accounts?.map((persisted) => {
-                  const account = current.accounts.find(
-                    (a) => a.address.toLowerCase() === persisted.address.toLowerCase(),
-                  )
-                  return account ?? persisted
-                }) ?? current.accounts,
-              accessKeys: state.accessKeys ?? current.accessKeys,
-              chainId: state.chainId ?? current.chainId,
-            }
-          },
+          merge: hydrate,
           name: 'store',
-          partialize: (state) => {
-            const accounts =
-              maxAccounts && state.accounts.length > maxAccounts
-                ? state.accounts.slice(0, maxAccounts)
-                : state.accounts
-            return {
-              accounts,
-              activeAccount: state.activeAccount,
-              ...(persistCredentials ? { accessKeys: state.accessKeys } : {}),
-              ...(state.auth ? { auth: state.auth } : {}),
-              chainId: state.chainId,
-            } as unknown as State
-          },
+          partialize: (state) => serialize(state, { maxAccounts, persistCredentials }),
           storage,
           version: 0,
         },
       ),
     ),
   )
+}
+
+/** Converts runtime provider state into the persisted refresh snapshot. */
+export function serialize(state: State, options: serialize.Options = {}): Persisted {
+  const { maxAccounts, persistCredentials = true } = options
+  const accounts =
+    maxAccounts && state.accounts.length > maxAccounts
+      ? state.accounts.slice(0, maxAccounts)
+      : state.accounts
+  return {
+    accounts,
+    activeAccount: state.activeAccount,
+    ...(persistCredentials ? { accessKeys: state.accessKeys } : {}),
+    ...(state.auth ? { auth: state.auth } : {}),
+    chainId: state.chainId,
+  }
+}
+
+export declare namespace serialize {
+  /** Options for {@link serialize}. */
+  type Options = {
+    /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded. */
+    maxAccounts?: number | undefined
+    /** Whether to persist credentials and access keys to storage. @default true */
+    persistCredentials?: boolean | undefined
+  }
+}
+
+/** Restores runtime provider state from a persisted refresh snapshot. */
+export function hydrate(persisted: unknown, current: State): State {
+  return normalize(persisted, current)
+}
+
+/** Normalizes a persisted refresh snapshot using the current runtime state as fallback. */
+export function normalize(persisted: unknown, current: State): State {
+  const state = stateFromPersisted(persisted)
+  return {
+    ...state,
+    ...current,
+    // Preserve in-memory credentials when persisted accounts only have addresses.
+    accounts:
+      state.accounts?.map((persisted) => {
+        const account = current.accounts.find(
+          (a) => a.address.toLowerCase() === persisted.address.toLowerCase(),
+        )
+        return account ?? persisted
+      }) ?? current.accounts,
+    accessKeys: state.accessKeys ?? current.accessKeys,
+    chainId: state.chainId ?? current.chainId,
+  }
+}
+
+function stateFromPersisted(persisted: unknown): Partial<Persisted> {
+  if (!persisted || typeof persisted !== 'object') return {}
+  return persisted as Partial<Persisted>
 }
 
 /**
