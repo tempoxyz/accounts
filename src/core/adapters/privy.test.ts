@@ -1,14 +1,28 @@
-import { Hex } from 'ox'
+import { Address as core_Address, Hex, Secp256k1, Signature } from 'ox'
 import { describe, expect, test } from 'vp/test'
 
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { privy } from './privy.js'
 
-const address = '0x0000000000000000000000000000000000000001'
-const other = '0x0000000000000000000000000000000000000002'
+// Deterministic test keys so addresses and signatures are reproducible across
+// runs. Real signing is required by upcoming signer-recovery validation, and
+// keeps the mocks honest about what the production adapter sees from Privy.
+const privateKeyA = Hex.padLeft('0x01', 32)
+const privateKeyB = Hex.padLeft('0x02', 32)
+const address = core_Address.fromPublicKey(Secp256k1.getPublicKey({ privateKey: privateKeyA }))
+const other = core_Address.fromPublicKey(Secp256k1.getPublicKey({ privateKey: privateKeyB }))
 
-const stubSignature = Hex.concat(Hex.padLeft('0x11', 32), Hex.padLeft('0x22', 32), '0x1b')
+function signWithKey(privateKey: Hex.Hex, payload: Hex.Hex): Hex.Hex {
+  const signature = Secp256k1.sign({ payload, privateKey })
+  return Signature.toHex(signature)
+}
+
+function privateKeyForAddress(walletAddress: string): Hex.Hex {
+  if (core_Address.from(walletAddress) === address) return privateKeyA
+  if (core_Address.from(walletAddress) === other) return privateKeyB
+  throw new Error(`No test private key for ${walletAddress}`)
+}
 
 describe('privy', () => {
   test('default: createAccount delegates registration and signs the requested digest', async () => {
@@ -26,15 +40,15 @@ describe('privy', () => {
       ]
     `)
     expect(result).toMatchInlineSnapshot(`
-      {
-        "accounts": [
-          {
-            "address": "0x0000000000000000000000000000000000000001",
-            "label": "Ada",
-          },
-        ],
-        "signature": "0x000000000000000000000000000000000000000000000000000000000000001100000000000000000000000000000000000000000000000000000000000000221b",
-      }
+    	{
+    	  "accounts": [
+    	    {
+    	      "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+    	      "label": "Ada",
+    	    },
+    	  ],
+    	  "signature": "0xced9d002f487622c7e218274065c327bdfe274ea7da91349bb48fe7c4495baeb71cc6b2f9b3d5f34e5b404cec0ed0dcb085f990a7b7a7f4cb81a5e8abb76aa981b",
+    	}
     `)
   })
 
@@ -49,12 +63,12 @@ describe('privy', () => {
 
     expect(client.loadCalls).toMatchInlineSnapshot(`1`)
     expect(client.signWith).toMatchInlineSnapshot(`
-      [
-        "0x0000000000000000000000000000000000000001",
-      ]
+    	[
+    	  "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+    	]
     `)
     expect(result).toMatchInlineSnapshot(
-      `"0x000000000000000000000000000000000000000000000000000000000000001100000000000000000000000000000000000000000000000000000000000000221b"`,
+      `"0xe5ddc160e4c8f92de507c7db9b982d4f9b7197bfa421864aeadc586bc96b09ae0ba0c5b131650ae4994cff1839341d00f3735ef5abc62ac8fe2cf50f65208e2a1b"`,
     )
   })
 
@@ -73,32 +87,32 @@ describe('privy', () => {
     )
 
     expect(client.signPayloads).toMatchInlineSnapshot(`
-      [
-        "0x219d0ef7a59d2a40d6ff9e115e32fb6b53eb7fa518ea3364b7b806990fad3944",
-      ]
+    	[
+    	  "0xe77ac2b1d13a90cbd8c4912ff18d0d044cc89c5c6781941001640b8d251f3783",
+    	]
     `)
     expect(result).toMatchInlineSnapshot(`
-      {
-        "accounts": [
-          {
-            "address": "0x0000000000000000000000000000000000000001",
-          },
-        ],
-        "keyAuthorization": {
-          "chainId": "0x1",
-          "expiry": "0x7b",
-          "keyId": "0x0000000000000000000000000000000000000002",
-          "keyType": "secp256k1",
-          "limits": undefined,
-          "signature": {
-            "r": "0x0000000000000000000000000000000000000000000000000000000000000011",
-            "s": "0x0000000000000000000000000000000000000000000000000000000000000022",
-            "type": "secp256k1",
-            "yParity": "0x0",
-          },
-        },
-        "signature": undefined,
-      }
+    	{
+    	  "accounts": [
+    	    {
+    	      "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+    	    },
+    	  ],
+    	  "keyAuthorization": {
+    	    "chainId": "0x1",
+    	    "expiry": "0x7b",
+    	    "keyId": "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+    	    "keyType": "secp256k1",
+    	    "limits": undefined,
+    	    "signature": {
+    	      "r": "0xb364cd8e50555239adf9f7d655b018ea386764d44ed9b56e894f4a101f0b1a6b",
+    	      "s": "0x4910cc8497358eb73a08df09c9cfb2618e3c949b3847ab310ad7ab0d76a9c624",
+    	      "type": "secp256k1",
+    	      "yParity": "0x1",
+    	    },
+    	  },
+    	  "signature": undefined,
+    	}
     `)
   })
 
@@ -118,22 +132,22 @@ describe('privy', () => {
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
     expect(client.restoreCalls).toMatchInlineSnapshot(`1`)
     expect(result).toMatchInlineSnapshot(`
-      {
-        "keyAuthorization": {
-          "chainId": "0x1",
-          "expiry": "0x7b",
-          "keyId": "0x0000000000000000000000000000000000000002",
-          "keyType": "secp256k1",
-          "limits": undefined,
-          "signature": {
-            "r": "0x0000000000000000000000000000000000000000000000000000000000000011",
-            "s": "0x0000000000000000000000000000000000000000000000000000000000000022",
-            "type": "secp256k1",
-            "yParity": "0x0",
-          },
-        },
-        "rootAddress": "0x0000000000000000000000000000000000000001",
-      }
+    	{
+    	  "keyAuthorization": {
+    	    "chainId": "0x1",
+    	    "expiry": "0x7b",
+    	    "keyId": "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+    	    "keyType": "secp256k1",
+    	    "limits": undefined,
+    	    "signature": {
+    	      "r": "0xb364cd8e50555239adf9f7d655b018ea386764d44ed9b56e894f4a101f0b1a6b",
+    	      "s": "0x4910cc8497358eb73a08df09c9cfb2618e3c949b3847ab310ad7ab0d76a9c624",
+    	      "type": "secp256k1",
+    	      "yParity": "0x1",
+    	    },
+    	  },
+    	  "rootAddress": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+    	}
     `)
   })
 
@@ -176,16 +190,16 @@ describe('privy', () => {
     )
 
     expect(client.signWith).toMatchInlineSnapshot(`
-      [
-        "0x0000000000000000000000000000000000000002",
-      ]
+    	[
+    	  "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+    	]
     `)
     expect(store.getState().accounts).toMatchInlineSnapshot(`
-      [
-        {
-          "address": "0x0000000000000000000000000000000000000002",
-        },
-      ]
+    	[
+    	  {
+    	    "address": "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+    	  },
+    	]
     `)
   })
 
@@ -339,11 +353,11 @@ describe('privy', () => {
       params: undefined,
     })
     expect(result.accounts).toMatchInlineSnapshot(`
-      [
-        {
-          "address": "0x0000000000000000000000000000000000000001",
-        },
-      ]
+    	[
+    	  {
+    	    "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+    	  },
+    	]
     `)
   })
 
@@ -481,7 +495,15 @@ function createClient(options: setup.Options = {}) {
             const hash = (req.params as readonly Hex.Hex[])[0] as Hex.Hex
             client.signPayloads.push(hash)
             client.signWith.push(address)
-            return options.signResult ?? stubSignature
+            if (options.signResult !== undefined) return options.signResult
+            const privateKey = (() => {
+              try {
+                return privateKeyForAddress(address)
+              } catch {
+                return privateKeyA
+              }
+            })()
+            return signWithKey(privateKey, hash)
           },
         },
       }
@@ -518,7 +540,15 @@ function createClient(options: setup.Options = {}) {
             const hash = (req.params as readonly Hex.Hex[])[0] as Hex.Hex
             client.signPayloads.push(hash)
             client.signWith.push(wallet_address)
-            return options.signResult ?? stubSignature
+            if (options.signResult !== undefined) return options.signResult
+            const privateKey = (() => {
+              try {
+                return privateKeyForAddress(wallet_address)
+              } catch {
+                return privateKeyA
+              }
+            })()
+            return signWithKey(privateKey, hash)
           },
         }
       },
