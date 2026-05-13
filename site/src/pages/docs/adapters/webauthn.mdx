@@ -3,6 +3,8 @@ title: WebAuthn Adapter
 description: Use domain-bound passkeys as the account signing adapter.
 ---
 
+import { Cards, Card } from 'vocs'
+
 # WebAuthn Adapter
 
 The WebAuthn adapter is for apps and enterprises that want account keys bound to their own domain. Your app owns the passkey ceremony and the Accounts SDK plugs those signatures into Tempo account flows.
@@ -13,9 +15,15 @@ Use it when you want:
 - Your app to own registration and authentication UX.
 - Tempo account features without using the hosted Tempo Wallet surface.
 
-## Configure
+## Demo
 
-```tsx
+TODO
+
+## Usage
+
+:::code-group
+
+```tsx twoslash [Web (Wagmi)]
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
 import { webAuthn } from 'wagmi/tempo'
@@ -29,12 +37,162 @@ export const config = createConfig({
 })
 ```
 
-## Human Pass Needed
+```ts twoslash [Web (Vanilla)]
+import { Provider, webAuthn } from 'accounts'
 
-This page should be expanded with origin requirements, server ceremony boundaries, recovery expectations, and production security guidance.
+const provider = Provider.create({
+  adapter: webAuthn({ auth: '/auth' }),
+})
+```
+
+```ts twoslash [CLI]
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create()
+```
+
+:::
+
+## How Passkeys Work
+
+WebAuthn has two ceremonies: registration creates a new credential, and authentication proves that the same credential is present later. In both cases, your server sends a challenge, the browser asks the authenticator to sign it, and your server verifies the signed response with the stored public key. The browser mediates the UI, so your app never handles the raw private key material directly.
+
+Passkeys can live on a platform authenticator such as Face ID, Touch ID, or Windows Hello, or on a roaming authenticator such as a hardware security key. The private key stays on the device or credential provider and is not exported through the WebAuthn API.
+
+:::info
+Use `webAuthn({ auth: '/auth' })` when you want the browser to talk to a server backed ceremony. If you need to plug in your own ceremony implementation, use `WebAuthnCeremony.server({ url })` or `WebAuthnCeremony.local({ storage })`.
+:::
+
+## Setting up your Server
+
+For a server backed flow, mount [`Handler.webAuthn`](/docs/server/handler.webAuthn) and point the client adapter at the same path. The handler exposes `POST /auth/register/options`, `POST /auth/register`, `POST /auth/login/options`, `POST /auth/login`, and `POST /auth/logout`. Use a persistent [`Kv`](/docs/server/kv) store in production so challenges, credentials, and sessions survive deploys and restarts.
+
+:::code-group
+
+```ts twoslash [Server]
+import { Handler, Kv } from 'accounts/server'
+
+export const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://app.example.com',
+  rpId: 'example.com',
+})
+
+createServer(handler.listener)              // Node.js
+Bun.serve({ fetch: handler.fetch })         // Bun
+Deno.serve({ fetch: handler.fetch })        // Deno
+app.all('*', c => handler.fetch(c.request)) // Elysia
+app.use(handler.listener)                   // Express
+app.use(c => handler.fetch(c.req.raw))      // Hono
+export const GET = handler.fetch            // Next.js
+export const POST = handler.fetch           // Next.js
+```
+
+```ts twoslash [Client]
+import { Provider, webAuthn } from 'accounts'
+
+const provider = Provider.create({
+  adapter: webAuthn({ auth: '/auth' }),
+})
+```
+
+:::
+
+:::warning
+`Kv.memory()` is fine for local development and tests, but not for production. Use a persistent `Kv` adapter instead. [Learn more](/docs/server/kv).
+:::
+
+## Learn More
+
+### Origin and RP ID
+
+WebAuthn credentials are scoped to an origin and an RP ID. `origin` is the full browser origin that must match during verification, while `rpId` is the effective domain the credential is bound to. In development, `http://localhost` works because browsers allow WebAuthn on localhost as a secure context exception.
+
+Choose `rpId` carefully before you ship. If you register with `rpId: 'example.com'`, that credential can be used from `app.example.com` and other subdomains that satisfy WebAuthn's RP rules. But the reverse is not true: a passkey created with `rpId: 'app.example.com'` cannot later be used with `rpId: 'example.com'`.
+
+```ts twoslash
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://app.example.com',
+  rpId: 'example.com',
+})
+```
+
+:::warning
+Treat `rpId` like part of your public API. Changing it later can strand existing credentials and force users to register new passkeys.
+:::
+
+### Sessions
+
+A successful login automatically provisions a session for the authenticated user. By default, that session is issued as a cookie and downstream routes can read it without any extra plumbing. For non-browser callers, the login response can also return a `{ token }` body so the same session can be carried as a bearer token.
+
+For downstream routes on the same server, call `handler.getSession(req)` to resolve the current WebAuthn session. It reads the session from the cookie or from an `Authorization: Bearer <token>` header and returns `undefined` when the request is not authenticated.
+
+```ts twoslash
+// @noErrors
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://app.example.com',
+  rpId: 'example.com',
+})
+
+app.get('/me', async (req) => {
+  const session = await handler.getSession(req)
+  if (!session) return new Response('unauthorized', { status: 401 })
+  return Response.json({ credentialId: session.credentialId })
+})
+```
+
+:::info
+You can disable automatic session provisioning by passing `session: false` to `Handler.webAuthn`. With sessions disabled, login no longer issues a cookie or a token, the `/auth/logout` endpoint is not mounted, and `getSession` always returns `undefined`.
+
+```ts twoslash
+import { Handler, Kv } from 'accounts/server'
+
+export const handler = Handler.webAuthn({
+  kv: Kv.memory(),
+  origin: 'https://app.example.com',
+  rpId: 'example.com',
+  session: false, // [!code focus]
+})
+```
+:::
+
+### Account Recovery
+
+Passkeys are bound to authenticators, so recovery is different from password reset. Some credentials sync through OS or password manager providers such as iCloud Keychain, Google Password Manager, or 1Password, but you should not assume every user has sync enabled or access to the same provider on every device. A user can also lose all registered authenticators at once.
+
+Plan for multiple credentials per user from the start. Let users add another passkey from a second device or a hardware key after they sign in, and make that visible in account settings. If losing every authenticator would lock a user out forever, you need a separate recovery flow with stronger checks and explicit support tooling.
+
+:::warning
+Do not treat possession of one device as permanent account recovery. Recovery should be deliberate, audited, and separate from normal login.
+:::
+
+See the [WebAuthn production checklist](/docs/production?adapter=web-authn) before shipping.
 
 ## Next Steps
 
-- [Authentication](/docs/guides/authentication)
-- [WebAuthn API reference](/docs/api/webAuthn)
-- [WebAuthnCeremony reference](/docs/api/webauthnceremony)
+<Cards>
+  <Card
+    description="Set up the full passkey authentication flow end to end with the WebAuthn adapter."
+    icon="lucide:lock-keyhole"
+    to="/docs/guides/authentication"
+    title="Authentication"
+  />
+  <Card
+    description="Full API reference for the webAuthn client adapter, including ceremony and auth options."
+    icon="lucide:book"
+    to="/docs/api/webAuthn"
+    title="webAuthn reference"
+  />
+  <Card
+    description="Server-side WebAuthn ceremony handler reference for registration, login, and sessions."
+    icon="lucide:server"
+    to="/docs/server/handler.webAuthn"
+    title="Handler.webAuthn reference"
+  />
+</Cards>

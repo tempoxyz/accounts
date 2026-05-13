@@ -1,0 +1,21 @@
+@import "tailwindcss";
+@import "./_vocs.generated.css";
+
+@source "../";
+
+/*
+ * Fix: LightningCSS (via Tailwind v4) compiles light-dark() into a polyfill
+ * that uses @media (prefers-color-scheme) — which only responds to the OS-level
+ * dark preference, not the inline `color-scheme` set by Vocs's theme toggle.
+ *
+ * Override the polyfill variables (--lightningcss-light / --lightningcss-dark)
+ * to respect the inline color-scheme attribute that Vocs sets on <html>.
+ */
+html[style*="color-scheme: light"] {
+  --lightningcss-light: initial;
+  --lightningcss-dark: ;
+}
+html[style*="color-scheme: dark"] {
+  --lightningcss-light: ;
+  --lightningcss-dark: initial;
+}

@@ -60,26 +60,10 @@ const config: Config = defineConfig({
         items: [
           { text: 'Overview', link: '/docs/adapters' },
           { text: 'Tempo Wallet', link: '/docs/adapters/tempo-wallet' },
-          { text: 'WebAuthn', link: '/docs/adapters/webauthn' },
+          { text: 'WebAuthn (Passkeys)', link: '/docs/adapters/webauthn' },
           { text: 'Turnkey', link: '/docs/adapters/turnkey' },
-          { text: 'Secp256k1', link: '/docs/adapters/secp256k1' },
+          { text: 'Private Key', link: '/docs/adapters/private-key' },
           { text: 'Custom', link: '/docs/adapters/custom' },
-        ],
-      },
-      {
-        text: 'Enterprise',
-        items: [
-          {
-            text: 'Bring Your Auth',
-            items: [
-              { text: 'Overview', link: '/docs/enterprise/bring-your-auth' },
-              { text: 'Privy', link: '/docs/enterprise/bring-your-auth/privy' },
-              { text: 'AWS KMS', link: '/docs/enterprise/bring-your-auth/aws-kms' },
-              { text: 'Turnkey', link: '/docs/enterprise/bring-your-auth/turnkey' },
-              { text: 'Custom', link: '/docs/enterprise/bring-your-auth/custom' },
-            ],
-          },
-          { text: 'Hosted Universal Wallets', link: '/docs/enterprise/hosted-universal-wallets' },
         ],
       },
       {

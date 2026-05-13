@@ -63,6 +63,7 @@ overrides:
   protobufjs: 7.5.7
   '@protobufjs/utf8': 1.1.1
   qs: 6.15.1
+  reselect: 5.1.0
   react: ^19.2.5
   react-dom: ^19.2.5
   tar: 7.5.15
@@ -70,6 +71,9 @@ overrides:
   vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
   wrangler: ^4.85.0
+
+patchedDependencies:
+  vocs@0.0.0: 0749dd43af96e1423a849f589c6b765ac71042c00b84c5d521e0af05bf159b6e
 
 importers:
 
@@ -757,6 +761,9 @@ importers:
       react-dom:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
+      tailwindcss:
+        specifier: ^4.2.4
+        version: 4.2.4
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
@@ -768,7 +775,7 @@ importers:
         version: 8.0.10(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.2)(tsx@4.21.0)(yaml@2.8.3)
       vocs:
         specifier: https://pkg.pr.new/wevm/vocs@dc18ab3
-        version: https://pkg.pr.new/wevm/vocs@dc18ab3(@cfworker/json-schema@4.1.1)(@tanstack/react-router@1.168.19(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@types/react@19.2.14)(@vue/compiler-sfc@3.5.33)(mermaid@11.15.0)(react-dom@19.2.5(react@19.2.5))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(rollup@4.60.3)(typescript@5.9.3)(vite@8.0.10)(waku@1.0.0-alpha.10(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(babel-plugin-react-compiler@1.0.0)(esbuild@0.27.7)(jiti@2.6.1)(react-dom@19.2.5(react@19.2.5))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(terser@5.46.2)(tsx@4.21.0)(yaml@2.8.3))
+        version: https://pkg.pr.new/wevm/vocs@dc18ab3(patch_hash=0749dd43af96e1423a849f589c6b765ac71042c00b84c5d521e0af05bf159b6e)(@cfworker/json-schema@4.1.1)(@tanstack/react-router@1.168.19(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@types/react@19.2.14)(@vue/compiler-sfc@3.5.33)(mermaid@11.15.0)(react-dom@19.2.5(react@19.2.5))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(rollup@4.60.3)(typescript@5.9.3)(vite@8.0.10)(waku@1.0.0-alpha.10(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(babel-plugin-react-compiler@1.0.0)(esbuild@0.27.7)(jiti@2.6.1)(react-dom@19.2.5(react@19.2.5))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(terser@5.46.2)(tsx@4.21.0)(yaml@2.8.3))
       wagmi:
         specifier: 'catalog:'
         version: 3.6.12(@tanstack/query-core@5.100.5)(@tanstack/react-query@5.100.5(react@19.2.5))(@types/react@19.2.14)(accounts@)(immer@11.1.4)(react@19.2.5)(typescript@5.9.3)(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))
@@ -782,6 +789,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      unplugin-icons:
+        specifier: ^22.5.0
+        version: 22.5.0(@svgr/core@8.1.0(typescript@5.9.3))(@vue/compiler-sfc@3.5.33)
 
 packages:
 
@@ -7690,8 +7700,8 @@ packages:
   requires-port@1.0.0:
     resolution: {integrity: sha512-KigOCHcocU3XODJxsu8i/j8T9tzT4adHiecwORRQ0ZZFcp7ahwXuRU1m+yuO90C5ZUyGeGfocHDI14M3L3yDAQ==}
 
-  reselect@5.1.1:
-    resolution: {integrity: sha512-K/BG6eIky/SBpzfHZv/dd+9JBFiS4SWV7FIujVyJRux6e45+73RaUHXLmIR1f7WOMaQ0U1km6qwklRQxpJJY0w==}
+  reselect@5.1.0:
+    resolution: {integrity: sha512-aw7jcGLDpSgNDyWBQLv2cedml85qd95/iszJjN988zX1t7AVRJi19d9kto5+W7oCfQ94gyo40dVbT6g2k4/kXg==}
 
   resolve-from@4.0.0:
     resolution: {integrity: sha512-pb/MYmXstAkysRFx8piNI1tGFNQIFA3vkE3Gq4EuA1dF6gHp/+vgZqsCGJapvy8N3Q+4o7FwvquPJcnZ7RYy4g==}
@@ -9560,7 +9570,7 @@ snapshots:
       '@floating-ui/utils': 0.2.11
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
-      reselect: 5.1.1
+      reselect: 5.1.0
       use-sync-external-store: 1.6.0(react@19.2.5)
     optionalDependencies:
       '@types/react': 19.2.14
@@ -17210,7 +17220,7 @@ snapshots:
 
   requires-port@1.0.0: {}
 
-  reselect@5.1.1: {}
+  reselect@5.1.0: {}
 
   resolve-from@4.0.0: {}
 
@@ -18236,7 +18246,7 @@ snapshots:
 
   vlq@1.0.1: {}
 
-  vocs@https://pkg.pr.new/wevm/vocs@dc18ab3(@cfworker/json-schema@4.1.1)(@tanstack/react-router@1.168.19(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@types/react@19.2.14)(@vue/compiler-sfc@3.5.33)(mermaid@11.15.0)(react-dom@19.2.5(react@19.2.5))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(rollup@4.60.3)(typescript@5.9.3)(vite@8.0.10)(waku@1.0.0-alpha.10(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(babel-plugin-react-compiler@1.0.0)(esbuild@0.27.7)(jiti@2.6.1)(react-dom@19.2.5(react@19.2.5))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(terser@5.46.2)(tsx@4.21.0)(yaml@2.8.3)):
+  vocs@https://pkg.pr.new/wevm/vocs@dc18ab3(patch_hash=0749dd43af96e1423a849f589c6b765ac71042c00b84c5d521e0af05bf159b6e)(@cfworker/json-schema@4.1.1)(@tanstack/react-router@1.168.19(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@types/react@19.2.14)(@vue/compiler-sfc@3.5.33)(mermaid@11.15.0)(react-dom@19.2.5(react@19.2.5))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(rollup@4.60.3)(typescript@5.9.3)(vite@8.0.10)(waku@1.0.0-alpha.10(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(babel-plugin-react-compiler@1.0.0)(esbuild@0.27.7)(jiti@2.6.1)(react-dom@19.2.5(react@19.2.5))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(terser@5.46.2)(tsx@4.21.0)(yaml@2.8.3)):
     dependencies:
       '@base-ui/react': 1.4.1(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@codesandbox/sandpack-react': 2.20.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)

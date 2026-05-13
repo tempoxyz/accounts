@@ -3,6 +3,8 @@ title: Turnkey Adapter
 description: Use Turnkey-managed wallet accounts as the account signing adapter.
 ---
 
+import { Cards, Card } from 'vocs'
+
 # Turnkey Adapter
 
 The Turnkey adapter is for apps that want Turnkey to own key custody and authentication while plugging into Tempo account features. Your app keeps the registration and login UX (passkey prompts, OTP, etc.); the adapter handles silent reconnect, session expiry, and provider signing.
@@ -13,7 +15,11 @@ Use it when you want:
 - Passkey or other Turnkey-supported authentication on your own organization.
 - Tempo account features without managing your own signer infrastructure.
 
-## Configure
+## Demo
+
+TODO
+
+## Usage
 
 ```tsx
 import { TurnkeyClient } from '@turnkey/core'
@@ -47,6 +53,11 @@ This page should be expanded with sub-org setup, session lifetime guidance, reco
 
 ## Next Steps
 
-- [Bring Your Auth — Turnkey](/docs/enterprise/bring-your-auth/turnkey)
-- [Authentication](/docs/guides/authentication)
-- [`turnkey` API reference](/docs/api/turnkey)
+<Cards>
+  <Card
+    description="Full API reference for the turnkey adapter, including client and account loading hooks."
+    icon="lucide:book"
+    to="/docs/api/turnkey"
+    title="turnkey reference"
+  />
+</Cards>

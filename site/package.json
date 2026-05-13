@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "NODE_OPTIONS='--import tsx' vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "node --import tsx scripts/copy-vocs-theme.ts && vite build",
+    "preview": "vite preview",
+    "sync:vocs": "node --import tsx scripts/copy-vocs-theme.ts"
   },
   "dependencies": {
     "@types/react": "catalog:",
@@ -16,6 +17,7 @@
     "ox": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "tailwindcss": "^4.2.4",
     "tsx": "catalog:",
     "viem": "catalog:",
     "vite": "catalog:",
@@ -25,6 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "unplugin-icons": "^22.5.0"
   }
 }

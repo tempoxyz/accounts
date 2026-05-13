@@ -3,17 +3,21 @@ title: Adapters
 description: Choose the signing adapter for your Accounts SDK integration.
 ---
 
+import { Cards, Card } from 'vocs'
+
 # Adapters
+
+## Overview
 
 Adapters decide where keys live, who runs authentication, and how account requests are approved. Your app talks to the Accounts SDK through one provider surface while the adapter handles signing.
 
-| Adapter | Who owns auth | Best for |
-| --- | --- | --- |
-| [Tempo Wallet](/docs/adapters/tempo-wallet) | Tempo Wallet | Apps that want a universal wallet without owning signing infrastructure. |
-| [WebAuthn](/docs/adapters/webauthn) | Your app origin | Teams that want domain-bound passkeys and Tempo account features. |
-| [Turnkey](/docs/adapters/turnkey) | Turnkey | Apps that want Turnkey to own key custody and authentication. |
-| [Secp256k1](/docs/adapters/secp256k1) | Your environment | Server-side signers with a pinned key, or development with a random in-storage key. |
-| [Custom](/docs/adapters/custom) | Your infrastructure | Privy, AWS KMS, internal signers, and hosted wallet products. |
+| Adapter                                     | Who owns auth       | Best for                                                                            |
+| ------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------- |
+| [Tempo Wallet](/docs/adapters/tempo-wallet) | Tempo Wallet        | Apps that want a universal wallet without owning signing infrastructure.            |
+| [WebAuthn (Passkeys)](/docs/adapters/webauthn) | Your app origin  | Teams that want domain-bound passkeys and Tempo account features.                   |
+| [Turnkey](/docs/adapters/turnkey)           | Turnkey             | Apps that want Turnkey to own key custody and authentication.                       |
+| [Private Key](/docs/adapters/private-key)   | Your environment    | Server-side signers with a pinned key, or development with a random in-storage key. |
+| [Custom](/docs/adapters/custom)             | Your infrastructure | Privy, AWS KMS, internal signers, and hosted wallet products.                       |
 
 ```mermaid
 sequenceDiagram
@@ -32,9 +36,35 @@ sequenceDiagram
 
 ## Next Steps
 
-- [Tempo Wallet](/docs/adapters/tempo-wallet)
-- [WebAuthn](/docs/adapters/webauthn)
-- [Turnkey](/docs/adapters/turnkey)
-- [Secp256k1](/docs/adapters/secp256k1)
-- [Custom adapter](/docs/adapters/custom)
-- [Adapter API reference](/docs/api/adapters)
+<Cards>
+  <Card
+    description="Universal account hosted on Tempo"
+    icon="lucide:wallet"
+    to="/docs/adapters/tempo-wallet"
+    title="Tempo Wallet"
+  />
+  <Card
+    description="Passkey accounts bound to your own origin"
+    icon="lucide:fingerprint"
+    to="/docs/adapters/webauthn"
+    title="WebAuthn (Passkeys)"
+  />
+  <Card
+    description="Accounts custodied by Turnkey infrastructure"
+    icon='<svg viewBox="-18 -12 50 50" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="m8.023 11.354 6.518 14.253H0l6.518-14.253a.828.828 0 0 1 1.505 0ZM7.27 9.145a4.576 4.576 0 0 0 4.579-4.572A4.576 4.576 0 0 0 7.269 0a4.576 4.576 0 0 0-4.578 4.573A4.576 4.576 0 0 0 7.27 9.145Z" fill="currentColor"/></svg>'
+    to="/docs/adapters/turnkey"
+    title="Turnkey"
+  />
+  <Card
+    description="Direct private key accounts"
+    icon="lucide:key-round"
+    to="/docs/adapters/private-key"
+    title="Private Key"
+  />
+  <Card
+    description="Bring your own auth infrastructure"
+    icon="lucide:plug"
+    to="/docs/adapters/custom"
+    title="Custom"
+  />
+</Cards>

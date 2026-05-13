@@ -77,6 +77,8 @@ overrides:
   protobufjs: '7.5.7'
   '@protobufjs/utf8': '1.1.1'
   qs: '6.15.1'
+  # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
+  reselect: '5.1.0'
   react: 'catalog:'
   react-dom: 'catalog:'
   tar: '7.5.15'
@@ -109,3 +111,6 @@ trustPolicyExclude:
   - semver@6.3.1
   - slow-redact@0.3.2
   - undici-types@6.19.8
+
+patchedDependencies:
+  vocs@0.0.0: patches/vocs@0.0.0.patch

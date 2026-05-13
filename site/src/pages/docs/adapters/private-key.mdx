@@ -1,0 +1,117 @@
+---
+title: Private Key Adapter
+description: Sign in-process with a `secp256k1` private key.
+---
+
+import { Cards, Card } from 'vocs'
+
+# Private Key Adapter
+
+The Private Key adapter signs in-process with a `secp256k1` private key. Use it when you have a key the host environment owns (server-side signers, fee payers, scripts) or when you need a quick development signer that persists a generated key in storage.
+
+Use it when you want:
+
+- A private key supplied by your environment (e.g. server-side signers, scripted flows).
+- A development-only signer that generates and persists a random key in the provider's storage.
+- A lightweight signing layer without passkey or hosted wallet UX.
+
+:::warning
+Storing keys in browser storage in plaintext is dangerous — only omit `privateKey` for development, testing, or when the threat model allows it.
+:::
+
+## Demo
+
+TODO
+
+## Usage
+
+```ts twoslash
+import { Provider, secp256k1 } from 'accounts'
+
+const provider = Provider.create({
+  adapter: secp256k1({ privateKey: '0x...' }),
+})
+```
+
+## Learn more
+
+### Generating a Private Key
+
+You need a 32-byte secret to use as `privateKey`. Generate it once, store it in a secret manager, and load it from an environment variable at runtime. Never commit the value to the repo.
+
+:::code-group
+
+```bash [CLI]
+cast wallet new
+```
+
+```ts twoslash [TypeScript]
+import { Secp256k1 } from 'viem/tempo'
+
+const privateKey = Secp256k1.randomPrivateKey()
+```
+
+:::
+
+:::warning
+Treat the output of either command as a production secret from the moment it is generated. Do not paste it into chat, tickets, or commit history.
+:::
+
+### Server-side Signers
+
+Use `secp256k1({ privateKey })` only in trusted server code — API routes, workers, cron jobs, fee payers, or scripted signers. Load the key from an environment variable or secret manager, fail fast if it is missing, and never expose it to browser bundles.
+
+```ts twoslash
+import { Provider, secp256k1 } from 'accounts'
+
+export const provider = Provider.create({
+  adapter: secp256k1({ privateKey: '0x...' }),
+})
+```
+
+Use separate keys for separate roles. A fee payer, background automation signer, and emergency admin signer should not share one private key. Rotate by deploying a new secret, moving traffic or jobs to the new signer, then retiring the old key. Never print the key, never include it in logs or error payloads, and never send it to client code.
+
+:::warning
+Passing a `privateKey` is full custody. Treat it like any other production secret.
+:::
+
+### Development and Testing
+
+For local playgrounds and one-off demos, `secp256k1()` is the quickest path. On first connect it generates a random key, then persists it through the provider storage adapter such as `localStorage` or cookies because `secp256k1` wraps [`local`](/docs/api/local).
+
+That is useful for development, but it is not a safe default for real user custody. Browser storage is plaintext to your app and can leak through XSS, shared machines, debug tooling, or accidental persistence.
+
+For automated tests, prefer a deterministic key instead of a generated one. That keeps addresses and fixtures stable across runs. In CI, inject a dedicated test key with an environment variable rather than committing one to the repo.
+
+```ts twoslash
+import { Provider, secp256k1 } from 'accounts'
+
+const provider = Provider.create({
+  adapter: secp256k1({ privateKey: '0x...' }),
+})
+```
+
+### When Not to Use This
+
+Do not use the generated browser form for production end-user wallets unless your threat model explicitly accepts plaintext key persistence. If you need domain-bound user authentication and non-exportable keys, prefer [WebAuthn](/docs/adapters/webauthn). If you want hosted custody and policy controls, prefer [Turnkey](/docs/adapters/turnkey).
+
+Also avoid sharing one long-lived private key across unrelated environments. Development, staging, production, and CI should each use different keys so a leak in one environment does not compromise the others.
+
+See the [Private Keys production checklist](/docs/production?adapter=private-keys) before shipping.
+
+## Next Steps
+
+<Cards>
+  <Card
+    description="Full API reference for the secp256k1 adapter, including private key and storage options."
+    icon="lucide:book"
+    to="/docs/api/secp256k1"
+    title="secp256k1 reference"
+  />
+  <Card
+    description="Build your own adapter when neither the built-in signers nor a hosted wallet fit your custody model."
+    icon="lucide:wrench"
+    to="/docs/adapters/custom"
+    title="Custom adapter"
+  />
+</Cards>

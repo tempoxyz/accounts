@@ -1,48 +1,144 @@
 ---
 title: Custom Adapter
-description: Author an adapter for your own auth and signing infrastructure.
+description: Author your own adapter with the `Adapter.define` API.
 ---
+
+import { Cards, Card } from 'vocs'
 
 # Custom Adapter
 
-Custom adapters connect the Accounts SDK to auth and signing systems you already operate. Use one when you want Privy, AWS KMS, Turnkey, internal signers, or a wallet on your own domain to plug into Tempo account features.
+The Accounts SDK exposes a low-level `Adapter.define` API for authoring custom adapters. Use it when none of the built-in adapters ([`tempoWallet`](/docs/adapters/tempo-wallet), [`webAuthn`](/docs/adapters/webauthn), [`turnkey`](/docs/adapters/turnkey), [`secp256k1`](/docs/adapters/private-key)) match your custody model.
 
-## What the adapter owns
+Use it when you want:
 
-- Authentication and session state.
-- Key custody or signer delegation.
-- User approval surfaces.
-- Request translation between the Accounts SDK and your signer.
-- Error mapping back into the provider contract.
+- A signer not covered by a built-in adapter.
+- Full control over the JSON-RPC actions exposed to the provider.
+- A thin wrapper that adds metadata or middleware around an existing adapter.
 
-## Walkthrough
+:::tip
+If your signer can produce a private key or sign arbitrary digests, consider wrapping the [`local`](/docs/api/local) adapter first — it implements every required action for you and only asks you to supply `createAccount` and `loadAccounts`. Reach for `Adapter.define` directly when you need to override signing, request translation, or session lifecycle behavior.
+:::
 
-::::steps
+## Anatomy
 
-### Define the signer boundary
+An adapter is a function annotated with display metadata. `Adapter.define(meta, setup)` returns that function, the provider calls it once at startup, and the returned `Instance` wires actions into the provider's `request()` dispatcher.
 
-Decide whether signing happens in the browser, on a server, in an HSM/KMS, or through a third-party wallet service.
+```ts
+import { Adapter } from 'accounts'
 
-### Implement the adapter contract
+const myAdapter = Adapter.define(
+  {
+    name: 'My Wallet',
+    rdns: 'com.example.mywallet',
+    icon: 'data:image/svg+xml;base64,...',
+  },
+  ({ getAccount, getClient, storage, store }) => {
+    return {
+      actions: {
+        async createAccount(params, request) {
+          // ...
+        },
+        async loadAccounts(params, request) {
+          // ...
+        },
+        async signPersonalMessage({ address, data }) {
+          // ...
+        },
+        async signTypedData({ address, data }) {
+          // ...
+        },
+        async signTransaction(params, request) {
+          // ...
+        },
+        async sendTransaction(params, request) {
+          // ...
+        },
+        async sendTransactionSync(params, request) {
+          // ...
+        },
+      },
+      cleanup() {
+        // ...
+      },
+    }
+  },
+)
+```
 
-Translate provider requests into your auth and signing flow.
+## Error mapping
 
-### Map errors deliberately
+Wrap signer-specific errors in [`ox`](https://oxlib.sh)'s `Provider` errors so app code can handle them without knowing your signer's internals.
 
-Return errors that app code can handle without knowing the signer implementation.
+```ts twoslash
+import { Provider as ox_Provider } from 'ox'
 
-### Test against shared guides
+declare function callMySigner(): Promise<unknown>
 
-Run connect, payment, and access-key flows through the same app code used by hosted adapters.
+try {
+  await callMySigner()
+} catch (error) {
+  // Translate auth failures into the provider contract.
+  throw new ox_Provider.UserRejectedRequestError(error as Error)
+}
+```
 
-::::
+Common mappings:
 
-## Human Pass Needed
+- User-cancelled prompts → `ox_Provider.UserRejectedRequestError`.
+- Missing or expired session → `ox_Provider.UnauthorizedError`.
+- Methods you choose not to implement → `ox_Provider.UnsupportedMethodError`.
+- Malformed adapter input → `ox_Provider.InvalidParamsError`.
 
-This page needs concrete adapter interface examples after the custom adapter API stabilizes.
+## Reference adapters
+
+The built-in adapters are good blueprints when you build your own.
+
+<Cards>
+  <Card
+    description="Implements every required action against a `viem` `Account`."
+    icon="lucide:file-code"
+    to="https://github.com/tempoxyz/accounts/blob/main/src/core/adapters/local.ts"
+    title="local"
+  />
+  <Card
+    description="Minimal wrapper around `local` that supplies a private key."
+    icon="lucide:file-code"
+    to="https://github.com/tempoxyz/accounts/blob/main/src/core/adapters/secp256k1.ts"
+    title="secp256k1"
+  />
+  <Card
+    description="Wraps `local` with WebAuthn registration and authentication ceremonies."
+    icon="lucide:file-code"
+    to="https://github.com/tempoxyz/accounts/blob/main/src/core/adapters/webAuthn.ts"
+    title="webAuthn"
+  />
+  <Card
+    description="Full custom adapter with session restore, expiry handling, and per-action signer translation."
+    icon="lucide:file-code"
+    to="https://github.com/tempoxyz/accounts/blob/main/src/core/adapters/turnkey.ts"
+    title="turnkey"
+  />
+  <Card
+    description="Remote-forwarding adapter that shows how `forwardsAuth` is used."
+    icon="lucide:file-code"
+    to="https://github.com/tempoxyz/accounts/blob/main/src/core/adapters/dialog.ts"
+    title="dialog"
+  />
+</Cards>
 
 ## Next Steps
 
-- [Bring Your Auth](/docs/enterprise/bring-your-auth)
-- [Hosted Universal Wallets](/docs/enterprise/hosted-universal-wallets)
-- [Adapter API reference](/docs/api/adapters)
+<Cards>
+  <Card
+    description="Provider configuration that consumes your adapter."
+    icon="lucide:book"
+    to="/docs/api/provider"
+    title="Provider reference"
+  />
+  <Card
+    description="Wrap the `local` adapter for the simplest custom path."
+    icon="lucide:wrench"
+    to="/docs/api/local"
+    title="local reference"
+  />
+</Cards>
