@@ -442,6 +442,48 @@ describe('privy', () => {
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: restore surfaces user.get session errors as `Privy session expired.`', async () => {
+    const { adapter, store } = setup({
+      userGetError: Object.assign(new Error('boom'), { code: 'session_expired' }),
+    })
+    // Wait past the 100ms `waitForHydration` safety timeout so the eager
+    // boot-time `void restore()` runs first against an empty store and exits
+    // before we populate state. Without this, boot races with the user call
+    // and swallows the session error before the test can assert on it.
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
+    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: Privy session expired.]')
+
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: restore surfaces getEthereumProvider session errors as `Privy session expired.`', async () => {
+    const { adapter, store } = setup({
+      getEthereumProviderError: Object.assign(new Error('boom'), {
+        code: 'embedded_wallet_before_logged_in',
+      }),
+    })
+    // See note above: wait past `waitForHydration`'s 100ms safety timeout so
+    // boot-time restore settles against an empty store first.
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
+    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: Privy session expired.]')
+
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
   test('error: signature recovered from a different key is rejected as Unauthorized', async () => {
     // Wallet A is loaded, but the provider signs with key B's private key
     // (simulating a stale or mismatched provider). The adapter must refuse to
@@ -494,6 +536,10 @@ declare namespace setup {
     logoutError?: unknown
     /** Make `client.initialize` throw on the next call (then resolve). */
     initError?: unknown
+    /** Make `client.user.get` throw on every call, to test restore-side session errors. */
+    userGetError?: unknown
+    /** Make `client.embeddedWallet.getEthereumProvider` throw, to test restore-side session errors. */
+    getEthereumProviderError?: unknown
   }
 }
 
@@ -558,6 +604,7 @@ function createClient(options: setup.Options = {}) {
         entropyId: string
         entropyIdVerifier: string
       }) {
+        if (options.getEthereumProviderError) throw options.getEthereumProviderError
         const wallet_address = parameters.wallet.address as string
         return {
           async request(req: { method: string; params?: readonly unknown[] | undefined }) {
@@ -591,6 +638,7 @@ function createClient(options: setup.Options = {}) {
     user: {
       async get() {
         client.restoreCalls++
+        if (options.userGetError) throw options.userGetError
         return { user: { id: 'user_1', linked_accounts: client.linkedAccounts.slice() } }
       },
     },
