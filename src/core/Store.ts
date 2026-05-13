@@ -154,12 +154,7 @@ export declare namespace serialize {
 
 /** Restores runtime provider state from a persisted refresh snapshot. */
 export function hydrate(persisted: unknown, current: State): State {
-  return normalize(persisted, current)
-}
-
-/** Normalizes a persisted refresh snapshot using the current runtime state as fallback. */
-export function normalize(persisted: unknown, current: State): State {
-  const state = stateFromPersisted(persisted)
+  const state = persisted && typeof persisted === 'object' ? (persisted as Partial<Persisted>) : {}
   return {
     ...state,
     ...current,
@@ -174,11 +169,6 @@ export function normalize(persisted: unknown, current: State): State {
     accessKeys: state.accessKeys ?? current.accessKeys,
     chainId: state.chainId ?? current.chainId,
   }
-}
-
-function stateFromPersisted(persisted: unknown): Partial<Persisted> {
-  if (!persisted || typeof persisted !== 'object') return {}
-  return persisted as Partial<Persisted>
 }
 
 /**
