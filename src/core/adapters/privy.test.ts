@@ -436,6 +436,23 @@ describe('privy', () => {
     `)
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
+
+  test('error: signature recovered from a different key is rejected as Unauthorized', async () => {
+    // Wallet A is loaded, but the provider signs with key B's private key
+    // (simulating a stale or mismatched provider). The adapter must refuse to
+    // accept the mismatched signature, even though it is well-formed.
+    const { adapter } = setup({ signWithPrivateKey: privateKeyB })
+    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnauthorizedError: Privy provider returned a signature for "${other}" that does not match the requested wallet "${address}".]`,
+    )
+  })
 })
 
 function setup(options: setup.Options = {}) {
@@ -466,6 +483,8 @@ declare namespace setup {
     signError?: unknown
     /** Override the value returned by the embedded provider's `secp256k1_sign`. */
     signResult?: unknown
+    /** Force the test wallet to sign with this private key (for wrong-signer tests). */
+    signWithPrivateKey?: Hex.Hex | undefined
     /** Make `client.auth.logout` throw, to test disconnect cleanup. */
     logoutError?: unknown
     /** Make `client.initialize` throw on the next call (then resolve). */
@@ -496,13 +515,15 @@ function createClient(options: setup.Options = {}) {
             client.signPayloads.push(hash)
             client.signWith.push(address)
             if (options.signResult !== undefined) return options.signResult
-            const privateKey = (() => {
-              try {
-                return privateKeyForAddress(address)
-              } catch {
-                return privateKeyA
-              }
-            })()
+            const privateKey =
+              options.signWithPrivateKey ??
+              (() => {
+                try {
+                  return privateKeyForAddress(address)
+                } catch {
+                  return privateKeyA
+                }
+              })()
             return signWithKey(privateKey, hash)
           },
         },
@@ -541,13 +562,15 @@ function createClient(options: setup.Options = {}) {
             client.signPayloads.push(hash)
             client.signWith.push(wallet_address)
             if (options.signResult !== undefined) return options.signResult
-            const privateKey = (() => {
-              try {
-                return privateKeyForAddress(wallet_address)
-              } catch {
-                return privateKeyA
-              }
-            })()
+            const privateKey =
+              options.signWithPrivateKey ??
+              (() => {
+                try {
+                  return privateKeyForAddress(wallet_address)
+                } catch {
+                  return privateKeyA
+                }
+              })()
             return signWithKey(privateKey, hash)
           },
         }
