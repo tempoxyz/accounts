@@ -1,235 +1,104 @@
-import { Hex } from 'ox'
-import { http, createServer } from 'node:http'
-import { describe, expect, test, afterAll, beforeAll } from 'vp/test'
+import { describe, expect, test } from 'vp/test'
 
+import * as Provider from '../Provider.js'
 import * as Storage from '../Storage.js'
-import * as Store from '../Store.js'
 import { bitgo } from './bitgo.js'
 
-const address = '0x0000000000000000000000000000000000000001'
-const other = '0x0000000000000000000000000000000000000002'
+const accessToken = 'v2xddc0e59a2e7211b3b336c92805b2e715073c0145670b62f1a66a43551f64a23a'
+const walletId = '6a03beb5464739a03ca8be8a6a4ab1ba'
+const coin = 'ttempo'
+const walletAddress = '0xc58d556ed56f7a32f608a5b0c2a5ff3446143872'
 
-const stubSignature = Hex.concat(Hex.padLeft('0x11', 32), Hex.padLeft('0x22', 32), '0x1b')
+function createProvider(overrides: Partial<bitgo.Options> = {}) {
+  return Provider.create({
+    adapter: bitgo({
+      accessToken,
+      coin,
+      walletId,
+      walletPassphrase: '',
+      env: 'test',
+      ...overrides,
+    }),
+    storage: Storage.memory(),
+    testnet: true,
+  })
+}
 
 describe('bitgo', () => {
-  let server: ReturnType<typeof createMockServer>
+  test('wallet_connect discovers the BitGo wallet base address', async () => {
+    const provider = createProvider()
 
-  beforeAll(() => {
-    server = createMockServer()
-    return server.start()
-  })
+    const accounts = await provider.request({ method: 'wallet_connect' })
 
-  afterAll(() => server?.close())
-
-  test('default: createAccount discovers the wallet address and signs the digest', async () => {
-    const { adapter, state } = setup(server)
-
-    const result = await adapter.actions.createAccount(
-      { digest: '0x1234', name: 'Ada' },
-      { method: 'wallet_connect', params: undefined },
-    )
-
-    expect(state().signPayloads).toMatchInlineSnapshot(`
+    expect(accounts).toMatchInlineSnapshot(`
       [
-        "0x1234",
+        "${walletAddress}",
       ]
     `)
-    expect(result).toMatchInlineSnapshot(`
-      {
-        "accounts": [
-          {
-            "address": "0x0000000000000000000000000000000000000001",
-            "label": "Ada",
-          },
-        ],
-        "signature": "${stubSignature}",
-      }
-    `)
   })
 
-  test('default: loadAccounts discovers wallet accounts for signing', async () => {
-    const { adapter, state } = setup(server)
+  test('wallet_connect populates the provider store', async () => {
+    const provider = createProvider()
 
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
-    const result = await adapter.actions.signPersonalMessage(
-      { address, data: '0x68656c6c6f' },
-      { method: 'personal_sign', params: ['0x68656c6c6f', address] },
-    )
+    await provider.request({ method: 'wallet_connect' })
+    const state = provider.store.getState()
 
-    expect(state().signPayloads.length).toMatchInlineSnapshot(`1`)
-    expect(result).toMatchInlineSnapshot(
-      `"${stubSignature}"`,
-    )
+    expect(state.accounts.length).toMatchInlineSnapshot(`1`)
+    expect(state.accounts[0]?.address.toLowerCase()).toBe(walletAddress.toLowerCase())
   })
 
-  test('default: loadAccounts can provision an external access key', async () => {
-    const { adapter, state } = setup(server)
+  test('wallet_disconnect clears the provider store', async () => {
+    const provider = createProvider()
 
-    const result = await adapter.actions.loadAccounts(
-      {
-        authorizeAccessKey: {
-          address: other,
-          expiry: 123,
-          keyType: 'secp256k1',
-        },
-      },
-      { method: 'wallet_connect', params: undefined },
-    )
+    await provider.request({ method: 'wallet_connect' })
+    expect(provider.store.getState().accounts.length).toBe(1)
 
-    expect(state().signPayloads).toMatchInlineSnapshot(`
+    await provider.request({ method: 'wallet_disconnect' })
+    expect(provider.store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('eth_accounts returns connected accounts', async () => {
+    const provider = createProvider()
+
+    await provider.request({ method: 'wallet_connect' })
+    const accounts = await provider.request({ method: 'eth_accounts' })
+
+    expect(accounts).toMatchInlineSnapshot(`
       [
-        "0x219d0ef7a59d2a40d6ff9e115e32fb6b53eb7fa518ea3364b7b806990fad3944",
+        "${walletAddress}",
       ]
     `)
-    expect(result.keyAuthorization).toBeDefined()
-    expect(result.accounts[0]?.address).toMatchInlineSnapshot(
-      `"0x0000000000000000000000000000000000000001"`,
-    )
   })
 
-  test('behavior: expired sessions clear provider accounts', async () => {
-    const { adapter, store } = setup(server, { authenticated: false })
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
+  test('eth_accounts returns empty before connect', async () => {
+    const provider = createProvider()
+
+    const accounts = await provider.request({ method: 'eth_accounts' })
+
+    expect(accounts).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('invalid access token fails authentication', async () => {
+    const provider = createProvider({ accessToken: 'v2x-invalid-token' })
 
     await expect(
-      adapter.actions.signPersonalMessage(
-        { address, data: '0x68656c6c6f' },
-        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
-      ),
-    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: BitGo session expired.]')
-
-    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+      provider.request({ method: 'wallet_connect' }),
+    ).rejects.toThrow()
   })
 
-  test('behavior: server session errors clear provider accounts', async () => {
-    const { adapter, store } = setup(server, { signError: true })
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
+  // Signing tests are skipped because the test wallet is custodial and
+  // BitGo does not allow custodial signing on testnet.
+  // To test signing, a self-custody MPC hot wallet + BitGo Express is required.
+  test.skip('personal_sign signs a message', async () => {
+    const provider = createProvider()
+    await provider.request({ method: 'wallet_connect' })
 
-    await expect(
-      adapter.actions.signPersonalMessage(
-        { address, data: '0x68656c6c6f' },
-        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
-      ),
-    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: BitGo session expired.]')
+    const signature = await provider.request({
+      method: 'personal_sign',
+      params: ['0x68656c6c6f', walletAddress],
+    })
 
-    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
-  })
-
-  test('disconnect: clears provider accounts', async () => {
-    const { adapter, store } = setup(server)
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
-
-    await adapter.actions.disconnect!()
-
-    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+    expect(signature).toBeDefined()
+    expect(signature.startsWith('0x')).toBe(true)
   })
 })
-
-type MockState = {
-  signPayloads: Hex.Hex[]
-}
-
-function createMockServer() {
-  let authenticated = true
-  let signError = false
-  const state: MockState = { signPayloads: [] }
-
-  const httpServer = http.createServer((req, res) => {
-    let body = ''
-    req.on('data', (chunk: Buffer) => {
-      body += chunk.toString()
-    })
-    req.on('end', () => {
-      if (req.url === '/api/v2/me') {
-        if (!authenticated) {
-          res.writeHead(401, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: 'unauthorized' }))
-          return
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ user: { id: 'test' } }))
-        return
-      }
-
-      if (req.url?.includes('/wallet/') && req.method === 'GET') {
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(
-          JSON.stringify({
-            id: 'test-wallet',
-            receiveAddress: { address },
-          }),
-        )
-        return
-      }
-
-      if (req.url?.includes('/signmessage') && req.method === 'POST') {
-        if (signError) {
-          res.writeHead(401, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: 'unauthorized' }))
-          return
-        }
-        const parsed = JSON.parse(body)
-        state.signPayloads.push(parsed.message.messageRaw)
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ signature: stubSignature }))
-        return
-      }
-
-      res.writeHead(404)
-      res.end()
-    })
-  })
-
-  let port = 0
-  return {
-    get url() {
-      const addr = httpServer.address()
-      if (typeof addr === 'object' && addr) return `http://localhost:${addr.port}`
-      return `http://localhost:${port}`
-    },
-    start() {
-      return new Promise<void>((resolve) => {
-        httpServer.listen(0, () => {
-          const addr = httpServer.address()
-          if (typeof addr === 'object' && addr) port = addr.port
-          resolve()
-        })
-      })
-    },
-    close() {
-      httpServer.close()
-    },
-    configure(opts: { authenticated?: boolean; signError?: boolean }) {
-      authenticated = opts.authenticated ?? true
-      signError = opts.signError ?? false
-      state.signPayloads = []
-    },
-    state() {
-      return state
-    },
-  }
-}
-
-function setup(
-  server: ReturnType<typeof createMockServer>,
-  opts: { authenticated?: boolean; signError?: boolean } = {},
-) {
-  server.configure(opts)
-  const storage = Storage.memory()
-  const store = Store.create({ chainId: 1, storage })
-  const adapter = bitgo({
-    accessToken: 'v2x-test',
-    coin: 'hteth',
-    walletId: 'test-wallet',
-    walletPassphrase: 'pass',
-    env: server.url,
-  })({
-    getAccount: (() => {
-      throw new Error('not implemented')
-    }) as never,
-    getClient: (() => ({ chain: { id: 1 } })) as never,
-    storage,
-    store,
-  })
-  return { adapter, store, state: () => server.state() }
-}

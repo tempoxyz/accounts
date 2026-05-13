@@ -119,7 +119,7 @@ export function bitgo(options: bitgo.Options): Adapter.Adapter {
         `/api/v2/${options.coin}/wallet/${options.walletId}`,
       )
       const address: string | undefined =
-        wallet.receiveAddress?.address ?? wallet.coinSpecific?.baseAddress
+        wallet.coinSpecific?.baseAddress ?? wallet.receiveAddress?.address?.split('?')[0]
       if (!address) throw new Error('BitGo wallet has no base address.')
       return [makeWalletAccount(address)]
     }
