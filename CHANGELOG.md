@@ -1,5 +1,13 @@
 # accounts
 
+## 0.10.7
+
+### Patch Changes
+
+- 7cb2162: Exposed the `Adapter` namespace from the package root so consumers can author custom adapters with `Adapter.define`.
+- 195d6e8: Fixed scoped access key selection to only match keys whose scopes covered the current transaction calls.
+- 70814cd: Made `turnkey` `createAccount` optional and default registration requests to `loadAccounts`.
+
 ## 0.10.6
 
 ### Patch Changes
