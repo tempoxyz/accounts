@@ -226,7 +226,7 @@ export function privy<const client extends privy.Client>(
         const restored = await restoreWalletAccounts(await getPrivyClient()).catch((error) => {
           if (!isSessionError(error)) throw error
           if (connect_version === startVersion) clear()
-          return [] as readonly privy.EmbeddedWallet[]
+          throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
         })
 
         // A user-initiated connect happened mid-flight; bail without overwriting cached accounts.
