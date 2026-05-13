@@ -16,10 +16,17 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          include: ['./src/**/*.test.ts', '!./src/**/*.browser.test.ts'],
+          include: ['./src/**/*.test.ts', '!./src/**/*.browser.test.ts', '!./src/core/zod/*.test.ts'],
           name: 'lib',
           globalSetup: [join(import.meta.dirname, './test/setup.global.ts')],
           setupFiles: [join(import.meta.dirname, './test/setup.ts')],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          include: ['./src/core/zod/*.test.ts'],
+          name: 'schema',
         },
       },
       // {
