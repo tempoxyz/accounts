@@ -218,13 +218,25 @@ describe('invalidate', () => {
     return { account, store }
   }
 
-  test('default: removes access key for stale-key errors', async () => {
+  test('default: removes matching access key for stale-key errors', async () => {
     const { account, store } = await setup()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const account_other = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    AccessKey.save({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(account_other.accessKeyAddress),
+      keyPair,
+      store,
+    })
 
     const result = AccessKey.invalidate(account, createRevert('KeyNotFound'), { store })
 
     expect(result).toMatchInlineSnapshot(`true`)
-    expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+    expect(store.getState().accessKeys.map((key) => key.address)).toMatchInlineSnapshot(`
+      [
+        "${account_other.accessKeyAddress}",
+      ]
+    `)
   })
 
   test('behavior: preserves access key for recoverable execution errors', async () => {
