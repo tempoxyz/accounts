@@ -224,14 +224,12 @@ describe('prepare', () => {
     expect(result.keyPair).toBeDefined()
   })
 
-  test('behavior: prepares external key authorization from public key', async () => {
-    const keyPair = await WebCryptoP256.createKeyPair()
-    const account = TempoAccount.fromWebCryptoP256(keyPair)
-
+  test('behavior: prepares external key authorization from address', async () => {
     const result = await AccessKey.prepare({
+      address: accounts[1]!.address,
       chainId: 123n,
       expiry: 456,
-      keyType: 'p256',
+      keyType: 'webAuthn',
       limits: [
         {
           limit: 1000n,
@@ -246,13 +244,12 @@ describe('prepare', () => {
           selector: 'transfer(address,uint256)',
         },
       ],
-      publicKey: account.publicKey,
     })
 
     expect(result.keyPair).toBeUndefined()
     expect(result.keyAuthorization).toMatchInlineSnapshot(`
       {
-        "address": "${account.address.toLowerCase()}",
+        "address": "${accounts[1]!.address}",
         "chainId": 123n,
         "expiry": 456,
         "limits": [
@@ -271,7 +268,7 @@ describe('prepare', () => {
             "selector": "0xa9059cbb",
           },
         ],
-        "type": "p256",
+        "type": "webAuthn",
       }
     `)
   })

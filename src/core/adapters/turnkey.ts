@@ -1,4 +1,4 @@
-import { Address as core_Address, Hex, Provider as ox_Provider, Signature } from 'ox'
+import { Address as core_Address, Hex, Provider as ox_Provider, PublicKey, Signature } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
 import type { Address } from 'viem/accounts'
@@ -204,13 +204,14 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
 
     async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
       const { address, expiry, keyType, limits, publicKey, scopes } = options
+      const address_ =
+        address ?? (publicKey ? core_Address.fromPublicKey(PublicKey.from(publicKey)) : undefined)
       return await AccessKey.prepare({
-        address,
+        address: address_,
         chainId: options.chainId ?? getClient().chain.id,
         expiry,
         keyType,
         limits,
-        publicKey,
         scopes,
       })
     }

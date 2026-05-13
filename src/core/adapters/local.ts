@@ -1,4 +1,4 @@
-import { Hex, Provider as ox_Provider } from 'ox'
+import { Address as ox_Address, Hex, Provider as ox_Provider, PublicKey } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { BaseError, hashMessage } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
@@ -33,13 +33,14 @@ export function local(options: local.Options): Adapter.Adapter {
      */
     async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
       const { address, expiry, keyType, limits, publicKey, scopes } = options
+      const address_ =
+        address ?? (publicKey ? ox_Address.fromPublicKey(PublicKey.from(publicKey)) : undefined)
       return await AccessKey.prepare({
-        address,
+        address: address_,
         chainId: options.chainId ?? getClient().chain.id,
         expiry,
         keyType,
         limits,
-        publicKey,
         scopes,
       })
     }
