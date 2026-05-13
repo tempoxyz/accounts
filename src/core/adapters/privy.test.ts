@@ -115,7 +115,8 @@ describe('privy', () => {
       { method: 'wallet_authorizeAccessKey', params: [{ expiry: 123 }] },
     )
 
-    expect(client.loadCalls).toMatchInlineSnapshot(`1`)
+    expect(client.loadCalls).toMatchInlineSnapshot(`0`)
+    expect(client.restoreCalls).toMatchInlineSnapshot(`1`)
     expect(result).toMatchInlineSnapshot(`
       {
         "keyAuthorization": {
@@ -136,7 +137,7 @@ describe('privy', () => {
     `)
   })
 
-  test('behavior: signing silently restores wallet accounts from an existing session', async () => {
+  test('behavior: signing silently restores wallet accounts via the Privy SDK', async () => {
     const { adapter, client, store } = setup()
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
@@ -145,7 +146,8 @@ describe('privy', () => {
       { method: 'personal_sign', params: ['0x68656c6c6f', address] },
     )
 
-    expect(client.loadCalls).toMatchInlineSnapshot(`1`)
+    expect(client.restoreCalls).toMatchInlineSnapshot(`1`)
+    expect(client.loadCalls).toMatchInlineSnapshot(`0`)
   })
 
   test('behavior: silent restore does not connect accounts when the provider store is empty', async () => {
@@ -159,12 +161,13 @@ describe('privy', () => {
     ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: No Privy account connected.]')
 
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
+    expect(client.restoreCalls).toMatchInlineSnapshot(`0`)
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: silent restore only reconnects persisted provider accounts', async () => {
     const { adapter, client, store } = setup()
-    client.wallets = [client.makeWallet(address), client.makeWallet(other)]
+    client.addLinkedWallet(other)
     store.setState({ accounts: [{ address: other }], activeAccount: 0 })
 
     await adapter.actions.signPersonalMessage(
@@ -202,7 +205,7 @@ describe('privy', () => {
   })
 
   test('behavior: server session errors clear provider accounts', async () => {
-    const { adapter, store } = setup({ signError: { code: 'not_authenticated' } })
+    const { adapter, store } = setup({ signError: { code: 'embedded_wallet_request_error' } })
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
@@ -215,6 +218,118 @@ describe('privy', () => {
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: session errors are recognized via fuzzy code match', async () => {
+    const { adapter, store } = setup({ signError: { code: 'session_invalid_token' } })
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
+    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: Privy session expired.]')
+
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: session errors are recognized via nested cause messages', async () => {
+    const inner = new Error('User must be logged in to sign.')
+    const outer = new Error('Wallet operation failed', { cause: inner })
+    const { adapter, store } = setup({ signError: outer })
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
+    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: Privy session expired.]')
+
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: session errors are recognized via message fallback', async () => {
+    const { adapter, store } = setup({
+      signError: Object.assign(new Error('User must be logged in to sign.'), {}),
+    })
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
+    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: Privy session expired.]')
+
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: silent restore clears store when persisted address is no longer in user', async () => {
+    const { adapter, client, store } = setup()
+    // Persisted address that is NOT linked on the Privy user.
+    store.setState({ accounts: [{ address: other }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address: other, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', other] },
+      ),
+    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: No Privy account connected.]')
+
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+    expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('error: silent restore rejects malformed wallet addresses', async () => {
+    const { adapter, client, store } = setup()
+    client.addLinkedWallet('0xnot-an-address')
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
+    ).rejects.toThrowError(/Address.*invalid/i)
+  })
+
+  test('error: silent restore rejects non-hex secp256k1_sign results', async () => {
+    const { adapter, store } = setup({ signResult: 'not-hex' })
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
+    ).rejects.toMatchInlineSnapshot(
+      '[ProviderRpcError: Privy provider returned a non-hex secp256k1_sign result.]',
+    )
+  })
+
+  test('error: app-returned wallet with malformed address is rejected at connect', async () => {
+    const { adapter, client } = setup()
+    client.wallets = [client.makeWallet('0xnot-an-address')]
+
+    await expect(
+      adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined }),
+    ).rejects.toThrowError(/Address.*invalid/i)
+  })
+
+  test('error: app-provided provider secp256k1_sign result is hex-validated', async () => {
+    const { adapter } = setup({ signResult: 'not-hex' })
+    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
+    ).rejects.toMatchInlineSnapshot(
+      '[ProviderRpcError: Privy provider returned a non-hex secp256k1_sign result.]',
+    )
+  })
+
   test('error: signing an unconnected account fails', async () => {
     const { adapter } = setup()
     await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
@@ -224,8 +339,20 @@ describe('privy', () => {
         { address: other, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', other] },
       ),
+    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: No Privy account connected.]')
+  })
+
+  test('error: unsupported secp256k1_sign maps to UnsupportedMethodError', async () => {
+    const { adapter, store } = setup({ signError: { code: 4200, message: 'Method not supported' } })
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
     ).rejects.toMatchInlineSnapshot(
-      '[Provider.UnauthorizedError: Account "0x0000000000000000000000000000000000000002" not found.]',
+      '[Provider.UnsupportedMethodError: Privy adapter requires raw secp256k1 hash signing via `secp256k1_sign` for Tempo transactions and access keys.]',
     )
   })
 
@@ -236,6 +363,11 @@ describe('privy', () => {
     await adapter.actions.disconnect!()
 
     expect(client.logoutCalls).toMatchInlineSnapshot(`1`)
+    expect(client.logoutWith).toMatchInlineSnapshot(`
+      [
+        "user_1",
+      ]
+    `)
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 })
@@ -266,6 +398,8 @@ declare namespace setup {
   type Options = {
     token?: string | null | undefined
     signError?: unknown
+    /** Override the value returned by the embedded provider's `secp256k1_sign`. */
+    signResult?: unknown
   }
 }
 
@@ -274,23 +408,62 @@ function createClient(options: setup.Options = {}) {
     initCalls: 0,
     loadCalls: 0,
     logoutCalls: 0,
+    logoutWith: [] as (string | undefined)[],
+    restoreCalls: 0,
     signPayloads: [] as Hex.Hex[],
     signWith: [] as string[],
     wallets: [] as privy.EmbeddedWallet[],
+    /** Linked accounts returned by `client.user.get` to drive silent restore. */
+    linkedAccounts: [] as privy.LinkedAccount[],
     makeWallet(address: string): privy.EmbeddedWallet {
       return {
         address,
-        signRawHash: async (hash) => {
-          if (options.signError) throw options.signError
-          client.signPayloads.push(hash)
-          client.signWith.push(address)
-          return stubSignature
+        provider: {
+          async request(req: { method: string; params?: readonly unknown[] | undefined }) {
+            if (req.method !== 'secp256k1_sign') throw new Error(`unexpected method: ${req.method}`)
+            if (options.signError) throw options.signError
+            const hash = (req.params as readonly Hex.Hex[])[0] as Hex.Hex
+            client.signPayloads.push(hash)
+            client.signWith.push(address)
+            return options.signResult ?? stubSignature
+          },
         },
       }
     },
+    /** Registers an embedded ETH wallet so silent restore picks it up via `user.get`. */
+    addLinkedWallet(address: string, wallet_index = client.linkedAccounts.length) {
+      client.linkedAccounts.push({
+        type: 'wallet',
+        wallet_client_type: 'privy',
+        connector_type: 'embedded',
+        chain_type: 'ethereum',
+        address,
+        wallet_index,
+      })
+    },
     auth: {
-      logout() {
+      logout(parameters?: { userId: string } | undefined) {
         client.logoutCalls++
+        client.logoutWith.push(parameters?.userId)
+      },
+    },
+    embeddedWallet: {
+      async getEthereumProvider(parameters: {
+        wallet: privy.LinkedAccount
+        entropyId: string
+        entropyIdVerifier: string
+      }) {
+        const wallet_address = parameters.wallet.address as string
+        return {
+          async request(req: { method: string; params?: readonly unknown[] | undefined }) {
+            if (req.method !== 'secp256k1_sign') throw new Error(`unexpected method: ${req.method}`)
+            if (options.signError) throw options.signError
+            const hash = (req.params as readonly Hex.Hex[])[0] as Hex.Hex
+            client.signPayloads.push(hash)
+            client.signWith.push(wallet_address)
+            return options.signResult ?? stubSignature
+          },
+        }
       },
     },
     async getAccessToken() {
@@ -299,17 +472,28 @@ function createClient(options: setup.Options = {}) {
     initialize() {
       client.initCalls++
     },
+    user: {
+      async get() {
+        client.restoreCalls++
+        return { user: { id: 'user_1', linked_accounts: client.linkedAccounts.slice() } }
+      },
+    },
   } satisfies privy.Client & {
     initCalls: number
     loadCalls: number
     logoutCalls: number
+    logoutWith: (string | undefined)[]
+    restoreCalls: number
     signPayloads: Hex.Hex[]
     signWith: string[]
     wallets: privy.EmbeddedWallet[]
+    linkedAccounts: privy.LinkedAccount[]
     makeWallet: (address: string) => privy.EmbeddedWallet
+    addLinkedWallet: (address: string, wallet_index?: number) => void
   }
 
   client.wallets = [client.makeWallet(address)]
+  client.addLinkedWallet(address)
 
   return client
 }
