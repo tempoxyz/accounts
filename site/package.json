@@ -17,6 +17,7 @@
     "ox": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "regen-ui": "^0.3.0",
     "tailwindcss": "^4.2.4",
     "tsx": "catalog:",
     "viem": "catalog:",
@@ -26,7 +27,9 @@
     "waku": "1.0.0-alpha.10"
   },
   "devDependencies": {
+    "@iconify-json/lucide": "^1.2.93",
     "@types/node": "catalog:",
+    "eventemitter3": "^5.0.1",
     "typescript": "catalog:",
     "unplugin-icons": "^22.5.0"
   }

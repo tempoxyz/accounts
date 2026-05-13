@@ -204,6 +204,8 @@ const config: Config = defineConfig({
       },
     ],
   },
+  iconUrl: { light: '/tempo-light.svg', dark: '/tempo-dark.svg' },
+  logoUrl: { light: '/lockup-light.svg', dark: '/lockup-dark.svg' },
   socials: [
     {
       icon: 'github',

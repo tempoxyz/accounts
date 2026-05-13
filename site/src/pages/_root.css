@@ -1,7 +1,40 @@
 @import "tailwindcss";
+@import "regen-ui/tailwind.css";
 @import "./_vocs.generated.css";
 
 @source "../";
+
+button {
+  font-weight: 500;
+}
+
+[data-v-topnav] > [data-v-surface-bg] {
+  @media (width >= 1080px) {
+    border-top-left-radius: 0;
+  }
+}
+
+[data-v-logo-image] {
+  max-height: 1.125rem;
+}
+
+:root {
+  --regen-radius: 0px;
+
+  --vocs-radius-sm: 0px;
+  --vocs-radius-md: 0px;
+  --vocs-radius-lg: 0px;
+  --vocs-radius-xl: 0px;
+  --vocs-radius-2xl: 0px;
+
+  /* Use regen's background/surface palette for both regen and vocs
+   * surfaces. The vocs `@theme` block re-declares `--background-color-*`
+   * on top of regen, so we re-pin both layers explicitly. */
+  --background-color-background: light-dark(#fafafa, #0c0c0c);
+  --background-color-surface: light-dark(#ffffff, #141414);
+  --vocs-background-color-primary: var(--background-color-background);
+  --vocs-background-color-surface: var(--background-color-surface);
+}
 
 /*
  * Fix: LightningCSS (via Tailwind v4) compiles light-dark() into a polyfill

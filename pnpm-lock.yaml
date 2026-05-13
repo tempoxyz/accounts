@@ -761,6 +761,9 @@ importers:
       react-dom:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
+      regen-ui:
+        specifier: ^0.3.0
+        version: 0.3.0(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(typescript@5.9.3)(vite@8.0.10)(zod@4.4.3)
       tailwindcss:
         specifier: ^4.2.4
         version: 4.2.4
@@ -783,9 +786,15 @@ importers:
         specifier: 1.0.0-alpha.10
         version: 1.0.0-alpha.10(@types/node@25.6.0)(@vitejs/devtools@0.1.15)(babel-plugin-react-compiler@1.0.0)(esbuild@0.27.7)(jiti@2.6.1)(react-dom@19.2.5(react@19.2.5))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(terser@5.46.2)(tsx@4.21.0)(yaml@2.8.3)
     devDependencies:
+      '@iconify-json/lucide':
+        specifier: ^1.2.93
+        version: 1.2.106
       '@types/node':
         specifier: 'catalog:'
         version: 25.6.0
+      eventemitter3:
+        specifier: ^5.0.1
+        version: 5.0.1
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -12675,9 +12684,9 @@ snapshots:
 
   '@vue/shared@3.5.33': {}
 
-  '@wagmi/connectors@8.0.12(@wagmi/core@3.4.10(@tanstack/query-core@5.100.5)(@types/react@19.2.14)(immer@11.1.4)(react@19.2.5)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@19.2.5))(viem@2.48.8(typescript@5.9.3)(zod@4.3.6)))(accounts@)(typescript@5.9.3)(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))':
+  '@wagmi/connectors@8.0.12(@wagmi/core@3.4.10(@tanstack/query-core@5.100.5)(@types/react@19.2.14)(accounts@)(immer@11.1.4)(react@19.2.5)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@19.2.5))(viem@2.48.8(typescript@5.9.3)(zod@4.4.3)))(accounts@)(typescript@5.9.3)(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))':
     dependencies:
-      '@wagmi/core': 3.4.10(@tanstack/query-core@5.100.5)(@types/react@19.2.14)(immer@11.1.4)(react@19.2.5)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@19.2.5))(viem@2.48.8(typescript@5.9.3)(zod@4.3.6))
+      '@wagmi/core': 3.4.10(@tanstack/query-core@5.100.5)(@types/react@19.2.14)(accounts@)(immer@11.1.4)(react@19.2.5)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@19.2.5))(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))
       viem: 2.48.8(typescript@5.9.3)(zod@4.4.3)
     optionalDependencies:
       accounts: 'link:'
@@ -12690,12 +12699,12 @@ snapshots:
     optionalDependencies:
       typescript: 5.9.3
 
-  '@wagmi/core@3.4.10(@tanstack/query-core@5.100.5)(@types/react@19.2.14)(accounts@)(immer@11.1.4)(react@19.2.5)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@19.2.5))(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))':
+  '@wagmi/core@3.4.10(@tanstack/query-core@5.100.5)(@types/react@19.2.14)(accounts@)(immer@11.1.4)(react@19.2.5)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@19.2.5))(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))':
     dependencies:
       eventemitter3: 5.0.1
       mipd: 0.0.7(typescript@5.9.3)
       viem: 2.48.8(typescript@5.9.3)(zod@4.4.3)
-      zustand: 5.0.0(@types/react@19.2.14)(immer@11.1.4)(react@19.2.5)(use-sync-external-store@1.4.0(react@19.2.5))
+      zustand: 5.0.0(@types/react@19.2.14)(immer@11.1.4)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
     optionalDependencies:
       '@tanstack/query-core': 5.100.5
       accounts: 'link:'
@@ -18363,8 +18372,8 @@ snapshots:
   wagmi@3.6.12(@tanstack/query-core@5.100.5)(@tanstack/react-query@5.100.5(react@19.2.5))(@types/react@19.2.14)(accounts@)(immer@11.1.4)(react@19.2.5)(typescript@5.9.3)(viem@2.48.8(typescript@5.9.3)(zod@4.4.3)):
     dependencies:
       '@tanstack/react-query': 5.100.5(react@19.2.5)
-      '@wagmi/connectors': 8.0.12(@wagmi/core@3.4.10(@tanstack/query-core@5.100.5)(@types/react@19.2.14)(immer@11.1.4)(react@19.2.5)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@19.2.5))(viem@2.48.8(typescript@5.9.3)(zod@4.3.6)))(accounts@)(typescript@5.9.3)(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))
-      '@wagmi/core': 3.4.10(@tanstack/query-core@5.100.5)(@types/react@19.2.14)(accounts@)(immer@11.1.4)(react@19.2.5)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@19.2.5))(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))
+      '@wagmi/connectors': 8.0.12(@wagmi/core@3.4.10(@tanstack/query-core@5.100.5)(@types/react@19.2.14)(accounts@)(immer@11.1.4)(react@19.2.5)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@19.2.5))(viem@2.48.8(typescript@5.9.3)(zod@4.4.3)))(accounts@)(typescript@5.9.3)(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))
+      '@wagmi/core': 3.4.10(@tanstack/query-core@5.100.5)(@types/react@19.2.14)(accounts@)(immer@11.1.4)(react@19.2.5)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@19.2.5))(viem@2.48.8(typescript@5.9.3)(zod@4.4.3))
       react: 19.2.5
       use-sync-external-store: 1.4.0(react@19.2.5)
       viem: 2.48.8(typescript@5.9.3)(zod@4.4.3)
