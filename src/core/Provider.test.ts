@@ -29,11 +29,15 @@ const adapters = [
 ] as const
 
 describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
-  const transferCall = Actions.token.transfer.call({
-    to: '0x0000000000000000000000000000000000000001',
-    token: Addresses.pathUsd,
-    amount: parseUnits('1', 6),
-  })
+  function transfer(amount: string) {
+    return Actions.token.transfer.call({
+      to: '0x0000000000000000000000000000000000000001',
+      token: Addresses.pathUsd,
+      amount: parseUnits(amount, 6),
+    })
+  }
+
+  const transferCall = transfer('1')
 
   /** Connects via login (or register if login returns no accounts), returns the active account address. */
   async function connect(provider: ReturnType<typeof Provider.create>) {
@@ -2183,6 +2187,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.01')
 
       const hash = await provider.request({
         method: 'eth_sendTransaction',
@@ -2252,6 +2257,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.02')
 
       const hash = await provider.request({
         method: 'eth_sendTransaction',
@@ -2293,6 +2299,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.03')
 
       const hash = await provider.request({
         method: 'eth_sendTransaction',
@@ -2315,6 +2322,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.04')
 
       const hash = await provider.request({
         method: 'eth_sendTransaction',
@@ -2358,6 +2366,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.05')
 
       const hash = await provider.request({
         method: 'eth_sendTransaction',
@@ -2419,6 +2428,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.06')
 
       const hash = await provider.request({
         method: 'eth_sendTransaction',
@@ -2478,6 +2488,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.07')
 
       const result = await provider.request({
         method: 'wallet_sendCalls',
@@ -2506,6 +2517,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.08')
 
       const result = await provider.request({
         method: 'wallet_sendCalls',
@@ -2534,6 +2546,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.09')
 
       const result = await provider.request({
         method: 'wallet_sendCalls',
