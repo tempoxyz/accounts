@@ -67,7 +67,10 @@ describe('privy', () => {
 
   test('ethereum provider shape exposes EIP-1193 request', () => {
     expectTypeOf<privy.EthereumProvider>().toMatchTypeOf<{
-      request(parameters: { method: string; params?: unknown[] | undefined }): Promise<unknown>
+      request(parameters: {
+        method: string
+        params?: readonly unknown[] | undefined
+      }): Promise<unknown>
     }>()
   })
 
