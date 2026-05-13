@@ -269,8 +269,8 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         const result = await fn(account, keyAuthorization ?? undefined)
         AccessKey.removePending(account, { store })
         return result
-      } catch {
-        AccessKey.remove(account, { store })
+      } catch (error) {
+        AccessKey.invalidate(account, error, { store })
         return undefined
       }
     }

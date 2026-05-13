@@ -319,8 +319,8 @@ export function create(options: create.Options = {}): create.ReturnType {
                             })
                             AccessKey.removePending(account, { store })
                             return result
-                          } catch {
-                            AccessKey.remove(account, { store })
+                          } catch (error) {
+                            AccessKey.invalidate(account, error, { store })
                             return await fill(parameters)
                           }
                         }

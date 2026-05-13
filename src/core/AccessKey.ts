@@ -3,7 +3,18 @@ import { KeyAuthorization } from 'ox/tempo'
 import { Account as TempoAccount } from 'viem/tempo'
 
 import type { OneOf } from '../internal/types.js'
+import * as ExecutionError from './ExecutionError.js'
 import type * as Store from './Store.js'
+
+const removalErrorNames = new Set([
+  'InvalidSignature',
+  'InvalidSignatureFormat',
+  'InvalidSignatureType',
+  'KeyAlreadyRevoked',
+  'KeyExpired',
+  'KeyNotFound',
+  'SignatureTypeMismatch',
+])
 
 /** Access key entry stored alongside accounts. */
 export type AccessKey = {
@@ -160,6 +171,26 @@ export function remove(account: TempoAccount.Account, options: { store: Store.St
   }))
 }
 
+/** Invalidates a stored access key when the error proves it is no longer usable. */
+export function invalidate(
+  account: TempoAccount.Account,
+  error: unknown,
+  options: invalidate.Options,
+): boolean {
+  if (account.source !== 'accessKey') return false
+  if (!shouldRemoveForError(error)) return false
+  remove(account, options)
+  return true
+}
+
+export declare namespace invalidate {
+  /** Options for {@link invalidate}. */
+  type Options = {
+    /** Reactive state store. */
+    store: Store.Store
+  }
+}
+
 /** Permanently removes the pending key authorization for an access key account. */
 export function removePending(
   account: TempoAccount.Account,
@@ -250,6 +281,12 @@ function scopesMatch(
       return callSelector === scopeSelector
     })
   })
+}
+
+function shouldRemoveForError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const parsed = ExecutionError.parse(error)
+  return removalErrorNames.has(parsed.errorName)
 }
 
 /** Saves an access key to the store with its one-time key authorization. */

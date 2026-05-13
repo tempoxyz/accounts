@@ -1678,7 +1678,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(receipt.from.toLowerCase()).toBe(address.toLowerCase())
     })
 
-    test('behavior: access key is removed after key-auth error (spending limit exceeded)', async () => {
+    test('behavior: access key is preserved after recoverable key-auth error', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
@@ -1696,13 +1696,14 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       expect(provider.store.getState().accessKeys).toHaveLength(1)
 
-      // Transfer exceeds limit — key-auth error — access key should be removed.
+      // Transfer exceeds limit — key-auth error — access key should fall back
+      // to the root account without removing the still-valid access key.
       await provider.request({
         method: 'eth_sendTransactionSync',
         params: [{ calls: [transferCall] }],
       })
 
-      expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+      expect(provider.store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
     })
   })
 
