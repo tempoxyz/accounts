@@ -1,11 +1,4 @@
-import {
-  Address as core_Address,
-  Hex,
-  Provider as ox_Provider,
-  PublicKey,
-  Signature,
-  WebCryptoP256,
-} from 'ox'
+import { Address as core_Address, Hex, Provider as ox_Provider, Signature } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
 import type { Address } from 'viem/accounts'
@@ -210,34 +203,16 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }
 
     async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
-      const { expiry, limits, scopes } = options
-      const chainId = options.chainId ?? getClient().chain.id
-
-      if (options.publicKey || options.address) {
-        const address =
-          options.address ?? core_Address.fromPublicKey(PublicKey.from(options.publicKey!))
-        const keyAuthorization = KeyAuthorization.from({
-          address,
-          chainId: BigInt(chainId),
-          expiry,
-          limits,
-          scopes,
-          type: options.keyType ?? 'secp256k1',
-        })
-        return { keyAuthorization }
-      }
-
-      const keyPair = await WebCryptoP256.createKeyPair()
-      const address = core_Address.fromPublicKey(PublicKey.from(keyPair.publicKey))
-      const keyAuthorization = KeyAuthorization.from({
+      const { address, expiry, keyType, limits, publicKey, scopes } = options
+      return await AccessKey.prepare({
         address,
-        chainId: BigInt(chainId),
+        chainId: options.chainId ?? getClient().chain.id,
         expiry,
+        keyType,
         limits,
+        publicKey,
         scopes,
-        type: 'p256',
       })
-      return { keyAuthorization, keyPair }
     }
 
     async function signKeyAuthorization(

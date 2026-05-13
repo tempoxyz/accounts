@@ -5,7 +5,8 @@ import { subscribeWithSelector } from 'zustand/middleware'
 import { createStore } from 'zustand/vanilla'
 
 import type { OneOf } from '../internal/types.js'
-import type { AccessKey, Store as Account } from './Account.js'
+import type { AccessKey } from './AccessKey.js'
+import type { Store as Account } from './Account.js'
 import * as Storage from './Storage.js'
 
 export type { AccessKey, Account }

@@ -213,6 +213,80 @@ describe('generate', () => {
   })
 })
 
+describe('prepare', () => {
+  test('default: prepares generated p256 key authorization', async () => {
+    const result = await AccessKey.prepare({ chainId: 1, expiry: 123 })
+
+    expect(result.keyAuthorization.address).toMatch(/^0x[0-9a-f]{40}$/i)
+    expect(result.keyAuthorization.chainId).toMatchInlineSnapshot(`1n`)
+    expect(result.keyAuthorization.expiry).toMatchInlineSnapshot(`123`)
+    expect(result.keyAuthorization.type).toMatchInlineSnapshot(`"p256"`)
+    expect(result.keyPair).toBeDefined()
+  })
+
+  test('behavior: prepares external key authorization from public key', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const account = TempoAccount.fromWebCryptoP256(keyPair)
+
+    const result = await AccessKey.prepare({
+      chainId: 123n,
+      expiry: 456,
+      keyType: 'p256',
+      limits: [
+        {
+          limit: 1000n,
+          period: 60,
+          token: '0x20c0000000000000000000000000000000000001',
+        },
+      ],
+      scopes: [
+        {
+          address: '0x0000000000000000000000000000000000000abc',
+          recipients: ['0x0000000000000000000000000000000000000def'],
+          selector: 'transfer(address,uint256)',
+        },
+      ],
+      publicKey: account.publicKey,
+    })
+
+    expect(result.keyPair).toBeUndefined()
+    expect(result.keyAuthorization).toMatchInlineSnapshot(`
+      {
+        "address": "${account.address.toLowerCase()}",
+        "chainId": 123n,
+        "expiry": 456,
+        "limits": [
+          {
+            "limit": 1000n,
+            "period": 60,
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+        "scopes": [
+          {
+            "address": "0x0000000000000000000000000000000000000abc",
+            "recipients": [
+              "0x0000000000000000000000000000000000000def",
+            ],
+            "selector": "0xa9059cbb",
+          },
+        ],
+        "type": "p256",
+      }
+    `)
+  })
+
+  test('behavior: defaults external key type to secp256k1', async () => {
+    const result = await AccessKey.prepare({
+      address: accounts[1]!.address,
+      chainId: 1,
+      expiry: 123,
+    })
+
+    expect(result.keyAuthorization.type).toMatchInlineSnapshot(`"secp256k1"`)
+  })
+})
+
 describe('hydrate', () => {
   test('default: hydrates webCrypto access key to signable account', async () => {
     const keyPair = await WebCryptoP256.createKeyPair()

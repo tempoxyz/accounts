@@ -89,7 +89,7 @@ describe('hydrate', () => {
 describe('find', () => {
   function setup(
     storeAccounts: readonly Account.Store[] = [],
-    accessKeys: readonly Account.AccessKey[] = [],
+    accessKeys: readonly Store.AccessKey[] = [],
   ) {
     const store = Store.create({ chainId: tempoLocalnet.id })
     store.setState({ accounts: storeAccounts, accessKeys, activeAccount: 0 })

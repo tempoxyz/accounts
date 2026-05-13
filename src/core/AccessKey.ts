@@ -1,8 +1,43 @@
-import { AbiFunction, Address, Hex, Provider, WebCryptoP256 } from 'ox'
+import { AbiFunction, Address, Hex, Provider, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { Account as TempoAccount } from 'viem/tempo'
 
+import type { OneOf } from '../internal/types.js'
 import type * as Store from './Store.js'
+
+/** Access key entry stored alongside accounts. */
+export type AccessKey = {
+  /** Access key address. */
+  address: Address.Address
+  /** Owner of the access key. */
+  access: Address.Address
+  /** Unix timestamp when the access key expires. */
+  expiry?: number | undefined
+  /** Signed key authorization to attach to the first transaction. Consumed on use. */
+  keyAuthorization?: KeyAuthorization.Signed | undefined
+  /** Key type. */
+  keyType: 'secp256k1' | 'p256' | 'webAuthn' | 'webCrypto'
+  /** TIP-20 spending limits for the access key. */
+  limits?: { token: Address.Address; limit: bigint; period?: number | undefined }[] | undefined
+  /** Call scopes restricting which contracts/selectors this key can call. */
+  scopes?:
+    | {
+        address: Address.Address
+        selector?: Hex.Hex | string | undefined
+        recipients?: readonly Address.Address[] | undefined
+      }[]
+    | undefined
+} & OneOf<
+  | {}
+  | {
+      /** The exported private key backing the access key. */
+      privateKey: Hex.Hex
+    }
+  | {
+      /** The WebCrypto key pair backing the access key. */
+      keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>
+    }
+>
 
 /** Returns the pending key authorization for an access key account without removing it. */
 export function getPending(
@@ -42,8 +77,64 @@ export declare namespace generate {
   }
 }
 
+/** Prepares an unsigned key authorization and local key material when needed. */
+export async function prepare(options: prepare.Options): Promise<prepare.ReturnType> {
+  const { address, chainId, expiry, keyType, limits, publicKey, scopes } = options
+
+  if (address || publicKey) {
+    const keyAuthorization = KeyAuthorization.from({
+      address: address ?? Address.fromPublicKey(PublicKey.from(publicKey!)),
+      chainId: BigInt(chainId),
+      expiry,
+      limits,
+      scopes,
+      type: keyType ?? 'secp256k1',
+    })
+    return { keyAuthorization }
+  }
+
+  const keyPair = await WebCryptoP256.createKeyPair()
+  const keyAuthorization = KeyAuthorization.from({
+    address: Address.fromPublicKey(PublicKey.from(keyPair.publicKey)),
+    chainId: BigInt(chainId),
+    expiry,
+    limits,
+    scopes,
+    type: 'p256',
+  })
+  return { keyAuthorization, keyPair }
+}
+
+export declare namespace prepare {
+  /** Options for {@link prepare}. */
+  type Options = {
+    /** External access key address. Alternative to `publicKey`. */
+    address?: Address.Address | undefined
+    /** Chain ID the key authorization is scoped to. */
+    chainId: bigint | number
+    /** Unix timestamp when the key expires. */
+    expiry: number
+    /** External key type. Defaults to `secp256k1` for external keys. */
+    keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
+    /** TIP-20 spending limits for this key. */
+    limits?: readonly KeyAuthorization.TokenLimit[] | undefined
+    /** External public key to derive the access key address from. */
+    publicKey?: Hex.Hex | undefined
+    /** Call scopes restricting which contracts/selectors this key can call. */
+    scopes?: readonly KeyAuthorization.Scope[] | undefined
+  }
+
+  /** Prepared unsigned key authorization and optional local key material. */
+  type ReturnType = {
+    /** Unsigned key authorization to sign with the root account. */
+    keyAuthorization: KeyAuthorization.KeyAuthorization<false>
+    /** Generated WebCrypto key pair for local access keys. */
+    keyPair?: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
+  }
+}
+
 /** Hydrates an access key entry to a viem Account. Only works for locally-generated keys. */
-export function hydrate(accessKey: Store.AccessKey): TempoAccount.Account {
+export function hydrate(accessKey: AccessKey): TempoAccount.Account {
   if ('keyPair' in accessKey && accessKey.keyPair)
     return TempoAccount.fromWebCryptoP256(accessKey.keyPair, { access: accessKey.access })
   if ('privateKey' in accessKey && accessKey.privateKey) {
@@ -89,7 +180,7 @@ export function removePending(
 }
 
 /** Selects a locally-signable access key for a root account, removing expired keys. */
-export function select(options: select.Options): Store.AccessKey | undefined {
+export function select(options: select.Options): AccessKey | undefined {
   const { address, calls, store } = options
   const { accessKeys } = store.getState()
   let accessKeys_next = accessKeys
@@ -139,7 +230,7 @@ export declare namespace revoke {
 }
 
 function scopesMatch(
-  key: Store.AccessKey,
+  key: AccessKey,
   options: {
     calls?: readonly { to?: Address.Address | undefined; data?: Hex.Hex | undefined }[] | undefined
   },
@@ -173,11 +264,11 @@ export function save(options: save.Options): void {
     expiry: keyAuthorization.expiry ?? undefined,
     keyAuthorization,
     keyType: keyAuthorization.type,
-    limits: keyAuthorization.limits as Store.AccessKey['limits'],
-    scopes: keyAuthorization.scopes as Store.AccessKey['scopes'],
+    limits: keyAuthorization.limits as AccessKey['limits'],
+    scopes: keyAuthorization.scopes as AccessKey['scopes'],
   }
 
-  const accessKey: Store.AccessKey = privateKey
+  const accessKey: AccessKey = privateKey
     ? { ...base, privateKey }
     : keyPair
       ? { ...base, keyPair }
