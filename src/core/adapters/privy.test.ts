@@ -316,6 +316,37 @@ describe('privy', () => {
     ).rejects.toThrowError(/Address.*invalid/i)
   })
 
+  test('error: secp256k1_sign result must be 65 bytes', async () => {
+    const { adapter } = setup({ signResult: '0x1234' })
+    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+      ),
+    ).rejects.toMatchInlineSnapshot(
+      '[ProviderRpcError: Privy provider returned a malformed secp256k1_sign result (expected 65 bytes, got 2).]',
+    )
+  })
+
+  test('behavior: cache dedupes app-returned wallets by checksummed address', async () => {
+    const { adapter, client } = setup()
+    client.wallets = [client.makeWallet(address), client.makeWallet(address)]
+
+    const result = await adapter.actions.loadAccounts(undefined, {
+      method: 'wallet_connect',
+      params: undefined,
+    })
+    expect(result.accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x0000000000000000000000000000000000000001",
+        },
+      ]
+    `)
+  })
+
   test('error: app-provided provider secp256k1_sign result is hex-validated', async () => {
     const { adapter } = setup({ signResult: 'not-hex' })
     await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
