@@ -25,8 +25,8 @@ const turnkeySessionErrorCodes = new Set([
  * Creates a Turnkey adapter backed by `@turnkey/core` client sessions and Ethereum wallet accounts.
  *
  * The adapter owns silent reconnect, session-expiry cleanup, and provider signing actions.
- * Apps provide the UI-bearing registration and login flows through `createAccount` and
- * `loadAccounts`.
+ * Apps provide the UI-bearing login or sign-up flow through `loadAccounts`. Provide
+ * `createAccount` only when registration needs a distinct Turnkey flow.
  *
  * @example
  * ```ts
@@ -36,14 +36,6 @@ const turnkeySessionErrorCodes = new Set([
  * const provider = Provider.create({
  *   adapter: turnkey({
  *     client: new TurnkeyClient({ organizationId, authProxyConfigId }),
- *     createAccount: async ({ client, parameters }) => {
- *       await client.signUpWithPasskey({
- *         createSubOrgParams: { userName: parameters.name },
- *       })
- *       return (await client.fetchWallets())
- *         .flatMap((wallet) => wallet.accounts)
- *         .find((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')!
- *     },
  *     loadAccounts: async ({ client }) => {
  *       const session = await client.getSession()
  *       if (!session || session.expiry * 1000 <= Date.now()) await client.loginWithPasskey()
@@ -55,16 +47,18 @@ const turnkeySessionErrorCodes = new Set([
  * })
  * ```
  */
-export function turnkey(options: turnkey.Options): Adapter.Adapter {
+export function turnkey<const client extends turnkey.Client>(
+  options: turnkey.Options<client>,
+): Adapter.Adapter {
   const { icon, name = 'Turnkey', rdns = 'com.turnkey', sessionSkewMs = 10_000 } = options
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
-    let turnkeyClient_promise: Promise<turnkey.Client> | undefined
+    let turnkeyClient_promise: Promise<client> | undefined
     let expiry_timeout: ReturnType<typeof setTimeout> | undefined
     let restore_promise: Promise<void> | undefined
     let walletAccounts: readonly turnkey.WalletAccount[] = []
 
-    async function getTurnkeyClient() {
+    async function getTurnkeyClient(): Promise<client> {
       turnkeyClient_promise ??= (async () => {
         const { client } = options
         await client.init?.()
@@ -344,31 +338,46 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
             )
 
           const turnkeyClient = await getTurnkeyClient()
-          const account = await options.createAccount({ client: turnkeyClient, parameters })
+          const accounts = options.createAccount
+            ? [await options.createAccount({ client: turnkeyClient, parameters })]
+            : await options.loadAccounts({
+                client: turnkeyClient,
+                parameters: {
+                  authorizeAccessKey,
+                  digest: parameters.digest,
+                  ...(personalSign ? { personalSign } : {}),
+                },
+              })
           await requireSession()
-          walletAccounts = [account]
+          walletAccounts = accounts
           restore_promise = undefined
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters.digest
+          const account = walletAccounts[0]
           const keyAuthorization = authorizeAccessKey
-            ? await signKeyAuthorization(
-                account,
-                await prepareKeyAuthorization(authorizeAccessKey),
-                { signature: authorizeAccessKey.signature },
-              )
+            ? account
+              ? await signKeyAuthorization(
+                  account,
+                  await prepareKeyAuthorization(authorizeAccessKey),
+                  { signature: authorizeAccessKey.signature },
+                )
+              : undefined
             : undefined
 
           return {
-            accounts: [toStoreAccount(account, parameters.name)],
+            accounts: walletAccounts.map((account, index) =>
+              toStoreAccount(account, index === 0 ? parameters.name : undefined),
+            ),
             ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
             ...(keyAuthorization ? { keyAuthorization } : {}),
-            signature: digest
-              ? await signPayload({
-                  payload: digest,
-                  turnkeyClient,
-                  walletAccount: account,
-                })
-              : undefined,
+            signature:
+              digest && account
+                ? await signPayload({
+                    payload: digest,
+                    turnkeyClient,
+                    walletAccount: account,
+                  })
+                : undefined,
           }
         },
         async loadAccounts(parameters) {
@@ -542,22 +551,24 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
 
 export declare namespace turnkey {
   /** Options for {@link turnkey}. */
-  type Options = {
+  type Options<client extends Client = Client> = {
     /** Existing Turnkey client, such as `TurnkeyClient` from `@turnkey/core`. */
-    client: Client
-    /** Creates/registers a Turnkey wallet account. UI is allowed. */
-    createAccount: (parameters: {
-      /** Initialized Turnkey client. */
-      client: Client
-      /** Provider create-account parameters. */
-      parameters: Adapter.createAccount.Parameters
-    }) => Promise<WalletAccount>
+    client: client
+    /** Creates/registers a Turnkey wallet account. UI is allowed. Defaults to `loadAccounts`. */
+    createAccount?:
+      | ((parameters: {
+          /** Initialized Turnkey client. */
+          client: client
+          /** Provider create-account parameters. */
+          parameters: Adapter.createAccount.Parameters
+        }) => Promise<WalletAccount>)
+      | undefined
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /** Loads/logs into existing Turnkey wallet accounts. UI is allowed. */
     loadAccounts: (parameters: {
       /** Initialized Turnkey client. */
-      client: Client
+      client: client
       /** Provider load-accounts parameters. */
       parameters?: Adapter.loadAccounts.Parameters | undefined
     }) => Promise<readonly WalletAccount[]>

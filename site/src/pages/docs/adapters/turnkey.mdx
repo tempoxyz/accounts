@@ -7,7 +7,7 @@ import { Cards, Card } from 'vocs'
 
 # Turnkey Adapter
 
-The Turnkey adapter is for apps that want Turnkey to own key custody and authentication while plugging into Tempo account features. Your app keeps the registration and login UX (passkey prompts, OTP, etc.); the adapter handles silent reconnect, session expiry, and provider signing.
+The Turnkey adapter is for apps that want Turnkey to own key custody and authentication while plugging into Tempo account features. Your app keeps the login or sign-up UX (passkey prompts, OTP, etc.); the adapter handles silent reconnect, session expiry, and provider signing.
 
 Use it when you want:
 
@@ -28,14 +28,6 @@ import { Provider, turnkey } from 'accounts'
 const provider = Provider.create({
   adapter: turnkey({
     client: new TurnkeyClient({ organizationId, authProxyConfigId }),
-    createAccount: async ({ client, parameters }) => {
-      await client.signUpWithPasskey({
-        createSubOrgParams: { userName: parameters.name },
-      })
-      return (await client.fetchWallets())
-        .flatMap((wallet) => wallet.accounts)
-        .find((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')!
-    },
     loadAccounts: async ({ client }) => {
       const session = await client.getSession()
       if (!session || session.expiry * 1000 <= Date.now()) await client.loginWithPasskey()

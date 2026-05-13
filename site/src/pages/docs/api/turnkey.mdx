@@ -7,7 +7,7 @@ description: Adapter backed by Turnkey client sessions.
 
 Creates a Turnkey adapter backed by `@turnkey/core` client sessions and Ethereum wallet accounts.
 
-The adapter owns silent reconnect, session-expiry cleanup, and provider signing actions. Apps provide the UI-bearing registration and login flows through [`createAccount`](#createaccount) and [`loadAccounts`](#loadaccounts).
+The adapter owns silent reconnect, session-expiry cleanup, and provider signing actions. Apps usually provide one UI-bearing login or sign-up flow through [`loadAccounts`](#loadaccounts). Use [`createAccount`](#createaccount) only when registration needs a distinct Turnkey flow.
 
 ## Usage
 
@@ -18,14 +18,6 @@ import { Provider, turnkey } from 'accounts'
 const provider = Provider.create({
   adapter: turnkey({
     client: new TurnkeyClient({ organizationId, authProxyConfigId }),
-    createAccount: async ({ client, parameters }) => {
-      await client.signUpWithPasskey({
-        createSubOrgParams: { userName: parameters.name },
-      })
-      return (await client.fetchWallets())
-        .flatMap((wallet) => wallet.accounts)
-        .find((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')!
-    },
     loadAccounts: async ({ client }) => {
       const session = await client.getSession()
       if (!session || session.expiry * 1000 <= Date.now()) await client.loginWithPasskey()
@@ -53,8 +45,55 @@ import { Provider, turnkey } from 'accounts'
 const provider = Provider.create({
   adapter: turnkey({
     client: new TurnkeyClient({ organizationId, authProxyConfigId }), // [!code focus]
-    createAccount: async ({ client, parameters }) => { /* ... */ },
     loadAccounts: async ({ client }) => { /* ... */ },
+  }),
+})
+```
+
+### icon
+
+- **Type:** `` `data:image/${string}` ``
+- **Optional**
+
+Data URI of the provider icon.
+
+```ts
+import { Provider, turnkey } from 'accounts'
+
+const provider = Provider.create({
+  adapter: turnkey({
+    client,
+    loadAccounts: async () => { /* ... */ },
+    icon: 'data:image/svg+xml,...', // [!code focus]
+  }),
+})
+```
+
+### loadAccounts
+
+- **Type:** `(params: { client; parameters? }) => Promise<readonly turnkey.WalletAccount[]>`
+- **Required**
+
+Loads/logs into existing Turnkey wallet accounts. UI is allowed (e.g. passkey prompts to start a new session).
+
+Receives the initialized Turnkey `client` and the optional provider load-accounts `parameters` (e.g. `authorizeAccessKey`, `digest`, `personalSign`, `selectAccount`). Must return all Ethereum-format Turnkey wallet accounts that should be exposed to the provider.
+
+When `createAccount` is omitted, register requests call `loadAccounts` too. This fits email and social auth flows where the same Turnkey ceremony can sign in an existing user or create one.
+
+```ts
+import { Provider, turnkey } from 'accounts'
+
+const provider = Provider.create({
+  adapter: turnkey({
+    client,
+    loadAccounts: async ({ client }) => { // [!code focus]
+      const session = await client.getSession() // [!code focus]
+      if (!session || session.expiry * 1000 <= Date.now()) // [!code focus]
+        await client.loginWithPasskey() // [!code focus]
+      return (await client.fetchWallets()) // [!code focus]
+        .flatMap((wallet) => wallet.accounts) // [!code focus]
+        .filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM') // [!code focus]
+    }, // [!code focus]
   }),
 })
 ```
@@ -62,9 +101,10 @@ const provider = Provider.create({
 ### createAccount
 
 - **Type:** `(params: { client; parameters }) => Promise<turnkey.WalletAccount>`
-- **Required**
+- **Optional**
+- **Default:** `loadAccounts`
 
-Creates/registers a Turnkey wallet account. UI is allowed (e.g. passkey prompts).
+Creates/registers a Turnkey wallet account when registration needs a separate flow.
 
 Receives the initialized Turnkey `client` and the provider create-account `parameters` (display name, optional `digest`, `personalSign`, `userId`, etc.). Must return a single Ethereum-format Turnkey wallet account.
 
@@ -87,54 +127,6 @@ const provider = Provider.create({
 })
 ```
 
-### icon
-
-- **Type:** `` `data:image/${string}` ``
-- **Optional**
-
-Data URI of the provider icon.
-
-```ts
-import { Provider, turnkey } from 'accounts'
-
-const provider = Provider.create({
-  adapter: turnkey({
-    client,
-    createAccount: async () => { /* ... */ },
-    loadAccounts: async () => { /* ... */ },
-    icon: 'data:image/svg+xml,...', // [!code focus]
-  }),
-})
-```
-
-### loadAccounts
-
-- **Type:** `(params: { client; parameters? }) => Promise<readonly turnkey.WalletAccount[]>`
-- **Required**
-
-Loads/logs into existing Turnkey wallet accounts. UI is allowed (e.g. passkey prompts to start a new session).
-
-Receives the initialized Turnkey `client` and the optional provider load-accounts `parameters` (e.g. `authorizeAccessKey`, `digest`, `personalSign`, `selectAccount`). Must return all Ethereum-format Turnkey wallet accounts that should be exposed to the provider.
-
-```ts
-import { Provider, turnkey } from 'accounts'
-
-const provider = Provider.create({
-  adapter: turnkey({
-    client,
-    createAccount: async () => { /* ... */ },
-    loadAccounts: async ({ client }) => { // [!code focus]
-      const session = await client.getSession() // [!code focus]
-      if (!session || session.expiry * 1000 <= Date.now()) // [!code focus]
-        await client.loginWithPasskey() // [!code focus]
-      return (await client.fetchWallets()) // [!code focus]
-        .flatMap((wallet) => wallet.accounts) // [!code focus]
-        .filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM') // [!code focus]
-    }, // [!code focus]
-  }),
-})
-```
-
 ### name
 
 - **Type:** `string`
@@ -148,7 +140,6 @@ import { Provider, turnkey } from 'accounts'
 const provider = Provider.create({
   adapter: turnkey({
     client,
-    createAccount: async () => { /* ... */ },
     loadAccounts: async () => { /* ... */ },
     name: 'My Wallet', // [!code focus]
   }),
@@ -168,7 +159,6 @@ import { Provider, turnkey } from 'accounts'
 const provider = Provider.create({
   adapter: turnkey({
     client,
-    createAccount: async () => { /* ... */ },
     loadAccounts: async () => { /* ... */ },
     rdns: 'com.example.wallet', // [!code focus]
   }),
@@ -188,7 +178,6 @@ import { Provider, turnkey } from 'accounts'
 const provider = Provider.create({
   adapter: turnkey({
     client,
-    createAccount: async () => { /* ... */ },
     loadAccounts: async () => { /* ... */ },
     sessionSkewMs: 30_000, // [!code focus]
   }),

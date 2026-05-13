@@ -36,6 +36,29 @@ describe('turnkey', () => {
     `)
   })
 
+  test('default: createAccount falls back to loadAccounts', async () => {
+    const { adapter, client } = setup({ createAccount: false })
+
+    const result = await adapter.actions.createAccount(
+      { digest: '0x1234', name: 'Ada' },
+      { method: 'wallet_connect', params: undefined },
+    )
+
+    expect(client.createCalls).toMatchInlineSnapshot(`0`)
+    expect(client.loadCalls).toMatchInlineSnapshot(`1`)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+            "label": "Ada",
+          },
+        ],
+        "signature": "0x000000000000000000000000000000000000000000000000000000000000001100000000000000000000000000000000000000000000000000000000000000221b",
+      }
+    `)
+  })
+
   test('default: loadAccounts delegates login and caches wallet accounts for signing', async () => {
     const { adapter, client } = setup()
 
@@ -268,7 +291,14 @@ function setup(options: setup.Options = {}) {
   const client = createClient(options)
   const adapter = turnkey({
     client,
-    createAccount: async () => ({ address }),
+    ...(options.createAccount === false
+      ? {}
+      : {
+          createAccount: async () => {
+            client.createCalls++
+            return { address }
+          },
+        }),
     loadAccounts: async () => {
       client.loadCalls++
       return [{ address }]
@@ -286,6 +316,7 @@ function setup(options: setup.Options = {}) {
 
 declare namespace setup {
   type Options = {
+    createAccount?: boolean | undefined
     session?: turnkey.Session | null | undefined
     signError?: unknown
   }
@@ -294,6 +325,7 @@ declare namespace setup {
 function createClient(options: setup.Options = {}) {
   type WalletShape = { accounts: { address: string; addressFormat: string }[] }
   const state = {
+    createCalls: 0,
     fetchCalls: 0,
     initCalls: 0,
     loadCalls: 0,
@@ -306,6 +338,12 @@ function createClient(options: setup.Options = {}) {
   const client = {
     get fetchCalls() {
       return state.fetchCalls
+    },
+    get createCalls() {
+      return state.createCalls
+    },
+    set createCalls(value: number) {
+      state.createCalls = value
     },
     get initCalls() {
       return state.initCalls
@@ -353,6 +391,7 @@ function createClient(options: setup.Options = {}) {
     },
     logout: () => {},
   } satisfies turnkey.Client & {
+    createCalls: number
     fetchCalls: number
     initCalls: number
     loadCalls: number
