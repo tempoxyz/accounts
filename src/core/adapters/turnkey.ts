@@ -322,8 +322,8 @@ export declare namespace turnkey {
   type WalletAccount = {
     /** EVM address for the Turnkey wallet account. */
     address: string
-    /** Turnkey Ethereum address format. */
-    addressFormat?: 'ADDRESS_FORMAT_ETHEREUM' | undefined
+    /** Turnkey address format. Account discovery callbacks should return EVM accounts. */
+    addressFormat?: string | undefined
     /** Compressed secp256k1 public key for the Turnkey wallet account. */
     publicKey: string
   }

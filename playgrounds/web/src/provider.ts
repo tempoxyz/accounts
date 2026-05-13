@@ -188,7 +188,17 @@ function createTurnkeySubOrgParams(name?: string | undefined) {
 async function getEthereumAccounts(client: TurnkeyPlaygroundClient) {
   return (await client.fetchWallets())
     .flatMap((wallet) => wallet.accounts)
-    .filter((account) => account.addressFormat === turnkeyEthereumAddressFormat)
+    .flatMap((account) => {
+      if (account.addressFormat !== turnkeyEthereumAddressFormat) return []
+      if (!account.publicKey) return []
+      return [
+        {
+          address: account.address,
+          addressFormat: account.addressFormat,
+          publicKey: account.publicKey,
+        },
+      ]
+    })
 }
 
 async function getOrCreateEthereumAccounts(client: TurnkeyPlaygroundClient) {
