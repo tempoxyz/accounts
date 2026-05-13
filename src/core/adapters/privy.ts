@@ -106,13 +106,26 @@ export function privy<const client extends privy.Client>(
     let privyClient_promise: Promise<client> | undefined
     let restore_promise: Promise<void> | undefined
     let walletAccounts: readonly privy.EmbeddedWallet[] = []
+    /**
+     * Bumped by user-initiated `createAccount`/`loadAccounts` so an in-flight silent
+     * `restore()` IIFE can detect a concurrent connect and bail before clobbering
+     * just-cached accounts.
+     */
+    let connect_version = 0
 
     async function getPrivyClient(): Promise<client> {
-      privyClient_promise ??= (async () => {
-        const { client } = options
-        await client.initialize?.()
-        return client
-      })()
+      if (!privyClient_promise) {
+        const promise = (async () => {
+          const { client } = options
+          await client.initialize?.()
+          return client
+        })()
+        privyClient_promise = promise
+        // Reset on failure so subsequent calls can retry initialization.
+        promise.catch(() => {
+          if (privyClient_promise === promise) privyClient_promise = undefined
+        })
+      }
       return await privyClient_promise
     }
 
@@ -190,11 +203,13 @@ export function privy<const client extends privy.Client>(
         return
       }
 
+      const startVersion = connect_version
       restore_promise = (async () => {
         const state = store.getState()
         const persisted = state.accounts
 
         if (!(await hasValidSession())) {
+          if (connect_version !== startVersion) return
           clear()
           if (persisted.length > 0)
             throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
@@ -205,9 +220,13 @@ export function privy<const client extends privy.Client>(
 
         const restored = await restoreWalletAccounts(await getPrivyClient()).catch((error) => {
           if (!isSessionError(error)) throw error
-          clear()
+          if (connect_version === startVersion) clear()
           return [] as readonly privy.EmbeddedWallet[]
         })
+
+        // A user-initiated connect happened mid-flight; bail without overwriting cached accounts.
+        if (connect_version !== startVersion) return
+
         cache(
           persisted
             .map((account) =>
@@ -246,8 +265,8 @@ export function privy<const client extends privy.Client>(
 
     async function accountForSigning(address: Address | undefined) {
       await Store.waitForHydration(store)
-      const state = store.getState()
-      const address_ = address ?? state.accounts[state.activeAccount]?.address
+      const initialState = store.getState()
+      const address_ = address ?? initialState.accounts[initialState.activeAccount]?.address
       if (!address_) throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
 
       const cached = accountByAddress(address_)
@@ -255,7 +274,10 @@ export function privy<const client extends privy.Client>(
 
       await requireSession()
 
-      const persisted = state.accounts.some((account) => isAddressEqual(account.address, address_))
+      // Re-read state since `requireSession` may have called `clear()`.
+      const persisted = store
+        .getState()
+        .accounts.some((account) => isAddressEqual(account.address, address_))
       await restore(persisted ? address_ : undefined)
 
       const restored = accountByAddress(address_)
@@ -495,6 +517,7 @@ export function privy<const client extends privy.Client>(
           const privyClient = await getPrivyClient()
           const account = await options.createAccount({ client: privyClient, parameters })
           await requireSession()
+          connect_version++
           cache([account])
           restore_promise = undefined
 
@@ -531,6 +554,7 @@ export function privy<const client extends privy.Client>(
           const privyClient = await getPrivyClient()
           const accounts = await options.loadAccounts({ client: privyClient, parameters })
           await requireSession()
+          connect_version++
           cache(accounts)
           restore_promise = undefined
 
@@ -672,8 +696,11 @@ export function privy<const client extends privy.Client>(
             .get()
             .then(({ user }) => user.id)
             .catch(() => undefined)
-          await privyClient.auth.logout(userId ? { userId } : undefined)
-          clear()
+          try {
+            await privyClient.auth.logout(userId ? { userId } : undefined)
+          } finally {
+            clear()
+          }
         },
       },
     }
