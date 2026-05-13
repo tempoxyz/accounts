@@ -356,6 +356,27 @@ describe('privy', () => {
     )
   })
 
+  test('disconnect: clears provider accounts even when logout throws', async () => {
+    const { adapter, store } = setup({ logoutError: new Error('logout failed') })
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(adapter.actions.disconnect!()).rejects.toThrowError('logout failed')
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('init: a failed initialize is retried on the next call', async () => {
+    const { adapter, client } = setup({ initError: new Error('init failed') })
+
+    await expect(
+      adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined }),
+    ).rejects.toThrowError('init failed')
+    expect(client.initCalls).toMatchInlineSnapshot(`1`)
+
+    // Second call should retry initialize and succeed.
+    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+    expect(client.initCalls).toMatchInlineSnapshot(`2`)
+  })
+
   test('disconnect: clears provider accounts and logs the user out of Privy', async () => {
     const { adapter, client, store } = setup()
     store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -400,6 +421,10 @@ declare namespace setup {
     signError?: unknown
     /** Override the value returned by the embedded provider's `secp256k1_sign`. */
     signResult?: unknown
+    /** Make `client.auth.logout` throw, to test disconnect cleanup. */
+    logoutError?: unknown
+    /** Make `client.initialize` throw on the next call (then resolve). */
+    initError?: unknown
   }
 }
 
@@ -445,6 +470,7 @@ function createClient(options: setup.Options = {}) {
       logout(parameters?: { userId: string } | undefined) {
         client.logoutCalls++
         client.logoutWith.push(parameters?.userId)
+        if (options.logoutError) throw options.logoutError
       },
     },
     embeddedWallet: {
@@ -471,6 +497,7 @@ function createClient(options: setup.Options = {}) {
     },
     initialize() {
       client.initCalls++
+      if (options.initError && client.initCalls === 1) throw options.initError
     },
     user: {
       async get() {
