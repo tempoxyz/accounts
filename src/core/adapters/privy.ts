@@ -143,15 +143,21 @@ export function privy<const client extends privy.Client>(
     }
 
     function cache(accounts: readonly privy.EmbeddedWallet[]) {
-      walletAccounts = accounts.map((account) => {
-        core_Address.from(account.address)
-        return account
+      const seen = new Set<string>()
+      walletAccounts = accounts.flatMap((account) => {
+        const address = core_Address.from(account.address)
+        if (seen.has(address)) return []
+        seen.add(address)
+        return [account]
       })
     }
 
     async function hasValidSession() {
       const privyClient = await getPrivyClient()
-      const token = await privyClient.getAccessToken().catch(() => null)
+      const token = await privyClient.getAccessToken().catch((error) => {
+        if (isSessionError(error)) return null
+        throw error
+      })
       return !!token
     }
 
@@ -307,19 +313,17 @@ export function privy<const client extends privy.Client>(
     }
 
     function assertHexResult(result: unknown): Hex.Hex {
-      if (typeof result !== 'string')
+      if (typeof result !== 'string' || !Hex.validate(result))
         throw new ox_Provider.ProviderRpcError(
           -32603,
           'Privy provider returned a non-hex secp256k1_sign result.',
         )
-      try {
-        Hex.assert(result)
-      } catch {
+      // secp256k1 signature is 65 bytes (r,s,v) → 130 hex chars + '0x'.
+      if (result.length !== 132)
         throw new ox_Provider.ProviderRpcError(
           -32603,
-          'Privy provider returned a non-hex secp256k1_sign result.',
+          `Privy provider returned a malformed secp256k1_sign result (expected 65 bytes, got ${(result.length - 2) / 2}).`,
         )
-      }
       return result
     }
 
