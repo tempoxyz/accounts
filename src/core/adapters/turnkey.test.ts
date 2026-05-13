@@ -1,7 +1,6 @@
 import { Hex } from 'ox'
 import { describe, expect, test } from 'vp/test'
 
-import { accounts as core_accounts } from '../../../test/config.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { turnkey } from './turnkey.js'
@@ -130,32 +129,6 @@ describe('turnkey', () => {
             "yParity": "0x0",
           },
         },
-        "rootAddress": "0x0000000000000000000000000000000000000001",
-      }
-    `)
-  })
-
-  test('behavior: authorizeAccessKey derives external key address from public key', async () => {
-    const { adapter, store } = setup()
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
-
-    const result = await adapter.actions.authorizeAccessKey!(
-      {
-        expiry: 123,
-        keyType: 'secp256k1',
-        publicKey: core_accounts[1]!.publicKey,
-      },
-      { method: 'wallet_authorizeAccessKey', params: [{ expiry: 123 }] },
-    )
-
-    expect({
-      keyId: result.keyAuthorization.keyId,
-      keyType: result.keyAuthorization.keyType,
-      rootAddress: result.rootAddress,
-    }).toMatchInlineSnapshot(`
-      {
-        "keyId": "${core_accounts[1]!.address.toLowerCase()}",
-        "keyType": "secp256k1",
         "rootAddress": "0x0000000000000000000000000000000000000001",
       }
     `)

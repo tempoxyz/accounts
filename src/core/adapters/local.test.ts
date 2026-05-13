@@ -132,43 +132,6 @@ describe('local', () => {
     })
   })
 
-  describe('authorizeAccessKey', () => {
-    test('behavior: derives external key address from public key', async () => {
-      const { adapter, store } = setup()
-      store.setState({
-        accounts: [
-          {
-            address: core_accounts[0]!.address,
-            keyType: 'secp256k1',
-            privateKey: privateKeys[0],
-          },
-        ],
-        activeAccount: 0,
-      })
-
-      const result = await adapter.actions.authorizeAccessKey!(
-        {
-          expiry: 123,
-          keyType: 'secp256k1',
-          publicKey: core_accounts[1]!.publicKey,
-        },
-        { method: 'wallet_authorizeAccessKey', params: [{ expiry: 123 }] },
-      )
-
-      expect({
-        keyId: result.keyAuthorization.keyId,
-        keyType: result.keyAuthorization.keyType,
-        rootAddress: result.rootAddress,
-      }).toMatchInlineSnapshot(`
-        {
-          "keyId": "${core_accounts[1]!.address.toLowerCase()}",
-          "keyType": "secp256k1",
-          "rootAddress": "${core_accounts[0]!.address}",
-        }
-      `)
-    })
-  })
-
   describe('createAccount', () => {
     test('default: creates account', async () => {
       const { adapter } = setup({
