@@ -212,8 +212,10 @@ export function removePending(
   }))
 }
 
-/** Selects a locally-signable access key for a root account, removing expired keys. */
-export function select(options: select.Options): AccessKey | undefined {
+/** Selects and hydrates a locally-signable access key account for a root account. */
+export function selectAccount(
+  options: selectAccount.Options,
+): TempoAccount.AccessKeyAccount | undefined {
   const { address, calls, chainId, store } = options
   const { accessKeys } = store.getState()
   let accessKeys_next = accessKeys
@@ -228,13 +230,13 @@ export function select(options: select.Options): AccessKey | undefined {
       continue
     }
 
-    if (scopesMatch(key, { calls })) return key
+    if (scopesMatch(key, { calls })) return hydrate(key) as TempoAccount.AccessKeyAccount
   }
   return undefined
 }
 
-export declare namespace select {
-  /** Options for {@link select}. */
+export declare namespace selectAccount {
+  /** Options for {@link selectAccount}. */
   type Options = {
     /** Root account address. */
     address: Address.Address

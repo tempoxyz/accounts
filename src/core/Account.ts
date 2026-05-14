@@ -49,13 +49,13 @@ export function find(options: find.Options): TempoAccount.Account | JsonRpcAccou
 
   // When accessKey is requested, prefer a locally-signable access key for this address.
   if (accessKey) {
-    const key = core_AccessKey.select({
+    const account = core_AccessKey.selectAccount({
       address: root.address,
       calls: options.calls,
       chainId: options.chainId ?? store.getState().chainId,
       store,
     })
-    if (key) return core_AccessKey.hydrate(key) as never
+    if (account) return account
   }
 
   return hydrate(root, { signable }) as never
