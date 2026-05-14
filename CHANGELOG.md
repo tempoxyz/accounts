@@ -1,5 +1,31 @@
 # accounts
 
+## 0.11.0
+
+### Minor Changes
+
+- 0a73f2c: Renamed the `wallet_send` `value` parameter to `amount`.
+
+  ```diff
+   await provider.request({
+     method: 'wallet_send',
+     params: [{
+       to: '0x...',
+       token: '0x20c0000000000000000000000000000000000001',
+  -    value: '1.5',
+  +    amount: '1.5',
+     }],
+   })
+  ```
+
+### Patch Changes
+
+- 43b8700: Fixed access keys selection to include chain.
+- b4a08ef: Fixed access key selection in the dialog adapter by forwarding calls.
+- b4a08ef: Added console logging in the dialog adapter's access key fallback path.
+- 0a73f2c: Added an optional `memo` parameter to `wallet_send` that the wallet attaches to TIP-20 transfers and rejects with `InvalidParamsError` for non-TIP-20 tokens.
+- 0a73f2c: Widened the `wallet_send` `token` parameter to accept a curated tokenlist symbol (case-insensitive, e.g. `"pathUsd"`) in addition to a contract address.
+
 ## 0.10.7
 
 ### Patch Changes
