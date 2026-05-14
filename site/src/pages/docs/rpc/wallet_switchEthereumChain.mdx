@@ -1,0 +1,37 @@
+---
+title: wallet_switchEthereumChain
+description: Switch the provider's active chain.
+---
+
+# `wallet_switchEthereumChain`
+
+Switches the provider's active chain to the chain identified by `chainId`. The chain must be one of the chains the provider was configured with — switching to an unknown chain throws an `UnsupportedChainId` error.
+
+After a successful switch, [`eth_chainId`](/docs/rpc/eth_chainId) reflects the new chain and subsequent requests use it as their default.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_switchEthereumChain'
+  params: [{
+    /** Chain ID to switch to (hex-encoded number on the wire, decoded to `number`). */
+    chainId: number
+  }]
+}
+```
+
+## Response
+
+```ts
+type Response = undefined
+```
+
+## Example
+
+```ts
+await provider.request({
+  method: 'wallet_switchEthereumChain',
+  params: [{ chainId: 1 }],
+})
+```

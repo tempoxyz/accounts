@@ -1,0 +1,55 @@
+---
+title: Theming
+description: Match embedded account surfaces to your product.
+---
+
+# Theming
+
+Configure the appearance of embedded account surfaces without changing the signing adapter contract.
+
+## Demo
+
+Target workspace: `examples/theming/`.
+
+:::warning[Stub]
+This page needs product design input before implementation. The first pass should identify which surfaces are themeable and which are owned by hosted wallet infrastructure.
+:::
+
+## Walkthrough
+
+::::steps
+
+### Install the SDK
+
+```bash
+pnpm add accounts
+```
+
+### Configure the Provider
+
+Choose the adapter whose surfaces need theming.
+
+### Connect the user's account
+
+Open the embedded surface in the target browser contexts.
+
+### Submit the request
+
+Apply the supported theme options.
+
+### Verify the result
+
+Compare the embedded dialog, popup, and mobile behavior.
+
+::::
+
+## Notes / Gotchas
+
+- Hosted wallet surfaces may intentionally limit theming to preserve trust and security cues.
+- Domain-bound and custom adapters may own more of the UI surface directly.
+
+## Next Steps
+
+- [Tempo Wallet adapter](/docs/adapters/tempo-wallet)
+- [Dialog reference](/docs/api/dialogs)
+- [Deploying to Production](/docs/production)

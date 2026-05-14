@@ -1,0 +1,98 @@
+---
+title: secp256k1
+description: Adapter that signs in-process with a `secp256k1` private key.
+---
+
+# `secp256k1`
+
+Creates an adapter that signs in-process with a `secp256k1` private key.
+
+If `privateKey` is provided, the adapter pins that key as the signer (useful for server-side use, where the key is supplied by the host environment).
+
+If `privateKey` is omitted, the adapter generates a random key on first connect and persists it via the provider's storage adapter (e.g. `localStorage`, cookies).
+
+:::warning
+Storing keys in browser storage in plaintext is dangerous — only use the unpinned form for development, testing, or when the threat model allows it.
+:::
+
+Wraps the [`local`](/docs/api/local) adapter.
+
+## Usage
+
+```ts twoslash
+import { secp256k1, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: secp256k1({ privateKey: '0x...' }),
+})
+```
+
+## Parameters
+
+### icon
+
+- **Type:** `` `data:image/${string}` ``
+- **Optional**
+
+Data URI of the provider icon.
+
+```ts twoslash
+import { secp256k1, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: secp256k1({
+    icon: 'data:image/svg+xml,...', // [!code focus]
+  }),
+})
+```
+
+### name
+
+- **Type:** `string`
+- **Default:** `'Injected Wallet'`
+
+Display name of the provider.
+
+```ts twoslash
+import { secp256k1, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: secp256k1({
+    name: 'My Wallet', // [!code focus]
+  }),
+})
+```
+
+### privateKey
+
+- **Type:** `Hex`
+- **Optional**
+
+Fixed private key to expose instead of generating/loading one from storage. When provided, the adapter pins this key for every connect.
+
+```ts twoslash
+import { secp256k1, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: secp256k1({
+    privateKey: '0x...', // [!code focus]
+  }),
+})
+```
+
+### rdns
+
+- **Type:** `string`
+- **Default:** `` `com.{lowercase name}` ``
+
+Reverse DNS identifier.
+
+```ts twoslash
+import { secp256k1, Provider } from 'accounts'
+
+const provider = Provider.create({
+  adapter: secp256k1({
+    rdns: 'com.example.wallet', // [!code focus]
+  }),
+})
+```

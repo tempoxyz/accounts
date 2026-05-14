@@ -1,9 +1,10 @@
 import { WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
-import { Account as TempoAccount } from 'viem/tempo'
+import { encodeErrorResult } from 'viem'
+import { Abis, Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
-import { accounts } from '../../test/config.js'
+import { accounts, privateKeys } from '../../test/config.js'
 import * as AccessKey from './AccessKey.js'
 import * as Store from './Store.js'
 
@@ -29,6 +30,12 @@ function createKeyAuthorization(
   )
 }
 
+function createRevert(errorName: string) {
+  return Object.assign(new Error('reverted'), {
+    data: encodeErrorResult({ abi: Abis.abis, errorName, args: [] } as never),
+  })
+}
+
 describe('save', () => {
   test('default: saves access key to store', async () => {
     const store = createStore()
@@ -42,6 +49,7 @@ describe('save', () => {
     expect(accessKeys.length).toMatchInlineSnapshot(`1`)
     expect(accessKeys[0]!.address).toBe(accessKey.address)
     expect(accessKeys[0]!.access).toBe(rootAddress)
+    expect(accessKeys[0]!.chainId).toMatchInlineSnapshot(`1`)
     expect(accessKeys[0]!.keyType).toMatchInlineSnapshot(`"p256"`)
     expect(accessKeys[0]!.keyAuthorization).toBe(keyAuthorization)
   })
@@ -197,6 +205,70 @@ describe('removePending', () => {
   })
 })
 
+describe('invalidate', () => {
+  async function setup() {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const account = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    AccessKey.save({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(account.accessKeyAddress),
+      keyPair,
+      store,
+    })
+    return { account, store }
+  }
+
+  test('default: removes matching access key for stale-key errors', async () => {
+    const { account, store } = await setup()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const account_other = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    AccessKey.save({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(account_other.accessKeyAddress),
+      keyPair,
+      store,
+    })
+
+    const result = AccessKey.invalidate(account, createRevert('KeyNotFound'), { store })
+
+    expect(result).toMatchInlineSnapshot(`true`)
+    expect(store.getState().accessKeys.map((key) => key.address)).toMatchInlineSnapshot(`
+      [
+        "${account_other.accessKeyAddress}",
+      ]
+    `)
+  })
+
+  test('behavior: preserves access key for recoverable execution errors', async () => {
+    const { account, store } = await setup()
+
+    const result = AccessKey.invalidate(account, createRevert('SpendingLimitExceeded'), {
+      store,
+    })
+
+    expect(result).toMatchInlineSnapshot(`false`)
+    expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
+  })
+
+  test('behavior: preserves access key for unknown errors', async () => {
+    const { account, store } = await setup()
+
+    const result = AccessKey.invalidate(account, new Error('network failed'), { store })
+
+    expect(result).toMatchInlineSnapshot(`false`)
+    expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
+  })
+
+  test('behavior: no-op for root accounts', () => {
+    const store = createStore()
+
+    const result = AccessKey.invalidate(accounts[0]!, createRevert('KeyNotFound'), { store })
+
+    expect(result).toMatchInlineSnapshot(`false`)
+  })
+})
+
 describe('generate', () => {
   test('default: returns access key and key pair', async () => {
     const result = await AccessKey.generate()
@@ -210,6 +282,423 @@ describe('generate', () => {
 
     expect(result.accessKey.source).toMatchInlineSnapshot(`"accessKey"`)
     expect(result.accessKey.accessKeyAddress).toMatch(/^0x[0-9a-f]{40}$/i)
+  })
+})
+
+describe('prepare', () => {
+  test('default: prepares generated p256 key authorization', async () => {
+    const result = await AccessKey.prepare({ chainId: 1, expiry: 123 })
+
+    expect(result.keyAuthorization.address).toMatch(/^0x[0-9a-f]{40}$/i)
+    expect(result.keyAuthorization.chainId).toMatchInlineSnapshot(`1n`)
+    expect(result.keyAuthorization.expiry).toMatchInlineSnapshot(`123`)
+    expect(result.keyAuthorization.type).toMatchInlineSnapshot(`"p256"`)
+    expect(result.keyPair).toBeDefined()
+  })
+
+  test('behavior: prepares external key authorization from address', async () => {
+    const result = await AccessKey.prepare({
+      address: accounts[1]!.address,
+      chainId: 123n,
+      expiry: 456,
+      keyType: 'webAuthn',
+      limits: [
+        {
+          limit: 1000n,
+          period: 60,
+          token: '0x20c0000000000000000000000000000000000001',
+        },
+      ],
+      scopes: [
+        {
+          address: '0x0000000000000000000000000000000000000abc',
+          recipients: ['0x0000000000000000000000000000000000000def'],
+          selector: 'transfer(address,uint256)',
+        },
+      ],
+    })
+
+    expect(result.keyPair).toBeUndefined()
+    expect(result.keyAuthorization).toMatchInlineSnapshot(`
+      {
+        "address": "${accounts[1]!.address}",
+        "chainId": 123n,
+        "expiry": 456,
+        "limits": [
+          {
+            "limit": 1000n,
+            "period": 60,
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+        "scopes": [
+          {
+            "address": "0x0000000000000000000000000000000000000abc",
+            "recipients": [
+              "0x0000000000000000000000000000000000000def",
+            ],
+            "selector": "0xa9059cbb",
+          },
+        ],
+        "type": "webAuthn",
+      }
+    `)
+  })
+
+  test('behavior: prepares external key authorization from public key', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const account = TempoAccount.fromWebCryptoP256(keyPair)
+
+    const result = await AccessKey.prepare({
+      chainId: 123n,
+      expiry: 456,
+      keyType: 'p256',
+      publicKey: account.publicKey,
+    })
+
+    expect(result.keyPair).toBeUndefined()
+    expect(result.keyAuthorization).toMatchInlineSnapshot(`
+      {
+        "address": "${account.address.toLowerCase()}",
+        "chainId": 123n,
+        "expiry": 456,
+        "limits": undefined,
+        "scopes": undefined,
+        "type": "p256",
+      }
+    `)
+  })
+
+  test('behavior: defaults external key type to secp256k1', async () => {
+    const result = await AccessKey.prepare({
+      address: accounts[1]!.address,
+      chainId: 1,
+      expiry: 123,
+    })
+
+    expect(result.keyAuthorization.type).toMatchInlineSnapshot(`"secp256k1"`)
+  })
+})
+
+describe('hydrate', () => {
+  test('default: hydrates webCrypto access key to signable account', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const result = AccessKey.hydrate({
+      access: rootAddress,
+      address: '0x0000000000000000000000000000000000000099',
+      chainId: 1,
+      keyPair,
+      keyType: 'webCrypto',
+    })
+
+    expect(result.type).toMatchInlineSnapshot(`"local"`)
+    expect(typeof result.sign).toMatchInlineSnapshot(`"function"`)
+    expect(result.source).toMatchInlineSnapshot(`"accessKey"`)
+  })
+
+  test('behavior: hydrates private-key access key to signable account', () => {
+    const result = AccessKey.hydrate({
+      access: rootAddress,
+      address: accounts[1]!.address,
+      chainId: 1,
+      keyType: 'secp256k1',
+      privateKey: privateKeys[1],
+    })
+
+    expect(result.type).toMatchInlineSnapshot(`"local"`)
+    expect(typeof result.sign).toMatchInlineSnapshot(`"function"`)
+    expect(result.source).toMatchInlineSnapshot(`"accessKey"`)
+  })
+
+  test('error: throws for external access key without signer material', () => {
+    expect(() =>
+      AccessKey.hydrate({
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyType: 'p256',
+      }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnauthorizedError: External access key cannot be hydrated for signing.]`,
+    )
+  })
+})
+
+describe('select', () => {
+  function setup(accessKeys: readonly Store.AccessKey[] = []) {
+    const store = createStore()
+    store.setState({ accessKeys })
+    return store
+  }
+
+  test('default: selects locally-signable access key for root address', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+      },
+    ])
+
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+
+    expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
+  })
+
+  test('behavior: skips access keys for another root address', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const store = setup([
+      {
+        access: accounts[1]!.address,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+      },
+    ])
+
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+
+    expect(result).toMatchInlineSnapshot(`undefined`)
+  })
+
+  test('behavior: skips access keys for another chain', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+      },
+    ])
+
+    const result = AccessKey.select({ address: rootAddress, chainId: 42_431, store })
+
+    expect(result).toMatchInlineSnapshot(`undefined`)
+  })
+
+  test('behavior: skips external access keys without signer material', () => {
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyType: 'p256',
+      },
+    ])
+
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+
+    expect(result).toMatchInlineSnapshot(`undefined`)
+  })
+
+  test('behavior: removes expired access key', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        expiry: Math.floor(Date.now() / 1000) - 3600,
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+      },
+    ])
+
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+
+    expect(result).toMatchInlineSnapshot(`undefined`)
+    expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: keeps future-expiring access key', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+      },
+    ])
+
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+
+    expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
+    expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
+  })
+
+  test('behavior: preserves limits on selected access key', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+        limits: [
+          {
+            token: '0x0000000000000000000000000000000000000abc',
+            limit: 1000n,
+          },
+        ],
+      },
+    ])
+
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+
+    expect(result?.limits).toMatchInlineSnapshot(`
+      [
+        {
+          "limit": 1000n,
+          "token": "0x0000000000000000000000000000000000000abc",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: unscoped access key selects with calls', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+      },
+    ])
+
+    const result = AccessKey.select({
+      address: rootAddress,
+      chainId: 1,
+      store,
+      calls: [{ to: '0x0000000000000000000000000000000000000abc', data: '0xa9059cbb' }],
+    })
+
+    expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
+  })
+
+  test('behavior: scoped access key selects when calls match', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+        scopes: [{ address: token, selector: '0xa9059cbb' }],
+      },
+    ])
+
+    const result = AccessKey.select({
+      address: rootAddress,
+      chainId: 1,
+      store,
+      calls: [{ to: token, data: '0xa9059cbb0000000000000000000000000000000000000001' }],
+    })
+
+    expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
+  })
+
+  test('behavior: scoped access key skips calls that do not match', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+        scopes: [{ address: token, selector: '0xa9059cbb' }],
+      },
+    ])
+
+    const result = AccessKey.select({
+      address: rootAddress,
+      chainId: 1,
+      store,
+      calls: [{ to: '0x0000000000000000000000000000000000000def', data: '0xdeadbeef' }],
+    })
+
+    expect(result).toMatchInlineSnapshot(`undefined`)
+  })
+
+  test('behavior: scoped access key supports human-readable selectors', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+        scopes: [{ address: token, selector: 'transfer(address,uint256)' }],
+      },
+    ])
+
+    const result = AccessKey.select({
+      address: rootAddress,
+      chainId: 1,
+      store,
+      calls: [{ to: token, data: '0xa9059cbb0000000000000000000000000000000000000001' }],
+    })
+
+    expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
+  })
+
+  test('behavior: scoped access key without selector allows any call to that address', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+        scopes: [{ address: token }],
+      },
+    ])
+
+    const result = AccessKey.select({
+      address: rootAddress,
+      chainId: 1,
+      store,
+      calls: [{ to: token, data: '0xdeadbeef' }],
+    })
+
+    expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
+  })
+
+  test('behavior: scoped access key skips when no calls are provided', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+        scopes: [{ address: '0x0000000000000000000000000000000000000abc' }],
+      },
+    ])
+
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+
+    expect(result).toMatchInlineSnapshot(`undefined`)
   })
 })
 

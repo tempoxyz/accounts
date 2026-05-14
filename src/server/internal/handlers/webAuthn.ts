@@ -329,7 +329,7 @@ export declare namespace webAuthn {
   type ReturnType = Handler & { getSession: getSession }
 
   /** Resolves the current session from a request's cookie or bearer token. */
-  type getSession = (req: Request) => Promise<SessionPayload | undefined>
+  type getSession = (req: Session.SessionRequest) => Promise<SessionPayload | undefined>
 
   type Options = from.Options & {
     /**

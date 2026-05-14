@@ -1,0 +1,40 @@
+---
+title: wallet_revokeAccessKey
+description: Revoke a previously authorized access key.
+---
+
+# `wallet_revokeAccessKey`
+
+Revokes a previously authorized access key.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_revokeAccessKey'
+  params: [{
+    /** Address of the account. */
+    address: Address
+    /** Address of the access key to revoke. */
+    accessKeyAddress: Address
+  }]
+}
+```
+
+## Response
+
+```ts
+type Response = undefined
+```
+
+## Example
+
+```ts
+await provider.request({
+  method: 'wallet_revokeAccessKey',
+  params: [{
+    address: '0x...',
+    accessKeyAddress: '0x...',
+  }],
+})
+```

@@ -109,24 +109,28 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: turnkey({
         client,
-        async createAccount({ client, parameters }) {
-          const client_ = client as TurnkeyPlaygroundClient
-          await requestTurnkeyEmailOtp({
-            client: client_,
-            createSubOrgParams: createTurnkeySubOrgParams(parameters.name),
-            mode: 'register',
-          })
-          const account = (await getOrCreateEthereumAccounts(client_))[0]
-          return account
-        },
         async loadAccounts({ client }) {
-          const client_ = client as TurnkeyPlaygroundClient
           await requestTurnkeyEmailOtp({
-            client: client_,
+            client,
             createSubOrgParams: createTurnkeySubOrgParams(),
-            mode: 'login',
           })
-          return await getOrCreateEthereumAccounts(client_)
+
+          const existing = (await client.fetchWallets())
+            .flatMap((wallet) => wallet.accounts)
+            .filter((account) => account.addressFormat === turnkeyEthereumAddressFormat)
+          if (existing.length > 0) return existing
+
+          await client.createWallet({
+            walletName: 'Tempo Playground',
+            accounts: [turnkeyEthereumAddressFormat],
+          })
+
+          const created = (await client.fetchWallets())
+            .flatMap((wallet) => wallet.accounts)
+            .filter((account) => account.addressFormat === turnkeyEthereumAddressFormat)
+          if (created.length > 0) return created
+
+          throw new Error('No Turnkey Ethereum account found after creating a wallet.')
         },
       }),
       mpp: true,
@@ -184,27 +188,6 @@ function createTurnkeySubOrgParams(name?: string | undefined) {
       }),
     },
   } satisfies CreateSubOrgParams
-}
-
-async function getEthereumAccounts(client: TurnkeyPlaygroundClient) {
-  return (await client.fetchWallets())
-    .flatMap((wallet) => wallet.accounts)
-    .filter((account) => account.addressFormat === turnkeyEthereumAddressFormat)
-}
-
-async function getOrCreateEthereumAccounts(client: TurnkeyPlaygroundClient) {
-  const existing = await getEthereumAccounts(client)
-  if (existing.length > 0) return existing
-
-  await client.createWallet({
-    walletName: 'Tempo Playground',
-    accounts: [turnkeyEthereumAddressFormat],
-  })
-
-  const created = await getEthereumAccounts(client)
-  if (created.length > 0) return created
-
-  throw new Error('No Turnkey Ethereum account found after creating a wallet.')
 }
 
 export function switchTheme(

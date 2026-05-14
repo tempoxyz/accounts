@@ -1,0 +1,66 @@
+---
+title: Kv.cloudflare
+description: Kv adapter backed by a Cloudflare Workers KV namespace.
+---
+
+# `Kv.cloudflare`
+
+Adapts a Cloudflare Workers KV namespace (or compatible binding) into a [`Kv`](/docs/server/kv). Uses the underlying store's native `expirationTtl` for TTL — Cloudflare KV's minimum TTL is 60 seconds, enforced by the platform independent of what's passed here.
+
+:::warning
+**Not safe for one-time-consume semantics.** Cloudflare KV is eventually consistent across data centers — concurrent read+delete races can let the same key be "consumed" twice. The optional [`take`](/docs/server/kv#take-key-optional) method is intentionally NOT implemented. Use [`Kv.durableObject`](/docs/server/kv.durableObject) (or another linearizable backend) for the SIWE challenge nonce store.
+:::
+
+## Usage
+
+```ts
+import { Kv } from 'accounts/server'
+
+const kv = Kv.cloudflare(env.MY_KV_NAMESPACE)
+```
+
+Wire the binding in `wrangler.jsonc`:
+
+```jsonc
+{
+  "kv_namespaces": [{ "binding": "MY_KV_NAMESPACE", "id": "<namespace-id>" }]
+}
+```
+
+## Parameters
+
+### namespace
+
+- **Type:** `Kv.cloudflare.Parameters`
+- **Required**
+
+A Cloudflare Workers KV namespace binding (or anything matching the same shape):
+
+```ts
+type Parameters = {
+  get: <value = unknown>(key: string, format: 'json') => Promise<value | null>
+  put: (
+    key: string,
+    value: string,
+    options?: { expirationTtl?: number } | undefined,
+  ) => Promise<void>
+  delete: (key: string) => Promise<void>
+}
+```
+
+```ts
+import { Handler, Kv } from 'accounts/server'
+
+export default {
+  fetch(req: Request, env: { KV: KVNamespace }) {
+    const handler = Handler.exchange({
+      kv: Kv.cloudflare(env.KV), // [!code focus]
+    })
+    return handler.fetch(req)
+  },
+}
+```
+
+## Return Type
+
+A [`Kv`](/docs/server/kv#interface) instance with `get`, `set`, and `delete`. `take` is intentionally omitted — handlers that require atomic read-and-delete (e.g. [`Handler.auth`](/docs/server/handler.auth)) will refuse to accept this adapter and should be paired with [`Kv.durableObject`](/docs/server/kv.durableObject) instead.

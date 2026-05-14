@@ -1,0 +1,156 @@
+---
+title: Schema
+description: Zod-based JSON-RPC schema definitions for the Accounts provider.
+---
+
+# `Schema`
+
+Zod schemas describing every JSON-RPC method the [`Provider`](/docs/api/provider) handles, plus helpers for defining and combining schema items and translating them into [Ox](https://oxlib.sh) and [Viem](https://viem.sh)-compatible RPC schemas.
+
+A `Schema` is a `readonly Item[]`. Each `Item` is a `{ method, params, returns }` triple of Zod schemas. The package ships a `Schema.schema` containing every provider-handled method, derived from [`Rpc`](/docs/api/rpc).
+
+## Usage
+
+```ts twoslash
+import { Schema } from 'accounts'
+
+const item = Schema.defineItem({
+  method: Schema.schema[0].method,
+  params: Schema.schema[0].params,
+  returns: Schema.schema[0].returns,
+})
+```
+
+## Functions
+
+### defineItem
+
+- **Type:** `<const item extends Schema.Item>(item: item) => item`
+
+Defines a single JSON-RPC method schema item, preserving the literal types of `method`, `params`, and `returns`.
+
+```ts twoslash
+import { Rpc, Schema } from 'accounts'
+
+const item = Schema.defineItem({ // [!code focus]
+  method: Rpc.eth_chainId.schema.method, // [!code focus]
+  params: undefined, // [!code focus]
+  returns: Rpc.eth_chainId.schema.returns, // [!code focus]
+}) // [!code focus]
+```
+
+### from
+
+- **Type:** `<const schema extends Schema.Schema>(schema: schema) => schema`
+
+Creates a `Schema` from a tuple of items. The identity function exists to anchor the inferred tuple type.
+
+```ts twoslash
+import { Rpc, Schema } from 'accounts'
+
+const schema = Schema.from([ // [!code focus]
+  Rpc.eth_accounts.schema, // [!code focus]
+  Rpc.eth_chainId.schema, // [!code focus]
+]) // [!code focus]
+```
+
+## Properties
+
+### schema
+
+- **Type:** `Schema`
+
+Every provider-handled JSON-RPC method, derived from [`Rpc`](/docs/api/rpc). This is the canonical schema used by `Provider`.
+
+```ts twoslash
+import { Schema } from 'accounts'
+
+const items = Schema.schema // [!code focus]
+```
+
+### Request
+
+- **Type:** `z.ZodMiniType<Schema.Request, ToRequestInput<typeof schema>>`
+
+Discriminated union (on `method`) of every provider-handled RPC request. Use it to validate incoming `{ method, params }` payloads.
+
+```ts twoslash
+import { Schema } from 'accounts'
+
+const result = Schema.Request.safeParse({ // [!code focus]
+  method: 'eth_chainId', // [!code focus]
+}) // [!code focus]
+```
+
+### ox
+
+- **Type:** `RpcSchema<Schema.Ox>`
+
+[Ox](https://oxlib.sh)-compatible RPC schema union for the provider, suitable for `RpcSchema.from<Schema.Ox>(){:js}`-style consumers.
+
+```ts twoslash
+import { Schema } from 'accounts'
+
+const ox = Schema.ox // [!code focus]
+```
+
+### viem
+
+- **Type:** `RpcSchema<Schema.Viem>`
+
+[Viem](https://viem.sh)-compatible RPC schema tuple for the provider, suitable for typing `Client`s and `Transport`s.
+
+```ts twoslash
+import { Schema } from 'accounts'
+
+const viem = Schema.viem // [!code focus]
+```
+
+## Types
+
+### Item
+
+- **Type:**
+
+```ts
+type Item = {
+  /** Method name as a Zod literal. */
+  method: z.ZodMiniLiteral<string>
+  /** Parameters schema, or `undefined` if the method takes no params. */
+  params: z.ZodMiniType | undefined
+  /** Return type schema, or `undefined` if the method returns nothing. */
+  returns: z.ZodMiniType | undefined
+}
+```
+
+A single JSON-RPC method definition.
+
+### Schema
+
+- **Type:** `readonly Item[]`
+
+An array of JSON-RPC method definitions.
+
+### Encoded
+
+- **Type:** `Encoded<item extends Item>`
+
+Wire-format type for a schema item — raw JSON-RPC `{ method, params, returns }` before any codec transforms are applied (hex strings, etc.).
+
+### Decoded
+
+- **Type:** `Decoded<item extends Item>`
+
+Decoded type for a schema item — the runtime shape returned after codec transforms are applied.
+
+### ToOx
+
+- **Type:** `ToOx<schema extends Schema>`
+
+Transforms a `Schema` into an Ox-compatible `RpcSchema.Generic` union over the wire/encoded form.
+
+### ToViem
+
+- **Type:** `ToViem<schema extends Schema>`
+
+Transforms a `Schema` into a Viem-compatible `RpcSchema` tuple over the wire/encoded form.

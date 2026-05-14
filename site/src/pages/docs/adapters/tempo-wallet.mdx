@@ -1,0 +1,84 @@
+---
+title: Tempo Wallet Adapter
+description: Use Tempo Wallet as the hosted universal wallet adapter.
+---
+
+import { Cards, Card } from 'vocs'
+
+# Tempo Wallet Adapter
+
+Tempo Wallet is the hosted adapter for apps that want embedded account creation and signing without owning auth, passkeys, or wallet infrastructure.
+
+Use it when you want:
+
+- A universal account that can move across apps.
+- Hosted approval surfaces through iframe or popup dialogs.
+- Tempo-managed passkey and signing infrastructure.
+- A fast path for app teams that do not need to build a wallet.
+
+## Demo
+
+TODO
+
+## Usage
+
+:::code-group
+
+```tsx twoslash [Web (Wagmi)]
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [tempoWallet()],
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+
+```ts twoslash [Web (Vanilla)]
+import { Provider, tempoWallet } from 'accounts'
+
+const provider = Provider.create({
+  adapter: tempoWallet(),
+})
+```
+
+```ts twoslash [CLI]
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create()
+```
+
+:::
+
+## Next Steps
+
+<Cards>
+  <Card
+    description="Wire up the Tempo Wallet adapter and let users connect an account in your app."
+    icon="lucide:link"
+    to="/docs/guides/connect-accounts"
+    title="Connect Accounts"
+  />
+  <Card
+    description="Authenticate users on your backend using their connected Tempo Wallet account."
+    icon="lucide:lock-keyhole"
+    to="/docs/guides/authentication"
+    title="Authentication"
+  />
+  <Card
+    description="Customize the colors, typography, and surfaces of the embedded Tempo Wallet dialog."
+    icon="lucide:palette"
+    to="/docs/guides/theming"
+    title="Theming"
+  />
+  <Card
+    description="Full API reference for the tempoWallet adapter, including dialog modes and host overrides."
+    icon="lucide:book"
+    to="/docs/api/dialog"
+    title="tempoWallet reference"
+  />
+</Cards>

@@ -1,0 +1,236 @@
+---
+title: Remote.create
+description: Create a remote context bound to a Messenger and Provider.
+---
+
+# `Remote.create`
+
+Creates a remote context for the wallet's iframe/popup app. The context bundles:
+
+- a [`Messenger`](https://github.com/tempoxyz/accounts/blob/main/src/core/Messenger.ts) bridge to the host SDK
+- a [`Provider`](/docs/api/provider) used to actually execute approved requests
+- a [Zustand](https://github.com/pmndrs/zustand) store of queued RPC requests
+
+## Usage
+
+The `messenger` is a [`Messenger.Bridge`](https://github.com/tempoxyz/accounts/blob/main/src/core/Messenger.ts) that connects the wallet app to its host (the iframe `parent` or popup `opener`). The `provider` is the wallet's own [`Provider`](/docs/api/provider) instance -- the one that holds the wallet's accounts and actually executes signing operations.
+
+```ts
+import { Messenger, Provider, Remote, webAuthn } from 'accounts'
+
+// 1. Build a bridge to the parent/opener (the page that opened this iframe/popup).
+const target = window.opener ?? window.parent
+const messenger = Messenger.bridge({
+  from: Messenger.fromWindow(window),
+  to: Messenger.fromWindow(target),
+})
+
+// 2. Build the wallet-side provider that will execute approved requests.
+const provider = Provider.create({
+  adapter: webAuthn({ auth: '/auth' }),
+})
+
+// 3. Wire them together.
+const remote = Remote.create({
+  messenger,
+  provider,
+})
+
+remote.onUserRequest(({ account, request }) => {
+  if (!request) return
+  // Navigate to the request's approval UI...
+})
+
+remote.ready()
+```
+
+## Parameters
+
+### messenger
+
+- **Type:** `Messenger.Bridge`
+- **Required**
+
+Bridge messenger used to receive RPC requests from the host SDK and to send back responses, sync events, and mode switches.
+
+```ts
+import { Remote } from 'accounts'
+
+const remote = Remote.create({
+  messenger, // [!code focus]
+  provider,
+})
+```
+
+### provider
+
+- **Type:** `Provider.Provider`
+- **Required**
+
+[`Provider`](/docs/api/provider) instance used to execute RPC requests once the user approves them.
+
+```ts
+import { Remote } from 'accounts'
+
+const remote = Remote.create({
+  messenger,
+  provider, // [!code focus]
+})
+```
+
+### trustedHosts
+
+- **Type:** `readonly string[]`
+- **Default:** `[]`
+
+Hostnames trusted to render the wallet in an iframe. Forwarded to [`Messenger.ready`](https://github.com/tempoxyz/accounts/blob/main/src/core/Messenger.ts) and consulted by [`Remote.useEnsureVisibility`](/docs/api/remote.useEnsureVisibility) to decide whether occlusion monitoring is required.
+
+```ts
+import { Remote } from 'accounts'
+
+const remote = Remote.create({
+  messenger,
+  provider,
+  trustedHosts: ['example.com', '*.example.com'], // [!code focus]
+})
+```
+
+## Returns
+
+`Remote.create` returns a `Remote` object with the following properties:
+
+### messenger
+
+- **Type:** `Messenger.Bridge`
+
+The messenger passed in via options.
+
+### provider
+
+- **Type:** `Provider.Provider`
+
+The provider passed in via options.
+
+### store
+
+- **Type:** `StoreApi<Remote.State>`
+
+Zustand store holding the remote context's state:
+
+```ts
+type State = {
+  /** Whether the dialog is rendered in an iframe or popup. */
+  mode: 'iframe' | 'popup' | undefined
+  /** Trusted host origin from MessageEvent. */
+  origin: string | undefined
+  /** Whether the dialog is ready to display content. */
+  ready: boolean
+  /** Queued RPC requests received from the host. */
+  requests: readonly Store.QueuedRequest[]
+}
+```
+
+### trustedHosts
+
+- **Type:** `readonly string[]`
+
+The trusted hosts list passed in via options (defaulted to `[]`).
+
+### onUserRequest
+
+- **Type:** `(cb: (payload: { account; origin; request }) => void | Promise<void>) => () => void`
+
+Subscribes to user-facing RPC requests. Syncs the host's active account/chain, updates the remote store, and invokes the callback with the first pending request -- or `null` when the queue is cleared, signalling the UI should close. Returns an unsubscribe function.
+
+```ts
+import { Remote } from 'accounts'
+
+const remote = Remote.create({ messenger, provider })
+
+const unsubscribe = remote.onUserRequest(({ account, request }) => { // [!code focus]
+  if (!request) return // Queue cleared -- close the dialog. // [!code focus]
+  // Navigate to the per-method approval UI. // [!code focus]
+}) // [!code focus]
+```
+
+### onRequests
+
+- **Type:** `(cb: (requests, event, extra) => void) => () => void`
+
+Lower-level subscription that fires on every `rpc-requests` message and receives the full queued request list, the underlying `MessageEvent`, and the host's active account. Used internally by `onUserRequest`. Returns an unsubscribe function.
+
+### ready
+
+- **Type:** `(options?: { accounts?: readonly string[] } & Messenger.ReadyOptions) => void`
+
+Signals readiness to the host and begins accepting requests. Call this after the remote context is fully initialized. When `accounts` is provided, the wallet responds to SDK account-sync messages.
+
+```ts
+import { Remote } from 'accounts'
+
+const remote = Remote.create({ messenger, provider })
+
+remote.ready({ accounts: ['0x...'] }) // [!code focus]
+```
+
+### reject
+
+- **Type:** `(request: Store.QueuedRequest['request'], error?: ProviderRpcError | RpcResponse.BaseError) => void`
+
+Rejects a single RPC request. Defaults to `Provider.UserRejectedRequestError` when no `error` is provided.
+
+```ts
+remote.reject(request) // [!code focus]
+```
+
+### rejectAll
+
+- **Type:** `(error?: ProviderRpcError | RpcResponse.BaseError) => void`
+
+Rejects every pending RPC request. Typically wired to backdrop clicks and dialog dismissals.
+
+```ts
+remote.rejectAll() // [!code focus]
+```
+
+### respond
+
+- **Type:** `(request, options?: respond.Options) => Promise<unknown>`
+
+Responds to an RPC request. When `options.result` is provided, sends it directly. When `options.error` is provided, sends an error response. Otherwise, executes `provider.request(request)` and sends the result.
+
+```ts
+declare namespace respond {
+  type Options = {
+    /** Error to respond with (takes precedence over result). */
+    error?: { code: number; message: string } | undefined
+    /**
+     * Called when `provider.request()` throws. Return `true` to suppress the
+     * error response to the parent -- the dialog stays open and can show a
+     * recovery UI. The error is still re-thrown to the caller.
+     */
+    onError?: ((error: Error) => boolean | void) | undefined
+    /** Explicit result -- if omitted, calls `provider.request(request)`. */
+    result?: unknown | undefined
+    /** Transform the result before sending. */
+    selector?: ((result: any) => unknown) | undefined
+  }
+}
+```
+
+```ts
+// Defer to the bound provider. // [!code focus]
+await remote.respond(request) // [!code focus]
+
+// Send an explicit result. // [!code focus]
+await remote.respond(request, { result: '0x...' }) // [!code focus]
+
+// Send an explicit error. // [!code focus]
+await remote.respond(request, { // [!code focus]
+  error: { code: 4001, message: 'User rejected' }, // [!code focus]
+}) // [!code focus]
+```
+
+## SSR
+
+In SSR environments (no `window`), prefer `Remote.noop()` which returns an inert context whose methods are no-ops.

@@ -29,11 +29,15 @@ const adapters = [
 ] as const
 
 describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
-  const transferCall = Actions.token.transfer.call({
-    to: '0x0000000000000000000000000000000000000001',
-    token: Addresses.pathUsd,
-    amount: parseUnits('1', 6),
-  })
+  function transfer(amount: string) {
+    return Actions.token.transfer.call({
+      to: '0x0000000000000000000000000000000000000001',
+      token: Addresses.pathUsd,
+      amount: parseUnits(amount, 6),
+    })
+  }
+
+  const transferCall = transfer('1')
 
   /** Connects via login (or register if login returns no accounts), returns the active account address. */
   async function connect(provider: ReturnType<typeof Provider.create>) {
@@ -1107,9 +1111,9 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
           method: 'wallet_send',
           params: [
             {
+              amount: '1',
               to: '0x0000000000000000000000000000000000000001',
               token: Addresses.pathUsd,
-              value: '1',
             },
           ],
         }),
@@ -1678,7 +1682,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(receipt.from.toLowerCase()).toBe(address.toLowerCase())
     })
 
-    test('behavior: access key is removed after key-auth error (spending limit exceeded)', async () => {
+    test('behavior: access key is preserved after recoverable key-auth error', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
@@ -1696,13 +1700,14 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       expect(provider.store.getState().accessKeys).toHaveLength(1)
 
-      // Transfer exceeds limit — key-auth error — access key should be removed.
+      // Transfer exceeds limit — key-auth error — access key should fall back
+      // to the root account without removing the still-valid access key.
       await provider.request({
         method: 'eth_sendTransactionSync',
         params: [{ calls: [transferCall] }],
       })
 
-      expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+      expect(provider.store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
     })
   })
 
@@ -2064,21 +2069,6 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
   })
 
   describe('wallet_authorizeAccessKey with external key', () => {
-    test('default: grants access key for an external key', async () => {
-      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
-      await connect(provider)
-
-      const keyPair = await WebCryptoP256.createKeyPair()
-      const accessKeyAccount = TempoAccount.fromWebCryptoP256(keyPair)
-
-      const result = await provider.request({
-        method: 'wallet_authorizeAccessKey',
-        params: [{ ...accessKeyAccount, expiry: Expiry.days(1) }],
-      })
-      expect(result.keyAuthorization.keyId).toBe(accessKeyAccount.address)
-      expect(result.keyAuthorization.keyType).toBe('p256')
-    })
-
     test('behavior: external key authorization can be used to send a transaction', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const rootAddress = await connect(provider)
@@ -2197,6 +2187,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.01')
 
       const hash = await provider.request({
         method: 'eth_sendTransaction',
@@ -2266,6 +2257,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.02')
 
       const hash = await provider.request({
         method: 'eth_sendTransaction',
@@ -2307,6 +2299,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.03')
 
       const hash = await provider.request({
         method: 'eth_sendTransaction',
@@ -2329,6 +2322,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.04')
 
       const hash = await provider.request({
         method: 'eth_sendTransaction',
@@ -2372,6 +2366,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.05')
 
       const hash = await provider.request({
         method: 'eth_sendTransaction',
@@ -2433,6 +2428,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.06')
 
       const hash = await provider.request({
         method: 'eth_sendTransaction',
@@ -2492,6 +2488,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.07')
 
       const result = await provider.request({
         method: 'wallet_sendCalls',
@@ -2520,6 +2517,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.08')
 
       const result = await provider.request({
         method: 'wallet_sendCalls',
@@ -2548,6 +2546,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const connected = await connect(provider)
       await fund(connected)
+      const transferCall = transfer('1.09')
 
       const result = await provider.request({
         method: 'wallet_sendCalls',

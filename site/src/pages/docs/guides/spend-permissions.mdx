@@ -1,0 +1,58 @@
+---
+title: Spend Permissions
+description: Authorize scoped access for repeat account activity.
+---
+
+# Spend Permissions
+
+Authorize scoped account access so an app or service can perform repeat activity without prompting the user for every request.
+
+## Demo
+
+Target workspace: `examples/spend-permissions/`.
+
+Seed implementations: `examples/with-access-key/` and `examples/with-access-key-and-webauthn/`.
+
+:::warning[Stub]
+This page needs a human pass to define the product language around spend limits, expiry, and revocation before the example is renamed to the guide slug.
+:::
+
+## Walkthrough
+
+::::steps
+
+### Install the SDK
+
+```bash
+pnpm add accounts wagmi viem
+```
+
+### Configure the Provider
+
+Use the adapter that owns user approval for the access request.
+
+### Connect the user's account
+
+Connect the account before requesting scoped access.
+
+### Submit the request
+
+Call the access-key authorization flow with the intended expiry and permissions.
+
+### Verify the result
+
+Store the returned access key material only in the environment that is allowed to use it, then test revocation.
+
+::::
+
+## Best Practices
+
+- Keep permissions as narrow as the workflow allows.
+- Prefer short expiries for automation and longer-lived access only after explicit user approval.
+- Show users where they can revoke access.
+
+## Next Steps
+
+- [wallet_authorizeAccessKey](/docs/rpc/wallet_authorizeAccessKey)
+- [wallet_revokeAccessKey](/docs/rpc/wallet_revokeAccessKey)
+- [Custom adapter](/docs/adapters/custom)

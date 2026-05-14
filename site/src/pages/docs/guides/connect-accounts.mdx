@@ -1,0 +1,89 @@
+---
+title: Connect Accounts
+description: Connect a user account with Tempo Wallet or WebAuthn.
+---
+
+# Connect Accounts
+
+Connect a user account, read its address, and keep the app code independent from the adapter that handles signing.
+
+## Demo
+
+Target workspace: `examples/connect-accounts/`.
+
+Seed implementation: `examples/basic/`.
+
+:::warning[Stub]
+The runnable workspace should be renamed or copied to `examples/connect-accounts/` after the example naming pass.
+:::
+
+## Walkthrough
+
+::::steps
+
+### Install the SDK
+
+Install `accounts` together with Wagmi and Viem.
+
+```bash
+pnpm add accounts wagmi viem
+```
+
+### Configure the Provider
+
+Choose an adapter. Most apps should start with Tempo Wallet.
+
+```tsx
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [tempoWallet()],
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+
+### Connect the user's account
+
+Render the configured connector and call `connect`.
+
+```tsx
+import { useConnect, useConnectors } from 'wagmi'
+
+function Connect() {
+  const { connect } = useConnect()
+  const connectors = useConnectors()
+
+  return connectors.map((connector) => (
+    <button key={connector.uid} onClick={() => connect({ connector })}>
+      Connect
+    </button>
+  ))
+}
+```
+
+### Verify the result
+
+Read the connected address from Wagmi connection state.
+
+```tsx
+import { useConnection } from 'wagmi'
+
+function Account() {
+  const { address, status } = useConnection()
+  return <pre>{JSON.stringify({ address, status }, null, 2)}</pre>
+}
+```
+
+::::
+
+## Next Steps
+
+- [Authentication](/docs/guides/authentication)
+- [Payments](/docs/guides/payments)
+- [Tempo Wallet adapter](/docs/adapters/tempo-wallet)
+- [WebAuthn adapter](/docs/adapters/webauthn)

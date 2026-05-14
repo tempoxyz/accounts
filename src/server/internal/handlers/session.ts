@@ -43,13 +43,41 @@ export function parseCookieValue(header: string, name: string): string | undefin
 }
 
 /**
+ * Minimal request interface accepted by `tokenFromRequest` and
+ * `getSession`. Compatible with both the Fetch API `Request` and
+ * Node.js `http.IncomingMessage` so callers in Express, Fastify, or
+ * plain `http.createServer` don't need to construct a synthetic
+ * `Request` just to read a session.
+ */
+export type SessionRequest =
+  | Request
+  | {
+      headers: Record<string, string | string[] | undefined>
+    }
+
+/**
+ * Read a single header value from a `SessionRequest`. Handles both
+ * the Fetch API `Headers` (`.get()`) and the Node.js record shape
+ * where values may be `string | string[] | undefined`.
+ */
+function getHeader(req: SessionRequest, name: string): string | null {
+  if ('get' in req.headers && typeof req.headers.get === 'function') return req.headers.get(name)
+  const value = (req.headers as Record<string, string | string[] | undefined>)[name]
+  if (value === undefined) return null
+  return Array.isArray(value) ? value.join('; ') : value
+}
+
+/**
  * Resolve the session token for a request. Prefers `Authorization: Bearer
  * <token>` over the cookie. When `cookie: false`, the cookie is ignored
  * even if present so callers cannot opt back into cookie mode by sending
  * a stale `Set-Cookie` value.
+ *
+ * Accepts both Fetch API `Request` and Node.js `IncomingMessage`-shaped
+ * objects (see {@link SessionRequest}).
  */
 export function tokenFromRequest(
-  req: Request,
+  req: SessionRequest,
   options: {
     /** Whether cookie issuance is enabled for this handler. */
     cookie: boolean
@@ -57,10 +85,10 @@ export function tokenFromRequest(
     cookieName: string
   },
 ): string | undefined {
-  const bearer = bearerToken(req.headers.get('authorization'))
+  const bearer = bearerToken(getHeader(req, 'authorization'))
   if (bearer) return bearer
   if (!options.cookie) return undefined
-  const cookieHeader = req.headers.get('cookie')
+  const cookieHeader = getHeader(req, 'cookie')
   return cookieHeader ? parseCookieValue(cookieHeader, options.cookieName) : undefined
 }
 

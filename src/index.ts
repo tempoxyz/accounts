@@ -1,3 +1,4 @@
+export * as Adapter from './core/Adapter.js'
 export * as IntersectionObserver from './core/IntersectionObserver.js'
 export * as Dialog from './core/Dialog.js'
 export * as ExecutionError from './core/ExecutionError.js'
@@ -15,4 +16,8 @@ export { dialog, dialog as tempoWallet } from './core/adapters/dialog.js'
 export { local } from './core/adapters/local.js'
 export { turnkey } from './core/adapters/turnkey.js'
 export { webAuthn } from './core/adapters/webAuthn.js'
-export { dangerous_secp256k1 } from './core/adapters/dangerous_secp256k1.js'
+export {
+  secp256k1,
+  /** @deprecated Use `secp256k1` instead. */
+  secp256k1 as dangerous_secp256k1,
+} from './core/adapters/secp256k1.js'

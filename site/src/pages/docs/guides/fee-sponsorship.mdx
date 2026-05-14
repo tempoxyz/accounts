@@ -1,0 +1,58 @@
+---
+title: Fee Sponsorship
+description: Pay transaction fees for users from a server-controlled policy.
+---
+
+# Fee Sponsorship
+
+Sponsor fees for user transactions while keeping signing and sponsorship policy separate.
+
+## Demo
+
+Target workspace: `examples/fee-sponsorship/`.
+
+Seed implementations: `examples/with-fee-payer/` and `examples/with-fee-payer-and-webauthn/`.
+
+:::warning[Stub]
+The existing examples should be consolidated under the guide slug after the adapter toggle and server policy shape are finalized.
+:::
+
+## Walkthrough
+
+::::steps
+
+### Install the SDK
+
+```bash
+pnpm add accounts wagmi viem
+```
+
+### Configure the Provider
+
+Configure the client adapter and a server handler that can attach fee payer behavior.
+
+### Connect the user's account
+
+Connect the account with Tempo Wallet or WebAuthn.
+
+### Submit the request
+
+Submit the transaction through the sponsored flow so the server can apply the fee payer.
+
+### Verify the result
+
+Inspect the receipt and show which address paid fees.
+
+::::
+
+## Best Practices
+
+- Keep sponsorship policy server-side.
+- Log rejected sponsorship attempts with enough context to debug policy failures.
+- Keep spinner and approval text short in CLI or terminal flows.
+
+## Next Steps
+
+- [Handler.feePayer](/docs/server/handler.feePayer)
+- [Payments](/docs/guides/payments)
+- [Tempo Wallet adapter](/docs/adapters/tempo-wallet)

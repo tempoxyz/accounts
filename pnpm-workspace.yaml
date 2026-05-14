@@ -1,7 +1,12 @@
+auditConfig:
+  ignoreGhsas:
+    - GHSA-rmmr-r34h-pfm5 # affected versions have been removed from npm.
+
 allowBuilds:
   bufferutil: true
   cloudflared: true
   cpu-features: true
+  es5-ext: true
   esbuild: true
   protobufjs: true
   sharp: true
@@ -45,10 +50,12 @@ catalog:
 minimumReleaseAge: 1440
 
 minimumReleaseAgeExclude:
+  - '@mermaid-js/*'
   - '@voidzero-dev/*'
   - '@wagmi/connectors'
   - '@wagmi/core'
   - incur
+  - mermaid
   - mppx
   - ox
   - regen-ui
@@ -64,10 +71,14 @@ overrides:
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
   js-yaml@^3: '3.14.2'
+  mermaid: '^11.14.1'
   ox: '~0.14.18'
   postcss: '8.5.14'
-  protobufjs: '7.5.5'
+  protobufjs: '7.5.7'
+  '@protobufjs/utf8': '1.1.1'
   qs: '6.15.1'
+  # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
+  reselect: '5.1.0'
   react: 'catalog:'
   react-dom: 'catalog:'
   tar: '7.5.15'
@@ -81,6 +92,7 @@ packages:
   - examples/*
   - playgrounds/*
   - ref-impls/*
+  - site
 
 peerDependencyRules:
   allowedVersions:
@@ -99,3 +111,6 @@ trustPolicyExclude:
   - semver@6.3.1
   - slow-redact@0.3.2
   - undici-types@6.19.8
+
+patchedDependencies:
+  vocs@0.0.0: patches/vocs@0.0.0.patch

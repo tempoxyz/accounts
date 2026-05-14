@@ -1,0 +1,64 @@
+---
+title: Storage
+description: Pluggable storage adapters for persisting provider state.
+---
+
+import { Cards, Card } from 'vocs'
+
+# `Storage`
+
+Pluggable storage adapters for persisting [`Provider`](/docs/api/provider) state (connected accounts, session keys, etc.). Pass a `Storage` to `Provider.create({ storage })` to control where state is read from and written to.
+
+The default is `Storage.idb()` in the browser and `Storage.memory()` otherwise.
+
+## Adapters
+
+<Cards>
+  <Card
+    description="Combine multiple storage adapters into one"
+    icon="lucide:layers"
+    to="/docs/api/storage.combine"
+    title="Storage.combine"
+  />
+  <Card
+    description="Persist state to document.cookie"
+    icon="lucide:cookie"
+    to="/docs/api/storage.cookie"
+    title="Storage.cookie"
+  />
+  <Card
+    description="Create a Storage adapter from a custom implementation"
+    icon="lucide:code"
+    to="/docs/api/storage.from"
+    title="Storage.from"
+  />
+  <Card
+    description="Persist state to IndexedDB"
+    icon="lucide:database"
+    to="/docs/api/storage.idb"
+    title="Storage.idb"
+  />
+  <Card
+    description="Persist state to localStorage"
+    icon="lucide:hard-drive"
+    to="/docs/api/storage.localStorage"
+    title="Storage.localStorage"
+  />
+  <Card
+    description="In-memory storage for SSR and tests"
+    icon="lucide:cpu"
+    to="/docs/api/storage.memory"
+    title="Storage.memory"
+  />
+</Cards>
+
+## Comparison
+
+| Adapter | Persistence | Environment | Notes |
+| --- | --- | --- | --- |
+| [`Storage.idb`](/docs/api/storage.idb) | Persistent | Browser | Default in the browser. Stores raw values (no JSON serialization). |
+| [`Storage.localStorage`](/docs/api/storage.localStorage) | Persistent | Browser | Synchronous; values are JSON-serialized. |
+| [`Storage.cookie`](/docs/api/storage.cookie) | Persistent | Browser | Uses `SameSite=None; Secure`. Deep objects are flattened to stay within the 4 KB-per-cookie limit. |
+| [`Storage.memory`](/docs/api/storage.memory) | Ephemeral | Any | Default outside the browser. Useful for SSR and tests. |
+| [`Storage.combine`](/docs/api/storage.combine) | — | Any | Reads return the first non-null result; writes propagate to every storage. |
+| [`Storage.from`](/docs/api/storage.from) | — | Any | Wraps a custom implementation, optionally scoping all keys under a prefix. |

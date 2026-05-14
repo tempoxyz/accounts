@@ -1,0 +1,57 @@
+---
+title: wallet_deposit
+description: Open the wallet deposit flow with optional pre-filled fields.
+---
+
+# `wallet_deposit`
+
+Opens the wallet's deposit flow so the user can fund an account. The wallet renders the deposit UI (for example onramp, faucet, or transfer-from-an-external-wallet flows) using any pre-filled hints supplied in the request.
+
+The wallet picks the deposit path it supports for the requested token and chain. For paths that move funds onchain (such as a testnet faucet drop), the wallet returns the resulting receipts. For offchain paths like Apple Pay, funds arrive asynchronously and `receipts` is omitted.
+
+This method is only supported by adapters that opt in to the `deposit` action (typically the [`dialog`](/docs/api/dialog) adapter). Other adapters reject the request as an unsupported method.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_deposit'
+  params: [{
+    /** Recipient address. Defaults to the connected account. */
+    address?: `0x${string}`
+    /** Chain ID to deposit to. */
+    chainId?: number
+    /** Display name shown in the deposit UI (e.g. the app name). */
+    displayName?: string
+    /** Token contract address to pre-fill. Omit to let the user choose. */
+    token?: `0x${string}`
+    /** Human-readable amount to pre-fill (e.g. `"1.5"`). */
+    value?: string
+  }]
+}
+```
+
+## Response
+
+```ts
+type Response = {
+  /**
+   * Receipts of any onchain operations performed during the deposit
+   * (e.g. testnet faucet drops). Absent for offchain paths like Apple
+   * Pay where funds arrive asynchronously.
+   */
+  receipts?: TransactionReceipt[]
+} | undefined
+```
+
+## Example
+
+```ts
+const result = await provider.request({
+  method: 'wallet_deposit',
+  params: [{
+    token: '0x20c0000000000000000000000000000000000001',
+    value: '10',
+  }],
+})
+```

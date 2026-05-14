@@ -132,7 +132,7 @@ export type Instance = {
    * wallet host's own Provider runs the orchestration instead of racing
    * the dapp-side Provider for the challenge.
    *
-   * Wallet-host adapters (`local`, `webAuthn`, `dangerous_secp256k1`)
+   * Wallet-host adapters (`local`, `webAuthn`, `secp256k1`)
    * leave this unset.
    */
   forwardsAuth?: boolean | undefined

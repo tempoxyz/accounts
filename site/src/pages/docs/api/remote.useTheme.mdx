@@ -1,0 +1,64 @@
+---
+title: Remote.useTheme
+description: React hook that applies theme overrides from URL search params and live messenger updates.
+---
+
+# `Remote.useTheme`
+
+React hook that applies theme overrides to the document root. On mount, it reads `accent`, `radius`, and `scheme` from the wallet app's URL search params and writes them to `<html>`. When a `remote` context is provided, it also subscribes to live `theme` messages from the host SDK and re-applies the latest values.
+
+The hook captures the original document attributes/styles on mount and restores them on unmount, so it is safe to use inside a route that may unmount and remount.
+
+## Usage
+
+```tsx
+import { Remote } from 'accounts/react'
+
+import { remote } from '../lib/config.js'
+
+function App() {
+  Remote.useTheme(remote)
+  return <Outlet />
+}
+```
+
+## Parameters
+
+### remote
+
+- **Type:** `Remote.Remote | undefined`
+- **Optional**
+
+The remote context returned from [`Remote.create`](/docs/api/remote.create). When provided, the hook subscribes to live `theme` messages on the messenger so the wallet re-themes whenever the host SDK pushes an update.
+
+When omitted, only the initial URL-search-param theme is applied -- useful for SSR-rendered pages or static previews.
+
+```tsx
+import { Remote } from 'accounts/react'
+
+import { remote } from '../lib/config.js'
+
+Remote.useTheme(remote) // [!code focus]
+```
+
+## Theme values
+
+The following values are read from URL search params (and from `theme` messenger payloads) and applied to `<html>`:
+
+### accent
+
+- **Type:** `'neutral' | 'blue' | 'red' | 'amber' | 'green' | 'purple' | string`
+
+Sets the `data-theme-accent` attribute. When the value is not one of the named presets above, it is also written to the `--theme-accent` CSS custom property and `data-theme-accent` is set to `'custom'`.
+
+### radius
+
+- **Type:** `string`
+
+Sets the `data-theme-radius` attribute on `<html>` so theme CSS can pick up corner-radius variants.
+
+### scheme
+
+- **Type:** `string`
+
+Written to `document.documentElement.style.colorScheme` (e.g. `'light'`, `'dark'`).

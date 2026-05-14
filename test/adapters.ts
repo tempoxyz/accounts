@@ -1,5 +1,5 @@
-import { dangerous_secp256k1 } from '../src/core/adapters/dangerous_secp256k1.js'
 import { local as core_local } from '../src/core/adapters/local.js'
+import { secp256k1 as core_secp256k1 } from '../src/core/adapters/secp256k1.js'
 import { webAuthn as core_webAuthn } from '../src/core/adapters/webAuthn.js'
 import type * as Store from '../src/core/Store.js'
 import * as WebAuthnCeremony from '../src/core/WebAuthnCeremony.js'
@@ -25,9 +25,9 @@ export function headlessWebAuthn() {
   })
 }
 
-/** Creates a `dangerous_secp256k1` adapter for testing. */
+/** Creates a `secp256k1` adapter for testing. */
 export function secp256k1() {
-  return dangerous_secp256k1()
+  return core_secp256k1()
 }
 
 /** Creates a WebAuthn adapter backed by a server-side ceremony via {@link WebAuthnCeremony.server}. */

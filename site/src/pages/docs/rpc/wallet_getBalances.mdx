@@ -1,0 +1,45 @@
+---
+title: wallet_getBalances
+description: Get token balances for an account.
+---
+
+# `wallet_getBalances`
+
+Returns token balances for the connected account.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_getBalances'
+  params?: [{
+    /** Account address. Defaults to connected account. */
+    account?: Address
+    /** Chain ID. */
+    chainId?: number
+    /** Filter to specific token addresses. */
+    tokens?: Address[]
+  }]
+}
+```
+
+## Response
+
+```ts
+type Response = {
+  address: Address
+  balance: bigint
+  decimals: number
+  display: string
+  name: string
+  symbol: string
+}[]
+```
+
+## Example
+
+```ts
+const balances = await provider.request({
+  method: 'wallet_getBalances',
+})
+```

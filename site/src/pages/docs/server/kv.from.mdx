@@ -1,0 +1,60 @@
+---
+title: Kv.from
+description: Wrap a custom Kv-shaped object so the SDK accepts it as a Kv.
+---
+
+# `Kv.from`
+
+Wraps an existing [`Kv`](/docs/server/kv)-shaped object so the SDK accepts it as a `Kv`. Useful when adapting a custom backend (Redis, DynamoDB, Postgres, an internal cache) — implement the four-method interface and pass the result through `Kv.from`.
+
+`Kv.from` is a structural pass-through — it returns the input unchanged. It exists so callers can opt into the `Kv` type without an explicit `as` cast and so future evolutions of the interface stay compatible.
+
+## Usage
+
+```ts twoslash
+import { Kv } from 'accounts/server'
+
+declare const redis: {
+  get: (key: string) => Promise<string | null>
+  set: (key: string, value: string, mode?: 'EX', ttl?: number) => Promise<unknown>
+  del: (key: string) => Promise<unknown>
+}
+// ---cut---
+const kv = Kv.from({
+  async get(key) {
+    const value = await redis.get(key)
+    return value ? JSON.parse(value) : undefined
+  },
+  async set(key, value, options) {
+    if (options?.ttl) await redis.set(key, JSON.stringify(value), 'EX', options.ttl)
+    else await redis.set(key, JSON.stringify(value))
+  },
+  async delete(key) {
+    await redis.del(key)
+  },
+})
+```
+
+## Parameters
+
+### kv
+
+- **Type:** [`Kv`](/docs/server/kv#interface)
+- **Required**
+
+A `Kv`-shaped object. Must implement `get`, `set`, and `delete`. Optionally implement [`take`](/docs/server/kv#take-key-optional) for atomic read-and-delete semantics — handlers that require it (e.g. [`Handler.auth`](/docs/server/handler.auth) on multi-instance deployments) refuse stores without it.
+
+```ts twoslash
+import { Kv } from 'accounts/server'
+
+const kv = Kv.from({
+  async get(_key) { /* ... */ return undefined },
+  async set(_key, _value, _options) { /* ... */ },
+  async delete(_key) { /* ... */ },
+  async take(_key) { /* ... */ return undefined }, // [!code focus]
+})
+```
+
+## Return Type
+
+The same `Kv` instance passed in, typed as `Kv`.
