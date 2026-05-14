@@ -109,7 +109,7 @@ function TopNav() {
       </a>
       <div className="flex items-center gap-7 px-3">
         <a
-          href="https://tempo.xyz/docs"
+          href="https://docs.tempo.xyz/accounts"
           className="flex items-center gap-2 text-[12px] text-white outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
         >
           <img src="/icons/docs.svg" alt="" width={16} height={16} />
@@ -160,10 +160,11 @@ function HeroIntro() {
     >
       <div className="flex flex-col items-center gap-2 text-center">
         <h1 className="text-[32px] leading-[1.1] tracking-[-0.02em] text-white sm:text-5xl sm:whitespace-nowrap">
-          Stablecoin Accounts SDK
+          Accounts SDK
         </h1>
-        <p className="max-w-xl text-[16px] text-white/50 sm:text-xl">
-          The fastest way to add stablecoins to your application
+        <p className="max-w-lg text-[16px] text-white/50 sm:text-xl">
+          The fastest way to build stablecoin-powered apps, wallets, and agentic
+          workflows.
         </p>
       </div>
 
@@ -216,14 +217,40 @@ function HeroIntro() {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => copyAgent(agentInstructions)}
-        className="mt-[-14px] flex items-center gap-1 text-[12px] text-white/50 outline-none transition-colors hover:text-white focus-visible:text-white"
-      >
-        <img src="/icons/agent-copy.svg" alt="" width={16} height={16} />
-        {copiedAgent ? "Copied" : "Copy instructions for my agent"}
-      </button>
+      <div className="mt-[-14px] flex items-center gap-5">
+        <a
+          href="https://docs.tempo.xyz/accounts"
+          className="flex items-center gap-1.5 text-[12px] text-white outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
+        >
+          View docs
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 12 12"
+            fill="none"
+            aria-hidden
+          >
+            <path
+              d="M3 9L9 3M9 3H4.5M9 3V7.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </a>
+        <span aria-hidden className="text-[12px] text-white/20">
+          |
+        </span>
+        <button
+          type="button"
+          onClick={() => copyAgent(agentInstructions)}
+          className="flex items-center gap-1 text-[12px] text-white/50 outline-none transition-colors hover:text-white focus-visible:text-white"
+        >
+          <img src="/icons/agent-copy.svg" alt="" width={16} height={16} />
+          {copiedAgent ? "Copied" : "Copy instructions for my agent"}
+        </button>
+      </div>
     </div>
   );
 }
