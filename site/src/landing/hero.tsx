@@ -12,7 +12,7 @@ import {
 type AccountsProvider = ReturnType<typeof Provider.create>;
 
 type PackageManager = "npm" | "pnpm" | "bun";
-type Adapter = "tempoAuth" | "webAuth" | "privy";
+type Adapter = "tempoAuth" | "webAuth" | "privy" | "turnkey";
 type SignInStatus = "idle" | "opening" | "connected";
 
 const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
@@ -41,6 +41,11 @@ const adapterInfo: Record<Adapter, { title: string; description: string }> = {
     title: "Privy Adapter",
     description:
       "Bring your own auth: route sign-in through Privy's embedded wallets while keeping the Accounts SDK's wagmi-compatible surface. Falls back to the Tempo dialog when Privy is unavailable.",
+  },
+  turnkey: {
+    title: "Turnkey Adapter",
+    description:
+      "Bring your own signing infrastructure: delegate key management and approvals to Turnkey while the Accounts SDK exposes the same wagmi-compatible surface to your app.",
   },
 };
 
@@ -280,19 +285,15 @@ const Hl = ({ children }: { children: React.ReactNode }) => (
   </span>
 );
 
+const codeFor: Record<Adapter, { connector: string; importPath: string }> = {
+  tempoAuth: { connector: "tempoWallet", importPath: "wagmi/connectors" },
+  webAuth: { connector: "webAuthConnector", importPath: "@tempo/web-auth" },
+  privy: { connector: "privyConnector", importPath: "@privy-io/wagmi" },
+  turnkey: { connector: "turnkeyConnector", importPath: "@turnkey/wagmi" },
+};
+
 function CodeBlock({ adapter }: { adapter: Adapter }) {
-  const connector =
-    adapter === "tempoAuth"
-      ? "tempoWallet"
-      : adapter === "webAuth"
-        ? "webAuthConnector"
-        : "privyConnector";
-  const importPath =
-    adapter === "tempoAuth"
-      ? "wagmi/connectors"
-      : adapter === "webAuth"
-        ? "@tempo/web-auth"
-        : "@privy-io/wagmi";
+  const { connector, importPath } = codeFor[adapter];
 
   return (
     <pre
@@ -352,6 +353,7 @@ function AdapterTabs({
     { id: "tempoAuth", label: "tempoAuth" },
     { id: "webAuth", label: "webAuth" },
     { id: "privy", label: "privy" },
+    { id: "turnkey", label: "turnkey" },
   ];
   const tabsRef = useRef<HTMLDivElement>(null);
   const [highlight, setHighlight] = useState({
@@ -623,13 +625,14 @@ function DemoSplit() {
           className="text-[32px] leading-[1.1] tracking-[-0.02em] text-white sm:text-[48px] sm:whitespace-nowrap"
           style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
         >
-          Bring your own adapter
+          Bring your own wallet provider
         </h2>
         <p
-          className="max-w-[560px] text-[16px] text-white/70 sm:text-[20px]"
+          className="max-w-[520px] text-[16px] text-white/50 sm:text-[20px]"
           style={{ animation: `fadeUp 600ms ${easeOut} 80ms both` }}
         >
-          Tempo dialog, WebAuthn, or your own. Same SDK surface.
+          Accounts SDK is provider-agnostic. Bring your own wallet. Keep the
+          same SDK.
         </p>
       </div>
       <div

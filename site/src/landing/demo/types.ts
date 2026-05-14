@@ -1,7 +1,7 @@
 import type { Provider } from "accounts";
 import type { ReactNode } from "react";
 
-export type Adapter = "tempoAuth" | "webAuth" | "privy";
+export type Adapter = "tempoAuth" | "webAuth" | "privy" | "turnkey";
 
 export type DemoKind =
   | "Log In"
