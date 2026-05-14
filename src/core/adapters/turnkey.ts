@@ -197,13 +197,14 @@ export function turnkey<const client extends turnkey.Client>(
     }
 
     async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
-      const { address, expiry, keyType, limits, scopes } = options
+      const { address, expiry, keyType, limits, publicKey, scopes } = options
       return await AccessKey.prepare({
         address,
         chainId: options.chainId ?? getClient().chain.id,
         expiry,
         keyType,
         limits,
+        publicKey,
         scopes,
       })
     }

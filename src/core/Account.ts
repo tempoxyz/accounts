@@ -95,7 +95,12 @@ export function hydrate(
   options: hydrate.Options = {},
 ): TempoAccount.Account | JsonRpcAccount {
   const { signable = false } = options
-  if (!signable) return { address: account.address, type: 'json-rpc' }
+  if (!signable)
+    return {
+      address: account.address,
+      type: 'json-rpc',
+      ...(account.keyType ? { keyType: account.keyType } : {}),
+    } as JsonRpcAccount
   if ('sign' in account && typeof account.sign === 'function')
     return account as TempoAccount.Account
   if (!account.keyType)
