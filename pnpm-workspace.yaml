@@ -3,11 +3,13 @@ auditConfig:
     - GHSA-rmmr-r34h-pfm5 # affected versions have been removed from npm.
 
 allowBuilds:
+  '@reown/appkit': true
   bufferutil: true
   cloudflared: true
   cpu-features: true
   es5-ext: true
   esbuild: true
+  keccak: true
   protobufjs: true
   sharp: true
   simple-git-hooks: true
@@ -108,8 +110,10 @@ trustPolicyExclude:
   - '@noble/hashes@1.7.0'
   - chokidar@4.0.3
   - jose@4.15.9
+  - react-device-detect@2.2.3
   - semver@6.3.1
   - slow-redact@0.3.2
+  - ua-parser-js@1.0.41
   - undici-types@6.19.8
 
 patchedDependencies:
