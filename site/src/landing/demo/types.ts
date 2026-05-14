@@ -5,11 +5,11 @@ export type Adapter = "tempoAuth" | "webAuth" | "privy" | "turnkey";
 
 export type DemoKind =
   | "Log In"
-  | "Onramp"
+  | "Add Funds"
   | "Pay Once"
   | "Pay Per Use"
   | "Subscribe"
-  | "FX Trade";
+  | "Swap Currencies";
 
 export type Status = "idle" | "running" | "done";
 

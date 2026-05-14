@@ -13,11 +13,11 @@ import { ChatBubble } from "./ChatBubble";
 
 const DEMO_STEPS: readonly DemoKind[] = [
   "Log In",
-  "Onramp",
+  "Add Funds",
   "Pay Once",
   "Pay Per Use",
   "Subscribe",
-  "FX Trade",
+  "Swap Currencies",
 ];
 
 function ChevronRight() {

@@ -59,7 +59,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     },
   },
 
-  Onramp: {
+  "Add Funds": {
     url: "wisselbank.xyz",
     prelude: ["Top up your account"],
     Body: OnRampBody,
@@ -146,7 +146,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     },
   },
 
-  "FX Trade": {
+  "Swap Currencies": {
     url: "wisselbank.xyz",
     prelude: ["Fetching best route"],
     Body: TradeBody,
