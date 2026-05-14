@@ -1,0 +1,29 @@
+---
+title: AWS KMS
+description: Stub for integrating AWS KMS-backed signing with the Accounts SDK.
+---
+
+# AWS KMS
+
+Use a custom adapter when account signing should happen through AWS-controlled infrastructure.
+
+## Demo
+
+Target workspace: `examples/enterprise-aws-kms/`.
+
+:::warning[Stub]
+This page needs a concrete KMS signing design before implementation: key type, address derivation, latency, authorization policy, and audit logging.
+:::
+
+## Integration Checklist
+
+- Define the KMS key lifecycle and signer address derivation.
+- Keep authorization policy server-side.
+- Map KMS failures into app-readable provider errors.
+- Test payment and revocation flows.
+
+## Next Steps
+
+- [Bring Your Auth](/docs/enterprise/bring-your-auth)
+- [Custom adapter](/docs/adapters/custom)
+- [Fee Sponsorship](/docs/guides/fee-sponsorship)

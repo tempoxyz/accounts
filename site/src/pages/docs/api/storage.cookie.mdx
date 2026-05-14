@@ -1,0 +1,41 @@
+---
+title: Storage.cookie
+description: Cookie-backed Storage adapter.
+---
+
+# `Storage.cookie`
+
+Creates a [`Storage`](/docs/api/storage) adapter backed by `document.cookie`.
+
+Cookies are written with `SameSite=None; Secure` and a one-year `max-age`. Deep objects are flattened into individual cookies (one per leaf value) to stay within the 4 KB-per-cookie browser limit; arrays additionally store a sentinel `__length` cookie so they can be reconstructed on read.
+
+Useful for sharing provider state with a server (e.g. SSR) since cookies are sent on every request to the same origin.
+
+## Usage
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+const provider = Provider.create({
+  storage: Storage.cookie(),
+})
+```
+
+## Parameters
+
+### options.key
+
+- **Type:** `string`
+- **Default:** `'tempo'`
+
+Key prefix applied to every stored cookie name. Set this when you need to scope the cookies to a specific app, or when multiple SDK instances share the same origin.
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+const provider = Provider.create({
+  storage: Storage.cookie({
+    key: 'my-app', // [!code focus]
+  }),
+})
+```

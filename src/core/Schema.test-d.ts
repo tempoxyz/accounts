@@ -127,9 +127,10 @@ describe('Encoded', () => {
       params:
         | readonly [
             {
+              amount?: string | undefined
+              memo?: string | undefined
               to?: Hex | undefined
-              token?: Hex | undefined
-              value?: string | undefined
+              token?: Hex | string | undefined
             },
           ]
         | undefined

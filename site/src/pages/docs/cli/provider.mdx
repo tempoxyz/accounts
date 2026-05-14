@@ -1,0 +1,326 @@
+---
+title: CLI
+description: Create a Provider for CLI environments.
+---
+
+# `Provider`
+
+Creates a Provider that bootstraps account access from the terminal via the device-code flow.
+
+When `wallet_connect` or `wallet_authorizeAccessKey` runs, the provider:
+
+- opens the configured `host` in the user's default browser
+- prompts them to approve the access key
+- persists the resulting key under `keysPath` for re-use across CLI invocations
+
+Subsequent transaction signing happens locally with the managed key -- no further browser round-trip is required until the key expires.
+
+## Usage
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create()
+```
+
+### Authorizing an Access Key
+
+The CLI adapter requires `capabilities.authorizeAccessKey` on `wallet_connect` — the user must explicitly grant a scoped access key during the device-code ceremony.
+
+```ts twoslash
+// @noErrors
+import { Expiry } from 'accounts'
+import { Provider } from 'accounts/cli'
+import { parseUnits } from 'viem'
+import { connect } from 'viem/experimental/erc7846'
+
+const provider = Provider.create()
+const client = provider.getClient()
+
+await connect(client, { // [!code focus]
+  capabilities: { // [!code focus]
+    authorizeAccessKey: { // [!code focus]
+      expiry: Expiry.days(7), // [!code focus]
+      limits: [{ // [!code focus]
+        token: '0x20c0000000000000000000000000000000000001', // [!code focus]
+        limit: parseUnits('100', 6), // [!code focus]
+      }], // [!code focus]
+      scopes: [{ // [!code focus]
+        address: '0x20c0000000000000000000000000000000000001', // [!code focus]
+        selector: 'transfer(address,uint256)', // [!code focus]
+      }], // [!code focus]
+    }, // [!code focus]
+  }, // [!code focus]
+}) // [!code focus]
+```
+
+## Parameters
+
+### auth
+
+- **Type:** `string | { url?: string; challenge?: string; verify?: string; logout?: string; returnToken?: boolean }`
+- **Optional**
+
+Default Server Authentication configuration for `wallet_connect`. See [`Provider.auth`](/docs/api/provider#auth) for full semantics.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  auth: '/auth', // [!code focus]
+})
+```
+
+### chains
+
+- **Type:** `readonly [Chain, ...Chain[]]`
+- **Default:** `[tempo, tempoModerato, tempoDevnet]`
+
+Supported chains. The first chain is the default.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+import { tempo } from 'viem/chains'
+
+const provider = Provider.create({
+  chains: [tempo], // [!code focus]
+})
+```
+
+### feePayer
+
+- **Type:** `string | false | { url: string; precedence?: 'fee-payer-first' | 'user-first' }`
+- **Optional**
+
+Fee payer configuration. See [`Provider.feePayer`](/docs/api/provider#feepayer) for full semantics.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  feePayer: 'https://myapp.com/fee-payer', // [!code focus]
+})
+```
+
+### host
+
+- **Type:** `string`
+- **Default:** `'https://wallet.tempo.xyz/api/auth/cli'`
+
+Host URL for the device-code flow. The browser is opened at `${host}?code=<code>` and the CLI polls `${host}/poll/<code>` for completion.
+
+Designed to point at a service exposing the `CliAuth` handlers from `accounts/server`.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  host: 'https://myapp.com/api/auth/cli', // [!code focus]
+})
+```
+
+### keysPath
+
+- **Type:** `string`
+- **Default:** `'~/.tempo/wallet/keys.toml'`
+
+Filesystem path for the managed access-key keyring. Generated keys, their authorizations, and expiry metadata are written to this TOML file so the CLI can re-use them across invocations.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  keysPath: '~/.config/myapp/keys.toml', // [!code focus]
+})
+```
+
+### maxAccounts
+
+- **Type:** `number`
+- **Optional**
+
+Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU).
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  maxAccounts: 5, // [!code focus]
+})
+```
+
+### mpp
+
+- **Type:** `boolean | Provider.mpp.Options`
+- **Default:** `false`
+
+Enable [Machine Payment Protocol](https://mpp.dev) (mppx) support. Pass `true` to enable with defaults, or an options object to configure.
+
+:::info
+The CLI provider defaults `mpp.mode` to `'pull'` — the CLI signs transactions locally and forwards the serialized payload to the server, which is the safest mode when the host environment owns the broadcasting endpoint.
+:::
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  mpp: true, // [!code focus]
+})
+```
+
+### name
+
+- **Type:** `string`
+- **Default:** `'Tempo CLI'`
+
+Display name of the provider.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  name: 'My CLI', // [!code focus]
+})
+```
+
+### open
+
+- **Type:** `(url: string) => Promise<void> | void`
+- **Default:** `open`/`xdg-open`/`start` depending on platform
+
+Browser opener override. Useful for headless environments, CI, or to intercept the URL before opening (e.g. to print it to the terminal).
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  open: (url) => { // [!code focus]
+    console.log(`Open ${url} in your browser to continue.`) // [!code focus]
+  }, // [!code focus]
+})
+```
+
+### persistCredentials
+
+- **Type:** `boolean`
+- **Default:** `true`
+
+Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  persistCredentials: false, // [!code focus]
+})
+```
+
+### pollIntervalMs
+
+- **Type:** `number`
+- **Default:** `2000`
+
+How often (in milliseconds) the CLI polls the device-code endpoint while waiting for the user to approve the request in the browser.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  pollIntervalMs: 1000, // [!code focus]
+})
+```
+
+### rdns
+
+- **Type:** `string`
+- **Default:** `'xyz.tempo.cli'`
+
+Reverse DNS identifier.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  rdns: 'com.example.cli', // [!code focus]
+})
+```
+
+### relay
+
+- **Type:** `string`
+- **Optional**
+
+Base URL for a wallet relay endpoint. See [`Provider.relay`](/docs/api/provider#relay) for full semantics.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  relay: 'https://myapp.com/relay', // [!code focus]
+})
+```
+
+### storage
+
+- **Type:** `Storage`
+- **Default:** `Storage.memory()` in CLI environments
+
+Storage adapter for persistence. Defaults to an in-memory map; managed access keys are persisted separately to `keysPath`.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+import { Storage } from 'accounts'
+
+const provider = Provider.create({
+  storage: Storage.memory(), // [!code focus]
+})
+```
+
+### testnet
+
+- **Type:** `boolean`
+- **Default:** `false`
+
+Use testnet. When `true`, the default chain will be the first testnet chain in `chains`.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  testnet: true, // [!code focus]
+})
+```
+
+### timeoutMs
+
+- **Type:** `number`
+- **Default:** `300000` (5 minutes)
+
+How long (in milliseconds) the CLI waits for the user to complete the device-code ceremony before throwing a timeout error.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  timeoutMs: 60_000, // [!code focus]
+})
+```
+
+### transports
+
+- **Type:** `Record<number, Transport>`
+- **Optional**
+
+Per-chain transports keyed by chain ID. Layered on top of `relay`. See [`Provider.transports`](/docs/api/provider#transports) for full semantics.
+
+```ts twoslash
+import { Provider } from 'accounts/cli'
+import { http } from 'viem'
+import { tempo } from 'viem/chains'
+
+const provider = Provider.create({
+  transports: { // [!code focus]
+    [tempo.id]: http('https://myapp.com/relay/' + tempo.id), // [!code focus]
+  }, // [!code focus]
+})
+```

@@ -1,0 +1,78 @@
+---
+title: Authentication
+description: Register and authenticate accounts through WebAuthn or a custom auth-backed adapter.
+---
+
+# Authentication
+
+Register a user, authenticate future sessions, and route account requests through the selected adapter.
+
+## Demo
+
+Target workspace: `examples/authentication/`.
+
+Seed implementation: `examples/domain-bound-webauthn/`.
+
+:::warning[Stub]
+This page needs a human pass to decide how much auth product surface belongs in the guide versus the WebAuthn and enterprise adapter docs.
+:::
+
+## Walkthrough
+
+::::steps
+
+### Install the SDK
+
+```bash
+pnpm add accounts wagmi viem
+```
+
+### Configure the Provider
+
+Start with `webAuthn` when the app owns the passkey ceremony.
+
+```tsx
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { webAuthn } from 'wagmi/tempo'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [webAuthn({ authUrl: '/auth' })],
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+
+### Register an account
+
+Call `connect` with the registration capability when creating the passkey-backed account.
+
+```tsx
+connect({
+  connector,
+  capabilities: { method: 'register', name: 'My Wallet' },
+})
+```
+
+### Sign in again
+
+Call `connect` with the same connector and let the adapter run the authentication ceremony.
+
+### Verify the result
+
+Read the connected account and confirm server-side session state if your adapter creates one.
+
+::::
+
+## Notes / Gotchas
+
+- WebAuthn is origin-bound. Local examples need a secure origin when testing browser passkeys.
+- Custom auth-backed adapters need a concrete session and signer boundary before this guide can be finalized.
+
+## Next Steps
+
+- [WebAuthn adapter](/docs/adapters/webauthn)
+- [Bring Your Auth](/docs/enterprise/bring-your-auth)
+- [Custom adapter](/docs/adapters/custom)

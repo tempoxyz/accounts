@@ -1,11 +1,4 @@
-import {
-  Address as core_Address,
-  Hex,
-  Provider as ox_Provider,
-  PublicKey,
-  Signature,
-  WebCryptoP256,
-} from 'ox'
+import { Address as core_Address, Hex, Provider as ox_Provider, Signature } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
 import type { Address } from 'viem/accounts'
@@ -32,8 +25,8 @@ const turnkeySessionErrorCodes = new Set([
  * Creates a Turnkey adapter backed by `@turnkey/core` client sessions and Ethereum wallet accounts.
  *
  * The adapter owns silent reconnect, session-expiry cleanup, and provider signing actions.
- * Apps provide the UI-bearing registration and login flows through `createAccount` and
- * `loadAccounts`.
+ * Apps provide the UI-bearing login or sign-up flow through `loadAccounts`. Provide
+ * `createAccount` only when registration needs a distinct Turnkey flow.
  *
  * @example
  * ```ts
@@ -43,14 +36,6 @@ const turnkeySessionErrorCodes = new Set([
  * const provider = Provider.create({
  *   adapter: turnkey({
  *     client: new TurnkeyClient({ organizationId, authProxyConfigId }),
- *     createAccount: async ({ client, parameters }) => {
- *       await client.signUpWithPasskey({
- *         createSubOrgParams: { userName: parameters.name },
- *       })
- *       return (await client.fetchWallets())
- *         .flatMap((wallet) => wallet.accounts)
- *         .find((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')!
- *     },
  *     loadAccounts: async ({ client }) => {
  *       const session = await client.getSession()
  *       if (!session || session.expiry * 1000 <= Date.now()) await client.loginWithPasskey()
@@ -62,16 +47,18 @@ const turnkeySessionErrorCodes = new Set([
  * })
  * ```
  */
-export function turnkey(options: turnkey.Options): Adapter.Adapter {
+export function turnkey<const client extends turnkey.Client>(
+  options: turnkey.Options<client>,
+): Adapter.Adapter {
   const { icon, name = 'Turnkey', rdns = 'com.turnkey', sessionSkewMs = 10_000 } = options
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
-    let turnkeyClient_promise: Promise<turnkey.Client> | undefined
+    let turnkeyClient_promise: Promise<client> | undefined
     let expiry_timeout: ReturnType<typeof setTimeout> | undefined
     let restore_promise: Promise<void> | undefined
     let walletAccounts: readonly turnkey.WalletAccount[] = []
 
-    async function getTurnkeyClient() {
+    async function getTurnkeyClient(): Promise<client> {
       turnkeyClient_promise ??= (async () => {
         const { client } = options
         await client.init?.()
@@ -210,34 +197,16 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }
 
     async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
-      const { expiry, limits, scopes } = options
-      const chainId = options.chainId ?? getClient().chain.id
-
-      if (options.publicKey || options.address) {
-        const address =
-          options.address ?? core_Address.fromPublicKey(PublicKey.from(options.publicKey!))
-        const keyAuthorization = KeyAuthorization.from({
-          address,
-          chainId: BigInt(chainId),
-          expiry,
-          limits,
-          scopes,
-          type: options.keyType ?? 'secp256k1',
-        })
-        return { keyAuthorization }
-      }
-
-      const keyPair = await WebCryptoP256.createKeyPair()
-      const address = core_Address.fromPublicKey(PublicKey.from(keyPair.publicKey))
-      const keyAuthorization = KeyAuthorization.from({
+      const { address, expiry, keyType, limits, publicKey, scopes } = options
+      return await AccessKey.prepare({
         address,
-        chainId: BigInt(chainId),
+        chainId: options.chainId ?? getClient().chain.id,
         expiry,
+        keyType,
         limits,
+        publicKey,
         scopes,
-        type: 'p256',
       })
-      return { keyAuthorization, keyPair }
     }
 
     async function signKeyAuthorization(
@@ -270,6 +239,11 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     }
 
     async function withAccessKey<result>(
+      options: {
+        address?: Address | undefined
+        calls?: Adapter.signTransaction.Parameters['calls']
+        chainId?: number | undefined
+      },
       fn: (
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
@@ -277,7 +251,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
     ) {
       const account = (() => {
         try {
-          return getAccount({ signable: true })
+          return getAccount({ ...options, signable: true })
         } catch {
           return undefined
         }
@@ -289,8 +263,8 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
         const result = await fn(account, keyAuthorization ?? undefined)
         AccessKey.removePending(account, { store })
         return result
-      } catch {
-        AccessKey.remove(account, { store })
+      } catch (error) {
+        AccessKey.invalidate(account, error, { store })
         return undefined
       }
     }
@@ -300,6 +274,7 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
       const account = await accountForSigning(parameters.from)
       const { feePayer, ...rest } = parameters
       const viemClient = getClient({
+        chainId: parameters.chainId,
         feePayer: feePayer === true ? undefined : feePayer,
       })
       const prepared = await prepareTransactionRequest(viemClient, {
@@ -366,31 +341,46 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
             )
 
           const turnkeyClient = await getTurnkeyClient()
-          const account = await options.createAccount({ client: turnkeyClient, parameters })
+          const accounts = options.createAccount
+            ? [await options.createAccount({ client: turnkeyClient, parameters })]
+            : await options.loadAccounts({
+                client: turnkeyClient,
+                parameters: {
+                  authorizeAccessKey,
+                  digest: parameters.digest,
+                  ...(personalSign ? { personalSign } : {}),
+                },
+              })
           await requireSession()
-          walletAccounts = [account]
+          walletAccounts = accounts
           restore_promise = undefined
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters.digest
+          const account = walletAccounts[0]
           const keyAuthorization = authorizeAccessKey
-            ? await signKeyAuthorization(
-                account,
-                await prepareKeyAuthorization(authorizeAccessKey),
-                { signature: authorizeAccessKey.signature },
-              )
+            ? account
+              ? await signKeyAuthorization(
+                  account,
+                  await prepareKeyAuthorization(authorizeAccessKey),
+                  { signature: authorizeAccessKey.signature },
+                )
+              : undefined
             : undefined
 
           return {
-            accounts: [toStoreAccount(account, parameters.name)],
+            accounts: walletAccounts.map((account, index) =>
+              toStoreAccount(account, index === 0 ? parameters.name : undefined),
+            ),
             ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
             ...(keyAuthorization ? { keyAuthorization } : {}),
-            signature: digest
-              ? await signPayload({
-                  payload: digest,
-                  turnkeyClient,
-                  walletAccount: account,
-                })
-              : undefined,
+            signature:
+              digest && account
+                ? await signPayload({
+                    payload: digest,
+                    turnkeyClient,
+                    walletAccount: account,
+                  })
+                : undefined,
           }
         },
         async loadAccounts(parameters) {
@@ -450,20 +440,24 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           })
         },
         async signTransaction(parameters) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
-            const { feePayer, ...rest } = parameters
-            const viemClient = getClient({
-              feePayer: feePayer === true ? undefined : feePayer,
-            })
-            const prepared = await prepareTransactionRequest(viemClient, {
-              account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
-            } as never)
-            return await account.signTransaction(prepared as never)
-          })
+          const result = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
+            async (account, keyAuthorization) => {
+              const { feePayer, ...rest } = parameters
+              const viemClient = getClient({
+                chainId: parameters.chainId,
+                feePayer: feePayer === true ? undefined : feePayer,
+              })
+              const prepared = await prepareTransactionRequest(viemClient, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                keyAuthorization,
+                type: 'tempo',
+              } as never)
+              return await account.signTransaction(prepared as never)
+            },
+          )
           if (result !== undefined) return result
           return await signTransaction(parameters)
         },
@@ -483,25 +477,28 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           })
         },
         async sendTransaction(parameters) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
-            const { feePayer, ...rest } = parameters
-            const viemClient = getClient({
-              chainId: parameters.chainId,
-              feePayer: feePayer === true ? undefined : feePayer,
-            })
-            const prepared = await prepareTransactionRequest(viemClient, {
-              account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
-            } as never)
-            const signed = await account.signTransaction(prepared as never)
-            return await viemClient.request({
-              method: 'eth_sendRawTransaction' as never,
-              params: [signed],
-            })
-          })
+          const result = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
+            async (account, keyAuthorization) => {
+              const { feePayer, ...rest } = parameters
+              const viemClient = getClient({
+                chainId: parameters.chainId,
+                feePayer: feePayer === true ? undefined : feePayer,
+              })
+              const prepared = await prepareTransactionRequest(viemClient, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                keyAuthorization,
+                type: 'tempo',
+              } as never)
+              const signed = await account.signTransaction(prepared as never)
+              return await viemClient.request({
+                method: 'eth_sendRawTransaction' as never,
+                params: [signed],
+              })
+            },
+          )
           if (result !== undefined) return result
           const signed = await signTransaction(parameters)
           const viemClient = getClient({
@@ -514,25 +511,28 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
           })
         },
         async sendTransactionSync(parameters) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
-            const { feePayer, ...rest } = parameters
-            const viemClient = getClient({
-              chainId: parameters.chainId,
-              feePayer: feePayer === true ? undefined : feePayer,
-            })
-            const prepared = await prepareTransactionRequest(viemClient, {
-              account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
-            } as never)
-            const signed = await account.signTransaction(prepared as never)
-            return await viemClient.request({
-              method: 'eth_sendRawTransactionSync' as never,
-              params: [signed],
-            })
-          })
+          const result = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
+            async (account, keyAuthorization) => {
+              const { feePayer, ...rest } = parameters
+              const viemClient = getClient({
+                chainId: parameters.chainId,
+                feePayer: feePayer === true ? undefined : feePayer,
+              })
+              const prepared = await prepareTransactionRequest(viemClient, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                keyAuthorization,
+                type: 'tempo',
+              } as never)
+              const signed = await account.signTransaction(prepared as never)
+              return await viemClient.request({
+                method: 'eth_sendRawTransactionSync' as never,
+                params: [signed],
+              })
+            },
+          )
           if (result !== undefined) return result
           const signed = await signTransaction(parameters)
           const viemClient = getClient({
@@ -555,22 +555,24 @@ export function turnkey(options: turnkey.Options): Adapter.Adapter {
 
 export declare namespace turnkey {
   /** Options for {@link turnkey}. */
-  type Options = {
+  type Options<client extends Client = Client> = {
     /** Existing Turnkey client, such as `TurnkeyClient` from `@turnkey/core`. */
-    client: Client
-    /** Creates/registers a Turnkey wallet account. UI is allowed. */
-    createAccount: (parameters: {
-      /** Initialized Turnkey client. */
-      client: Client
-      /** Provider create-account parameters. */
-      parameters: Adapter.createAccount.Parameters
-    }) => Promise<WalletAccount>
+    client: client
+    /** Creates/registers a Turnkey wallet account. UI is allowed. Defaults to `loadAccounts`. */
+    createAccount?:
+      | ((parameters: {
+          /** Initialized Turnkey client. */
+          client: client
+          /** Provider create-account parameters. */
+          parameters: Adapter.createAccount.Parameters
+        }) => Promise<WalletAccount>)
+      | undefined
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /** Loads/logs into existing Turnkey wallet accounts. UI is allowed. */
     loadAccounts: (parameters: {
       /** Initialized Turnkey client. */
-      client: Client
+      client: client
       /** Provider load-accounts parameters. */
       parameters?: Adapter.loadAccounts.Parameters | undefined
     }) => Promise<readonly WalletAccount[]>

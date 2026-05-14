@@ -1,0 +1,309 @@
+---
+title: Handler.auth
+description: Server handler that issues SIWE-based authentication challenges and sessions.
+---
+
+# `Handler.auth`
+
+Creates a server handler that issues SIWE-style authentication challenges and verifies signed messages. Mounts three POST endpoints under `path`:
+
+- `POST {path}/challenge` — issue a single-use challenge message (`{ message }`)
+- `POST {path}` — verify the signed message and issue a session (cookie via `Set-Cookie`, or `{ token }` body when `cookie: false` or the request opts in via `returnToken: true`)
+- `POST {path}/logout` — revoke the session and clear the cookie. Only mounted when [`session`](#session) is `true` (the default); otherwise calls fall through as `404`.
+
+The challenge wire format is [EIP-4361 (SIWE)](https://eips.ethereum.org/EIPS/eip-4361) for ecosystem compatibility, but address binding is deferred — the wallet supplies the signing address at verify time and the server uses it as the session subject.
+
+## Usage
+
+```ts
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth()
+```
+
+Then plug `handler` into your server framework of choice:
+
+```ts
+createServer(handler.listener)              // Node.js
+Bun.serve({ fetch: handler.fetch })         // Bun
+Deno.serve({ fetch: handler.fetch })        // Deno
+app.all('*', c => handler.fetch(c.request)) // Elysia
+app.use(handler.listener)                   // Express
+app.use(c => handler.fetch(c.req.raw))      // Hono
+export const GET = handler.fetch            // Next.js
+export const POST = handler.fetch           // Next.js
+```
+
+### Validating & Extracting Sessions
+
+Use the [`getSession`](#getsession) helper attached to the handler to resolve the current session inside other routes on the same server. It reads the session cookie (or `Authorization: Bearer <token>` header) and returns the [`SessionPayload`](#sessionpayload), or `undefined` when the request is unauthenticated.
+
+```ts
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth()
+
+app.get('/me', async (req) => {
+  const session = await handler.getSession(req)
+  if (!session) return new Response('unauthorized', { status: 401 })
+  return Response.json({ address: session.address })
+})
+```
+
+## Return Type
+
+`Handler.auth` returns a [`Handler`](/docs/server/handler.compose#handler) extended with a `getSession` helper for resolving the current session from a follow-up request:
+
+```ts
+type ReturnType = Handler & {
+  getSession: (req: Request) => Promise<SessionPayload | undefined>
+}
+```
+
+#### `getSession`
+
+Resolves the current session from a request's session cookie or `Authorization: Bearer <token>` header. Returns `undefined` when no token is present, the token has been revoked, or the session has been disabled (`session: false`).
+
+```ts
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth()
+
+// Inside another route on the same server:
+app.get('/me', async (req) => {
+  const session = await handler.getSession(req)
+  if (!session) return new Response('unauthorized', { status: 401 })
+  return Response.json({ address: session.address })
+})
+```
+
+### `SessionPayload`
+
+```ts
+type SessionPayload = {
+  /** Address of the account that signed the challenge. */
+  address: Address
+  /** Chain ID echoed into the challenge message. */
+  chainId: number
+  /** Unix timestamp (seconds) when the session was issued. */
+  issuedAt: number
+  /** Unix timestamp (seconds) when the session expires. */
+  expiresAt: number
+}
+```
+
+The session payload is persisted in [`store`](#store) under `session:{token}` and is also the value returned by [`getSession`](#getsession).
+
+## Parameters
+
+### cookie
+
+- **Type:** `boolean`
+- **Default:** `true`
+
+Whether to issue a session cookie on successful verify. When `false`:
+
+- the verify response always contains `{ token }` in the body (the per-request `returnToken` flag is ignored)
+- no `Set-Cookie` header is sent
+- logout does not clear a cookie
+- `getSession` ignores any incoming cookie -- only `Authorization: Bearer <token>` is honored
+
+Use this when the SDK lives in a non-browser context or the host app already manages its own auth cookies.
+
+### cookieName
+
+- **Type:** `string`
+- **Default:** `'accounts_auth'`
+
+Cookie name for the session token.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth({
+  cookieName: 'my_app_session', // [!code focus]
+})
+```
+
+### domain
+
+- **Type:** `string`
+- **Default:** request `Host` header
+
+Domain echoed into the SIWE challenge message. When omitted, the handler derives it from the request `Host` header (or, if [`origin`](#origin) is set, from that URL).
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth({
+  domain: 'app.example.com', // [!code focus]
+})
+```
+
+### onAuthenticate
+
+- **Type:** `(params: { address: Address; chainId: number; message: string; request: Request; signature: Hex }) => Response | Promise<Response> | void | Promise<void>`
+- **Optional**
+
+Called after a successful SIWE signature verification, before the session token is issued.
+
+- Returning a `Response` merges its JSON body and status onto the default verify response.
+- Returning `void` (or a `Promise<void>`) leaves the default response untouched.
+- Throwing rejects the request with `401`. The thrown error's `message` is surfaced as the response `error` field, the challenge is consumed, and no session is issued.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+declare function isBlocked(address: string): Promise<boolean>
+// ---cut---
+const handler = Handler.auth({
+  onAuthenticate: async ({ address }) => { // [!code focus]
+    if (await isBlocked(address)) throw new Error('address blocked') // [!code focus]
+  }, // [!code focus]
+})
+```
+
+### origin
+
+- **Type:** `string`
+- **Optional**
+
+Pinned canonical public origin (e.g. `'https://app.example.com'`). When set, the SIWE `domain` and `uri`, and the cookie `Secure` flag, are derived from this URL — request `Host`, request URL, and `x-forwarded-*` headers are ignored. Recommended for production deployments behind a CDN or reverse proxy: it prevents a spoofed `x-forwarded-host` from shifting the SIWE domain and a spoofed `x-forwarded-proto: http` from disabling `Secure`.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth({
+  origin: 'https://app.example.com', // [!code focus]
+})
+```
+
+### path
+
+- **Type:** `string`
+- **Default:** `'/'`
+
+Path prefix for the auth endpoints.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth({
+  path: '/auth', // [!code focus]
+})
+```
+
+### session
+
+- **Type:** `boolean`
+- **Default:** `true`
+
+Whether to issue a session on successful verify. When `false`, verify acts as a stateless signature check:
+
+- no token is generated
+- no entry is written to the session store
+- no cookie is sent
+
+The verify response is `{}`. `getSession` always returns `undefined` and the `/logout` route is not mounted (so it returns `404`). Use this when the host application mints its own session token (e.g. a JWT inside `onAuthenticate`).
+
+### store
+
+- **Type:** [`Kv`](/docs/server/kv)
+- **Default:** `Kv.memory()`
+
+Backing store for both single-use challenges (nonces) and issued sessions. Keys are namespaced internally (`challenge:…`, `session:…`).
+
+:::warning
+For one-time-consume nonce semantics across multiple worker instances, use a linearizable backend such as [`Kv.durableObject`](/docs/server/kv.durableObject). [`Kv.cloudflare`](/docs/server/kv.cloudflare) is eventually consistent and is rejected at construction time when used as the auth store on Cloudflare Workers.
+:::
+
+```ts twoslash
+// @noErrors
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.auth({
+  store: Kv.durableObject(env.NONCE_DO), // [!code focus]
+})
+```
+
+### transport
+
+- **Type:** `Transport` (from `viem`)
+- **Default:** `http()`
+
+Viem transport for the Tempo client used to verify signatures. The client is always built against the `tempo` chain — Tempo's `chain.verifyHash` natively understands `SignatureEnvelope` for WebAuthn / P256 / keychain signatures and falls back to ECDSA recovery for plain EOAs.
+
+```ts twoslash
+import { http } from 'viem'
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth({
+  transport: http('https://rpc.tempo.xyz'), // [!code focus]
+})
+```
+
+### trustProxy
+
+- **Type:** `boolean`
+- **Default:** `false`
+
+Honor `x-forwarded-proto` / `x-forwarded-host` to derive the public origin. Required when running behind a trusted reverse proxy that terminates TLS. When `false`, forwarded headers are ignored to prevent spoofing on deployments that expose the origin server directly. Ignored when [`origin`](#origin) is set.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth({
+  trustProxy: true, // [!code focus]
+})
+```
+
+### ttl
+
+- **Type:** `{ challenge?: number; session?: number }`
+- **Optional**
+
+TTLs in seconds for stored challenges and issued sessions.
+
+#### ttl.challenge
+
+- **Type:** `number`
+- **Default:** `600` (10 minutes)
+
+Maximum age of a challenge in seconds before it expires.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth({
+  ttl: { challenge: 60 * 5 }, // 5 minutes // [!code focus]
+})
+```
+
+#### ttl.session
+
+- **Type:** `number`
+- **Default:** `86400` (24 hours)
+
+Lifetime of an issued session in seconds. After expiry, `getSession` returns `undefined` and the store entry is evicted by the underlying backend.
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth({
+  ttl: { session: 60 * 60 * 24 * 7 }, // 7 days // [!code focus]
+})
+```
+
+### cors
+
+- **Type:** `boolean | Cors`
+- **Default:** `true`
+
+Inherited from [`from.Options`](/docs/server/handler.compose#optionscors). CORS configuration applied to every response.
+
+### headers
+
+- **Type:** `Headers | Record<string, string>`
+- **Optional**
+
+Inherited from [`from.Options`](/docs/server/handler.compose#optionsheaders). Additional headers merged onto every response.

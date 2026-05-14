@@ -1,0 +1,50 @@
+---
+title: Subscriptions
+description: Build recurring payment flows with account permissions.
+---
+
+# Subscriptions
+
+Build a recurring payment flow that uses account permissions for repeat charges.
+
+## Demo
+
+Target workspace: `examples/subscriptions/`.
+
+:::warning[Stub]
+This guide needs product and protocol decisions before implementation: billing cadence, cancellation UX, spend caps, and how the server proves each charge is authorized.
+:::
+
+## Walkthrough
+
+::::steps
+
+### Install the SDK
+
+```bash
+pnpm add accounts wagmi viem
+```
+
+### Configure the Provider
+
+Use Tempo Wallet, WebAuthn, or a custom adapter depending on who owns signing.
+
+### Connect the user's account
+
+Connect the subscriber account and display the subscription terms.
+
+### Submit the request
+
+Request the permission needed for recurring charges.
+
+### Verify the result
+
+Run one scheduled charge in the example workspace and show cancellation state.
+
+::::
+
+## Next Steps
+
+- [Spend Permissions](/docs/guides/spend-permissions)
+- [Payments](/docs/guides/payments)
+- [Bring Your Auth](/docs/enterprise/bring-your-auth)

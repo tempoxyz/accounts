@@ -1,0 +1,39 @@
+---
+title: wallet_getCapabilities
+description: Get account capabilities for specified chains.
+---
+
+# `wallet_getCapabilities`
+
+Returns capabilities for the connected account across chains.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_getCapabilities'
+  params?: [Address] | [Address, Hex[]]
+}
+```
+
+## Response
+
+```ts
+type Response = Record<Hex, {
+  /** Access key (delegated signing) support. */
+  accessKeys?: { status: 'supported' | 'unsupported' }
+  /** EIP-5792 atomic execution support. */
+  atomic: { status: 'supported' | 'ready' | 'unsupported' }
+  /** Whether the relay can sponsor fees on this chain. */
+  feePayer?: { status: 'supported' | 'unsupported' }
+}>
+```
+
+## Example
+
+```ts
+const capabilities = await provider.request({
+  method: 'wallet_getCapabilities',
+  params: ['0x...'],
+})
+```

@@ -1,0 +1,37 @@
+{
+  "name": "site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "NODE_OPTIONS='--import tsx' vite",
+    "build": "node --import tsx scripts/copy-vocs-theme.ts && vite build",
+    "preview": "vite preview",
+    "sync:vocs": "node --import tsx scripts/copy-vocs-theme.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "accounts": "workspace:*",
+    "mermaid": "^11.14.0",
+    "ox": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "regen-ui": "^0.3.0",
+    "tailwindcss": "^4.2.4",
+    "tsx": "catalog:",
+    "viem": "catalog:",
+    "vite": "catalog:",
+    "vocs": "https://pkg.pr.new/wevm/vocs@dc18ab3",
+    "wagmi": "catalog:",
+    "waku": "1.0.0-alpha.10"
+  },
+  "devDependencies": {
+    "@iconify-json/lucide": "^1.2.93",
+    "@types/node": "catalog:",
+    "eventemitter3": "^5.0.1",
+    "typescript": "catalog:",
+    "unplugin-icons": "^22.5.0"
+  }
+}

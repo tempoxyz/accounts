@@ -1,0 +1,55 @@
+---
+title: wallet_depositZone
+description: Open the wallet zone-deposit flow with optional pre-filled fields.
+---
+
+# `wallet_depositZone`
+
+Opens the wallet's zone-deposit flow so the user can move funds from their account into a zone. The wallet renders the deposit UI using any pre-filled hints supplied in the request.
+
+To withdraw funds back out of a zone, use [`wallet_withdrawZone`](/docs/rpc/wallet_withdrawZone).
+
+This method is only supported by adapters that opt in to the `depositZone` action (typically the [`dialog`](/docs/api/dialog) adapter). Other adapters reject the request as an unsupported method.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_depositZone'
+  params?: [{
+    /** Human-readable amount to pre-fill (e.g. `"1.5"`). */
+    amount?: string
+    /**
+     * Fee payer override. `false` disables the wallet's default fee
+     * payer, a URL string points at a custom fee payer service.
+     */
+    feePayer?: boolean | string
+    /** Token contract address to pre-fill. Omit to let the user choose. */
+    token?: `0x${string}`
+    /** Zone id to deposit into. */
+    zoneId?: number
+  }]
+}
+```
+
+## Response
+
+```ts
+type Response = {
+  /** Receipt of the submitted deposit. */
+  receipt: TransactionReceipt
+}
+```
+
+## Example
+
+```ts
+const { receipt } = await provider.request({
+  method: 'wallet_depositZone',
+  params: [{
+    zoneId: 1,
+    token: '0x20c0000000000000000000000000000000000001',
+    amount: '10',
+  }],
+})
+```

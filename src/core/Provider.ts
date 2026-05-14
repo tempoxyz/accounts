@@ -92,7 +92,6 @@ export function create(options: create.Options = {}): create.ReturnType {
   })
 
   const getAccount: Account.Find = (options = {}) => Account.find({ ...options, store }) as never
-
   // Lazy reference — assigned after the provider is created so the client
   // transport can route provider methods (wallet_connect, etc.) through it.
   let providerRef: ox_Provider.Provider | undefined
@@ -288,7 +287,22 @@ export function create(options: create.Options = {}): create.ReturnType {
                     if (!parameters.keyAuthorization) {
                       const account = (() => {
                         try {
-                          return getAccount({ signable: true })
+                          const calls =
+                            parameters.calls ??
+                            (parameters.to
+                              ? [
+                                  {
+                                    data: parameters.data,
+                                    to: parameters.to,
+                                  },
+                                ]
+                              : undefined)
+                          return getAccount({
+                            address: parameters.from,
+                            calls,
+                            chainId: parameters.chainId ?? store.getState().chainId,
+                            signable: true,
+                          })
                         } catch {
                           return undefined
                         }
@@ -306,8 +320,8 @@ export function create(options: create.Options = {}): create.ReturnType {
                             })
                             AccessKey.removePending(account, { store })
                             return result
-                          } catch {
-                            AccessKey.remove(account, { store })
+                          } catch (error) {
+                            AccessKey.invalidate(account, error, { store })
                             return await fill(parameters)
                           }
                         }

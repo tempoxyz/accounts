@@ -1,0 +1,105 @@
+---
+title: Remote.validateSearch
+description: Validate an RPC request payload from URL search params.
+---
+
+# `Remote.validateSearch`
+
+Validates an RPC request from URL search params against the wallet's [`Schema.Request`](https://github.com/tempoxyz/accounts/blob/main/src/core/Schema.ts) discriminated union.
+
+- parses `search` against the schema
+- asserts the decoded `method` matches the expected `method`
+- enforces strict parameter schemas (e.g. required `limits`)
+
+On failure it rejects all pending requests via `remote.rejectAll(error)` and re-throws so the router can render its error boundary.
+
+Designed to be used from inside a TanStack Router (or similar) `validateSearch` callback so each per-method route gets a fully-typed, decoded request.
+
+## Usage
+
+```ts
+import { createFileRoute } from '@tanstack/react-router'
+import { Remote } from 'accounts'
+
+import { remote } from '../lib/config.js'
+
+export const Route = createFileRoute('/rpc/personal_sign')({
+  validateSearch: (search) =>
+    Remote.validateSearch(remote, search, { method: 'personal_sign' }),
+  component: Component,
+})
+```
+
+## Parameters
+
+### remote
+
+- **Type:** `Remote.Remote`
+- **Required**
+
+The remote context returned from [`Remote.create`](/docs/api/remote.create). Used to call `rejectAll(error)` when validation fails so the host SDK is notified before the router error boundary renders.
+
+```ts
+import { Remote } from 'accounts'
+
+import { remote } from '../lib/config.js'
+
+Remote.validateSearch(
+  remote, // [!code focus]
+  search,
+  { method: 'personal_sign' },
+)
+```
+
+### search
+
+- **Type:** `Record<string, unknown>`
+- **Required**
+
+Raw URL search params (including the encoded `_decoded`/`params`/`id` fields written by the host SDK).
+
+```ts
+import { Remote } from 'accounts'
+
+Remote.validateSearch(
+  remote,
+  search, // [!code focus]
+  { method: 'personal_sign' },
+)
+```
+
+### parameters.method
+
+- **Type:** `Schema.Request['method']`
+- **Required**
+
+Expected RPC method name. The decoded request's `method` must equal this value or an `InvalidParamsError` is thrown.
+
+```ts
+import { Remote } from 'accounts'
+
+Remote.validateSearch(remote, search, {
+  method: 'eth_sendTransaction', // [!code focus]
+})
+```
+
+## Returns
+
+The validated, decoded request payload -- a discriminated union member matching the requested `method`, augmented with:
+
+- `id: number` -- coerced from `search.id`.
+- `jsonrpc: '2.0'`.
+- `_decoded` -- the parsed `Schema.Request` member.
+- `_returnType` -- phantom marker for the route's return type.
+
+```ts
+type ReturnType<method extends Schema.Request['method']> = Extract<
+  Schema.Request,
+  { method: method }
+> & {
+  id: number
+  jsonrpc: '2.0'
+  _decoded: Extract<Schema.Request, { method: method }>
+  _returnType: unknown
+}
+```

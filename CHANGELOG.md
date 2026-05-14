@@ -1,5 +1,75 @@
 # accounts
 
+## 0.11.0
+
+### Minor Changes
+
+- 0a73f2c: Renamed the `wallet_send` `value` parameter to `amount`.
+
+  ```diff
+   await provider.request({
+     method: 'wallet_send',
+     params: [{
+       to: '0x...',
+       token: '0x20c0000000000000000000000000000000000001',
+  -    value: '1.5',
+  +    amount: '1.5',
+     }],
+   })
+  ```
+
+### Patch Changes
+
+- 43b8700: Fixed access keys selection to include chain.
+- b4a08ef: Fixed access key selection in the dialog adapter by forwarding calls.
+- b4a08ef: Added console logging in the dialog adapter's access key fallback path.
+- 0a73f2c: Added an optional `memo` parameter to `wallet_send` that the wallet attaches to TIP-20 transfers and rejects with `InvalidParamsError` for non-TIP-20 tokens.
+- 0a73f2c: Widened the `wallet_send` `token` parameter to accept a curated tokenlist symbol (case-insensitive, e.g. `"pathUsd"`) in addition to a contract address.
+
+## 0.10.7
+
+### Patch Changes
+
+- 7cb2162: Exposed the `Adapter` namespace from the package root so consumers can author custom adapters with `Adapter.define`.
+- 195d6e8: Fixed scoped access key selection to only match keys whose scopes covered the current transaction calls.
+- 70814cd: Made `turnkey` `createAccount` optional and default registration requests to `loadAccounts`.
+
+## 0.10.6
+
+### Patch Changes
+
+- e12ae75: Added `auth` option to the `webAuthn` adapter, mirroring the Provider `auth` capability shape (`string | { url, ... }`); the existing `authUrl` option is preserved as a deprecated alias.
+
+  ```diff
+  - webAuthn({ authUrl: '/webauthn' })
+  + webAuthn({ auth: '/webauthn' })
+  ```
+
+## 0.10.5
+
+### Patch Changes
+
+- b65893e: Renamed the `dangerous_secp256k1` adapter to `secp256k1`. The old name is preserved as a deprecated alias so existing imports keep working.
+
+  ```diff
+  - import { dangerous_secp256k1 } from 'accounts'
+  + import { secp256k1 } from 'accounts'
+  ```
+
+## 0.10.4
+
+### Patch Changes
+
+- f36c350: Widened `getSession` to accept Node.js `http.IncomingMessage` in addition to Fetch API `Request`.
+- ef44a68: Fixed `Handler.relay()` to return an actionable error when `eth_signRawTransaction` is called without a fee payer configured, instead of forwarding to the RPC node which returns an opaque "Method not found".
+
+## 0.10.3
+
+### Patch Changes
+
+- a5ca0be: Fixed `Handler.relay` forwarding `keyAuthorization` to `eth_fillTransaction` in the internal envelope shape instead of the RPC shape the chain expects.
+- dccc343: Added a Turnkey adapter for connecting and signing with app-provided Turnkey wallet accounts.
+
 ## 0.10.2
 
 ### Patch Changes

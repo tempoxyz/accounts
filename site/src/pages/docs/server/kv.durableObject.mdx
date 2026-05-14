@@ -1,0 +1,84 @@
+---
+title: Kv.durableObject
+description: Kv adapter backed by a Cloudflare Durable Object with atomic take.
+---
+
+# `Kv.durableObject`
+
+Adapts a Cloudflare Durable Object namespace into a [`Kv`](/docs/server/kv) with atomic [`take`](/docs/server/kv#take-key-optional). Unlike [`Kv.cloudflare`](/docs/server/kv.cloudflare), a Durable Object's storage is single-actor and linearizable — `take` (read+delete) is guaranteed atomic across concurrent callers, which makes this the recommended backend for SIWE challenge nonce storage on Cloudflare Workers.
+
+Pair with [`NonceStorage`](/docs/server/kv#noncestorage) (or your own DO class implementing the same fetch protocol).
+
+## Usage
+
+```ts
+import { Handler, Kv, NonceStorage } from 'accounts/server'
+
+export { NonceStorage }
+
+export default {
+  fetch(req: Request, env: { NONCE_DO: DurableObjectNamespace }) {
+    const handler = Handler.auth({
+      origin: 'https://app.example.com',
+      store: Kv.durableObject(env.NONCE_DO),
+    })
+    return handler.fetch(req)
+  },
+}
+```
+
+Wire the Durable Object class in `wrangler.jsonc`:
+
+```jsonc
+{
+  "durable_objects": {
+    "bindings": [{ "name": "NONCE_DO", "class_name": "NonceStorage" }]
+  },
+  "migrations": [{ "tag": "v1", "new_classes": ["NonceStorage"] }]
+}
+```
+
+## Parameters
+
+### namespace
+
+- **Type:** `Kv.durableObject.Namespace`
+- **Required**
+
+A Cloudflare Durable Object namespace binding (or anything matching the same shape):
+
+```ts
+type Namespace = {
+  idFromName: (name: string) => unknown
+  get: (id: unknown) => { fetch: (input: string, init?: unknown) => Promise<Response> }
+}
+```
+
+Compatible with `DurableObjectNamespace` from `@cloudflare/workers-types`.
+
+### options
+
+- **Type:** `Kv.durableObject.Options`
+- **Default:** `{}`
+
+#### options.name
+
+- **Type:** `string`
+- **Default:** `'default'`
+
+Durable Object instance name. Defaults to a single shared actor. Use a per-tenant name when you need isolation between callers.
+
+```ts
+import { Handler, Kv } from 'accounts/server'
+
+const handler = Handler.auth({
+  origin: 'https://app.example.com',
+  store: Kv.durableObject(env.NONCE_DO, {
+    name: `tenant:${tenantId}`, // [!code focus]
+  }),
+})
+```
+
+## Return Type
+
+A [`Kv`](/docs/server/kv#interface) instance with `get`, `set`, `delete`, and the linearizable `take`.

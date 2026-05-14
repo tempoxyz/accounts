@@ -1,0 +1,112 @@
+diff --git a/dist/react/Tabs.js b/dist/react/Tabs.js
+index 3d5ccdb5618b24c1d99c42aca2a0a3879e9e4919..38d5c06e809ceddd5b61b9f9a5e3fbdf47925e6d 100644
+--- a/dist/react/Tabs.js
++++ b/dist/react/Tabs.js
+@@ -46,8 +46,8 @@ export function Tabs(props) {
+     return (_jsxs(BaseTabs.Root, { onValueChange: (value) => setTab(value), value: tab, children: [_jsx(BaseTabs.List, { className: "vocs:flex vocs:border-b vocs:border-primary", children: tabs.map((t) => (_jsx(BaseTabs.Tab, { className: "vocs:flex vocs:-mb-px vocs:h-10 vocs:cursor-pointer vocs:items-center vocs:border-b-[1.5px] vocs:border-transparent vocs:px-2 vocs:text-[15px] vocs:font-[350] vocs:text-secondary vocs:data-active:border-accent7 vocs:data-active:text-heading vocs:data-active:font-medium vocs:transition-colors vocs:duration-100", value: t.value, children: t.title }, t.value))) }), children] }));
+ }
+ export function Tab(props) {
+-    const { title, children } = props;
++    const { className, title, children } = props;
+     const value = toKebabCase(title);
+-    return (_jsx(BaseTabs.Panel, { className: "vocs:pt-4", value: value, children: children }));
++    return (_jsx(BaseTabs.Panel, { className: `vocs:pt-4 vocs:space-y-6${className ? ` ${className}` : ''}`, "data-v-content": true, keepMounted: true, render: _jsx("article", {}), value: value, children: children }));
+ }
+ //# sourceMappingURL=Tabs.js.map
+\ No newline at end of file
+diff --git a/dist/react/internal/Outline.js b/dist/react/internal/Outline.js
+index 1d2ce10029664071d7b58be43ce500de28807ee7..e618d42147b9889a14ac6df7d2a5a0904c5b43fd 100644
+--- a/dist/react/internal/Outline.js
++++ b/dist/react/internal/Outline.js
+@@ -22,7 +22,7 @@ function useOutlineItems(options) {
+         if (typeof window === 'undefined')
+             return;
+         const scanHeadings = () => {
+-            const headingElements = Array.from(document.querySelectorAll('article[data-v-content] :is(h2, h3, h4, h5, h6)[id]'));
++            const headingElements = Array.from(document.querySelectorAll('article[data-v-content] :is(h2, h3, h4, h5, h6)[id]')).filter((el) => !el.closest('[data-hidden]'));
+             const newItems = headingElements
+                 .map((element) => {
+                 const level = Number.parseInt(element.tagName[1] ?? '0', 10);
+@@ -53,11 +53,13 @@ function useOutlineItems(options) {
+                 return current;
+             });
+         }
+-        const article = document.querySelector('article[data-v-content]');
+-        if (!article)
++        const articles = document.querySelectorAll('article[data-v-content]');
++        if (articles.length === 0)
+             return;
+         const observer = new MutationObserver(scanHeadings);
+-        observer.observe(article, { childList: true, subtree: true });
++        for (const article of articles) {
++            observer.observe(article, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-hidden'] });
++        }
+         return () => observer.disconnect();
+     }, [router.path, minLevel, maxLevel]);
+     React.useEffect(() => {
+diff --git a/src/react/Tabs.tsx b/src/react/Tabs.tsx
+index 24ae4d397ccf5603f1429512ab3cea87e2c12404..28adf545eb286b954c15e0aab731b6fc54a61e14 100644
+--- a/src/react/Tabs.tsx
++++ b/src/react/Tabs.tsx
+@@ -77,10 +77,16 @@ export declare namespace Tabs {
+ }
+ 
+ export function Tab(props: Tab.Props) {
+-  const { title, children } = props
++  const { className, title, children } = props
+   const value = toKebabCase(title)
+   return (
+-    <BaseTabs.Panel className="vocs:pt-4" value={value}>
++    <BaseTabs.Panel
++      className={`vocs:pt-4 vocs:space-y-6${className ? ` ${className}` : ''}`}
++      data-v-content
++      keepMounted
++      render={<article />}
++      value={value}
++    >
+       {children}
+     </BaseTabs.Panel>
+   )
+@@ -89,6 +95,7 @@ export function Tab(props: Tab.Props) {
+ export declare namespace Tab {
+   type Props = {
+     children: React.ReactNode
++    className?: string | undefined
+     title: string
+   }
+ }
+diff --git a/src/react/internal/Outline.tsx b/src/react/internal/Outline.tsx
+index e7977a1d6733a80ad44bb7d537fc36e7d95541c7..c158d7eda95ab9739696bb4b778ac13a1b134672 100644
+--- a/src/react/internal/Outline.tsx
++++ b/src/react/internal/Outline.tsx
+@@ -26,7 +26,7 @@ function useOutlineItems(options: { minLevel: number; maxLevel: number }) {
+     const scanHeadings = () => {
+       const headingElements = Array.from(
+         document.querySelectorAll('article[data-v-content] :is(h2, h3, h4, h5, h6)[id]'),
+-      )
++      ).filter((el) => !el.closest('[data-hidden]'))
+       const newItems = headingElements
+         .map((element) => {
+           const level = Number.parseInt(element.tagName[1] ?? '0', 10)
+@@ -59,11 +59,18 @@ function useOutlineItems(options: { minLevel: number; maxLevel: number }) {
+       })
+     }
+ 
+-    const article = document.querySelector('article[data-v-content]')
+-    if (!article) return
++    const articles = document.querySelectorAll('article[data-v-content]')
++    if (articles.length === 0) return
+ 
+     const observer = new MutationObserver(scanHeadings)
+-    observer.observe(article, { childList: true, subtree: true })
++    for (const article of articles) {
++      observer.observe(article, {
++        childList: true,
++        subtree: true,
++        attributes: true,
++        attributeFilter: ['data-hidden'],
++      })
++    }
+ 
+     return () => observer.disconnect()
+   }, [router.path, minLevel, maxLevel])

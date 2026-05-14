@@ -1,0 +1,41 @@
+---
+title: Storage.idb
+description: IndexedDB-backed Storage adapter.
+---
+
+# `Storage.idb`
+
+Creates a [`Storage`](/docs/api/storage) adapter backed by IndexedDB (via [`idb-keyval`](https://github.com/jakearchibald/idb-keyval)).
+
+Values are stored raw — no JSON serialization is performed, so structured-clone-compatible values like `Map`, `Set`, `Date`, and `ArrayBuffer` round-trip natively.
+
+This is the default storage for [`Provider.create`](/docs/api/provider) in the browser.
+
+## Usage
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+const provider = Provider.create({
+  storage: Storage.idb(),
+})
+```
+
+## Parameters
+
+### options.key
+
+- **Type:** `string`
+- **Default:** `'tempo'`
+
+Key prefix applied to every entry written to the IndexedDB store. Useful when several apps share the same origin and you want to avoid key collisions.
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+const provider = Provider.create({
+  storage: Storage.idb({
+    key: 'my-app', // [!code focus]
+  }),
+})
+```

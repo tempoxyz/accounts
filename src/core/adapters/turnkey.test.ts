@@ -36,6 +36,29 @@ describe('turnkey', () => {
     `)
   })
 
+  test('default: createAccount falls back to loadAccounts', async () => {
+    const { adapter, client } = setup({ createAccount: false })
+
+    const result = await adapter.actions.createAccount(
+      { digest: '0x1234', name: 'Ada' },
+      { method: 'wallet_connect', params: undefined },
+    )
+
+    expect(client.createCalls).toMatchInlineSnapshot(`0`)
+    expect(client.loadCalls).toMatchInlineSnapshot(`1`)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+            "label": "Ada",
+          },
+        ],
+        "signature": "0x000000000000000000000000000000000000000000000000000000000000001100000000000000000000000000000000000000000000000000000000000000221b",
+      }
+    `)
+  })
+
   test('default: loadAccounts delegates login and caches wallet accounts for signing', async () => {
     const { adapter, client } = setup()
 
@@ -268,7 +291,14 @@ function setup(options: setup.Options = {}) {
   const client = createClient(options)
   const adapter = turnkey({
     client,
-    createAccount: async () => ({ address }),
+    ...(options.createAccount === false
+      ? {}
+      : {
+          createAccount: async () => {
+            client.createCalls++
+            return { address }
+          },
+        }),
     loadAccounts: async () => {
       client.loadCalls++
       return [{ address }]
@@ -286,33 +316,69 @@ function setup(options: setup.Options = {}) {
 
 declare namespace setup {
   type Options = {
+    createAccount?: boolean | undefined
     session?: turnkey.Session | null | undefined
     signError?: unknown
   }
 }
 
 function createClient(options: setup.Options = {}) {
-  const client = {
+  type WalletShape = { accounts: { address: string; addressFormat: string }[] }
+  const state = {
+    createCalls: 0,
     fetchCalls: 0,
     initCalls: 0,
     loadCalls: 0,
     signPayloads: [] as Hex.Hex[],
     signWith: [] as string[],
-    wallets: [{ accounts: [{ address, addressFormat: 'ADDRESS_FORMAT_ETHEREUM' }] }],
-    async fetchWallets() {
-      client.fetchCalls++
-      return client.wallets
+    wallets: [
+      { accounts: [{ address, addressFormat: 'ADDRESS_FORMAT_ETHEREUM' }] },
+    ] as WalletShape[],
+  }
+  const client = {
+    get fetchCalls() {
+      return state.fetchCalls
     },
-    async getSession() {
-      return options.session === undefined
+    get createCalls() {
+      return state.createCalls
+    },
+    set createCalls(value: number) {
+      state.createCalls = value
+    },
+    get initCalls() {
+      return state.initCalls
+    },
+    get loadCalls() {
+      return state.loadCalls
+    },
+    set loadCalls(value: number) {
+      state.loadCalls = value
+    },
+    get signPayloads() {
+      return state.signPayloads
+    },
+    get signWith() {
+      return state.signWith
+    },
+    get wallets() {
+      return state.wallets
+    },
+    set wallets(value: WalletShape[]) {
+      state.wallets = value
+    },
+    fetchWallets: async () => {
+      state.fetchCalls++
+      return state.wallets as readonly turnkey.Wallet[]
+    },
+    getSession: async () =>
+      options.session === undefined
         ? { expiry: Math.floor(Date.now() / 1000) + 60 }
-        : options.session
-    },
+        : options.session,
     httpClient: {
-      async signRawPayload(parameters: turnkey.SignRawPayloadParameters) {
+      signRawPayload: async (parameters: turnkey.SignRawPayloadParameters) => {
         if (options.signError) throw options.signError
-        client.signPayloads.push(parameters.payload)
-        client.signWith.push(parameters.signWith)
+        state.signPayloads.push(parameters.payload)
+        state.signWith.push(parameters.signWith)
         return {
           r: Hex.padLeft('0x11', 32),
           s: Hex.padLeft('0x22', 32),
@@ -320,17 +386,18 @@ function createClient(options: setup.Options = {}) {
         }
       },
     },
-    init() {
-      client.initCalls++
+    init: () => {
+      state.initCalls++
     },
-    logout() {},
+    logout: () => {},
   } satisfies turnkey.Client & {
+    createCalls: number
     fetchCalls: number
     initCalls: number
     loadCalls: number
     signPayloads: Hex.Hex[]
     signWith: string[]
-    wallets: turnkey.Wallet[]
+    wallets: WalletShape[]
   }
 
   return client

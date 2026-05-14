@@ -7,7 +7,6 @@ import { z } from 'zod/mini'
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
-import * as ExecutionError from '../ExecutionError.js'
 import * as Schema from '../Schema.js'
 import type * as Store from '../Store.js'
 import * as Rpc from '../zod/rpc.js'
@@ -145,39 +144,34 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     /**
      * Tries to execute `fn` with the local access key. Returns `undefined`
      * when no access key exists so the caller can fall through to the dialog.
-     * On access key errors, removes the stale key and also returns `undefined`.
-     * On insufficient-balance reverts, keeps the key (it's still valid) and
-     * falls through to the dialog so the user can fund or retry.
+     * On stale-key errors, removes the key and also returns `undefined`.
+     * On recoverable transaction errors, keeps the key and falls through to
+     * the dialog so the user can fund, approve, or retry.
      */
     async function withAccessKey<result>(
+      options: Pick<Adapter.sendTransaction.Parameters, 'calls' | 'chainId' | 'from'>,
       fn: (
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
       ) => Promise<result>,
     ): Promise<result | undefined> {
-      const account = (() => {
-        try {
-          return getAccount({ signable: true })
-        } catch {
-          return undefined
-        }
-      })()
+      if (!options.from || typeof options.chainId === 'undefined') return undefined
+      const account = AccessKey.selectAccount({
+        address: options.from,
+        calls: options.calls,
+        chainId: options.chainId,
+        store,
+      })
       if (!account) return undefined
-      if (account.source !== 'accessKey') return undefined
       const keyAuthorization = AccessKey.getPending(account, { store })
       try {
         const result = await fn(account, keyAuthorization ?? undefined)
         AccessKey.removePending(account, { store })
         return result
       } catch (err) {
-        const revert = err instanceof Error ? ExecutionError.parse(err) : undefined
-        if (revert?.errorName === 'InsufficientBalance') {
-          // Access key is still valid — fall through to dialog so the user can
-          // address the funding issue without losing their authorization.
-          return undefined
-        }
-        console.warn('[accounts] silent sign with access key failed, removing key:', err)
-        AccessKey.remove(account, { store })
+        if (AccessKey.invalidate(account, err, { store }))
+          console.warn('[accounts] access key invalidated, falling through to dialog:', err)
+        else console.warn('[accounts] access key sign failed, falling through to dialog:', err)
         return undefined
       }
     }
@@ -294,9 +288,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async signTransaction(parameters, request) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
+          const result = await withAccessKey(parameters, async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
+              chainId: parameters.chainId,
               feePayer: (() => {
                 if (feePayer === false) return false
                 if (typeof feePayer === 'string') return feePayer
@@ -324,9 +319,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async sendTransaction(parameters, request) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
+          const result = await withAccessKey(parameters, async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
+              chainId: parameters.chainId,
               feePayer: (() => {
                 if (feePayer === false) return false
                 if (typeof feePayer === 'string') return feePayer
@@ -354,9 +350,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async sendTransactionSync(parameters, request) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
+          const result = await withAccessKey(parameters, async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
+              chainId: parameters.chainId,
               feePayer: (() => {
                 if (feePayer === false) return false
                 if (typeof feePayer === 'string') return feePayer

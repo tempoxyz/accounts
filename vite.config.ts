@@ -28,5 +28,11 @@ export default defineConfig({
         'unknown',
       ],
     },
+    overrides: [
+      {
+        files: ['**/*.md', '**/*.mdx'],
+        options: { embeddedLanguageFormatting: 'off' },
+      },
+    ],
   },
 })

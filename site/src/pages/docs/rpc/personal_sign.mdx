@@ -1,0 +1,40 @@
+---
+title: personal_sign
+description: Sign a message with the connected account.
+---
+
+# `personal_sign`
+
+Signs an arbitrary message with the connected account's key.
+
+## Request
+
+```ts
+type Request = {
+  method: 'personal_sign'
+  params: [
+    Hex,    // message
+    Address // signer address
+  ]
+}
+```
+
+## Response
+
+```ts
+type Response = Hex // signature
+```
+
+## Example
+
+```ts
+import { Hex } from 'ox'
+
+const signature = await provider.request({
+  method: 'personal_sign',
+  params: [
+    Hex.fromString('Hello, Tempo!'),
+    '0x...',
+  ],
+})
+```

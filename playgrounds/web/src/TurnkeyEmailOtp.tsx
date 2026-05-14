@@ -28,8 +28,6 @@ export function TurnkeyEmailOtp() {
 
   if (!request) return null
 
-  const label = request.mode === 'register' ? 'Register' : 'Continue'
-
   function cancel(event: MouseEvent<HTMLDivElement>) {
     if (pending || event.target !== event.currentTarget) return
     rejectTurnkeyEmailOtp(new Error('Turnkey email OTP cancelled.'))
@@ -76,34 +74,13 @@ export function TurnkeyEmailOtp() {
       setError(undefined)
       setPending(true)
 
-      if (request.mode === 'login') {
-        await request.client.completeOtp({
-          contact: email_,
-          ...(request.createSubOrgParams ? { createSubOrgParams: request.createSubOrgParams } : {}),
-          otpCode: code_,
-          otpId,
-          otpType: OtpType.Email,
-        })
-      } else {
-        const publicKey = await request.client.createApiKeyPair()
-        const verified = await request.client.verifyOtp({
-          contact: email_,
-          otpCode: code_,
-          otpId,
-          otpType: OtpType.Email,
-          publicKey,
-        })
-
-        if (verified.subOrganizationId)
-          throw new Error('A Turnkey account already exists for that email.')
-        await request.client.signUpWithOtp({
-          contact: email_,
-          ...(request.createSubOrgParams ? { createSubOrgParams: request.createSubOrgParams } : {}),
-          otpType: OtpType.Email,
-          publicKey,
-          verificationToken: verified.verificationToken,
-        })
-      }
+      await request.client.completeOtp({
+        contact: email_,
+        ...(request.createSubOrgParams ? { createSubOrgParams: request.createSubOrgParams } : {}),
+        otpCode: code_,
+        otpId,
+        otpType: OtpType.Email,
+      })
 
       resolveTurnkeyEmailOtp()
     } catch (error) {
@@ -117,7 +94,7 @@ export function TurnkeyEmailOtp() {
     <div className="turnkey-otp-backdrop" onClick={cancel} role="presentation">
       <section aria-label="Turnkey email OTP" className="turnkey-otp-panel">
         <header className="turnkey-otp-header">
-          <h2>{label} with Turnkey</h2>
+          <h2>Continue with Turnkey</h2>
         </header>
 
         {!otpId ? (

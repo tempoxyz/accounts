@@ -1,0 +1,29 @@
+---
+title: Turnkey
+description: Stub for integrating Turnkey-backed signing with the Accounts SDK.
+---
+
+# Turnkey
+
+Use a custom adapter when Turnkey owns signer infrastructure and the app wants to expose Tempo account operations through the Accounts SDK.
+
+## Demo
+
+Target workspace: `examples/enterprise-turnkey/`.
+
+:::warning[Stub]
+This page needs a real Turnkey-backed adapter example before publishing. Keep the root SDK structurally typed so non-Turnkey consumers do not inherit a hard dependency.
+:::
+
+## Integration Checklist
+
+- Accept an app-provided Turnkey client shape.
+- Keep Turnkey-specific dependencies out of the root SDK path.
+- Map Turnkey signing responses into Accounts SDK responses.
+- Test connect, payment, and spend-permission flows.
+
+## Next Steps
+
+- [Bring Your Auth](/docs/enterprise/bring-your-auth)
+- [Custom adapter](/docs/adapters/custom)
+- [Spend Permissions](/docs/guides/spend-permissions)

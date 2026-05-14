@@ -1,0 +1,58 @@
+---
+title: Remote
+description: Bridge that runs inside the wallet's iframe/popup and serves RPC requests from the host SDK.
+---
+
+import { Cards, Card } from 'vocs'
+
+# `Remote`
+
+The `Remote` namespace is the **wallet-side** counterpart to the [`Provider`](/docs/api/provider). It:
+
+- runs inside the iframe or popup served by the wallet's auth app
+- receives RPC requests forwarded from the host SDK over [`Messenger`](https://github.com/tempoxyz/accounts/blob/main/src/core/Messenger.ts)
+- exposes a queue of pending requests for the UI to render approval surfaces against
+
+A typical wallet app calls [`Remote.create`](/docs/api/remote.create) once at startup, subscribes to the request queue with `onUserRequest`, navigates to a per-method route, and either [`respond`](#respond) or [`reject`](#reject)s once the user has approved or cancelled.
+
+## Core
+
+<Cards>
+  <Card
+    description="Create a remote context bound to a Messenger and Provider"
+    icon="lucide:plug"
+    to="/docs/api/remote.create"
+    title=".create"
+  />
+  <Card
+    description="Validate an RPC request payload from URL search params"
+    icon="lucide:shield-check"
+    to="/docs/api/remote.validateSearch"
+    title=".validateSearch"
+  />
+</Cards>
+
+## React
+
+The React hooks live in the `accounts/react` entrypoint and are designed to be used from inside the wallet's auth app.
+
+<Cards>
+  <Card
+    description="Detect iframe occlusion and fall back to a popup"
+    icon="lucide:eye"
+    to="/docs/api/remote.useEnsureVisibility"
+    title=".useEnsureVisibility"
+  />
+  <Card
+    description="Subscribe to a remote context's state store"
+    icon="lucide:database"
+    to="/docs/api/remote.useState"
+    title=".useState"
+  />
+  <Card
+    description="Apply theme overrides from the host SDK"
+    icon="lucide:palette"
+    to="/docs/api/remote.useTheme"
+    title=".useTheme"
+  />
+</Cards>

@@ -6,6 +6,9 @@
     "check": "vp lint --fix --ignore-pattern package.json && vp fmt src examples playgrounds ref-impls scripts test",
     "dev": "docker compose up -d",
     "dev:cli": "pnpm --filter './playgrounds/cli' connect",
+    "docs:build": "pnpm --filter site build",
+    "docs:dev": "pnpm --filter site dev",
+    "docs:preview": "pnpm --filter site preview",
     "check:types": "tsc -b --noEmit && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types",
     "dev:dialog": "pnpm --filter tempo-app dev",
     "dev:dialog-ref": "pnpm --filter dialog-ref dev",
@@ -53,7 +56,7 @@
     "typescript": "catalog:",
     "viem": "catalog:",
     "vp": "catalog:",
-    "wagmi": "^3.6.12",
+    "wagmi": "catalog:",
     "zile": "^0.0.25"
   },
   "simple-git-hooks": {
@@ -66,7 +69,7 @@
   "name": "accounts",
   "description": "Tempo Accounts SDK",
   "type": "module",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "dependencies": {
     "hono": "^4.12.18",
     "idb-keyval": "^6.2.2",

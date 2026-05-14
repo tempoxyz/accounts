@@ -1,0 +1,30 @@
+---
+title: wallet_disconnect
+description: Disconnect the connected account(s).
+---
+
+# `wallet_disconnect`
+
+Disconnects the connected account(s) and clears session state.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_disconnect'
+}
+```
+
+## Response
+
+```ts
+type Response = undefined
+```
+
+## Example
+
+```ts
+await provider.request({
+  method: 'wallet_disconnect',
+})
+```

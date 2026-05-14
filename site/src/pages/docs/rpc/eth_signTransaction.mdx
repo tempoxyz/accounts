@@ -1,0 +1,86 @@
+---
+title: eth_signTransaction
+description: Sign a transaction without broadcasting it.
+---
+
+# `eth_signTransaction`
+
+Signs a transaction with the connected account's key and returns the signed transaction as a hex-encoded RLP payload. The returned payload can be broadcast later via `eth_sendRawTransaction`.
+
+To sign and broadcast in a single step, use [`eth_sendTransaction`](/docs/rpc/eth_sendTransaction) or [`eth_sendTransactionSync`](/docs/rpc/eth_sendTransactionSync). To preview the filled-in transaction (gas, fees, balance diffs) without signing, use [`eth_fillTransaction`](/docs/rpc/eth_fillTransaction).
+
+## Request
+
+```ts
+type Request = {
+  method: 'eth_signTransaction'
+  params: [TransactionRequest]
+}
+
+type TransactionRequest = {
+  /** Access list entries. */
+  accessList?: { address: `0x${string}`; storageKeys: `0x${string}`[] }[]
+  /** Batch of calls. */
+  calls?: { data?: `0x${string}`; to?: `0x${string}`; value?: `0x${string}` }[]
+  /** Chain ID (hex-encoded number). */
+  chainId?: `0x${string}`
+  /** Top-level calldata. */
+  data?: `0x${string}`
+  /**
+   * Fee payer override. `true` enables the relay default, `false` disables
+   * it, or a URL string points at a custom fee payer service.
+   */
+  feePayer?: boolean | string
+  /** Pre-computed fee payer signature payload. */
+  feePayerSignature?: Record<string, unknown>
+  /** Fee token to use. If omitted, the relay picks the user's best token. */
+  feeToken?: `0x${string}`
+  /** Sender address. */
+  from?: `0x${string}`
+  /** Gas limit (hex-encoded bigint). */
+  gas?: `0x${string}`
+  /** Key authorization for access key transactions. */
+  keyAuthorization?: KeyAuthorization
+  /** Raw key material. */
+  keyData?: `0x${string}`
+  /** Address of the key being used to sign. */
+  keyId?: `0x${string}`
+  /** Key type used to sign. */
+  keyType?: 'secp256k1' | 'p256' | 'webAuthn'
+  /** Max fee per gas (hex-encoded bigint). */
+  maxFeePerGas?: `0x${string}`
+  /** Max priority fee per gas (hex-encoded bigint). */
+  maxPriorityFeePerGas?: `0x${string}`
+  /** Nonce (hex-encoded number). */
+  nonce?: `0x${string}`
+  /** Nonce key (hex-encoded bigint). */
+  nonceKey?: `0x${string}`
+  /** Top-level recipient. */
+  to?: `0x${string}`
+  /** Value to transfer (hex-encoded bigint). */
+  value?: `0x${string}`
+  /** Valid after timestamp (hex-encoded number, unix seconds). */
+  validAfter?: `0x${string}`
+  /** Valid before timestamp (hex-encoded number, unix seconds). */
+  validBefore?: `0x${string}`
+}
+```
+
+## Response
+
+```ts
+type Response = `0x${string}` // signed transaction (RLP-encoded)
+```
+
+## Example
+
+```ts
+const signed = await provider.request({
+  method: 'eth_signTransaction',
+  params: [{
+    to: '0x...',
+    value: '0x0',
+    data: '0x...',
+  }],
+})
+```

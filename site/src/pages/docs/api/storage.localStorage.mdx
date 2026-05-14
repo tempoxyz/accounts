@@ -1,0 +1,39 @@
+---
+title: Storage.localStorage
+description: localStorage-backed Storage adapter.
+---
+
+# `Storage.localStorage`
+
+Creates a [`Storage`](/docs/api/storage) adapter backed by `globalThis.localStorage`.
+
+Values are JSON-serialized on write and parsed on read. Reads return `null` when the underlying value is missing or fails to parse.
+
+## Usage
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+const provider = Provider.create({
+  storage: Storage.localStorage(),
+})
+```
+
+## Parameters
+
+### options.key
+
+- **Type:** `string`
+- **Default:** `'tempo'`
+
+Key prefix applied to every entry written to `localStorage`. Useful when several apps share the same origin and you want to avoid key collisions.
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+const provider = Provider.create({
+  storage: Storage.localStorage({
+    key: 'my-app', // [!code focus]
+  }),
+})
+```

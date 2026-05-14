@@ -5,23 +5,35 @@ import * as Adapter from '../Adapter.js'
 import { local } from './local.js'
 
 /**
- * Creates a secp256k1 adapter that generates random private keys and persists them to storage.
+ * Creates a secp256k1 adapter that signs in-process with a `secp256k1` private key.
  *
- * ⚠️ **Dangerous**: Private keys are stored in plaintext via the provider's storage adapter
- * (e.g. localStorage, cookies). Use only for development, testing, or when the threat model allows it.
+ * If `privateKey` is provided, the adapter pins that key as the signer (useful
+ * for server-side use, where the key is supplied by the host environment).
  *
- * Wraps the {@link local} adapter with automatic key generation.
+ * If `privateKey` is omitted, the adapter generates a random key on first
+ * connect and persists it via the provider's storage adapter (e.g.
+ * `localStorage`, cookies). Storing keys in browser storage in plaintext is
+ * dangerous — only use the unpinned form for development, testing, or when the
+ * threat model allows it.
+ *
+ * Wraps the {@link local} adapter.
  *
  * @example
  * ```ts
- * import { dangerous_secp256k1, Provider } from 'accounts'
+ * import { secp256k1, Provider } from 'accounts'
  *
+ * // Server-side (pinned key):
  * const provider = Provider.create({
- *   adapter: dangerous_secp256k1(),
+ *   adapter: secp256k1({ privateKey: process.env.PRIVATE_KEY }),
+ * })
+ *
+ * // Client-side (random key, persisted to storage):
+ * const provider = Provider.create({
+ *   adapter: secp256k1(),
  * })
  * ```
  */
-export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}): Adapter.Adapter {
+export function secp256k1(options: secp256k1.Options = {}): Adapter.Adapter {
   const { icon, name, privateKey, rdns } = options
   const fixed = privateKey
     ? {
@@ -52,7 +64,7 @@ export function dangerous_secp256k1(options: dangerous_secp256k1.Options = {}): 
   })
 }
 
-export declare namespace dangerous_secp256k1 {
+export declare namespace secp256k1 {
   type Options = {
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined

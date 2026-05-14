@@ -1,4 +1,4 @@
-import { Address as ox_Address, Hex, Provider as ox_Provider, PublicKey, WebCryptoP256 } from 'ox'
+import { Hex, Provider as ox_Provider } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { BaseError, hashMessage } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
@@ -29,41 +29,19 @@ export function local(options: local.Options): Adapter.Adapter {
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
     /**
-     * Resolves access key params and computes the key authorization digest.
-     *
-     * For external keys: derives the address from the provided publicKey/address.
-     * For local keys: generates a P256 key pair via `AccessKey.generate`.
+     * Resolves access key params into an unsigned key authorization.
      */
     async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
-      const { expiry, limits, scopes } = options
-      const chainId = options.chainId ?? getClient().chain.id
-
-      if (options.publicKey || options.address) {
-        const accessKeyAddress =
-          options.address ?? ox_Address.fromPublicKey(PublicKey.from(options.publicKey!))
-        const keyType = options.keyType ?? 'secp256k1'
-        const keyAuthorization = KeyAuthorization.from({
-          address: accessKeyAddress,
-          chainId: BigInt(chainId),
-          expiry,
-          limits,
-          scopes,
-          type: keyType,
-        })
-        return { keyAuthorization }
-      }
-
-      const keyPair = await WebCryptoP256.createKeyPair()
-      const address = ox_Address.fromPublicKey(PublicKey.from(keyPair.publicKey))
-      const keyAuthorization = KeyAuthorization.from({
+      const { address, expiry, keyType, limits, publicKey, scopes } = options
+      return await AccessKey.prepare({
         address,
-        chainId: BigInt(chainId),
+        chainId: options.chainId ?? getClient().chain.id,
         expiry,
+        keyType,
         limits,
+        publicKey,
         scopes,
-        type: 'p256',
       })
-      return { keyAuthorization, keyPair }
     }
 
     /**
@@ -93,12 +71,13 @@ export function local(options: local.Options): Adapter.Adapter {
     }
 
     async function withAccessKey<result>(
+      options: Pick<Account.find.Options, 'address' | 'calls' | 'chainId'>,
       fn: (
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
       ) => Promise<result>,
     ): Promise<result> {
-      const account = getAccount({ signable: true })
+      const account = getAccount({ ...options, signable: true })
       const keyAuthorization = AccessKey.getPending(account, { store })
       try {
         const result = await fn(account, keyAuthorization ?? undefined)
@@ -106,8 +85,8 @@ export function local(options: local.Options): Adapter.Adapter {
         return result
       } catch (error) {
         if (account.source !== 'accessKey') throw error
-        AccessKey.remove(account, { store })
-        const root = getAccount({ accessKey: false, signable: true })
+        AccessKey.invalidate(account, error, { store })
+        const root = getAccount({ accessKey: false, address: options.address, signable: true })
         return await fn(root, undefined)
       }
     }
@@ -266,22 +245,26 @@ export function local(options: local.Options): Adapter.Adapter {
         async signTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient({
+            chainId: parameters.chainId,
             feePayer: (() => {
               if (feePayer === false) return false
               if (typeof feePayer === 'string') return feePayer
               return undefined
             })(),
           })
-          const { account, prepared } = await withAccessKey(async (account, keyAuthorization) => ({
-            account,
-            prepared: await prepareTransactionRequest(client, {
+          const { account, prepared } = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
+            async (account, keyAuthorization) => ({
               account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
+              prepared: await prepareTransactionRequest(client, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                keyAuthorization,
+                type: 'tempo',
+              }),
             }),
-          }))
+          )
           return await account.signTransaction(prepared as never)
         },
         async signTypedData({ data, address }) {
@@ -297,22 +280,26 @@ export function local(options: local.Options): Adapter.Adapter {
         async sendTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient({
+            chainId: parameters.chainId,
             feePayer: (() => {
               if (feePayer === false) return false
               if (typeof feePayer === 'string') return feePayer
               return undefined
             })(),
           })
-          const { account, prepared } = await withAccessKey(async (account, keyAuthorization) => ({
-            account,
-            prepared: await prepareTransactionRequest(client, {
+          const { account, prepared } = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
+            async (account, keyAuthorization) => ({
               account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
+              prepared: await prepareTransactionRequest(client, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                keyAuthorization,
+                type: 'tempo',
+              }),
             }),
-          }))
+          )
           const signed = await account.signTransaction(prepared as never)
           return await client.request({
             method: 'eth_sendRawTransaction' as never,
@@ -322,22 +309,26 @@ export function local(options: local.Options): Adapter.Adapter {
         async sendTransactionSync(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient({
+            chainId: parameters.chainId,
             feePayer: (() => {
               if (feePayer === false) return false
               if (typeof feePayer === 'string') return feePayer
               return undefined
             })(),
           })
-          const { account, prepared } = await withAccessKey(async (account, keyAuthorization) => ({
-            account,
-            prepared: await prepareTransactionRequest(client, {
+          const { account, prepared } = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
+            async (account, keyAuthorization) => ({
               account,
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-              keyAuthorization,
-              type: 'tempo',
+              prepared: await prepareTransactionRequest(client, {
+                account,
+                ...rest,
+                ...(feePayer ? { feePayer: true } : {}),
+                keyAuthorization,
+                type: 'tempo',
+              }),
             }),
-          }))
+          )
           const signed = await account.signTransaction(prepared as never)
           return await client.request({
             method: 'eth_sendRawTransactionSync' as never,

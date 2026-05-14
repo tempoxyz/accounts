@@ -81,6 +81,225 @@ describe('create', () => {
   })
 })
 
+describe('serialize', () => {
+  test('default: returns the persisted refresh snapshot', () => {
+    const result = Store.serialize({
+      accessKeys: [
+        {
+          access: '0x0000000000000000000000000000000000000001',
+          address: '0x0000000000000000000000000000000000000099',
+          chainId: 123,
+          keyType: 'secp256k1',
+          privateKey: '0x1234',
+        },
+      ],
+      accounts: [
+        { address: '0x0000000000000000000000000000000000000001' },
+        { address: '0x0000000000000000000000000000000000000002' },
+      ],
+      activeAccount: 1,
+      auth: { logout: 'https://example.com/logout' },
+      chainId: 123,
+      requestQueue: [
+        {
+          request: { method: 'eth_accounts' } as never,
+          status: 'pending',
+        },
+      ],
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "accessKeys": [
+          {
+            "access": "0x0000000000000000000000000000000000000001",
+            "address": "0x0000000000000000000000000000000000000099",
+            "chainId": 123,
+            "keyType": "secp256k1",
+            "privateKey": "0x1234",
+          },
+        ],
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+          {
+            "address": "0x0000000000000000000000000000000000000002",
+          },
+        ],
+        "activeAccount": 1,
+        "auth": {
+          "logout": "https://example.com/logout",
+        },
+        "chainId": 123,
+      }
+    `)
+  })
+
+  test('behavior: limits persisted accounts', () => {
+    const result = Store.serialize(
+      {
+        accessKeys: [],
+        accounts: [
+          { address: '0x0000000000000000000000000000000000000001' },
+          { address: '0x0000000000000000000000000000000000000002' },
+        ],
+        activeAccount: 0,
+        chainId: 123,
+        requestQueue: [],
+      },
+      { maxAccounts: 1 },
+    )
+
+    expect(result.accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x0000000000000000000000000000000000000001",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: skips access keys when credential persistence is disabled', () => {
+    const result = Store.serialize(
+      {
+        accessKeys: [
+          {
+            access: '0x0000000000000000000000000000000000000001',
+            address: '0x0000000000000000000000000000000000000099',
+            chainId: 123,
+            keyType: 'secp256k1',
+            privateKey: '0x1234',
+          },
+        ],
+        accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+        activeAccount: 0,
+        chainId: 123,
+        requestQueue: [],
+      },
+      { persistCredentials: false },
+    )
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "activeAccount": 0,
+        "chainId": 123,
+      }
+    `)
+  })
+})
+
+describe('hydrate', () => {
+  test('behavior: restores persisted state with runtime-only request queue', () => {
+    const current: Store.State = {
+      accessKeys: [],
+      accounts: [],
+      activeAccount: 0,
+      chainId: 123,
+      requestQueue: [
+        {
+          request: { method: 'eth_accounts' } as never,
+          status: 'pending',
+        },
+      ],
+    }
+
+    const result = Store.hydrate(
+      {
+        accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+        chainId: 456,
+      },
+      current,
+    )
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "accessKeys": [],
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "activeAccount": 0,
+        "chainId": 456,
+        "requestQueue": [
+          {
+            "request": {
+              "method": "eth_accounts",
+            },
+            "status": "pending",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('behavior: preserves in-memory account credentials when persisted accounts are redacted', () => {
+    const current: Store.State = {
+      accessKeys: [],
+      accounts: [
+        {
+          address: '0x0000000000000000000000000000000000000001',
+          keyType: 'secp256k1',
+          privateKey: '0x1234',
+        },
+      ],
+      activeAccount: 0,
+      chainId: 123,
+      requestQueue: [],
+    }
+
+    const result = Store.hydrate(
+      {
+        accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+        chainId: 456,
+      },
+      current,
+    )
+
+    expect(result.accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x0000000000000000000000000000000000000001",
+          "keyType": "secp256k1",
+          "privateKey": "0x1234",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: drops legacy access key without chain context', () => {
+    const current: Store.State = {
+      accessKeys: [],
+      accounts: [],
+      activeAccount: 0,
+      chainId: 123,
+      requestQueue: [],
+    }
+
+    const result = Store.hydrate(
+      {
+        accessKeys: [
+          {
+            access: '0x0000000000000000000000000000000000000001',
+            address: '0x0000000000000000000000000000000000000099',
+            keyType: 'webCrypto',
+            keyPair: {} as any,
+          },
+        ],
+      },
+      current,
+    )
+
+    expect(result.accessKeys).toMatchInlineSnapshot(`[]`)
+  })
+})
+
 describe('persistence', () => {
   test('default: persists accounts, activeAccount, and chainId to storage', async () => {
     const storage = Storage.memory()
@@ -149,6 +368,7 @@ describe('persistence', () => {
         {
           address: '0x0000000000000000000000000000000000000099',
           access: '0x0000000000000000000000000000000000000001',
+          chainId: 123,
           keyType: 'webCrypto',
           keyPair: {} as any,
         },
@@ -161,6 +381,7 @@ describe('persistence', () => {
         {
           "access": "0x0000000000000000000000000000000000000001",
           "address": "0x0000000000000000000000000000000000000099",
+          "chainId": 123,
           "keyPair": {},
           "keyType": "webCrypto",
         },
@@ -180,6 +401,7 @@ describe('persistence', () => {
         {
           address: '0x0000000000000000000000000000000000000099',
           access: '0x0000000000000000000000000000000000000001',
+          chainId: 123,
           expiry: 9999999999,
           limits: [{ token: '0x0000000000000000000000000000000000000abc', limit: 500n }],
           keyType: 'webCrypto',
@@ -196,6 +418,7 @@ describe('persistence', () => {
         {
           "access": "0x0000000000000000000000000000000000000001",
           "address": "0x0000000000000000000000000000000000000099",
+          "chainId": 123,
           "expiry": 9999999999,
           "keyPair": {},
           "keyType": "webCrypto",
@@ -221,6 +444,7 @@ describe('persistence', () => {
         {
           address: '0x0000000000000000000000000000000000000099',
           access: '0x0000000000000000000000000000000000000001',
+          chainId: 123,
           keyType: 'webCrypto',
           keyPair: {} as any,
         },

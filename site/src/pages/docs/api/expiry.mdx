@@ -1,0 +1,47 @@
+---
+title: Expiry
+description: Utility functions for computing access key expiry timestamps.
+---
+
+# `Expiry`
+
+Utility functions that return a Unix timestamp (seconds) offset from the current time. Useful for setting access key expiry.
+
+## Usage
+
+```ts
+import { Expiry } from 'accounts'
+
+// Access key that expires in 1 day
+const expiry = Expiry.days(1)
+```
+
+## Functions
+
+### Expiry.seconds(n)
+
+Returns a Unix timestamp `n` seconds from now.
+
+### Expiry.minutes(n)
+
+Returns a Unix timestamp `n` minutes from now.
+
+### Expiry.hours(n)
+
+Returns a Unix timestamp `n` hours from now.
+
+### Expiry.days(n)
+
+Returns a Unix timestamp `n` days from now.
+
+### Expiry.weeks(n)
+
+Returns a Unix timestamp `n` weeks from now.
+
+### Expiry.months(n)
+
+Returns a Unix timestamp `n` months (30 days) from now.
+
+### Expiry.years(n)
+
+Returns a Unix timestamp `n` years (365 days) from now.

@@ -76,7 +76,20 @@ pnpm test             # run tests
 | ---------------- | ----------------------------------- |
 | Playground       | `https://playground.accounts.local` |
 | Dialog Reference | `https://dialog-ref.accounts.local` |
+| Docs             | `https://docs.accounts.local`       |
 | Wagmi Playground | `https://wagmi.accounts.local`      |
+
+## Deployment
+
+The docs site is configured for Vercel as a monorepo project.
+
+| Setting        | Value        |
+| -------------- | ------------ |
+| Root Directory | `site`       |
+| Build Command  | `pnpm build` |
+| Dev Command    | `pnpm dev`   |
+
+Set `VITE_BASE_URL` to the production docs origin when using a custom domain.
 
 ### Playgrounds
 

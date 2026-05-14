@@ -1,0 +1,51 @@
+---
+title: CLI
+description: Authorize and use accounts from command-line tools.
+---
+
+# CLI
+
+Authorize a local CLI to use an account, poll for approval, and store credentials for future commands.
+
+## Demo
+
+Example workspace: `examples/cli/`.
+
+## Walkthrough
+
+::::steps
+
+### Install the SDK
+
+```bash
+pnpm add accounts viem
+```
+
+### Configure the CLI
+
+Create the CLI auth provider and point it at the auth server for the environment.
+
+### Connect the user's account
+
+Print the authorization URL and poll for the device-code result.
+
+### Submit the request
+
+Use the authorized local key to make the CLI request.
+
+### Verify the result
+
+Confirm the stored account and run a command that requires authorization.
+
+::::
+
+## Notes / Gotchas
+
+- Device codes stay raw in protocol and should only be hyphenated for human display.
+- Keep spinner text short and print long URLs as static log lines.
+
+## Next Steps
+
+- [Authentication](/docs/guides/authentication)
+- [Spend Permissions](/docs/guides/spend-permissions)
+- [Server reference](/docs/server)

@@ -1,0 +1,97 @@
+---
+title: wallet_authorizeAccessKey
+description: Authorize an access key for delegated transaction signing.
+---
+
+# `wallet_authorizeAccessKey`
+
+Authorizes an access key with an expiry and optional spending limits for delegated transaction signing.
+
+## Request
+
+```ts
+type Request = {
+  method: 'wallet_authorizeAccessKey'
+  params: [{
+    /** Address of the key (alternative to `publicKey`). */
+    address?: Address
+    /**
+     * Chain ID to scope the authorization to.
+     * Hex-encoded (`0x...`) on the wire, decoded to `bigint`.
+     */
+    chainId?: bigint
+    /** Unix timestamp (seconds) when the key expires. */
+    expiry: number
+    /** Key type. */
+    keyType?: 'secp256k1' | 'p256' | 'webAuthn'
+    /** TIP-20 spending limits. */
+    limits?: {
+      /** Token contract address. */
+      token: Address
+      /** Spending cap. Hex-encoded (`0x...`) on the wire, decoded to `bigint`. */
+      limit: bigint
+      /** Window length in seconds. Omit for an absolute (non-resetting) cap. */
+      period?: number
+    }[]
+    /** Public key to authorize. */
+    publicKey?: Hex
+    /** Per-target call scopes. The key may only call these targets. */
+    scopes?: {
+      /** Target contract address the key may call. */
+      address: Address
+      /** Function selector (4-byte `0x...`) or human-readable signature. */
+      selector?: Hex | string
+      /** Allowed call recipients (e.g. `transfer(to, ...)`). */
+      recipients?: Address[]
+    }[]
+  }]
+}
+```
+
+## Response
+
+```ts
+type Response = {
+  /** The signed authorization payload. */
+  keyAuthorization: KeyAuthorization
+  /** Root account address that issued the authorization. */
+  rootAddress: Address
+}
+
+type KeyAuthorization = {
+  /** Address of the access key. */
+  address: Address
+  /** Chain ID the authorization is scoped to. Hex on the wire. */
+  chainId: bigint
+  /** Unix timestamp (seconds) when the authorization expires. May be `null`. */
+  expiry: number | null | undefined
+  /** Address derived from the key. */
+  keyId: Address
+  /** Key type. */
+  keyType: 'secp256k1' | 'p256' | 'webAuthn'
+  /** Signed spending limits, if any. */
+  limits?: readonly {
+    token: Address
+    limit: bigint
+    period?: number
+  }[]
+  /** Signature envelope from the root account. */
+  signature: SignatureEnvelope
+}
+```
+
+## Example
+
+```ts
+import { Expiry } from 'accounts'
+
+const result = await provider.request({
+  method: 'wallet_authorizeAccessKey',
+  params: [{
+    expiry: Expiry.days(1),
+    limits: [
+      { token: '0x20c0000000000000000000000000000000000001', limit: '0x5F5E100' },
+    ],
+  }],
+})
+```
