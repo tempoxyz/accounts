@@ -424,7 +424,7 @@ describe('hydrate', () => {
   })
 })
 
-describe('select', () => {
+describe('selectAccount', () => {
   function setup(accessKeys: readonly Store.AccessKey[] = []) {
     const store = createStore()
     store.setState({ accessKeys })
@@ -443,9 +443,9 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+    const result = AccessKey.selectAccount({ address: rootAddress, chainId: 1, store })
 
-    expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
+    expect(result?.source).toMatchInlineSnapshot(`"accessKey"`)
   })
 
   test('behavior: skips access keys for another root address', async () => {
@@ -460,7 +460,7 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+    const result = AccessKey.selectAccount({ address: rootAddress, chainId: 1, store })
 
     expect(result).toMatchInlineSnapshot(`undefined`)
   })
@@ -477,7 +477,7 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, chainId: 42_431, store })
+    const result = AccessKey.selectAccount({ address: rootAddress, chainId: 42_431, store })
 
     expect(result).toMatchInlineSnapshot(`undefined`)
   })
@@ -492,7 +492,7 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+    const result = AccessKey.selectAccount({ address: rootAddress, chainId: 1, store })
 
     expect(result).toMatchInlineSnapshot(`undefined`)
   })
@@ -510,7 +510,7 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+    const result = AccessKey.selectAccount({ address: rootAddress, chainId: 1, store })
 
     expect(result).toMatchInlineSnapshot(`undefined`)
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
@@ -529,9 +529,9 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+    const result = AccessKey.selectAccount({ address: rootAddress, chainId: 1, store })
 
-    expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
+    expect(result?.source).toMatchInlineSnapshot(`"accessKey"`)
     expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
   })
 
@@ -553,9 +553,10 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+    const result = AccessKey.selectAccount({ address: rootAddress, chainId: 1, store })
 
-    expect(result?.limits).toMatchInlineSnapshot(`
+    expect(result?.source).toMatchInlineSnapshot(`"accessKey"`)
+    expect(store.getState().accessKeys[0]?.limits).toMatchInlineSnapshot(`
       [
         {
           "limit": 1000n,
@@ -577,14 +578,14 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({
+    const result = AccessKey.selectAccount({
       address: rootAddress,
       chainId: 1,
       store,
       calls: [{ to: '0x0000000000000000000000000000000000000abc', data: '0xa9059cbb' }],
     })
 
-    expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
+    expect(result?.source).toMatchInlineSnapshot(`"accessKey"`)
   })
 
   test('behavior: scoped access key selects when calls match', async () => {
@@ -601,14 +602,14 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({
+    const result = AccessKey.selectAccount({
       address: rootAddress,
       chainId: 1,
       store,
       calls: [{ to: token, data: '0xa9059cbb0000000000000000000000000000000000000001' }],
     })
 
-    expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
+    expect(result?.source).toMatchInlineSnapshot(`"accessKey"`)
   })
 
   test('behavior: scoped access key skips calls that do not match', async () => {
@@ -625,7 +626,7 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({
+    const result = AccessKey.selectAccount({
       address: rootAddress,
       chainId: 1,
       store,
@@ -649,14 +650,14 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({
+    const result = AccessKey.selectAccount({
       address: rootAddress,
       chainId: 1,
       store,
       calls: [{ to: token, data: '0xa9059cbb0000000000000000000000000000000000000001' }],
     })
 
-    expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
+    expect(result?.source).toMatchInlineSnapshot(`"accessKey"`)
   })
 
   test('behavior: scoped access key without selector allows any call to that address', async () => {
@@ -673,14 +674,14 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({
+    const result = AccessKey.selectAccount({
       address: rootAddress,
       chainId: 1,
       store,
       calls: [{ to: token, data: '0xdeadbeef' }],
     })
 
-    expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
+    expect(result?.source).toMatchInlineSnapshot(`"accessKey"`)
   })
 
   test('behavior: scoped access key skips when no calls are provided', async () => {
@@ -696,7 +697,7 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+    const result = AccessKey.selectAccount({ address: rootAddress, chainId: 1, store })
 
     expect(result).toMatchInlineSnapshot(`undefined`)
   })

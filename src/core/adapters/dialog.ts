@@ -155,21 +155,14 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         keyAuthorization?: KeyAuthorization.Signed,
       ) => Promise<result>,
     ): Promise<result | undefined> {
-      const account = (() => {
-        try {
-          return getAccount({
-            address: options.from,
-            calls: options.calls,
-            chainId: options.chainId,
-            signable: true,
-          })
-        } catch (err) {
-          console.warn('[accounts] getAccount failed in withAccessKey:', err)
-          return undefined
-        }
-      })()
+      if (!options.from || typeof options.chainId === 'undefined') return undefined
+      const account = AccessKey.selectAccount({
+        address: options.from,
+        calls: options.calls,
+        chainId: options.chainId,
+        store,
+      })
       if (!account) return undefined
-      if (account.source !== 'accessKey') return undefined
       const keyAuthorization = AccessKey.getPending(account, { store })
       try {
         const result = await fn(account, keyAuthorization ?? undefined)

@@ -9,6 +9,7 @@
     "sync:vocs": "node --import tsx scripts/copy-vocs-theme.ts"
   },
   "dependencies": {
+    "@tanstack/react-query": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",

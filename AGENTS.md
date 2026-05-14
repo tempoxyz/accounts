@@ -24,6 +24,7 @@
 - **No dynamic imports** — use static `import` declarations. No `await import(...)` or `import(...)` expressions.
 - **`as never` over `as any`** — when a type assertion is unavoidable, use `as never` instead of `as any`.
 - **Destructure when accessing multiple properties** — prefer `const { a, b } = options` over repeated `options.a`, `options.b`.
+- **Keep hook results grouped** — when consuming a hook that returns a related bundle (e.g. `useMutation`, Wagmi/React Query hooks, `Steps.use()`), assign the whole result to a single noun and access fields via `.`. Prefer `const send = Hooks.wallet.useSend(); send.mutate(...); send.isPending` over `const { mutate: send, isPending } = Hooks.wallet.useSend()`. The grouping keeps the call site self-documenting and avoids inventing per-hook aliases.
 - **Read from `options.x` when normalizing a single field** — when transforming exactly one option into a local of the same name, read it directly from `options` instead of destructuring + renaming. Avoids `_resolved` / `_normalized` / `_x` suffixes for what's really just a normalized version of the same field. For example: `const mpp = (() => { if (!options.mpp) return undefined; ... })()` instead of pulling `mpp` out of `options` and inventing a second name for the result.
 - **`core_` prefix for import aliases** — when aliasing an import to avoid conflicts, use `core_<name>` (e.g. `import { local as core_local }`), not arbitrary camelCase.
 - **`Hex.fromNumber` over `toString(16)`** — use `Hex.fromNumber(n)` from `ox` instead of `` `0x${n.toString(16)}` `` for number-to-hex conversion.
@@ -42,6 +43,13 @@
 
 - **JSDoc on all exports** — every exported function, type, and constant gets a JSDoc comment. Type properties get JSDoc too. Namespace types (e.g. `declare namespace create { type Options }`) get JSDoc too. Doc-driven development: write the JSDoc before or alongside the implementation, not after.
 - **No `--` in site docs** — site docs (`site/src/pages/**`) must not use `--` (two ASCII hyphens) as punctuation. Use an em dash (`—`) instead. The global `--`-over-em-dash rule still applies to PR titles/bodies, changesets, commit messages, and code comments — site documentation is the only exception.
+
+## Site Styling Conventions
+
+- **Use Tailwind utilities, not arbitrary `var()` values** — never write `bg-[var(--background-color-surface)]` or `border-[var(--vocs-border-color-primary)]`. Use the corresponding Tailwind utility class. Both vocs and regen-ui register their tokens via `@theme`, so every token has a generated utility.
+- **No `vocs:` prefix in our app code** — vocs uses a `vocs:` prefix internally for its own components, but our `_root.css` re-imports vocs's theme tokens at the **root** `@theme` layer (via `_vocs.generated.css`), so vocs tokens are available as plain unprefixed utilities in our code: `bg-primary`, `bg-surface`, `border-primary`, `text-primary`/`text-secondary`/`text-muted`, `bg-info-tint`, `text-info`, `border-info-tint`, etc. Writing `vocs:bg-info-tint` will silently no-op because Tailwind has no `vocs:` prefix registered for our own source files.
+- **Regen-ui tokens are also unprefixed** — regen tokens are imported into the root `@theme` and are available as plain Tailwind utilities: `bg-pane`, `bg-secondary`, `border-border`, `text-foreground`, `text-foreground-secondary`, etc. Where regen and vocs both define a token of the same name (e.g. `--background-color-primary`), vocs wins because it is imported last.
+- **Arbitrary values only when no token exists** — if a value isn't covered by a token (e.g. a custom `color-mix(...)` blend, a one-off pixel size), inline it with `[...]` syntax, but prefer utility classes wherever possible.
 
 ## Protocol Conventions
 

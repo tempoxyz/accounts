@@ -39,11 +39,11 @@ export function CheckboxCard(props: CheckboxCard.Props) {
   return (
     <label
       htmlFor={reactId}
-      className="group relative flex items-center gap-3 border border-[var(--border-color-border)] bg-[color-mix(in_srgb,var(--background-color-pane)_70%,transparent)] p-4 cursor-pointer transition-colors hover:bg-[var(--background-color-secondary)] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--vocs-color-accent)] has-[:focus-visible]:outline-offset-2"
+      className="group relative flex items-center gap-3 border border-border bg-[color-mix(in_srgb,var(--background-color-pane)_70%,transparent)] p-4 cursor-pointer transition-colors hover:bg-secondary has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent has-[:focus-visible]:outline-offset-2"
     >
       <span
         aria-hidden
-        className="relative inline-flex size-[18px] flex-shrink-0 items-center justify-center border border-[var(--border-color-border)] bg-[var(--background-color-surface)] transition-colors group-has-[:checked]:border-[light-dark(black,white)] group-has-[:checked]:bg-[light-dark(black,white)]"
+        className="relative inline-flex size-[18px] flex-shrink-0 items-center justify-center border border-border bg-surface transition-colors group-has-[:checked]:border-[light-dark(black,white)] group-has-[:checked]:bg-[light-dark(black,white)]"
       >
         <input
           id={reactId}
@@ -58,8 +58,8 @@ export function CheckboxCard(props: CheckboxCard.Props) {
         />
       </span>
       <div
-        className={`min-w-0 flex-1 truncate text-[15px] leading-normal text-[var(--text-color-foreground)] transition-opacity ${
-          checked ? 'opacity-60 line-through decoration-[var(--text-color-foreground)]' : ''
+        className={`min-w-0 flex-1 truncate text-[15px] leading-normal text-foreground transition-opacity ${
+          checked ? 'opacity-60 line-through decoration-foreground' : ''
         }`}
       >
         {children}
@@ -68,7 +68,7 @@ export function CheckboxCard(props: CheckboxCard.Props) {
         <a
           href={href}
           onClick={(e) => e.stopPropagation()}
-          className="ml-auto inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-[var(--text-color-foreground-secondary)] no-underline! hover:text-[var(--text-color-foreground)]"
+          className="ml-auto inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-foreground-secondary no-underline! hover:text-foreground"
         >
           See more
           <LucideArrowDown aria-hidden className="size-3" />

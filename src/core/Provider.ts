@@ -911,9 +911,13 @@ export function create(options: create.Options = {}): create.ReturnType {
     }
   }
 
-  if (options.mpp) {
-    const mppOptions = typeof options.mpp === 'object' ? options.mpp : {}
-    const { mode = 'push' } = mppOptions
+  const mpp = (() => {
+    if (options.mpp === false) return undefined
+    if (typeof options.mpp === 'object') return options.mpp
+    return {}
+  })()
+  if (mpp) {
+    const { mode = 'push' } = mpp
     Mppx.create({
       methods: [
         mppx_tempo({
@@ -967,9 +971,9 @@ export declare namespace create {
     /**
      * Enable Machine Payment Protocol (mppx) support.
      *
-     * Pass `true` to enable with defaults, or an options object to configure.
+     * Pass an options object to configure, or `false` to disable.
      *
-     * @default false
+     * @default true
      */
     mpp?: boolean | mpp.Options | undefined
     /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */

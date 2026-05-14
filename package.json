@@ -56,7 +56,7 @@
     "typescript": "catalog:",
     "viem": "catalog:",
     "vp": "catalog:",
-    "wagmi": "^3.6.12",
+    "wagmi": "catalog:",
     "zile": "^0.0.25"
   },
   "simple-git-hooks": {
