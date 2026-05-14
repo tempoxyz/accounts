@@ -1,5 +1,5 @@
 ---
-'accounts': major
+'accounts': minor
 ---
 
 Renamed the `wallet_send` `value` parameter to `amount`.
