@@ -1,21 +1,36 @@
 ---
 title: Connect Accounts
-description: Connect a user account with Tempo Wallet or WebAuthn.
+description: Connect a Tempo account in your application.
 ---
+
+import { Cards, Card } from 'vocs'
+import { ConnectAccount } from '../../../components/ConnectAccount'
+import { Demo, DemoReset } from '../../../components/Demo'
 
 # Connect Accounts
 
-Connect a user account, read its address, and keep the app code independent from the adapter that handles signing.
+Connect a Tempo account in your application using the [Tempo Accounts SDK](/docs) and [Wagmi](https://wagmi.sh).
+
+The Accounts SDK ships several signing adapters — [Tempo Wallet](/docs/adapters/tempo-wallet), [domain-bound Passkeys](/docs/adapters/webauthn), [Turnkey](/docs/adapters/turnkey), and more. Each adapter exposes the same Wagmi connector surface, so the integration code in this guide is the same regardless of which adapter you pick. Choose an adapter once in your Wagmi config; the rest of your app stays adapter-agnostic.
+
+:::info[Which adapter should I use?]
+
+Most apps should start with **Tempo Wallet** for a universal, hosted account experience. Pick **domain-bound Passkeys** if you want full control over the auth ceremony on your own origin, or another adapter if you have an existing custody stack. See the [Adapters overview](/docs/adapters) for a side-by-side comparison.
+
+:::
 
 ## Demo
 
-Target workspace: `examples/connect-accounts/`.
+By the end of this guide, you will be able to let users connect a Tempo account from your application using your adapter of choice.
 
-Seed implementation: `examples/basic/`.
-
-:::warning[Stub]
-The runnable workspace should be renamed or copied to `examples/connect-accounts/` after the example naming pass.
-:::
+<Demo
+  title="Connect an Account"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/basic"
+  headerAction={<DemoReset />}
+  className="flex justify-start"
+>
+  <ConnectAccount standalone />
+</Demo>
 
 ## Walkthrough
 
@@ -25,65 +40,211 @@ The runnable workspace should be renamed or copied to `examples/connect-accounts
 
 Install `accounts` together with Wagmi and Viem.
 
-```bash
-pnpm add accounts wagmi viem
+:::code-group
+
+```bash [npm]
+npm i accounts wagmi viem
 ```
 
-### Configure the Provider
+```bash [pnpm]
+pnpm i accounts wagmi viem
+```
 
-Choose an adapter. Most apps should start with Tempo Wallet.
+```bash [bun]
+bun i accounts wagmi viem
+```
 
-```tsx
+:::
+
+### Set up Wagmi
+
+Ensure that you have set up your project with Wagmi by following the [official guide](https://wagmi.sh/react/getting-started).
+
+### Configure an Adapter
+
+Next, register a Tempo signing adapter as a Wagmi connector. Pick the adapter that fits how you want to custody accounts — the rest of the app code stays the same.
+
+:::code-group
+
+```tsx twoslash [Tempo Wallet]
+// @noErrors
 import { createConfig, http } from 'wagmi'
 import { tempo } from 'wagmi/chains'
-import { tempoWallet } from 'wagmi/connectors'
+import { tempoWallet } from 'wagmi/connectors' // [!code ++]
 
 export const config = createConfig({
   chains: [tempo],
-  connectors: [tempoWallet()],
+  connectors: [tempoWallet()], // [!code ++]
+  multiInjectedProviderDiscovery: false,
   transports: {
     [tempo.id]: http(),
   },
 })
 ```
 
-### Connect the user's account
+```tsx twoslash [Domain-bound Passkeys]
+// @noErrors
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { webAuthn } from 'wagmi/tempo' // [!code ++]
 
-Render the configured connector and call `connect`.
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [webAuthn({ authUrl: '/auth' })], // [!code ++]
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
 
-```tsx
+:::
+
+:::tip
+
+This Wagmi configuration sets `multiInjectedProviderDiscovery` to `false` to
+prevent injected browser wallets from being detected, and to prefer the Tempo connector.
+If you would like to allow connection to other wallets, set this property to `true`.
+
+:::
+
+### Display Sign In Button
+
+After that, set up a "Sign in" button that triggers the connector for the user.
+
+We will create a new `Example.tsx` component to work in.
+
+:::code-group
+
+```tsx twoslash [Example.tsx]
+// @noErrors
 import { useConnect, useConnectors } from 'wagmi'
 
-function Connect() {
-  const { connect } = useConnect()
-  const connectors = useConnectors()
+export function Example() {
+  const connect = useConnect()
+  const [connector] = useConnectors()
 
-  return connectors.map((connector) => (
-    <button key={connector.uid} onClick={() => connect({ connector })}>
-      Connect
-    </button>
-  ))
+  return (
+    <div>
+      <button onClick={() => connect.connect({ connector })}>
+        Sign in
+      </button>
+    </div>
+  )
 }
 ```
 
-### Verify the result
+:::
 
-Read the connected address from Wagmi connection state.
+### Display Account & Sign Out
 
-```tsx
-import { useConnection } from 'wagmi'
+After the user has signed in, display the account information and a sign out button.
 
-function Account() {
-  const { address, status } = useConnection()
-  return <pre>{JSON.stringify({ address, status }, null, 2)}</pre>
+```tsx twoslash [Example.tsx]
+// @noErrors
+import { useConnection, useConnect, useConnectors, useDisconnect } from 'wagmi'
+
+export function Example() {
+  const account = useConnection() // [!code ++]
+  const connect = useConnect()
+  const [connector] = useConnectors()
+  const disconnect = useDisconnect() // [!code ++]
+
+  if (account.address) // [!code ++]
+    return ( // [!code ++]
+      <div> {/* [!code ++] */}
+        <div>{account.address.slice(0, 6)}...{account.address.slice(-4)}</div> {/* [!code ++] */}
+        <button onClick={() => disconnect.disconnect()}>Sign out</button> {/* [!code ++] */}
+      </div> {/* [!code ++] */}
+    ) // [!code ++]
+
+  return (
+    <div>
+      <button onClick={() => connect.connect({ connector })}>
+        Sign in
+      </button>
+    </div>
+  )
 }
 ```
+
+### Deploy to Production
+
+When you're ready to go live, follow the [Deploying to Production](/docs/production) guide to configure your application for production use.
 
 ::::
 
-## Next Steps
+## Best Practices
 
-- [Authentication](/docs/guides/authentication)
-- [Payments](/docs/guides/payments)
-- [Tempo Wallet adapter](/docs/adapters/tempo-wallet)
-- [WebAuthn adapter](/docs/adapters/webauthn)
+### Loading State
+
+When the user is signing in or signing out, show loading state to indicate that the process is happening.
+
+Use the `isPending` property from the `useConnect` hook to show pending state to the user.
+
+```tsx twoslash [Example.tsx]
+// @noErrors
+import { useConnection, useConnect, useConnectors, useDisconnect } from 'wagmi'
+
+export function Example() {
+  const account = useConnection()
+  const connect = useConnect()
+  const [connector] = useConnectors()
+  const disconnect = useDisconnect()
+
+  if (connect.isPending) // [!code ++]
+    return <div>Check prompt...</div> {/* [!code ++] */}
+  return (/* ... */)
+}
+```
+
+### Error Handling
+
+If an error unexpectedly occurs, display an error message to the user.
+
+Use the `error` property from the `useConnect` hook to show error state to the user.
+
+```tsx twoslash [Example.tsx]
+// @noErrors
+import { useConnection, useConnect, useConnectors, useDisconnect } from 'wagmi'
+
+export function Example() {
+  const account = useConnection()
+  const connect = useConnect()
+  const [connector] = useConnectors()
+  const disconnect = useDisconnect()
+
+  if (connect.error) // [!code ++]
+    return <div>Error: {connect.error.message}</div> {/* [!code ++] */}
+  return (/* ... */)
+}
+```
+
+## Learning Resources
+
+<Cards>
+  <Card
+    description="Choose between Tempo Wallet, WebAuthn, Turnkey, and custom signing infrastructure"
+    to="/docs/adapters"
+    icon="lucide:route"
+    title="Choose an Adapter"
+  />
+  <Card
+    description="Send and accept stablecoin payments on Tempo"
+    to="/docs/guides/payments"
+    icon="lucide:send"
+    title="Make Payments"
+  />
+  <Card
+    description="Sponsor transaction fees for your users to enable feeless transactions"
+    to="/docs/guides/fee-sponsorship"
+    icon="lucide:badge-dollar-sign"
+    title="Sponsor Fees"
+  />
+  <Card
+    description="Authenticate connected accounts against your own server with signed messages"
+    to="/docs/guides/authentication"
+    icon="lucide:fingerprint"
+    title="Authentication"
+  />
+</Cards>

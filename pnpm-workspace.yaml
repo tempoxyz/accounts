@@ -39,11 +39,11 @@ catalog:
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: ^2.48.8
+  viem: https://pkg.pr.new/viem@0e282d6
   vite: ^8.0.5
   vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
-  wagmi: ^3.6.12
+  wagmi: ^3.6.14
   wrangler: ^4.85.0
   zod: ^4.3.6
 
@@ -82,7 +82,6 @@ overrides:
   react: 'catalog:'
   react-dom: 'catalog:'
   tar: '7.5.15'
-  viem: 'catalog:'
   vite-plus: 'catalog:'
   vp: 'catalog:'
   wrangler: 'catalog:'

@@ -18,6 +18,24 @@ button {
   max-height: 1.125rem;
 }
 
+* {
+  border-style: dashed;
+}
+
+[data-active],
+[data-v-active="true"],
+[aria-current="page"] {
+  border-style: solid;
+}
+
+table[data-v] th {
+  background-color: var(--background-color-surface);
+}
+
+[data-v-code-header] {
+  background-color: color-mix(in srgb, var(--background-color-secondary) 50%, transparent);
+}
+
 :root {
   --regen-radius: 0px;
 
@@ -34,6 +52,8 @@ button {
   --background-color-surface: light-dark(#ffffff, #141414);
   --vocs-background-color-primary: var(--background-color-background);
   --vocs-background-color-surface: var(--background-color-surface);
+  --vocs-background-color-code-block: color-mix(in srgb, var(--background-color-secondary) 50%, transparent);
+  --vocs-background-color-inline-code: color-mix(in srgb, var(--background-color-secondary) 50%, transparent);
 }
 
 /*

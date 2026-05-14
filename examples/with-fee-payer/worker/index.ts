@@ -1,14 +1,16 @@
 import { Handler } from 'accounts/server'
+import { Hono } from 'hono'
 import { privateKeyToAccount } from 'viem/accounts'
 
-export default {
-  async fetch(request, env) {
-    const handler = Handler.relay({
-      feePayer: {
-        account: privateKeyToAccount(env.FEE_PAYER_PRIVATE_KEY),
-      },
-      path: '/relay',
-    })
-    return handler.fetch(request)
-  },
-} satisfies ExportedHandler<Cloudflare.Env>
+const app = new Hono<{ Bindings: Cloudflare.Env }>()
+
+app.all('/relay/*', (c) =>
+  Handler.relay({
+    feePayer: {
+      account: privateKeyToAccount(c.env.FEE_PAYER_PRIVATE_KEY),
+    },
+    path: '/relay',
+  }).fetch(c.req.raw),
+)
+
+export default app
