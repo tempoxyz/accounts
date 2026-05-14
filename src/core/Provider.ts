@@ -821,6 +821,25 @@ export function create(options: create.Options = {}): create.ReturnType {
                     )) satisfies Rpc.wallet_swap.Encoded['returns']
                   }
 
+                  case 'wallet_transfer': {
+                    assertConnected()
+                    if (!actions.transfer)
+                      throw new ox_Provider.UnsupportedMethodError({
+                        message: '`transfer` not supported by adapter.',
+                      })
+                    const decoded = request._decoded.params[0]
+                    const parameters = {
+                      ...decoded,
+                      ...(typeof decoded.feePayer !== 'undefined'
+                        ? { feePayer: resolveFeePayer(decoded.feePayer) }
+                        : {}),
+                    } as Adapter.transfer.Parameters
+                    return (await actions.transfer(
+                      parameters,
+                      request,
+                    )) satisfies Rpc.wallet_transfer.Encoded['returns']
+                  }
+
                   case 'wallet_depositZone': {
                     assertConnected()
                     if (!actions.depositZone)
@@ -918,6 +937,9 @@ export function create(options: create.Options = {}): create.ReturnType {
   })()
   if (mpp) {
     const { mode = 'push' } = mpp
+    // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
+    // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
+    const polyfill = mpp.polyfill ?? isFetchWritable()
     Mppx.create({
       methods: [
         mppx_tempo({
@@ -929,6 +951,7 @@ export function create(options: create.Options = {}): create.ReturnType {
           mode,
         }),
       ],
+      polyfill,
     })
   }
 
@@ -1033,6 +1056,30 @@ export declare namespace mpp {
      * @default 'push'
      */
     mode?: 'push' | 'pull' | undefined
+    /**
+     * Whether to polyfill `globalThis.fetch` with the payment-aware wrapper.
+     *
+     * Defaults to `true` when `globalThis.fetch` is writable, and `false`
+     * otherwise (e.g. Cloudflare Workers, where `globalThis.fetch` is
+     * read-only).
+     */
+    polyfill?: boolean | undefined
+  }
+}
+
+/**
+ * Returns `true` if `globalThis.fetch` can be reassigned. Some runtimes
+ * (notably Cloudflare Workers) expose a non-writable, non-configurable
+ * `fetch` that throws when `Mppx.create({ polyfill: true })` tries to
+ * replace it.
+ */
+function isFetchWritable(): boolean {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'fetch')
+    if (!descriptor) return true
+    return Boolean(descriptor.writable || descriptor.set)
+  } catch {
+    return false
   }
 }
 
