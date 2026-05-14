@@ -19,8 +19,6 @@ type PrivyReactSnapshot = {
   authenticated: boolean
   /** Returns the Privy access token, or null if no session. */
   getAccessToken: () => Promise<string | null>
-  /** Privy user id (DID), or null if no session. */
-  userId: string | null
   /** Opens the Privy login modal. */
   login: () => void
   /** Logs the user out of Privy. */
@@ -48,7 +46,7 @@ function snapshotOrThrow(): PrivyReactSnapshot {
  * into the module-scoped snapshot. Mount once, inside `<PrivyProvider>`.
  */
 export function PrivyReactBridge() {
-  const { ready, authenticated, user, getAccessToken, login, logout } = usePrivy()
+  const { ready, authenticated, getAccessToken, login, logout } = usePrivy()
   const { wallets } = useWallets()
 
   useEffect(() => {
@@ -59,7 +57,6 @@ export function PrivyReactBridge() {
       ready,
       authenticated,
       getAccessToken: async () => (await getAccessToken()) ?? null,
-      userId: user?.id ?? null,
       login: () => login(),
       logout: async () => {
         await logout()
@@ -68,7 +65,7 @@ export function PrivyReactBridge() {
     return () => {
       setSnapshot(undefined)
     }
-  }, [ready, authenticated, user?.id, wallets, getAccessToken, login, logout])
+  }, [ready, authenticated, wallets, getAccessToken, login, logout])
 
   return null
 }
@@ -131,7 +128,6 @@ export async function ensurePrivyReactLoggedIn(): Promise<readonly ConnectedWall
 export function getPrivyReactAdapterClient(): privy.Client {
   return {
     getAccessToken: () => snapshotOrThrow().getAccessToken(),
-    getCurrentUserId: async () => snapshotOrThrow().userId,
     loadEthereumWallets: async () => {
       const wallets = snapshotOrThrow().wallets
       return await Promise.all(

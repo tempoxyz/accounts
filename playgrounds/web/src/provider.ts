@@ -307,10 +307,6 @@ function makePrivyCoreClient(client: Privy): privy.Client {
   return {
     initialize: () => client.initialize(),
     getAccessToken: () => client.getAccessToken(),
-    async getCurrentUserId() {
-      const { user } = await client.user.get()
-      return user?.id ?? null
-    },
     async loadEthereumWallets() {
       await privyIframeReady
       const { user } = await client.user.get()
@@ -330,7 +326,13 @@ function makePrivyCoreClient(client: Privy): privy.Client {
         })),
       )
     },
-    logout: (parameters) => client.auth.logout(parameters),
+    async logout() {
+      const userId = await client.user
+        .get()
+        .then(({ user }) => user?.id)
+        .catch(() => undefined)
+      await client.auth.logout(userId ? { userId } : undefined)
+    },
   }
 }
 
