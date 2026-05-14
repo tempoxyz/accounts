@@ -13,8 +13,8 @@
     "accounts": "latest",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "viem": "catalog:",
-    "wagmi": "catalog:"
+    "viem": "^2.47.18",
+    "wagmi": "latest"
   },
   "devDependencies": {
     "@types/react": "latest",
