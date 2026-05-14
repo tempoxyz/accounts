@@ -171,7 +171,8 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         return result
       } catch (err) {
         if (AccessKey.invalidate(account, err, { store }))
-          console.warn('[accounts] silent sign with access key failed, removing key:', err)
+          console.warn('[accounts] access key invalidated, falling through to dialog:', err)
+        else console.warn('[accounts] access key sign failed, falling through to dialog:', err)
         return undefined
       }
     }
