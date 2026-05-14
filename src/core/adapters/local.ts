@@ -32,13 +32,14 @@ export function local(options: local.Options): Adapter.Adapter {
      * Resolves access key params into an unsigned key authorization.
      */
     async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
-      const { address, expiry, keyType, limits, scopes } = options
+      const { address, expiry, keyType, limits, publicKey, scopes } = options
       return await AccessKey.prepare({
         address,
         chainId: options.chainId ?? getClient().chain.id,
         expiry,
         keyType,
         limits,
+        publicKey,
         scopes,
       })
     }
