@@ -2,7 +2,7 @@ import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { tempoWallet } from 'wagmi/connectors'
 
-const authUrl = await (async () => {
+const auth = await (async () => {
   if (import.meta.env.MODE === 'development') {
     const { getTunnelUrl } = await import('virtual:vite-plugin-cloudflare-tunnel')
     return `${getTunnelUrl()}/auth`
@@ -12,7 +12,7 @@ const authUrl = await (async () => {
 
 export const config = createConfig({
   chains: [tempoModerato, tempo],
-  connectors: [tempoWallet({ auth: authUrl })],
+  connectors: [tempoWallet({ auth })],
   multiInjectedProviderDiscovery: false,
   transports: {
     [tempo.id]: http(),

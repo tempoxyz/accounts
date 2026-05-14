@@ -19,9 +19,3 @@ A [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connectio
 is created automatically during development so the wallet iframe can reach the
 local auth endpoint (required due to Chrome's
 [Private Network Access](https://developer.chrome.com/blog/private-network-access-preflight/) policy).
-
-> [!NOTE]
-> In production, set `tempoWallet({ auth: '/auth' })` to your deployed worker
-> URL — no tunnel needed. The default `Handler.auth` session store is
-> in-memory; use [`Kv.durableObject`](https://docs.tempo.xyz/accounts/server/kv.durableObject)
-> for production deployments on Cloudflare Workers.
