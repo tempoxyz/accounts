@@ -52,9 +52,8 @@ const privySessionErrorCodes = new Set([
  *   adapter: privy({
  *     client: {
  *       getAccessToken: () => privyCore.getAccessToken(),
- *       getCurrentUserId: async () => (await privyCore.user.get()).user?.id ?? null,
  *       loadEthereumWallets: async () => { ... },
- *       logout: (params) => privyCore.auth.logout(params),
+ *       logout: () => privyCore.auth.logout(),
  *       initialize: () => privyCore.initialize(),
  *     },
  *     createAccount: async ({ client }) => {
@@ -76,22 +75,12 @@ export function privy<const client extends privy.Client>(
     let privyClient_promise: Promise<client> | undefined
     let restore_promise: Promise<void> | undefined
     let walletAccounts: readonly privy.EmbeddedWallet[] = []
-    /** Epoch bumped by user-initiated connects so in-flight silent restores bail. */
-    let connect_version = 0
 
     async function getPrivyClient(): Promise<client> {
-      if (!privyClient_promise) {
-        const promise = (async () => {
-          const { client } = options
-          await client.initialize?.()
-          return client
-        })()
-        privyClient_promise = promise
-        // Reset on failure so subsequent calls can retry initialization.
-        promise.catch(() => {
-          if (privyClient_promise === promise) privyClient_promise = undefined
-        })
-      }
+      privyClient_promise ??= (async () => {
+        await options.client.initialize?.()
+        return options.client
+      })()
       return await privyClient_promise
     }
 
@@ -108,80 +97,43 @@ export function privy<const client extends privy.Client>(
       store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
     }
 
-    function cache(accounts: readonly privy.EmbeddedWallet[]) {
-      const seen = new Set<string>()
-      walletAccounts = accounts.flatMap((account) => {
-        const address = core_Address.from(account.address)
-        if (seen.has(address)) return []
-        seen.add(address)
-        return [account]
-      })
-    }
-
     async function hasValidSession() {
-      const privyClient = await getPrivyClient()
-      const token = await privyClient.getAccessToken().catch((error) => {
+      const token = await (await getPrivyClient()).getAccessToken().catch((error) => {
         if (isSessionError(error)) return null
         throw error
       })
       return !!token
     }
 
-    function accountByAddress(address: Address) {
-      return walletAccounts.find((account) =>
-        isAddressEqual(core_Address.from(account.address), address),
-      )
-    }
-
     async function restore() {
-      // Capture before any await so a concurrent disconnect/connect that bumps
-      // `connect_version` after our entry causes us to bail before `setState`.
-      const startVersion = connect_version
       await Store.waitForHydration(store)
-      if (restore_promise) {
-        await restore_promise
-        return
-      }
+      if (walletAccounts.length > 0) return
+      if (restore_promise) return await restore_promise
 
       restore_promise = (async () => {
         const state = store.getState()
         const persisted = state.accounts
+        if (persisted.length === 0) return
 
         if (!(await hasValidSession())) {
-          if (connect_version !== startVersion) return
           clear()
-          if (persisted.length > 0)
-            throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
-          return
+          throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
         }
-
-        if (persisted.length === 0) return
 
         const restored = await (await getPrivyClient()).loadEthereumWallets().catch((error) => {
           if (!isSessionError(error)) throw error
-          if (connect_version === startVersion) clear()
+          clear()
           throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
         })
+        walletAccounts = persisted
+          .map((account) =>
+            restored.find((walletAccount) =>
+              isAddressEqual(core_Address.from(walletAccount.address), account.address),
+            ),
+          )
+          .filter((account): account is privy.EmbeddedWallet => !!account)
 
-        // A user-initiated connect happened mid-flight; bail without overwriting cached accounts.
-        if (connect_version !== startVersion) return
-
-        cache(
-          persisted
-            .map((account) =>
-              restored.find((walletAccount) =>
-                isAddressEqual(core_Address.from(walletAccount.address), account.address),
-              ),
-            )
-            .filter((account): account is privy.EmbeddedWallet => !!account),
-        )
-
-        if (walletAccounts.length === 0) {
-          clear()
-          throw new ox_Provider.DisconnectedError({
-            message: 'No Privy account connected.',
-          })
-        }
+        if (walletAccounts.length === 0) return
 
         store.setState({
           accounts: walletAccounts.map((account) => toStoreAccount(account)),
@@ -203,20 +155,16 @@ export function privy<const client extends privy.Client>(
     }
 
     async function accountForSigning(address: Address | undefined) {
-      await Store.waitForHydration(store)
-      const initialState = store.getState()
-      const address_ = address ?? initialState.accounts[initialState.activeAccount]?.address
-      if (!address_) throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
-
-      const cached = accountByAddress(address_)
-      if (cached) return cached
-
+      await restore()
       await requireSession()
 
-      await restore()
+      const address_ = address ?? store.getState().accounts[store.getState().activeAccount]?.address
+      if (!address_) throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
 
-      const restored = accountByAddress(address_)
-      if (restored) return restored
+      const account = walletAccounts.find((account) =>
+        isAddressEqual(core_Address.from(account.address), address_),
+      )
+      if (account) return account
 
       if (walletAccounts.length === 0)
         throw new ox_Provider.DisconnectedError({
@@ -468,8 +416,7 @@ export function privy<const client extends privy.Client>(
           const privyClient = await getPrivyClient()
           const account = await options.createAccount({ client: privyClient, parameters })
           await requireSession()
-          connect_version++
-          cache([account])
+          walletAccounts = [account]
           restore_promise = undefined
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters.digest
@@ -503,10 +450,8 @@ export function privy<const client extends privy.Client>(
             )
 
           const privyClient = await getPrivyClient()
-          const accounts = await options.loadAccounts({ client: privyClient, parameters })
+          walletAccounts = await options.loadAccounts({ client: privyClient, parameters })
           await requireSession()
-          connect_version++
-          cache(accounts)
           restore_promise = undefined
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters?.digest
@@ -642,16 +587,8 @@ export function privy<const client extends privy.Client>(
           })
         },
         async disconnect() {
-          connect_version++
-          restore_promise = undefined
-          try {
-            const privyClient = await getPrivyClient()
-            const userId = await privyClient.getCurrentUserId().catch(() => null)
-            await privyClient.logout(userId ? { userId } : undefined)
-          } finally {
-            // Clear local state even if logout/initialize throws.
-            clear()
-          }
+          await (await getPrivyClient()).logout()
+          clear()
         },
       },
     }
@@ -709,21 +646,13 @@ export declare namespace privy {
      */
     getAccessToken: () => Promise<string | null>
     /**
-     * Returns the current Privy user id (DID), or `null` if no session. Used by
-     * `disconnect()` to scope the logout call for multi-tab/multi-user setups.
-     */
-    getCurrentUserId: () => Promise<string | null>
-    /**
      * Returns the user's embedded Ethereum wallets, headlessly. Called during
      * silent restore on page reload. Each wallet must expose an EIP-1193 provider
      * that supports `secp256k1_sign`.
      */
     loadEthereumWallets: () => Promise<readonly EmbeddedWallet[]>
-    /**
-     * Clears the current Privy session. The adapter passes the current user id
-     * (when available) so multi-tab/multi-user setups scope the logout correctly.
-     */
-    logout: (parameters?: { userId: string } | undefined) => Promise<void> | void
+    /** Clears the current Privy session. */
+    logout: () => Promise<void> | void
     /** Initializes the client. Called once by the adapter, before any other method. */
     initialize?: (() => Promise<void> | void) | undefined
   }

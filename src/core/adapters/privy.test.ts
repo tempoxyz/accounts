@@ -278,7 +278,7 @@ describe('privy', () => {
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
-  test('behavior: silent restore clears store when persisted address is no longer in user', async () => {
+  test('behavior: silent restore yields No Privy account connected when persisted address is missing', async () => {
     const { adapter, client, store } = setup()
     // Persisted address that is NOT linked on the Privy user.
     store.setState({ accounts: [{ address: other }], activeAccount: 0 })
@@ -290,7 +290,6 @@ describe('privy', () => {
       ),
     ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: No Privy account connected.]')
 
-    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
   })
 
@@ -331,23 +330,6 @@ describe('privy', () => {
     )
   })
 
-  test('behavior: cache dedupes app-returned wallets by checksummed address', async () => {
-    const { adapter, client } = setup()
-    client.wallets = [client.makeWallet(address), client.makeWallet(address)]
-
-    const result = await adapter.actions.loadAccounts(undefined, {
-      method: 'wallet_connect',
-      params: undefined,
-    })
-    expect(result.accounts).toMatchInlineSnapshot(`
-    	[
-    	  {
-    	    "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
-    	  },
-    	]
-    `)
-  })
-
   test('error: signing for an unconnected address while others are connected throws Unauthorized', async () => {
     const { adapter } = setup()
     await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
@@ -376,27 +358,6 @@ describe('privy', () => {
     )
   })
 
-  test('disconnect: clears provider accounts even when logout throws', async () => {
-    const { adapter, store } = setup({ logoutError: new Error('logout failed') })
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
-
-    await expect(adapter.actions.disconnect!()).rejects.toThrowError('logout failed')
-    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
-  })
-
-  test('init: a failed initialize is retried on the next call', async () => {
-    const { adapter, client } = setup({ initError: new Error('init failed') })
-
-    await expect(
-      adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined }),
-    ).rejects.toThrowError('init failed')
-    expect(client.initCalls).toMatchInlineSnapshot(`1`)
-
-    // Second call should retry initialize and succeed.
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
-    expect(client.initCalls).toMatchInlineSnapshot(`2`)
-  })
-
   test('disconnect: clears provider accounts and logs the user out of Privy', async () => {
     const { adapter, client, store } = setup()
     store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -404,11 +365,6 @@ describe('privy', () => {
     await adapter.actions.disconnect!()
 
     expect(client.logoutCalls).toMatchInlineSnapshot(`1`)
-    expect(client.logoutWith).toMatchInlineSnapshot(`
-      [
-        "user_1",
-      ]
-    `)
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
@@ -447,14 +403,6 @@ describe('privy', () => {
       ),
     ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: Privy session expired.]')
 
-    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
-  })
-
-  test('disconnect: clears local state even when initialize throws', async () => {
-    const { adapter, store } = setup({ initError: new Error('init failed') })
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
-
-    await expect(adapter.actions.disconnect!()).rejects.toThrowError('init failed')
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
@@ -503,10 +451,6 @@ declare namespace setup {
     signResult?: unknown
     /** Force the test wallet to sign with this private key (for wrong-signer tests). */
     signWithPrivateKey?: Hex.Hex | undefined
-    /** Make `client.auth.logout` throw, to test disconnect cleanup. */
-    logoutError?: unknown
-    /** Make `client.initialize` throw on the next call (then resolve). */
-    initError?: unknown
     /** Make `client.user.get` throw on every call, to test restore-side session errors. */
     userGetError?: unknown
     /** Make `client.embeddedWallet.getEthereumProvider` throw, to test restore-side session errors. */
@@ -522,7 +466,6 @@ function createClient(options: setup.Options = {}) {
     initCalls: 0,
     loadCalls: 0,
     logoutCalls: 0,
-    logoutWith: [] as (string | undefined)[],
     restoreCalls: 0,
     signPayloads: [] as Hex.Hex[],
     signWith: [] as string[],
@@ -562,29 +505,22 @@ function createClient(options: setup.Options = {}) {
     async getAccessToken() {
       return options.token === undefined ? 'token' : options.token
     },
-    async getCurrentUserId() {
-      return 'user_1'
-    },
     async loadEthereumWallets(): Promise<readonly privy.EmbeddedWallet[]> {
       client.restoreCalls++
       if (options.userGetError) throw options.userGetError
       if (options.getEthereumProviderError) throw options.getEthereumProviderError
       return linkedAddresses.map((linked) => client.makeWallet(linked))
     },
-    logout(parameters?: { userId: string } | undefined) {
+    logout() {
       client.logoutCalls++
-      client.logoutWith.push(parameters?.userId)
-      if (options.logoutError) throw options.logoutError
     },
     initialize() {
       client.initCalls++
-      if (options.initError && client.initCalls === 1) throw options.initError
     },
   } satisfies privy.Client & {
     initCalls: number
     loadCalls: number
     logoutCalls: number
-    logoutWith: (string | undefined)[]
     restoreCalls: number
     signPayloads: Hex.Hex[]
     signWith: string[]

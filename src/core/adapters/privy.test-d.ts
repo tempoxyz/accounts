@@ -7,9 +7,8 @@ describe('privy', () => {
   test('accepts a structural Privy client with silent-restore surface', () => {
     expectTypeOf<privy.Client>().toEqualTypeOf<{
       getAccessToken: () => Promise<string | null>
-      getCurrentUserId: () => Promise<string | null>
       loadEthereumWallets: () => Promise<readonly privy.EmbeddedWallet[]>
-      logout: (parameters?: { userId: string } | undefined) => Promise<void> | void
+      logout: () => Promise<void> | void
       initialize?: (() => Promise<void> | void) | undefined
     }>()
   })
@@ -17,9 +16,8 @@ describe('privy', () => {
   test('accepts a wider client with extra fields', () => {
     expectTypeOf<{
       getAccessToken: () => Promise<string | null>
-      getCurrentUserId: () => Promise<string | null>
       loadEthereumWallets: () => Promise<readonly privy.EmbeddedWallet[]>
-      logout: (parameters?: { userId: string } | undefined) => Promise<void>
+      logout: () => Promise<void>
       initialize: () => Promise<void>
       // Extra app-specific fields are fine.
       privyVersion: string
@@ -65,7 +63,6 @@ describe('privy', () => {
     privy({
       client: {
         getAccessToken: async () => null,
-        getCurrentUserId: async () => null,
         loadEthereumWallets: async () => [],
         logout: async () => {},
       },
@@ -85,7 +82,6 @@ describe('privy', () => {
   test('callbacks preserve the concrete client type', () => {
     const client = {
       getAccessToken: async () => null,
-      getCurrentUserId: async () => null,
       loadEthereumWallets: async () => [],
       logout: async () => {},
       // App-specific extras must remain visible to callbacks.
