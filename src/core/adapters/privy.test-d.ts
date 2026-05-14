@@ -6,63 +6,25 @@ import { privy } from './privy.js'
 describe('privy', () => {
   test('accepts a structural Privy client with silent-restore surface', () => {
     expectTypeOf<privy.Client>().toEqualTypeOf<{
-      auth: {
-        logout: (parameters?: { userId: string } | undefined) => Promise<void> | void
-      }
-      embeddedWallet: {
-        getEthereumProvider: (parameters: {
-          wallet: privy.LinkedAccount
-          entropyId: string
-          entropyIdVerifier: string
-        }) => Promise<privy.EthereumProvider>
-      }
       getAccessToken: () => Promise<string | null>
+      getCurrentUserId: () => Promise<string | null>
+      loadEthereumWallets: () => Promise<readonly privy.EmbeddedWallet[]>
+      logout: (parameters?: { userId: string } | undefined) => Promise<void> | void
       initialize?: (() => Promise<void> | void) | undefined
-      user: {
-        get: () => Promise<{ user: privy.User }>
-      }
     }>()
   })
 
   test('accepts a wider client with extra fields', () => {
     expectTypeOf<{
-      auth: {
-        logout: () => Promise<void>
-        login: (email: string) => Promise<void>
-      }
-      embeddedWallet: {
-        getEthereumProvider: (parameters: {
-          wallet: privy.LinkedAccount
-          entropyId: string
-          entropyIdVerifier: string
-        }) => Promise<privy.EthereumProvider>
-        delegateWallets: () => Promise<void>
-      }
       getAccessToken: () => Promise<string | null>
+      getCurrentUserId: () => Promise<string | null>
+      loadEthereumWallets: () => Promise<readonly privy.EmbeddedWallet[]>
+      logout: (parameters?: { userId: string } | undefined) => Promise<void>
       initialize: () => Promise<void>
-      user: {
-        get: () => Promise<{ user: privy.User }>
-        update: () => Promise<void>
-      }
+      // Extra app-specific fields are fine.
+      privyVersion: string
+      raw: { auth: { login: () => Promise<void> } }
     }>().toMatchTypeOf<privy.Client>()
-  })
-
-  test('user shape exposes id and optional linked accounts', () => {
-    expectTypeOf<privy.User>().toEqualTypeOf<{
-      id: string
-      linked_accounts?: readonly privy.LinkedAccount[] | undefined
-    }>()
-  })
-
-  test('linked account shape mirrors the Privy SDK fields used during restore', () => {
-    expectTypeOf<privy.LinkedAccount>().toMatchTypeOf<{
-      address?: string | undefined
-      chain_type?: string | undefined
-      connector_type?: string | undefined
-      type?: string | undefined
-      wallet_client_type?: string | undefined
-      wallet_index?: number | null | undefined
-    }>()
   })
 
   test('ethereum provider shape exposes EIP-1193 request', () => {
@@ -102,12 +64,10 @@ describe('privy', () => {
   test('callbacks receive a Privy client and adapter parameters', () => {
     privy({
       client: {
-        auth: { logout: async () => {} },
-        embeddedWallet: {
-          getEthereumProvider: async () => ({ request: async () => '0x0' }),
-        },
         getAccessToken: async () => null,
-        user: { get: async () => ({ user: { id: 'user_1' } }) },
+        getCurrentUserId: async () => null,
+        loadEthereumWallets: async () => [],
+        logout: async () => {},
       },
       createAccount: async ({ client, parameters }) => {
         expectTypeOf(client).toMatchTypeOf<privy.Client>()
@@ -124,31 +84,21 @@ describe('privy', () => {
 
   test('callbacks preserve the concrete client type', () => {
     const client = {
-      auth: { logout: async () => {} },
-      embeddedWallet: {
-        getEthereumProvider: async () => ({ request: async () => '0x0' }),
-        delegateWallets: async () => 'delegated' as const,
-      },
       getAccessToken: async () => null,
-      user: {
-        get: async () => ({ user: { id: 'user_1' } }),
-        update: async () => 'updated' as const,
-      },
+      getCurrentUserId: async () => null,
+      loadEthereumWallets: async () => [],
+      logout: async () => {},
+      // App-specific extras must remain visible to callbacks.
+      raw: { delegateWallets: async () => 'delegated' as const },
     }
     privy({
       client,
       createAccount: async ({ client }) => {
-        expectTypeOf(client.embeddedWallet.delegateWallets).toEqualTypeOf<
-          () => Promise<'delegated'>
-        >()
-        expectTypeOf(client.user.update).toEqualTypeOf<() => Promise<'updated'>>()
+        expectTypeOf(client.raw.delegateWallets).toEqualTypeOf<() => Promise<'delegated'>>()
         return { address: '0x0', provider: { request: async () => '0x0' } }
       },
       loadAccounts: async ({ client }) => {
-        expectTypeOf(client.embeddedWallet.delegateWallets).toEqualTypeOf<
-          () => Promise<'delegated'>
-        >()
-        expectTypeOf(client.user.update).toEqualTypeOf<() => Promise<'updated'>>()
+        expectTypeOf(client.raw.delegateWallets).toEqualTypeOf<() => Promise<'delegated'>>()
         return []
       },
     })

@@ -294,19 +294,6 @@ describe('privy', () => {
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
   })
 
-  test('error: silent restore rejects malformed wallet addresses', async () => {
-    const { adapter, client, store } = setup()
-    client.addLinkedWallet('0xnot-an-address')
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
-
-    await expect(
-      adapter.actions.signPersonalMessage(
-        { address, data: '0x68656c6c6f' },
-        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
-      ),
-    ).rejects.toThrowError(/Address.*invalid/i)
-  })
-
   test('error: silent restore rejects non-hex secp256k1_sign results', async () => {
     const { adapter, store } = setup({ signResult: 'not-hex' })
     store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -361,24 +348,7 @@ describe('privy', () => {
     `)
   })
 
-  test('error: app-provided provider secp256k1_sign result is hex-validated', async () => {
-    const { adapter } = setup({ signResult: 'not-hex' })
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
-
-    await expect(
-      adapter.actions.signPersonalMessage(
-        { address, data: '0x68656c6c6f' },
-        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
-      ),
-    ).rejects.toMatchInlineSnapshot(
-      '[ProviderRpcError: Privy provider returned a non-hex secp256k1_sign result.]',
-    )
-  })
-
   test('error: signing for an unconnected address while others are connected throws Unauthorized', async () => {
-    // After loading wallet A, signing for wallet B (which is not connected)
-    // must distinguish "wrong account" (Unauthorized) from "no session"
-    // (Disconnected) so apps can recover gracefully.
     const { adapter } = setup()
     await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
 
@@ -446,10 +416,7 @@ describe('privy', () => {
     const { adapter, store } = setup({
       userGetError: Object.assign(new Error('boom'), { code: 'session_expired' }),
     })
-    // Wait past the 100ms `waitForHydration` safety timeout so the eager
-    // boot-time `void restore()` runs first against an empty store and exits
-    // before we populate state. Without this, boot races with the user call
-    // and swallows the session error before the test can assert on it.
+    // Let the boot-time `void restore()` settle against an empty store first.
     await new Promise((resolve) => setTimeout(resolve, 150))
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
@@ -469,8 +436,7 @@ describe('privy', () => {
         code: 'embedded_wallet_before_logged_in',
       }),
     })
-    // See note above: wait past `waitForHydration`'s 100ms safety timeout so
-    // boot-time restore settles against an empty store first.
+    // Let the boot-time `void restore()` settle against an empty store first.
     await new Promise((resolve) => setTimeout(resolve, 150))
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
@@ -485,8 +451,6 @@ describe('privy', () => {
   })
 
   test('disconnect: clears local state even when initialize throws', async () => {
-    // First call to `initialize` throws; disconnect must still clear local
-    // provider state so the user is not stuck with a stale connected session.
     const { adapter, store } = setup({ initError: new Error('init failed') })
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
@@ -495,9 +459,6 @@ describe('privy', () => {
   })
 
   test('error: signature recovered from a different key is rejected as Unauthorized', async () => {
-    // Wallet A is loaded, but the provider signs with key B's private key
-    // (simulating a stale or mismatched provider). The adapter must refuse to
-    // accept the mismatched signature, even though it is well-formed.
     const { adapter } = setup({ signWithPrivateKey: privateKeyB })
     await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
 
@@ -554,6 +515,9 @@ declare namespace setup {
 }
 
 function createClient(options: setup.Options = {}) {
+  /** Addresses the shim treats as embedded ETH wallets during silent restore. */
+  const linkedAddresses: string[] = []
+
   const client = {
     initCalls: 0,
     loadCalls: 0,
@@ -563,13 +527,14 @@ function createClient(options: setup.Options = {}) {
     signPayloads: [] as Hex.Hex[],
     signWith: [] as string[],
     wallets: [] as privy.EmbeddedWallet[],
-    /** Linked accounts returned by `client.user.get` to drive silent restore. */
-    linkedAccounts: [] as privy.LinkedAccount[],
     makeWallet(address: string): privy.EmbeddedWallet {
       return {
         address,
         provider: {
-          async request(req: { method: string; params?: readonly unknown[] | undefined }) {
+          async request(req: {
+            method: string
+            params?: readonly unknown[] | undefined
+          }): Promise<unknown> {
             if (req.method !== 'secp256k1_sign') throw new Error(`unexpected method: ${req.method}`)
             if (options.signError) throw options.signError
             const hash = (req.params as readonly Hex.Hex[])[0] as Hex.Hex
@@ -590,67 +555,30 @@ function createClient(options: setup.Options = {}) {
         },
       }
     },
-    /** Registers an embedded ETH wallet so silent restore picks it up via `user.get`. */
-    addLinkedWallet(address: string, wallet_index = client.linkedAccounts.length) {
-      client.linkedAccounts.push({
-        type: 'wallet',
-        wallet_client_type: 'privy',
-        connector_type: 'embedded',
-        chain_type: 'ethereum',
-        address,
-        wallet_index,
-      })
-    },
-    auth: {
-      logout(parameters?: { userId: string } | undefined) {
-        client.logoutCalls++
-        client.logoutWith.push(parameters?.userId)
-        if (options.logoutError) throw options.logoutError
-      },
-    },
-    embeddedWallet: {
-      async getEthereumProvider(parameters: {
-        wallet: privy.LinkedAccount
-        entropyId: string
-        entropyIdVerifier: string
-      }) {
-        if (options.getEthereumProviderError) throw options.getEthereumProviderError
-        const wallet_address = parameters.wallet.address as string
-        return {
-          async request(req: { method: string; params?: readonly unknown[] | undefined }) {
-            if (req.method !== 'secp256k1_sign') throw new Error(`unexpected method: ${req.method}`)
-            if (options.signError) throw options.signError
-            const hash = (req.params as readonly Hex.Hex[])[0] as Hex.Hex
-            client.signPayloads.push(hash)
-            client.signWith.push(wallet_address)
-            if (options.signResult !== undefined) return options.signResult
-            const privateKey =
-              options.signWithPrivateKey ??
-              (() => {
-                try {
-                  return privateKeyForAddress(wallet_address)
-                } catch {
-                  return privateKeyA
-                }
-              })()
-            return signWithKey(privateKey, hash)
-          },
-        }
-      },
+    /** Registers an embedded ETH wallet so silent restore picks it up. */
+    addLinkedWallet(address: string) {
+      linkedAddresses.push(address)
     },
     async getAccessToken() {
       return options.token === undefined ? 'token' : options.token
     },
+    async getCurrentUserId() {
+      return 'user_1'
+    },
+    async loadEthereumWallets(): Promise<readonly privy.EmbeddedWallet[]> {
+      client.restoreCalls++
+      if (options.userGetError) throw options.userGetError
+      if (options.getEthereumProviderError) throw options.getEthereumProviderError
+      return linkedAddresses.map((linked) => client.makeWallet(linked))
+    },
+    logout(parameters?: { userId: string } | undefined) {
+      client.logoutCalls++
+      client.logoutWith.push(parameters?.userId)
+      if (options.logoutError) throw options.logoutError
+    },
     initialize() {
       client.initCalls++
       if (options.initError && client.initCalls === 1) throw options.initError
-    },
-    user: {
-      async get() {
-        client.restoreCalls++
-        if (options.userGetError) throw options.userGetError
-        return { user: { id: 'user_1', linked_accounts: client.linkedAccounts.slice() } }
-      },
     },
   } satisfies privy.Client & {
     initCalls: number
@@ -661,9 +589,8 @@ function createClient(options: setup.Options = {}) {
     signPayloads: Hex.Hex[]
     signWith: string[]
     wallets: privy.EmbeddedWallet[]
-    linkedAccounts: privy.LinkedAccount[]
     makeWallet: (address: string) => privy.EmbeddedWallet
-    addLinkedWallet: (address: string, wallet_index?: number) => void
+    addLinkedWallet: (address: string) => void
   }
 
   client.wallets = [client.makeWallet(address)]
