@@ -1,19 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Provider } from "accounts";
 import AsciiBackground from "./ascii-bg";
-import {
-  createProvider,
-  defaultAuthorizeAccessKey,
-  isTrustedHost,
-} from "./demo/sdk";
-
-type AccountsProvider = ReturnType<typeof Provider.create>;
+import { defaultAuthorizeAccessKey, isTrustedHost } from "./demo/sdk";
+import { useTempoSession } from "./sections/useTempoSession";
 
 type PackageManager = "npm" | "pnpm" | "bun";
 type Adapter = "tempoAuth" | "webAuth" | "privy" | "turnkey";
-type SignInStatus = "idle" | "opening" | "connected";
 
 const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
 
@@ -305,10 +298,10 @@ const Var = ({ children }: { children: React.ReactNode }) => (
 );
 const Hl = ({ children }: { children: React.ReactNode }) => (
   <span
-    className="hl-token rounded-[3px] px-[3px]"
+    className="hl-token rounded-[4px] px-[5px]"
     style={{
-      background: "rgba(255, 255, 255, 0.05)",
-      boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
+      background: "rgba(255, 255, 255, 0.12)",
+      boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.2)",
       animation: `highlightFlash 900ms ${easeOut} both`,
     }}
   >
@@ -328,7 +321,7 @@ function CodeBlock({ adapter }: { adapter: Adapter }) {
 
   return (
     <pre
-      className="code-pre overflow-x-auto font-mono text-[15px] leading-[1.5] text-[#adbac7]"
+      className="code-pre scrollbar-hide max-h-[320px] overflow-auto font-mono text-[15px] leading-[1.5] text-[#adbac7]"
       style={{ tabSize: 2 }}
     >
       <code>
@@ -458,13 +451,15 @@ function AdapterTabs({
 function BalancesCard({
   status,
   address,
+  balanceDisplay,
   onSignIn,
 }: {
-  status: SignInStatus;
+  status: "idle" | "running" | "done";
   address: string | null;
+  balanceDisplay: string | null;
   onSignIn: () => void;
 }) {
-  const connected = status === "connected" && !!address;
+  const connected = !!address;
   const balances = [
     { sym: "USDC", value: "1,234.56" },
     { sym: "USDT", value: "567.89" },
@@ -476,28 +471,38 @@ function BalancesCard({
     ETH: "#627eea",
   };
 
+  const cta =
+    status === "running"
+      ? "Opening Tempo…"
+      : connected && address
+        ? shorten(address)
+        : "Sign in";
+
   return (
-    <div className="flex h-[384px] w-full max-w-[358px] flex-col justify-between border-[0.7px] border-solid border-[#2e2e2e] bg-[#141414] p-[12.7px]">
-      <div className="flex flex-col">
-        <div className="flex items-center justify-between pb-3">
-          <p className="text-[11.336px] tracking-[0.1134px] text-[#ededed]">
-            Balances
-          </p>
-          <p className="text-[9.919px] tracking-[0.0992px] text-[#a1a1a1]">
-            View all
-          </p>
+    <div className="flex w-full max-w-[420px] flex-col gap-5 bg-[#181818] p-6">
+      <div className="flex flex-col gap-1">
+        <p className="text-[13px] text-white/50">Available balance</p>
+        <p className="font-mono text-[28px] tabular-nums text-white">
+          {connected ? (balanceDisplay ?? "$0.00") : "$0.00"}
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <p className="text-[12px] text-white/50">Balances</p>
+          <p className="text-[11px] text-white/40">View all</p>
         </div>
-        <div className="flex flex-col gap-3 pb-2">
+        <div className="flex flex-col gap-2">
           {balances.map((b, i) => (
             <div
               key={b.sym}
-              className="flex items-center justify-between py-[3px]"
+              className="flex items-center justify-between py-1"
             >
               <div className="flex items-center gap-2">
                 {connected ? (
                   <span
                     aria-hidden
-                    className="grid size-[18px] shrink-0 place-items-center rounded-full text-[8px] font-semibold text-white"
+                    className="grid size-[20px] shrink-0 place-items-center rounded-full text-[9px] font-semibold text-white"
                     style={{ background: ringColors[b.sym] }}
                   >
                     {b.sym.slice(0, 1)}
@@ -505,14 +510,14 @@ function BalancesCard({
                 ) : (
                   <span
                     aria-hidden
-                    className="block size-[18px] shrink-0 rounded-full bg-[#292929]"
+                    className="block size-[20px] shrink-0 rounded-full bg-[#292929]"
                     style={{
                       animation: `pulseDot 1600ms ease-in-out ${i * 120}ms infinite`,
                     }}
                   />
                 )}
                 {connected ? (
-                  <span className="text-[11px] text-[#ededed]">{b.sym}</span>
+                  <span className="text-[13px] text-white">{b.sym}</span>
                 ) : (
                   <span
                     aria-hidden
@@ -524,7 +529,7 @@ function BalancesCard({
                 )}
               </div>
               {connected ? (
-                <span className="font-mono text-[11px] tabular-nums text-[#ededed]">
+                <span className="font-mono text-[13px] tabular-nums text-white">
                   {b.value}
                 </span>
               ) : (
@@ -540,113 +545,62 @@ function BalancesCard({
           ))}
         </div>
       </div>
+
       <button
         type="button"
         onClick={onSignIn}
-        disabled={status === "opening"}
-        className="flex h-9 w-full items-center justify-center gap-2 bg-white text-[11.336px] tracking-[0.1134px] text-[#181818] outline-none transition-opacity duration-200 hover:opacity-90 focus-visible:opacity-90 disabled:cursor-progress"
+        disabled={status === "running"}
+        className="flex h-11 w-full items-center justify-center gap-2 bg-white px-4 text-[14px] text-[#181818] outline-none transition-opacity hover:opacity-90 focus-visible:opacity-90 disabled:cursor-progress disabled:opacity-80"
       >
-        {status === "opening" ? (
+        {status === "running" ? (
           <span
             aria-hidden
             className="size-1.5 shrink-0 rounded-full bg-[#181818]"
             style={{ animation: "pulseDot 900ms ease-in-out infinite" }}
           />
         ) : null}
-        <span>
-          {status === "opening"
-            ? "Opening Tempo…"
-            : connected && address
-              ? shorten(address)
-              : "Sign in"}
-        </span>
+        <span>{cta}</span>
       </button>
     </div>
   );
 }
 
-// Provider construction lives in `./demo/sdk` so the hero's BalancesCard
-// shares the same persistent session (`Storage.combine(cookie, localStorage)`)
-// with the demo section below — sign in once, see it everywhere.
+// The hero's BalancesCard now leans on the shared `useTempoSession`, so
+// signing in here carries across every section on the page (and vice
+// versa). The adapter tab is illustrative for the code panel only —
+// `buildAdapter` in `demo/sdk.ts` already routes non-webAuth adapters
+// through the Tempo dialog for the actual sign-in flow.
 
 function DemoSplit() {
   const [adapter, setAdapter] = useState<Adapter>("tempoAuth");
-  const [status, setStatus] = useState<SignInStatus>("idle");
-  const [address, setAddress] = useState<string | null>(null);
-  const providerRef = useRef<AccountsProvider | null>(null);
-  const providerAdapterRef = useRef<Adapter | null>(null);
-
-  // Hydrate from persisted storage on mount / adapter switch so a refresh
-  // restores the connected state instead of resetting to "Sign in".
-  useEffect(() => {
-    let cancelled = false;
-    const hydrate = async () => {
-      try {
-        if (providerAdapterRef.current !== adapter) {
-          providerRef.current = createProvider(adapter);
-          providerAdapterRef.current = adapter;
-        }
-        const accounts = (await providerRef.current!.request({
-          method: "eth_accounts",
-        })) as readonly `0x${string}`[];
-        if (cancelled) return;
-        const account = accounts?.[0];
-        if (account) {
-          setAddress(account);
-          setStatus("connected");
-        }
-      } catch {
-        // No persisted session — leave UI at idle.
-      }
-    };
-    void hydrate();
-    return () => {
-      cancelled = true;
-    };
-  }, [adapter]);
+  const { status, address, balanceDisplay, run } = useTempoSession();
 
   const handleAdapterChange = (next: Adapter) => {
     if (next === adapter) return;
     setAdapter(next);
-    providerRef.current = null;
-    providerAdapterRef.current = null;
-    setStatus("idle");
-    setAddress(null);
   };
 
-  const signIn = async () => {
-    if (status === "opening") return;
-    setStatus("opening");
-
-    if (providerAdapterRef.current !== adapter) {
-      providerRef.current = createProvider(adapter);
-      providerAdapterRef.current = adapter;
-    }
-
-    try {
-      // Same lazy access-key gating as the demo section: include only
-      // when we're on a *.tempo.xyz host, where the wallet validator
-      // bypasses the "must include scopes" check.
+  const signIn = () => {
+    void run(async (provider) => {
       const capabilities: Record<string, unknown> = {
         method: "register",
         name: "Accounts SDK",
       };
-      if (isTrustedHost()) {
+      if (isTrustedHost())
         capabilities.authorizeAccessKey = defaultAuthorizeAccessKey();
-      }
-      const result = (await providerRef.current!.request({
+      const result = (await provider.request({
         method: "wallet_connect",
         params: [{ capabilities } as Record<string, unknown>],
-      } as Parameters<
-        NonNullable<typeof providerRef.current>["request"]
-      >[0])) as { accounts?: ReadonlyArray<{ address: `0x${string}` }> };
+      } as Parameters<typeof provider.request>[0])) as {
+        accounts?: ReadonlyArray<{ address: `0x${string}` }>;
+      };
       const account = result?.accounts?.[0];
-      if (!account) throw new Error("No account returned.");
-      setAddress(account.address);
-      setStatus("connected");
-    } catch {
-      setStatus(address ? "connected" : "idle");
-    }
+      return {
+        summary: account
+          ? `Signed in · ${shorten(account.address)}`
+          : "Signed in",
+      };
+    });
   };
 
   return (
@@ -694,8 +648,13 @@ function DemoSplit() {
         </div>
         <div className="dash-l relative flex items-center justify-center overflow-hidden bg-[#0a0a0a] px-6 py-12 lg:min-h-[540px]">
           <AsciiBackground />
-          <div className="relative z-10 w-full max-w-[358px]">
-            <BalancesCard status={status} address={address} onSignIn={signIn} />
+          <div className="relative z-10 w-full max-w-[420px]">
+            <BalancesCard
+              status={status}
+              address={address}
+              balanceDisplay={balanceDisplay}
+              onSignIn={signIn}
+            />
           </div>
         </div>
       </div>

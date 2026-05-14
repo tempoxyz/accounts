@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import {
-  RECEIVE_ACCOUNTS,
-  type ReceiveAccountId,
+  RECEIVE_FALLBACK_ADDRESS,
   ReceiveBody,
 } from "../demo/bodies/Receive";
 import {
@@ -26,15 +25,13 @@ type ModeId = (typeof MODES)[number]["id"];
 export default function SendReceive() {
   const [mode, setMode] = useState<ModeId>("send");
   const [destId, setDestId] = useState<DestinationId>(DESTINATIONS[0].id);
-  const [receiveId, setReceiveId] = useState<ReceiveAccountId>(
-    RECEIVE_ACCOUNTS[0].id,
-  );
-  const { status, balanceDisplay, result, run } = useTempoSession();
+  const { status, address, balanceDisplay, result, run } = useTempoSession();
 
   const dest = DESTINATIONS.find((d) => d.id === destId) ?? DESTINATIONS[0];
-  const receiveAccount =
-    RECEIVE_ACCOUNTS.find((a) => a.id === receiveId) ?? RECEIVE_ACCOUNTS[0];
-  const receiveIndex = RECEIVE_ACCOUNTS.findIndex((a) => a.id === receiveId);
+  // The Tempo wallet exposes a single account per session, so the
+  // Receive demo always points at that account. Pre-connect we fall
+  // back to a placeholder so the section still renders before sign-in.
+  const receiveAddress = address ?? RECEIVE_FALLBACK_ADDRESS;
 
   const onSend = () => {
     void run(async (provider) => {
@@ -67,12 +64,7 @@ export default function SendReceive() {
               onChange={setMode}
               label="Mode"
             />
-            <ModeCode
-              mode={mode}
-              dest={dest}
-              receiveAccount={receiveAccount}
-              receiveIndex={receiveIndex}
-            />
+            <ModeCode mode={mode} dest={dest} />
           </div>
           <div className="-mx-9 -mb-[26px] mt-auto">
             <div className="bg-[#141414] px-5 py-5">
@@ -112,11 +104,7 @@ export default function SendReceive() {
             onSelect={setDestId}
           />
         ) : (
-          <ReceiveBody
-            selectedId={receiveId}
-            onSelect={setReceiveId}
-            delay={120}
-          />
+          <ReceiveBody address={receiveAddress} delay={120} />
         )
       }
     />
@@ -167,19 +155,8 @@ const Hl = ({ children }: { children: React.ReactNode }) => (
 );
 
 type Destination = (typeof DESTINATIONS)[number];
-type ReceiveAccount = (typeof RECEIVE_ACCOUNTS)[number];
 
-function ModeCode({
-  mode,
-  dest,
-  receiveAccount,
-  receiveIndex,
-}: {
-  mode: ModeId;
-  dest: Destination;
-  receiveAccount: ReceiveAccount;
-  receiveIndex: number;
-}) {
+function ModeCode({ mode, dest }: { mode: ModeId; dest: Destination }) {
   return (
     <pre
       key={mode}
@@ -191,9 +168,7 @@ function ModeCode({
     >
       <code>
         {mode === "send" ? <SendSnippet dest={dest} /> : null}
-        {mode === "receive" ? (
-          <ReceiveSnippet account={receiveAccount} index={receiveIndex} />
-        ) : null}
+        {mode === "receive" ? <ReceiveSnippet /> : null}
       </code>
     </pre>
   );
@@ -250,13 +225,7 @@ function SendSnippet({ dest }: { dest: Destination }) {
   );
 }
 
-function ReceiveSnippet({
-  account,
-  index,
-}: {
-  account: ReceiveAccount;
-  index: number;
-}) {
+function ReceiveSnippet() {
   return (
     <>
       <div>
@@ -270,9 +239,9 @@ function ReceiveSnippet({
       </div>
       <div>{" "}</div>
       <div>
-        <Keyword>const</Keyword> {"{ "}
-        <Var>accounts</Var>
-        {" } = "}
+        <Keyword>const</Keyword> {"["}
+        <Var>account</Var>
+        {"] = "}
         <Keyword>await</Keyword> <Var>provider</Var>.<Fn>request</Fn>
         {"({"}
       </div>
@@ -297,14 +266,7 @@ function ReceiveSnippet({
       </div>
       <div>
         {"  params: [{ account: "}
-        <Hl key={`acc-${account.id}`}>
-          <Var>accounts</Var>
-          {"["}
-          <span style={{ color: "#f0a868" }}>{index}</span>
-          {"]"}
-        </Hl>
-        {" "}
-        <Cmnt key={`cmnt-${account.id}`}>{`/* ${account.label} */`}</Cmnt>
+        <Var>account</Var>
         {" }],"}
       </div>
       <div>{"})"}</div>
