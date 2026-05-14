@@ -16,6 +16,7 @@ import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 
 import { PrivyEmailOtp } from './PrivyEmailOtp.js'
+import { PrivyReactBridge } from './privyReactBridge.js'
 import {
   type AdapterType,
   type DialogMode,
@@ -67,6 +68,7 @@ export function App() {
     <div className="playground min-h-dvh bg-background text-foreground" data-regen-radius="small">
       <PrivyEmailOtp />
       <TurnkeyEmailOtp />
+      {import.meta.env.VITE_PRIVY_APP_ID && <PrivyReactBridge />}
       <div className="playground-layout">
         <aside className="playground-rail">
           <div className="flex min-h-0 flex-col gap-[20px]">
@@ -185,7 +187,8 @@ function ConfigPanel(props: {
             <option value="tempoWallet">tempoWallet</option>
             <option value="dialogRefImpl">dialogRefImpl</option>
             <option value="turnkey">turnkey</option>
-            <option value="privy">privy</option>
+            <option value="privyCore">privyCore</option>
+            <option value="privyReact">privyReact</option>
             <option value="webAuthn">webAuthn</option>
             <option value="secp256k1">secp256k1</option>
           </select>
