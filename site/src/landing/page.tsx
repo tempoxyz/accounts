@@ -34,7 +34,9 @@ export default function Home() {
         <div className="dash-t">
           <Guides />
         </div>
-        <Footer />
+        <div className="dash-t">
+          <Footer />
+        </div>
       </div>
     </main>
   );
