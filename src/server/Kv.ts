@@ -161,10 +161,16 @@ export declare namespace durableObject {
   /**
    * Minimal shape of a Cloudflare Durable Object namespace binding.
    * Compatible with `DurableObjectNamespace` from `@cloudflare/workers-types`.
+   *
+   * `get`'s parameter is typed as `any` (rather than `unknown`) so the
+   * stricter `(id: DurableObjectId) => ...` signature on Cloudflare's
+   * `DurableObjectNamespace` is structurally assignable here without an
+   * intermediate cast on the caller.
    */
   type Namespace = {
     idFromName: (name: string) => unknown
-    get: (id: unknown) => { fetch: (input: string, init?: unknown) => Promise<Response> }
+    // biome-ignore lint/suspicious/noExplicitAny: contravariant id parameter — see JSDoc above.
+    get: (id: any) => { fetch: (input: string, init?: unknown) => Promise<Response> }
   }
   type Options = {
     /**

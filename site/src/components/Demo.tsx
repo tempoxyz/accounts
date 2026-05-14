@@ -23,7 +23,8 @@ export function Demo(props: Demo.Props) {
           <div className="my-4 border border-primary bg-surface" data-demo>
             <Demo.Header badge={badge} headerAction={headerAction} title={title} />
             <div
-              className={`border-t border-primary px-5 py-4${className ? ` ${className}` : ''}`}
+              className={`border-t border-primary px-5${className ? ` ${className}` : ''}`}
+              style={{ paddingTop: 16, paddingBottom: 16 }}
             >
               {children}
             </div>

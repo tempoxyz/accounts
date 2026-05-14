@@ -235,15 +235,15 @@ const provider = Provider.create({
 ### mpp
 
 - **Type:** `boolean | Provider.mpp.Options`
-- **Default:** `false`
+- **Default:** `true`
 
-Enable [Machine Payment Protocol](https://mpp.dev) (mppx) support. Pass `true` to enable with defaults, or an options object to configure.
+Enable [Machine Payment Protocol](https://mpp.dev) (mppx) support. Enabled by default — pass an options object to configure, or `false` to disable.
 
 ```ts twoslash
 import { Provider } from 'accounts'
 
 const provider = Provider.create({
-  mpp: true, // [!code focus]
+  mpp: false, // [!code focus]
 })
 ```
 

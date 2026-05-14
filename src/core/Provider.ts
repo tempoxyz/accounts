@@ -911,9 +911,13 @@ export function create(options: create.Options = {}): create.ReturnType {
     }
   }
 
-  if (options.mpp) {
-    const mppOptions = typeof options.mpp === 'object' ? options.mpp : {}
-    const { mode = 'push' } = mppOptions
+  const mpp = (() => {
+    if (options.mpp === false) return undefined
+    if (typeof options.mpp === 'object') return options.mpp
+    return {}
+  })()
+  if (mpp) {
+    const { mode = 'push' } = mpp
     Mppx.create({
       methods: [
         mppx_tempo({
@@ -967,9 +971,9 @@ export declare namespace create {
     /**
      * Enable Machine Payment Protocol (mppx) support.
      *
-     * Pass `true` to enable with defaults, or an options object to configure.
+     * Pass an options object to configure, or `false` to disable.
      *
-     * @default false
+     * @default true
      */
     mpp?: boolean | mpp.Options | undefined
     /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
@@ -1140,6 +1144,16 @@ function assertSameAuthOrigin(auth: NonNullable<z.output<typeof Rpc.wallet_conne
 }
 
 /**
+ * Hint appended to "domain mismatch" / "uri mismatch" errors raised in
+ * {@link fetchAuthChallenge}. Most of the time these come from a server
+ * sitting behind a TLS-terminating proxy (Cloudflare Tunnel, ngrok, a
+ * CDN) that forwards `x-forwarded-proto` / `x-forwarded-host` headers the
+ * auth handler isn't honoring by default.
+ */
+const authOriginHint =
+  ' Hint: if the server is behind a reverse proxy or tunnel, set `Handler.auth({ trustProxy: true })` to honor `x-forwarded-*` headers, or pin the public origin with `Handler.auth({ origin: "https://app.example.com" })`.'
+
+/**
  * Fetches an auth challenge from the auth endpoint and validates that the
  * server-supplied message is bound to the auth endpoint's origin and the
  * requested chain.
@@ -1187,11 +1201,11 @@ async function fetchAuthChallenge(
     })
   if (parsed.domain !== expected.host)
     throw new RpcResponse.InvalidParamsError({
-      message: `Server Authentication challenge endpoint \`${url}\` returned a message bound to \`${parsed.domain}\` (expected \`${expected.host}\`).`,
+      message: `Server Authentication challenge endpoint \`${url}\` returned a message bound to \`${parsed.domain}\` (expected \`${expected.host}\`).${authOriginHint}`,
     })
   if (parsed.uri !== expected.origin)
     throw new RpcResponse.InvalidParamsError({
-      message: `Server Authentication challenge endpoint \`${url}\` returned a message with \`uri\` \`${parsed.uri}\` (expected \`${expected.origin}\`).`,
+      message: `Server Authentication challenge endpoint \`${url}\` returned a message with \`uri\` \`${parsed.uri}\` (expected \`${expected.origin}\`).${authOriginHint}`,
     })
   if (parsed.chainId !== chainId)
     throw new RpcResponse.InvalidParamsError({
