@@ -8,7 +8,7 @@ import * as Steps from './Steps.js'
 /**
  * Action button for the "Send $100 to a recipient." step. Uses
  * {@link Hooks.wallet.useSend} from `wagmi/tempo` to send $100 of
- * AlphaUSD to a fixed demo recipient.
+ * pathusd to a fixed demo recipient.
  */
 export function SendPayment() {
   const steps = Steps.use()
@@ -28,8 +28,8 @@ export function SendPayment() {
       loading={send.isPending}
       onClick={() =>
         send.mutate({
-          token: '0x20c0000000000000000000000000000000000000',
-          value: '100',
+          amount: '100',
+          token: 'pathusd',
         })
       }
     >
