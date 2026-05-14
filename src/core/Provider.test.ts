@@ -1846,8 +1846,9 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       })
       expect(result.tx.gas).toBeDefined()
 
-      // Pending keyAuthorization should be consumed after successful fill.
-      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
+      // Estimation should not consume the pending keyAuthorization. It needs
+      // to stay available for the first signed transaction that registers the key.
+      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
     })
 
     test('behavior: removes stale access key and retries on error', async () => {

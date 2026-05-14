@@ -318,7 +318,6 @@ export function create(options: create.Options = {}): create.ReturnType {
                                 ...KeyAuthorization.toRpc(keyAuth),
                               } as never,
                             })
-                            AccessKey.removePending(account, { store })
                             return result
                           } catch (error) {
                             AccessKey.invalidate(account, error, { store })
