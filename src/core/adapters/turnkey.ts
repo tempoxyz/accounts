@@ -1,10 +1,17 @@
-import { Address as core_Address, Hex, Provider as ox_Provider, Signature } from 'ox'
+import {
+  Address as core_Address,
+  Bytes,
+  Hex,
+  Provider as ox_Provider,
+  PublicKey,
+  RpcResponse,
+  Secp256k1,
+} from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
-import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
+import { hashMessage, hashTypedData, isAddressEqual } from 'viem'
 import type { Address } from 'viem/accounts'
 import { prepareTransactionRequest } from 'viem/actions'
-import type { Account as TempoAccount } from 'viem/tempo'
-import { Transaction as TempoTransaction } from 'viem/tempo'
+import { Account as TempoAccount } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
@@ -25,23 +32,34 @@ const turnkeySessionErrorCodes = new Set([
  * Creates a Turnkey adapter backed by `@turnkey/core` client sessions and Ethereum wallet accounts.
  *
  * The adapter owns silent reconnect, session-expiry cleanup, and provider signing actions.
- * Apps provide the UI-bearing login or sign-up flow through `loadAccounts`. Provide
+ * Apps provide the UI-bearing login or sign-up flow through `loadAccounts`. The adapter
+ * fetches Ethereum wallet accounts from Turnkey after the flow completes. Provide
  * `createAccount` only when registration needs a distinct Turnkey flow.
  *
  * @example
  * ```ts
- * import { TurnkeyClient } from '@turnkey/core'
+ * import { TurnkeyClient, generateWalletAccountsFromAddressFormat } from '@turnkey/core'
  * import { Provider, turnkey } from 'accounts'
  *
  * const provider = Provider.create({
  *   adapter: turnkey({
  *     client: new TurnkeyClient({ organizationId, authProxyConfigId }),
+ *     createAccount: async ({ client, parameters }) => {
+ *       await client.signUpWithPasskey({
+ *         passkeyDisplayName: parameters.name,
+ *         createSubOrgParams: {
+ *           userName: parameters.name,
+ *           customWallet: {
+ *             walletName: 'FooBar',
+ *             walletAccounts: generateWalletAccountsFromAddressFormat({
+ *               addresses: ['ADDRESS_FORMAT_ETHEREUM'],
+ *             }),
+ *           },
+ *         },
+ *       })
+ *     },
  *     loadAccounts: async ({ client }) => {
- *       const session = await client.getSession()
- *       if (!session || session.expiry * 1000 <= Date.now()) await client.loginWithPasskey()
- *       return (await client.fetchWallets())
- *         .flatMap((wallet) => wallet.accounts)
- *         .filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')
+ *       await client.loginWithPasskey()
  *     },
  *   }),
  * })
@@ -72,6 +90,68 @@ export function turnkey<const client extends turnkey.Client>(
         address: core_Address.from(account.address),
         ...(label ? { label } : {}),
       }
+    }
+
+    function toTempoAccount(account: turnkey.WalletAccount): TempoAccount.Account {
+      const publicKey = toPublicKey(account)
+      assertAddress(account, publicKey)
+
+      const sign = async (parameters: { hash: Hex.Hex }) =>
+        await signPayload({
+          payload: parameters.hash,
+          turnkeyClient: await getTurnkeyClient(),
+          walletAccount: account,
+        })
+
+      return TempoAccount.from({
+        keyType: 'secp256k1',
+        publicKey,
+        sign,
+      })
+    }
+
+    function toPublicKey(account: turnkey.WalletAccount) {
+      const publicKey = account.publicKey.startsWith('0x')
+        ? account.publicKey
+        : `0x${account.publicKey}`
+      Hex.assert(publicKey, { strict: true })
+      return PublicKey.from(Secp256k1.noble.ProjectivePoint.fromHex(Bytes.fromHex(publicKey)))
+    }
+
+    function assertAddress(account: turnkey.WalletAccount, publicKey: PublicKey.PublicKey) {
+      const address = core_Address.from(account.address)
+      const address_publicKey = core_Address.fromPublicKey(publicKey)
+      if (isAddressEqual(address, address_publicKey)) return
+
+      throw new RpcResponse.InternalError({
+        message: `Turnkey account publicKey does not match address "${address}".`,
+      })
+    }
+
+    async function fetchWalletAccounts(): Promise<readonly turnkey.WalletAccount[]> {
+      const turnkeyClient = await getTurnkeyClient()
+      return (await turnkeyClient.fetchWallets()).flatMap((wallet) =>
+        wallet.accounts.filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM'),
+      )
+    }
+
+    function selectWalletAccounts(
+      accounts: readonly turnkey.WalletAccount[],
+      addresses: turnkey.AccountSelection,
+    ) {
+      if (!addresses) return accounts
+
+      return addresses.map((address) => {
+        const address_ = core_Address.from(address)
+        const account = accounts.find((account) =>
+          isAddressEqual(core_Address.from(account.address), address_),
+        )
+        if (account) return account
+
+        throw new RpcResponse.InternalError({
+          message: `Turnkey callback returned address "${address_}" that was not found in fetched wallet accounts.`,
+        })
+      })
     }
 
     function clear() {
@@ -116,10 +196,7 @@ export function turnkey<const client extends turnkey.Client>(
         const session = await getValidSession()
         if (!session) return
 
-        const turnkeyClient = await getTurnkeyClient()
-        const restored = (await turnkeyClient.fetchWallets()).flatMap((wallet) =>
-          wallet.accounts.filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM'),
-        )
+        const restored = await fetchWalletAccounts()
         walletAccounts = persisted
           .map((account) =>
             restored.find((walletAccount) =>
@@ -270,35 +347,19 @@ export function turnkey<const client extends turnkey.Client>(
     }
 
     async function signTransaction(parameters: Adapter.signTransaction.Parameters) {
-      const turnkeyClient = await getTurnkeyClient()
-      const account = await accountForSigning(parameters.from)
+      const account = toTempoAccount(await accountForSigning(parameters.from))
       const { feePayer, ...rest } = parameters
       const viemClient = getClient({
         chainId: parameters.chainId,
         feePayer: feePayer === true ? undefined : feePayer,
       })
       const prepared = await prepareTransactionRequest(viemClient, {
-        account: core_Address.from(account.address),
+        account,
         ...rest,
         ...(feePayer ? { feePayer: true } : {}),
         type: 'tempo',
       } as never)
-      const presign = (() => {
-        if ('feePayerSignature' in prepared && prepared.feePayerSignature)
-          return { ...prepared, feePayerSignature: null }
-        return prepared
-      })()
-      const unsignedTransaction = await TempoTransaction.serialize(presign as never)
-
-      const signature = await signPayload({
-        payload: keccak256(unsignedTransaction),
-        turnkeyClient,
-        walletAccount: account,
-      })
-      return await TempoTransaction.serialize(
-        prepared as never,
-        SignatureEnvelope.from(Signature.fromHex(signature)) as never,
-      )
+      return await account.signTransaction(prepared as never)
     }
 
     function isSessionError(error: unknown) {
@@ -341,8 +402,8 @@ export function turnkey<const client extends turnkey.Client>(
             )
 
           const turnkeyClient = await getTurnkeyClient()
-          const accounts = options.createAccount
-            ? [await options.createAccount({ client: turnkeyClient, parameters })]
+          const addresses = options.createAccount
+            ? await options.createAccount({ client: turnkeyClient, parameters })
             : await options.loadAccounts({
                 client: turnkeyClient,
                 parameters: {
@@ -352,7 +413,7 @@ export function turnkey<const client extends turnkey.Client>(
                 },
               })
           await requireSession()
-          walletAccounts = accounts
+          walletAccounts = selectWalletAccounts(await fetchWalletAccounts(), addresses)
           restore_promise = undefined
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters.digest
@@ -393,8 +454,9 @@ export function turnkey<const client extends turnkey.Client>(
             )
 
           const turnkeyClient = await getTurnkeyClient()
-          walletAccounts = await options.loadAccounts({ client: turnkeyClient, parameters })
+          const addresses = await options.loadAccounts({ client: turnkeyClient, parameters })
           await requireSession()
+          walletAccounts = selectWalletAccounts(await fetchWalletAccounts(), addresses)
           restore_promise = undefined
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters?.digest
@@ -558,24 +620,30 @@ export declare namespace turnkey {
   type Options<client extends Client = Client> = {
     /** Existing Turnkey client, such as `TurnkeyClient` from `@turnkey/core`. */
     client: client
-    /** Creates/registers a Turnkey wallet account. UI is allowed. Defaults to `loadAccounts`. */
+    /**
+     * Creates/registers a Turnkey wallet account. UI is allowed. Defaults to `loadAccounts`.
+     * May return selected addresses; the first address is treated as active by default.
+     */
     createAccount?:
       | ((parameters: {
           /** Initialized Turnkey client. */
           client: client
           /** Provider create-account parameters. */
           parameters: Adapter.createAccount.Parameters
-        }) => Promise<WalletAccount>)
+        }) => Promise<AccountSelection>)
       | undefined
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
-    /** Loads/logs into existing Turnkey wallet accounts. UI is allowed. */
+    /**
+     * Loads/logs into existing Turnkey wallet accounts. UI is allowed. May return selected
+     * addresses; the first address is treated as active by default.
+     */
     loadAccounts: (parameters: {
       /** Initialized Turnkey client. */
       client: client
       /** Provider load-accounts parameters. */
       parameters?: Adapter.loadAccounts.Parameters | undefined
-    }) => Promise<readonly WalletAccount[]>
+    }) => Promise<AccountSelection>
     /** Display name of the provider. @default "Turnkey" */
     name?: string | undefined
     /** Reverse DNS identifier. @default "com.turnkey" */
@@ -583,6 +651,13 @@ export declare namespace turnkey {
     /** Milliseconds before Turnkey session expiry to proactively disconnect. @default 10000 */
     sessionSkewMs?: number | undefined
   }
+
+  /**
+   * Optional selected addresses returned from a Turnkey login/sign-up callback.
+   * When omitted, all fetched Turnkey Ethereum accounts are used. When provided,
+   * fetched accounts are ordered to match this list, and the first address is active by default.
+   */
+  type AccountSelection = readonly Address[] | void
 
   /** Minimal structural Turnkey client surface used by the adapter. */
   type Client = {
@@ -613,12 +688,14 @@ export declare namespace turnkey {
     accounts: readonly WalletAccount[]
   }
 
-  /** Minimal structural Turnkey wallet account used by the adapter. */
+  /** Minimal structural Turnkey wallet account fetched by the adapter. */
   type WalletAccount = {
     /** EVM address for the Turnkey wallet account. */
     address: string
     /** Turnkey Ethereum address format. */
     addressFormat?: 'ADDRESS_FORMAT_ETHEREUM' | undefined
+    /** Raw compressed secp256k1 public key for the Turnkey wallet account. */
+    publicKey: string
   }
 
   /** Signature parts returned by Turnkey raw-payload signing. */
