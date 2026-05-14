@@ -1,14 +1,16 @@
 import { Handler, Kv } from 'accounts/server'
+import { Hono } from 'hono'
 
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url)
-    const handler = Handler.webAuthn({
-      kv: Kv.cloudflare(env.KV),
-      origin: url.origin,
-      rpId: url.hostname,
-      path: '/auth',
-    })
-    return handler.fetch(request)
-  },
-} satisfies ExportedHandler<Cloudflare.Env>
+const app = new Hono<{ Bindings: Cloudflare.Env }>()
+
+app.all('/auth/*', (c) => {
+  const url = new URL(c.req.url)
+  return Handler.webAuthn({
+    kv: Kv.cloudflare(c.env.KV),
+    origin: url.origin,
+    rpId: url.hostname,
+    path: '/auth',
+  }).fetch(c.req.raw)
+})
+
+export default app
