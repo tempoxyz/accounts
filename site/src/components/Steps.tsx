@@ -1,15 +1,13 @@
 'use client'
 
 import {
-  Children,
-  cloneElement,
   createContext,
-  isValidElement,
-  type ReactElement,
   type ReactNode,
   useCallback,
   useContext,
+  useId,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { Button } from 'regen-ui'
@@ -20,15 +18,21 @@ type Action = number | 'next' | 'back' | 'reset'
 type StepsContextValue = {
   current: number
   set: (action: Action) => void
+  /**
+   * Claim a sequential 1-based slot for a Step by its stable `id`. Repeat
+   * calls with the same id (e.g. from React strict-mode double-renders)
+   * return the same value without shifting subsequent steps.
+   */
+  register: (id: string) => number
 }
 
 const StepsContext = createContext<StepsContextValue | null>(null)
 const StepContext = createContext<number | null>(null)
 
 /**
- * Wraps children with step state. Auto-numbers any direct {@link Step}
- * children starting at 1; pass `value` on a `<Step>` to override. `initial`
- * defaults to the first inferred step (1) so the first row is active.
+ * Wraps children with step state. Each {@link Step} that renders without an
+ * explicit `value` is auto-numbered sequentially, starting at 1, in the
+ * order it is rendered. `initial` defaults to `1`.
  *
  * Renders without any layout wrapper. Use {@link Root} for the default
  * vertically-stacked layout.
@@ -37,14 +41,13 @@ const StepContext = createContext<number | null>(null)
  */
 export function Provider(props: Provider.Props) {
   const { children, initial } = props
-  const { enriched, value } = useStepsState(children, initial)
-  return <StepsContext.Provider value={value}>{enriched}</StepsContext.Provider>
+  return <StepsRoot initial={initial}>{children}</StepsRoot>
 }
 
 export declare namespace Provider {
   type Props = {
     children: ReactNode
-    /** Starting step. @default first inferred step (`1`) */
+    /** Starting step. @default `1` */
     initial?: number
   }
 }
@@ -55,11 +58,10 @@ export declare namespace Provider {
  */
 export function Root(props: Root.Props) {
   const { children, initial } = props
-  const { enriched, value } = useStepsState(children, initial)
   return (
-    <StepsContext.Provider value={value}>
-      <div className="flex flex-col gap-3">{enriched}</div>
-    </StepsContext.Provider>
+    <StepsRoot initial={initial}>
+      <div className="flex flex-col gap-3">{children}</div>
+    </StepsRoot>
   )
 }
 
@@ -67,95 +69,125 @@ export declare namespace Root {
   type Props = Provider.Props
 }
 
-/**
- * Recursively walks `children`, assigning sequential `value` props to any
- * {@link Step} elements found anywhere in the subtree. Wrappers (any
- * non-Step element) are cloned with their walked children, so Steps inside
- * arbitrary wrappers (e.g. a {@link Demo}) still get auto-numbered.
- */
-function enrichSteps(
-  children: ReactNode,
-  counter: { value: number },
-  first: { value: number | undefined },
-): ReactNode {
-  return Children.map(children, (child) => {
-    if (!isValidElement(child)) return child
-    const isStep =
-      typeof child.type === 'function' && (child.type as { __step?: boolean }).__step === true
-    if (isStep) {
-      counter.value += 1
-      const childProps = child.props as Step.Props
-      const value = childProps.value ?? counter.value
-      if (first.value === undefined) first.value = value
-      return cloneElement(child as ReactElement<Step.Props>, { key: value, value })
-    }
-    const childProps = child.props as { children?: ReactNode }
-    if (childProps.children === undefined) return child
-    return cloneElement(child, {
-      children: enrichSteps(childProps.children, counter, first),
-    } as never)
-  })
-}
+function StepsRoot(props: { children: ReactNode; initial: number | undefined }) {
+  const { children, initial } = props
+  // Stable ordered list of Step ids that have registered with this
+  // Provider. Lives in a ref so the slot a Step claims survives across
+  // re-renders and React's strict-mode double-invocation.
+  const idsRef = useRef<string[]>([])
 
-function useStepsState(children: ReactNode, initial: number | undefined) {
-  const { enriched, firstValue } = useMemo(() => {
-    const counter = { value: 0 }
-    const first: { value: number | undefined } = { value: undefined }
-    const enriched = enrichSteps(children, counter, first)
-    return { enriched, firstValue: first.value ?? 1 }
-  }, [children])
-
-  const [current, _setStep] = useState(initial ?? firstValue)
+  const [current, setStep] = useState(initial ?? 1)
 
   const set = useCallback(
     (action: Action) => {
-      if (action === 'next') _setStep((s) => s + 1)
-      else if (action === 'back') _setStep((s) => Math.max(0, s - 1))
-      else if (action === 'reset') _setStep(initial ?? firstValue)
-      else _setStep(action)
+      if (action === 'next') setStep((s) => s + 1)
+      else if (action === 'back') setStep((s) => Math.max(0, s - 1))
+      else if (action === 'reset') setStep(initial ?? 1)
+      else setStep(action)
     },
-    [initial, firstValue],
+    [initial],
   )
 
-  const value = useMemo<StepsContextValue>(() => ({ current, set }), [current, set])
-  return { enriched, value }
+  const register = useCallback((id: string) => {
+    const ids = idsRef.current
+    const i = ids.indexOf(id)
+    if (i !== -1) return i + 1
+    ids.push(id)
+    return ids.length
+  }, [])
+
+  const value = useMemo<StepsContextValue>(
+    () => ({ current, set, register }),
+    [current, set, register],
+  )
+  return <StepsContext.Provider value={value}>{children}</StepsContext.Provider>
 }
 
 /**
- * Returns `{ active, current, set }`. `active` is `true` only when called
- * inside a {@link Step} that matches the current step. `set` accepts a step
- * index (`number`), or one of `'next'`, `'back'`, `'reset'`.
+ * Returns `{ active, current, set }`. `set` accepts a step index
+ * (`number`), or one of `'next'`, `'back'`, `'reset'`.
+ *
+ * `active` is `true` when the surrounding step matches `current`. The step
+ * to compare against is resolved as follows:
+ *
+ *   1. If `value` is passed, compare against it (useful when calling from
+ *      outside a `<Step>`, e.g. a composite component that owns its own
+ *      `<Step>` element).
+ *   2. Otherwise, use the nearest `<Step>` ancestor's value.
+ *   3. If neither is present, `active` is always `false`.
  *
  * @example
  * ```ts
  * import * as Steps from './Steps'
  *
- * const { active, current, set } = Steps.use()
- * set('next')
+ * const steps = Steps.use(2)
+ * if (steps.active) steps.set('next')
  * ```
  */
-export function use(): { active: boolean; current: number; set: (action: Action) => void } {
+export function use(value?: number): {
+  active: boolean
+  current: number
+  set: (action: Action) => void
+} {
   const ctx = useContext(StepsContext)
   if (!ctx) throw new Error('Steps.use() must be called inside <Steps.Provider>')
   const stepValue = useContext(StepContext)
+  const compare = value ?? stepValue
   return {
-    active: stepValue !== null && stepValue === ctx.current,
+    active: compare !== null && compare !== undefined && compare === ctx.current,
     current: ctx.current,
     set: ctx.set,
   }
 }
 
 /**
- * A single row in a step list. Clicking the action button advances to the
- * next step by default; wrap with a client component if you need a custom
- * handler.
+ * Claim a sequential 1-based step slot in the surrounding {@link Provider}
+ * and report active state, all in one call. Use this from a composite
+ * component that owns its own {@link Step}: pass `value` down and read
+ * `active` for the action button without nesting another component.
+ *
+ * @example
+ * ```tsx
+ * function SendPayment() {
+ *   const steps = Steps.useStep()
+ *   return <Steps.Step value={steps.value} ...action={... disabled={!steps.active} />} />
+ * }
+ * ```
+ */
+export function useStep(): {
+  active: boolean
+  value: number
+  current: number
+  set: (action: Action) => void
+} {
+  const ctx = useContext(StepsContext)
+  if (!ctx) throw new Error('Steps.useStep() must be called inside <Steps.Provider>')
+  const id = useId()
+  const value = ctx.register(id)
+  return {
+    active: ctx.current === value,
+    value,
+    current: ctx.current,
+    set: ctx.set,
+  }
+}
+
+/**
+ * A single row in a step list. Auto-numbers in render order via
+ * {@link Provider}; pass `value` only to override.
+ *
+ * Clicking the action button advances to the next step by default; wrap
+ * with a client component if you need a custom handler.
  */
 export function Step(props: Step.Props) {
-  const { action, children, label, value } = props
+  const { action, children, label } = props
   const ctx = useContext(StepsContext)
   if (!ctx) throw new Error('<Steps.Step> must be inside <Steps.Provider>')
-  if (value === undefined)
-    throw new Error('<Steps.Step> must have a `value` (set automatically by <Steps.Provider>)')
+  // If `value` is omitted, claim a stable slot from the surrounding
+  // Provider keyed by `useId()`. Strict-mode double-invocation of the Step
+  // body is safe because `register` is idempotent per id.
+  const id = useId()
+  const value = props.value ?? ctx.register(id)
   const active = ctx.current === value
 
   return (
@@ -178,7 +210,9 @@ export function Step(props: Step.Props) {
             >
               {action}
             </Button>
-          ) : (action ?? null)}
+          ) : (
+            (action ?? null)
+          )}
         </div>
         {children && active ? (
           <div className="ml-11 border-l border-primary pl-4 text-primary text-[14px]">
@@ -190,21 +224,14 @@ export function Step(props: Step.Props) {
   )
 }
 
-/**
- * Marker so {@link enrichSteps} can recognize Step elements without relying
- * on identity comparison (which breaks across HMR or MDX component
- * wrapping).
- */
-;(Step as unknown as { __step: boolean }).__step = true
-
 export declare namespace Step {
   type Props = {
     /**
-     * Step index this row represents. Auto-assigned by the parent
-     * {@link Provider} based on the child's position; only set explicitly
-     * to override.
+     * Step index this row represents. Auto-assigned by the surrounding
+     * {@link Provider} based on render order; only set explicitly to
+     * override.
      */
-    value?: number
+    value?: number | undefined
     /** Description text shown next to the number. */
     label: ReactNode
     /**
@@ -236,5 +263,3 @@ export function Reset() {
     </button>
   )
 }
-
-

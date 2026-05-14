@@ -13,17 +13,23 @@ import * as Steps from './Steps.js'
 const queryClient = new QueryClient()
 
 export function Demo(props: Demo.Props) {
-  const { badge = 'DEMO', children, githubUrl, headerAction, title } = props
+  const { badge = 'DEMO', children, className, githubUrl, headerAction, title } = props
   const repoPath = githubUrl.replace(/^https?:\/\/github\.com\//, '')
   const gitpickCommand = `pnpx gitpick ${repoPath}`
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <div className="my-4 border border-primary bg-surface" data-demo>
-          <Demo.Header badge={badge} headerAction={headerAction} title={title} />
-          <div className="border-t border-primary px-5 py-4">{children}</div>
-          <Demo.Footer command={gitpickCommand} githubUrl={githubUrl} />
-        </div>
+        <Steps.Provider>
+          <div className="my-4 border border-primary bg-surface" data-demo>
+            <Demo.Header badge={badge} headerAction={headerAction} title={title} />
+            <div
+              className={`border-t border-primary px-5 py-4${className ? ` ${className}` : ''}`}
+            >
+              {children}
+            </div>
+            <Demo.Footer command={gitpickCommand} githubUrl={githubUrl} />
+          </div>
+        </Steps.Provider>
       </QueryClientProvider>
     </WagmiProvider>
   )
@@ -33,6 +39,8 @@ export namespace Demo {
   export type Props = {
     badge?: string | undefined
     children: React.ReactNode
+    /** Extra class names applied to the inner content area. */
+    className?: string | undefined
     githubUrl: string
     /** Optional element rendered on the right side of the header (e.g. a reset button). */
     headerAction?: React.ReactNode | undefined
@@ -108,10 +116,10 @@ export function DemoReset() {
     <button
       type="button"
       aria-label="Restart"
-      onClick={() => {
-        disconnect.disconnect()
-        steps.set('reset')
-      }}
+      onClick={async () => {
+          await disconnect.disconnectAsync()
+          steps.set('reset')
+        }}
       className="text-secondary hover:text-primary flex size-7 items-center justify-center cursor-pointer leading-none"
     >
       <LucideRotateCcw aria-hidden className="size-4 block" />

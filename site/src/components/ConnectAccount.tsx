@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { Button } from 'regen-ui'
 import { useConnect, useConnection, useConnectors, useDisconnect } from 'wagmi'
 
@@ -22,6 +23,14 @@ export function ConnectAccount() {
 
   const connected = connection.status === 'connected'
 
+  // Auto-advance whenever this step is active and the wallet is connected.
+  // Covers both fresh connections (clicking "Sign in") and cached
+  // connections on page load. Safe against reset because `Demo.Reset`
+  // awaits `disconnectAsync()` before navigating back to step 1.
+  useEffect(() => {
+    if (steps.active && connected) steps.set('next')
+  }, [steps.active, connected, steps.set])
+
   if (connected)
     return (
       <Button
@@ -38,15 +47,7 @@ export function ConnectAccount() {
       variant={steps.active ? 'primary' : 'secondary'}
       disabled={!steps.active || !connector}
       loading={connect.isPending}
-      onClick={() =>
-        connector &&
-        connect.mutate(
-          { connector },
-          {
-            onSuccess: () => steps.set('next'),
-          },
-        )
-      }
+      onClick={() => connector && connect.mutate({ connector })}
     >
       Sign in
     </Button>

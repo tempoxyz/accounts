@@ -19,22 +19,18 @@ The Tempo Accounts SDK is a TypeScript library for applications and wallets to c
 
 Below is a live example of the Tempo Wallet adapter from the Accounts SDK — connect a Tempo account and send a payment to see the end-to-end flow.
 
-<Steps.Provider>
-  <Demo
-    title="Make a Payment"
-    githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/basic"
-    headerAction={<DemoReset />}
-  >
-    <div className="flex flex-col gap-3">
-      <Steps.Step
-        value={1}
-        label="Create an account, or use an existing one."
-        action={<ConnectAccount />}
-      />
-      <Steps.Step value={2} label="Send $100 to a recipient." action={<SendPayment />} />
-    </div>
-  </Demo>
-</Steps.Provider>
+<Demo
+  title="Make a Payment"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/basic"
+  headerAction={<DemoReset />}
+  className="flex flex-col gap-3"
+>
+  <Steps.Step
+    label="Create an account, or use an existing one."
+    action={<ConnectAccount />}
+  />
+  <SendPayment />
+</Demo>
 
 ### Quick Prompt
 
