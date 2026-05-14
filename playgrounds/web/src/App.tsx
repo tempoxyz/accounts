@@ -8,11 +8,11 @@ import {
   useState,
 } from 'react'
 import { Button as RegenButton } from 'regen-ui'
-import { parseUnits } from 'viem'
+import { encodeFunctionData, parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
-import { Actions } from 'viem/tempo'
+import { Abis, Actions, Addresses } from 'viem/tempo'
 
 import {
   type AdapterType,
@@ -919,7 +919,7 @@ function WalletSwitchChain() {
   )
 }
 
-type CallType = 'transfer' | 'approve'
+type CallType = 'transfer' | 'approve' | 'fee-token'
 type CallRow = { type: CallType; to: `0x${string}`; token: `0x${string}`; amount: string }
 
 function defaultRow(i: number): CallRow {
@@ -934,6 +934,15 @@ function defaultRow(i: number): CallRow {
 function buildCalls(rows: CallRow[]) {
   return rows.map((r) => {
     const amount = parseUnits(r.amount || '0', 6)
+    if (r.type === 'fee-token')
+      return {
+        to: Addresses.feeManager as `0x${string}`,
+        data: encodeFunctionData({
+          abi: Abis.feeManager,
+          functionName: 'setUserToken',
+          args: [r.token],
+        }),
+      }
     if (r.type === 'approve') {
       return Actions.token.approve.call({
         spender: r.to,
@@ -1011,11 +1020,14 @@ function Transactions() {
                 >
                   <option value="transfer">transfer</option>
                   <option value="approve">approve</option>
+                  <option value="fee-token">set user fee token</option>
                 </select>
               </td>
               <td>
                 <input
-                  value={row.to}
+                  disabled={row.type === 'fee-token'}
+                  placeholder={row.type === 'fee-token' ? 'n/a' : undefined}
+                  value={row.type === 'fee-token' ? '' : row.to}
                   onChange={(e) => updateRow(i, 'to', e.target.value as `0x${string}`)}
                   style={{ width: '100%', fontFamily: 'monospace', boxSizing: 'border-box' }}
                 />
@@ -1035,7 +1047,9 @@ function Transactions() {
               </td>
               <td>
                 <input
-                  value={row.amount}
+                  disabled={row.type === 'fee-token'}
+                  placeholder={row.type === 'fee-token' ? 'n/a' : undefined}
+                  value={row.type === 'fee-token' ? '' : row.amount}
                   onChange={(e) => updateRow(i, 'amount', e.target.value)}
                   style={{ width: '100%', boxSizing: 'border-box' }}
                 />
