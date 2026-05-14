@@ -158,7 +158,8 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       const account = (() => {
         try {
           return getAccount({ address: options.from, calls: options.calls, signable: true })
-        } catch {
+        } catch (err) {
+          console.warn('[accounts] getAccount failed in withAccessKey:', err)
           return undefined
         }
       })()
