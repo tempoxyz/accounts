@@ -82,9 +82,11 @@ function ServerAuth() {
     <div>
       <p>
         The wallet signs a SIWE challenge during connect (because{' '}
-        <code>tempoWallet({'{'} auth {'}'})</code> is set). The server issues an{' '}
-        <code>accounts_auth</code> session cookie, which authenticates calls to{' '}
-        <code>GET /me</code>. <strong>Disconnect</strong> calls{' '}
+        <code>
+          tempoWallet({'{'} auth {'}'})
+        </code>{' '}
+        is set). The server issues an <code>accounts_auth</code> session cookie, which authenticates
+        calls to <code>GET /me</code>. <strong>Disconnect</strong> calls{' '}
         <code>POST /auth/logout</code> automatically.
       </p>
       <div style={{ display: 'flex', gap: 8 }}>

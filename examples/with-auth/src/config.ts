@@ -11,8 +11,8 @@ const authUrl = await (async () => {
 })()
 
 export const config = createConfig({
-  chains: [tempo, tempoModerato],
-  connectors: [tempoWallet({ testnet: true, auth: authUrl })],
+  chains: [tempoModerato, tempo],
+  connectors: [tempoWallet({ auth: authUrl })],
   multiInjectedProviderDiscovery: false,
   transports: {
     [tempo.id]: http(),
