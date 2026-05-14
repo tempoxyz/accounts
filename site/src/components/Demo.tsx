@@ -91,25 +91,30 @@ export namespace Demo {
     }
   }
 
-  /**
-   * Header action button that resets the surrounding {@link Steps.Provider}
-   * and disconnects any active Wagmi connection so the demo starts fresh.
-   */
-  export function Reset() {
-    const steps = Steps.use()
-    const disconnect = useDisconnect()
-    return (
-      <button
-        type="button"
-        aria-label="Restart"
-        onClick={() => {
-          disconnect.disconnect()
-          steps.set('reset')
-        }}
-        className="text-secondary hover:text-primary flex size-7 items-center justify-center cursor-pointer leading-none"
-      >
-        <LucideRotateCcw aria-hidden className="size-4 block" />
-      </button>
-    )
-  }
+}
+
+/**
+ * Header action button that resets the surrounding {@link Steps.Provider}
+ * and disconnects any active Wagmi connection so the demo starts fresh.
+ *
+ * Exported at the top level (not under {@link Demo}) so MDX/RSC can reach
+ * it: client component references serialize the called function only and
+ * don't carry namespace properties.
+ */
+export function DemoReset() {
+  const steps = Steps.use()
+  const disconnect = useDisconnect()
+  return (
+    <button
+      type="button"
+      aria-label="Restart"
+      onClick={() => {
+        disconnect.disconnect()
+        steps.set('reset')
+      }}
+      className="text-secondary hover:text-primary flex size-7 items-center justify-center cursor-pointer leading-none"
+    >
+      <LucideRotateCcw aria-hidden className="size-4 block" />
+    </button>
+  )
 }

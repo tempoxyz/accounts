@@ -13,6 +13,7 @@ import * as Steps from './Steps.js'
 export function SendPayment() {
   const steps = Steps.use()
   const send = Hooks.wallet.useSend()
+  console.log(send)
 
   if (send.isSuccess)
     return (

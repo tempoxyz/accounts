@@ -5,7 +5,7 @@ description: Set up the Tempo Accounts SDK to create, manage, and interact with 
 
 import { Cards, Card } from 'vocs'
 import { ConnectAccount } from '../../components/ConnectAccount'
-import { Demo } from '../../components/Demo'
+import { Demo, DemoReset } from '../../components/Demo'
 import { SendPayment } from '../../components/SendPayment'
 import * as Steps from '../../components/Steps'
 
@@ -23,7 +23,7 @@ Below is a live example of the Tempo Wallet adapter from the Accounts SDK — co
   <Demo
     title="Make a Payment"
     githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/basic"
-    headerAction={<Demo.Reset />}
+    headerAction={<DemoReset />}
   >
     <div className="flex flex-col gap-3">
       <Steps.Step
