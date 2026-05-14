@@ -300,6 +300,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                           return getAccount({
                             address: parameters.from,
                             calls,
+                            chainId: parameters.chainId ?? store.getState().chainId,
                             signable: true,
                           })
                         } catch {

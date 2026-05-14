@@ -88,6 +88,7 @@ describe('serialize', () => {
         {
           access: '0x0000000000000000000000000000000000000001',
           address: '0x0000000000000000000000000000000000000099',
+          chainId: 123,
           keyType: 'secp256k1',
           privateKey: '0x1234',
         },
@@ -113,6 +114,7 @@ describe('serialize', () => {
           {
             "access": "0x0000000000000000000000000000000000000001",
             "address": "0x0000000000000000000000000000000000000099",
+            "chainId": 123,
             "keyType": "secp256k1",
             "privateKey": "0x1234",
           },
@@ -165,6 +167,7 @@ describe('serialize', () => {
           {
             access: '0x0000000000000000000000000000000000000001',
             address: '0x0000000000000000000000000000000000000099',
+            chainId: 123,
             keyType: 'secp256k1',
             privateKey: '0x1234',
           },
@@ -269,6 +272,32 @@ describe('hydrate', () => {
       ]
     `)
   })
+
+  test('behavior: drops legacy access key without chain context', () => {
+    const current: Store.State = {
+      accessKeys: [],
+      accounts: [],
+      activeAccount: 0,
+      chainId: 123,
+      requestQueue: [],
+    }
+
+    const result = Store.hydrate(
+      {
+        accessKeys: [
+          {
+            access: '0x0000000000000000000000000000000000000001',
+            address: '0x0000000000000000000000000000000000000099',
+            keyType: 'webCrypto',
+            keyPair: {} as any,
+          },
+        ],
+      },
+      current,
+    )
+
+    expect(result.accessKeys).toMatchInlineSnapshot(`[]`)
+  })
 })
 
 describe('persistence', () => {
@@ -339,6 +368,7 @@ describe('persistence', () => {
         {
           address: '0x0000000000000000000000000000000000000099',
           access: '0x0000000000000000000000000000000000000001',
+          chainId: 123,
           keyType: 'webCrypto',
           keyPair: {} as any,
         },
@@ -351,6 +381,7 @@ describe('persistence', () => {
         {
           "access": "0x0000000000000000000000000000000000000001",
           "address": "0x0000000000000000000000000000000000000099",
+          "chainId": 123,
           "keyPair": {},
           "keyType": "webCrypto",
         },
@@ -370,6 +401,7 @@ describe('persistence', () => {
         {
           address: '0x0000000000000000000000000000000000000099',
           access: '0x0000000000000000000000000000000000000001',
+          chainId: 123,
           expiry: 9999999999,
           limits: [{ token: '0x0000000000000000000000000000000000000abc', limit: 500n }],
           keyType: 'webCrypto',
@@ -386,6 +418,7 @@ describe('persistence', () => {
         {
           "access": "0x0000000000000000000000000000000000000001",
           "address": "0x0000000000000000000000000000000000000099",
+          "chainId": 123,
           "expiry": 9999999999,
           "keyPair": {},
           "keyType": "webCrypto",
@@ -411,6 +444,7 @@ describe('persistence', () => {
         {
           address: '0x0000000000000000000000000000000000000099',
           access: '0x0000000000000000000000000000000000000001',
+          chainId: 123,
           keyType: 'webCrypto',
           keyPair: {} as any,
         },

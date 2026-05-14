@@ -48,6 +48,7 @@
 - **CLI auth device codes are raw in protocol** — store, return, and query device codes as raw 8-character values (for example `ABCDEFGH`). Only apply hyphen formatting (`ABCD-EFGH`) when rendering for humans.
 - **Keep CLI protocol looseness scoped** — if the CLI bootstrap/device-code flow needs a more permissive request shape than the shared SDK RPC contract, keep that looseness in the CLI/server-specific surface (for example `src/server/CliAuth.ts` and CLI adapter handling). Do not widen `src/core/zod/rpc.ts` or shared `wallet_authorizeAccessKey` semantics unless the change is explicitly intended SDK-wide.
 - **Preserve WebAuthn signature-envelope magic when verifying RPC payloads** — `SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(signature))` must pass `{ magic: true }` for `webAuthn` signatures, but not for secp256k1/p256 signatures. `viem/tempo` uses the magic suffix to route stateless verification through `SignatureEnvelope.verify(...)`.
+- **Access keys are chain-scoped** — store and select locally managed access keys by the `chainId` from their signed key authorization. Do not use an access key authorized on one chain for another chain; fall back to root signing or reauthorization instead.
 
 ## Type Conventions
 

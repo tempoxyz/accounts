@@ -149,7 +149,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
      * the dialog so the user can fund, approve, or retry.
      */
     async function withAccessKey<result>(
-      options: Pick<Adapter.sendTransaction.Parameters, 'calls' | 'from'>,
+      options: Pick<Adapter.sendTransaction.Parameters, 'calls' | 'chainId' | 'from'>,
       fn: (
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
@@ -157,7 +157,12 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     ): Promise<result | undefined> {
       const account = (() => {
         try {
-          return getAccount({ address: options.from, calls: options.calls, signable: true })
+          return getAccount({
+            address: options.from,
+            calls: options.calls,
+            chainId: options.chainId,
+            signable: true,
+          })
         } catch (err) {
           console.warn('[accounts] getAccount failed in withAccessKey:', err)
           return undefined
@@ -293,6 +298,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const result = await withAccessKey(parameters, async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
+              chainId: parameters.chainId,
               feePayer: (() => {
                 if (feePayer === false) return false
                 if (typeof feePayer === 'string') return feePayer
@@ -323,6 +329,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const result = await withAccessKey(parameters, async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
+              chainId: parameters.chainId,
               feePayer: (() => {
                 if (feePayer === false) return false
                 if (typeof feePayer === 'string') return feePayer
@@ -353,6 +360,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const result = await withAccessKey(parameters, async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
+              chainId: parameters.chainId,
               feePayer: (() => {
                 if (feePayer === false) return false
                 if (typeof feePayer === 'string') return feePayer

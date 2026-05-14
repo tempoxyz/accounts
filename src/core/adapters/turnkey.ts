@@ -241,6 +241,7 @@ export function turnkey<const client extends turnkey.Client>(
       options: {
         address?: Address | undefined
         calls?: Adapter.signTransaction.Parameters['calls']
+        chainId?: number | undefined
       },
       fn: (
         account: TempoAccount.Account,
@@ -272,6 +273,7 @@ export function turnkey<const client extends turnkey.Client>(
       const account = await accountForSigning(parameters.from)
       const { feePayer, ...rest } = parameters
       const viemClient = getClient({
+        chainId: parameters.chainId,
         feePayer: feePayer === true ? undefined : feePayer,
       })
       const prepared = await prepareTransactionRequest(viemClient, {
@@ -438,10 +440,11 @@ export function turnkey<const client extends turnkey.Client>(
         },
         async signTransaction(parameters) {
           const result = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls },
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
             async (account, keyAuthorization) => {
               const { feePayer, ...rest } = parameters
               const viemClient = getClient({
+                chainId: parameters.chainId,
                 feePayer: feePayer === true ? undefined : feePayer,
               })
               const prepared = await prepareTransactionRequest(viemClient, {
@@ -474,7 +477,7 @@ export function turnkey<const client extends turnkey.Client>(
         },
         async sendTransaction(parameters) {
           const result = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls },
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
             async (account, keyAuthorization) => {
               const { feePayer, ...rest } = parameters
               const viemClient = getClient({
@@ -508,7 +511,7 @@ export function turnkey<const client extends turnkey.Client>(
         },
         async sendTransactionSync(parameters) {
           const result = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls },
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
             async (account, keyAuthorization) => {
               const { feePayer, ...rest } = parameters
               const viemClient = getClient({
