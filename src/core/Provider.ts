@@ -821,25 +821,6 @@ export function create(options: create.Options = {}): create.ReturnType {
                     )) satisfies Rpc.wallet_swap.Encoded['returns']
                   }
 
-                  case 'wallet_transfer': {
-                    assertConnected()
-                    if (!actions.transfer)
-                      throw new ox_Provider.UnsupportedMethodError({
-                        message: '`transfer` not supported by adapter.',
-                      })
-                    const decoded = request._decoded.params[0]
-                    const parameters = {
-                      ...decoded,
-                      ...(typeof decoded.feePayer !== 'undefined'
-                        ? { feePayer: resolveFeePayer(decoded.feePayer) }
-                        : {}),
-                    } as Adapter.transfer.Parameters
-                    return (await actions.transfer(
-                      parameters,
-                      request,
-                    )) satisfies Rpc.wallet_transfer.Encoded['returns']
-                  }
-
                   case 'wallet_depositZone': {
                     assertConnected()
                     if (!actions.depositZone)
