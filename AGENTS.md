@@ -43,6 +43,7 @@
 
 - **JSDoc on all exports** — every exported function, type, and constant gets a JSDoc comment. Type properties get JSDoc too. Namespace types (e.g. `declare namespace create { type Options }`) get JSDoc too. Doc-driven development: write the JSDoc before or alongside the implementation, not after.
 - **No `--` in site docs** — site docs (`site/src/pages/**`) must not use `--` (two ASCII hyphens) as punctuation. Use an em dash (`—`) instead. The global `--`-over-em-dash rule still applies to PR titles/bodies, changesets, commit messages, and code comments — site documentation is the only exception.
+- **No crypto jargon in site docs** — site docs (`site/src/pages/**`) must not use crypto/blockchain jargon when a plainer word exists. Examples: prefer "feeless" over "gasless", "transaction fee" over "gas fee", "account" over "wallet" when referring to user identity, "sign in" over "connect wallet" in user-facing copy. Reach for the term a non-crypto reader would already understand.
 
 ## Site Styling Conventions
 
