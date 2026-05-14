@@ -119,7 +119,7 @@ export default function Guides() {
 
   return (
     <section
-      className="px-6 pt-12 pb-16 sm:pt-[55px] sm:pb-[100px]"
+      className="px-6 pt-12 sm:pt-[55px]"
       style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
     >
       <h2 className="text-[24px] leading-tight text-white sm:text-[24px]">

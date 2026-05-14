@@ -121,7 +121,7 @@ function TopNav() {
           DOCS
         </a>
         <a
-          href="https://github.com/tempoxyz"
+          href="https://github.com/tempoxyz/accounts"
           className="flex items-center gap-2 text-[12px] text-white outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
         >
           <img src="/icons/github.svg" alt="" width={16} height={16} />
@@ -132,31 +132,37 @@ function TopNav() {
   );
 }
 
+const PM_SWAP_MS = 280;
+
 function HeroIntro() {
   const [pmIndex, setPmIndex] = useState(0);
-  const [prefixOpacity, setPrefixOpacity] = useState(1);
+  const [outgoingIndex, setOutgoingIndex] = useState<number | null>(null);
   const [paused, setPaused] = useState(false);
   const { copied: copiedInstall, copy: copyInstall } = useCopy();
   const { copied: copiedAgent, copy: copyAgent } = useCopy();
   const pm = PACKAGE_MANAGERS[pmIndex] ?? "npm";
   const cmd = installCommand[pm];
   const fullCommand = `${cmd.prefix} ${cmd.pkg}`;
+  const outgoingPrefix =
+    outgoingIndex != null
+      ? (installCommand[PACKAGE_MANAGERS[outgoingIndex] ?? "npm"]?.prefix ??
+        null)
+      : null;
 
   useEffect(() => {
     if (paused) return;
-    let swap: ReturnType<typeof setTimeout> | null = null;
     const cycle = setInterval(() => {
-      setPrefixOpacity(0);
-      swap = setTimeout(() => {
-        setPmIndex((i) => (i + 1) % PACKAGE_MANAGERS.length);
-        setPrefixOpacity(1);
-      }, 240);
-    }, 2400);
-    return () => {
-      clearInterval(cycle);
-      if (swap) clearTimeout(swap);
-    };
-  }, [paused]);
+      setOutgoingIndex((prev) => (prev == null ? pmIndex : prev));
+      setPmIndex((i) => (i + 1) % PACKAGE_MANAGERS.length);
+    }, 2200);
+    return () => clearInterval(cycle);
+  }, [paused, pmIndex]);
+
+  useEffect(() => {
+    if (outgoingIndex == null) return;
+    const t = setTimeout(() => setOutgoingIndex(null), PM_SWAP_MS + 40);
+    return () => clearTimeout(t);
+  }, [outgoingIndex, pmIndex]);
 
   return (
     <div
@@ -181,14 +187,39 @@ function HeroIntro() {
         >
           <p className="flex items-baseline font-mono text-[16px]">
             <span
-              className="block overflow-hidden whitespace-nowrap text-white/25"
+              className="overflow-hidden whitespace-nowrap"
               style={{
-                opacity: prefixOpacity,
+                display: "inline-grid",
                 width: `${cmd.prefix.length}ch`,
-                transition: `opacity 240ms ${easeOut}, width 240ms ${easeOut}`,
+                transition: `width ${PM_SWAP_MS}ms ${easeOut}`,
+                verticalAlign: "baseline",
               }}
             >
-              {cmd.prefix}
+              <span
+                key={`in-${pmIndex}`}
+                className="text-white/25"
+                style={{
+                  gridArea: "1 / 1",
+                  animation: `pmSlideIn ${PM_SWAP_MS}ms ${easeOut} both`,
+                  willChange: "transform, opacity, filter",
+                }}
+              >
+                {cmd.prefix}
+              </span>
+              {outgoingPrefix != null ? (
+                <span
+                  key={`out-${outgoingIndex}-${pmIndex}`}
+                  aria-hidden
+                  className="text-white/25"
+                  style={{
+                    gridArea: "1 / 1",
+                    animation: `pmSlideOut ${PM_SWAP_MS}ms ${easeOut} both`,
+                    willChange: "transform, opacity, filter",
+                  }}
+                >
+                  {outgoingPrefix}
+                </span>
+              ) : null}
             </span>
             <span className="pl-[1ch] text-white">{cmd.pkg}</span>
           </p>
@@ -643,7 +674,7 @@ function DemoSplit() {
           <AdapterTabs adapter={adapter} setAdapter={handleAdapterChange} />
           <CodeBlock adapter={adapter} />
           <div className="-mx-9 -mb-[26px] mt-auto">
-            <div className="bg-[#141414] px-9 py-5">
+            <div className="bg-[#141414] px-5 py-5">
               <div key={adapter} className="flex flex-col gap-2">
                 <p
                   className="text-[14px] text-white"

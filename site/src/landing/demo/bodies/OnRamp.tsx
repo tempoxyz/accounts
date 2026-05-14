@@ -22,7 +22,7 @@ export function OnRampBody({
       className="flex w-full max-w-[420px] flex-col gap-4 bg-[#181818] p-6"
       style={bodyAnimation(delay)}
     >
-      <div className="flex items-baseline justify-between">
+      <div className="flex flex-col gap-1">
         <p className="text-[13px] text-white/50">Available balance</p>
         <p className="font-mono text-[28px] tabular-nums text-white">
           {connectedBalance ?? "$0.00"}

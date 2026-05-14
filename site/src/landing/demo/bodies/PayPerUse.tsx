@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { DemoBodyProps } from "../types";
 import { PrimaryButton, bodyAnimation } from "./shared";
+
+const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
 
 export function PayPerUseBody({
   status,
@@ -12,6 +15,14 @@ export function PayPerUseBody({
   const calls = 1247;
   const cap = 5000;
   const pct = Math.min(100, (calls / cap) * 100);
+
+  // Fill from 0 → pct once the card has faded in. Re-arms on remount
+  // (e.g. when the user navigates back to this demo).
+  const [filled, setFilled] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setFilled(true), delay + 80);
+    return () => clearTimeout(id);
+  }, [delay]);
 
   const buttonLabel =
     status === "running"
@@ -39,7 +50,10 @@ export function PayPerUseBody({
       <div className="h-1 w-full bg-[#262626]">
         <div
           className="h-full bg-white"
-          style={{ width: `${pct}%` }}
+          style={{
+            width: `${filled ? pct : 0}%`,
+            transition: `width 1100ms ${easeOut}`,
+          }}
         />
       </div>
 

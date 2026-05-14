@@ -17,8 +17,7 @@ const DEMO_STEPS: readonly DemoKind[] = [
   "Pay Once",
   "Pay Per Use",
   "Subscribe",
-  "Trade",
-  "Read and Write",
+  "FX Trade",
 ];
 
 function ChevronRight() {
@@ -101,7 +100,7 @@ export function BrowserMockup({
 
   return (
     <div className="relative z-10 mx-auto w-full max-w-[1089px] border border-[#141414] bg-[rgba(11,11,11,0.75)] backdrop-blur-sm">
-      {/* URL bar — wraps to two rows on small screens so the wallet pill stays visible. */}
+      {/* URL bar — wraps to two rows on small screens so the wallet info stays visible. */}
       <div className="m-3 mb-0 flex flex-wrap items-center justify-between gap-2 bg-[#101010] p-3 sm:m-[27px] sm:gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <img
@@ -116,7 +115,7 @@ export function BrowserMockup({
           </p>
         </div>
         {connected ? (
-          <div className="flex shrink-0 items-center gap-2 border border-[#2e2e2e] bg-[#181818] px-2.5 py-1">
+          <div className="flex shrink-0 items-center gap-2">
             <span aria-hidden className="size-1.5 rounded-full bg-[#22c55e]" />
             <span className="font-mono text-[11px] text-white">
               {shorten(connected.address)}

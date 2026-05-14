@@ -4,7 +4,6 @@ import { PayOnceBody } from "./bodies/PayOnce";
 import { PayPerUseBody } from "./bodies/PayPerUse";
 import { SubscribeBody } from "./bodies/Subscribe";
 import { TradeBody } from "./bodies/Trade";
-import { ReadAndWriteBody } from "./bodies/ReadAndWrite";
 import {
   defaultAuthorizeAccessKey,
   DEMO_AMOUNT_USD,
@@ -147,9 +146,9 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     },
   },
 
-  Trade: {
+  "FX Trade": {
     url: "wisselbank.xyz",
-    prelude: ["Fetching best route", "Route found"],
+    prelude: ["Fetching best route"],
     Body: TradeBody,
     async run(provider) {
       // Open the wallet's swap UI — user picks tokens. Pre-fill $0.01.
@@ -164,50 +163,6 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         ],
       } as Parameters<typeof provider.request>[0]);
       return { summary: "Swap submitted" };
-    },
-  },
-
-  "Read and Write": {
-    url: "wisselbank.xyz",
-    prelude: ["Signing in with Ethereum to read your data"],
-    Body: ReadAndWriteBody,
-    async run(provider, ctx) {
-      if (ctx.variant === "write") {
-        const accounts = (await provider.request({
-          method: "eth_accounts",
-        })) as readonly `0x${string}`[];
-        const self = accounts?.[0];
-        if (!self) throw new Error("No account connected.");
-        await provider.request({
-          method: "wallet_send",
-          params: [{ to: self, value: DEMO_AMOUNT_USD }],
-        } as Parameters<typeof provider.request>[0]);
-        return { summary: "preference saved onchain" };
-      }
-      // Read step — SIWE personal_sign.
-      // TODO: hook up CF Worker echo when endpoint exists.
-      // TODO: switch to SIWE 1-click once access-key TIP lands.
-      const accountsResult = (await provider.request({
-        method: "eth_accounts",
-      })) as readonly `0x${string}`[];
-      const address = accountsResult?.[0];
-      if (!address) throw new Error("No account");
-      const domain = typeof window === "undefined" ? "demo" : window.location.host;
-      const nonce = Math.random().toString(36).slice(2, 10);
-      const issuedAt = new Date().toISOString();
-      const siweMessage = `${domain} wants you to sign in with your Ethereum account:\n${address}\n\nReady your usage on Accounts SDK demo.\n\nURI: https://${domain}\nVersion: 1\nNonce: ${nonce}\nIssued At: ${issuedAt}`;
-      const bytes = new TextEncoder().encode(siweMessage);
-      const hex =
-        "0x" +
-        Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-      await provider.request({
-        method: "personal_sign",
-        params: [hex as `0x${string}`, address],
-      } as Parameters<typeof provider.request>[0]);
-      const fakeActionsCount = 247; // mocked CF Worker response
-      return {
-        summary: `Welcome back · ${shorten(address)} · ${fakeActionsCount} actions`,
-      };
     },
   },
 };

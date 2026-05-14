@@ -21,11 +21,8 @@ export function SubscribeBody({
       className="flex w-full max-w-[420px] flex-col gap-5 bg-[#181818] p-6"
       style={bodyAnimation(delay)}
     >
-      <div className="flex items-baseline justify-between">
-        <div className="flex flex-col">
-          <p className="text-[16px] text-white">Pro Plan</p>
-          <p className="text-[12px] text-white/50">Monthly</p>
-        </div>
+      <div className="flex flex-col gap-1">
+        <p className="text-[13px] text-white/50">Pro Plan</p>
         <p className="font-mono text-[28px] tabular-nums text-white">
           $24.99<span className="text-white/40">/mo</span>
         </p>

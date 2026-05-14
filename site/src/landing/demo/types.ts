@@ -9,8 +9,7 @@ export type DemoKind =
   | "Pay Once"
   | "Pay Per Use"
   | "Subscribe"
-  | "Trade"
-  | "Read and Write";
+  | "FX Trade";
 
 export type Status = "idle" | "running" | "done";
 

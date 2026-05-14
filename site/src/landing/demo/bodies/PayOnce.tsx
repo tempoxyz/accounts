@@ -22,7 +22,7 @@ export function PayOnceBody({
       style={bodyAnimation(delay)}
     >
       <div className="flex flex-col gap-1">
-        <p className="text-[16px] text-white">Pro Plan</p>
+        <p className="text-[13px] text-white/50">Pro Plan</p>
         <p className="font-mono text-[32px] leading-none text-white sm:text-[36px]">
           $240
         </p>

@@ -33,9 +33,9 @@ function TokenRow({
   token: string;
 }) {
   return (
-    <div className="flex flex-col gap-2 bg-[#1f1f1f] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-5 sm:py-4">
+    <div className="flex flex-col gap-2 bg-[#1f1f1f] px-4 py-3 sm:px-5 sm:py-4">
       <p className="text-[12px] text-white/50">{label}</p>
-      <div className="flex items-baseline gap-2.5">
+      <div className="flex items-baseline justify-between gap-2.5">
         <p className="font-mono text-[20px] leading-none tabular-nums text-white sm:text-[24px]">
           {amount}
         </p>
@@ -57,8 +57,8 @@ export function TradeBody({
     status === "running"
       ? "Opening Tempo…"
       : status === "done"
-        ? "Swapped"
-        : "Swap";
+        ? "Exchanged"
+        : "Exchange";
 
   return (
     <div
@@ -69,11 +69,7 @@ export function TradeBody({
       <div className="flex items-center justify-center py-2 text-white/60">
         <SwapArrow />
       </div>
-      <TokenRow label="To" amount="0.038" token="ETH" />
-
-      <p className="mt-3 text-[11px] text-white/40">
-        1 USDC ≈ 0.000380 ETH · slippage 0.5%
-      </p>
+      <TokenRow label="To" amount="92.34" token="EURC" />
 
       <PrimaryButton
         label={buttonLabel}

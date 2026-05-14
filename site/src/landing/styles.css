@@ -185,6 +185,35 @@
   }
 }
 
+@keyframes pmSlideIn {
+  0% {
+    transform: translate3d(0, 110%, 0);
+    opacity: 0;
+    filter: blur(2px);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes pmSlideOut {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    transform: translate3d(0, -110%, 0);
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+
 .accounts-landing .code-pre,
 .accounts-landing .code-pre * {
   transition: color 220ms ease-out;
