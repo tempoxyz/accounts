@@ -49,6 +49,7 @@ describe('save', () => {
     expect(accessKeys.length).toMatchInlineSnapshot(`1`)
     expect(accessKeys[0]!.address).toBe(accessKey.address)
     expect(accessKeys[0]!.access).toBe(rootAddress)
+    expect(accessKeys[0]!.chainId).toMatchInlineSnapshot(`1`)
     expect(accessKeys[0]!.keyType).toMatchInlineSnapshot(`"p256"`)
     expect(accessKeys[0]!.keyAuthorization).toBe(keyAuthorization)
   })
@@ -385,6 +386,7 @@ describe('hydrate', () => {
     const result = AccessKey.hydrate({
       access: rootAddress,
       address: '0x0000000000000000000000000000000000000099',
+      chainId: 1,
       keyPair,
       keyType: 'webCrypto',
     })
@@ -398,6 +400,7 @@ describe('hydrate', () => {
     const result = AccessKey.hydrate({
       access: rootAddress,
       address: accounts[1]!.address,
+      chainId: 1,
       keyType: 'secp256k1',
       privateKey: privateKeys[1],
     })
@@ -412,6 +415,7 @@ describe('hydrate', () => {
       AccessKey.hydrate({
         access: rootAddress,
         address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
         keyType: 'p256',
       }),
     ).toThrowErrorMatchingInlineSnapshot(
@@ -433,12 +437,13 @@ describe('select', () => {
       {
         access: rootAddress,
         address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
         keyPair,
         keyType: 'webCrypto',
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, store })
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
 
     expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
   })
@@ -449,12 +454,30 @@ describe('select', () => {
       {
         access: accounts[1]!.address,
         address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
         keyPair,
         keyType: 'webCrypto',
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, store })
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
+
+    expect(result).toMatchInlineSnapshot(`undefined`)
+  })
+
+  test('behavior: skips access keys for another chain', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+      },
+    ])
+
+    const result = AccessKey.select({ address: rootAddress, chainId: 42_431, store })
 
     expect(result).toMatchInlineSnapshot(`undefined`)
   })
@@ -464,11 +487,12 @@ describe('select', () => {
       {
         access: rootAddress,
         address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
         keyType: 'p256',
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, store })
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
 
     expect(result).toMatchInlineSnapshot(`undefined`)
   })
@@ -480,12 +504,13 @@ describe('select', () => {
         access: rootAddress,
         address: '0x0000000000000000000000000000000000000099',
         expiry: Math.floor(Date.now() / 1000) - 3600,
+        chainId: 1,
         keyPair,
         keyType: 'webCrypto',
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, store })
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
 
     expect(result).toMatchInlineSnapshot(`undefined`)
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
@@ -498,12 +523,13 @@ describe('select', () => {
         access: rootAddress,
         address: '0x0000000000000000000000000000000000000099',
         expiry: Math.floor(Date.now() / 1000) + 3600,
+        chainId: 1,
         keyPair,
         keyType: 'webCrypto',
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, store })
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
 
     expect(result?.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000099"`)
     expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
@@ -515,6 +541,7 @@ describe('select', () => {
       {
         access: rootAddress,
         address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
         keyPair,
         keyType: 'webCrypto',
         limits: [
@@ -526,7 +553,7 @@ describe('select', () => {
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, store })
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
 
     expect(result?.limits).toMatchInlineSnapshot(`
       [
@@ -544,6 +571,7 @@ describe('select', () => {
       {
         access: rootAddress,
         address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
         keyPair,
         keyType: 'webCrypto',
       },
@@ -551,6 +579,7 @@ describe('select', () => {
 
     const result = AccessKey.select({
       address: rootAddress,
+      chainId: 1,
       store,
       calls: [{ to: '0x0000000000000000000000000000000000000abc', data: '0xa9059cbb' }],
     })
@@ -565,6 +594,7 @@ describe('select', () => {
       {
         access: rootAddress,
         address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
         keyPair,
         keyType: 'webCrypto',
         scopes: [{ address: token, selector: '0xa9059cbb' }],
@@ -573,6 +603,7 @@ describe('select', () => {
 
     const result = AccessKey.select({
       address: rootAddress,
+      chainId: 1,
       store,
       calls: [{ to: token, data: '0xa9059cbb0000000000000000000000000000000000000001' }],
     })
@@ -587,6 +618,7 @@ describe('select', () => {
       {
         access: rootAddress,
         address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
         keyPair,
         keyType: 'webCrypto',
         scopes: [{ address: token, selector: '0xa9059cbb' }],
@@ -595,6 +627,7 @@ describe('select', () => {
 
     const result = AccessKey.select({
       address: rootAddress,
+      chainId: 1,
       store,
       calls: [{ to: '0x0000000000000000000000000000000000000def', data: '0xdeadbeef' }],
     })
@@ -609,6 +642,7 @@ describe('select', () => {
       {
         access: rootAddress,
         address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
         keyPair,
         keyType: 'webCrypto',
         scopes: [{ address: token, selector: 'transfer(address,uint256)' }],
@@ -617,6 +651,7 @@ describe('select', () => {
 
     const result = AccessKey.select({
       address: rootAddress,
+      chainId: 1,
       store,
       calls: [{ to: token, data: '0xa9059cbb0000000000000000000000000000000000000001' }],
     })
@@ -631,6 +666,7 @@ describe('select', () => {
       {
         access: rootAddress,
         address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
         keyPair,
         keyType: 'webCrypto',
         scopes: [{ address: token }],
@@ -639,6 +675,7 @@ describe('select', () => {
 
     const result = AccessKey.select({
       address: rootAddress,
+      chainId: 1,
       store,
       calls: [{ to: token, data: '0xdeadbeef' }],
     })
@@ -652,13 +689,14 @@ describe('select', () => {
       {
         access: rootAddress,
         address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
         keyPair,
         keyType: 'webCrypto',
         scopes: [{ address: '0x0000000000000000000000000000000000000abc' }],
       },
     ])
 
-    const result = AccessKey.select({ address: rootAddress, store })
+    const result = AccessKey.select({ address: rootAddress, chainId: 1, store })
 
     expect(result).toMatchInlineSnapshot(`undefined`)
   })

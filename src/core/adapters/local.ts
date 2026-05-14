@@ -70,7 +70,7 @@ export function local(options: local.Options): Adapter.Adapter {
     }
 
     async function withAccessKey<result>(
-      options: Pick<Account.find.Options, 'address' | 'calls'>,
+      options: Pick<Account.find.Options, 'address' | 'calls' | 'chainId'>,
       fn: (
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
@@ -244,6 +244,7 @@ export function local(options: local.Options): Adapter.Adapter {
         async signTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient({
+            chainId: parameters.chainId,
             feePayer: (() => {
               if (feePayer === false) return false
               if (typeof feePayer === 'string') return feePayer
@@ -251,7 +252,7 @@ export function local(options: local.Options): Adapter.Adapter {
             })(),
           })
           const { account, prepared } = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls },
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
             async (account, keyAuthorization) => ({
               account,
               prepared: await prepareTransactionRequest(client, {
@@ -278,6 +279,7 @@ export function local(options: local.Options): Adapter.Adapter {
         async sendTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient({
+            chainId: parameters.chainId,
             feePayer: (() => {
               if (feePayer === false) return false
               if (typeof feePayer === 'string') return feePayer
@@ -285,7 +287,7 @@ export function local(options: local.Options): Adapter.Adapter {
             })(),
           })
           const { account, prepared } = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls },
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
             async (account, keyAuthorization) => ({
               account,
               prepared: await prepareTransactionRequest(client, {
@@ -306,6 +308,7 @@ export function local(options: local.Options): Adapter.Adapter {
         async sendTransactionSync(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient({
+            chainId: parameters.chainId,
             feePayer: (() => {
               if (feePayer === false) return false
               if (typeof feePayer === 'string') return feePayer
@@ -313,7 +316,7 @@ export function local(options: local.Options): Adapter.Adapter {
             })(),
           })
           const { account, prepared } = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls },
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
             async (account, keyAuthorization) => ({
               account,
               prepared: await prepareTransactionRequest(client, {

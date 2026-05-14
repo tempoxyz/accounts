@@ -1111,9 +1111,9 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
           method: 'wallet_send',
           params: [
             {
+              amount: '1',
               to: '0x0000000000000000000000000000000000000001',
               token: Addresses.pathUsd,
-              value: '1',
             },
           ],
         }),

@@ -153,13 +153,14 @@ describe('find', () => {
         {
           address: '0x0000000000000000000000000000000000000099',
           access: accounts[0].address,
+          chainId: tempoLocalnet.id,
           keyType: 'webCrypto',
           keyPair,
         },
       ],
     )
 
-    const result = Account.find({ store, signable: true })
+    const result = Account.find({ chainId: tempoLocalnet.id, store, signable: true })
 
     expect(result.source).toMatchInlineSnapshot(`"accessKey"`)
   })
@@ -172,6 +173,7 @@ describe('find', () => {
         {
           address: '0x0000000000000000000000000000000000000099',
           access: accounts[0].address,
+          chainId: tempoLocalnet.id,
           keyType: 'webCrypto',
           keyPair,
         },

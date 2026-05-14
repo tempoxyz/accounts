@@ -49,7 +49,12 @@ export function find(options: find.Options): TempoAccount.Account | JsonRpcAccou
 
   // When accessKey is requested, prefer a locally-signable access key for this address.
   if (accessKey) {
-    const key = core_AccessKey.select({ address: root.address, calls: options.calls, store })
+    const key = core_AccessKey.select({
+      address: root.address,
+      calls: options.calls,
+      chainId: options.chainId ?? store.getState().chainId,
+      store,
+    })
     if (key) return core_AccessKey.hydrate(key) as never
   }
 
@@ -64,6 +69,8 @@ export declare namespace find {
     address?: Address | undefined
     /** Calls to match against access key scopes. When provided, access keys whose scopes don't cover these calls are skipped. */
     calls?: readonly { to?: Address | undefined; data?: Hex | undefined }[] | undefined
+    /** Chain ID the access key must be authorized on. Defaults to the active chain. */
+    chainId?: number | undefined
     /** Whether to hydrate signing capability. @default false */
     signable?: boolean | undefined
     /** Reactive state store. */

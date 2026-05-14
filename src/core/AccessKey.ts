@@ -22,6 +22,8 @@ export type AccessKey = {
   address: Address.Address
   /** Owner of the access key. */
   access: Address.Address
+  /** Chain ID this access key authorization is scoped to. */
+  chainId: number
   /** Unix timestamp when the access key expires. */
   expiry?: number | undefined
   /** Signed key authorization to attach to the first transaction. Consumed on use. */
@@ -212,11 +214,12 @@ export function removePending(
 
 /** Selects a locally-signable access key for a root account, removing expired keys. */
 export function select(options: select.Options): AccessKey | undefined {
-  const { address, calls, store } = options
+  const { address, calls, chainId, store } = options
   const { accessKeys } = store.getState()
   let accessKeys_next = accessKeys
   for (const key of accessKeys) {
     if (key.access.toLowerCase() !== address.toLowerCase()) continue
+    if (key.chainId !== chainId) continue
     if (!('keyPair' in key && !!key.keyPair) && !('privateKey' in key && !!key.privateKey)) continue
 
     if (key.expiry && key.expiry < Date.now() / 1000) {
@@ -237,6 +240,8 @@ export declare namespace select {
     address: Address.Address
     /** Calls to match against access key scopes. */
     calls?: readonly { to?: Address.Address | undefined; data?: Hex.Hex | undefined }[] | undefined
+    /** Chain ID the access key must be authorized on. */
+    chainId: number
     /** Reactive state store. */
     store: Store.Store
   }
@@ -298,6 +303,7 @@ export function save(options: save.Options): void {
   const base = {
     address: keyAuthorization.address,
     access: address,
+    chainId: Number(keyAuthorization.chainId),
     expiry: keyAuthorization.expiry ?? undefined,
     keyAuthorization,
     keyType: keyAuthorization.type,

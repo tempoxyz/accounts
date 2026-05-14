@@ -615,17 +615,28 @@ export namespace wallet_getCallsStatus {
 export namespace wallet_send {
   /** Parameters object for `wallet_send`. */
   export const parameters = z.object({
+    /** Human-readable amount to pre-fill (e.g. "1.5"). */
+    amount: z.optional(z.string()),
     /**
      * Fee payer override. `false` to disable the wallet's default fee
      * payer, a URL string to use a custom fee payer service.
      */
     feePayer: z.optional(z.union([z.boolean(), z.string()])),
+    /**
+     * UTF-8 memo (max 32 bytes) to attach to the transfer. Wallet
+     * rejects the request if the selected token does not support
+     * memos (non-TIP-20).
+     */
+    memo: z.optional(z.string()),
     /** Recipient address to pre-fill. */
     to: z.optional(u.address()),
-    /** Token contract address to pre-fill. Omit to let the user choose. */
-    token: z.optional(u.address()),
-    /** Human-readable amount to pre-fill (e.g. "1.5"). */
-    value: z.optional(z.string()),
+    /**
+     * Token to pre-fill, accepted as either a contract address or a
+     * curated tokenlist symbol (case-insensitive, e.g. `"pathUsd"`).
+     * Symbols are resolved against the curated tokenlist on the active
+     * chain. Omit to let the user choose.
+     */
+    token: z.optional(z.union([u.address(), z.string()])),
   })
 
   export const schema = Schema.defineItem({

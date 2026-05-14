@@ -149,7 +149,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
      * the dialog so the user can fund, approve, or retry.
      */
     async function withAccessKey<result>(
-      options: Pick<Adapter.sendTransaction.Parameters, 'calls' | 'from'>,
+      options: Pick<Adapter.sendTransaction.Parameters, 'calls' | 'chainId' | 'from'>,
       fn: (
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
@@ -157,8 +157,14 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     ): Promise<result | undefined> {
       const account = (() => {
         try {
-          return getAccount({ address: options.from, calls: options.calls, signable: true })
-        } catch {
+          return getAccount({
+            address: options.from,
+            calls: options.calls,
+            chainId: options.chainId,
+            signable: true,
+          })
+        } catch (err) {
+          console.warn('[accounts] getAccount failed in withAccessKey:', err)
           return undefined
         }
       })()
@@ -171,7 +177,8 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         return result
       } catch (err) {
         if (AccessKey.invalidate(account, err, { store }))
-          console.warn('[accounts] silent sign with access key failed, removing key:', err)
+          console.warn('[accounts] access key invalidated, falling through to dialog:', err)
+        else console.warn('[accounts] access key sign failed, falling through to dialog:', err)
         return undefined
       }
     }
@@ -291,6 +298,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const result = await withAccessKey(parameters, async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
+              chainId: parameters.chainId,
               feePayer: (() => {
                 if (feePayer === false) return false
                 if (typeof feePayer === 'string') return feePayer
@@ -321,6 +329,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const result = await withAccessKey(parameters, async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
+              chainId: parameters.chainId,
               feePayer: (() => {
                 if (feePayer === false) return false
                 if (typeof feePayer === 'string') return feePayer
@@ -351,6 +360,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const result = await withAccessKey(parameters, async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const client = getClient({
+              chainId: parameters.chainId,
               feePayer: (() => {
                 if (feePayer === false) return false
                 if (typeof feePayer === 'string') return feePayer

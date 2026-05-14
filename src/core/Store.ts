@@ -42,7 +42,7 @@ export type State = {
 /** Provider state persisted as a refresh snapshot. */
 export type Persisted = {
   /** Stored access keys. */
-  accessKeys?: readonly AccessKey[] | undefined
+  accessKeys?: readonly unknown[] | undefined
   /** Connected accounts. */
   accounts?: readonly Account[] | undefined
   /** Index of the active account. */
@@ -167,9 +167,31 @@ export function hydrate(persisted: unknown, current: State): State {
         )
         return account ?? persisted
       }) ?? current.accounts,
-    accessKeys: state.accessKeys ?? current.accessKeys,
+    accessKeys: normalizeAccessKeys(state.accessKeys) ?? current.accessKeys,
     chainId: state.chainId ?? current.chainId,
   }
+}
+
+function normalizeAccessKeys(accessKeys: Persisted['accessKeys']) {
+  if (!accessKeys) return undefined
+  return accessKeys.filter((key): key is AccessKey => {
+    if (!key || typeof key !== 'object') return false
+    const value = key as {
+      access?: unknown
+      address?: unknown
+      chainId?: unknown
+      keyType?: unknown
+    }
+    return (
+      typeof value.access === 'string' &&
+      typeof value.address === 'string' &&
+      typeof value.chainId === 'number' &&
+      (value.keyType === 'secp256k1' ||
+        value.keyType === 'p256' ||
+        value.keyType === 'webAuthn' ||
+        value.keyType === 'webCrypto')
+    )
+  })
 }
 
 /**
