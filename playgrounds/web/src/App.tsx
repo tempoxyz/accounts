@@ -398,7 +398,7 @@ function WalletSend() {
           )
         }
       >
-        Send (PathUSD)
+        Send pathUSD
       </Button>
       <Button
         onClick={() =>
@@ -407,9 +407,9 @@ function WalletSend() {
               method: 'wallet_send',
               params: [
                 {
+                  amount: '1',
                   to: '0x0000000000000000000000000000000000000001',
                   token: tokens.pathUSD,
-                  value: '1',
                   ...feePayerParam,
                 },
               ],
@@ -417,7 +417,51 @@ function WalletSend() {
           )
         }
       >
-        Send ($1 PathUSD)
+        Send $1 pathUSD
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_send',
+              params: [
+                {
+                  amount: '1',
+                  to: '0x0000000000000000000000000000000000000001',
+                  // Resolved against the wallet's curated tokenlist
+                  // (case-insensitive). `pathusd` is also accepted.
+                  token: 'pathUSD',
+                  ...feePayerParam,
+                },
+              ],
+            }),
+          )
+        }
+      >
+        Send $1 pathUSD (symbol)
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_send',
+              params: [
+                {
+                  amount: '1',
+                  // 32-byte UTF-8 memo attached to the TIP-20 transfer.
+                  // The wallet rejects with `InvalidParamsError` if the
+                  // selected token is not TIP-20.
+                  memo: 'invoice #4821',
+                  to: '0x0000000000000000000000000000000000000001',
+                  token: 'pathUSD',
+                  ...feePayerParam,
+                },
+              ],
+            }),
+          )
+        }
+      >
+        Send $1 with memo
       </Button>
     </Method>
   )
