@@ -79,7 +79,7 @@ export function isPreparedTransaction(value: Record<string, unknown>) {
 /** Signs a filled transaction as the fee payer. */
 export async function sign(options: sign.Options) {
   const { account, transaction, sender } = options
-  const from = (transaction.from as Address | undefined) ?? sender
+  const from = sender ?? (transaction.from as Address | undefined)
   const { signature: _, ...withoutSenderSig } = transaction
   const prepared = { ...withoutSenderSig, from }
 

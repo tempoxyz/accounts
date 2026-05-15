@@ -1358,17 +1358,18 @@ function buildSwapCalls(
  * built for sponsorship signing throws `CallsEmptyError` or
  * `Cannot convert undefined to a BigInt` when serializing.
  *
- * Result fields take precedence (they are the chain's authoritative filled
- * values); request fields fill in everything else. Calls are normalized
+ * Only gas, fee, nonce, and signature fields from the fill result are trusted;
+ * request fields define the transaction being filled. Calls are normalized
  * separately so legacy `to`/`data`/`value` requests are also supported.
  */
 function mergeCallsFromRequest(
   resultTx: Record<string, unknown>,
   request: Record<string, unknown>,
 ): Record<string, unknown> {
-  const merged: Record<string, unknown> = { ...request, ...resultTx }
-  const resultCalls = resultTx.calls
-  if (Array.isArray(resultCalls) && resultCalls.length > 0) return merged
+  const merged: Record<string, unknown> = {
+    ...request,
+    ...pickFillFields(resultTx),
+  }
 
   const reqCalls = request.calls
   if (Array.isArray(reqCalls) && reqCalls.length > 0) {
@@ -1388,6 +1389,20 @@ function mergeCallsFromRequest(
     },
   ]
   return merged
+}
+
+function pickFillFields(tx: Record<string, unknown>): Record<string, unknown> {
+  const fields = [
+    'feePayerSignature',
+    'gas',
+    'gasPrice',
+    'maxFeePerGas',
+    'maxPriorityFeePerGas',
+    'nonce',
+  ] as const
+  const picked: Record<string, unknown> = {}
+  for (const field of fields) if (typeof tx[field] !== 'undefined') picked[field] = tx[field]
+  return picked
 }
 
 /**
