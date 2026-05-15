@@ -46,7 +46,7 @@ export const signatureEnvelope = z.custom<SignatureEnvelope.SignatureEnvelopeRpc
 export const keyType = z.union([z.literal('secp256k1'), z.literal('p256'), z.literal('webAuthn')])
 
 export const keyAuthorization = z.object({
-  address: u.address(),
+  address: z.optional(u.address()),
   chainId: u.bigint(),
   expiry: z.union([u.number(), z.null(), z.undefined()]),
   keyId: u.address(),
