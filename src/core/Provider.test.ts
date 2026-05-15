@@ -185,7 +185,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(result.accounts[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
     })
 
-    test('behavior: digest signature is verifiable on-chain', async () => {
+    test('behavior: caller digest signature is not a raw hash signature', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const client = provider.getClient()
 
@@ -201,7 +201,14 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         hash: digest,
         signature: result.accounts[0]!.capabilities.signature!,
       })
-      expect(valid).toMatchInlineSnapshot(`true`)
+      expect(valid).toMatchInlineSnapshot(`false`)
+
+      const messageValid = await verifyMessage(client, {
+        address: result.accounts[0]!.address,
+        message: { raw: digest },
+        signature: result.accounts[0]!.capabilities.signature!,
+      })
+      expect(messageValid).toMatchInlineSnapshot(`true`)
     })
 
     test('behavior: login without digest returns empty capabilities', async () => {
@@ -231,7 +238,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(result.accounts[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
     })
 
-    test('behavior: register digest signature is verifiable on-chain', async () => {
+    test('behavior: register caller digest signature is not a raw hash signature', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const client = provider.getClient()
 
@@ -246,7 +253,14 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         hash: digest,
         signature: result.accounts[0]!.capabilities.signature!,
       })
-      expect(valid).toMatchInlineSnapshot(`true`)
+      expect(valid).toMatchInlineSnapshot(`false`)
+
+      const messageValid = await verifyMessage(client, {
+        address: result.accounts[0]!.address,
+        message: { raw: digest },
+        signature: result.accounts[0]!.capabilities.signature!,
+      })
+      expect(messageValid).toMatchInlineSnapshot(`true`)
     })
 
     test('behavior: login with personalSign echoes { message } and surfaces signature at root', async () => {
