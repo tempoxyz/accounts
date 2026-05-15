@@ -86,8 +86,7 @@ export function local(options: local.Options): Adapter.Adapter {
       } catch (error) {
         if (account.source !== 'accessKey') throw error
         AccessKey.invalidate(account, error, { store })
-        const root = getAccount({ accessKey: false, address: options.address, signable: true })
-        return await fn(root, undefined)
+        throw error
       }
     }
 
