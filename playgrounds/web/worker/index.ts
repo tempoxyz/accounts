@@ -27,6 +27,7 @@ const handler = Handler.compose([
       account: privateKeyToAccount(process.env.PRIVATE_KEY),
       name: 'Playground',
       url: 'https://playground.tempo.xyz',
+      validate: () => true,
     },
     path: '/relay',
   }),

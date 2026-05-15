@@ -221,6 +221,7 @@ describe('behavior: with feePayer', () => {
           account: feePayerAccount,
           name: 'Test Sponsor',
           url: 'https://test.com',
+          validate: () => true,
         },
         onRequest: async (request) => {
           requests.push(request)
@@ -321,6 +322,7 @@ describe('behavior: with feePayer.feeToken', () => {
         feePayer: {
           account: feePayerAccount,
           feeToken: sponsorFeeToken,
+          validate: () => true,
         },
         resolveTokens: () => localnetTokens,
       }).listener,
@@ -406,6 +408,7 @@ describe('behavior: with app-provided feePayer URL', () => {
           account: feePayerAccount,
           name: 'App Sponsor',
           url: 'https://app.example.com',
+          validate: () => true,
         },
       }).listener,
     )
@@ -494,6 +497,7 @@ describe('behavior: with app-provided feePayer URL + autoSwap', () => {
           account: feePayerAccount,
           name: 'App Sponsor',
           url: 'https://app.example.com',
+          validate: () => true,
         },
       }).listener,
     )
@@ -614,6 +618,7 @@ describe('behavior: app-provided feePayer URL bypasses wallet validate', () => {
           account: feePayerAccount,
           name: 'App Sponsor',
           url: 'https://app.example.com',
+          validate: () => true,
         },
       }).listener,
     )
@@ -1374,6 +1379,7 @@ describe('behavior: path A — guaranteed sponsorship (no validate)', () => {
         feePayer: {
           account: feePayerAccount,
           name: 'Path A Sponsor',
+          validate: () => true,
         },
         onRequest: async (request) => {
           requests.push(request)

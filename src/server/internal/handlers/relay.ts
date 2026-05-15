@@ -63,6 +63,7 @@ const defaultCacheTtl = 10 * 60
  * const handler = Handler.relay({
  *   feePayer: {
  *     account: privateKeyToAccount('0x...'),
+ *     validate: () => true,
  *   },
  * })
  * ```

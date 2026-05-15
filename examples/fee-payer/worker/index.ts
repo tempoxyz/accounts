@@ -8,6 +8,7 @@ app.all('/relay/*', (c) =>
   Handler.relay({
     feePayer: {
       account: privateKeyToAccount(c.env.FEE_PAYER_PRIVATE_KEY),
+      validate: () => true,
     },
     path: '/relay',
   }).fetch(c.req.raw),

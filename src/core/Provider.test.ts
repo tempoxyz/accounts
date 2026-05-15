@@ -2173,6 +2173,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
           chains: [chain],
           feePayer: {
             account: feePayerAccount,
+            validate: () => true,
           },
           transports: { [chain.id]: http() },
         }).listener,
