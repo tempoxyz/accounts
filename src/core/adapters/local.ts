@@ -124,7 +124,11 @@ export function local(options: local.Options): Adapter.Adapter {
 
           // If the caller requested a digest signature but the adapter didn't
           // produce one (e.g. secp256k1 adapters), sign it ourselves.
-          const signature_ = digest && !signature ? await account.sign({ hash: digest }) : signature
+          const signature_ = await (async () => {
+            if (!digest || signature) return signature
+            if (personalSign) return await account.signMessage({ message: personalSign.message })
+            return await account.signMessage({ message: { raw: digest } })
+          })()
 
           const keyAuthorization = await (async () => {
             if (!grantOptions) return undefined
@@ -192,7 +196,16 @@ export function local(options: local.Options): Adapter.Adapter {
 
           // Fall back to local signing if the adapter didn't return a signature.
           let signature_ = signature
-          if (digest && !signature_ && account) signature_ = await account.sign({ hash: digest })
+          if (digest && !signature_ && account) {
+            if (personalSign)
+              signature_ = await account.signMessage({ message: personalSign.message })
+            else if (
+              keyAuthorization_unsigned &&
+              digest === KeyAuthorization.getSignPayload(keyAuthorization_unsigned.keyAuthorization)
+            )
+              signature_ = await account.sign({ hash: digest })
+            else signature_ = await account.signMessage({ message: { raw: digest } })
+          }
 
           // Key auth signing path:
           //   - If `personalSign` took the ceremony slot AND `authorizeAccessKey`

@@ -31,6 +31,26 @@ describe('local', () => {
         ]
       `)
     })
+
+    test('default: caller digest fallback signs an EIP-191 raw message', async () => {
+      const digest = `0x${'12'.repeat(32)}` as const
+      const { adapter } = setup({
+        loadAccounts: makeLoadAccounts(0, []),
+      })
+
+      const result = await adapter.actions.loadAccounts(
+        { digest },
+        { method: 'wallet_connect', params: undefined },
+      )
+
+      expect(
+        await verifyMessage({
+          address: core_accounts[0]!.address,
+          message: { raw: digest },
+          signature: result.signature!,
+        }),
+      ).toBe(true)
+    })
   })
 
   describe('loadAccounts: personalSign', () => {
@@ -191,6 +211,34 @@ describe('local', () => {
       ).toBe(true)
     })
 
+    test('default: caller digest fallback signs an EIP-191 raw message', async () => {
+      const digest = `0x${'34'.repeat(32)}` as const
+      const { adapter } = setup({
+        createAccount: async () => ({
+          accounts: [
+            {
+              address: core_accounts[1].address,
+              keyType: 'secp256k1' as const,
+              privateKey: privateKeys[1]!,
+            },
+          ],
+        }),
+      })
+
+      const result = await adapter.actions.createAccount(
+        { name: 'test', digest },
+        { method: 'wallet_connect', params: undefined },
+      )
+
+      expect(
+        await verifyMessage({
+          address: core_accounts[1]!.address,
+          message: { raw: digest },
+          signature: result.signature!,
+        }),
+      ).toBe(true)
+    })
+
     test('error: createAccount rejects when personalSign and digest are both set', async () => {
       const { adapter } = setup({
         createAccount: async () => ({
@@ -232,8 +280,8 @@ describe('local', () => {
 /**
  * Builds a `loadAccounts` callback backed by `privateKeys[index]` (secp256k1)
  * that records each `digest` it receives into `captured`. Returns the account
- * but no signature, so the local adapter signs the digest itself via
- * `account.sign({ hash })` — exercising the real signing path end-to-end.
+ * but no signature, so the local adapter exercises the real fallback
+ * signing path end-to-end.
  */
 function makeLoadAccounts(
   index: number,
