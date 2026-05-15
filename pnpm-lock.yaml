@@ -144,8 +144,8 @@ importers:
         specifier: ^1.4.28
         version: 1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3)
       expo-secure-store:
-        specifier: ^55.0.13
-        version: 55.0.13(expo@55.0.15)
+        specifier: ^56.0.3
+        version: 56.0.3(expo@55.0.15)
       expo-web-browser:
         specifier: ^55.0.14
         version: 55.0.14(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))
@@ -725,8 +725,8 @@ importers:
         specifier: ~55.0.11
         version: 55.0.13(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)(typescript@5.9.3)
       expo-secure-store:
-        specifier: ~55.0.12
-        version: 55.0.13(expo@55.0.15)
+        specifier: ~56.0.3
+        version: 56.0.3(expo@55.0.15)
       expo-status-bar:
         specifier: ~55.0.5
         version: 55.0.5(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)
@@ -5994,8 +5994,8 @@ packages:
       react-native-worklets:
         optional: true
 
-  expo-secure-store@55.0.13:
-    resolution: {integrity: sha512-I6r0JNO1Fd4o0Gu7Ixiic7s89lqgdUHq17uBH9y1f/AntoyKn71TdtYJH82RgfsBbu5qNVzrwImmvlANyOlITQ==}
+  expo-secure-store@56.0.3:
+    resolution: {integrity: sha512-az8s0l2fwx4rCiifU5Nii2opNufBxiWldJZ7gKrfl3OGA4W91rufgd+BSfVgp2ob7qXeQV2Ii/7kPYHudpufhw==}
     peerDependencies:
       expo: '*'
 
@@ -15347,7 +15347,7 @@ snapshots:
       react: 19.2.5
       react-native: 0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5)
 
-  expo-secure-store@55.0.13(expo@55.0.15):
+  expo-secure-store@56.0.3(expo@55.0.15):
     dependencies:
       expo: 55.0.15(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(typescript@5.9.3)
 
