@@ -95,6 +95,7 @@ export function from(messenger: Messenger): Messenger {
  */
 export function fromWindow(w: Window, options: fromWindow.Options = {}): Messenger {
   const { targetOrigin } = options
+  if (!targetOrigin) throw new Error('Messenger.fromWindow requires `targetOrigin`.')
   const listeners = new Map<string, (event: MessageEvent) => void>()
 
   return from({
@@ -106,7 +107,7 @@ export function fromWindow(w: Window, options: fromWindow.Options = {}): Messeng
       function onMessage(event: MessageEvent) {
         if (event.data.topic !== topic) return
         if (id && event.data.id !== id) return
-        if (targetOrigin && event.origin !== targetOrigin) return
+        if (event.origin !== targetOrigin) return
         listener(event.data.payload as never, event)
       }
       w.addEventListener('message', onMessage)
@@ -118,7 +119,7 @@ export function fromWindow(w: Window, options: fromWindow.Options = {}): Messeng
     },
     async send(topic, payload, target) {
       const id = crypto.randomUUID()
-      w.postMessage(normalizeValue({ id, payload, topic }), target ?? targetOrigin ?? '*')
+      w.postMessage(normalizeValue({ id, payload, topic }), target ?? targetOrigin)
       return { id, payload, topic } as never
     },
   })
