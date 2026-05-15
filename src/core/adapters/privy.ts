@@ -282,6 +282,11 @@ export function privy<const client extends privy.Client>(
     }
 
     async function withAccessKey<result>(
+      options: {
+        address?: Address | undefined
+        calls?: Adapter.signTransaction.Parameters['calls']
+        chainId?: number | undefined
+      },
       fn: (
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
@@ -289,7 +294,7 @@ export function privy<const client extends privy.Client>(
     ) {
       const account = (() => {
         try {
-          return getAccount({ signable: true })
+          return getAccount({ ...options, signable: true })
         } catch {
           return undefined
         }
@@ -311,6 +316,7 @@ export function privy<const client extends privy.Client>(
       const account = await accountForSigning(parameters.from)
       const { feePayer, ...rest } = parameters
       const viemClient = getClient({
+        chainId: parameters.chainId,
         feePayer: feePayer === true ? undefined : feePayer,
       })
       const prepared = await prepareTransactionRequest(viemClient, {
@@ -494,9 +500,12 @@ export function privy<const client extends privy.Client>(
           })
         },
         async signTransaction(parameters) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
+          const result = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
+            async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const viemClient = getClient({
+              chainId: parameters.chainId,
               feePayer: feePayer === true ? undefined : feePayer,
             })
             const prepared = await prepareTransactionRequest(viemClient, {
@@ -507,7 +516,8 @@ export function privy<const client extends privy.Client>(
               type: 'tempo',
             } as never)
             return await account.signTransaction(prepared as never)
-          })
+          },
+          )
           if (result !== undefined) return result
           return await signTransaction(parameters)
         },
@@ -525,7 +535,9 @@ export function privy<const client extends privy.Client>(
           })
         },
         async sendTransaction(parameters) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
+          const result = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
+            async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const viemClient = getClient({
               chainId: parameters.chainId,
@@ -543,7 +555,8 @@ export function privy<const client extends privy.Client>(
               method: 'eth_sendRawTransaction' as never,
               params: [signed],
             })
-          })
+          },
+          )
           if (result !== undefined) return result
           const signed = await signTransaction(parameters)
           const viemClient = getClient({
@@ -556,7 +569,9 @@ export function privy<const client extends privy.Client>(
           })
         },
         async sendTransactionSync(parameters) {
-          const result = await withAccessKey(async (account, keyAuthorization) => {
+          const result = await withAccessKey(
+            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
+            async (account, keyAuthorization) => {
             const { feePayer, ...rest } = parameters
             const viemClient = getClient({
               chainId: parameters.chainId,
@@ -574,7 +589,8 @@ export function privy<const client extends privy.Client>(
               method: 'eth_sendRawTransactionSync' as never,
               params: [signed],
             })
-          })
+          },
+          )
           if (result !== undefined) return result
           const signed = await signTransaction(parameters)
           const viemClient = getClient({
