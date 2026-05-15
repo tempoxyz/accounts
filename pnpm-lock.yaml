@@ -147,8 +147,8 @@ importers:
         specifier: ^55.0.13
         version: 55.0.13(expo@55.0.15)
       expo-web-browser:
-        specifier: ^55.0.14
-        version: 55.0.14(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))
+        specifier: ^56.0.4
+        version: 56.0.4(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))
       express:
         specifier: ^5.2.1
         version: 5.2.1
@@ -731,8 +731,8 @@ importers:
         specifier: ~55.0.5
         version: 55.0.5(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)
       expo-web-browser:
-        specifier: ~55.0.13
-        version: 55.0.14(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))
+        specifier: ~56.0.4
+        version: 56.0.4(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))
       ox:
         specifier: ~0.14.18
         version: 0.14.20(typescript@5.9.3)(zod@4.4.3)
@@ -6009,8 +6009,8 @@ packages:
       react: ^19.2.5
       react-native: '*'
 
-  expo-web-browser@55.0.14:
-    resolution: {integrity: sha512-bTDkBSQBnrlnYcM7Aak72AOvJuvdgA3M8p//Lazrm0Nfa77T9cRXzQ6KhLrB08V39n1+00d1dvuTWznJslkmdg==}
+  expo-web-browser@56.0.4:
+    resolution: {integrity: sha512-B8npNB7cHhQZdFBAB9/az/uEnGPWJnZvyWQPMCtc7qg/5y8nMOGaRdNsrJzeXthRkS+1c307zPhkTcXJqcT2ew==}
     peerDependencies:
       expo: '*'
       react-native: '*'
@@ -15359,7 +15359,7 @@ snapshots:
       react-native: 0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5)
       react-native-is-edge-to-edge: 1.3.1(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)
 
-  expo-web-browser@55.0.14(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5)):
+  expo-web-browser@56.0.4(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5)):
     dependencies:
       expo: 55.0.15(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(typescript@5.9.3)
       react-native: 0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5)
