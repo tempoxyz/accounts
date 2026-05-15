@@ -392,22 +392,59 @@ describe('behavior: with feePayer.feeToken', () => {
 })
 
 describe('behavior: external feePayer URL validation', () => {
-  let server: Server
+  const externalUrl = 'https://relay.example.com'
+  let appServer: Server
+  let walletServer: Server
   let client: ReturnType<typeof getClient<typeof chain>>
+  let fetch_: typeof fetch = globalThis.fetch
 
   beforeAll(async () => {
-    server = await createServer(
+    appServer = await createServer(
       relay({
         chains: [chain],
         transports: { [chain.id]: http() },
+        feePayer: {
+          account: feePayerAccount,
+          name: 'App Sponsor',
+          url: 'https://app.example.com',
+        },
       }).listener,
     )
-
-    client = getClient({ transport: http(server.url) })
+    walletServer = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+        feePayer: {
+          account: feePayerAccount,
+          validate: () => false,
+        },
+      }).listener,
+    )
+    client = getClient({ transport: http(walletServer.url) })
+    fetch_ = globalThis.fetch
+    globalThis.fetch = ((input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.startsWith(externalUrl)) return fetch_(appServer.url, init)
+      return fetch_(input as never, init)
+    }) as typeof fetch
   })
 
   afterAll(() => {
-    server.close()
+    globalThis.fetch = fetch_
+    appServer.close()
+    walletServer.close()
+  })
+
+  test('proxies allowed external URL', async () => {
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feePayer: externalUrl as never,
+    })
+
+    expect(result.transaction.feePayerSignature).toBeDefined()
+    expect(result.capabilities?.sponsored).toBe(true)
+    expect(result.capabilities?.sponsor?.name).toBe('App Sponsor')
   })
 
   test.each([
