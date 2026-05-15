@@ -1101,24 +1101,25 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
     })
   })
 
-  describe('wallet_send', () => {
-    test('error: throws UnsupportedMethodError when adapter has no send action', async () => {
+  describe('wallet_transfer', () => {
+    test('error: throws UnsupportedMethodError when adapter has no transfer action', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       await connect(provider)
 
       await expect(
         provider.request({
-          method: 'wallet_send',
+          method: 'wallet_transfer',
           params: [
             {
               amount: '1',
+              editable: true,
               to: '0x0000000000000000000000000000000000000001',
               token: Addresses.pathUsd,
             },
           ],
         }),
       ).rejects.toThrowErrorMatchingInlineSnapshot(
-        `[Provider.UnsupportedMethodError: \`send\` not supported by adapter.]`,
+        `[Provider.UnsupportedMethodError: \`transfer\` not supported by adapter.]`,
       )
     })
   })

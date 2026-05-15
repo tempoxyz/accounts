@@ -109,7 +109,7 @@ export function App() {
 
           <PlaygroundSection id="transactions" title="Transactions">
             <Transactions />
-            <WalletSend />
+            <WalletTransfer />
             <WalletSwap />
             <WalletDepositZone />
             <WalletWithdrawZone />
@@ -349,7 +349,7 @@ function WalletDeposit() {
   )
 }
 
-function WalletSend() {
+function WalletTransfer() {
   const [result, error, execute] = useRequest()
   const [feePayerMode, setFeePayerMode] = useState<'wallet' | 'playground' | 'disabled'>('wallet')
 
@@ -360,14 +360,14 @@ function WalletSend() {
   })()
 
   return (
-    <Method method="wallet_send" result={result} error={error}>
+    <Method method="wallet_transfer" result={result} error={error}>
       <fieldset style={{ marginBottom: 8, border: 'none', padding: 0 }}>
         <legend>Fee Payer</legend>
         {(['wallet', 'playground', 'disabled'] as const).map((mode) => (
           <label key={mode} style={{ marginRight: 12 }}>
             <input
               type="radio"
-              name="walletSendFeePayerMode"
+              name="WalletTransferFeePayerMode"
               value={mode}
               checked={feePayerMode === mode}
               onChange={() => setFeePayerMode(mode)}
@@ -376,35 +376,15 @@ function WalletSend() {
           </label>
         ))}
       </fieldset>
+
+      <h5 style={{ flexBasis: '100%', fontSize: 11, margin: '8px 0 4px', width: '100%' }}>
+        Read-only
+      </h5>
       <Button
         onClick={() =>
           execute(() =>
             provider.request({
-              method: 'wallet_send',
-              params: [{ ...feePayerParam }],
-            }),
-          )
-        }
-      >
-        Send
-      </Button>
-      <Button
-        onClick={() =>
-          execute(() =>
-            provider.request({
-              method: 'wallet_send',
-              params: [{ token: tokens.pathUSD, ...feePayerParam }],
-            }),
-          )
-        }
-      >
-        Send pathUSD
-      </Button>
-      <Button
-        onClick={() =>
-          execute(() =>
-            provider.request({
-              method: 'wallet_send',
+              method: 'wallet_transfer',
               params: [
                 {
                   amount: '1',
@@ -423,7 +403,7 @@ function WalletSend() {
         onClick={() =>
           execute(() =>
             provider.request({
-              method: 'wallet_send',
+              method: 'wallet_transfer',
               params: [
                 {
                   amount: '1',
@@ -444,10 +424,103 @@ function WalletSend() {
         onClick={() =>
           execute(() =>
             provider.request({
-              method: 'wallet_send',
+              method: 'wallet_transfer',
               params: [
                 {
                   amount: '1',
+                  // Hex-encoded UTF-8 memo (max 32 bytes). Wallet rejects
+                  // with InvalidParamsError if the token is not TIP-20.
+                  memo: Hex.fromString('invoice #4821'),
+                  to: '0x0000000000000000000000000000000000000001',
+                  token: 'pathUSD',
+                  ...feePayerParam,
+                },
+              ],
+            }),
+          )
+        }
+      >
+        Send $1 with memo
+      </Button>
+
+      <h5 style={{ flexBasis: '100%', fontSize: 11, margin: '8px 0 4px', width: '100%' }}>
+        Editable
+      </h5>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_transfer',
+              params: [{ editable: true, ...feePayerParam }],
+            }),
+          )
+        }
+      >
+        Send
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_transfer',
+              params: [{ editable: true, token: tokens.pathUSD, ...feePayerParam }],
+            }),
+          )
+        }
+      >
+        Send pathUSD
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_transfer',
+              params: [
+                {
+                  amount: '1',
+                  editable: true,
+                  to: '0x0000000000000000000000000000000000000001',
+                  token: tokens.pathUSD,
+                  ...feePayerParam,
+                },
+              ],
+            }),
+          )
+        }
+      >
+        Send $1 pathUSD
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_transfer',
+              params: [
+                {
+                  amount: '1',
+                  editable: true,
+                  // Resolved against the wallet's curated tokenlist
+                  // (case-insensitive). `pathusd` is also accepted.
+                  token: 'pathUSD',
+                  to: '0x0000000000000000000000000000000000000001',
+                  ...feePayerParam,
+                },
+              ],
+            }),
+          )
+        }
+      >
+        Send $1 pathUSD (symbol)
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_transfer',
+              params: [
+                {
+                  amount: '1',
+                  editable: true,
                   // 32-byte UTF-8 memo attached to the TIP-20 transfer.
                   // The wallet rejects with `InvalidParamsError` if the
                   // selected token is not TIP-20.

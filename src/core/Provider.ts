@@ -2,7 +2,7 @@ import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { http, type Chain, type Client as ViemClient, type Transport } from 'viem'
+import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { parseSiweMessage } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
@@ -17,6 +17,7 @@ import { withDedupe } from './internal/withDedupe.js'
 import * as Schema from './Schema.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
+import * as Tokenlist from './Tokenlist.js'
 import * as Request from './zod/request.js'
 import * as Rpc from './zod/rpc.js'
 
@@ -244,10 +245,12 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const { to, data, ...rest } = decoded
                     const calls =
                       decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
+                    const state = store.getState()
                     return (await actions.sendTransaction(
                       {
                         ...rest,
-                        chainId: decoded.chainId ?? store.getState().chainId,
+                        chainId: decoded.chainId ?? state.chainId,
+                        from: decoded.from ?? state.accounts[state.activeAccount]?.address,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
@@ -337,10 +340,12 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const { to, data, ...rest } = decoded
                     const calls =
                       decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
+                    const state = store.getState()
                     return (await actions.signTransaction(
                       {
                         ...rest,
-                        chainId: decoded.chainId ?? store.getState().chainId,
+                        chainId: decoded.chainId ?? state.chainId,
+                        from: decoded.from ?? state.accounts[state.activeAccount]?.address,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
@@ -354,10 +359,12 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const { to, data, ...rest } = decoded
                     const calls =
                       decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
+                    const state = store.getState()
                     return (await actions.sendTransactionSync(
                       {
                         ...rest,
-                        chainId: decoded.chainId ?? store.getState().chainId,
+                        chainId: decoded.chainId ?? state.chainId,
+                        from: decoded.from ?? state.accounts[state.activeAccount]?.address,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
@@ -397,10 +404,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const feePayer = resolveFeePayer(
                       capabilities?.feePayer ?? (feePayerConfig ? true : undefined),
                     )
+                    const state = store.getState()
                     const txRequest = {
                       calls,
                       chainId,
-                      from,
+                      from: from ?? state.accounts[state.activeAccount]?.address,
                       ...(feePayer ? { feePayer } : {}),
                     }
                     if (!sync) {
@@ -790,23 +798,104 @@ export function create(options: create.Options = {}): create.ReturnType {
                     )) satisfies Rpc.wallet_deposit.Encoded['returns']
                   }
 
-                  case 'wallet_send': {
+                  case 'wallet_transfer': {
                     assertConnected()
-                    if (!actions.send)
-                      throw new ox_Provider.UnsupportedMethodError({
-                        message: '`send` not supported by adapter.',
+                    // Default to the editable variant when params are
+                    // omitted — programmatic mode requires `amount`,
+                    // `to`, and `token`, so an empty call only makes
+                    // sense as "open the wallet send UI".
+                    const decoded = request._decoded.params?.[0] ?? { editable: true as const }
+
+                    // Editable variant: forward to the wallet host UI.
+                    if (decoded.editable === true) {
+                      if (!actions.transfer)
+                        throw new ox_Provider.UnsupportedMethodError({
+                          message: '`transfer` not supported by adapter.',
+                        })
+                      const parameters = {
+                        ...decoded,
+                        ...(typeof decoded.feePayer !== 'undefined'
+                          ? { feePayer: resolveFeePayer(decoded.feePayer) }
+                          : {}),
+                      } as Adapter.transfer.Parameters
+                      return (await actions.transfer(
+                        parameters,
+                        request,
+                      )) satisfies Rpc.wallet_transfer.Encoded['returns']
+                    }
+
+                    // Programmatic variant (default): skip the wallet UI,
+                    // build the TIP-20 `transfer` call inline, and route
+                    // through `eth_sendTransactionSync` (which uses an
+                    // access key when one matches, falling back to the
+                    // dialog otherwise).
+                    const { amount, feePayer, from, memo, to, token } = decoded
+                    const state = store.getState()
+                    const chainId = decoded.chainId ?? state.chainId
+                    const resolvedFeePayer = resolveFeePayer(feePayer)
+
+                    const client = getClient({
+                      chainId,
+                      feePayer:
+                        typeof resolvedFeePayer === 'string' ? resolvedFeePayer : undefined,
+                    })
+                    const { address: tokenAddress, decimals } = await (async () => {
+                      if (Address.validate(token)) {
+                        const metadata = await Actions.token.getMetadata(client, {
+                          token,
+                        })
+                        return { address: token, decimals: metadata.decimals }
+                      }
+                      const resolved = await Tokenlist.resolveSymbol({
+                        chainId: client.chain.id,
+                        symbol: token,
                       })
-                    const decoded = request._decoded.params?.[0] ?? {}
-                    const parameters = {
-                      ...decoded,
-                      ...(typeof decoded.feePayer !== 'undefined'
-                        ? { feePayer: resolveFeePayer(decoded.feePayer) }
-                        : {}),
-                    } as Adapter.send.Parameters
-                    return (await actions.send(
-                      parameters,
-                      request,
-                    )) satisfies Rpc.wallet_send.Encoded['returns']
+                      if (!resolved)
+                        throw new ox_Provider.ProviderRpcError(
+                          -32602,
+                          `Unknown token symbol "${token}".`,
+                        )
+                      return { address: resolved.address, decimals: resolved.decimals }
+                    })()
+                    const amountUnits = parseUnits(amount, decimals)
+
+                    // The signer is the active account (or its access
+                    // key). `from` here is the TIP-20 source for
+                    // `transferFrom` semantics, so we only forward it
+                    // when the caller explicitly set it to a different
+                    // address — otherwise `Actions.token.transfer.call`
+                    // emits `transferFrom` (different selector) instead
+                    // of plain `transfer`, breaking access-key scope
+                    // matching.
+                    const signerAddress = state.accounts[state.activeAccount]?.address
+                    const sourceFrom =
+                      from &&
+                      signerAddress &&
+                      from.toLowerCase() !== signerAddress.toLowerCase()
+                        ? from
+                        : undefined
+                    const call = Actions.token.transfer.call({
+                      amount: amountUnits,
+                      ...(sourceFrom ? { from: sourceFrom } : {}),
+                      memo,
+                      to,
+                      token: tokenAddress,
+                    })
+
+                    const txRequest = {
+                      calls: [call],
+                      chainId,
+                      from: signerAddress,
+                      ...(resolvedFeePayer !== undefined ? { feePayer: resolvedFeePayer } : {}),
+                    }
+                    const receipt = await actions.sendTransactionSync(txRequest, {
+                      method: 'eth_sendTransactionSync',
+                      params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
+                    })
+                    return {
+                      chainId: Hex.fromNumber(chainId),
+                      receipt,
+                    } satisfies Rpc.wallet_transfer.Encoded['returns']
                   }
 
                   case 'wallet_swap': {
@@ -1053,12 +1142,16 @@ export declare namespace mpp {
  * (notably Cloudflare Workers) expose a non-writable, non-configurable
  * `fetch` that throws when `Mppx.create({ polyfill: true })` tries to
  * replace it.
+ *
+ * Tries an actual no-op self-reassignment because some runtimes report a
+ * writable descriptor but still throw at assignment time (e.g. Workers
+ * dev runner via Durable Objects).
  */
 function isFetchWritable(): boolean {
   try {
-    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'fetch')
-    if (!descriptor) return true
-    return Boolean(descriptor.writable || descriptor.set)
+    const original = globalThis.fetch
+    globalThis.fetch = original
+    return true
   } catch {
     return false
   }

@@ -75,11 +75,11 @@ export type Instance = {
         ) => Promise<void>)
       | undefined
     /** Open the send-token flow. */
-    send?:
+    transfer?:
       | ((
-          params: send.Parameters,
-          request: EncodedRequest<Rpc.wallet_send.Encoded>,
-        ) => Promise<send.ReturnType>)
+          params: transfer.Parameters,
+          request: EncodedRequest<Rpc.wallet_transfer.Encoded>,
+        ) => Promise<transfer.ReturnType>)
       | undefined
     /** Open the swap flow. */
     swap?:
@@ -330,9 +330,9 @@ export declare namespace revokeAccessKey {
   }
 }
 
-export declare namespace send {
-  type Parameters = ActionRequest<typeof Rpc.wallet_send.schema>
-  type ReturnType = Rpc.wallet_send.Encoded['returns']
+export declare namespace transfer {
+  type Parameters = ActionRequest<typeof Rpc.wallet_transfer.schema>
+  type ReturnType = Rpc.wallet_transfer.Encoded['returns']
 }
 
 /** Parameters and return type for the `wallet_swap` action. */

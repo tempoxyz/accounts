@@ -612,35 +612,85 @@ export namespace wallet_getCallsStatus {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
-export namespace wallet_send {
-  /** Parameters object for `wallet_send`. */
-  export const parameters = z.object({
-    /** Human-readable amount to pre-fill (e.g. "1.5"). */
-    amount: z.optional(z.string()),
-    /**
-     * Fee payer override. `false` to disable the wallet's default fee
-     * payer, a URL string to use a custom fee payer service.
-     */
-    feePayer: z.optional(z.union([z.boolean(), z.string()])),
-    /**
-     * UTF-8 memo (max 32 bytes) to attach to the transfer. Wallet
-     * rejects the request if the selected token does not support
-     * memos (non-TIP-20).
-     */
-    memo: z.optional(z.string()),
-    /** Recipient address to pre-fill. */
-    to: z.optional(u.address()),
-    /**
-     * Token to pre-fill, accepted as either a contract address or a
-     * curated tokenlist symbol (case-insensitive, e.g. `"pathUsd"`).
-     * Symbols are resolved against the curated tokenlist on the active
-     * chain. Omit to let the user choose.
-     */
-    token: z.optional(z.union([u.address(), z.string()])),
-  })
+export namespace wallet_transfer {
+  /**
+   * Parameters for `wallet_transfer`.
+   *
+   * Discriminated on `editable`:
+   *
+   * - omitted or `false` (default): programmatic. `amount` is a
+   *   human-readable string (e.g. `"1.5"`), `to` and `token` are
+   *   required, no UI is shown. Uses an access key when one matches,
+   *   otherwise falls back to a confirm dialog.
+   * - `true`: editable. Wallet shows a UI with optional fields
+   *   pre-filled; the user confirms or edits before signing.
+   */
+  export const parameters = z.discriminatedUnion('editable', [
+    z.object({
+      /** Human-readable amount to transfer (e.g. `"1.5"`). */
+      amount: z.string(),
+      /** Chain id. Defaults to the active chain. */
+      chainId: z.optional(u.number()),
+      /** Skip the wallet UI and sign programmatically. @default false */
+      editable: z.optional(z.literal(false)),
+      /**
+       * Fee payer override. `false` to disable the wallet's default fee
+       * payer, a URL string to use a custom fee payer service.
+       */
+      feePayer: z.optional(z.union([z.boolean(), z.string()])),
+      /**
+       * Address to transfer tokens from. Defaults to the active account.
+       * When set to a different address, the call uses `transferFrom` and
+       * requires the active account to have an allowance from `from`.
+       */
+      from: z.optional(u.address()),
+      /**
+       * UTF-8 memo to attach to the transfer (max 32 bytes when encoded
+       * as UTF-8). Sent via `transferWithMemo` / `transferFromWithMemo`.
+       */
+      memo: z.optional(u.hex()),
+      /** Recipient address. */
+      to: u.address(),
+      /**
+       * Token to transfer, accepted as either a contract address or a
+       * curated tokenlist symbol (case-insensitive, e.g. `"pathUsd"`).
+       * Symbols are resolved against the curated tokenlist on the active
+       * chain.
+       */
+      token: z.union([u.address(), z.string()]),
+    }),
+    z.object({
+      /** Human-readable amount to pre-fill (e.g. `"1.5"`). */
+      amount: z.optional(z.string()),
+      /** Chain id. Defaults to the active chain. */
+      chainId: z.optional(u.number()),
+      /** Show the wallet UI for the user to confirm or edit. */
+      editable: z.literal(true),
+      /**
+       * Fee payer override. `false` to disable the wallet's default fee
+       * payer, a URL string to use a custom fee payer service.
+       */
+      feePayer: z.optional(z.union([z.boolean(), z.string()])),
+      /**
+       * UTF-8 memo (max 32 bytes) to attach to the transfer. Wallet
+       * rejects the request if the selected token does not support
+       * memos (non-TIP-20).
+       */
+      memo: z.optional(z.string()),
+      /** Recipient address to pre-fill. */
+      to: z.optional(u.address()),
+      /**
+       * Token to pre-fill, accepted as either a contract address or a
+       * curated tokenlist symbol (case-insensitive, e.g. `"pathUsd"`).
+       * Symbols are resolved against the curated tokenlist on the active
+       * chain. Omit to let the user choose.
+       */
+      token: z.optional(z.union([u.address(), z.string()])),
+    }),
+  ])
 
   export const schema = Schema.defineItem({
-    method: z.literal('wallet_send'),
+    method: z.literal('wallet_transfer'),
     params: z.optional(z.readonly(z.tuple([parameters]))),
     returns: z.object({
       /** Chain id the send is to. */

@@ -409,10 +409,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           return await provider.request(request)
         },
 
-        async send(params, request) {
+        async transfer(params, request) {
           return await provider.request({
             ...request,
-            params: [z.encode(Rpc.wallet_send.parameters, params)] as const,
+            params: [z.encode(Rpc.wallet_transfer.parameters, params)] as const,
           })
         },
 
