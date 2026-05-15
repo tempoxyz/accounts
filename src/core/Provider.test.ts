@@ -1658,7 +1658,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
     })
 
-    test('exceeding access key limits falls back to root account', async () => {
+    test('behavior: exceeding access key limits rejects without root fallback', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
@@ -1674,16 +1674,16 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         ],
       })
 
-      // Transfer 1 PUSD — exceeds access key limit, falls back to root account.
-      const receipt = await provider.request({
-        method: 'eth_sendTransactionSync',
-        params: [{ calls: [transferCall] }],
-      })
-      expect(receipt.status).toBe('0x1')
-      expect(receipt.from.toLowerCase()).toBe(address.toLowerCase())
+      // Transfer 1 PUSD — exceeds access key limit.
+      await expect(
+        provider.request({
+          method: 'eth_sendTransactionSync',
+          params: [{ calls: [transferCall] }],
+        }),
+      ).rejects.toThrow(/SpendingLimitExceeded/)
     })
 
-    test('behavior: access key is preserved after recoverable key-auth error', async () => {
+    test('behavior: access key is preserved after recoverable key-auth rejection', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
@@ -1701,12 +1701,13 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       expect(provider.store.getState().accessKeys).toHaveLength(1)
 
-      // Transfer exceeds limit — key-auth error — access key should fall back
-      // to the root account without removing the still-valid access key.
-      await provider.request({
-        method: 'eth_sendTransactionSync',
-        params: [{ calls: [transferCall] }],
-      })
+      // Transfer exceeds limit — key-auth error — access key should remain stored.
+      await expect(
+        provider.request({
+          method: 'eth_sendTransactionSync',
+          params: [{ calls: [transferCall] }],
+        }),
+      ).rejects.toThrow(/SpendingLimitExceeded/)
 
       expect(provider.store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
     })
