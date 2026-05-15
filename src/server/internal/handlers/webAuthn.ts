@@ -273,9 +273,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       // userId we stashed during register, so callers see the same
       // identifier shape across register and login.
       const userId =
-        userHandle && userHandle.length > 0
-          ? userHandle
-          : (credentialData.userId ?? undefined)
+        userHandle && userHandle.length > 0 ? userHandle : (credentialData.userId ?? undefined)
 
       // Hook for side effects (user provisioning, analytics, allow/deny).
       // The legacy contract — return a `Response` to merge fields onto

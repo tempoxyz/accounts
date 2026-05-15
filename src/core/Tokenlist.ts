@@ -73,9 +73,7 @@ export declare namespace fetch {
  * Resolves a token symbol (case-insensitive) against the curated tokenlist
  * for a given chain. Returns the token entry, or `undefined` if no match.
  */
-export async function resolveSymbol(
-  options: resolveSymbol.Options,
-): Promise<Token | undefined> {
+export async function resolveSymbol(options: resolveSymbol.Options): Promise<Token | undefined> {
   const { symbol, ...rest } = options
   const tokens = await fetch(rest)
   const lowered = symbol.toLowerCase()

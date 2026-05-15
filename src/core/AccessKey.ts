@@ -222,8 +222,7 @@ export function selectAccount(
   for (const key of accessKeys) {
     if (key.access.toLowerCase() !== address.toLowerCase()) continue
     if (key.chainId !== chainId) continue
-    if (!('keyPair' in key && !!key.keyPair) && !('privateKey' in key && !!key.privateKey))
-      continue
+    if (!('keyPair' in key && !!key.keyPair) && !('privateKey' in key && !!key.privateKey)) continue
 
     if (key.expiry && key.expiry < Date.now() / 1000) {
       accessKeys_next = accessKeys_next.filter((a) => a !== key)

@@ -1,5 +1,35 @@
 # accounts
 
+## 0.12.0
+
+### Minor Changes
+
+- 91711b3: Changed the default value of `mpp` on `Provider.create` to `true`. Machine Payment Protocol (mppx) support is now enabled by default -- pass `mpp: false` to opt out.
+- 5c46dd4: **Breaking:** Renamed `wallet_send` to `wallet_transfer`. The method now defaults to "read-only" mode.
+
+  For previous behavior, pass `editable: true` to open the editable flow.
+
+  ```diff
+  provider.request({
+  - method: 'wallet_send',
+  - params: [{ token: '0x...' }],
+  + method: 'wallet_transfer',
+  + params: [{ editable: true, token: '0x...' }],
+  })
+  ```
+
+### Patch Changes
+
+- d545edf: Carried `keyType` through on non-signable json-rpc accounts so the viem/tempo transaction formatter can derive the correct `keyType`/`keyData` placeholder bytes during `eth_fillTransaction` gas estimation (notably for WebAuthn EOAs).
+- 59046a4: Made `keyAuthorization.address` optional in the RPC schema. RPC nodes return prepared transactions with only `keyId` (the access key address), so requiring `address` rejected valid `eth_signTransaction` payloads when MPP signed via an access key.
+- 5a15e7d: Relaxed the `id` parameter on `Kv.durableObject.Namespace.get` from `unknown` to `any` so Cloudflare's `DurableObjectNamespace<T>` is structurally assignable without an intermediate cast at the call site.
+- 6d6cc9e: Skipped the `mppx` `globalThis.fetch` polyfill on runtimes where `fetch` is read-only (e.g. Cloudflare Workers). Added `mpp.polyfill` option for explicit control; defaults to auto-detect via the property descriptor.
+- d545edf: Fixed `local` and `turnkey` adapters dropping `publicKey` when preparing key authorizations, which caused the wallet to sign authorizations for a freshly-generated address instead of the caller-supplied one.
+- 63c9d5c: Removed console warning from expected signing paths in dialog adapter.
+- f0757a4: Simplified loadAccounts and createAccount in turnkey adapter.
+- 9d20725: Issued a `Handler.webAuthn` session on successful registration (matching `/login`), revoked it via `wallet_disconnect` in the WebAuthn adapter, and surfaced a consistent base64url-encoded `userId` across `/register` and `/login`.
+- 5a15e7d: Defaulted `Handler.auth({ trustProxy })` to `true` on Cloudflare Workers and appended a `trustProxy` / `origin` hint to "domain mismatch" / "uri mismatch" errors raised from `wallet_connect`.
+
 ## 0.11.0
 
 ### Minor Changes

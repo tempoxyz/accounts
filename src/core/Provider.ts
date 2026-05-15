@@ -836,8 +836,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                     const client = getClient({
                       chainId,
-                      feePayer:
-                        typeof resolvedFeePayer === 'string' ? resolvedFeePayer : undefined,
+                      feePayer: typeof resolvedFeePayer === 'string' ? resolvedFeePayer : undefined,
                     })
                     const { address: tokenAddress, decimals } = await (async () => {
                       if (Address.validate(token)) {
@@ -869,9 +868,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     // matching.
                     const signerAddress = state.accounts[state.activeAccount]?.address
                     const sourceFrom =
-                      from &&
-                      signerAddress &&
-                      from.toLowerCase() !== signerAddress.toLowerCase()
+                      from && signerAddress && from.toLowerCase() !== signerAddress.toLowerCase()
                         ? from
                         : undefined
                     const call = Actions.token.transfer.call({
