@@ -347,37 +347,43 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         // Real Hono app: mount the auth handler under `/auth` and add a
         // protected `/me` route — exactly as a dapp would compose them
         // — so the e2e test below exercises the full flow.
-        const auth = Handler.auth({ domain: 'localhost' })
-        const app = Handler.compose([auth], { path: '/auth' })
-        app.get('/me', async (c) => {
-          const session = await auth.getSession(c.req.raw)
-          if (!session) return c.json({ error: 'unauthenticated' }, 401)
-          return c.json({ address: session.address, chainId: session.chainId })
+        let listener: Parameters<typeof createServer>[0] | undefined
+        server = await createServer((req, res) => {
+          if (!listener) {
+            const auth = Handler.auth({ origin: server.url })
+            const app = Handler.compose([auth], { path: '/auth' })
+            app.get('/me', async (c) => {
+              const session = await auth.getSession(c.req.raw)
+              if (!session) return c.json({ error: 'unauthenticated' }, 401)
+              return c.json({ address: session.address, chainId: session.chainId })
+            })
+            // Bad-challenge / bad-verify endpoints mounted on the same origin
+            // as `/auth` so the same-origin enforcement (`absolutizeAuth`)
+            // doesn't reject the request before the bad-content paths under
+            // test can run. `app.all` so we don't depend on the SDK's request
+            // method (POST).
+            app.all('/bad/verify-401', (c) => c.json({ error: 'unauthorized' }, 401))
+            app.all('/bad/challenge-500', (c) => c.json({ error: 'boom' }, 500))
+            app.all('/bad/challenge-empty', (c) => c.json({}))
+            app.all('/bad/challenge-evil-domain', (c) =>
+              c.json({
+                message: [
+                  'evil.example wants you to sign in with your Ethereum account:',
+                  '0x0000000000000000000000000000000000000000',
+                  '',
+                  '',
+                  'URI: https://evil.example',
+                  'Version: 1',
+                  'Chain ID: 0',
+                  'Nonce: deadbeef00',
+                  'Issued At: 2025-01-01T00:00:00Z',
+                ].join('\n'),
+              }),
+            )
+            listener = app.listener
+          }
+          return listener(req, res)
         })
-        // Bad-challenge / bad-verify endpoints mounted on the same origin
-        // as `/auth` so the same-origin enforcement (`absolutizeAuth`)
-        // doesn't reject the request before the bad-content paths under
-        // test can run. `app.all` so we don't depend on the SDK's request
-        // method (POST).
-        app.all('/bad/verify-401', (c) => c.json({ error: 'unauthorized' }, 401))
-        app.all('/bad/challenge-500', (c) => c.json({ error: 'boom' }, 500))
-        app.all('/bad/challenge-empty', (c) => c.json({}))
-        app.all('/bad/challenge-evil-domain', (c) =>
-          c.json({
-            message: [
-              'evil.example wants you to sign in with your Ethereum account:',
-              '0x0000000000000000000000000000000000000000',
-              '',
-              '',
-              'URI: https://evil.example',
-              'Version: 1',
-              'Chain ID: 0',
-              'Nonce: deadbeef00',
-              'Issued At: 2025-01-01T00:00:00Z',
-            ].join('\n'),
-          }),
-        )
-        server = await createServer(app.listener)
         authBase = `${server.url}/auth`
 
         // Cross-origin bad server kept around for the same-origin enforcement
