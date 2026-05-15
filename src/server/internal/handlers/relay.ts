@@ -677,7 +677,7 @@ async function fill(client: Client, options: fill.Options) {
     if (!sourceToken || sourceToken.toLowerCase() === insufficientToken.toLowerCase()) return null
 
     const maxAmountIn = deficit + (deficit * BigInt(Math.round(autoSwap.slippage * 1000))) / 1000n
-    const originalCalls = (request.calls as Call[] | undefined) ?? []
+    const originalCalls = extractCalls(request)
     const swapCalls = buildSwapCalls(sourceToken, insufficientToken, deficit, maxAmountIn)
 
     const result = await client.request({
