@@ -311,8 +311,6 @@ export declare namespace authorizeAccessKey {
           recipients?: readonly Address[] | undefined
         }[]
       | undefined
-    /** Pre-computed signature over the key authorization digest (skips a second signing ceremony). */
-    signature?: Hex | undefined
   }
 
   type ReturnType = {

@@ -132,8 +132,6 @@ declare function authorizeAccessKey(): {
   scopes?:
     | { address: Address; recipients?: readonly Address[]; selector?: Hex | string }[]
     | undefined
-  /** Pre-computed signature over the key authorization digest (skips a second signing ceremony). */
-  signature?: Hex | undefined
 }
 ```
 
@@ -167,8 +165,7 @@ const provider = Provider.create({
   authorizeAccessKey: () => ({ // [!code focus]
     expiry: Expiry.days(7), // [!code focus]
     keyType: 'p256', // [!code focus]
-    publicKey: '0x...', // [!code focus]
-    signature: '0x...', // already-signed authorization digest // [!code focus]
+    publicKey: '0x1234', // [!code focus]
   }), // [!code focus]
 })
 ```
