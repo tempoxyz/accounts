@@ -695,7 +695,7 @@ describe('getSession', () => {
 
 describe('store: atomic `take` preferred, non-atomic fallback', () => {
   test('Kv.memory() (has `take`) is accepted', () => {
-    expect(() => auth({ store: Kv.memory() })).not.toThrow()
+    expect(() => auth({ domain: 'wallet.example', store: Kv.memory() })).not.toThrow()
   })
 
   test('store without `take` falls back to non-atomic get + delete', async () => {
