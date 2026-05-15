@@ -18,7 +18,7 @@ export const hosts: Record<string, readonly string[]> = _hosts
  * (e.g. `*.workers.dev` matches `foo.workers.dev`).
  */
 export function match(trustedHosts: readonly string[], hostname: string, source?: string) {
-  if (source && sameRegistrableDomain(hostname, source)) return true
+  void source
   return trustedHosts.some((pattern) => {
     if (pattern.startsWith('*.'))
       return hostname.endsWith(pattern.slice(1)) && hostname.length > pattern.length - 1
