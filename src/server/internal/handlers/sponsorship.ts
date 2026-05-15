@@ -133,10 +133,16 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
       message: 'Sponsorship rejected.',
     })
 
-  if (feeToken && transaction.feeToken?.toLowerCase() !== feeToken.toLowerCase())
-    throw new RpcResponse.InvalidParamsError({
-      message: 'Transaction fee token does not match sponsor policy.',
-    })
+  if (feeToken) {
+    const transactionFeeToken = transaction.feeToken
+    if (
+      typeof transactionFeeToken !== 'string' ||
+      transactionFeeToken.toLowerCase() !== feeToken.toLowerCase()
+    )
+      throw new RpcResponse.InvalidParamsError({
+        message: 'Transaction fee token does not match sponsor policy.',
+      })
+  }
 
   const client = getClient(transaction.chainId)
   const serializedTransaction = toSerializedTransaction(
