@@ -487,7 +487,9 @@ function CustomThemeToolbar({
     <div className="flex w-full max-w-[920px] flex-col gap-3 border border-[#2e2e2e] bg-[#0c0c0c] px-5 py-4 sm:flex-row sm:flex-nowrap sm:items-center sm:justify-center sm:gap-x-6">
       {/* Accent */}
       <div className="flex items-center gap-2.5">
-        <span className="font-mono text-[12px] text-white/50">Accent</span>
+        <span className="font-mono text-[10px] tracking-[0.18em] text-white/20 uppercase">
+          Accent
+        </span>
         <div className="flex items-center gap-1.5">
           {ACCENT_PRESETS.map((a) => {
             const active = theme.accent.toLowerCase() === a.color.toLowerCase();
@@ -534,7 +536,9 @@ function CustomThemeToolbar({
 
       {/* Radius */}
       <div className="flex items-center gap-2.5">
-        <span className="font-mono text-[12px] text-white/50">Radius</span>
+        <span className="font-mono text-[10px] tracking-[0.18em] text-white/20 uppercase">
+          Radius
+        </span>
         <div className="flex items-center gap-1">
           {RADIUS_OPTIONS.map((r) => {
             const active = theme.radius === r.id;
@@ -564,7 +568,9 @@ function CustomThemeToolbar({
 
       {/* Scheme */}
       <div className="flex items-center gap-2.5">
-        <span className="font-mono text-[12px] text-white/50">Scheme</span>
+        <span className="font-mono text-[10px] tracking-[0.18em] text-white/20 uppercase">
+          Scheme
+        </span>
         <div className="flex items-center gap-1">
           {(["light", "dark"] as const).map((s) => {
             const active = theme.scheme === s;

@@ -401,10 +401,9 @@ function AdapterTabs({
   }, [adapter]);
 
   return (
-    <div className="flex items-center gap-3">
-      <span className="font-mono text-[14px] text-white/50">Adapter</span>
-      <span aria-hidden className="font-mono text-[14px] text-white/20">
-        |
+    <div className="flex items-stretch gap-3">
+      <span className="flex items-center pr-1 font-mono text-[10px] tracking-[0.18em] text-white/20 uppercase">
+        Adapter
       </span>
       {/*
         Inactive pills get the dimmer bg from the row container itself

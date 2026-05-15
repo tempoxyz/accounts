@@ -42,14 +42,11 @@ export function TogglePills<const T extends string>({
   }, [value]);
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-stretch gap-3">
       {label ? (
-        <>
-          <span className="font-mono text-[14px] text-white/50">{label}</span>
-          <span aria-hidden className="font-mono text-[14px] text-white/20">
-            |
-          </span>
-        </>
+        <span className="flex items-center pr-1 font-mono text-[10px] tracking-[0.18em] text-white/20 uppercase">
+          {label}
+        </span>
       ) : null}
       <div ref={ref} className="relative flex items-center bg-[#0c0c0c]">
         <span
