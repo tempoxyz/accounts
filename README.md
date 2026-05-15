@@ -52,12 +52,12 @@ Join the Telegram group to chat with the team and other devs: [@mpp_devs](https:
 | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | [basic](./examples/basic)                                               | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallet.  |
 | [cli](./examples/cli)                                                   | Minimal CLI setup to connect and authorize local keys using Tempo Wallet.        |
-| [domain-bound-webauthn](./examples/domain-bound-webauthn)               | Domain-bound passkey example using Wagmi and the `webAuthn` connector.           |
-| [with-access-key](./examples/with-access-key)                           | Authorize access keys using Tempo Wallet to submit transactions without prompts. |
-| [with-access-key-and-webauthn](./examples/with-access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                               |
-| [with-fee-payer](./examples/with-fee-payer)                             | Sponsor transactions via Tempo Wallet.                                           |
-| [with-fee-payer-and-webauthn](./examples/with-fee-payer-and-webauthn)   | Sponsor transactions using a Cloudflare Worker with domain-bound Passkeys.       |
-| [with-mpp](./examples/with-mpp)                                         | Auto-pay HTTP `402` responses served by a Hono server using `mppx/hono`.         |
+| [webauthn](./examples/webauthn)               | Domain-bound passkey example using Wagmi and the `webAuthn` connector.           |
+| [access-key](./examples/access-key)                           | Authorize access keys using Tempo Wallet to submit transactions without prompts. |
+| [access-key-and-webauthn](./examples/access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                               |
+| [fee-payer](./examples/fee-payer)                             | Sponsor transactions via Tempo Wallet.                                           |
+| [fee-payer-and-webauthn](./examples/fee-payer-and-webauthn)   | Sponsor transactions using a Cloudflare Worker with domain-bound Passkeys.       |
+| [mpp](./examples/mpp)                                         | Auto-pay HTTP `402` responses served by a Hono server using `mppx/hono`.         |
 
 ## Development
 

@@ -1,27 +1,34 @@
 {
-  "name": "basic-example",
+  "name": "@examples/webauthn",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "check:types": "tsc -b --noEmit",
+    "dev": "vp dev",
+    "gen:types": "wrangler types",
+    "postinstall": "wrangler types",
+    "build": "tsc -b && vp build",
+    "preview": "vp preview"
   },
   "dependencies": {
     "@tanstack/react-query": "latest",
     "accounts": "latest",
+    "hono": "^4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "viem": "latest",
     "wagmi": "latest"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "latest",
+    "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
     "typescript": "~5.9.3",
-    "vite": "latest",
-    "vite-plugin-mkcert": "^2.0.0"
+    "vite-plugin-mkcert": "^2.0.0",
+    "vite-plus": "latest",
+    "wrangler": "^4.82.2"
   }
 }

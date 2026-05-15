@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "accounts-webauthn",
+  "compatibility_date": "2026-03-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./worker/index.ts",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/auth", "/auth/*", "/me"],
+  },
+  "kv_namespaces": [{ "binding": "KV", "id": "webauthn-kv" }],
+}

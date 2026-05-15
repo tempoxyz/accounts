@@ -21,7 +21,7 @@ Hit **GET /me** before signing in to confirm the endpoint returns `401`. Sign in
 
 <Demo
   title="Authenticate an Account"
-  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/with-auth"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/authentication"
   headerAction={<DemoReset />}
 >
   <Authenticate />
@@ -263,7 +263,7 @@ This means `/auth` and `/me` must live on the same origin as your app for the co
 
 ### Same-origin in development
 
-Browsers attach `SameSite=Lax` cookies only on same-site requests. Run your auth handler on the app's origin — Vite's proxy or a colocated worker (see [`with-auth`](https://github.com/tempoxyz/accounts/tree/main/examples/with-auth)) is the easiest path.
+Browsers attach `SameSite=Lax` cookies only on same-site requests. Run your auth handler on the app's origin — Vite's proxy or a colocated worker (see [`authentication`](https://github.com/tempoxyz/accounts/tree/main/examples/authentication)) is the easiest path.
 
 ### Non-browser clients
 

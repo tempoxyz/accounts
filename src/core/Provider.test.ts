@@ -1735,19 +1735,19 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const client = getClient()
       const before = await Actions.accessKey.getMetadata(client, {
         account: connected,
-        accessKey: keyAuthorization.address,
+        accessKey: keyAuthorization.address!,
       })
       expect(before.isRevoked).toBe(false)
 
       await provider.request({
         method: 'wallet_revokeAccessKey',
-        params: [{ address: connected, accessKeyAddress: keyAuthorization.address }],
+        params: [{ address: connected, accessKeyAddress: keyAuthorization.address! }],
       })
 
       // Key should be revoked on-chain.
       const after = await Actions.accessKey.getMetadata(client, {
         account: connected,
-        accessKey: keyAuthorization.address,
+        accessKey: keyAuthorization.address!,
       })
       expect(after.isRevoked).toBe(true)
     })
@@ -1774,7 +1774,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       await provider.request({
         method: 'wallet_revokeAccessKey',
-        params: [{ address: connected, accessKeyAddress: keyAuthorization.address }],
+        params: [{ address: connected, accessKeyAddress: keyAuthorization.address! }],
       })
 
       expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
@@ -1800,7 +1800,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       await provider.request({
         method: 'wallet_revokeAccessKey',
-        params: [{ address: connected, accessKeyAddress: keyAuthorization.address }],
+        params: [{ address: connected, accessKeyAddress: keyAuthorization.address! }],
       })
 
       const receipt = await provider.request({
