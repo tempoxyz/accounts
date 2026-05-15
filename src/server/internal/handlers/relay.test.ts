@@ -922,12 +922,12 @@ describe('behavior: capabilities', () => {
     expect(diffs.find((d) => d.address.toLowerCase() === base.toLowerCase())).toBeUndefined()
   })
 
-  test('behavior: approval covered by transfer is suppressed', async () => {
+  test('behavior: approval and transfer both show outgoing exposure', async () => {
     const sender = accounts[6]!
     const recipient = accounts[7]!
     const token = addresses.alphaUsd
 
-    // approve(100) + transfer(100) to same spender → approval fully covered.
+    // approve(100) + transfer(100) to same spender → both remain separate exposure.
     const result = await fillTransaction(client, {
       account: sender.address,
       calls: [
@@ -947,17 +947,17 @@ describe('behavior: capabilities', () => {
 
     const diffs = findDiffs(meta?.balanceDiffs, sender.address)!
     const tokenDiff = diffs.find((d) => d.address.toLowerCase() === token.toLowerCase())!
-    // Only the transfer shows — approval is fully covered.
-    expect(tokenDiff.value).toBe('0x64')
+    // Transfer does not consume the approval allowance.
+    expect(tokenDiff.value).toBe('0xc8')
     expect(tokenDiff.direction).toBe('outgoing')
   })
 
-  test('behavior: uncovered approval shows as outgoing', async () => {
+  test('behavior: approval is not reduced by transfer to spender', async () => {
     const sender = accounts[6]!
     const spender = accounts[7]!
     const token = addresses.alphaUsd
 
-    // approve(200) + transfer(50) to same spender → 150 uncovered approval.
+    // approve(200) + transfer(50) to same spender → 250 outgoing exposure.
     const result = await fillTransaction(client, {
       account: sender.address,
       calls: [
@@ -977,8 +977,8 @@ describe('behavior: capabilities', () => {
 
     const diffs = findDiffs(meta?.balanceDiffs, sender.address)!
     const tokenDiff = diffs.find((d) => d.address.toLowerCase() === token.toLowerCase())!
-    // transfer(50) + uncovered approval(150) = 200 outgoing.
-    expect(tokenDiff.value).toBe('0xc8')
+    // Direct transfer does not reduce the approved allowance.
+    expect(tokenDiff.value).toBe('0xfa')
     expect(tokenDiff.direction).toBe('outgoing')
   })
 })

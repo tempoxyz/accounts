@@ -1115,9 +1115,6 @@ async function buildBalanceDiffs(client: Client, options: buildBalanceDiffs.Opti
     { incoming: bigint; outgoing: bigint; recipients: Set<Address>; token: Address }
   >()
 
-  // Track total transferred per (token, spender) so we can suppress covered approvals.
-  const transferredBySpender = new Map<string, bigint>()
-
   for (const log of transferLogs) {
     const token = log.address.toLowerCase()
     const fromLower = log.args.from.toLowerCase()
@@ -1138,14 +1135,12 @@ async function buildBalanceDiffs(client: Client, options: buildBalanceDiffs.Opti
     if (fromLower === accountLower) {
       entry.outgoing += log.args.amount
       entry.recipients.add(log.args.to)
-      const key = `${token}:${toLower}`
-      transferredBySpender.set(key, (transferredBySpender.get(key) ?? 0n) + log.args.amount)
     }
     if (toLower === accountLower) entry.incoming += log.args.amount
     tokenMap.set(token, entry)
   }
 
-  // Treat approvals as outgoing unless the spender already transferred >= approval amount.
+  // Treat approvals as outgoing exposure. Direct transfers do not consume allowances.
   for (const log of approvalLogs) {
     if (log.args.owner.toLowerCase() !== accountLower) continue
     const token = log.address.toLowerCase()
@@ -1153,17 +1148,13 @@ async function buildBalanceDiffs(client: Client, options: buildBalanceDiffs.Opti
     // Skip swap-related approvals (reported in capabilities.autoSwap instead).
     if (swap && token === swapTokenIn && log.args.spender.toLowerCase() === dexLower) continue
 
-    const spenderKey = `${token}:${log.args.spender.toLowerCase()}`
-    const transferred = transferredBySpender.get(spenderKey) ?? 0n
-    if (log.args.amount <= transferred) continue
-
     const entry = tokenMap.get(token) ?? {
       incoming: 0n,
       outgoing: 0n,
       recipients: new Set<Address>(),
       token: log.address,
     }
-    entry.outgoing += log.args.amount - transferred
+    entry.outgoing += log.args.amount
     entry.recipients.add(log.args.spender)
     tokenMap.set(token, entry)
   }
