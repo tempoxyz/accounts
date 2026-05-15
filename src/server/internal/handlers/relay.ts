@@ -153,6 +153,10 @@ export function relay(options: relay.Options = {}): Handler {
             typeof parameters.feePayer === 'string' ? parameters.feePayer : undefined
           const requestsSponsorship =
             (!!feePayerOptions || !!externalFeePayerUrl) && parameters.feePayer !== false
+          if (requestsSponsorship && feePayerOptions && !feePayerOptions.validate)
+            throw new RpcResponse.InvalidParamsError({
+              message: 'Local fee payer sponsorship requires a validate callback.',
+            })
           // Default to `true`. Dapps that don't render diffs can pass
           // `capabilities.balanceDiffs: false` to skip the post-fill
           // `tempo_simulateV1` round trip (~250-400ms).
@@ -356,6 +360,7 @@ export function relay(options: relay.Options = {}): Handler {
             })(),
             // Sign as fee payer (if sponsored and not already signed).
             (async () => {
+              if (externalFeePayerUrl) return transaction_filled
               if (!(sponsored && feePayerOptions && !alreadySigned)) return transaction_filled
               return Sponsorship.sign({
                 account: feePayerOptions.account,
@@ -530,7 +535,12 @@ export function relay(options: relay.Options = {}): Handler {
             getClient,
             method: request.method as Sponsorship.handleRawTransaction.Options['method'],
             request: { params: 'params' in request ? request.params : undefined },
-            validate: feePayerOptions.validate,
+            validate: (() => {
+              if (feePayerOptions.validate) return feePayerOptions.validate
+              throw new RpcResponse.InvalidParamsError({
+                message: 'Local fee payer sponsorship requires a validate callback.',
+              })
+            })(),
           })
           return RpcResponse.from({ result } as never, { request } as never)
         } catch (error) {
