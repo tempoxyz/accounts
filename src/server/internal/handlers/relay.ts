@@ -679,12 +679,13 @@ async function fill(client: Client, options: fill.Options) {
     const maxAmountIn = deficit + (deficit * BigInt(Math.round(autoSwap.slippage * 1000))) / 1000n
     const originalCalls = extractCalls(request)
     const swapCalls = buildSwapCalls(sourceToken, insufficientToken, deficit, maxAmountIn)
+    const { data: _, to: __, value: ___, ...requestWithoutLegacyCall } = request
 
     const result = await client.request({
       method: 'eth_fillTransaction',
       params: [
         format({
-          ...request,
+          ...requestWithoutLegacyCall,
           calls: [...swapCalls, ...originalCalls],
         }) as never,
       ],
@@ -693,7 +694,7 @@ async function fill(client: Client, options: fill.Options) {
       | { address: Address; name?: string; url?: string }
       | undefined
     const mergedTx = mergeCallsFromRequest(result.tx as Record<string, unknown>, {
-      ...request,
+      ...requestWithoutLegacyCall,
       calls: [...swapCalls, ...originalCalls],
     })
     return {
