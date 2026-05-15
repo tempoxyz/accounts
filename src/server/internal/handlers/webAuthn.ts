@@ -149,6 +149,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       const userId = stored.userId
         ? Base64.fromBytes(Bytes.fromString(stored.userId), { pad: false, url: true })
         : undefined
+      if (await kv.get(`credential:${credentialId}`)) throw new Error('Credential already exists')
 
       const [, hook] = await Promise.all([
         kv.set(`credential:${credentialId}`, { publicKey, ...(userId ? { userId } : {}) }),
@@ -263,17 +264,9 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       })
       if (!valid) throw new Error('Authentication failed')
 
-      const rawResponse = response.raw?.response as unknown as Record<string, string> | undefined
-      const userHandle = rawResponse?.userHandle
-
       const credentialId = response.id
       const publicKey = credentialData.publicKey
-      // Surface the authenticator-emitted `userHandle` verbatim
-      // (base64url-encoded user id). Fall back to the base64-encoded
-      // userId we stashed during register, so callers see the same
-      // identifier shape across register and login.
-      const userId =
-        userHandle && userHandle.length > 0 ? userHandle : (credentialData.userId ?? undefined)
+      const userId = credentialData.userId
 
       // Hook for side effects (user provisioning, analytics, allow/deny).
       // The legacy contract — return a `Response` to merge fields onto
