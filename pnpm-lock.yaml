@@ -70,7 +70,7 @@ overrides:
   tar: 7.5.15
   vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
-  wrangler: ^4.85.0
+  wrangler: ^4.90.1
 
 patchedDependencies:
   vocs@0.0.0: 0749dd43af96e1423a849f589c6b765ac71042c00b84c5d521e0af05bf159b6e
