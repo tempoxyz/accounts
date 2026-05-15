@@ -618,11 +618,12 @@ export namespace wallet_transfer {
    *
    * Discriminated on `editable`:
    *
-   * - omitted or `false` (default): programmatic. `amount` is a
+   * - omitted or `false` (default): Read-only. `amount` is a
    *   human-readable string (e.g. `"1.5"`), `to` and `token` are
-   *   required, no UI is shown. Uses an access key when one matches,
-   *   otherwise falls back to a confirm dialog.
-   * - `true`: editable. Wallet shows a UI with optional fields
+   *   required, no editable UI is shown. Uses an access key when one
+   *   matches (signs without UI), otherwise falls back to a confirm
+   *   dialog the user has to approve.
+   * - `true`: Editable. Wallet shows a UI with optional fields
    *   pre-filled; the user confirms or edits before signing.
    */
   export const parameters = z.discriminatedUnion('editable', [
@@ -631,7 +632,7 @@ export namespace wallet_transfer {
       amount: z.string(),
       /** Chain id. Defaults to the active chain. */
       chainId: z.optional(u.number()),
-      /** Skip the wallet UI and sign programmatically. @default false */
+      /** Skip the editable wallet UI (Read-only mode). @default false */
       editable: z.optional(z.literal(false)),
       /**
        * Fee payer override. `false` to disable the wallet's default fee
@@ -648,7 +649,7 @@ export namespace wallet_transfer {
        * UTF-8 memo to attach to the transfer (max 32 bytes when encoded
        * as UTF-8). Sent via `transferWithMemo` / `transferFromWithMemo`.
        */
-      memo: z.optional(u.hex()),
+      memo: z.optional(z.string()),
       /** Recipient address. */
       to: u.address(),
       /**

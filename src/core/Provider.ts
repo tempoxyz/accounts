@@ -801,7 +801,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'wallet_transfer': {
                     assertConnected()
                     // Default to the editable variant when params are
-                    // omitted — programmatic mode requires `amount`,
+                    // omitted — Read-only mode requires `amount`,
                     // `to`, and `token`, so an empty call only makes
                     // sense as "open the wallet send UI".
                     const decoded = request._decoded.params?.[0] ?? { editable: true as const }
@@ -877,7 +877,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const call = Actions.token.transfer.call({
                       amount: amountUnits,
                       ...(sourceFrom ? { from: sourceFrom } : {}),
-                      memo,
+                      memo: memo ? Hex.fromString(memo) : undefined,
                       to,
                       token: tokenAddress,
                     })

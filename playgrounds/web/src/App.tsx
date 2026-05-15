@@ -428,9 +428,9 @@ function WalletTransfer() {
               params: [
                 {
                   amount: '1',
-                  // Hex-encoded UTF-8 memo (max 32 bytes). Wallet rejects
-                  // with InvalidParamsError if the token is not TIP-20.
-                  memo: Hex.fromString('invoice #4821'),
+                  // UTF-8 memo (max 32 bytes). Wallet rejects with
+                  // InvalidParamsError if the token is not TIP-20.
+                  memo: 'invoice #4821',
                   to: '0x0000000000000000000000000000000000000001',
                   token: 'pathUSD',
                   ...feePayerParam,
