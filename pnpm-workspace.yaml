@@ -68,6 +68,7 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 
 overrides:
   accounts: 'workspace:*'
+  '@sinclair/typebox': '^0.34.0'
   viem: 'catalog:'
   file-type: '22.0.1'
   follow-redirects: '1.16.0'

@@ -54,6 +54,7 @@ catalogs:
 
 overrides:
   accounts: workspace:*
+  '@sinclair/typebox': ^0.34.0
   viem: ^2.49.2
   file-type: 22.0.1
   follow-redirects: 1.16.0
@@ -93,7 +94,7 @@ importers:
         version: 0.0.7(typescript@5.9.3)
       mppx:
         specifier: 'catalog:'
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.27.10)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
+        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.49)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       ox:
         specifier: ~0.14.18
         version: 0.14.20(typescript@5.9.3)(zod@4.4.3)
@@ -142,7 +143,7 @@ importers:
         version: 3.4.12(@tanstack/query-core@5.100.10)(@types/react@19.2.14)(react@19.2.6)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@19.2.6))(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       elysia:
         specifier: ^1.4.28
-        version: 1.4.28(@sinclair/typebox@0.27.10)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3)
+        version: 1.4.28(@sinclair/typebox@0.34.49)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3)
       expo-secure-store:
         specifier: ^55.0.13
         version: 55.0.14(expo@55.0.24)
@@ -515,7 +516,7 @@ importers:
         version: 4.12.18
       mppx:
         specifier: ^0.6.23
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.27.10)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
+        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.49)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       react:
         specifier: ^19.2.5
         version: 19.2.6
@@ -567,7 +568,7 @@ importers:
         version: 4.12.18
       mppx:
         specifier: ^0.6.23
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.27.10)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
+        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.49)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       react:
         specifier: ^19.2.5
         version: 19.2.6
@@ -619,7 +620,7 @@ importers:
         version: 4.12.18
       mppx:
         specifier: ^0.6.23
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.27.10)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
+        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.49)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       react:
         specifier: ^19.2.5
         version: 19.2.6
@@ -772,7 +773,7 @@ importers:
         version: link:../..
       mppx:
         specifier: 'catalog:'
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.27.10)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
+        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.49)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       react:
         specifier: ^19.2.5
         version: 19.2.6
@@ -821,7 +822,7 @@ importers:
         version: link:../..
       mppx:
         specifier: 'catalog:'
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.27.10)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
+        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.49)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       react:
         specifier: ^19.2.5
         version: 19.2.6
@@ -3536,8 +3537,8 @@ packages:
   '@shikijs/vscode-textmate@10.0.2':
     resolution: {integrity: sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg==}
 
-  '@sinclair/typebox@0.27.10':
-    resolution: {integrity: sha512-MTBk/3jGLNB2tVxv6uLlFh1iu64iYOQ2PbdOSK3NW8JZsmlaOh2q6sdtKowBhfw8QFLmYNzTW4/oK4uATIi6ZA==}
+  '@sinclair/typebox@0.34.49':
+    resolution: {integrity: sha512-brySQQs7Jtn0joV8Xh9ZV/hZb9Ozb0pmazDIASBkYKCjXrXU3mpcFahmK/z4YDhGkQvP9mWJbVyahdtU5wQA+A==}
 
   '@sindresorhus/is@7.2.0':
     resolution: {integrity: sha512-P1Cz1dWaFfR4IR+U13mqqiGsLFf1KbayybWwdd2vfctdV6hDpUkgCY0nKOLLTMSoRd/jJNjtbqzf13K8DCCXQw==}
@@ -5568,7 +5569,7 @@ packages:
   elysia@1.4.28:
     resolution: {integrity: sha512-Vrx8sBnvq8squS/3yNBzR1jBXI+SgmnmvwawPjNuEHndUe5l1jV2Gp6JJ4ulDkEB8On6bWmmuyPpA+bq4t+WYg==}
     peerDependencies:
-      '@sinclair/typebox': '>= 0.34.0 < 1'
+      '@sinclair/typebox': ^0.34.0
       '@types/bun': '>= 1.2.0'
       exact-mirror: '>= 0.0.9'
       file-type: 22.0.1
@@ -10877,7 +10878,7 @@ snapshots:
 
   '@jest/schemas@29.6.3':
     dependencies:
-      '@sinclair/typebox': 0.27.10
+      '@sinclair/typebox': 0.34.49
 
   '@jest/types@29.6.3':
     dependencies:
@@ -11916,7 +11917,7 @@ snapshots:
 
   '@shikijs/vscode-textmate@10.0.2': {}
 
-  '@sinclair/typebox@0.27.10': {}
+  '@sinclair/typebox@0.34.49': {}
 
   '@sindresorhus/is@7.2.0': {}
 
@@ -14300,9 +14301,9 @@ snapshots:
 
   electron-to-chromium@1.5.355: {}
 
-  elysia@1.4.28(@sinclair/typebox@0.27.10)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3):
+  elysia@1.4.28(@sinclair/typebox@0.34.49)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3):
     dependencies:
-      '@sinclair/typebox': 0.27.10
+      '@sinclair/typebox': 0.34.49
       cookie: 1.1.1
       exact-mirror: 1.0.0
       fast-decode-uri-component: 1.0.1
@@ -16439,7 +16440,7 @@ snapshots:
       pkg-types: 1.3.1
       ufo: 1.6.4
 
-  mppx@0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.27.10)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3)):
+  mppx@0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.49)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3)):
     dependencies:
       incur: 0.4.5
       ox: 0.14.20(typescript@5.9.3)(zod@4.4.3)
@@ -16447,7 +16448,7 @@ snapshots:
       zod: 4.4.3
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
-      elysia: 1.4.28(@sinclair/typebox@0.27.10)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3)
+      elysia: 1.4.28(@sinclair/typebox@0.34.49)(exact-mirror@1.0.0)(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3)
       express: 5.2.1
       hono: 4.12.18
     transitivePeerDependencies:
