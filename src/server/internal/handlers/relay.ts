@@ -751,7 +751,10 @@ async function fill(client: Client, options: fill.Options) {
     // The chain's `eth_fillTransaction` doesn't echo back `calls`, so merge
     // them in from the original request before normalizing — otherwise the
     // typed envelope built for sponsorship signing throws CallsEmptyError.
-    const mergedTx = mergeCallsFromRequest(result.tx as Record<string, unknown>, request)
+    const mergedTx = mergeCallsFromRequest(
+      result.tx as Record<string, unknown>,
+      swap ? { ...request, calls: [...swap.calls, ...extractCalls(request)] } : request,
+    )
 
     // The node's `eth_fillTransaction` may pick a fee token the user
     // doesn't yet hold (e.g. one this transaction will mint via a
