@@ -391,172 +391,37 @@ describe('behavior: with feePayer.feeToken', () => {
   })
 })
 
-describe('behavior: with app-provided feePayer URL', () => {
-  let appServer: Server
-  let walletServer: Server
+describe('behavior: external feePayer URL validation', () => {
+  let server: Server
   let client: ReturnType<typeof getClient<typeof chain>>
 
   beforeAll(async () => {
-    // App relay: has a fee payer account and signs transactions.
-    appServer = await createServer(
-      relay({
-        chains: [chain],
-        transports: { [chain.id]: http() },
-        feePayer: {
-          account: feePayerAccount,
-          name: 'App Sponsor',
-          url: 'https://app.example.com',
-        },
-      }).listener,
-    )
-
-    // Wallet relay: no fee payer configured — proxies to app relay.
-    walletServer = await createServer(
+    server = await createServer(
       relay({
         chains: [chain],
         transports: { [chain.id]: http() },
       }).listener,
     )
 
-    client = getClient({ transport: http(walletServer.url) })
+    client = getClient({ transport: http(server.url) })
   })
 
   afterAll(() => {
-    appServer.close()
-    walletServer.close()
+    server.close()
   })
 
-  test('default: rejects unsafe app relay URLs', async () => {
+  test.each([
+    ['invalid URL', 'not a url'],
+    ['non-HTTPS URL', 'http://relay.example.com'],
+    ['localhost URL', 'https://localhost'],
+    ['private IPv4 URL', 'https://192.168.0.1'],
+    ['IPv6 URL', 'https://[::1]'],
+  ])('rejects %s', async (_name, feePayer) => {
     await expect(
       fillTransaction(client, {
         account: userAccount.address,
         calls: [transferCall()],
-        feePayer: appServer.url as never,
-      }),
-    ).rejects.toThrow(/Invalid parameters/)
-  })
-
-  test('behavior: rejects localhost app relay before forwarding', async () => {
-    await expect(
-      fillTransaction(client, {
-        account: userAccount.address,
-        calls: [transferCall()],
-        feePayer: appServer.url as never,
-      }),
-    ).rejects.toThrow(/Invalid parameters/)
-  })
-
-  test('behavior: rejects non-https app relay URLs', async () => {
-    await expect(
-      fillTransaction(client, {
-        account: userAccount.address,
-        calls: [transferCall()],
-        feePayer: 'http://relay.example.com' as never,
-      }),
-    ).rejects.toThrow(/Invalid parameters/)
-  })
-})
-
-describe('behavior: with app-provided feePayer URL + autoSwap', () => {
-  let appServer: Server
-  let walletServer: Server
-  let client: ReturnType<typeof getClient<typeof chain>>
-
-  beforeAll(async () => {
-    // App relay sponsors fees AND has `features: 'all'` so it can recover
-    // from InsufficientBalance via autoSwap.
-    appServer = await createServer(
-      relay({
-        chains: [chain],
-        features: 'all',
-        transports: { [chain.id]: http() },
-        feePayer: {
-          account: feePayerAccount,
-          name: 'App Sponsor',
-          url: 'https://app.example.com',
-        },
-      }).listener,
-    )
-
-    // Wallet relay forwards to the app relay; also has features:'all' so its
-    // own fill() can detect upstream `capabilities.error` as InsufficientBalance.
-    walletServer = await createServer(
-      relay({
-        chains: [chain],
-        features: 'all',
-        transports: { [chain.id]: http() },
-      }).listener,
-    )
-
-    client = getClient({ transport: http(walletServer.url) })
-  })
-
-  afterAll(() => {
-    appServer.close()
-    walletServer.close()
-  })
-
-  test('behavior: rejects unsafe external feePayer URL before autoSwap', async () => {
-    await expect(
-      fillTransaction(client, {
-        account: accounts[6]!.address,
-        calls: [transferCall()],
-        feePayer: appServer.url as never,
-      }),
-    ).rejects.toThrow(/Invalid parameters/)
-  })
-})
-
-describe('behavior: app-provided feePayer URL bypasses wallet validate', () => {
-  let appServer: Server
-  let walletServer: Server
-  let client: ReturnType<typeof getClient<typeof chain>>
-
-  beforeAll(async () => {
-    // App relay is the authoritative sponsor — it has its own fee payer
-    // account and signs sponsored transactions.
-    appServer = await createServer(
-      relay({
-        chains: [chain],
-        transports: { [chain.id]: http() },
-        feePayer: {
-          account: feePayerAccount,
-          name: 'App Sponsor',
-          url: 'https://app.example.com',
-        },
-      }).listener,
-    )
-
-    // Wallet relay has its own fee payer with a `validate` that ALWAYS
-    // rejects. This guards the wallet's own fee payer; it must NOT gate
-    // sponsorship when the dapp supplies its own external feePayer URL.
-    walletServer = await createServer(
-      relay({
-        chains: [chain],
-        features: 'all',
-        transports: { [chain.id]: http() },
-        feePayer: {
-          account: feePayerAccount,
-          name: 'Wallet Sponsor',
-          validate: () => false,
-        },
-      }).listener,
-    )
-
-    client = getClient({ transport: http(walletServer.url) })
-  })
-
-  afterAll(() => {
-    appServer.close()
-    walletServer.close()
-  })
-
-  test('behavior: unsafe external feePayer URL is rejected before wallet validate', async () => {
-    await expect(
-      fillTransaction(client, {
-        account: userAccount.address,
-        calls: [transferCall()],
-        feePayer: appServer.url as never,
+        feePayer: feePayer as never,
       }),
     ).rejects.toThrow(/Invalid parameters/)
   })
