@@ -15,6 +15,12 @@ const otherAccount = privateKeyToAccount(
 )
 
 describe('challenge', () => {
+  test('error: requires pinned origin or domain', () => {
+    expect(() => auth()).toThrowErrorMatchingInlineSnapshot(
+      `[Error: \`auth()\` requires \`origin\` or \`domain\` to pin SIWE domain binding.]`,
+    )
+  })
+
   test('returns challenge message with chainId, nonce, zero-address placeholder', async () => {
     const { app } = setup()
 

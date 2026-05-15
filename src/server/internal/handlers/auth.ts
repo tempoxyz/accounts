@@ -138,6 +138,9 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     ...rest
   } = options
 
+  if (!origin_option && !domain)
+    throw new Error('`auth()` requires `origin` or `domain` to pin SIWE domain binding.')
+
   async function take(key: string): Promise<ChallengePayload | undefined> {
     if (store.take) return store.take<ChallengePayload>(key)
     const value = await store.get<ChallengePayload>(key)
