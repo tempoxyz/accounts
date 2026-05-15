@@ -1007,17 +1007,13 @@ export function create(options: create.Options = {}): create.ReturnType {
     // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
     // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
     const polyfill = mpp.polyfill ?? isFetchWritable()
+    const getClient = ({ chainId }: { chainId?: number | undefined }) => {
+      const client = provider.getClient({ chainId })
+      const account = provider.getAccount()
+      return Object.assign(client, { account })
+    }
     Mppx.create({
-      methods: [
-        mppx_tempo({
-          getClient: ({ chainId }) => {
-            const client = provider.getClient({ chainId })
-            const account = provider.getAccount()
-            return Object.assign(client, { account })
-          },
-          mode,
-        }),
-      ],
+      methods: [mppx_tempo({ getClient, mode }), mppx_tempo.subscription({ getClient })],
       polyfill,
     })
   }
