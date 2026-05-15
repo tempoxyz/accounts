@@ -45,9 +45,6 @@ catalogs:
     typescript:
       specifier: ^5.9.3
       version: 5.9.3
-    viem:
-      specifier: ^2.49.2
-      version: 2.49.2
     vite:
       specifier: ^8.0.5
       version: 8.0.10
@@ -57,6 +54,7 @@ catalogs:
 
 overrides:
   accounts: workspace:*
+  viem: ^2.49.2
   file-type: 22.0.1
   follow-redirects: 1.16.0
   js-yaml@^3: 3.14.2
@@ -182,7 +180,7 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
       viem:
-        specifier: 'catalog:'
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.3.6)
       vp:
         specifier: npm:vite-plus@~0.1.18
@@ -209,7 +207,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: latest
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
       wagmi:
         specifier: latest
@@ -252,7 +250,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: latest
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
       wagmi:
         specifier: latest
@@ -353,7 +351,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: latest
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
       wagmi:
         specifier: latest
@@ -390,7 +388,7 @@ importers:
         specifier: ~0.14.18
         version: 0.14.18(typescript@5.9.3)(zod@4.4.3)
       viem:
-        specifier: latest
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
     devDependencies:
       '@types/node':
@@ -421,7 +419,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: latest
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
       wagmi:
         specifier: latest
@@ -473,7 +471,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: latest
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
       wagmi:
         specifier: latest
@@ -525,7 +523,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: latest
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
       wagmi:
         specifier: latest
@@ -577,7 +575,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: latest
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
       wagmi:
         specifier: latest
@@ -629,7 +627,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: latest
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
       wagmi:
         specifier: latest
@@ -678,7 +676,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: latest
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
       wagmi:
         specifier: latest
@@ -754,7 +752,7 @@ importers:
         specifier: ~4.24.0
         version: 4.24.0(react-native@0.85.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)
       viem:
-        specifier: 'catalog:'
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
     devDependencies:
       '@types/react':
@@ -782,7 +780,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       viem:
-        specifier: 'catalog:'
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
       wagmi:
         specifier: 'catalog:'
@@ -837,7 +835,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.0(react@19.2.5)
       viem:
-        specifier: 'catalog:'
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
     devDependencies:
       '@cloudflare/vite-plugin':
@@ -996,7 +994,7 @@ importers:
         specifier: 'catalog:'
         version: 4.21.0
       viem:
-        specifier: 'catalog:'
+        specifier: ^2.49.2
         version: 2.49.2(typescript@5.9.3)(zod@4.4.3)
       vite:
         specifier: 'catalog:'
@@ -4417,7 +4415,7 @@ packages:
       accounts: workspace:*
       porto: ~0.2.35
       typescript: '>=5.7.3'
-      viem: 2.x
+      viem: ^2.49.2
     peerDependenciesMeta:
       '@base-org/account':
         optional: true
@@ -4444,7 +4442,7 @@ packages:
       '@tanstack/query-core': '>=5.0.0'
       accounts: workspace:*
       typescript: '>=5.7.3'
-      viem: 2.x
+      viem: ^2.49.2
     peerDependenciesMeta:
       '@tanstack/query-core':
         optional: true
@@ -4459,7 +4457,7 @@ packages:
       '@tanstack/query-core': '>=5.0.0'
       accounts: workspace:*
       typescript: '>=5.7.3'
-      viem: 2.x
+      viem: ^2.49.2
     peerDependenciesMeta:
       '@tanstack/query-core':
         optional: true
@@ -7149,7 +7147,7 @@ packages:
       elysia: '>=1'
       express: '>=5'
       hono: '>=4.12.18'
-      viem: '>=2.47.5'
+      viem: ^2.49.2
     peerDependenciesMeta:
       '@modelcontextprotocol/sdk':
         optional: true
@@ -9034,7 +9032,7 @@ packages:
       '@tanstack/react-query': '>=5.0.0'
       react: ^19.2.5
       typescript: '>=5.7.3'
-      viem: 2.x
+      viem: ^2.49.2
     peerDependenciesMeta:
       typescript:
         optional: true

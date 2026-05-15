@@ -68,6 +68,7 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 
 overrides:
   accounts: 'workspace:*'
+  viem: 'catalog:'
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
   js-yaml@^3: '3.14.2'
