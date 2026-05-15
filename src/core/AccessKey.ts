@@ -281,15 +281,51 @@ function scopesMatch(
     const callSelector = call.data?.slice(0, 10).toLowerCase()
     return key.scopes!.some((scope) => {
       if (scope.address.toLowerCase() !== callTo) return false
-      if (!scope.selector) return true
+      if (!scope.selector) return !scope.recipients || scope.recipients.length === 0
       const scopeSelector = (
         scope.selector.startsWith('0x') && scope.selector.length === 10
           ? scope.selector
           : AbiFunction.getSelector(scope.selector)
       ).toLowerCase()
-      return callSelector === scopeSelector
+      if (callSelector !== scopeSelector) return false
+      return recipientsMatch(scope, call.data)
     })
   })
+}
+
+function recipientsMatch(
+  scope: NonNullable<AccessKey['scopes']>[number],
+  data: Hex.Hex | undefined,
+): boolean {
+  const { recipients } = scope
+  if (!recipients || recipients.length === 0) return true
+  if (!data) return false
+  const selector = data.slice(0, 10).toLowerCase()
+  const indexes = recipientIndexes[selector]
+  if (!indexes) return false
+  const allowed = recipients.map((recipient) => recipient.toLowerCase())
+  return indexes.some((index) => {
+    const recipient = wordAddress(data, index)
+    return recipient ? allowed.includes(recipient) : false
+  })
+}
+
+const recipientIndexes: Record<string, readonly number[]> = {
+  [AbiFunction.getSelector('approve(address,uint256)').toLowerCase()]: [0],
+  [AbiFunction.getSelector('safeTransferFrom(address,address,uint256)').toLowerCase()]: [1],
+  [AbiFunction.getSelector('safeTransferFrom(address,address,uint256,bytes)').toLowerCase()]: [1],
+  [AbiFunction.getSelector(
+    'safeTransferFrom(address,address,uint256,uint256,bytes)',
+  ).toLowerCase()]: [1],
+  [AbiFunction.getSelector('transfer(address,uint256)').toLowerCase()]: [0],
+  [AbiFunction.getSelector('transferFrom(address,address,uint256)').toLowerCase()]: [1],
+}
+
+function wordAddress(data: Hex.Hex, index: number): Address.Address | undefined {
+  const offset = 10 + index * 64
+  const word = data.slice(offset, offset + 64)
+  if (word.length !== 64) return undefined
+  return `0x${word.slice(24)}` as Address.Address
 }
 
 function shouldRemoveForError(error: unknown): boolean {

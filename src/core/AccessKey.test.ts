@@ -1,6 +1,6 @@
 import { WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
-import { encodeErrorResult } from 'viem'
+import { encodeErrorResult, encodeFunctionData } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
@@ -658,6 +658,97 @@ describe('selectAccount', () => {
     })
 
     expect(result?.source).toMatchInlineSnapshot(`"accessKey"`)
+  })
+
+  test('behavior: scoped access key selects when recipient matches', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const recipient = '0x0000000000000000000000000000000000000def' as const
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+        scopes: [{ address: token, recipients: [recipient], selector: '0xa9059cbb' }],
+      },
+    ])
+
+    const result = AccessKey.selectAccount({
+      address: rootAddress,
+      chainId: 1,
+      store,
+      calls: [
+        {
+          to: token,
+          data: encodeFunctionData({
+            abi: [
+              {
+                type: 'function',
+                name: 'transfer',
+                inputs: [
+                  { type: 'address', name: 'to' },
+                  { type: 'uint256', name: 'amount' },
+                ],
+                outputs: [],
+                stateMutability: 'nonpayable',
+              },
+            ],
+            functionName: 'transfer',
+            args: [recipient, 1n],
+          }),
+        },
+      ],
+    })
+
+    expect(result?.source).toMatchInlineSnapshot(`"accessKey"`)
+  })
+
+  test('behavior: scoped access key skips when recipient does not match', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const recipient = '0x0000000000000000000000000000000000000def' as const
+    const attacker = '0x0000000000000000000000000000000000000bad' as const
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+        scopes: [{ address: token, recipients: [recipient], selector: '0xa9059cbb' }],
+      },
+    ])
+
+    const result = AccessKey.selectAccount({
+      address: rootAddress,
+      chainId: 1,
+      store,
+      calls: [
+        {
+          to: token,
+          data: encodeFunctionData({
+            abi: [
+              {
+                type: 'function',
+                name: 'transfer',
+                inputs: [
+                  { type: 'address', name: 'to' },
+                  { type: 'uint256', name: 'amount' },
+                ],
+                outputs: [],
+                stateMutability: 'nonpayable',
+              },
+            ],
+            functionName: 'transfer',
+            args: [attacker, 1n],
+          }),
+        },
+      ],
+    })
+
+    expect(result).toMatchInlineSnapshot(`undefined`)
   })
 
   test('behavior: scoped access key without selector allows any call to that address', async () => {
