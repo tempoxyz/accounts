@@ -1623,7 +1623,7 @@ describe('behavior: fee token resolution', () => {
       calls: [transferCall()],
     })
 
-    expect(transaction.feeToken).toBe(preferredToken)
+    expect(transaction.feeToken?.toLowerCase()).toBe(preferredToken.toLowerCase())
   })
 
   test('behavior: resolves to highest-balance token from token list', async () => {
