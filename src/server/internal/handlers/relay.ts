@@ -662,7 +662,7 @@ async function fill(client: Client, options: fill.Options) {
 
   // Skip re-formatting if already in RPC format (e.g. from viem's fillTransaction).
   const format = (value: Record<string, unknown>) =>
-    Utils.normalizeFillTransactionRequest(
+    normalizeFillRequestForRpc(
       value.type === '0x76' ? value : Utils.formatFillTransactionRequest(client, value),
     )
 
@@ -1008,6 +1008,26 @@ function extractCalls(transaction: Record<string, unknown>): readonly Call[] {
       ...(transaction.value ? { value: transaction.value as bigint } : {}),
     },
   ] as readonly Call[]
+}
+
+// TODO: cleanup/remove
+function normalizeFillRequestForRpc(transaction: Record<string, unknown>): Record<string, unknown> {
+  const calls = transaction.calls as readonly Record<string, unknown>[] | undefined
+  if (!calls?.length) return transaction
+  return {
+    ...transaction,
+    calls: calls.map((call) => ({
+      ...call,
+      value: normalizeCallValueForRpc(call.value),
+    })),
+  }
+}
+
+function normalizeCallValueForRpc(value: unknown) {
+  if (typeof value === 'bigint') return Hex.fromNumber(value)
+  if (value === '0x') return '0x0'
+  if (typeof value === 'undefined') return '0x0'
+  return value
 }
 
 // TODO: cleanup/remove
