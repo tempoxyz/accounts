@@ -706,7 +706,9 @@ export function create(options: create.Options = {}): create.ReturnType {
                                       },
                                     }
                                   : {}),
-                                ...(signature ? { signature } : {}),
+                                ...(signature && (!auth_request || auth_result)
+                                  ? { signature }
+                                  : {}),
                                 ...(email !== undefined ? { email } : {}),
                                 ...(username !== undefined ? { username } : {}),
                                 ...(auth_result ? { auth: auth_result } : {}),
@@ -1237,10 +1239,13 @@ function absolutizeAuth(
 
 function assertSameAuthOrigin(auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>): void {
   if (typeof auth !== 'object') return
+  if (!auth.challenge || !auth.verify)
+    throw new RpcResponse.InvalidParamsError({
+      message: '`auth` requires both `challenge` and `verify` endpoints.',
+    })
   const urls = [auth.challenge, auth.verify, auth.logout].filter(
     (u): u is string => typeof u === 'string',
   )
-  if (urls.length < 2) return
   const origins = urls.map((url) => {
     try {
       return new URL(url).origin
