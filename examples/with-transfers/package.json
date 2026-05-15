@@ -1,0 +1,34 @@
+{
+  "name": "with-transfers",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "check:types": "tsc -b --noEmit",
+    "dev": "vp dev",
+    "gen:types": "wrangler types",
+    "postinstall": "wrangler types",
+    "build": "tsc -b && vp build",
+    "preview": "vp preview"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.97.0",
+    "accounts": "latest",
+    "hono": "^4.12.18",
+    "mppx": "^0.6.19",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "viem": "latest",
+    "wagmi": "latest"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "~1.33.2",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "typescript": "^5.9.3",
+    "vite-plus": "~0.1.18",
+    "wrangler": "^4.85.0"
+  }
+}
