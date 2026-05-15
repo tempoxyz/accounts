@@ -39,7 +39,7 @@ catalog:
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: https://pkg.pr.new/viem@0e282d6
+  viem: ^2.49.2
   vite: ^8.0.5
   vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
@@ -68,6 +68,7 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 
 overrides:
   accounts: 'workspace:*'
+  viem: 'catalog:'
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
   js-yaml@^3: '3.14.2'
