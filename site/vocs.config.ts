@@ -45,7 +45,7 @@ const config: Config = defineConfig({
         items: [
           { text: 'Connect Accounts', link: '/docs/guides/connect-accounts' },
           { text: 'Authentication', link: '/docs/guides/authentication' },
-          { text: 'Payments', link: '/docs/guides/payments' },
+          { text: 'Transfers', link: '/docs/guides/transfers' },
           { text: 'Spend Permissions', link: '/docs/guides/spend-permissions' },
           { text: 'Subscriptions', link: '/docs/guides/subscriptions' },
           { text: 'Fee Sponsorship', link: '/docs/guides/fee-sponsorship' },

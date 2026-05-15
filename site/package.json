@@ -15,6 +15,7 @@
     "@vitejs/plugin-react": "catalog:",
     "accounts": "workspace:*",
     "mermaid": "^11.14.0",
+    "mppx": "catalog:",
     "ox": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

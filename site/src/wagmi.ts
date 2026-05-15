@@ -4,7 +4,7 @@ import { tempoWallet } from 'wagmi/tempo'
 
 export const wagmiConfig: Config = createConfig({
   chains: [tempoModerato, tempo],
-  connectors: [tempoWallet()],
+  connectors: [tempoWallet({ mpp: true })],
   multiInjectedProviderDiscovery: false,
   transports: {
     [tempoModerato.id]: http(),
