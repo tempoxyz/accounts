@@ -662,7 +662,9 @@ async function fill(client: Client, options: fill.Options) {
 
   // Skip re-formatting if already in RPC format (e.g. from viem's fillTransaction).
   const format = (value: Record<string, unknown>) =>
-    value.type === '0x76' ? value : Utils.formatFillTransactionRequest(client, value)
+    Utils.normalizeFillTransactionRequest(
+      value.type === '0x76' ? value : Utils.formatFillTransactionRequest(client, value),
+    )
 
   // Re-fill the transaction with prepended swap calls so the user can
   // mint the missing `insufficientToken` (typically the fee token) from
