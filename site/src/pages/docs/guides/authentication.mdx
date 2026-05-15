@@ -1,21 +1,31 @@
 ---
 title: Authentication
-description: Register and authenticate accounts through WebAuthn or a custom auth-backed adapter.
+description: Authenticate connected accounts against your own server with a signed SIWE challenge.
 ---
+
+import { Cards, Card } from 'vocs'
+import { Authenticate } from '../../../components/Authenticate'
+import { Demo, DemoReset } from '../../../components/Demo'
 
 # Authentication
 
-Register a user, authenticate future sessions, and route account requests through the selected adapter.
+Issue a server-side session for a connected Tempo account. The wallet signs a [SIWE](https://eips.ethereum.org/EIPS/eip-4361) challenge during `wallet_connect`, and your server verifies it to authenticate follow-up requests.
+
+The cookie is issued by **your origin**. The SDK calls your `verify` endpoint from the app so the browser attaches the `Set-Cookie` to your domain.
 
 ## Demo
 
-Target workspace: `examples/authentication/`.
+By the end of this guide, you will be able to authenticate the connected account against your own server and read the session from any request.
 
-Seed implementation: `examples/domain-bound-webauthn/`.
+Hit **GET /me** before signing in to confirm the endpoint returns `401`. Sign in, then fetch again to see the authenticated response.
 
-:::warning[Stub]
-This page needs a human pass to decide how much auth product surface belongs in the guide versus the WebAuthn and enterprise adapter docs.
-:::
+<Demo
+  title="Authenticate an Account"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/with-auth"
+  headerAction={<DemoReset />}
+>
+  <Authenticate />
+</Demo>
 
 ## Walkthrough
 
@@ -23,56 +33,275 @@ This page needs a human pass to decide how much auth product surface belongs in 
 
 ### Install the SDK
 
-```bash
-pnpm add accounts wagmi viem
+Install `accounts` together with Wagmi, Viem, and a server framework. This guide uses [Hono](https://hono.dev) on Cloudflare Workers; the same handler shape works on Node.js, Bun, Deno, Express, and Next.js.
+
+:::code-group
+
+```bash [npm]
+npm i accounts wagmi viem hono
 ```
 
-### Configure the Provider
+```bash [pnpm]
+pnpm i accounts wagmi viem hono
+```
 
-Start with `webAuthn` when the app owns the passkey ceremony.
+```bash [bun]
+bun i accounts wagmi viem hono
+```
 
-```tsx
+:::
+
+### Set up the Auth Handler
+
+Create a [`Handler.auth`](/docs/server/handler.auth) instance on your server. It mounts three endpoints under `path`:
+
+- `POST /auth/challenge` — issue a single-use SIWE challenge
+- `POST /auth` — verify a signed challenge and issue a session
+- `POST /auth/logout` — revoke a session
+
+It also exposes a `getSession` helper for reading the session from other routes.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Handler, Kv } from 'accounts/server'
+import { env } from 'cloudflare:workers'
+
+// `Kv.durableObject(env.NONCE_DO)` gives the auth handler a linearizable
+// store for one-time-consume SIWE challenge nonces and issued sessions
+// across concurrent worker instances.
+export const auth = Handler.auth({
+  path: '/auth',
+  store: Kv.durableObject(env.NONCE_DO),
+})
+```
+
+:::tip[Pick the right store for production]
+The default `Kv.memory()` store is fine for development. Multi-instance deployments need a linearizable backend so a SIWE nonce can only be consumed once.
+
+On Cloudflare, use [`Kv.durableObject`](/docs/server/kv.durableObject). Elsewhere, any [`Kv`](/docs/server/kv) implementation that supports atomic `take` works.
+:::
+
+### Mount the Handler
+
+Wire the handler into your server, and expose any routes that should be authenticated by reading the session via `getSession`.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Handler, Kv } from 'accounts/server'
+import { env } from 'cloudflare:workers'
+import { Hono } from 'hono'
+
+// Re-export the reference Durable Object class so wrangler can wire it up.
+export const NonceStorage = Kv.NonceStorage
+
+const auth = Handler.auth({
+  path: '/auth',
+  store: Kv.durableObject(env.NONCE_DO),
+})
+
+const app = new Hono()
+
+// Forward every request under `/auth` to the auth handler so the SDK // [!code ++]
+// can hit `/auth/challenge`, `/auth`, and `/auth/logout`. // [!code ++]
+app.all('/auth', (c) => auth.fetch(c.req.raw)) // [!code ++]
+app.all('/auth/*', (c) => auth.fetch(c.req.raw)) // [!code ++]
+
+// Reads the SIWE-issued session and returns the connected address. // [!code ++]
+// Demonstrates how an authenticated endpoint consumes Handler.auth. // [!code ++]
+app.get('/me', async (c) => { // [!code ++]
+  const session = await auth.getSession(c.req.raw) // [!code ++]
+  if (!session) return c.json({ error: 'unauthenticated' }, 401) // [!code ++]
+  return c.json({ address: session.address, chainId: session.chainId }) // [!code ++]
+}) // [!code ++]
+
+export default app
+```
+
+:::tip[Using a different framework?]
+`Handler.auth` exposes both `fetch` (Web Fetch API) and `listener` (Node.js `RequestListener`) entrypoints, so you can plug it into any server framework:
+
+```ts
+createServer(auth.listener)              // Node.js
+Bun.serve({ fetch: auth.fetch })         // Bun
+Deno.serve({ fetch: auth.fetch })        // Deno
+app.all('*', c => auth.fetch(c.request)) // Elysia
+app.use(auth.listener)                   // Express
+app.use(c => auth.fetch(c.req.raw))      // Hono
+export const GET = auth.fetch            // Next.js
+export const POST = auth.fetch           // Next.js
+```
+:::
+
+### Configure the Connector
+
+Pass the auth endpoint to the connector via the `auth` capability. The SDK runs the SIWE round-trip inside `wallet_connect`, sharing the same passkey ceremony.
+
+```tsx twoslash [src/config.ts]
+// @noErrors
 import { createConfig, http } from 'wagmi'
-import { tempo } from 'wagmi/chains'
-import { webAuthn } from 'wagmi/tempo'
+import { tempo, tempoModerato } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
 
 export const config = createConfig({
-  chains: [tempo],
-  connectors: [webAuthn({ authUrl: '/auth' })],
+  chains: [tempoModerato, tempo],
+  connectors: [tempoWallet({ auth: '/auth' })], // [!code ++]
+  multiInjectedProviderDiscovery: false,
   transports: {
     [tempo.id]: http(),
+    [tempoModerato.id]: http(),
   },
 })
 ```
 
-### Register an account
+:::tip[Object form]
+Use the [object form](/docs/rpc/wallet_connect) to override individual endpoints, opt into a `{ token }` body via `returnToken`, or split challenge/verify across hosts.
 
-Call `connect` with the registration capability when creating the passkey-backed account.
+```ts
+tempoWallet({
+  auth: {
+    challenge: 'https://auth.example.com/challenge',
+    verify: 'https://auth.example.com/verify',
+    logout: 'https://auth.example.com/logout',
+    returnToken: true,
+  },
+})
+```
+:::
 
-```tsx
-connect({
-  connector,
-  capabilities: { method: 'register', name: 'My Wallet' },
+### Display the Sign-In Button
+
+Drop in a connect button — no auth-specific code required. The Wagmi `connect` mutation triggers `wallet_connect`, and the auth round-trip happens inside that call.
+
+```tsx twoslash [src/App.tsx]
+// @noErrors
+import { useConnect, useConnection, useConnectors, useDisconnect } from 'wagmi'
+
+function Connect() {
+  const { address } = useConnection()
+  const { mutate: connect, isPending } = useConnect()
+  const { mutate: disconnect } = useDisconnect()
+  const [connector] = useConnectors()
+
+  if (address)
+    return (
+      <button onClick={() => disconnect()}>
+        Sign out
+      </button>
+    )
+
+  return (
+    <button disabled={isPending} onClick={() => connect({ connector })}>
+      Sign in
+    </button>
+  )
+}
+```
+
+### Call authenticated resource
+
+With the session cookie attached to your origin, any authenticated route just works. Use `credentials: 'include'` so the cookie is sent on the fetch.
+
+```tsx twoslash [src/App.tsx]
+// @noErrors
+import { useState } from 'react'
+
+function Me() {
+  const [me, setMe] = useState<unknown>(null)
+
+  async function fetchMe() {
+    const res = await fetch('/me', { credentials: 'include' }) // [!code focus]
+    setMe(await res.json())
+  }
+
+  return (
+    <div>
+      <button onClick={fetchMe}>GET /me</button>
+      <pre>{JSON.stringify(me, null, 2)}</pre>
+    </div>
+  )
+}
+```
+
+### Sign Out
+
+You don't need to call `/auth/logout` yourself: `wallet_disconnect` automatically POSTs to the configured `logout` endpoint, which clears the session cookie. The next `GET /me` returns `401`.
+
+```tsx twoslash
+// @noErrors
+import { useDisconnect } from 'wagmi'
+
+const { mutate: disconnect } = useDisconnect()
+
+// Clears the wallet connection AND the server session cookie.
+disconnect()
+```
+
+### Deploy to Production
+
+When you're ready to go live, follow the [Deploying to Production](/docs/production) guide. Then pin a canonical [`origin`](/docs/server/handler.auth#origin) on `Handler.auth` to prevent a spoofed `x-forwarded-host` from shifting the SIWE domain.
+
+```ts twoslash
+// @noErrors
+import { Handler, Kv } from 'accounts/server'
+
+const auth = Handler.auth({
+  origin: 'https://app.example.com', // [!code ++]
+  path: '/auth',
+  store: Kv.durableObject(env.NONCE_DO),
 })
 ```
 
-### Sign in again
-
-Call `connect` with the same connector and let the adapter run the authentication ceremony.
-
-### Verify the result
-
-Read the connected account and confirm server-side session state if your adapter creates one.
-
 ::::
 
-## Notes / Gotchas
+## Notes & Gotchas
 
-- WebAuthn is origin-bound. Local examples need a secure origin when testing browser passkeys.
-- Custom auth-backed adapters need a concrete session and signer boundary before this guide can be finalized.
+### Cookies are issued by your origin
+
+The session cookie is set on **your app's** origin, not the wallet's. The SDK sees `Set-Cookie` because it makes the verify call itself.
+
+This means `/auth` and `/me` must live on the same origin as your app for the cookie to attach.
+
+### Same-origin in development
+
+Browsers attach `SameSite=Lax` cookies only on same-site requests. Run your auth handler on the app's origin — Vite's proxy or a colocated worker (see [`with-auth`](https://github.com/tempoxyz/accounts/tree/main/examples/with-auth)) is the easiest path.
+
+### Non-browser clients
+
+Use the object form with `returnToken: true` when the SDK can't store cookies (CLI, React Native). The verify response then returns `{ token }` for use as `Authorization: Bearer <token>`.
+
+```ts
+tempoWallet({ auth: { url: '/auth', returnToken: true } })
+```
+
+### Custom verification logic
+
+Pass [`onAuthenticate`](/docs/server/handler.auth#onauthenticate) to gate session issuance. Throw to reject the request with a `401`, or return a `Response` to merge custom JSON onto the verify reply.
 
 ## Next Steps
 
-- [WebAuthn adapter](/docs/adapters/webauthn)
-- [Bring Your Auth](/docs/enterprise/bring-your-auth)
-- [Custom adapter](/docs/adapters/custom)
+<Cards>
+  <Card
+    description="Reference for the server-side auth handler — endpoints, options, getSession, SessionPayload."
+    to="/docs/server/handler.auth"
+    icon="lucide:server"
+    title="Handler.auth Reference"
+  />
+  <Card
+    description="Detailed parameters for the wallet_connect auth capability."
+    to="/docs/rpc/wallet_connect"
+    icon="lucide:link"
+    title="wallet_connect Reference"
+  />
+  <Card
+    description="Choose the right key-value store to back challenges and sessions across worker instances."
+    to="/docs/server/kv"
+    icon="lucide:database"
+    title="KV Stores"
+  />
+  <Card
+    description="Configure CSP, trusted origins, and cookie hardening before going live."
+    to="/docs/production"
+    icon="lucide:shield-check"
+    title="Deploying to Production"
+  />
+</Cards>

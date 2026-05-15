@@ -918,6 +918,9 @@ export function create(options: create.Options = {}): create.ReturnType {
   })()
   if (mpp) {
     const { mode = 'push' } = mpp
+    // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
+    // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
+    const polyfill = mpp.polyfill ?? isFetchWritable()
     Mppx.create({
       methods: [
         mppx_tempo({
@@ -929,6 +932,7 @@ export function create(options: create.Options = {}): create.ReturnType {
           mode,
         }),
       ],
+      polyfill,
     })
   }
 
@@ -1033,6 +1037,30 @@ export declare namespace mpp {
      * @default 'push'
      */
     mode?: 'push' | 'pull' | undefined
+    /**
+     * Whether to polyfill `globalThis.fetch` with the payment-aware wrapper.
+     *
+     * Defaults to `true` when `globalThis.fetch` is writable, and `false`
+     * otherwise (e.g. Cloudflare Workers, where `globalThis.fetch` is
+     * read-only).
+     */
+    polyfill?: boolean | undefined
+  }
+}
+
+/**
+ * Returns `true` if `globalThis.fetch` can be reassigned. Some runtimes
+ * (notably Cloudflare Workers) expose a non-writable, non-configurable
+ * `fetch` that throws when `Mppx.create({ polyfill: true })` tries to
+ * replace it.
+ */
+function isFetchWritable(): boolean {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'fetch')
+    if (!descriptor) return true
+    return Boolean(descriptor.writable || descriptor.set)
+  } catch {
+    return false
   }
 }
 
@@ -1144,6 +1172,16 @@ function assertSameAuthOrigin(auth: NonNullable<z.output<typeof Rpc.wallet_conne
 }
 
 /**
+ * Hint appended to "domain mismatch" / "uri mismatch" errors raised in
+ * {@link fetchAuthChallenge}. Most of the time these come from a server
+ * sitting behind a TLS-terminating proxy (Cloudflare Tunnel, ngrok, a
+ * CDN) that forwards `x-forwarded-proto` / `x-forwarded-host` headers the
+ * auth handler isn't honoring by default.
+ */
+const authOriginHint =
+  ' Hint: if the server is behind a reverse proxy or tunnel, set `Handler.auth({ trustProxy: true })` to honor `x-forwarded-*` headers, or pin the public origin with `Handler.auth({ origin: "https://app.example.com" })`.'
+
+/**
  * Fetches an auth challenge from the auth endpoint and validates that the
  * server-supplied message is bound to the auth endpoint's origin and the
  * requested chain.
@@ -1191,11 +1229,11 @@ async function fetchAuthChallenge(
     })
   if (parsed.domain !== expected.host)
     throw new RpcResponse.InvalidParamsError({
-      message: `Server Authentication challenge endpoint \`${url}\` returned a message bound to \`${parsed.domain}\` (expected \`${expected.host}\`).`,
+      message: `Server Authentication challenge endpoint \`${url}\` returned a message bound to \`${parsed.domain}\` (expected \`${expected.host}\`).${authOriginHint}`,
     })
   if (parsed.uri !== expected.origin)
     throw new RpcResponse.InvalidParamsError({
-      message: `Server Authentication challenge endpoint \`${url}\` returned a message with \`uri\` \`${parsed.uri}\` (expected \`${expected.origin}\`).`,
+      message: `Server Authentication challenge endpoint \`${url}\` returned a message with \`uri\` \`${parsed.uri}\` (expected \`${expected.origin}\`).${authOriginHint}`,
     })
   if (parsed.chainId !== chainId)
     throw new RpcResponse.InvalidParamsError({

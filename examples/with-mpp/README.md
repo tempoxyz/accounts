@@ -13,10 +13,10 @@ client-side configuration is required.
 Two [intents](https://mpp.dev) are demonstrated, both served from a single
 Hono `app` powered by `mppx/hono`:
 
-| Endpoint           | Intent          | Cost              | Notes                                                                                  |
-| ------------------ | --------------- | ----------------- | -------------------------------------------------------------------------------------- |
-| `GET /api/auth`    | **zero-charge** | $0                | Replay-protected proof of account ownership. No on-chain transaction.                  |
-| `GET /api/fortune` | **charge**      | $0.01 / call      | One-shot pathUSD transfer, settled on-chain before the response is returned.           |
+| Endpoint           | Intent          | Cost         | Notes                                                                        |
+| ------------------ | --------------- | ------------ | ---------------------------------------------------------------------------- |
+| `GET /api/auth`    | **zero-charge** | $0           | Replay-protected proof of account ownership. No on-chain transaction.        |
+| `GET /api/fortune` | **charge**      | $0.01 / call | One-shot pathUSD transfer, settled on-chain before the response is returned. |
 
 ## Setup
 

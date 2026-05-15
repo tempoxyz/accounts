@@ -1,11 +1,6 @@
 import { useState } from 'react'
 import { formatUnits, stringify } from 'viem'
-import {
-  useConnect,
-  useConnection,
-  useConnectors,
-  useDisconnect,
-} from 'wagmi'
+import { useConnect, useConnection, useConnectors, useDisconnect } from 'wagmi'
 import { tempoModerato } from 'wagmi/chains'
 import { Hooks } from 'wagmi/tempo'
 
@@ -17,8 +12,8 @@ export default function App() {
     <div>
       <h1>MPP Example</h1>
       <p>
-        Demonstrates the Accounts SDK auto-paying HTTP <code>402 Payment Required</code>{' '}
-        responses served by a Hono server using <code>mppx/hono</code> middleware.
+        Demonstrates the Accounts SDK auto-paying HTTP <code>402 Payment Required</code> responses
+        served by a Hono server using <code>mppx/hono</code> middleware.
       </p>
 
       <h2>Connection</h2>
@@ -71,8 +66,8 @@ function Faucet() {
   return (
     <div>
       <p>
-        Mints testnet pathUSD to your account. Required before invoking the{' '}
-        <code>charge</code> intent below.
+        Mints testnet pathUSD to your account. Required before invoking the <code>charge</code>{' '}
+        intent below.
       </p>
       <button
         type="button"
@@ -103,10 +98,7 @@ function Connect() {
           Disconnect
         </button>
       ) : (
-        <button
-          type="button"
-          onClick={() => connect({ connector, chainId: tempoModerato.id })}
-        >
+        <button type="button" onClick={() => connect({ connector, chainId: tempoModerato.id })}>
           Sign in
         </button>
       )}
@@ -123,8 +115,8 @@ function ZeroCharge() {
   return (
     <div>
       <p>
-        Free $0 challenge. Proves the caller controls a Tempo account without
-        any on-chain transaction.
+        Free $0 challenge. Proves the caller controls a Tempo account without any on-chain
+        transaction.
       </p>
       <button
         type="button"
@@ -160,8 +152,8 @@ function Charge() {
   return (
     <div>
       <p>
-        $0.01 per call. The SDK signs and broadcasts a pathUSD transfer; the
-        server only releases the response after the transfer settles on-chain.
+        $0.01 per call. The SDK signs and broadcasts a pathUSD transfer; the server only releases
+        the response after the transfer settles on-chain.
       </p>
       <button
         type="button"
