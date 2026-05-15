@@ -17,6 +17,16 @@ export type Kv = {
   /** Delete a value by key. */
   delete: (key: string) => Promise<void>
   /**
+   * Atomic create-if-absent. Returns `true` when the value was written,
+   * `false` when a non-expired value already exists.
+   *
+   * Optional. Required for unique-key semantics (e.g. WebAuthn credential
+   * registration). Backends without a linearizable create primitive (e.g.
+   * eventually-consistent stores like Cloudflare KV) should leave this
+   * undefined; consumers that require uniqueness will refuse the store.
+   */
+  create?: (key: string, value: unknown, options?: set.Options | undefined) => Promise<boolean>
+  /**
    * Atomic read-and-delete. Returns the value if present, `undefined` if
    * missing or expired. Across concurrent callers, exactly one observer
    * receives a non-`undefined` return for a given key, and the key is
@@ -147,6 +157,12 @@ export function durableObject(
     async set(key, value, options) {
       await rpc('set', key, { value, ttl: options?.ttl })
     },
+    async create(key, value, options) {
+      const { created } = (await rpc('create', key, { value, ttl: options?.ttl })) as {
+        created: boolean
+      }
+      return created
+    },
     async delete(key) {
       await rpc('delete', key)
     },
@@ -228,6 +244,17 @@ export class NonceStorage {
       await this.state.storage.put(key, entry)
       return Response.json({})
     }
+    if (op === 'create') {
+      const current = await this.state.storage.get<NonceStorage.Entry>(key)
+      if (current && !isExpired(current)) return Response.json({ created: false })
+
+      const body = (await request.json()) as { value: unknown; ttl?: number }
+      const entry: NonceStorage.Entry = body.ttl
+        ? { value: body.value, expiresAt: Date.now() + body.ttl * 1000 }
+        : { value: body.value }
+      await this.state.storage.put(key, entry)
+      return Response.json({ created: true })
+    }
     if (op === 'delete') {
       await this.state.storage.delete(key)
       return Response.json({})
@@ -279,6 +306,13 @@ export function memory(options: memory.Options = {}): Kv {
     async set(key, value, options) {
       const expiresAt = options?.ttl ? now() + options.ttl * 1000 : undefined
       store.set(key, expiresAt !== undefined ? { value, expiresAt } : { value })
+    },
+    async create(key, value, options) {
+      const entry = store.get(key)
+      if (entry && !isExpired(entry)) return false
+      const expiresAt = options?.ttl ? now() + options.ttl * 1000 : undefined
+      store.set(key, expiresAt !== undefined ? { value, expiresAt } : { value })
+      return true
     },
     // Atomic in-process: the synchronous `Map.get` + `Map.delete` runs
     // in a single microtask, so concurrent `take(key)` callers (within

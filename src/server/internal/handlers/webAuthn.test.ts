@@ -67,6 +67,28 @@ describe('POST /register', () => {
   })
 })
 
+describe('kv', () => {
+  test('store without atomic create is rejected', () => {
+    const kv: Kv.Kv = {
+      async get() {
+        return undefined
+      },
+      async set() {},
+      async delete() {},
+    }
+
+    expect(() =>
+      webAuthn({
+        kv,
+        origin: 'http://localhost',
+        rpId: 'localhost',
+      }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[Error: \`webAuthn({ kv })\` requires a Kv with atomic \`create\` support]`,
+    )
+  })
+})
+
 describe('POST /login', () => {
   test('error: unknown credential → 400', async () => {
     const response = await fetch(`${server.url}/login`, {
