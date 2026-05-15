@@ -1360,9 +1360,10 @@ function buildSwapCalls(
  * built for sponsorship signing throws `CallsEmptyError` or
  * `Cannot convert undefined to a BigInt` when serializing.
  *
- * Result fields take precedence (they are the chain's authoritative filled
- * values); request fields fill in everything else. Calls are normalized
- * separately so legacy `to`/`data`/`value` requests are also supported.
+ * Result fields take precedence because externally signed fee-payer relays may
+ * change envelope fields before producing `feePayerSignature`; request fields
+ * only fill gaps. Calls are normalized separately so legacy `to`/`data`/`value`
+ * requests are also supported.
  */
 function mergeCallsFromRequest(
   resultTx: Record<string, unknown>,
@@ -1392,6 +1393,7 @@ function mergeCallsFromRequest(
   return merged
 }
 
+/** Normalizes external fee-payer relay URLs before the wallet relay forwards fills. */
 function normalizeExternalFeePayerUrl(value: string): string {
   let url: URL
   try {
@@ -1409,6 +1411,7 @@ function normalizeExternalFeePayerUrl(value: string): string {
   return url.href
 }
 
+/** Blocks local/private hosts that should never receive user-supplied fill payloads. */
 function isUnsafeHostname(hostname: string): boolean {
   const host = hostname.toLowerCase()
   if (host === 'localhost' || host.endsWith('.localhost')) return true
