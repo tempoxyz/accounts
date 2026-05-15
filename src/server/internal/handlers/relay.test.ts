@@ -415,7 +415,9 @@ describe('behavior: external feePayer URL validation', () => {
     ['non-HTTPS URL', 'http://relay.example.com'],
     ['localhost URL', 'https://localhost'],
     ['private IPv4 URL', 'https://192.168.0.1'],
-    ['IPv6 URL', 'https://[::1]'],
+    ['loopback IPv6 URL', 'https://[::1]'],
+    ['link-local IPv6 URL', 'https://[fe80::1]'],
+    ['unique-local IPv6 URL', 'https://[fc00::1]'],
   ])('rejects %s', async (_name, feePayer) => {
     await expect(
       fillTransaction(client, {

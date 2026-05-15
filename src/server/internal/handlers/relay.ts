@@ -1416,16 +1416,72 @@ function isUnsafeHostname(hostname: string): boolean {
   const host = hostname.toLowerCase()
   if (host === 'localhost' || host.endsWith('.localhost')) return true
   if (host === '0.0.0.0') return true
-  if (host.includes(':')) return true
+  if (host.includes(':')) return isUnsafeIpv6Host(host)
   const parts = host.split('.').map((part) => Number(part))
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255))
     return false
-  const [a, b] = parts as [number, number, number, number]
+  return isUnsafeIpv4(parts as [number, number, number, number])
+}
+
+function isUnsafeIpv4(parts: [number, number, number, number]): boolean {
+  const [a, b] = parts
   if (a === 10 || a === 127 || a === 0) return true
   if (a === 169 && b === 254) return true
   if (a === 172 && b >= 16 && b <= 31) return true
   if (a === 192 && b === 168) return true
   return false
+}
+
+function isUnsafeIpv6Host(hostname: string): boolean {
+  const parts = parseIpv6(hostname)
+  if (!parts) return true
+  const [a] = parts
+  if (parts.every((part) => part === 0)) return true
+  if (parts.slice(0, 7).every((part) => part === 0) && parts[7] === 1) return true
+  if ((a & 0xfe00) === 0xfc00) return true
+  if ((a & 0xffc0) === 0xfe80) return true
+  if ((a & 0xffc0) === 0xfec0) return true
+  if ((a & 0xff00) === 0xff00) return true
+  if (
+    parts.slice(0, 5).every((part) => part === 0) &&
+    parts[5] === 0xffff &&
+    isUnsafeIpv4([parts[6]! >> 8, parts[6]! & 0xff, parts[7]! >> 8, parts[7]! & 0xff])
+  )
+    return true
+  return false
+}
+
+function parseIpv6(
+  hostname: string,
+): [number, number, number, number, number, number, number, number] | undefined {
+  const host = hostname.replace(/^\[|\]$/g, '').split('%')[0]!
+  const value = host.includes('.') ? replaceIpv4Tail(host) : host
+  if (!value) return undefined
+  const halves = value.split('::')
+  if (halves.length > 2) return undefined
+  const left = halves[0] ? halves[0].split(':') : []
+  const right = halves[1] ? halves[1].split(':') : []
+  const missing = halves.length === 2 ? 8 - left.length - right.length : 0
+  const parts = [...left, ...Array(Math.max(0, missing)).fill('0'), ...right]
+  if (parts.length !== 8) return undefined
+  const numbers = parts.map((part) =>
+    /^[\da-f]{1,4}$/i.test(part) ? Number.parseInt(part, 16) : NaN,
+  )
+  if (numbers.some((part) => !Number.isInteger(part) || part < 0 || part > 0xffff)) return undefined
+  return numbers as [number, number, number, number, number, number, number, number]
+}
+
+function replaceIpv4Tail(hostname: string): string | undefined {
+  const index = hostname.lastIndexOf(':')
+  if (index === -1) return undefined
+  const parts = hostname
+    .slice(index + 1)
+    .split('.')
+    .map((part) => Number(part))
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255))
+    return undefined
+  const [a, b, c, d] = parts as [number, number, number, number]
+  return `${hostname.slice(0, index)}:${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`
 }
 
 /**
