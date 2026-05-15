@@ -426,54 +426,34 @@ describe('behavior: with app-provided feePayer URL', () => {
     walletServer.close()
   })
 
-  test('default: proxies fill to app relay and returns sponsored tx', async () => {
-    const { transaction } = await fillTransaction(client, {
-      account: userAccount.address,
-      calls: [transferCall()],
-      feePayer: appServer.url as never,
-    })
-
-    expect(transaction.feePayerSignature).toBeDefined()
-    expect(transaction.gas).toBeDefined()
+  test('default: rejects unsafe app relay URLs', async () => {
+    await expect(
+      fillTransaction(client, {
+        account: userAccount.address,
+        calls: [transferCall()],
+        feePayer: appServer.url as never,
+      }),
+    ).rejects.toThrow(/Invalid parameters/)
   })
 
-  test('behavior: relays sponsor metadata from app relay', async () => {
-    const result = await fillTransaction(client, {
-      account: userAccount.address,
-      calls: [transferCall()],
-      feePayer: appServer.url as never,
-    })
-
-    expect(result.capabilities?.sponsored).toBe(true)
-    expect(result.capabilities?.sponsor).toMatchInlineSnapshot(`
-      {
-        "address": "${feePayerAccount.address}",
-        "name": "App Sponsor",
-        "url": "https://app.example.com",
-      }
-    `)
+  test('behavior: rejects localhost app relay before forwarding', async () => {
+    await expect(
+      fillTransaction(client, {
+        account: userAccount.address,
+        calls: [transferCall()],
+        feePayer: appServer.url as never,
+      }),
+    ).rejects.toThrow(/Invalid parameters/)
   })
 
-  test('behavior: sponsored tx from app relay can be signed and broadcast', async () => {
-    const { transaction } = await fillTransaction(client, {
-      account: userAccount.address,
-      calls: [transferCall()],
-      feePayer: appServer.url as never,
-    })
-    const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
-    const envelope = TxEnvelopeTempo.deserialize(serialized)
-    const signature = await userAccount.sign({
-      hash: TxEnvelopeTempo.getSignPayload(envelope),
-    })
-    const signed = TxEnvelopeTempo.serialize(envelope, {
-      signature: SignatureEnvelope.from(signature),
-    })
-    const receipt = (await getClient().request({
-      method: 'eth_sendRawTransactionSync' as never,
-      params: [signed],
-    })) as { feePayer?: string | undefined }
-
-    expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+  test('behavior: rejects non-https app relay URLs', async () => {
+    await expect(
+      fillTransaction(client, {
+        account: userAccount.address,
+        calls: [transferCall()],
+        feePayer: 'http://relay.example.com' as never,
+      }),
+    ).rejects.toThrow(/Invalid parameters/)
   })
 })
 
@@ -516,85 +496,14 @@ describe('behavior: with app-provided feePayer URL + autoSwap', () => {
     walletServer.close()
   })
 
-  test('behavior: autoSwap recovers when external feePayer surfaces InsufficientBalance', async () => {
-    const sender = accounts[6]!
-
-    // Token pair + DEX liquidity. Use alphaUsd as the quote token so the
-    // relay can swap alphaUsd → base to cover the deficit.
-    const rpc = getClient({ account: accounts[0]! })
-    const { token: base } = await Actions.token.createSync(rpc, {
-      name: 'External Swap Base',
-      symbol: 'EXTBASE',
-      currency: 'USD',
-      quoteToken: addresses.alphaUsd,
-    })
-    await sendTransactionSync(rpc, {
-      calls: [
-        Actions.token.grantRoles.call({ token: base, role: 'issuer', to: rpc.account!.address }),
-        Actions.token.mint.call({
-          token: base,
-          to: rpc.account!.address,
-          amount: parseUnits('10000', 6),
-        }),
-        Actions.token.mint.call({
-          token: addresses.alphaUsd,
-          to: rpc.account!.address,
-          amount: parseUnits('10000', 6),
-        }),
-        Actions.token.approve.call({
-          token: base,
-          spender: Addresses.stablecoinDex,
-          amount: parseUnits('10000', 6),
-        }),
-        Actions.token.approve.call({
-          token: addresses.alphaUsd,
-          spender: Addresses.stablecoinDex,
-          amount: parseUnits('10000', 6),
-        }),
-      ],
-    })
-    await Actions.dex.createPairSync(rpc, { base })
-    await Actions.dex.placeSync(rpc, {
-      token: base,
-      amount: parseUnits('500', 6),
-      type: 'sell',
-      tick: Tick.fromPrice('1.001'),
-    })
-
-    // Give sender alphaUsd (fee + swap source) but NO base tokens.
-    await Actions.token.mintSync(rpc, {
-      token: addresses.alphaUsd,
-      amount: parseUnits('1000', 6),
-      to: sender.address,
-    })
-    await Actions.fee.setUserToken(getClient({ account: sender }), { token: addresses.alphaUsd })
-
-    // Sender attempts to transfer base via the wallet relay, which forwards
-    // to the app relay. The app relay returns 200 with capabilities.error =
-    // InsufficientBalance and a stub tx; the wallet relay must convert that
-    // into a synthetic throw so its own fill() autoSwap branch can recover.
-    const transferAmount = parseUnits('5', 6)
-    const result = await fillTransaction(client, {
-      account: sender.address,
-      ...Actions.token.transfer.call({
-        token: base,
-        to: accounts[7]!.address,
-        amount: transferAmount,
+  test('behavior: rejects unsafe external feePayer URL before autoSwap', async () => {
+    await expect(
+      fillTransaction(client, {
+        account: accounts[6]!.address,
+        calls: [transferCall()],
+        feePayer: appServer.url as never,
       }),
-      feePayer: appServer.url as never,
-    })
-
-    const { transaction, capabilities } = result
-
-    // Tx is filled with the swap calls prepended (approve + buy + transfer).
-    expect(transaction.calls).toHaveLength(3)
-    expect(transaction.feePayerSignature).toBeDefined()
-
-    // autoSwap metadata is surfaced.
-    expect(capabilities?.autoSwap?.slippage).toBe(0.05)
-    expect(capabilities?.autoSwap?.maxIn.symbol).toBe('AlphaUSD')
-    expect(capabilities?.autoSwap?.minOut.symbol).toBe('EXTBASE')
-    expect(capabilities?.autoSwap?.minOut.formatted).toBe('5')
+    ).rejects.toThrow(/Invalid parameters/)
   })
 })
 
@@ -642,18 +551,14 @@ describe('behavior: app-provided feePayer URL bypasses wallet validate', () => {
     walletServer.close()
   })
 
-  test('behavior: external feePayer URL is sponsored even when wallet validate rejects', async () => {
-    const result = await fillTransaction(client, {
-      account: userAccount.address,
-      calls: [transferCall()],
-      feePayer: appServer.url as never,
-    })
-
-    expect(result.transaction.feePayerSignature).toBeDefined()
-    expect(result.transaction.maxFeePerGas).toBeDefined()
-    expect(result.transaction.maxFeePerGas).not.toBe(0n)
-    expect(result.capabilities?.sponsored).toBe(true)
-    expect(result.capabilities?.sponsor?.name).toBe('App Sponsor')
+  test('behavior: unsafe external feePayer URL is rejected before wallet validate', async () => {
+    await expect(
+      fillTransaction(client, {
+        account: userAccount.address,
+        calls: [transferCall()],
+        feePayer: appServer.url as never,
+      }),
+    ).rejects.toThrow(/Invalid parameters/)
   })
 })
 
