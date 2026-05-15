@@ -1071,7 +1071,7 @@ describe('behavior: AMM resolution', () => {
     const { transaction, capabilities } = result
     expect(transaction.gas).toBeDefined()
     expect(transaction.nonce).toBeDefined()
-    expect(transaction.feeToken).toBe(addresses.alphaUsd)
+    expect(transaction.feeToken?.toLowerCase()).toBe(addresses.alphaUsd.toLowerCase())
     expect(transaction.calls).toHaveLength(3) // approve + swap + transfer
 
     const m = capabilities
