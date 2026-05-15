@@ -155,7 +155,7 @@ const provider = Provider.create({
 })
 ```
 
-You can also pre-derive the access key locally and authorize it without a second signing ceremony by passing `publicKey`/`address`/`keyType`/`signature`:
+You can also pre-derive the access key locally by passing `publicKey` or `address` with `keyType`. The wallet still authorizes that key during `wallet_connect`; the app keeps the signing material.
 
 ```ts twoslash
 // @noErrors

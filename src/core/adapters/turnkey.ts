@@ -423,7 +423,6 @@ export function turnkey<const client extends turnkey.Client>(
               ? await signKeyAuthorization(
                   account,
                   await prepareKeyAuthorization(authorizeAccessKey),
-                  { signature: authorizeAccessKey.signature },
                 )
               : undefined
             : undefined
@@ -466,7 +465,6 @@ export function turnkey<const client extends turnkey.Client>(
               ? await signKeyAuthorization(
                   account,
                   await prepareKeyAuthorization(authorizeAccessKey),
-                  { signature: authorizeAccessKey.signature },
                 )
               : undefined
 
@@ -487,9 +485,7 @@ export function turnkey<const client extends turnkey.Client>(
         async authorizeAccessKey(parameters) {
           const account = await accountForSigning(undefined)
           const prepared = await prepareKeyAuthorization(parameters)
-          const keyAuthorization = await signKeyAuthorization(account, prepared, {
-            signature: parameters.signature,
-          })
+          const keyAuthorization = await signKeyAuthorization(account, prepared)
           return { keyAuthorization, rootAddress: core_Address.from(account.address) }
         },
         async signPersonalMessage(parameters) {

@@ -144,9 +144,7 @@ export function local(options: local.Options): Adapter.Adapter {
         async authorizeAccessKey(parameters) {
           const prepared = await prepareKeyAuthorization(parameters)
           const account = getAccount({ accessKey: false, signable: true })
-          const keyAuthorization = await signKeyAuthorization(account, prepared, {
-            signature: parameters.signature,
-          })
+          const keyAuthorization = await signKeyAuthorization(account, prepared)
           return { keyAuthorization, rootAddress: account.address }
         },
         async loadAccounts(parameters) {
