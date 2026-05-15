@@ -57,6 +57,7 @@ Join the Telegram group to chat with the team and other devs: [@mpp_devs](https:
 | [with-access-key-and-webauthn](./examples/with-access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                               |
 | [with-fee-payer](./examples/with-fee-payer)                             | Sponsor transactions via Tempo Wallet.                                           |
 | [with-fee-payer-and-webauthn](./examples/with-fee-payer-and-webauthn)   | Sponsor transactions using a Cloudflare Worker with domain-bound Passkeys.       |
+| [with-mpp](./examples/with-mpp)                                         | Auto-pay HTTP `402` responses served by a Hono server using `mppx/hono`.         |
 
 ## Development
 
