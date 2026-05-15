@@ -150,7 +150,9 @@ export function relay(options: relay.Options = {}): Handler {
           const requestFeeToken =
             typeof parameters.feeToken === 'string' ? (parameters.feeToken as Address) : undefined
           const externalFeePayerUrl =
-            typeof parameters.feePayer === 'string' ? parameters.feePayer : undefined
+            typeof parameters.feePayer === 'string'
+              ? normalizeExternalFeePayerUrl(parameters.feePayer)
+              : undefined
           const requestsSponsorship =
             (!!feePayerOptions || !!externalFeePayerUrl) && parameters.feePayer !== false
           // Default to `true`. Dapps that don't render diffs can pass
@@ -1388,6 +1390,39 @@ function mergeCallsFromRequest(
     },
   ]
   return merged
+}
+
+function normalizeExternalFeePayerUrl(value: string): string {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new RpcResponse.InvalidParamsError({ message: 'Invalid fee payer URL.' })
+  }
+  if (url.protocol !== 'https:')
+    throw new RpcResponse.InvalidParamsError({ message: 'Invalid fee payer URL protocol.' })
+  if (isUnsafeHostname(url.hostname))
+    throw new RpcResponse.InvalidParamsError({ message: 'Invalid fee payer URL host.' })
+  url.username = ''
+  url.password = ''
+  url.hash = ''
+  return url.href
+}
+
+function isUnsafeHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase()
+  if (host === 'localhost' || host.endsWith('.localhost')) return true
+  if (host === '0.0.0.0') return true
+  if (host.includes(':')) return true
+  const parts = host.split('.').map((part) => Number(part))
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255))
+    return false
+  const [a, b] = parts as [number, number, number, number]
+  if (a === 10 || a === 127 || a === 0) return true
+  if (a === 169 && b === 254) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  return false
 }
 
 /**

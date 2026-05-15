@@ -112,9 +112,18 @@ function providerTransport(provider: ox_Provider.Provider, base: Transport): Tra
  * browser; on the server, relative paths are returned as-is.
  */
 function normalizeFeePayerUrl(url: string): string {
-  if (url.startsWith('http://') || url.startsWith('https://')) return url
-  if (typeof window !== 'undefined') return new URL(url, window.location.origin).href
-  return url
+  if (typeof window !== 'undefined')
+    return validateFeePayerUrl(new URL(url, window.location.origin))
+  return validateFeePayerUrl(new URL(url))
+}
+
+function validateFeePayerUrl(url: URL): string {
+  if (url.protocol !== 'https:' && url.protocol !== 'http:')
+    throw new Error('Fee payer URL must use http or https.')
+  url.username = ''
+  url.password = ''
+  url.hash = ''
+  return url.href
 }
 
 function feePayerTransport(
