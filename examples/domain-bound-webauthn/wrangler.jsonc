@@ -6,6 +6,7 @@
   "main": "./worker/index.ts",
   "assets": {
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/auth/*"],
+    "run_worker_first": ["/auth", "/auth/*", "/me"],
   },
+  "kv_namespaces": [{ "binding": "KV", "id": "domain-bound-webauthn-kv" }],
 }

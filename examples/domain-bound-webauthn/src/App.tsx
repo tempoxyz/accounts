@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { formatUnits, parseUnits, stringify, type Hex } from 'viem'
 import { Actions } from 'viem/tempo'
 import {
@@ -42,6 +42,53 @@ export default function App() {
           <h2>Send Transaction</h2>
           <SendTransaction />
         </>
+      )}
+
+      <h2>Server Authentication</h2>
+      <ServerAuth />
+    </div>
+  )
+}
+
+function ServerAuth() {
+  type State =
+    | { status: 'idle' }
+    | { status: 'loading' }
+    | { status: 'success'; data: unknown }
+    | { status: 'error'; status_code: number; error: string }
+
+  const [me, setMe] = useState<State>({ status: 'idle' })
+
+  async function fetchMe() {
+    setMe({ status: 'loading' })
+    try {
+      const res = await fetch('/me', { credentials: 'include' })
+      const data = await res.json()
+      if (!res.ok)
+        return setMe({ status: 'error', status_code: res.status, error: stringify(data) })
+      setMe({ status: 'success', data })
+    } catch (error) {
+      setMe({ status: 'error', status_code: 0, error: (error as Error).message })
+    }
+  }
+
+  return (
+    <div>
+      <p>
+        The WebAuthn handler auto-provisions an <code>accounts_webauthn</code> session cookie on
+        successful registration or login, which authenticates calls to <code>GET /me</code>.{' '}
+        <strong>Disconnect</strong> calls <code>POST /auth/logout</code> automatically.
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="button" onClick={fetchMe} disabled={me.status === 'loading'}>
+          GET /me
+        </button>
+      </div>
+      {me.status === 'success' && <pre>{stringify(me.data, null, 2)}</pre>}
+      {me.status === 'error' && (
+        <pre style={{ color: 'red' }}>
+          {me.status_code} {me.error}
+        </pre>
       )}
     </div>
   )

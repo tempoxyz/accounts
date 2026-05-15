@@ -108,7 +108,11 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         ...(userId ? { user: { id: new TextEncoder().encode(userId), name } } : undefined),
       })
 
-      await kv.set(`challenge:${challenge}`, { created: Date.now(), name }, { ttl: challengeTtl })
+      await kv.set(
+        `challenge:${challenge}`,
+        { created: Date.now(), name, ...(userId ? { userId } : {}) },
+        { ttl: challengeTtl },
+      )
 
       return Response.json({ options })
     } catch (error) {
@@ -125,7 +129,9 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         Bytes.toString(new Uint8Array(deserialized.clientDataJSON)),
       ) as { challenge: string }
       const challenge = Hex.fromBytes(Base64.toBytes(clientData.challenge))
-      const stored = await kv.get<{ created: number; name: string }>(`challenge:${challenge}`)
+      const stored = await kv.get<{ created: number; name: string; userId?: string }>(
+        `challenge:${challenge}`,
+      )
       if (!stored || Date.now() - stored.created > challengeTtl * 1_000)
         throw new Error('Missing or expired challenge')
 
@@ -137,19 +143,63 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
       const { publicKey } = result.credential
       const credentialId = credential.id
+      // Base64url-encode the userId we registered with so it matches
+      // the `userHandle` shape the authenticator emits on `/login`.
+      // Callers see a consistent identifier across both flows.
+      const userId = stored.userId
+        ? Base64.fromBytes(Bytes.fromString(stored.userId), { pad: false, url: true })
+        : undefined
 
-      const json = { credentialId, publicKey }
       const [, hook] = await Promise.all([
-        kv.set(`credential:${credentialId}`, { publicKey }),
+        kv.set(`credential:${credentialId}`, { publicKey, ...(userId ? { userId } : {}) }),
         onRegister?.({
           credentialId,
           name: stored.name,
           publicKey,
           request: c.req.raw,
+          ...(userId ? { userId } : {}),
         }),
         kv.delete(`challenge:${challenge}`),
       ])
-      return Session.mergeResponse(json, hook || undefined)
+
+      // Successful registration is also a successful authentication for
+      // the freshly-minted credential. Issue a session here so the
+      // common "register → automatically signed in" flow doesn't require
+      // an extra `/login` round-trip.
+      if (!session)
+        return Session.mergeResponse(
+          { credentialId, publicKey, ...(userId ? { userId } : {}) },
+          hook || undefined,
+        )
+
+      const issuedAt = Math.floor(Date.now() / 1000)
+      const payload: SessionPayload = {
+        credentialId,
+        publicKey,
+        ...(userId ? { userId } : {}),
+        issuedAt,
+        expiresAt: issuedAt + sessionTtl,
+      }
+      const token = Session.generateToken()
+      await kv.set(sessionKey(token), payload, { ttl: sessionTtl })
+
+      const json = {
+        credentialId,
+        publicKey,
+        ...(userId ? { userId } : {}),
+        ...(!cookie ? { token } : {}),
+      }
+
+      const cookieHeader = cookie
+        ? Session.serializeCookie({
+            name: cookieName,
+            protocol: new URL(c.req.url).protocol,
+            ttl: sessionTtl,
+            value: token,
+          })
+        : undefined
+
+      return Session.mergeResponse(json, hook || undefined, cookieHeader)
     } catch (error) {
       return Response.json({ error: (error as Error).message }, { status: 400 })
     }
@@ -199,7 +249,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
       const [stored, credentialData] = await Promise.all([
         kv.get<number>(`challenge:${challenge}`),
-        kv.get<{ publicKey: string }>(`credential:${response.id}`),
+        kv.get<{ publicKey: string; userId?: string }>(`credential:${response.id}`),
       ])
       if (!stored || Date.now() - stored > challengeTtl * 1_000)
         throw new Error('Missing or expired challenge')
@@ -218,7 +268,14 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
       const credentialId = response.id
       const publicKey = credentialData.publicKey
-      const userId = userHandle && userHandle.length > 0 ? userHandle : undefined
+      // Surface the authenticator-emitted `userHandle` verbatim
+      // (base64url-encoded user id). Fall back to the base64-encoded
+      // userId we stashed during register, so callers see the same
+      // identifier shape across register and login.
+      const userId =
+        userHandle && userHandle.length > 0
+          ? userHandle
+          : (credentialData.userId ?? undefined)
 
       // Hook for side effects (user provisioning, analytics, allow/deny).
       // The legacy contract — return a `Response` to merge fields onto
@@ -354,6 +411,8 @@ export declare namespace webAuthn {
       name: string
       publicKey: string
       request: Request
+      /** The `userId` provided during `/register/options`, if any. */
+      userId?: string | undefined
     }) => Response | Promise<Response> | void | Promise<void>
     /**
      * Called after a successful authentication, before the session
