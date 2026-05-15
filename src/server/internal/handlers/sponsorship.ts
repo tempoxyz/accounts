@@ -113,7 +113,7 @@ export declare namespace sign {
 
 /** Handles `eth_signRawTransaction` and broadcast methods for sponsored Tempo transactions. */
 export async function handleRawTransaction(options: handleRawTransaction.Options) {
-  const { account, getClient, method, request, validate } = options
+  const { account, feeToken, getClient, method, request, validate } = options
   const serialized = request.params?.[0] as `0x76${string}` | undefined
 
   if (!serialized?.startsWith('0x76') && !serialized?.startsWith('0x78'))
@@ -131,6 +131,11 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
   if (validate && !(await validate(transaction as Transaction.TransactionRequest)))
     throw new RpcResponse.InvalidParamsError({
       message: 'Sponsorship rejected.',
+    })
+
+  if (feeToken && transaction.feeToken?.toLowerCase() !== feeToken.toLowerCase())
+    throw new RpcResponse.InvalidParamsError({
+      message: 'Transaction fee token does not match sponsor policy.',
     })
 
   const client = getClient(transaction.chainId)
@@ -153,6 +158,8 @@ export declare namespace handleRawTransaction {
   type Options = {
     /** Account used as the fee payer. */
     account: LocalAccount
+    /** Required fee token for sponsored raw transactions. */
+    feeToken?: Address | undefined
     /** Client resolver keyed by transaction `chainId`. */
     getClient: (chainId?: number | undefined) => Client
     /** Raw transaction method to handle. */
