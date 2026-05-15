@@ -13,7 +13,7 @@ const payment = Mppx.create({
   secretKey: process.env.MPP_SECRET_KEY,
 })
 
-const auth = Handler.auth({ path: '/auth' })
+const auth = Handler.auth({ origin: process.env.ORIGIN, path: '/auth' })
 
 const handler = Handler.compose([
   Handler.webAuthn({

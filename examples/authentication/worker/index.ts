@@ -13,6 +13,7 @@ export const NonceStorage = Kv.NonceStorage
 // store for one-time-consume SIWE challenge nonces and issued sessions
 // across concurrent worker instances.
 const auth = Handler.auth({
+  origin: env.ORIGIN,
   path: '/auth',
   store: Kv.durableObject(env.NONCE_DO),
 })

@@ -347,7 +347,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         // Real Hono app: mount the auth handler under `/auth` and add a
         // protected `/me` route — exactly as a dapp would compose them
         // — so the e2e test below exercises the full flow.
-        const auth = Handler.auth()
+        const auth = Handler.auth({ domain: 'localhost' })
         const app = Handler.compose([auth], { path: '/auth' })
         app.get('/me', async (c) => {
           const session = await auth.getSession(c.req.raw)

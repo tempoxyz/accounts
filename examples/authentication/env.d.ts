@@ -1,5 +1,7 @@
 /// <reference types="vite-plugin-cloudflare-tunnel/virtual" />
 
 declare namespace Cloudflare {
-  interface Env {}
+  interface Env {
+    ORIGIN: string
+  }
 }

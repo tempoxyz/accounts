@@ -732,8 +732,7 @@ describe('store: atomic `take` preferred, non-atomic fallback', () => {
 
 describe('origin / trustProxy', () => {
   test('default: ignores `x-forwarded-host` and `x-forwarded-proto`', async () => {
-    // No domain pin — relies on host header. trustProxy defaults to false.
-    const handler = auth()
+    const handler = auth({ domain: 'real.example' })
     const app = new Hono()
     app.route('/', handler)
 
@@ -753,7 +752,7 @@ describe('origin / trustProxy', () => {
   })
 
   test('trustProxy: true → honors `x-forwarded-host` and `x-forwarded-proto`', async () => {
-    const handler = auth({ trustProxy: true })
+    const handler = auth({ domain: 'app.example', trustProxy: true })
     const app = new Hono()
     app.route('/', handler)
 
@@ -811,7 +810,7 @@ describe('origin / trustProxy', () => {
       configurable: true,
     })
     try {
-      const handler = auth()
+      const handler = auth({ domain: 'app.example' })
       const app = new Hono()
       app.route('/', handler)
 

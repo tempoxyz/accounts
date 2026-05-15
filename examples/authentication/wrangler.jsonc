@@ -8,6 +8,9 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/auth", "/auth/*", "/me"],
   },
+  "vars": {
+    "ORIGIN": "http://localhost:5173",
+  },
   "durable_objects": {
     "bindings": [{ "name": "NONCE_DO", "class_name": "NonceStorage" }],
   },
