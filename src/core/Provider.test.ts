@@ -1,8 +1,9 @@
 import { Hex, Provider as core_Provider, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { type Address, createClient, custom, parseUnits } from 'viem'
+import { type Address, createClient, createWalletClient, custom, parseUnits } from 'viem'
 import {
   getBalance,
+  sendCalls,
   sendTransactionSync,
   signMessage,
   verifyHash,
@@ -18,6 +19,7 @@ import { headlessWebAuthn, secp256k1 } from '../../test/adapters.js'
 import { accounts, chain, getClient, http } from '../../test/config.js'
 import { createServer, type Server } from '../../test/utils.js'
 import * as Handler from '../server/Handler.js'
+import * as Adapter from './Adapter.js'
 import { local as core_local } from './adapters/local.js'
 import * as Expiry from './Expiry.js'
 import * as Provider from './Provider.js'
@@ -1054,6 +1056,58 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(result.version).toMatchInlineSnapshot(`"2.0.0"`)
       expect(result.receipts?.length).toMatchInlineSnapshot(`1`)
       expect(result.receipts?.[0]?.status).toMatchInlineSnapshot(`"0x1"`)
+    })
+
+    test('error: preserves adapter failure details for viem fallback handling', async () => {
+      const failing = Adapter.define({}, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address: accounts[0]!.address }] }
+          },
+          async loadAccounts() {
+            return { accounts: [{ address: accounts[0]!.address }] }
+          },
+          async sendTransaction() {
+            throw new Error('plain send failure')
+          },
+          async sendTransactionSync() {
+            throw new Error('plain sync failure')
+          },
+          async signPersonalMessage() {
+            return '0x'
+          },
+          async signTransaction() {
+            return '0x'
+          },
+          async signTypedData() {
+            return '0x'
+          },
+        },
+      }))
+      const provider = Provider.create({
+        adapter: failing,
+        chains: [chain],
+        storage: Storage.memory(),
+      })
+      await provider.request({ method: 'wallet_connect' })
+      const client = createWalletClient({ chain, transport: custom(provider) })
+
+      await expect(
+        sendCalls(client, {
+          account: accounts[0]!.address,
+          calls: [transferCall],
+          experimental_fallback: true,
+          experimental_fallbackDelay: 0,
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(`
+        [TransactionExecutionError: An internal error was received.
+
+        Request Arguments:
+          from:  0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+
+        Details: plain send failure
+        Version: viem@2.49.2]
+      `)
     })
   })
 

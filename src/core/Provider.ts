@@ -397,45 +397,49 @@ export function create(options: create.Options = {}): create.ReturnType {
                   }
 
                   case 'wallet_sendCalls': {
-                    assertConnected()
-                    const decoded = request._decoded.params?.[0]
-                    const { calls = [], capabilities, chainId, from } = decoded ?? {}
-                    const sync = capabilities?.sync
-                    const feePayer = resolveFeePayer(
-                      capabilities?.feePayer ?? (feePayerConfig ? true : undefined),
-                    )
-                    const state = store.getState()
-                    const txRequest = {
-                      calls,
-                      chainId,
-                      from: from ?? state.accounts[state.activeAccount]?.address,
-                      ...(feePayer ? { feePayer } : {}),
-                    }
-                    if (!sync) {
-                      const hash = await actions.sendTransaction(txRequest, {
-                        method: 'eth_sendTransaction',
+                    try {
+                      assertConnected()
+                      const decoded = request._decoded.params?.[0]
+                      const { calls = [], capabilities, chainId, from } = decoded ?? {}
+                      const sync = capabilities?.sync
+                      const feePayer = resolveFeePayer(
+                        capabilities?.feePayer ?? (feePayerConfig ? true : undefined),
+                      )
+                      const state = store.getState()
+                      const txRequest = {
+                        calls,
+                        chainId,
+                        from: from ?? state.accounts[state.activeAccount]?.address,
+                        ...(feePayer ? { feePayer } : {}),
+                      }
+                      if (!sync) {
+                        const hash = await actions.sendTransaction(txRequest, {
+                          method: 'eth_sendTransaction',
+                          params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
+                        })
+                        const chainId = Hex.fromNumber(store.getState().chainId)
+                        const id = Hex.concat(hash, Hex.padLeft(chainId, 32), sendCallsMagic)
+                        return { capabilities: { sync }, id }
+                      }
+                      const receipt = await actions.sendTransactionSync(txRequest as never, {
+                        method: 'eth_sendTransactionSync',
                         params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
                       })
-                      const chainId = Hex.fromNumber(store.getState().chainId)
-                      const id = Hex.concat(hash, Hex.padLeft(chainId, 32), sendCallsMagic)
-                      return { capabilities: { sync }, id }
+                      const hash = receipt.transactionHash
+                      const chainIdHex = Hex.fromNumber(store.getState().chainId)
+                      const id = Hex.concat(hash, Hex.padLeft(chainIdHex, 32), sendCallsMagic)
+                      return {
+                        atomic: true,
+                        capabilities: { sync },
+                        chainId: chainIdHex,
+                        id,
+                        receipts: [receipt],
+                        status: (receipt as { status: string }).status === '0x1' ? 200 : 500,
+                        version: '2.0.0',
+                      } satisfies Rpc.wallet_sendCalls.Encoded['returns']
+                    } catch (error) {
+                      throw withDetails(error)
                     }
-                    const receipt = await actions.sendTransactionSync(txRequest as never, {
-                      method: 'eth_sendTransactionSync',
-                      params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
-                    })
-                    const hash = receipt.transactionHash
-                    const chainIdHex = Hex.fromNumber(store.getState().chainId)
-                    const id = Hex.concat(hash, Hex.padLeft(chainIdHex, 32), sendCallsMagic)
-                    return {
-                      atomic: true,
-                      capabilities: { sync },
-                      chainId: chainIdHex,
-                      id,
-                      receipts: [receipt],
-                      status: (receipt as { status: string }).status === '0x1' ? 200 : 500,
-                      version: '2.0.0',
-                    } satisfies Rpc.wallet_sendCalls.Encoded['returns']
                   }
 
                   case 'wallet_getBalances': {
@@ -1128,6 +1132,18 @@ export declare namespace mpp {
      */
     polyfill?: boolean | undefined
   }
+}
+
+function withDetails(error: unknown): Error & { details: string } {
+  if (error instanceof Error) {
+    const details = (error as { details?: unknown }).details
+    if (typeof details === 'string') return error as Error & { details: string }
+    Object.assign(error, { details: error.message })
+    return error as Error & { details: string }
+  }
+  const next = new Error(String(error))
+  Object.assign(next, { details: next.message })
+  return next as Error & { details: string }
 }
 
 /**
