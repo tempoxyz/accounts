@@ -55,7 +55,7 @@ export function local(options: local.Options): Adapter.Adapter {
         signature?: Hex.Hex | undefined
       } = {},
     ) {
-      const { keyPair } = prepared
+      const { keyPair, privateKey } = prepared
 
       const keyAuthorization = await (async () => {
         const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
@@ -65,7 +65,7 @@ export function local(options: local.Options): Adapter.Adapter {
         })
       })()
 
-      AccessKey.save({ address: account.address, keyAuthorization, keyPair, store })
+      AccessKey.save({ address: account.address, keyAuthorization, keyPair, privateKey, store })
 
       return KeyAuthorization.toRpc(keyAuthorization)
     }

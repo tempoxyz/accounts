@@ -309,6 +309,7 @@ export function turnkey<const client extends turnkey.Client>(
         address: core_Address.from(account.address),
         keyAuthorization,
         ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
+        ...(prepared.privateKey ? { privateKey: prepared.privateKey } : {}),
         store,
       })
 

@@ -270,6 +270,8 @@ const provider = Provider.create({
 
 MPP session endpoints can use `deposit` or `maxDeposit` so the client opens and tops up a payment channel before sending vouchers.
 
+Session voucher verification currently requires secp256k1 signing. When `mpp.deposit` or `mpp.maxDeposit` is configured and `authorizeAccessKey` omits `keyType`, the SDK generates a `secp256k1` access key. Scoped keys must cover the session setup calls, such as token `approve` and escrow `open` or `topUp`.
+
 ```ts twoslash
 import { Provider } from 'accounts'
 

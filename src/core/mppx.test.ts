@@ -1,5 +1,7 @@
+import { Challenge } from 'mppx'
 import { Fetch } from 'mppx/client'
 import { Mppx as ServerMppx, tempo } from 'mppx/server'
+import { Methods } from 'mppx/tempo'
 import { parseUnits } from 'viem'
 import { Addresses } from 'viem/tempo'
 import { Actions } from 'viem/tempo'
@@ -128,6 +130,55 @@ describe('mppx integration', () => {
       expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
     } finally {
       await failingServer.closeAsync()
+    }
+  })
+
+  test('session challenge rejects p256 access key before retry', async () => {
+    const challenge = Challenge.fromMethod(Methods.session, {
+      id: 'session-p256-access-key',
+      realm: 'mppx-test',
+      request: {
+        amount: '1',
+        chainId: chain.id,
+        currency: Addresses.pathUsd,
+        decimals: 6,
+        escrowContract: '0x0000000000000000000000000000000000000e55',
+        recipient: accounts[1]!.address,
+        suggestedDeposit: '1',
+        unitType: 'request',
+      },
+    })
+    const sessionServer = await createServer(async (req, res) => {
+      if (req.headers.authorization) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true }))
+        return
+      }
+
+      res.writeHead(402, { 'WWW-Authenticate': Challenge.serialize(challenge) })
+      res.end()
+    })
+
+    try {
+      const provider = Provider.create({
+        adapter: headlessWebAuthn(),
+        chains: [chain],
+        mpp: { maxDeposit: '1' },
+      })
+      await connect(provider)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1), keyType: 'p256' }],
+      })
+
+      await expect(
+        fetch(`${sessionServer.url}/session`),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UnsupportedMethodError: MPP session payments require a secp256k1 root account or scoped secp256k1 access key.]`,
+      )
+    } finally {
+      await sessionServer.closeAsync()
     }
   })
 })

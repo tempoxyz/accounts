@@ -1,7 +1,7 @@
 import { AbiFunction, Address, Hex, Provider, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import type { Client, Transport } from 'viem'
-import { Account as TempoAccount, Actions } from 'viem/tempo'
+import { Account as TempoAccount, Actions, Secp256k1 } from 'viem/tempo'
 
 import type { OneOf } from '../internal/types.js'
 import * as ExecutionError from './ExecutionError.js'
@@ -81,9 +81,18 @@ export function getPending(
   return entry?.keyAuthorization
 }
 
-/** Generates a P256 key pair and access key account. */
+/** Generates local key material and an access key account. */
 export async function generate(options: generate.Options = {}): Promise<generate.ReturnType> {
   const { account } = options
+  if (options.keyType === 'secp256k1') {
+    const privateKey = Secp256k1.randomPrivateKey()
+    const accessKey = TempoAccount.fromSecp256k1(
+      privateKey,
+      account ? { access: account } : undefined,
+    )
+    return { accessKey, privateKey }
+  }
+
   const keyPair = await WebCryptoP256.createKeyPair()
   const accessKey = TempoAccount.fromWebCryptoP256(
     keyPair,
@@ -96,13 +105,17 @@ export declare namespace generate {
   type Options = {
     /** Root account to attach to the access key. */
     account?: TempoAccount.Account | undefined
+    /** Local key type to generate. Defaults to `p256`. */
+    keyType?: 'secp256k1' | 'p256' | undefined
   }
 
   type ReturnType = {
     /** The generated access key account. */
     accessKey: TempoAccount.AccessKeyAccount
+    /** Generated Secp256k1 private key for local access keys. */
+    privateKey?: Hex.Hex | undefined
     /** Generated key pair to pass to `authorizeAccessKey`. */
-    keyPair: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>>
+    keyPair?: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
   }
 }
 
@@ -120,6 +133,20 @@ export async function prepare(options: prepare.Options): Promise<prepare.ReturnT
       type: keyType ?? 'secp256k1',
     })
     return { keyAuthorization }
+  }
+
+  if (keyType === 'secp256k1') {
+    const privateKey = Secp256k1.randomPrivateKey()
+    const accessKey = TempoAccount.fromSecp256k1(privateKey)
+    const keyAuthorization = KeyAuthorization.from({
+      address: Address.fromPublicKey(PublicKey.from(accessKey.publicKey)),
+      chainId: BigInt(chainId),
+      expiry,
+      limits,
+      scopes,
+      type: 'secp256k1',
+    })
+    return { keyAuthorization, privateKey }
   }
 
   const keyPair = await WebCryptoP256.createKeyPair()
@@ -157,6 +184,8 @@ export declare namespace prepare {
   type ReturnType = {
     /** Unsigned key authorization to sign with the root account. */
     keyAuthorization: KeyAuthorization.KeyAuthorization<false>
+    /** Generated Secp256k1 private key for local access keys. */
+    privateKey?: Hex.Hex | undefined
     /** Generated WebCrypto key pair for local access keys. */
     keyPair?: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
   }
@@ -232,12 +261,13 @@ export function removePending(
 export function selectAccount(
   options: selectAccount.Options,
 ): TempoAccount.AccessKeyAccount | undefined {
-  const { address, calls, chainId, store } = options
+  const { address, calls, chainId, keyTypes, store } = options
   const { accessKeys } = store.getState()
   let accessKeys_next = accessKeys
   for (const key of accessKeys) {
     if (key.access.toLowerCase() !== address.toLowerCase()) continue
     if (key.chainId !== chainId) continue
+    if (keyTypes && !keyTypes.includes(key.keyType)) continue
     if (!('keyPair' in key && !!key.keyPair) && !('privateKey' in key && !!key.privateKey)) continue
 
     if (key.expiry && key.expiry < Date.now() / 1000) {
@@ -260,6 +290,8 @@ export declare namespace selectAccount {
     calls?: readonly { to?: Address.Address | undefined; data?: Hex.Hex | undefined }[] | undefined
     /** Chain ID the access key must be authorized on. */
     chainId: number
+    /** Local key types the access key must use. */
+    keyTypes?: readonly AccessKey['keyType'][] | undefined
     /** Reactive state store. */
     store: Store.Store
   }

@@ -116,14 +116,16 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       if (!options) return undefined
       if (options.publicKey || options.address) return undefined
 
-      const { accessKey, keyPair } = await AccessKey.generate()
+      const keyType: 'secp256k1' | 'p256' = options.keyType === 'secp256k1' ? 'secp256k1' : 'p256'
+      const { accessKey, keyPair, privateKey } = await AccessKey.generate({ keyType })
       return {
         accessKey,
         keyPair,
+        privateKey,
         request: {
           ...options,
           publicKey: accessKey.publicKey,
-          keyType: 'p256' as const,
+          keyType,
         },
       }
     }
@@ -135,10 +137,13 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     function saveAccessKey(
       address: Address.Address,
       keyAuth: KeyAuthorization.Rpc,
-      keyPair: AccessKey.generate.ReturnType['keyPair'],
+      key: {
+        keyPair?: AccessKey.generate.ReturnType['keyPair'] | undefined
+        privateKey?: AccessKey.generate.ReturnType['privateKey'] | undefined
+      },
     ) {
       const keyAuthorization = KeyAuthorization.fromRpc(keyAuth)
-      AccessKey.save({ address, keyAuthorization, keyPair, store })
+      AccessKey.save({ address, keyAuthorization, ...key, store })
     }
 
     /**
@@ -227,7 +232,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const keyAuthorization = accounts[0]?.capabilities.keyAuthorization
 
           if (accessKey && address && keyAuthorization)
-            saveAccessKey(address, keyAuthorization, accessKey.keyPair)
+            saveAccessKey(address, keyAuthorization, {
+              keyPair: accessKey.keyPair,
+              privateKey: accessKey.privateKey,
+            })
 
           return {
             accounts: accounts.map((a) => ({ address: a.address })),
@@ -268,7 +276,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const keyAuthorization = accounts[0]?.capabilities.keyAuthorization
 
           if (accessKey && address && keyAuthorization)
-            saveAccessKey(address, keyAuthorization, accessKey.keyPair)
+            saveAccessKey(address, keyAuthorization, {
+              keyPair: accessKey.keyPair,
+              privateKey: accessKey.privateKey,
+            })
 
           return {
             accounts: accounts.map((a) => ({ address: a.address })),
@@ -400,7 +411,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
 
           if (accessKey) {
             const account = getAccount({ accessKey: false, signable: false })
-            saveAccessKey(account.address, result.keyAuthorization, accessKey.keyPair)
+            saveAccessKey(account.address, result.keyAuthorization, {
+              keyPair: accessKey.keyPair,
+              privateKey: accessKey.privateKey,
+            })
           }
 
           return result

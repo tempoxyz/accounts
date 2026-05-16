@@ -1,11 +1,19 @@
 import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
+import { Session } from 'mppx/tempo'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
+import {
+  encodeFunctionData,
+  http,
+  parseUnits,
+  type Chain,
+  type Client as ViemClient,
+  type Transport,
+} from 'viem'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { parseSiweMessage } from 'viem/siwe'
-import { Actions } from 'viem/tempo'
+import { Abis, Account as TempoAccount, Actions } from 'viem/tempo'
 import * as z from 'zod/mini'
 
 import * as AccessKey from './AccessKey.js'
@@ -556,8 +564,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                     if (chainId) store.setState((x) => ({ ...x, chainId }))
 
                     const capabilities = request._decoded.params?.[0]?.capabilities
-                    const authorizeAccessKey =
-                      capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
+                    const authorizeAccessKey = normalizeMppAccessKey(
+                      capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.(),
+                      { mpp },
+                    )
 
                     // Server Authentication: pre-resolve `auth` URLs against
                     // this dapp-side Provider's `window.location.origin`. The
@@ -767,7 +777,9 @@ export function create(options: create.Options = {}): create.ReturnType {
                       throw new ox_Provider.UnsupportedMethodError({
                         message: '`authorizeAccessKey` not supported by adapter.',
                       })
-                    const decoded = request._decoded.params[0]
+                    const decoded =
+                      normalizeMppAccessKey(request._decoded.params[0], { mpp }) ??
+                      request._decoded.params[0]
                     const result = await actions.authorizeAccessKey(decoded, request)
                     return {
                       keyAuthorization: {
@@ -1027,6 +1039,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
     // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
     const polyfill = polyfill_option ?? isFetchWritable()
+    const accounts_mpp = new Map<string, TempoAccount.Account>()
     const getClient = ({ chainId }: { chainId?: number | undefined }) => {
       const client = provider.getClient({ chainId })
       const account = provider.getAccount()
@@ -1037,10 +1050,33 @@ export function create(options: create.Options = {}): create.ReturnType {
         mppx_tempo({ ...methodOptions, getClient, mode }),
         mppx_tempo.subscription({ getClient }),
       ],
+      async onChallenge(challenge, { createCredential }) {
+        if (challenge.method !== 'tempo' || challenge.intent !== 'session') return undefined
+        const account = getMppSessionAccount(challenge, {
+          getAccount: provider.getAccount,
+          mpp,
+          store,
+        })
+        accounts_mpp.set(challenge.id, account)
+        try {
+          return await createCredential({ account } as never)
+        } catch (error) {
+          accounts_mpp.delete(challenge.id)
+          throw error
+        }
+      },
       polyfill,
     })
     mppx.onPaymentResponse(({ challenge, method }) => {
-      if (method.name !== 'tempo' || method.intent !== 'charge') return
+      if (method.name !== 'tempo') return
+      if (method.intent === 'session') {
+        const account = accounts_mpp.get(challenge.id)
+        accounts_mpp.delete(challenge.id)
+        if (account && 'source' in account && account.source === 'accessKey')
+          AccessKey.removePending(account, { store })
+        return
+      }
+      if (method.intent !== 'charge') return
       const amount = challenge.request.amount
       if (
         typeof amount !== 'string' &&
@@ -1053,6 +1089,10 @@ export function create(options: create.Options = {}): create.ReturnType {
       const account = provider.getAccount()
       if ('source' in account && account.source === 'accessKey')
         AccessKey.removePending(account, { store })
+    })
+    mppx.onPaymentFailed(({ challenge, method }) => {
+      if (method?.name !== 'tempo' || method.intent !== 'session' || !challenge) return
+      accounts_mpp.delete(challenge.id)
     })
   }
 
@@ -1174,6 +1214,134 @@ export declare namespace mpp {
      */
     polyfill?: boolean | undefined
   }
+}
+
+function normalizeMppAccessKey(
+  options: Adapter.authorizeAccessKey.Parameters | undefined,
+  parameters: { mpp: mpp.Options | undefined },
+): Adapter.authorizeAccessKey.Parameters | undefined {
+  if (!options) return undefined
+  if (!usesMppSession(parameters.mpp)) return options
+  if (options.keyType || options.publicKey || options.address) return options
+  return { ...options, keyType: 'secp256k1' }
+}
+
+function getMppSessionAccount(
+  challenge: {
+    request: {
+      currency?: unknown
+      methodDetails?: unknown
+      recipient?: unknown
+    }
+  },
+  options: {
+    getAccount: Account.Find
+    mpp: mpp.Options
+    store: Store.Store
+  },
+): TempoAccount.Account {
+  const { getAccount, mpp, store } = options
+  const state = store.getState()
+  const address = state.accounts[state.activeAccount]?.address
+  if (!address) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
+
+  const chainId = getMppSessionChainId(challenge, { store })
+  const calls = getMppSessionCalls(challenge, { address, mpp })
+  const account = calls
+    ? AccessKey.selectAccount({
+        address,
+        calls,
+        chainId,
+        keyTypes: ['secp256k1'],
+        store,
+      })
+    : undefined
+  if (account) return account
+
+  const root = (() => {
+    try {
+      return getAccount({ accessKey: false, signable: true })
+    } catch {
+      return undefined
+    }
+  })()
+  if (root?.keyType === 'secp256k1') return root
+
+  throw new ox_Provider.UnsupportedMethodError({
+    message:
+      'MPP session payments require a secp256k1 root account or scoped secp256k1 access key.',
+  })
+}
+
+function getMppSessionCalls(
+  challenge: {
+    request: {
+      currency?: unknown
+      methodDetails?: unknown
+      recipient?: unknown
+    }
+  },
+  options: { address: Address.Address; mpp: mpp.Options },
+): readonly { data?: Hex.Hex | undefined; to?: Address.Address | undefined }[] | undefined {
+  const { address, mpp } = options
+  const methodDetails = getMppSessionMethodDetails(challenge)
+  const currency = getAddress(challenge.request.currency)
+  const escrow = getAddress(methodDetails?.escrowContract) ?? mpp.escrowContract
+  const payee = getAddress(challenge.request.recipient)
+  if (!currency || !escrow || !payee) return undefined
+
+  const approve = encodeFunctionData({
+    abi: Abis.tip20,
+    functionName: 'approve',
+    args: [escrow, 0n],
+  })
+  const open = encodeFunctionData({
+    abi: Session.Chain.escrowAbi,
+    functionName: 'open',
+    args: [payee, currency, 0n, Hex.fromNumber(0, { size: 32 }), address],
+  })
+
+  return [
+    { data: approve, to: currency },
+    { data: open, to: escrow },
+  ]
+}
+
+function getMppSessionChainId(
+  challenge: { request: { methodDetails?: unknown } },
+  options: { store: Store.Store },
+): number {
+  const methodDetails = getMppSessionMethodDetails(challenge)
+  return typeof methodDetails?.chainId === 'number'
+    ? methodDetails.chainId
+    : options.store.getState().chainId
+}
+
+function getMppSessionMethodDetails(challenge: { request: { methodDetails?: unknown } }):
+  | {
+      chainId?: number | undefined
+      escrowContract?: Address.Address | undefined
+    }
+  | undefined {
+  const value = challenge.request.methodDetails
+  if (!value || typeof value !== 'object') return undefined
+  const methodDetails = value as { chainId?: unknown; escrowContract?: unknown }
+  return {
+    ...(typeof methodDetails.chainId === 'number' ? { chainId: methodDetails.chainId } : {}),
+    ...(getAddress(methodDetails.escrowContract)
+      ? { escrowContract: getAddress(methodDetails.escrowContract) }
+      : {}),
+  }
+}
+
+function getAddress(value: unknown): Address.Address | undefined {
+  if (typeof value !== 'string') return undefined
+  if (!Address.validate(value)) return undefined
+  return value
+}
+
+function usesMppSession(mpp: mpp.Options | undefined): boolean {
+  return typeof mpp?.deposit !== 'undefined' || typeof mpp?.maxDeposit !== 'undefined'
 }
 
 function withDetails(error: unknown): Error & { details: string } {

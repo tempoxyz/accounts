@@ -1,6 +1,7 @@
+import { Session } from 'mppx/tempo'
 import { WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
-import { encodeErrorResult } from 'viem'
+import { encodeErrorResult, encodeFunctionData } from 'viem'
 import { Abis, Account as TempoAccount, Actions } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
@@ -18,6 +19,7 @@ function createKeyAuthorization(
   address: `0x${string}`,
   options: {
     expiry?: number | undefined
+    keyType?: 'secp256k1' | 'p256' | undefined
     limits?: { token: `0x${string}`; limit: bigint }[] | undefined
     scopes?: KeyAuthorization.Scope[] | undefined
   } = {},
@@ -29,7 +31,7 @@ function createKeyAuthorization(
       expiry: options.expiry,
       limits: options.limits,
       scopes: options.scopes,
-      type: 'p256',
+      type: options.keyType ?? 'p256',
     },
     { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
   )
@@ -288,6 +290,14 @@ describe('generate', () => {
     expect(result.accessKey.source).toMatchInlineSnapshot(`"accessKey"`)
     expect(result.accessKey.accessKeyAddress).toMatch(/^0x[0-9a-f]{40}$/i)
   })
+
+  test('behavior: generates secp256k1 private key', async () => {
+    const result = await AccessKey.generate({ keyType: 'secp256k1' })
+
+    expect(result.accessKey.keyType).toMatchInlineSnapshot(`"secp256k1"`)
+    expect(result.privateKey).toMatch(/^0x[0-9a-f]{64}$/i)
+    expect(result.keyPair).toBeUndefined()
+  })
 })
 
 describe('prepare', () => {
@@ -382,6 +392,18 @@ describe('prepare', () => {
     })
 
     expect(result.keyAuthorization.type).toMatchInlineSnapshot(`"secp256k1"`)
+  })
+
+  test('behavior: prepares generated secp256k1 key authorization', async () => {
+    const result = await AccessKey.prepare({
+      chainId: 1,
+      expiry: 123,
+      keyType: 'secp256k1',
+    })
+
+    expect(result.keyAuthorization.type).toMatchInlineSnapshot(`"secp256k1"`)
+    expect(result.privateKey).toMatch(/^0x[0-9a-f]{64}$/i)
+    expect(result.keyPair).toBeUndefined()
   })
 })
 
@@ -615,6 +637,100 @@ describe('selectAccount', () => {
     })
 
     expect(result?.source).toMatchInlineSnapshot(`"accessKey"`)
+  })
+
+  test('behavior: key type filter skips otherwise matching keys', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const accessKey = TempoAccount.fromSecp256k1(privateKeys[1], { access: rootAddress })
+    const store = setup([
+      {
+        access: rootAddress,
+        address: '0x0000000000000000000000000000000000000099',
+        chainId: 1,
+        keyPair,
+        keyType: 'webCrypto',
+        scopes: [{ address: token, selector: '0xa9059cbb' }],
+      },
+      {
+        access: rootAddress,
+        address: accessKey.accessKeyAddress,
+        chainId: 1,
+        keyType: 'secp256k1',
+        privateKey: privateKeys[1],
+        scopes: [{ address: token, selector: '0xa9059cbb' }],
+      },
+    ])
+
+    const result = AccessKey.selectAccount({
+      address: rootAddress,
+      chainId: 1,
+      store,
+      calls: [{ to: token, data: '0xa9059cbb0000000000000000000000000000000000000001' }],
+      keyTypes: ['secp256k1'],
+    })
+
+    expect(result?.keyType).toMatchInlineSnapshot(`"secp256k1"`)
+    expect(result?.accessKeyAddress).toMatchInlineSnapshot(
+      `"0x8c8d35429f74ec245f8ef2f4fd1e551cff97d650"`,
+    )
+  })
+
+  test('behavior: scoped secp256k1 key matches session setup calls', () => {
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const escrow = '0x0000000000000000000000000000000000000def' as const
+    const payee = '0x0000000000000000000000000000000000000123' as const
+    const accessKey = TempoAccount.fromSecp256k1(privateKeys[1], { access: rootAddress })
+    const store = setup([
+      {
+        access: rootAddress,
+        address: accessKey.accessKeyAddress,
+        chainId: 1,
+        keyType: 'secp256k1',
+        privateKey: privateKeys[1],
+        scopes: [
+          { address: token, selector: 'approve(address,uint256)', recipients: [escrow] },
+          {
+            address: escrow,
+            selector: 'open(address,address,uint128,bytes32,address)',
+            recipients: [payee],
+          },
+        ],
+      },
+    ])
+
+    const result = AccessKey.selectAccount({
+      address: rootAddress,
+      chainId: 1,
+      keyTypes: ['secp256k1'],
+      store,
+      calls: [
+        {
+          to: token,
+          data: encodeFunctionData({
+            abi: Abis.tip20,
+            functionName: 'approve',
+            args: [escrow, 0n],
+          }),
+        },
+        {
+          to: escrow,
+          data: encodeFunctionData({
+            abi: Session.Chain.escrowAbi,
+            functionName: 'open',
+            args: [
+              payee,
+              token,
+              0n,
+              '0x0000000000000000000000000000000000000000000000000000000000000000',
+              rootAddress,
+            ],
+          }),
+        },
+      ],
+    })
+
+    expect(result?.keyType).toMatchInlineSnapshot(`"secp256k1"`)
   })
 
   test('behavior: scoped access key skips calls that do not match', async () => {

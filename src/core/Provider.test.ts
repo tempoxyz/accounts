@@ -1645,6 +1645,22 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(result.rootAddress).toBe(rootAddress)
     })
 
+    test('behavior: MPP session authorization defaults to secp256k1', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        mpp: { maxDeposit: '1', polyfill: false },
+      })
+      await connect(provider)
+
+      const result = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      expect(result.keyAuthorization.keyType).toMatchInlineSnapshot(`"secp256k1"`)
+    })
+
     test('behavior: granted access key is used for sendTransactionSync', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
@@ -2135,6 +2151,24 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         params: [{ calls: [transferCall] }],
       })
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+    })
+
+    test('behavior: MPP session access keys default to secp256k1', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        authorizeAccessKey: () => ({ expiry: Expiry.days(1) }),
+        mpp: { maxDeposit: '1', polyfill: false },
+      })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { method: 'register' } }],
+      })
+
+      expect(result.accounts[0]!.capabilities.keyAuthorization!.keyType).toMatchInlineSnapshot(
+        `"secp256k1"`,
+      )
     })
 
     test('behavior: explicit authorizeAccessKey overrides default', async () => {
