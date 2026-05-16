@@ -268,6 +268,9 @@ Base URL for a wallet relay endpoint. When set, every chain's transport defaults
 
 Designed to point at a service running [`Handler.relay`](/docs/server/handler.relay) from `accounts/server`.
 
+Pass the base path here. The provider appends the active chain ID, so a base
+path of `/relay` sends chain `33139` requests to `/relay/33139`.
+
 ```ts twoslash
 import { Provider } from 'accounts'
 

@@ -15,6 +15,7 @@ const mppx = Mppx.create({
   methods: [
     tempo({
       account,
+      feePayer: true,
       // pathUSD on Tempo testnet.
       currency: '0x20c0000000000000000000000000000000000000',
       testnet: true,
