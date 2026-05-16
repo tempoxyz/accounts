@@ -1581,6 +1581,26 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
     })
 
+    test('behavior: access key status moves from pending to published', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      await expect(provider.getAccessKeyStatus()).resolves.toMatchInlineSnapshot(`"pending"`)
+
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      await expect(provider.getAccessKeyStatus()).resolves.toMatchInlineSnapshot(`"published"`)
+    })
+
     test('behavior: with expiry option', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       await connect(provider)

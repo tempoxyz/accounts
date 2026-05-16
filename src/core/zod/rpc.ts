@@ -393,19 +393,21 @@ export namespace wallet_authorizeAccessKey_strict {
     expiry: z.number(),
     keyType: z.optional(keyType),
     limits: z.readonly(
-      z.array(z.object({ token: u.address(), limit: u.bigint(), period: z.optional(z.number()) })),
+      z
+        .array(z.object({ token: u.address(), limit: u.bigint(), period: z.optional(z.number()) }))
+        .check(z.minLength(1)),
     ),
     publicKey: z.optional(u.hex()),
-    scopes: z.optional(
-      z.readonly(
-        z.array(
+    scopes: z.readonly(
+      z
+        .array(
           z.object({
             address: u.address(),
             selector: z.optional(z.union([u.hex(), z.string()])),
             recipients: z.optional(z.readonly(z.array(u.address()))),
           }),
-        ),
-      ),
+        )
+        .check(z.minLength(1)),
     ),
   })
 }

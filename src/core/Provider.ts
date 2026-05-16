@@ -27,6 +27,10 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     chains: readonly [Chain, ...Chain[]]
     /** Returns a viem Account for the given address (or active account). */
     getAccount: Account.Find
+    /** Returns local or on-chain publication status for an access key. */
+    getAccessKeyStatus(
+      options?: getAccessKeyStatus.Options | undefined,
+    ): Promise<getAccessKeyStatus.ReturnType>
     /** Returns a viem Client for the given (or current) chain ID. */
     getClient(options?: {
       chainId?: number | undefined
@@ -965,6 +969,19 @@ export function create(options: create.Options = {}): create.ReturnType {
     {
       chains,
       getAccount,
+      async getAccessKeyStatus(options: getAccessKeyStatus.Options = {}) {
+        const state = store.getState()
+        const address = options.address ?? state.accounts[state.activeAccount]?.address
+        if (!address) return AccessKey.status.missing
+        const chainId = options.chainId ?? state.chainId
+        return await AccessKey.getStatus({
+          ...options,
+          address,
+          chainId,
+          client: provider.getClient({ chainId }),
+          store,
+        })
+      },
       getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
         const { chainId, feePayer } = options
         return Client.fromChainId(chainId, {
@@ -1105,6 +1122,23 @@ export declare namespace create {
     transports?: Record<number, Transport> | undefined
   }
   type ReturnType = Provider
+}
+
+export declare namespace getAccessKeyStatus {
+  /** Options for {@link Provider.getAccessKeyStatus}. */
+  type Options = {
+    /** Root account address. Defaults to the active account. */
+    address?: Address.Address | undefined
+    /** Specific access key address to query. When omitted, the first locally matching key is used. */
+    accessKey?: Address.Address | undefined
+    /** Calls to match against access key scopes. */
+    calls?: readonly { to?: Address.Address | undefined; data?: Hex.Hex | undefined }[] | undefined
+    /** Chain ID the access key must be authorized on. Defaults to the active chain. */
+    chainId?: number | undefined
+  }
+
+  /** Access-key publication status. */
+  type ReturnType = AccessKey.Status
 }
 
 export declare namespace mpp {

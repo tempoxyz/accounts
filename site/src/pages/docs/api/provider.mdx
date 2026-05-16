@@ -7,7 +7,7 @@ description: Create an EIP-1193 provider for managing accounts on Tempo.
 
 Creates an EIP-1193 provider with a pluggable adapter for managing accounts on Tempo.
 
-The returned object implements [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193) (`request`, `on`, `removeListener`, `emit`, ...) and exposes a few convenience helpers (`getAccount`, `getClient`, `store`, `chains`). See [Return Type](#return-type) for the full surface.
+The returned object implements [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193) (`request`, `on`, `removeListener`, `emit`, ...) and exposes a few convenience helpers (`getAccount`, `getAccessKeyStatus`, `getClient`, `store`, `chains`). See [Return Type](#return-type) for the full surface.
 
 ## Usage
 
@@ -51,6 +51,28 @@ const { receipt } = await client.token.transferSync({ // [!code focus]
   to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEbb', // [!code focus]
   token: '0x20c0000000000000000000000000000000000001', // [!code focus]
 }) // [!code focus]
+```
+
+### Access Key Status
+
+Use `getAccessKeyStatus` to check whether the active account has a matching delegated key before starting a paid or delegated flow.
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+
+const provider = Provider.create()
+
+const status = await provider.getAccessKeyStatus({ // [!code focus]
+  calls: [{ // [!code focus]
+    to: '0x20c0000000000000000000000000000000000001', // [!code focus]
+    data: '0xa9059cbb', // [!code focus]
+  }], // [!code focus]
+}) // [!code focus]
+
+if (status === 'pending') {
+  // The next matching transaction will publish the key authorization.
+}
 ```
 
 ## Parameters
@@ -110,6 +132,8 @@ const provider = Provider.create({
 - **Optional**
 
 Default access key parameters for `wallet_connect`. When set, `wallet_connect` will automatically authorize an access key.
+
+Tempo Wallet-hosted approval pages require at least one `limits` entry and one `scopes` entry. Local adapters accept unbounded keys, but production apps should pass both so local and wallet-hosted flows use the same policy.
 
 ```ts
 declare function authorizeAccessKey(): {
@@ -333,7 +357,7 @@ const provider = Provider.create({
 The provider type is exported as `Provider` and is the intersection of [`ox.Provider.Provider`](https://oxlib.sh/Provider) (the EIP-1193 surface) and [`ox.Provider.Emitter`](https://oxlib.sh/Provider#emitter) plus a few extra accessors:
 
 ```ts
-import type { Account, Provider as ox_Provider } from 'ox'
+import type { Account, Address, Hex, Provider as ox_Provider } from 'ox'
 import type { Chain, Client as ViemClient, Transport } from 'viem'
 import type { tempo } from 'viem/chains'
 
@@ -342,6 +366,13 @@ export type Provider = ox_Provider.Provider & ox_Provider.Emitter & {
   chains: readonly [Chain, ...Chain[]]
   /** Returns a viem Account for the given address (or active account). */
   getAccount: Account.Find
+  /** Returns local or on-chain publication status for an access key. */
+  getAccessKeyStatus(options?: {
+    address?: Address | undefined
+    accessKey?: Address | undefined
+    calls?: readonly { to?: Address | undefined; data?: Hex | undefined }[] | undefined
+    chainId?: number | undefined
+  }): Promise<'missing' | 'pending' | 'published' | 'expired'>
   /** Returns a viem Client for the given (or current) chain ID. */
   getClient(options?: {
     chainId?: number | undefined
