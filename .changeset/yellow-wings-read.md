@@ -2,8 +2,4 @@
 "accounts": patch
 ---
 
-`Handler.relay`: Default `feeToken` to the chain's first configured
-token on sponsored fills when neither the wallet nor the caller supplies
-one, and re-inject it after `fill()` when the chain echoes `feeToken:
-null`. Prevents sponsored transactions from being broadcast without a
-`feeToken`.
+Defaulted `feeToken` to chain settlement token in Path A. Protected resolved token from `fill()` null-clobber. Fixed sponsored transactions reverting with insufficient FeeAMM liquidity.
