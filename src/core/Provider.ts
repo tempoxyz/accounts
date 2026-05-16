@@ -1003,17 +1003,20 @@ export function create(options: create.Options = {}): create.ReturnType {
     return {}
   })()
   if (mpp) {
-    const { mode = 'push' } = mpp
+    const { mode = 'push', polyfill: polyfill_option, ...methodOptions } = mpp
     // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
     // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
-    const polyfill = mpp.polyfill ?? isFetchWritable()
+    const polyfill = polyfill_option ?? isFetchWritable()
     const getClient = ({ chainId }: { chainId?: number | undefined }) => {
       const client = provider.getClient({ chainId })
       const account = provider.getAccount()
       return Object.assign(client, { account })
     }
     Mppx.create({
-      methods: [mppx_tempo({ getClient, mode }), mppx_tempo.subscription({ getClient })],
+      methods: [
+        mppx_tempo({ ...methodOptions, getClient, mode }),
+        mppx_tempo.subscription({ getClient }),
+      ],
       polyfill,
     })
   }
@@ -1109,16 +1112,7 @@ export declare namespace create {
 
 export declare namespace mpp {
   /** Options for Machine Payment Protocol (mppx) integration. */
-  type Options = {
-    /**
-     * Charge mode for `mppx/tempo`.
-     *
-     * - `'push'`: Client broadcasts the transaction and sends the tx hash to the server.
-     * - `'pull'`: Client signs the transaction and sends the serialized tx to the server for broadcast.
-     *
-     * @default 'push'
-     */
-    mode?: 'push' | 'pull' | undefined
+  type Options = Omit<mppx_tempo.Parameters, 'account' | 'getClient'> & {
     /**
      * Whether to polyfill `globalThis.fetch` with the payment-aware wrapper.
      *

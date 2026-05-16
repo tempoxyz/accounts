@@ -244,6 +244,19 @@ const provider = Provider.create({
 })
 ```
 
+MPP session endpoints can use `deposit` or `maxDeposit` so the client opens and tops up a payment channel before sending vouchers.
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create({
+  mpp: { // [!code focus]
+    maxDeposit: '10', // [!code focus]
+    mode: 'pull', // [!code focus]
+  }, // [!code focus]
+})
+```
+
 ### persistCredentials
 
 - **Type:** `boolean`
