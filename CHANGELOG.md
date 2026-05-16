@@ -1,5 +1,16 @@
 # accounts
 
+## 0.12.2
+
+### Patch Changes
+
+- 22153c8: Added access-key publication status helpers and matched scoped key policies locally without crashing on malformed scope data.
+- c97987d: Documented chain-qualified relay routes and showed the MPP example server sponsoring pull-mode charge transactions.
+- 652ae1a: Added error details to `wallet_sendCalls` failures so viem push-mode fallbacks preserved the original provider error.
+- 91b5699: Passed MPP session options from `Provider.create({ mpp })` through to mppx so clients could configure session deposits.
+- 8c4b343: Kept pending access-key authorization through fill and signing-only flows so first-use MPP charges and activation gas estimates could publish the key.
+- 20cf1d2: Preserved wallet-host RPC error codes when dialog requests failed so validation errors were no longer reported as user rejection.
+
 ## 0.12.1
 
 ### Patch Changes
