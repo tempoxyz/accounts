@@ -1951,7 +1951,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const receipt = await provider.request({
         method: 'eth_sendTransactionSync',
-        params: [{ from: address, ...fillTx, gas: result.tx.gas }],
+        params: [{ from: address, ...fillTx, gas: result.tx.gas as Hex.Hex }],
       })
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
       expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()

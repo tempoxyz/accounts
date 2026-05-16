@@ -53,6 +53,7 @@ describe('validateSearch', () => {
           {
             expiry: 100,
             limits: [{ token: '0x0000000000000000000000000000000000000001', limit: '0xa' }],
+            scopes: [{ address: '0x0000000000000000000000000000000000000002' }],
           },
         ],
       },
@@ -68,6 +69,11 @@ describe('validateSearch', () => {
               {
                 "limit": 10n,
                 "token": "0x0000000000000000000000000000000000000001",
+              },
+            ],
+            "scopes": [
+              {
+                "address": "0x0000000000000000000000000000000000000002",
               },
             ],
           },
@@ -92,6 +98,7 @@ describe('validateSearch', () => {
               authorizeAccessKey: {
                 expiry: 100,
                 limits: [{ token: '0x0000000000000000000000000000000000000001', limit: '0xa' }],
+                scopes: [{ address: '0x0000000000000000000000000000000000000002' }],
               },
             },
           },
