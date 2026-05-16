@@ -1,5 +1,12 @@
 # accounts
 
+## 0.12.1
+
+### Patch Changes
+
+- 2f2f85e: Removed `signature` from `authorizeAccessKey.Parameters`.
+- e91311f: Defaulted `feeToken` to chain settlement token in Path A. Protected resolved token from `fill()` null-clobber. Fixed sponsored transactions reverting with insufficient FeeAMM liquidity.
+
 ## 0.12.0
 
 ### Minor Changes
