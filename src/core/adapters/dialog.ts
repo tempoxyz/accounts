@@ -69,7 +69,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           listeners.delete(listener)
 
           if (queued.status === 'success') resolve(queued.result)
-          else reject(new ox_Provider.UserRejectedRequestError({ message: queued.error.message }))
+          else reject(ox_Provider.parseError(queued.error))
 
           // Remove the resolved request from the queue.
           store.setState((x) => ({

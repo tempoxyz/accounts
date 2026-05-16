@@ -118,7 +118,9 @@ describe('dialog', () => {
       request,
     )
 
-    await Promise.resolve()
+    await vi.waitFor(() => {
+      if (!store.getState().requestQueue[0]) throw new Error('request not queued')
+    })
 
     const queued = store.getState().requestQueue[0]!
     store.setState({
@@ -133,5 +135,68 @@ describe('dialog', () => {
 
     await expect(promise).resolves.toMatchInlineSnapshot(`"0x1234"`)
     expect(lookups).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('error: wallet validation errors keep their RPC code', async () => {
+    const storage = Storage.memory()
+    const store = Store.create({ chainId: tempoLocalnet.id, storage })
+    vi.spyOn(AccessKey, 'selectAccount').mockReturnValue(undefined)
+    const adapter = dialog({ dialog: Dialog.noop() })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store,
+    })
+    const promise = adapter.actions.sendTransaction(
+      {
+        calls: [{ data: '0x12345678', to: recipient }],
+        chainId: 1,
+        from: address,
+      },
+      {
+        method: 'eth_sendTransaction',
+        params: [
+          {
+            calls: [{ data: '0x12345678' as const, to: recipient }],
+            chainId: '0x1' as const,
+            from: address,
+          },
+        ] as const,
+      },
+    )
+
+    await vi.waitFor(() => {
+      if (!store.getState().requestQueue[0]) throw new Error('request not queued')
+    })
+
+    const queued = store.getState().requestQueue[0]!
+    store.setState({
+      requestQueue: [
+        {
+          request: queued.request,
+          error: {
+            code: -32602,
+            message: '`authorizeAccessKey` must include at least one `limits` entry.',
+          },
+          status: 'error',
+        },
+      ],
+    })
+
+    await expect(
+      promise.catch((error) => ({
+        code: error.code,
+        message: error.message,
+        name: error.name,
+      })),
+    ).resolves.toMatchInlineSnapshot(`
+      {
+        "code": -32602,
+        "message": "\`authorizeAccessKey\` must include at least one \`limits\` entry.",
+        "name": "RpcResponse.InvalidParamsError",
+      }
+    `)
   })
 })
