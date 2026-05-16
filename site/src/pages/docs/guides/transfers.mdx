@@ -1,0 +1,376 @@
+---
+title: Transfers
+description: Send stablecoin transfers from a connected Tempo account, initiated either by the user or by your server.
+---
+
+import { Cards, Card, Tabs, Tab } from 'vocs'
+import { ConnectAccount } from '../../../components/ConnectAccount'
+import { Demo, DemoReset } from '../../../components/Demo'
+import { SendPayment } from '../../../components/SendPayment'
+import { ServerTransfer } from '../../../components/ServerTransfer'
+import * as Steps from '../../../components/Steps'
+
+# Transfers
+
+Send stablecoin transfers from a connected Tempo account using the [Tempo Accounts SDK](/docs).
+
+There are two common ways to move value out of a connected account:
+
+- **User-initiated transfers**: your UI calls `wallet_transfer` and the connected account signs and broadcasts a stablecoin transfer.
+- **Server-initiated transfers**: your server responds with HTTP `402 Payment Required` using the [Machine Payments Protocol (MPP)](https://mpp.dev) [charge method](https://mpp.dev/payment-methods/tempo/charge), describing the amount, currency, and recipient. The Accounts SDK auto-fulfills the challenge from the connected account and retries the request, so your client code stays a plain `fetch`.
+
+<Tabs stateKey="transfer-mode">
+
+<Tab title="User-initiated Transfers" className="pt-8!">
+
+## Demo
+
+By the end of this section you'll have a button that sends pathUSD from the connected account to a recipient.
+
+<Demo
+  title="User-initiated Transfer"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/transfers"
+  headerAction={<DemoReset />}
+  className="flex flex-col gap-3"
+>
+  <Steps.Step
+    label="Create an account, or use an existing one."
+    action={<ConnectAccount />}
+  />
+  <SendPayment />
+</Demo>
+
+## Walkthrough
+
+::::steps
+
+### Connect an Account
+
+Follow the [Connect Accounts](/docs/guides/connect-accounts) guide to set up Wagmi with a Tempo signing adapter and let the user sign in. This guide will still function regardless of adapter.
+
+### Send the Transfer
+
+Call [`Hooks.wallet.useTransfer`](https://wagmi.sh/tempo/hooks/wallet.useTransfer) from `wagmi/tempo` and pass the amount, recipient, and token.
+
+```tsx twoslash [Transfer.tsx]
+// @noErrors
+import { Hooks } from 'wagmi/tempo'
+
+export function Transfer() {
+  const transfer = Hooks.wallet.useTransfer()
+
+  return (
+    <button
+      onClick={() =>
+        transfer.mutate({
+          amount: '1',
+          to: '0x0000000000000000000000000000000000000001',
+          token: 'pathusd',
+        })
+      }
+    >
+      Pay $1
+    </button>
+  )
+}
+```
+
+::::
+
+## Best Practices
+
+### Loading State
+
+Use `transfer.isPending` to disable the button and show a pending label while the transfer is in flight.
+
+```tsx twoslash [Transfer.tsx]
+// @noErrors
+import { Hooks } from 'wagmi/tempo'
+
+export function Transfer() {
+  const transfer = Hooks.wallet.useTransfer()
+
+  return (
+    <button
+      disabled={transfer.isPending} // [!code ++]
+      onClick={() =>
+        transfer.mutate({
+          amount: '1',
+          to: '0x0000000000000000000000000000000000000001',
+          token: 'pathusd',
+        })
+      }
+    >
+      {transfer.isPending ? 'Sending...' : 'Pay $1'} {/* [!code ++] */}
+    </button>
+  )
+}
+```
+
+### Error Handling
+
+If the transfer fails — for example, the user rejects the request, or the access key has insufficient allowance — surface the error from `transfer.error` to the user.
+
+```tsx twoslash [Transfer.tsx]
+// @noErrors
+import { Hooks } from 'wagmi/tempo'
+
+export function Transfer() {
+  const transfer = Hooks.wallet.useTransfer()
+
+  return (
+    <div>
+      <button onClick={() => transfer.mutate({ /* ... */ })}>Pay $1</button>
+      {transfer.error && ( // [!code ++]
+        <pre>{`${transfer.error.name}: ${transfer.error.message}`}</pre> /* [!code ++] */
+      )} {/* [!code ++] */}
+    </div>
+  )
+}
+```
+
+### Success State
+
+When the transfer succeeds, `transfer.data.receipt.transactionHash` is the on-chain transaction hash. Link to the block explorer, refresh balances, or surface a success state to the user.
+
+```tsx twoslash [Transfer.tsx]
+// @noErrors
+import { tempoModerato } from 'wagmi/chains' // [!code ++]
+import { Hooks } from 'wagmi/tempo'
+
+export function Transfer() {
+  const transfer = Hooks.wallet.useTransfer()
+
+  return (
+    <div>
+      <button onClick={() => transfer.mutate({ /* ... */ })}>Pay $1</button>
+      {transfer.isSuccess && ( // [!code ++]
+        <a /* [!code ++] */
+          href={`${tempoModerato.blockExplorers.default.url}/tx/${transfer.data.receipt.transactionHash}`} /* [!code ++] */
+          target="_blank" /* [!code ++] */
+          rel="noreferrer" /* [!code ++] */
+        > {/* [!code ++] */}
+          See receipt {/* [!code ++] */}
+        </a> /* [!code ++] */
+      )} {/* [!code ++] */}
+    </div>
+  )
+}
+```
+
+</Tab>
+
+<Tab title="Server-initiated Transfers" className="pt-8!">
+
+## Demo
+
+By the end of this section you'll have an HTTP endpoint that charges $100 in pathUSD per call before returning its payload. The button below hits a real `/api/transfer` endpoint hosted on this docs site — the connected account auto-fulfills the `402 Payment Required` challenge and the request resolves only after settlement.
+
+<Demo
+  title="Server-initiated Transfer"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/transfers"
+  headerAction={<DemoReset />}
+  className="flex flex-col gap-3"
+>
+  <Steps.Step
+    label="Create an account, or use an existing one."
+    action={<ConnectAccount />}
+  />
+  <ServerTransfer />
+</Demo>
+
+## Walkthrough
+
+::::steps
+
+### Install the Server Dependencies
+
+Install [`mppx`](https://github.com/tempoxyz/mppx) for serving and verifying HTTP `402` payment challenges. This guide uses [Hono](https://hono.dev) on Cloudflare Workers; the same handler shape works on Node.js, Bun, Deno, Express, and Next.js.
+
+:::code-group
+
+```bash [npm]
+npm i mppx hono
+```
+
+```bash [pnpm]
+pnpm i mppx hono
+```
+
+```bash [bun]
+bun i mppx hono
+```
+
+:::
+
+### Define a Charge
+
+Gate the endpoint behind a stablecoin transfer. If the client hasn't paid, return the payment challenge. Once paid, return your payload with a verifying receipt.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Hono } from 'hono'
+import { Mppx, tempo } from 'mppx/server'
+
+const pathUsd = '0x20c0000000000000000000000000000000000000'
+
+const mppx = Mppx.create({
+  methods: [tempo.charge({ testnet: true })],
+})
+
+const app = new Hono()
+
+app.get('/api/transfer', async (c) => {
+  const result = await mppx.charge({
+    amount: '100',
+    currency: pathUsd,
+    recipient: '0x0000000000000000000000000000000000000001',
+  })(c.req.raw)
+
+  if (result.status === 402) return result.challenge
+
+  return result.withReceipt(
+    Response.json({
+      message: 'Thanks for your $100.',
+    }),
+  )
+})
+
+export default app
+```
+
+### Call It from the Client
+
+No extra client code is required. Use `fetch` (or any HTTP client) the same way you would for any other endpoint. The Accounts SDK transparently handles the `402`, signs a transfer with the connected account, and replays the request.
+
+```tsx twoslash [Charge.tsx]
+// @noErrors
+import { useState } from 'react'
+
+export function Charge() {
+  const [data, setData] = useState<unknown>()
+  const [isPending, setPending] = useState(false)
+
+  return (
+    <div>
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={async () => {
+          setPending(true)
+          try {
+            const res = await fetch('/api/transfer')
+            setData(await res.json())
+          } finally {
+            setPending(false)
+          }
+        }}
+      >
+        {isPending ? 'Transferring...' : 'GET /api/transfer'}
+      </button>
+      {data !== undefined && <pre>{JSON.stringify(data, null, 2)}</pre>}
+    </div>
+  )
+}
+```
+
+::::
+
+## Best Practices
+
+### React Query for Mutations
+
+Reach for `useMutation` from `@tanstack/react-query` instead of hand-rolling `useState` for `data`, `error`, and `isPending`. You get retries, cache invalidation, and consistent loading/error semantics for free, and the rest of your app can react to the latest charge result.
+
+```tsx twoslash [Charge.tsx]
+// @noErrors
+import { useMutation } from '@tanstack/react-query'
+
+export function Charge() {
+  const charge = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/transfer')
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+  })
+
+  return (
+    <div>
+      <button disabled={charge.isPending} onClick={() => charge.mutate()}>
+        {charge.isPending ? 'Transferring...' : 'GET /api/transfer'}
+      </button>
+      {charge.error && <pre>{charge.error.message}</pre>}
+      {charge.data && <pre>{JSON.stringify(charge.data, null, 2)}</pre>}
+    </div>
+  )
+}
+```
+
+### Identify the Payer
+
+After `mppx.charge` verifies payment, the `Authorization` header is still on the request. Decode it with `Credential.deserialize` to read the payer's DID (e.g. `did:pkh:eip155:1:0x...`). Use it for per-payer rate limiting, analytics, or audit logs.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Credential } from 'mppx'
+
+app.get('/api/transfer', async (c) => {
+  const result = await mppx.charge({ /* ... */ })(c.req.raw)
+  if (result.status === 402) return result.challenge
+
+  const credential = Credential.deserialize(c.req.header('Authorization')!) // [!code ++]
+  const payer = credential.source // "did:pkh:eip155:1:0x..." // [!code ++]
+
+  return result.withReceipt(Response.json({ payer }))
+})
+```
+
+### Reuse Credentials with `Expires`
+
+By default, each request requires a fresh on-chain transfer. For tightly coupled flows (e.g. a paid endpoint that the user hits repeatedly within a short window), set `expires` so a paid credential is reusable for that duration. The user pays once and reuses the credential until it expires.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Expires } from 'mppx'
+
+const result = await mppx.charge({
+  amount: '100',
+  currency: pathUsd,
+  recipient: '0x0000000000000000000000000000000000000001',
+  expires: Expires.minutes(5), // [!code ++]
+})(c.req.raw)
+```
+
+</Tab>
+
+</Tabs>
+
+## Next Steps
+
+<Cards>
+  <Card
+    description="Authorize spend limits, scopes, and durations so transfers can be signed without a confirmation prompt."
+    to="/docs/guides/spend-permissions"
+    icon="lucide:shield"
+    title="Spend Permissions"
+  />
+  <Card
+    description="Sponsor transaction fees for your users so transfers are feeless from their perspective."
+    to="/docs/guides/fee-sponsorship"
+    icon="lucide:badge-dollar-sign"
+    title="Fee Sponsorship"
+  />
+  <Card
+    description="Charge users on a recurring schedule using server-initiated transfers."
+    to="/docs/guides/subscriptions"
+    icon="lucide:repeat"
+    title="Subscriptions"
+  />
+  <Card
+    description="Let agents and other servers pay your endpoints with the Machine Payments Protocol."
+    to="/docs/guides/machine-payments"
+    icon="lucide:bot"
+    title="Machine Payments (MPP)"
+  />
+</Cards>

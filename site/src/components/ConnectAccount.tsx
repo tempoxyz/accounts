@@ -12,8 +12,12 @@ import * as Steps from './Steps.js'
  * {@link Steps.Provider} to the next step on successful connect via the
  * Wagmi mutation's `onSuccess` callback (so reset can return here without
  * being immediately re-advanced by a stale connection state).
+ *
+ * Pass `standalone` when rendering outside of a `<Steps.Step>` to keep the
+ * button always-active (no step coordination).
  */
-export function ConnectAccount() {
+export function ConnectAccount(props: ConnectAccount.Props = {}) {
+  const { standalone = false } = props
   const steps = Steps.use()
   const connection = useConnection()
   const connectors = useConnectors()
@@ -22,14 +26,16 @@ export function ConnectAccount() {
   const disconnect = useDisconnect()
 
   const connected = connection.status === 'connected'
+  const active = standalone || steps.active
 
   // Auto-advance whenever this step is active and the wallet is connected.
   // Covers both fresh connections (clicking "Sign in") and cached
   // connections on page load. Safe against reset because `Demo.Reset`
   // awaits `disconnectAsync()` before navigating back to step 1.
   useEffect(() => {
+    if (standalone) return
     if (steps.active && connected) steps.set('next')
-  }, [steps.active, connected, steps.set])
+  }, [standalone, steps.active, connected, steps.set])
 
   if (connected)
     return (
@@ -44,12 +50,23 @@ export function ConnectAccount() {
 
   return (
     <Button
-      variant={steps.active ? 'primary' : 'secondary'}
-      disabled={!steps.active || !connector}
+      variant={active ? 'primary' : 'secondary'}
+      disabled={!active || !connector}
       loading={connect.isPending}
       onClick={() => connector && connect.mutate({ connector })}
     >
       Sign in
     </Button>
   )
+}
+
+export namespace ConnectAccount {
+  export type Props = {
+    /**
+     * Render without coordinating with the surrounding {@link Steps.Provider}.
+     * The button stays primary/enabled regardless of the current step, and
+     * connecting does not advance the step.
+     */
+    standalone?: boolean | undefined
+  }
 }

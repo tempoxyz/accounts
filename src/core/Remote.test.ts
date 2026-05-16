@@ -144,7 +144,8 @@ describe('validateSearch', () => {
       ),
     ).toThrowErrorMatchingInlineSnapshot(
       `[RpcResponse.InvalidParamsError: Invalid params for "wallet_authorizeAccessKey":
-  - limits: Expected array]`,
+  - limits: Expected array
+  - scopes: Expected array]`,
     )
     expect(remote.rejectAll).toHaveBeenCalledOnce()
   })
@@ -171,7 +172,8 @@ describe('validateSearch', () => {
       ),
     ).toThrowErrorMatchingInlineSnapshot(
       `[RpcResponse.InvalidParamsError: Invalid params for "wallet_connect":
-  - capabilities.authorizeAccessKey.limits: Expected array]`,
+  - capabilities.authorizeAccessKey.limits: Expected array
+  - capabilities.authorizeAccessKey.scopes: Expected array]`,
     )
     expect(remote.rejectAll).toHaveBeenCalledOnce()
   })
@@ -192,15 +194,68 @@ describe('validateSearch', () => {
     expect(remote.rejectAll).not.toHaveBeenCalled()
   })
 
-  test('strict: passes wallet_authorizeAccessKey with empty limits array', () => {
+  test('strict: rejects wallet_authorizeAccessKey with empty policy arrays', () => {
+    const remote = createMockRemote()
+    expect(() =>
+      Remote.validateSearch(
+        remote,
+        {
+          method: 'wallet_authorizeAccessKey',
+          id: 8,
+          jsonrpc: '2.0',
+          params: [{ expiry: 100, limits: [], scopes: [] }],
+        },
+        { method: 'wallet_authorizeAccessKey' },
+      ),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: Invalid params for "wallet_authorizeAccessKey":
+  - limits: Invalid input
+  - scopes: Invalid input]`,
+    )
+    expect(remote.rejectAll).toHaveBeenCalledOnce()
+  })
+
+  test('strict: rejects wallet_authorizeAccessKey with malformed scope', () => {
+    const remote = createMockRemote()
+    expect(() =>
+      Remote.validateSearch(
+        remote,
+        {
+          method: 'wallet_authorizeAccessKey',
+          id: 9,
+          jsonrpc: '2.0',
+          params: [
+            {
+              expiry: 100,
+              limits: [{ token: '0x20c0000000000000000000000000000000000001', limit: '0x1' }],
+              scopes: [{ selector: 'transfer(address,uint256)' }],
+            },
+          ],
+        },
+        { method: 'wallet_authorizeAccessKey' },
+      ),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: Invalid params for "wallet_authorizeAccessKey":
+  - params.0.scopes.0.address: Expected string]`,
+    )
+    expect(remote.rejectAll).toHaveBeenCalledOnce()
+  })
+
+  test('strict: passes wallet_authorizeAccessKey with bounded policy', () => {
     const remote = createMockRemote()
     const result = Remote.validateSearch(
       remote,
       {
         method: 'wallet_authorizeAccessKey',
-        id: 8,
+        id: 10,
         jsonrpc: '2.0',
-        params: [{ expiry: 100, limits: [] }],
+        params: [
+          {
+            expiry: 100,
+            limits: [{ token: '0x20c0000000000000000000000000000000000001', limit: '0x1' }],
+            scopes: [{ address: '0x20c0000000000000000000000000000000000001' }],
+          },
+        ],
       },
       { method: 'wallet_authorizeAccessKey' },
     )
@@ -210,7 +265,17 @@ describe('validateSearch', () => {
         "params": [
           {
             "expiry": 100,
-            "limits": [],
+            "limits": [
+              {
+                "limit": 1n,
+                "token": "0x20c0000000000000000000000000000000000001",
+              },
+            ],
+            "scopes": [
+              {
+                "address": "0x20c0000000000000000000000000000000000001",
+              },
+            ],
           },
         ],
       }

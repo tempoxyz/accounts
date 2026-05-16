@@ -245,7 +245,7 @@ const handler = Handler.auth({
 ### trustProxy
 
 - **Type:** `boolean`
-- **Default:** `false`
+- **Default:** `true` on Cloudflare Workers (always edge-fronted), `false` elsewhere.
 
 Honor `x-forwarded-proto` / `x-forwarded-host` to derive the public origin. Required when running behind a trusted reverse proxy that terminates TLS. When `false`, forwarded headers are ignored to prevent spoofing on deployments that expose the origin server directly. Ignored when [`origin`](#origin) is set.
 

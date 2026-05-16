@@ -569,6 +569,11 @@ const handler = Handler.relay({
 })
 ```
 
+When used with [`Provider.relay`](/docs/api/provider#relay), expose both the
+base path and chain-qualified child paths from your HTTP router. The provider
+posts JSON-RPC to `/relay/:chainId`; direct `POST /relay` calls are only valid
+when your router sends that exact path to the relay handler.
+
 ### resolveTokens
 
 - **Type:** `(chainId: number) => readonly Token[] | Promise<readonly Token[]>`

@@ -116,7 +116,24 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       },
     })(parameters)
 
-    return { ...base, persistAccounts: true }
+    // When a server-backed ceremony is used, also revoke the
+    // `Handler.webAuthn` session on disconnect — otherwise the
+    // `accounts_webauthn` cookie persists past `wallet_disconnect`
+    // and follow-up authenticated requests still succeed.
+    const disconnect = url
+      ? async () => {
+          await fetch(`${url}/logout`, {
+            method: 'POST',
+            credentials: 'include',
+          }).catch(() => {})
+        }
+      : undefined
+
+    return {
+      ...base,
+      actions: { ...base.actions, ...(disconnect ? { disconnect } : {}) },
+      persistAccounts: true,
+    }
   })
 }
 

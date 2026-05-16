@@ -796,6 +796,40 @@ describe('origin / trustProxy', () => {
       `[Error: \`auth({ origin })\` must be a valid absolute URL. Got: not-a-url]`,
     )
   })
+
+  test('default trustProxy: true on Cloudflare Workers runtime', async () => {
+    // Spoof the Cloudflare Workers runtime marker.
+    const originalNavigator = globalThis.navigator
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { userAgent: 'Cloudflare-Workers' },
+      configurable: true,
+    })
+    try {
+      const handler = auth()
+      const app = new Hono()
+      app.route('/', handler)
+
+      const res = await app.request('/challenge', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          host: 'internal.example',
+          'x-forwarded-host': 'app.example',
+          'x-forwarded-proto': 'https',
+        },
+        body: JSON.stringify({ chainId: 1 }),
+      })
+      const body = (await res.json()) as { message: string }
+      const parsed = parseSiweMessage(body.message)
+      expect(parsed.domain).toBe('app.example')
+      expect(parsed.uri).toBe('https://app.example')
+    } finally {
+      Object.defineProperty(globalThis, 'navigator', {
+        value: originalNavigator,
+        configurable: true,
+      })
+    }
+  })
 })
 
 describe('Handler.compose integration', () => {

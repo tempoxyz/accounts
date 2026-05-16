@@ -1426,6 +1426,30 @@ describe('behavior: path A — guaranteed sponsorship (no validate)', () => {
     expect(result.transaction.feePayerSignature).toBeDefined()
     expect(result.capabilities?.sponsored).toBe(true)
   })
+
+  test('behavior: defaults feeToken to chain default when caller omits it', async () => {
+    // Without the default, the broadcast envelope has no feeToken and
+    // the chain falls back to the sender's account token, which often
+    // lacks FeeAMM liquidity.
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+    })
+
+    expect(result.transaction.feeToken?.toLowerCase()).toBe(
+      localnetTokens[0]!.address.toLowerCase(),
+    )
+  })
+
+  test('behavior: preserves caller-supplied feeToken', async () => {
+    const result = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feeToken: addresses.alphaUsd as Address,
+    })
+
+    expect(result.transaction.feeToken?.toLowerCase()).toBe(addresses.alphaUsd.toLowerCase())
+  })
 })
 
 describe('behavior: path B — conditional sponsorship (validate)', () => {

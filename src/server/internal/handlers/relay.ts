@@ -222,7 +222,14 @@ export function relay(options: relay.Options = {}): Handler {
             //   - the app supplied its own external fee payer URL (that
             //     relay is the sponsorship authority — the wallet's own
             //     `validate` only governs the wallet's own fee payer).
-            const transaction = { ...baseTx, feePayer: true }
+            // Default to the chain's first token so the broadcast envelope
+            // always carries a feeToken the chain can charge.
+            if (!feeToken) feeToken = (await getTokens(chainId))[0]
+            const transaction = {
+              ...baseTx,
+              feePayer: true,
+              ...(feeToken ? { feeToken } : {}),
+            }
             if (Sponsorship.isPreparedTransaction(transaction)) {
               filled = {
                 transaction: Utils.normalizeTempoTransaction(transaction),
@@ -236,6 +243,15 @@ export function relay(options: relay.Options = {}): Handler {
                 resolveFeeToken: resolveFeeTokenForSwap,
                 transaction,
               })
+              // The chain echoes feeToken: null for sponsored fills served
+              // by viem clients that strip feeToken pre-sign; re-inject
+              // before the spread in mergeCallsFromRequest drops it.
+              if (
+                feeToken &&
+                filled?.transaction &&
+                (filled.transaction as { feeToken?: Address | null }).feeToken == null
+              )
+                (filled.transaction as { feeToken?: Address }).feeToken = feeToken
             }
             sponsored = true
           } else if (requestsSponsorship && feePayerOptions?.validate) {

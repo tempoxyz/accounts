@@ -22,18 +22,28 @@ TODO
 ## Usage
 
 ```tsx
-import { TurnkeyClient } from '@turnkey/core'
+import { TurnkeyClient, generateWalletAccountsFromAddressFormat } from '@turnkey/core'
 import { Provider, turnkey } from 'accounts'
 
 const provider = Provider.create({
   adapter: turnkey({
     client: new TurnkeyClient({ organizationId, authProxyConfigId }),
+    createAccount: async ({ client, parameters }) => {
+      await client.signUpWithPasskey({
+        passkeyDisplayName: parameters.name,
+        createSubOrgParams: {
+          userName: parameters.name,
+          customWallet: {
+            walletName: 'FooBar',
+            walletAccounts: generateWalletAccountsFromAddressFormat({
+              addresses: ['ADDRESS_FORMAT_ETHEREUM'],
+            }),
+          },
+        },
+      })
+    },
     loadAccounts: async ({ client }) => {
-      const session = await client.getSession()
-      if (!session || session.expiry * 1000 <= Date.now()) await client.loginWithPasskey()
-      return (await client.fetchWallets())
-        .flatMap((wallet) => wallet.accounts)
-        .filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')
+      await client.loginWithPasskey()
     },
   }),
 })

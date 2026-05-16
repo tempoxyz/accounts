@@ -2,7 +2,7 @@ import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { http, type Chain, type Client as ViemClient, type Transport } from 'viem'
+import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { parseSiweMessage } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
@@ -17,6 +17,7 @@ import { withDedupe } from './internal/withDedupe.js'
 import * as Schema from './Schema.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
+import * as Tokenlist from './Tokenlist.js'
 import * as Request from './zod/request.js'
 import * as Rpc from './zod/rpc.js'
 
@@ -26,6 +27,10 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     chains: readonly [Chain, ...Chain[]]
     /** Returns a viem Account for the given address (or active account). */
     getAccount: Account.Find
+    /** Returns local or on-chain publication status for an access key. */
+    getAccessKeyStatus(
+      options?: getAccessKeyStatus.Options | undefined,
+    ): Promise<getAccessKeyStatus.ReturnType>
     /** Returns a viem Client for the given (or current) chain ID. */
     getClient(options?: {
       chainId?: number | undefined
@@ -244,10 +249,12 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const { to, data, ...rest } = decoded
                     const calls =
                       decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
+                    const state = store.getState()
                     return (await actions.sendTransaction(
                       {
                         ...rest,
-                        chainId: decoded.chainId ?? store.getState().chainId,
+                        chainId: decoded.chainId ?? state.chainId,
+                        from: decoded.from ?? state.accounts[state.activeAccount]?.address,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
@@ -336,10 +343,12 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const { to, data, ...rest } = decoded
                     const calls =
                       decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
+                    const state = store.getState()
                     return (await actions.signTransaction(
                       {
                         ...rest,
-                        chainId: decoded.chainId ?? store.getState().chainId,
+                        chainId: decoded.chainId ?? state.chainId,
+                        from: decoded.from ?? state.accounts[state.activeAccount]?.address,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
@@ -353,10 +362,12 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const { to, data, ...rest } = decoded
                     const calls =
                       decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
+                    const state = store.getState()
                     return (await actions.sendTransactionSync(
                       {
                         ...rest,
-                        chainId: decoded.chainId ?? store.getState().chainId,
+                        chainId: decoded.chainId ?? state.chainId,
+                        from: decoded.from ?? state.accounts[state.activeAccount]?.address,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
@@ -389,44 +400,49 @@ export function create(options: create.Options = {}): create.ReturnType {
                   }
 
                   case 'wallet_sendCalls': {
-                    assertConnected()
-                    const decoded = request._decoded.params?.[0]
-                    const { calls = [], capabilities, chainId, from } = decoded ?? {}
-                    const sync = capabilities?.sync
-                    const feePayer = resolveFeePayer(
-                      capabilities?.feePayer ?? (feePayerConfig ? true : undefined),
-                    )
-                    const txRequest = {
-                      calls,
-                      chainId,
-                      from,
-                      ...(feePayer ? { feePayer } : {}),
-                    }
-                    if (!sync) {
-                      const hash = await actions.sendTransaction(txRequest, {
-                        method: 'eth_sendTransaction',
+                    try {
+                      assertConnected()
+                      const decoded = request._decoded.params?.[0]
+                      const { calls = [], capabilities, chainId, from } = decoded ?? {}
+                      const sync = capabilities?.sync
+                      const feePayer = resolveFeePayer(
+                        capabilities?.feePayer ?? (feePayerConfig ? true : undefined),
+                      )
+                      const state = store.getState()
+                      const txRequest = {
+                        calls,
+                        chainId,
+                        from: from ?? state.accounts[state.activeAccount]?.address,
+                        ...(feePayer ? { feePayer } : {}),
+                      }
+                      if (!sync) {
+                        const hash = await actions.sendTransaction(txRequest, {
+                          method: 'eth_sendTransaction',
+                          params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
+                        })
+                        const chainId = Hex.fromNumber(store.getState().chainId)
+                        const id = Hex.concat(hash, Hex.padLeft(chainId, 32), sendCallsMagic)
+                        return { capabilities: { sync }, id }
+                      }
+                      const receipt = await actions.sendTransactionSync(txRequest as never, {
+                        method: 'eth_sendTransactionSync',
                         params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
                       })
-                      const chainId = Hex.fromNumber(store.getState().chainId)
-                      const id = Hex.concat(hash, Hex.padLeft(chainId, 32), sendCallsMagic)
-                      return { capabilities: { sync }, id }
+                      const hash = receipt.transactionHash
+                      const chainIdHex = Hex.fromNumber(store.getState().chainId)
+                      const id = Hex.concat(hash, Hex.padLeft(chainIdHex, 32), sendCallsMagic)
+                      return {
+                        atomic: true,
+                        capabilities: { sync },
+                        chainId: chainIdHex,
+                        id,
+                        receipts: [receipt],
+                        status: (receipt as { status: string }).status === '0x1' ? 200 : 500,
+                        version: '2.0.0',
+                      } satisfies Rpc.wallet_sendCalls.Encoded['returns']
+                    } catch (error) {
+                      throw withDetails(error)
                     }
-                    const receipt = await actions.sendTransactionSync(txRequest as never, {
-                      method: 'eth_sendTransactionSync',
-                      params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
-                    })
-                    const hash = receipt.transactionHash
-                    const chainIdHex = Hex.fromNumber(store.getState().chainId)
-                    const id = Hex.concat(hash, Hex.padLeft(chainIdHex, 32), sendCallsMagic)
-                    return {
-                      atomic: true,
-                      capabilities: { sync },
-                      chainId: chainIdHex,
-                      id,
-                      receipts: [receipt],
-                      status: (receipt as { status: string }).status === '0x1' ? 200 : 500,
-                      version: '2.0.0',
-                    } satisfies Rpc.wallet_sendCalls.Encoded['returns']
                   }
 
                   case 'wallet_getBalances': {
@@ -789,23 +805,101 @@ export function create(options: create.Options = {}): create.ReturnType {
                     )) satisfies Rpc.wallet_deposit.Encoded['returns']
                   }
 
-                  case 'wallet_send': {
+                  case 'wallet_transfer': {
                     assertConnected()
-                    if (!actions.send)
-                      throw new ox_Provider.UnsupportedMethodError({
-                        message: '`send` not supported by adapter.',
+                    // Default to the editable variant when params are
+                    // omitted — Read-only mode requires `amount`,
+                    // `to`, and `token`, so an empty call only makes
+                    // sense as "open the wallet send UI".
+                    const decoded = request._decoded.params?.[0] ?? { editable: true as const }
+
+                    // Editable variant: forward to the wallet host UI.
+                    if (decoded.editable === true) {
+                      if (!actions.transfer)
+                        throw new ox_Provider.UnsupportedMethodError({
+                          message: '`transfer` not supported by adapter.',
+                        })
+                      const parameters = {
+                        ...decoded,
+                        ...(typeof decoded.feePayer !== 'undefined'
+                          ? { feePayer: resolveFeePayer(decoded.feePayer) }
+                          : {}),
+                      } as Adapter.transfer.Parameters
+                      return (await actions.transfer(
+                        parameters,
+                        request,
+                      )) satisfies Rpc.wallet_transfer.Encoded['returns']
+                    }
+
+                    // Programmatic variant (default): skip the wallet UI,
+                    // build the TIP-20 `transfer` call inline, and route
+                    // through `eth_sendTransactionSync` (which uses an
+                    // access key when one matches, falling back to the
+                    // dialog otherwise).
+                    const { amount, feePayer, from, memo, to, token } = decoded
+                    const state = store.getState()
+                    const chainId = decoded.chainId ?? state.chainId
+                    const resolvedFeePayer = resolveFeePayer(feePayer)
+
+                    const client = getClient({
+                      chainId,
+                      feePayer: typeof resolvedFeePayer === 'string' ? resolvedFeePayer : undefined,
+                    })
+                    const { address: tokenAddress, decimals } = await (async () => {
+                      if (Address.validate(token)) {
+                        const metadata = await Actions.token.getMetadata(client, {
+                          token,
+                        })
+                        return { address: token, decimals: metadata.decimals }
+                      }
+                      const resolved = await Tokenlist.resolveSymbol({
+                        chainId: client.chain.id,
+                        symbol: token,
                       })
-                    const decoded = request._decoded.params?.[0] ?? {}
-                    const parameters = {
-                      ...decoded,
-                      ...(typeof decoded.feePayer !== 'undefined'
-                        ? { feePayer: resolveFeePayer(decoded.feePayer) }
-                        : {}),
-                    } as Adapter.send.Parameters
-                    return (await actions.send(
-                      parameters,
-                      request,
-                    )) satisfies Rpc.wallet_send.Encoded['returns']
+                      if (!resolved)
+                        throw new ox_Provider.ProviderRpcError(
+                          -32602,
+                          `Unknown token symbol "${token}".`,
+                        )
+                      return { address: resolved.address, decimals: resolved.decimals }
+                    })()
+                    const amountUnits = parseUnits(amount, decimals)
+
+                    // The signer is the active account (or its access
+                    // key). `from` here is the TIP-20 source for
+                    // `transferFrom` semantics, so we only forward it
+                    // when the caller explicitly set it to a different
+                    // address — otherwise `Actions.token.transfer.call`
+                    // emits `transferFrom` (different selector) instead
+                    // of plain `transfer`, breaking access-key scope
+                    // matching.
+                    const signerAddress = state.accounts[state.activeAccount]?.address
+                    const sourceFrom =
+                      from && signerAddress && from.toLowerCase() !== signerAddress.toLowerCase()
+                        ? from
+                        : undefined
+                    const call = Actions.token.transfer.call({
+                      amount: amountUnits,
+                      ...(sourceFrom ? { from: sourceFrom } : {}),
+                      memo: memo ? Hex.fromString(memo) : undefined,
+                      to,
+                      token: tokenAddress,
+                    })
+
+                    const txRequest = {
+                      calls: [call],
+                      chainId,
+                      from: signerAddress,
+                      ...(resolvedFeePayer !== undefined ? { feePayer: resolvedFeePayer } : {}),
+                    }
+                    const receipt = await actions.sendTransactionSync(txRequest, {
+                      method: 'eth_sendTransactionSync',
+                      params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
+                    })
+                    return {
+                      chainId: Hex.fromNumber(chainId),
+                      receipt,
+                    } satisfies Rpc.wallet_transfer.Encoded['returns']
                   }
 
                   case 'wallet_swap': {
@@ -878,6 +972,19 @@ export function create(options: create.Options = {}): create.ReturnType {
     {
       chains,
       getAccount,
+      async getAccessKeyStatus(options: getAccessKeyStatus.Options = {}) {
+        const state = store.getState()
+        const address = options.address ?? state.accounts[state.activeAccount]?.address
+        if (!address) return AccessKey.status.missing
+        const chainId = options.chainId ?? state.chainId
+        return await AccessKey.getStatus({
+          ...options,
+          address,
+          chainId,
+          client: provider.getClient({ chainId }),
+          store,
+        })
+      },
       getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
         const { chainId, feePayer } = options
         return Client.fromChainId(chainId, {
@@ -910,20 +1017,42 @@ export function create(options: create.Options = {}): create.ReturnType {
     }
   }
 
-  if (options.mpp) {
-    const mppOptions = typeof options.mpp === 'object' ? options.mpp : {}
-    const { mode = 'push' } = mppOptions
-    Mppx.create({
+  const mpp = (() => {
+    if (options.mpp === false) return undefined
+    if (typeof options.mpp === 'object') return options.mpp
+    return {}
+  })()
+  if (mpp) {
+    const { mode = 'push', polyfill: polyfill_option, ...methodOptions } = mpp
+    // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
+    // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
+    const polyfill = polyfill_option ?? isFetchWritable()
+    const getClient = ({ chainId }: { chainId?: number | undefined }) => {
+      const client = provider.getClient({ chainId })
+      const account = provider.getAccount()
+      return Object.assign(client, { account })
+    }
+    const mppx = Mppx.create({
       methods: [
-        mppx_tempo({
-          getClient: ({ chainId }) => {
-            const client = provider.getClient({ chainId })
-            const account = provider.getAccount()
-            return Object.assign(client, { account })
-          },
-          mode,
-        }),
+        mppx_tempo({ ...methodOptions, getClient, mode }),
+        mppx_tempo.subscription({ getClient }),
       ],
+      polyfill,
+    })
+    mppx.onPaymentResponse(({ challenge, method }) => {
+      if (method.name !== 'tempo' || method.intent !== 'charge') return
+      const amount = challenge.request.amount
+      if (
+        typeof amount !== 'string' &&
+        typeof amount !== 'number' &&
+        typeof amount !== 'bigint' &&
+        typeof amount !== 'boolean'
+      )
+        return
+      if (BigInt(amount) === 0n) return
+      const account = provider.getAccount()
+      if ('source' in account && account.source === 'accessKey')
+        AccessKey.removePending(account, { store })
     })
   }
 
@@ -966,9 +1095,9 @@ export declare namespace create {
     /**
      * Enable Machine Payment Protocol (mppx) support.
      *
-     * Pass `true` to enable with defaults, or an options object to configure.
+     * Pass an options object to configure, or `false` to disable.
      *
-     * @default false
+     * @default true
      */
     mpp?: boolean | mpp.Options | undefined
     /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
@@ -1016,18 +1145,66 @@ export declare namespace create {
   type ReturnType = Provider
 }
 
+export declare namespace getAccessKeyStatus {
+  /** Options for {@link Provider.getAccessKeyStatus}. */
+  type Options = {
+    /** Root account address. Defaults to the active account. */
+    address?: Address.Address | undefined
+    /** Specific access key address to query. When omitted, the first locally matching key is used. */
+    accessKey?: Address.Address | undefined
+    /** Calls to match against access key scopes. */
+    calls?: readonly { to?: Address.Address | undefined; data?: Hex.Hex | undefined }[] | undefined
+    /** Chain ID the access key must be authorized on. Defaults to the active chain. */
+    chainId?: number | undefined
+  }
+
+  /** Access-key publication status. */
+  type ReturnType = AccessKey.Status
+}
+
 export declare namespace mpp {
   /** Options for Machine Payment Protocol (mppx) integration. */
-  type Options = {
+  type Options = Omit<mppx_tempo.Parameters, 'account' | 'getClient'> & {
     /**
-     * Charge mode for `mppx/tempo`.
+     * Whether to polyfill `globalThis.fetch` with the payment-aware wrapper.
      *
-     * - `'push'`: Client broadcasts the transaction and sends the tx hash to the server.
-     * - `'pull'`: Client signs the transaction and sends the serialized tx to the server for broadcast.
-     *
-     * @default 'push'
+     * Defaults to `true` when `globalThis.fetch` is writable, and `false`
+     * otherwise (e.g. Cloudflare Workers, where `globalThis.fetch` is
+     * read-only).
      */
-    mode?: 'push' | 'pull' | undefined
+    polyfill?: boolean | undefined
+  }
+}
+
+function withDetails(error: unknown): Error & { details: string } {
+  if (error instanceof Error) {
+    const details = (error as { details?: unknown }).details
+    if (typeof details === 'string') return error as Error & { details: string }
+    Object.assign(error, { details: error.message })
+    return error as Error & { details: string }
+  }
+  const next = new Error(String(error))
+  Object.assign(next, { details: next.message })
+  return next as Error & { details: string }
+}
+
+/**
+ * Returns `true` if `globalThis.fetch` can be reassigned. Some runtimes
+ * (notably Cloudflare Workers) expose a non-writable, non-configurable
+ * `fetch` that throws when `Mppx.create({ polyfill: true })` tries to
+ * replace it.
+ *
+ * Tries an actual no-op self-reassignment because some runtimes report a
+ * writable descriptor but still throw at assignment time (e.g. Workers
+ * dev runner via Durable Objects).
+ */
+function isFetchWritable(): boolean {
+  try {
+    const original = globalThis.fetch
+    globalThis.fetch = original
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -1139,6 +1316,16 @@ function assertSameAuthOrigin(auth: NonNullable<z.output<typeof Rpc.wallet_conne
 }
 
 /**
+ * Hint appended to "domain mismatch" / "uri mismatch" errors raised in
+ * {@link fetchAuthChallenge}. Most of the time these come from a server
+ * sitting behind a TLS-terminating proxy (Cloudflare Tunnel, ngrok, a
+ * CDN) that forwards `x-forwarded-proto` / `x-forwarded-host` headers the
+ * auth handler isn't honoring by default.
+ */
+const authOriginHint =
+  ' Hint: if the server is behind a reverse proxy or tunnel, set `Handler.auth({ trustProxy: true })` to honor `x-forwarded-*` headers, or pin the public origin with `Handler.auth({ origin: "https://app.example.com" })`.'
+
+/**
  * Fetches an auth challenge from the auth endpoint and validates that the
  * server-supplied message is bound to the auth endpoint's origin and the
  * requested chain.
@@ -1186,11 +1373,11 @@ async function fetchAuthChallenge(
     })
   if (parsed.domain !== expected.host)
     throw new RpcResponse.InvalidParamsError({
-      message: `Server Authentication challenge endpoint \`${url}\` returned a message bound to \`${parsed.domain}\` (expected \`${expected.host}\`).`,
+      message: `Server Authentication challenge endpoint \`${url}\` returned a message bound to \`${parsed.domain}\` (expected \`${expected.host}\`).${authOriginHint}`,
     })
   if (parsed.uri !== expected.origin)
     throw new RpcResponse.InvalidParamsError({
-      message: `Server Authentication challenge endpoint \`${url}\` returned a message with \`uri\` \`${parsed.uri}\` (expected \`${expected.origin}\`).`,
+      message: `Server Authentication challenge endpoint \`${url}\` returned a message with \`uri\` \`${parsed.uri}\` (expected \`${expected.origin}\`).${authOriginHint}`,
     })
   if (parsed.chainId !== chainId)
     throw new RpcResponse.InvalidParamsError({

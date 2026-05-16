@@ -121,9 +121,9 @@ describe('Encoded', () => {
     }>()
   })
 
-  test('wallet_send', () => {
-    expectTypeOf<Rpc.wallet_send.Encoded>().toMatchTypeOf<{
-      method: 'wallet_send'
+  test('wallet_transfer', () => {
+    expectTypeOf<Rpc.wallet_transfer.Encoded>().toMatchTypeOf<{
+      method: 'wallet_transfer'
       params:
         | readonly [
             {
@@ -222,7 +222,7 @@ describe('Request', () => {
       | 'wallet_depositZone'
       | 'wallet_getBalances'
       | 'wallet_revokeAccessKey'
-      | 'wallet_send'
+      | 'wallet_transfer'
       | 'wallet_swap'
       | 'wallet_withdrawZone'
     >()

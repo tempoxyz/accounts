@@ -12,18 +12,28 @@ The adapter owns silent reconnect, session-expiry cleanup, and provider signing 
 ## Usage
 
 ```ts
-import { TurnkeyClient } from '@turnkey/core'
+import { TurnkeyClient, generateWalletAccountsFromAddressFormat } from '@turnkey/core'
 import { Provider, turnkey } from 'accounts'
 
 const provider = Provider.create({
   adapter: turnkey({
     client: new TurnkeyClient({ organizationId, authProxyConfigId }),
+    createAccount: async ({ client, parameters }) => {
+      await client.signUpWithPasskey({
+        passkeyDisplayName: parameters.name,
+        createSubOrgParams: {
+          userName: parameters.name,
+          customWallet: {
+            walletName: 'FooBar',
+            walletAccounts: generateWalletAccountsFromAddressFormat({
+              addresses: ['ADDRESS_FORMAT_ETHEREUM'],
+            }),
+          },
+        },
+      })
+    },
     loadAccounts: async ({ client }) => {
-      const session = await client.getSession()
-      if (!session || session.expiry * 1000 <= Date.now()) await client.loginWithPasskey()
-      return (await client.fetchWallets())
-        .flatMap((wallet) => wallet.accounts)
-        .filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')
+      await client.loginWithPasskey()
     },
   }),
 })
@@ -71,12 +81,14 @@ const provider = Provider.create({
 
 ### loadAccounts
 
-- **Type:** `(params: { client; parameters? }) => Promise<readonly turnkey.WalletAccount[]>`
+- **Type:** `(params: { client; parameters? }) => Promise<readonly Address[] | void>`
 - **Required**
 
 Loads/logs into existing Turnkey wallet accounts. UI is allowed (e.g. passkey prompts to start a new session).
 
-Receives the initialized Turnkey `client` and the optional provider load-accounts `parameters` (e.g. `authorizeAccessKey`, `digest`, `personalSign`, `selectAccount`). Must return all Ethereum-format Turnkey wallet accounts that should be exposed to the provider.
+Receives the initialized Turnkey `client` and the optional provider load-accounts `parameters` (e.g. `authorizeAccessKey`, `digest`, `personalSign`, `selectAccount`). After this callback completes, the adapter calls `client.fetchWallets()` and exposes fetched Ethereum accounts.
+
+By default all the user's Ethereum accounts will be connected. Return `Address[]` to select and order the fetched accounts. The first returned address is active by default, matching `eth_requestAccounts`.
 
 When `createAccount` is omitted, register requests call `loadAccounts` too. This fits email and social auth flows where the same Turnkey ceremony can sign in an existing user or create one.
 
@@ -87,26 +99,11 @@ const provider = Provider.create({
   adapter: turnkey({
     client,
     loadAccounts: async ({ client }) => { // [!code focus]
-      const session = await client.getSession() // [!code focus]
-      if (!session || session.expiry * 1000 <= Date.now()) // [!code focus]
-        await client.loginWithPasskey() // [!code focus]
-      return (await client.fetchWallets()) // [!code focus]
-        .flatMap((wallet) => wallet.accounts) // [!code focus]
-        .filter((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM') // [!code focus]
+      await client.loginWithPasskey() // [!code focus]
     }, // [!code focus]
   }),
 })
 ```
-
-### createAccount
-
-- **Type:** `(params: { client; parameters }) => Promise<turnkey.WalletAccount>`
-- **Optional**
-- **Default:** `loadAccounts`
-
-Creates/registers a Turnkey wallet account when registration needs a separate flow.
-
-Receives the initialized Turnkey `client` and the provider create-account `parameters` (display name, optional `digest`, `personalSign`, `userId`, etc.). Must return a single Ethereum-format Turnkey wallet account.
 
 ```ts
 import { Provider, turnkey } from 'accounts'
@@ -114,13 +111,46 @@ import { Provider, turnkey } from 'accounts'
 const provider = Provider.create({
   adapter: turnkey({
     client,
+    loadAccounts: async ({ client }) => {
+      await client.loginWithPasskey()
+      return [selectedAddress] // [!code focus]
+    },
+  }),
+})
+```
+
+### createAccount
+
+- **Type:** `(params: { client; parameters }) => Promise<readonly Address[] | void>`
+- **Optional**
+- **Default:** `loadAccounts`
+
+Creates/registers a Turnkey wallet account when registration needs a separate flow.
+
+Receives the initialized Turnkey `client` and the provider create-account `parameters` (display name, optional `digest`, `personalSign`, `userId`, etc.). After this callback completes, the adapter calls `client.fetchWallets()` and exposes fetched Ethereum accounts.
+
+Like `loadAccounts`, by default all the user's Ethereum accounts will be connected. Return `Address[]` to choose the returned accounts. The first address is active by default.
+
+```ts
+import { generateWalletAccountsFromAddressFormat } from '@turnkey/core'
+import { Provider, turnkey } from 'accounts'
+
+const provider = Provider.create({
+  adapter: turnkey({
+    client,
     createAccount: async ({ client, parameters }) => { // [!code focus]
       await client.signUpWithPasskey({ // [!code focus]
-        createSubOrgParams: { userName: parameters.name }, // [!code focus]
+        passkeyDisplayName: parameters.name, // [!code focus]
+        createSubOrgParams: { // [!code focus]
+          userName: parameters.name, // [!code focus]
+          customWallet: { // [!code focus]
+            walletName: 'FooBar', // [!code focus]
+            walletAccounts: generateWalletAccountsFromAddressFormat({ // [!code focus]
+              addresses: ['ADDRESS_FORMAT_ETHEREUM'], // [!code focus]
+            }), // [!code focus]
+          }, // [!code focus]
+        }, // [!code focus]
       }) // [!code focus]
-      return (await client.fetchWallets()) // [!code focus]
-        .flatMap((wallet) => wallet.accounts) // [!code focus]
-        .find((account) => account.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')! // [!code focus]
     }, // [!code focus]
     loadAccounts: async ({ client }) => { /* ... */ },
   }),

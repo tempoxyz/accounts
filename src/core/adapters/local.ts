@@ -80,9 +80,7 @@ export function local(options: local.Options): Adapter.Adapter {
       const account = getAccount({ ...options, signable: true })
       const keyAuthorization = AccessKey.getPending(account, { store })
       try {
-        const result = await fn(account, keyAuthorization ?? undefined)
-        AccessKey.removePending(account, { store })
-        return result
+        return await fn(account, keyAuthorization ?? undefined)
       } catch (error) {
         if (account.source !== 'accessKey') throw error
         AccessKey.invalidate(account, error, { store })
@@ -144,9 +142,7 @@ export function local(options: local.Options): Adapter.Adapter {
         async authorizeAccessKey(parameters) {
           const prepared = await prepareKeyAuthorization(parameters)
           const account = getAccount({ accessKey: false, signable: true })
-          const keyAuthorization = await signKeyAuthorization(account, prepared, {
-            signature: parameters.signature,
-          })
+          const keyAuthorization = await signKeyAuthorization(account, prepared)
           return { keyAuthorization, rootAddress: account.address }
         },
         async loadAccounts(parameters) {
@@ -301,10 +297,12 @@ export function local(options: local.Options): Adapter.Adapter {
             }),
           )
           const signed = await account.signTransaction(prepared as never)
-          return await client.request({
+          const result = await client.request({
             method: 'eth_sendRawTransaction' as never,
             params: [signed],
           })
+          AccessKey.removePending(account, { store })
+          return result
         },
         async sendTransactionSync(parameters) {
           const { feePayer, ...rest } = parameters
@@ -330,10 +328,12 @@ export function local(options: local.Options): Adapter.Adapter {
             }),
           )
           const signed = await account.signTransaction(prepared as never)
-          return await client.request({
+          const result = await client.request({
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],
           })
+          AccessKey.removePending(account, { store })
+          return result
         },
       },
     }

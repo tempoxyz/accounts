@@ -1,6 +1,7 @@
 import { AbiFunction, Address, Hex, Provider, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { Account as TempoAccount } from 'viem/tempo'
+import type { Client, Transport } from 'viem'
+import { Account as TempoAccount, Actions } from 'viem/tempo'
 
 import type { OneOf } from '../internal/types.js'
 import * as ExecutionError from './ExecutionError.js'
@@ -15,6 +16,21 @@ const removalErrorNames = new Set([
   'KeyNotFound',
   'SignatureTypeMismatch',
 ])
+
+/** Access-key publication states. */
+export const status = {
+  /** No matching usable access key was found. */
+  missing: 'missing',
+  /** A matching key exists locally and still needs its first transaction to publish the authorization. */
+  pending: 'pending',
+  /** A matching key exists on-chain and can be used. */
+  published: 'published',
+  /** A matching key exists but is past its expiry. */
+  expired: 'expired',
+} as const
+
+/** Publication state for an access key. */
+export type Status = (typeof status)[keyof typeof status]
 
 /** Access key entry stored alongside accounts. */
 export type AccessKey = {
@@ -249,6 +265,48 @@ export declare namespace selectAccount {
   }
 }
 
+/** Returns publication status for a stored or on-chain access key. */
+export async function getStatus(options: getStatus.Options): Promise<getStatus.ReturnType> {
+  const { accessKey, address, calls, chainId, client, store } = options
+  const now = options.now ?? Date.now() / 1000
+  const local = store
+    .getState()
+    .accessKeys.find((key) => matches(key, { accessKey, address, calls, chainId }))
+
+  if (local) {
+    if (isExpired(local.expiry, now)) return status.expired
+    if (local.keyAuthorization) return status.pending
+    if (client) return await getPublishedStatus(client, { accessKey: local.address, address, now })
+    return status.published
+  }
+
+  if (accessKey && client) return await getPublishedStatus(client, { accessKey, address, now })
+  return status.missing
+}
+
+export declare namespace getStatus {
+  /** Options for {@link getStatus}. */
+  type Options = {
+    /** Root account address that owns the access key. */
+    address: Address.Address
+    /** Specific access key address to query. When omitted, the first locally matching key is used. */
+    accessKey?: Address.Address | undefined
+    /** Calls to match against access key scopes. */
+    calls?: readonly { to?: Address.Address | undefined; data?: Hex.Hex | undefined }[] | undefined
+    /** Chain ID the access key must be authorized on. */
+    chainId: number
+    /** Client used to verify published state on-chain. */
+    client?: Client<Transport> | undefined
+    /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
+    now?: number | undefined
+    /** Reactive state store. */
+    store: Store.Store
+  }
+
+  /** Access-key publication status. */
+  type ReturnType = Status
+}
+
 /** Removes an access key from the store. */
 export function revoke(options: revoke.Options): void {
   const { address, store } = options
@@ -273,23 +331,111 @@ function scopesMatch(
     calls?: readonly { to?: Address.Address | undefined; data?: Hex.Hex | undefined }[] | undefined
   },
 ): boolean {
-  if (!key.scopes) return true
+  const scopes = key.scopes
+  if (typeof scopes === 'undefined') return true
+  if (!Array.isArray(scopes)) return false
   if (!options.calls) return false
   return options.calls.every((call) => {
     if (!call.to) return false
     const callTo = call.to.toLowerCase()
     const callSelector = call.data?.slice(0, 10).toLowerCase()
-    return key.scopes!.some((scope) => {
+    return scopes.some((scope) => {
+      if (!isScope(scope)) return false
       if (scope.address.toLowerCase() !== callTo) return false
-      if (!scope.selector) return true
-      const scopeSelector = (
-        scope.selector.startsWith('0x') && scope.selector.length === 10
-          ? scope.selector
-          : AbiFunction.getSelector(scope.selector)
-      ).toLowerCase()
-      return callSelector === scopeSelector
+      if (!scope.selector) return scope.recipients ? scope.recipients.length === 0 : true
+      const scopeSelector = getSelector(scope.selector)
+      if (!scopeSelector || callSelector !== scopeSelector) return false
+      return recipientsMatch(scope.recipients, call.data)
     })
   })
+}
+
+function matches(
+  key: AccessKey,
+  options: {
+    accessKey?: Address.Address | undefined
+    address: Address.Address
+    calls?: readonly { to?: Address.Address | undefined; data?: Hex.Hex | undefined }[] | undefined
+    chainId: number
+  },
+): boolean {
+  const { accessKey, address, calls, chainId } = options
+  if (key.access.toLowerCase() !== address.toLowerCase()) return false
+  if (key.chainId !== chainId) return false
+  if (accessKey && key.address.toLowerCase() !== accessKey.toLowerCase()) return false
+  return scopesMatch(key, { calls })
+}
+
+function isExpired(expiry: number | undefined, now: number): boolean {
+  return typeof expiry === 'number' && expiry < now
+}
+
+async function getPublishedStatus(
+  client: Client<Transport>,
+  options: { accessKey: Address.Address; address: Address.Address; now: number },
+): Promise<Status> {
+  const { accessKey, address, now } = options
+  try {
+    const metadata = await Actions.accessKey.getMetadata(client, {
+      account: address,
+      accessKey,
+    })
+    if (metadata.isRevoked) return status.missing
+    if (metadata.expiry > 0n && metadata.expiry < BigInt(Math.floor(now))) return status.expired
+    return status.published
+  } catch (error) {
+    if (!(error instanceof Error)) throw error
+    const parsed = ExecutionError.parse(error)
+    if (parsed.errorName === 'KeyNotFound' || parsed.errorName === 'KeyAlreadyRevoked')
+      return status.missing
+    throw error
+  }
+}
+
+function isScope(scope: unknown): scope is NonNullable<AccessKey['scopes']>[number] {
+  if (!scope || typeof scope !== 'object') return false
+  const value = scope as {
+    address?: unknown
+    recipients?: unknown
+    selector?: unknown
+  }
+  if (typeof value.address !== 'string' || !Address.validate(value.address)) return false
+  if (typeof value.selector !== 'undefined' && typeof value.selector !== 'string') return false
+  if (typeof value.recipients !== 'undefined') {
+    if (!Array.isArray(value.recipients)) return false
+    if (value.recipients.some((recipient) => typeof recipient !== 'string')) return false
+    if (value.recipients.some((recipient) => !Address.validate(recipient))) return false
+  }
+  return true
+}
+
+function getSelector(selector: string): string | undefined {
+  try {
+    return (
+      selector.startsWith('0x') && selector.length === 10
+        ? selector
+        : AbiFunction.getSelector(selector)
+    ).toLowerCase()
+  } catch {
+    return undefined
+  }
+}
+
+function recipientsMatch(
+  recipients: readonly Address.Address[] | undefined,
+  data: Hex.Hex | undefined,
+): boolean {
+  if (!recipients || recipients.length === 0) return true
+  const recipient = getCallRecipient(data)
+  if (!recipient) return false
+  return recipients.some((address) => address.toLowerCase() === recipient.toLowerCase())
+}
+
+function getCallRecipient(data: Hex.Hex | undefined): Address.Address | undefined {
+  if (!data || data.length < 74) return undefined
+  const recipient = `0x${data.slice(34, 74)}` as Address.Address
+  if (!Address.validate(recipient)) return undefined
+  return recipient
 }
 
 function shouldRemoveForError(error: unknown): boolean {

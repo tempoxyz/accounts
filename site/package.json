@@ -15,6 +15,7 @@
     "@vitejs/plugin-react": "catalog:",
     "accounts": "workspace:*",
     "mermaid": "^11.14.0",
+    "mppx": "catalog:",
     "ox": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
@@ -32,6 +33,6 @@
     "@types/node": "catalog:",
     "eventemitter3": "^5.0.1",
     "typescript": "catalog:",
-    "unplugin-icons": "^22.5.0"
+    "unplugin-icons": "^23.0.1"
   }
 }
