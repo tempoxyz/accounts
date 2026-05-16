@@ -37,9 +37,12 @@ payment method:
 ```ts
 import { Hono } from 'hono'
 import { Mppx, tempo } from 'mppx/hono'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const account = privateKeyToAccount('0x...')
 
 const mppx = Mppx.create({
-  methods: [tempo({ recipient: '0x...', currency: '0x...', testnet: true })],
+  methods: [tempo({ account, currency: '0x...', feePayer: true, testnet: true })],
   realm: 'mpp',
   secretKey: '...',
 })
@@ -53,3 +56,8 @@ On the client, the standard `tempoWallet()` connector is enough — the
 `Provider.create({ mpp: true })` default automatically intercepts the 402
 responses, signs the payment with the connected account, and retries the
 original request with the credential attached.
+
+For pull-mode charge credentials, `feePayer: true` lets the worker co-sign and
+broadcast the signed payment transaction. Without a fee payer, the worker can
+verify the credential shape but cannot pay the transaction fee needed to settle
+the charge on-chain.

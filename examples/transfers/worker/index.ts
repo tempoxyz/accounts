@@ -5,7 +5,7 @@ import { tempoModerato } from 'viem/chains'
 const app = new Hono()
 
 const mppx = Mppx.create({
-  methods: [tempo()],
+  methods: [tempo.charge()],
 })
 
 app.get(

@@ -27,6 +27,10 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     chains: readonly [Chain, ...Chain[]]
     /** Returns a viem Account for the given address (or active account). */
     getAccount: Account.Find
+    /** Returns local or on-chain publication status for an access key. */
+    getAccessKeyStatus(
+      options?: getAccessKeyStatus.Options | undefined,
+    ): Promise<getAccessKeyStatus.ReturnType>
     /** Returns a viem Client for the given (or current) chain ID. */
     getClient(options?: {
       chainId?: number | undefined
@@ -321,7 +325,6 @@ export function create(options: create.Options = {}): create.ReturnType {
                                 ...KeyAuthorization.toRpc(keyAuth),
                               } as never,
                             })
-                            AccessKey.removePending(account, { store })
                             return result
                           } catch (error) {
                             AccessKey.invalidate(account, error, { store })
@@ -397,45 +400,49 @@ export function create(options: create.Options = {}): create.ReturnType {
                   }
 
                   case 'wallet_sendCalls': {
-                    assertConnected()
-                    const decoded = request._decoded.params?.[0]
-                    const { calls = [], capabilities, chainId, from } = decoded ?? {}
-                    const sync = capabilities?.sync
-                    const feePayer = resolveFeePayer(
-                      capabilities?.feePayer ?? (feePayerConfig ? true : undefined),
-                    )
-                    const state = store.getState()
-                    const txRequest = {
-                      calls,
-                      chainId,
-                      from: from ?? state.accounts[state.activeAccount]?.address,
-                      ...(feePayer ? { feePayer } : {}),
-                    }
-                    if (!sync) {
-                      const hash = await actions.sendTransaction(txRequest, {
-                        method: 'eth_sendTransaction',
+                    try {
+                      assertConnected()
+                      const decoded = request._decoded.params?.[0]
+                      const { calls = [], capabilities, chainId, from } = decoded ?? {}
+                      const sync = capabilities?.sync
+                      const feePayer = resolveFeePayer(
+                        capabilities?.feePayer ?? (feePayerConfig ? true : undefined),
+                      )
+                      const state = store.getState()
+                      const txRequest = {
+                        calls,
+                        chainId,
+                        from: from ?? state.accounts[state.activeAccount]?.address,
+                        ...(feePayer ? { feePayer } : {}),
+                      }
+                      if (!sync) {
+                        const hash = await actions.sendTransaction(txRequest, {
+                          method: 'eth_sendTransaction',
+                          params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
+                        })
+                        const chainId = Hex.fromNumber(store.getState().chainId)
+                        const id = Hex.concat(hash, Hex.padLeft(chainId, 32), sendCallsMagic)
+                        return { capabilities: { sync }, id }
+                      }
+                      const receipt = await actions.sendTransactionSync(txRequest as never, {
+                        method: 'eth_sendTransactionSync',
                         params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
                       })
-                      const chainId = Hex.fromNumber(store.getState().chainId)
-                      const id = Hex.concat(hash, Hex.padLeft(chainId, 32), sendCallsMagic)
-                      return { capabilities: { sync }, id }
+                      const hash = receipt.transactionHash
+                      const chainIdHex = Hex.fromNumber(store.getState().chainId)
+                      const id = Hex.concat(hash, Hex.padLeft(chainIdHex, 32), sendCallsMagic)
+                      return {
+                        atomic: true,
+                        capabilities: { sync },
+                        chainId: chainIdHex,
+                        id,
+                        receipts: [receipt],
+                        status: (receipt as { status: string }).status === '0x1' ? 200 : 500,
+                        version: '2.0.0',
+                      } satisfies Rpc.wallet_sendCalls.Encoded['returns']
+                    } catch (error) {
+                      throw withDetails(error)
                     }
-                    const receipt = await actions.sendTransactionSync(txRequest as never, {
-                      method: 'eth_sendTransactionSync',
-                      params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
-                    })
-                    const hash = receipt.transactionHash
-                    const chainIdHex = Hex.fromNumber(store.getState().chainId)
-                    const id = Hex.concat(hash, Hex.padLeft(chainIdHex, 32), sendCallsMagic)
-                    return {
-                      atomic: true,
-                      capabilities: { sync },
-                      chainId: chainIdHex,
-                      id,
-                      receipts: [receipt],
-                      status: (receipt as { status: string }).status === '0x1' ? 200 : 500,
-                      version: '2.0.0',
-                    } satisfies Rpc.wallet_sendCalls.Encoded['returns']
                   }
 
                   case 'wallet_getBalances': {
@@ -965,6 +972,19 @@ export function create(options: create.Options = {}): create.ReturnType {
     {
       chains,
       getAccount,
+      async getAccessKeyStatus(options: getAccessKeyStatus.Options = {}) {
+        const state = store.getState()
+        const address = options.address ?? state.accounts[state.activeAccount]?.address
+        if (!address) return AccessKey.status.missing
+        const chainId = options.chainId ?? state.chainId
+        return await AccessKey.getStatus({
+          ...options,
+          address,
+          chainId,
+          client: provider.getClient({ chainId }),
+          store,
+        })
+      },
       getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
         const { chainId, feePayer } = options
         return Client.fromChainId(chainId, {
@@ -1012,12 +1032,27 @@ export function create(options: create.Options = {}): create.ReturnType {
       const account = provider.getAccount()
       return Object.assign(client, { account })
     }
-    Mppx.create({
+    const mppx = Mppx.create({
       methods: [
         mppx_tempo({ ...methodOptions, getClient, mode }),
         mppx_tempo.subscription({ getClient }),
       ],
       polyfill,
+    })
+    mppx.onPaymentResponse(({ challenge, method }) => {
+      if (method.name !== 'tempo' || method.intent !== 'charge') return
+      const amount = challenge.request.amount
+      if (
+        typeof amount !== 'string' &&
+        typeof amount !== 'number' &&
+        typeof amount !== 'bigint' &&
+        typeof amount !== 'boolean'
+      )
+        return
+      if (BigInt(amount) === 0n) return
+      const account = provider.getAccount()
+      if ('source' in account && account.source === 'accessKey')
+        AccessKey.removePending(account, { store })
     })
   }
 
@@ -1110,6 +1145,23 @@ export declare namespace create {
   type ReturnType = Provider
 }
 
+export declare namespace getAccessKeyStatus {
+  /** Options for {@link Provider.getAccessKeyStatus}. */
+  type Options = {
+    /** Root account address. Defaults to the active account. */
+    address?: Address.Address | undefined
+    /** Specific access key address to query. When omitted, the first locally matching key is used. */
+    accessKey?: Address.Address | undefined
+    /** Calls to match against access key scopes. */
+    calls?: readonly { to?: Address.Address | undefined; data?: Hex.Hex | undefined }[] | undefined
+    /** Chain ID the access key must be authorized on. Defaults to the active chain. */
+    chainId?: number | undefined
+  }
+
+  /** Access-key publication status. */
+  type ReturnType = AccessKey.Status
+}
+
 export declare namespace mpp {
   /** Options for Machine Payment Protocol (mppx) integration. */
   type Options = Omit<mppx_tempo.Parameters, 'account' | 'getClient'> & {
@@ -1122,6 +1174,18 @@ export declare namespace mpp {
      */
     polyfill?: boolean | undefined
   }
+}
+
+function withDetails(error: unknown): Error & { details: string } {
+  if (error instanceof Error) {
+    const details = (error as { details?: unknown }).details
+    if (typeof details === 'string') return error as Error & { details: string }
+    Object.assign(error, { details: error.message })
+    return error as Error & { details: string }
+  }
+  const next = new Error(String(error))
+  Object.assign(next, { details: next.message })
+  return next as Error & { details: string }
 }
 
 /**
