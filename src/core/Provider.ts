@@ -321,7 +321,6 @@ export function create(options: create.Options = {}): create.ReturnType {
                                 ...KeyAuthorization.toRpc(keyAuth),
                               } as never,
                             })
-                            AccessKey.removePending(account, { store })
                             return result
                           } catch (error) {
                             AccessKey.invalidate(account, error, { store })
@@ -1012,9 +1011,24 @@ export function create(options: create.Options = {}): create.ReturnType {
       const account = provider.getAccount()
       return Object.assign(client, { account })
     }
-    Mppx.create({
+    const mppx = Mppx.create({
       methods: [mppx_tempo({ getClient, mode }), mppx_tempo.subscription({ getClient })],
       polyfill,
+    })
+    mppx.onPaymentResponse(({ challenge, method }) => {
+      if (method.name !== 'tempo' || method.intent !== 'charge') return
+      const amount = challenge.request.amount
+      if (
+        typeof amount !== 'string' &&
+        typeof amount !== 'number' &&
+        typeof amount !== 'bigint' &&
+        typeof amount !== 'boolean'
+      )
+        return
+      if (BigInt(amount) === 0n) return
+      const account = provider.getAccount()
+      if ('source' in account && account.source === 'accessKey')
+        AccessKey.removePending(account, { store })
     })
   }
 

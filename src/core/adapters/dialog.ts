@@ -154,7 +154,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
       ) => Promise<result>,
-    ): Promise<result | undefined> {
+    ): Promise<{ account: TempoAccount.Account; result: result } | undefined> {
       if (!options.from || typeof options.chainId === 'undefined') return undefined
       const account = AccessKey.selectAccount({
         address: options.from,
@@ -166,8 +166,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       const keyAuthorization = AccessKey.getPending(account, { store })
       try {
         const result = await fn(account, keyAuthorization ?? undefined)
-        AccessKey.removePending(account, { store })
-        return result
+        return { account, result }
       } catch (err) {
         if (AccessKey.invalidate(account, err, { store }))
           console.warn('[accounts] access key invalidated, falling through to dialog:', err)
@@ -307,7 +306,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             })
             return await account.signTransaction(prepared as never)
           })
-          if (result !== undefined) return result
+          if (result !== undefined) return result.result
           return await provider.request({
             ...request,
             params: [z.encode(Rpc.transactionRequest, parameters)] as const,
@@ -342,7 +341,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               params: [signed],
             })
           })
-          if (result !== undefined) return result
+          if (result !== undefined) {
+            AccessKey.removePending(result.account, { store })
+            return result.result
+          }
           return await provider.request({
             ...request,
             params: [z.encode(Rpc.transactionRequest, parameters)] as const,
@@ -373,7 +375,10 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               params: [signed],
             })
           })
-          if (result !== undefined) return result
+          if (result !== undefined) {
+            AccessKey.removePending(result.account, { store })
+            return result.result
+          }
           return await provider.request({
             ...request,
             params: [z.encode(Rpc.transactionRequest, parameters)] as const,

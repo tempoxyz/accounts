@@ -325,7 +325,7 @@ export function turnkey<const client extends turnkey.Client>(
         account: TempoAccount.Account,
         keyAuthorization?: KeyAuthorization.Signed,
       ) => Promise<result>,
-    ) {
+    ): Promise<{ account: TempoAccount.Account; result: result } | undefined> {
       const account = (() => {
         try {
           return getAccount({ ...options, signable: true })
@@ -338,8 +338,7 @@ export function turnkey<const client extends turnkey.Client>(
       const keyAuthorization = AccessKey.getPending(account, { store })
       try {
         const result = await fn(account, keyAuthorization ?? undefined)
-        AccessKey.removePending(account, { store })
-        return result
+        return { account, result }
       } catch (error) {
         AccessKey.invalidate(account, error, { store })
         return undefined
@@ -516,7 +515,7 @@ export function turnkey<const client extends turnkey.Client>(
               return await account.signTransaction(prepared as never)
             },
           )
-          if (result !== undefined) return result
+          if (result !== undefined) return result.result
           return await signTransaction(parameters)
         },
         async signTypedData(parameters) {
@@ -557,7 +556,10 @@ export function turnkey<const client extends turnkey.Client>(
               })
             },
           )
-          if (result !== undefined) return result
+          if (result !== undefined) {
+            AccessKey.removePending(result.account, { store })
+            return result.result
+          }
           const signed = await signTransaction(parameters)
           const viemClient = getClient({
             chainId: parameters.chainId,
@@ -591,7 +593,10 @@ export function turnkey<const client extends turnkey.Client>(
               })
             },
           )
-          if (result !== undefined) return result
+          if (result !== undefined) {
+            AccessKey.removePending(result.account, { store })
+            return result.result
+          }
           const signed = await signTransaction(parameters)
           const viemClient = getClient({
             chainId: parameters.chainId,

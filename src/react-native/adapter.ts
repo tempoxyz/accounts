@@ -205,9 +205,7 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
           keyAuthorization = await reauthorizeManagedKey(rootAddress, managedKey)
 
       try {
-        const result = await fn(account, keyAuthorization ?? undefined)
-        AccessKey.removePending(account, { store })
-        return result
+        return await fn(account, keyAuthorization ?? undefined)
       } catch (error) {
         AccessKey.remove(account, { store })
         throw error
@@ -348,10 +346,12 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
             }),
           )
           const signed = await account.signTransaction(prepared as never)
-          return await client.request({
+          const result = await client.request({
             method: 'eth_sendRawTransaction' as never,
             params: [signed],
           })
+          AccessKey.removePending(account, { store })
+          return result
         },
         async sendTransactionSync(parameters) {
           const { feePayer, ...rest } = parameters
@@ -369,10 +369,12 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
             }),
           )
           const signed = await account.signTransaction(prepared as never)
-          return await client.request({
+          const result = await client.request({
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],
           })
+          AccessKey.removePending(account, { store })
+          return result
         },
         async signPersonalMessage({ address, data }) {
           await loadManagedKey(address)

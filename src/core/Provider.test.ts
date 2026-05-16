@@ -997,6 +997,33 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       `)
     })
 
+    test('behavior: signing keeps pending access key retryable', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
+
+      const signed = await provider.request({
+        method: 'eth_signTransaction',
+        params: [{ calls: [transferCall] }],
+      })
+
+      expect(signed).toMatch(/^0x/)
+      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
+    })
+
     test('error: throws when not connected', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
@@ -1846,8 +1873,13 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         params: [{ from: address, ...fillTx }],
       })
       expect(result.tx.gas).toBeDefined()
+      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
 
-      // Pending keyAuthorization should be consumed after successful fill.
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ from: address, ...fillTx, gas: result.tx.gas }],
+      })
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
       expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
     })
 
