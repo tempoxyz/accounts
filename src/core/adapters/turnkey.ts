@@ -7,7 +7,7 @@ import {
   RpcResponse,
   Secp256k1,
 } from 'ox'
-import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { KeyAuthorization } from 'ox/tempo'
 import { hashMessage, hashTypedData, isAddressEqual } from 'viem'
 import type { Address } from 'viem/accounts'
 import { prepareTransactionRequest } from 'viem/actions'
@@ -273,48 +273,6 @@ export function turnkey<const client extends turnkey.Client>(
       return signatureToHex(result)
     }
 
-    async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
-      const { address, expiry, keyType, limits, publicKey, scopes } = options
-      return await AccessKey.prepare({
-        address,
-        chainId: options.chainId ?? getClient().chain.id,
-        expiry,
-        keyType,
-        limits,
-        publicKey,
-        scopes,
-      })
-    }
-
-    async function signKeyAuthorization(
-      account: turnkey.WalletAccount,
-      prepared: Awaited<ReturnType<typeof prepareKeyAuthorization>>,
-      options: {
-        signature?: Hex.Hex | undefined
-      } = {},
-    ) {
-      const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
-      const signature =
-        options.signature ??
-        (await signPayload({
-          payload: digest,
-          turnkeyClient: await getTurnkeyClient(),
-          walletAccount: account,
-        }))
-      const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
-        signature: SignatureEnvelope.from(signature),
-      })
-
-      AccessKey.save({
-        address: core_Address.from(account.address),
-        keyAuthorization,
-        ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
-        store,
-      })
-
-      return KeyAuthorization.toRpc(keyAuthorization)
-    }
-
     async function withAccessKey<result>(
       options: {
         address?: Address | undefined
@@ -419,10 +377,12 @@ export function turnkey<const client extends turnkey.Client>(
           const account = walletAccounts[0]
           const keyAuthorization = authorizeAccessKey
             ? account
-              ? await signKeyAuthorization(
-                  account,
-                  await prepareKeyAuthorization(authorizeAccessKey),
-                )
+              ? await AccessKey.authorize({
+                  account: toTempoAccount(account),
+                  chainId: getClient().chain.id,
+                  parameters: authorizeAccessKey,
+                  store,
+                })
               : undefined
             : undefined
 
@@ -461,10 +421,12 @@ export function turnkey<const client extends turnkey.Client>(
           const account = walletAccounts[0]
           const keyAuthorization =
             authorizeAccessKey && account
-              ? await signKeyAuthorization(
-                  account,
-                  await prepareKeyAuthorization(authorizeAccessKey),
-                )
+              ? await AccessKey.authorize({
+                  account: toTempoAccount(account),
+                  chainId: getClient().chain.id,
+                  parameters: authorizeAccessKey,
+                  store,
+                })
               : undefined
 
           return {
@@ -483,8 +445,12 @@ export function turnkey<const client extends turnkey.Client>(
         },
         async authorizeAccessKey(parameters) {
           const account = await accountForSigning(undefined)
-          const prepared = await prepareKeyAuthorization(parameters)
-          const keyAuthorization = await signKeyAuthorization(account, prepared)
+          const keyAuthorization = await AccessKey.authorize({
+            account: toTempoAccount(account),
+            chainId: getClient().chain.id,
+            parameters,
+            store,
+          })
           return { keyAuthorization, rootAddress: core_Address.from(account.address) }
         },
         async signPersonalMessage(parameters) {

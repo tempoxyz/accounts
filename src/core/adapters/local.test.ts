@@ -31,6 +31,41 @@ describe('local', () => {
         ]
       `)
     })
+
+    test('default: authorizeAccessKey folds the key authorization digest into the ceremony', async () => {
+      const captured: { digest: Hex | undefined }[] = []
+      const { adapter } = setup({
+        loadAccounts: makeLoadAccounts(0, captured),
+      })
+
+      const result = await adapter.actions.loadAccounts(
+        {
+          authorizeAccessKey: {
+            address: core_accounts[1]!.address,
+            expiry: 0,
+            keyType: 'secp256k1',
+          },
+        },
+        { method: 'wallet_connect', params: undefined },
+      )
+
+      expect({
+        digest: captured[0]?.digest,
+        hasSignature: typeof result.signature === 'string',
+        keyAuthorizationSignature: result.keyAuthorization?.signature,
+      }).toMatchInlineSnapshot(`
+        {
+          "digest": "0x64d5413088ae92221fde7900d29b540efc040ac134ccf50d3e916a9011f81bd0",
+          "hasSignature": true,
+          "keyAuthorizationSignature": {
+            "r": "0x876bd6f1719bdffc65382322939303ef37a804df5011b73704e7f4d9e4603cc8",
+            "s": "0x6c377e36d7a76b2dd15fdc9599ed663136a8e0faa33c3950e72c3b503bc18bab",
+            "type": "secp256k1",
+            "yParity": "0x1",
+          },
+        }
+      `)
+    })
   })
 
   describe('loadAccounts: personalSign', () => {

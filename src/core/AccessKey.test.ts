@@ -1,4 +1,4 @@
-import { WebCryptoP256 } from 'ox'
+import { Hex, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { encodeErrorResult } from 'viem'
 import { Abis, Account as TempoAccount, Actions } from 'viem/tempo'
@@ -290,9 +290,9 @@ describe('generate', () => {
   })
 })
 
-describe('prepare', () => {
+describe('prepareAuthorization', () => {
   test('default: prepares generated p256 key authorization', async () => {
-    const result = await AccessKey.prepare({ chainId: 1, expiry: 123 })
+    const result = await AccessKey.prepareAuthorization({ chainId: 1, expiry: 123 })
 
     expect(result.keyAuthorization.address).toMatch(/^0x[0-9a-f]{40}$/i)
     expect(result.keyAuthorization.chainId).toMatchInlineSnapshot(`1n`)
@@ -302,7 +302,7 @@ describe('prepare', () => {
   })
 
   test('behavior: prepares external key authorization from address', async () => {
-    const result = await AccessKey.prepare({
+    const result = await AccessKey.prepareAuthorization({
       address: accounts[1]!.address,
       chainId: 123n,
       expiry: 456,
@@ -354,7 +354,7 @@ describe('prepare', () => {
     const keyPair = await WebCryptoP256.createKeyPair()
     const account = TempoAccount.fromWebCryptoP256(keyPair)
 
-    const result = await AccessKey.prepare({
+    const result = await AccessKey.prepareAuthorization({
       chainId: 123n,
       expiry: 456,
       keyType: 'p256',
@@ -375,13 +375,94 @@ describe('prepare', () => {
   })
 
   test('behavior: defaults external key type to secp256k1', async () => {
-    const result = await AccessKey.prepare({
+    const result = await AccessKey.prepareAuthorization({
       address: accounts[1]!.address,
       chainId: 1,
       expiry: 123,
     })
 
     expect(result.keyAuthorization.type).toMatchInlineSnapshot(`"secp256k1"`)
+  })
+})
+
+describe('saveAuthorization', () => {
+  test('default: saves prepared authorization with provided signature', async () => {
+    const store = createStore()
+    const prepared = await AccessKey.prepareAuthorization({
+      address: accounts[1]!.address,
+      chainId: 1,
+      expiry: 123,
+    })
+    const signature = `0x${'11'.repeat(32)}${'22'.repeat(32)}1b` as const
+
+    const result = AccessKey.saveAuthorization({
+      address: rootAddress,
+      prepared,
+      signature,
+      store,
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "chainId": "0x1",
+        "expiry": "0x7b",
+        "keyId": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+        "keyType": "secp256k1",
+        "limits": undefined,
+        "signature": {
+          "r": "0x1111111111111111111111111111111111111111111111111111111111111111",
+          "s": "0x2222222222222222222222222222222222222222222222222222222222222222",
+          "type": "secp256k1",
+          "yParity": "0x0",
+        },
+      }
+    `)
+    expect(store.getState().accessKeys.map(({ keyAuthorization: _, ...accessKey }) => accessKey))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+          "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+          "chainId": 1,
+          "expiry": 123,
+          "keyType": "secp256k1",
+          "limits": undefined,
+          "scopes": undefined,
+        },
+      ]
+    `)
+  })
+})
+
+describe('authorize', () => {
+  test('default: prepares, signs, and saves authorization', async () => {
+    const store = createStore()
+    const digests: Hex.Hex[] = []
+    const signature = `0x${'11'.repeat(32)}${'22'.repeat(32)}1b` as const
+    const account = {
+      ...accounts[0]!,
+      sign: async (parameters: { hash: Hex.Hex }) => {
+        digests.push(parameters.hash)
+        return signature
+      },
+    } as TempoAccount.Account
+
+    await AccessKey.authorize({
+      account,
+      chainId: 1,
+      parameters: {
+        address: accounts[1]!.address,
+        expiry: 123,
+      },
+      store,
+    })
+
+    expect(digests).toMatchInlineSnapshot(`
+      [
+        "0xea47721547363fc82a5dca62b4544e4718d861b3df10bfac65d30102594b5c26",
+      ]
+    `)
+    expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
   })
 })
 

@@ -1,5 +1,5 @@
 import { AbiFunction, Address, Hex, Provider, PublicKey, WebCryptoP256 } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import type { Client, Transport } from 'viem'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
 
@@ -107,7 +107,9 @@ export declare namespace generate {
 }
 
 /** Prepares an unsigned key authorization and local key material when needed. */
-export async function prepare(options: prepare.Options): Promise<prepare.ReturnType> {
+export async function prepareAuthorization(
+  options: prepareAuthorization.Options,
+): Promise<prepareAuthorization.ReturnType> {
   const { address, chainId, expiry, keyType, limits, publicKey, scopes } = options
 
   if (address || publicKey) {
@@ -134,8 +136,8 @@ export async function prepare(options: prepare.Options): Promise<prepare.ReturnT
   return { keyAuthorization, keyPair }
 }
 
-export declare namespace prepare {
-  /** Options for {@link prepare}. */
+export declare namespace prepareAuthorization {
+  /** Options for {@link prepareAuthorization}. */
   type Options = {
     /** External access key address. Alternative to `publicKey`. */
     address?: Address.Address | undefined
@@ -160,6 +162,91 @@ export declare namespace prepare {
     /** Generated WebCrypto key pair for local access keys. */
     keyPair?: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
   }
+}
+
+/** Saves a prepared access key authorization with an existing signature. */
+export function saveAuthorization(
+  options: saveAuthorization.Options,
+): saveAuthorization.ReturnType {
+  const { address, prepared, signature, store } = options
+  const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
+    signature: SignatureEnvelope.from(signature),
+  })
+
+  save({
+    address,
+    keyAuthorization,
+    ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
+    store,
+  })
+
+  return KeyAuthorization.toRpc(keyAuthorization)
+}
+
+export declare namespace saveAuthorization {
+  /** Options for {@link saveAuthorization}. */
+  type Options = {
+    /** Root account address that owns this access key. */
+    address: Address.Address
+    /** Prepared unsigned key authorization returned by {@link prepareAuthorization}. */
+    prepared: prepareAuthorization.ReturnType
+    /** Signature over the key authorization digest. */
+    signature: Hex.Hex
+    /** Reactive state store. */
+    store: Store.Store
+  }
+
+  /** Signed key authorization in RPC form. */
+  type ReturnType = KeyAuthorization.Rpc
+}
+
+/** Prepares, signs, and saves an access key authorization. */
+export async function authorize(options: authorize.Options): Promise<authorize.ReturnType> {
+  const { account, chainId, parameters, store } = options
+  const prepared = await prepareAuthorization({
+    ...parameters,
+    chainId: parameters.chainId ?? chainId,
+  })
+  return await signAuthorization({ account, prepared, store })
+}
+
+export declare namespace authorize {
+  /** Options for {@link authorize}. */
+  type Options = {
+    /** Root account that owns this access key and signs its authorization. */
+    account: TempoAccount.Account
+    /** Default chain ID for the authorization when `parameters.chainId` is not set. */
+    chainId: bigint | number
+    /** Access key authorization parameters. */
+    parameters: Omit<prepareAuthorization.Options, 'chainId'> & {
+      /** Chain ID the key authorization is scoped to. */
+      chainId?: bigint | number | undefined
+    }
+    /** Reactive state store. */
+    store: Store.Store
+  }
+
+  /** Signed key authorization in RPC form. */
+  type ReturnType = KeyAuthorization.Rpc
+}
+
+async function signAuthorization(
+  options: signAuthorization.Options,
+): Promise<signAuthorization.ReturnType> {
+  const { account, prepared, store } = options
+  const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
+  const signature = await account.sign({ hash: digest })
+  return saveAuthorization({ address: account.address, prepared, signature, store })
+}
+
+declare namespace signAuthorization {
+  type Options = {
+    account: TempoAccount.Account
+    prepared: prepareAuthorization.ReturnType
+    store: Store.Store
+  }
+
+  type ReturnType = KeyAuthorization.Rpc
 }
 
 /** Hydrates an access key entry to a viem Account. Only works for locally-generated keys. */

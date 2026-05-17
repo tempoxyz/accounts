@@ -1,5 +1,5 @@
-import { Hex, Provider as ox_Provider } from 'ox'
-import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { Provider as ox_Provider } from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
 import { BaseError, hashMessage } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
@@ -28,48 +28,6 @@ export function local(options: local.Options): Adapter.Adapter {
   const { createAccount, icon, loadAccounts, name, rdns } = options
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
-    /**
-     * Resolves access key params into an unsigned key authorization.
-     */
-    async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
-      const { address, expiry, keyType, limits, publicKey, scopes } = options
-      return await AccessKey.prepare({
-        address,
-        chainId: options.chainId ?? getClient().chain.id,
-        expiry,
-        keyType,
-        limits,
-        publicKey,
-        scopes,
-      })
-    }
-
-    /**
-     * Signs (or wraps a pre-computed signature into) a key authorization
-     * and saves the result to the store.
-     */
-    async function signKeyAuthorization(
-      account: TempoAccount.Account,
-      prepared: Awaited<ReturnType<typeof prepareKeyAuthorization>>,
-      options: {
-        signature?: Hex.Hex | undefined
-      } = {},
-    ) {
-      const { keyPair } = prepared
-
-      const keyAuthorization = await (async () => {
-        const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
-        const signature = options.signature ?? (await account.sign({ hash: digest }))
-        return KeyAuthorization.from(prepared.keyAuthorization, {
-          signature: SignatureEnvelope.from(signature),
-        })
-      })()
-
-      AccessKey.save({ address: account.address, keyAuthorization, keyPair, store })
-
-      return KeyAuthorization.toRpc(keyAuthorization)
-    }
-
     async function withAccessKey<result>(
       options: Pick<Account.find.Options, 'address' | 'calls' | 'chainId'>,
       fn: (
@@ -126,8 +84,12 @@ export function local(options: local.Options): Adapter.Adapter {
 
           const keyAuthorization = await (async () => {
             if (!grantOptions) return undefined
-            const prepared = await prepareKeyAuthorization(grantOptions)
-            return await signKeyAuthorization(account, prepared)
+            return await AccessKey.authorize({
+              account,
+              chainId: getClient().chain.id,
+              parameters: grantOptions,
+              store,
+            })
           })()
 
           return {
@@ -140,9 +102,13 @@ export function local(options: local.Options): Adapter.Adapter {
           }
         },
         async authorizeAccessKey(parameters) {
-          const prepared = await prepareKeyAuthorization(parameters)
           const account = getAccount({ accessKey: false, signable: true })
-          const keyAuthorization = await signKeyAuthorization(account, prepared)
+          const keyAuthorization = await AccessKey.authorize({
+            account,
+            chainId: getClient().chain.id,
+            parameters,
+            store,
+          })
           return { keyAuthorization, rootAddress: account.address }
         },
         async loadAccounts(parameters) {
@@ -161,7 +127,14 @@ export function local(options: local.Options): Adapter.Adapter {
           const peronsalSign_digest = personalSign ? hashMessage(personalSign.message) : undefined
 
           const keyAuthorization_unsigned = authorizeAccessKey
-            ? await prepareKeyAuthorization(authorizeAccessKey)
+            ? await AccessKey.prepareAuthorization({
+                ...authorizeAccessKey,
+                chainId: authorizeAccessKey.chainId ?? getClient().chain.id,
+              })
+            : undefined
+
+          const keyAuthorization_digest = keyAuthorization_unsigned
+            ? KeyAuthorization.getSignPayload(keyAuthorization_unsigned.keyAuthorization)
             : undefined
 
           // Slot allocation:
@@ -172,11 +145,7 @@ export function local(options: local.Options): Adapter.Adapter {
           // `personalSign` wins the load-accounts ceremony and the key
           // authorization gets its own follow-up `account.sign` ceremony
           // (2 prompts total).
-          const digest =
-            peronsalSign_digest ??
-            (keyAuthorization_unsigned
-              ? KeyAuthorization.getSignPayload(keyAuthorization_unsigned.keyAuthorization)
-              : rest.digest)
+          const digest = peronsalSign_digest ?? keyAuthorization_digest ?? rest.digest
 
           // Pass the prepared digest (or the caller's) into loadAccounts so
           // the ceremony can sign it in a single biometric prompt.
@@ -196,10 +165,15 @@ export function local(options: local.Options): Adapter.Adapter {
           //   - Else (key-auth digest took the slot), reuse `signature_`.
           const keyAuthorization = await (async () => {
             if (!keyAuthorization_unsigned || !account) return undefined
-            if (peronsalSign_digest)
-              return await signKeyAuthorization(account, keyAuthorization_unsigned)
-            return await signKeyAuthorization(account, keyAuthorization_unsigned, {
-              signature: signature_,
+            const signature_keyAuthorization =
+              peronsalSign_digest || !signature_
+                ? await account.sign({ hash: keyAuthorization_digest! })
+                : signature_
+            return AccessKey.saveAuthorization({
+              address: account.address,
+              prepared: keyAuthorization_unsigned,
+              signature: signature_keyAuthorization,
+              store,
             })
           })()
 
