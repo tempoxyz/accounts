@@ -414,6 +414,7 @@ describe('behavior: with app-provided feePayer URL', () => {
     walletServer = await createServer(
       relay({
         chains: [chain],
+        internal_allowUnsafeUrls: true,
         transports: { [chain.id]: http() },
       }).listener,
     )
@@ -504,6 +505,7 @@ describe('behavior: with app-provided feePayer URL + autoSwap', () => {
       relay({
         chains: [chain],
         features: 'all',
+        internal_allowUnsafeUrls: true,
         transports: { [chain.id]: http() },
       }).listener,
     )
@@ -625,6 +627,7 @@ describe('behavior: app-provided feePayer URL bypasses wallet validate', () => {
       relay({
         chains: [chain],
         features: 'all',
+        internal_allowUnsafeUrls: true,
         transports: { [chain.id]: http() },
         feePayer: {
           account: feePayerAccount,

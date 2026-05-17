@@ -74,6 +74,7 @@ export function relay(options: relay.Options = {}): Handler {
   const {
     cacheTtl = defaultCacheTtl,
     chains = [tempo, tempoModerato, tempoDevnet],
+    internal_allowUnsafeUrls = false,
     kv = Kv.memory(),
     onRequest,
     path = '/',
@@ -150,7 +151,11 @@ export function relay(options: relay.Options = {}): Handler {
           const requestFeeToken =
             typeof parameters.feeToken === 'string' ? (parameters.feeToken as Address) : undefined
           const externalFeePayerUrl =
-            typeof parameters.feePayer === 'string' ? parameters.feePayer : undefined
+            typeof parameters.feePayer === 'string'
+              ? normalizeExternalFeePayerUrl(parameters.feePayer, {
+                  allowUnsafe: internal_allowUnsafeUrls,
+                })
+              : undefined
           const requestsSponsorship =
             (!!feePayerOptions || !!externalFeePayerUrl) && parameters.feePayer !== false
           // Default to `true`. Dapps that don't render diffs can pass
@@ -640,12 +645,30 @@ export namespace relay {
         }
       | undefined
     /**
+     * Relay features.
+     *
+     * - `'all'` — enables fee token resolution, auto-swap,
+     *   fee payer, and simulation (balance diffs + fee breakdown).
+     * - `undefined` (default) — only fee payers.
+     */
+    features?: 'all' | undefined
+    /**
+     * Allows app-provided external fee payer URLs to use non-HTTPS protocols
+     * or local/private hosts. Intended only for trusted development setups.
+     * @default false
+     */
+    internal_allowUnsafeUrls?: boolean | undefined
+    /**
      * Kv store used to cache `resolveTokens` results across requests.
      * Provide `Kv.cloudflare(env.KV)` for cross-instance caching, or omit
      * for an in-process LRU.
      * @default Kv.memory()
      */
     kv?: Kv.Kv | undefined
+    /** Function to call before handling the request. */
+    onRequest?: ((request: RpcRequest.RpcRequest) => Promise<void>) | undefined
+    /** Path to use for the handler. @default "/" */
+    path?: string | undefined
     /**
      * Resolves the list of known tokens for a chain. The relay checks
      * `balanceOf` for each token and picks the one with the highest balance
@@ -655,18 +678,6 @@ export namespace relay {
     resolveTokens?:
       | ((chainId: number) => readonly Tokenlist.Token[] | Promise<readonly Tokenlist.Token[]>)
       | undefined
-    /**
-     * Relay features.
-     *
-     * - `'all'` — enables fee token resolution, auto-swap,
-     *   fee payer, and simulation (balance diffs + fee breakdown).
-     * - `undefined` (default) — only fee payers.
-     */
-    features?: 'all' | undefined
-    /** Function to call before handling the request. */
-    onRequest?: ((request: RpcRequest.RpcRequest) => Promise<void>) | undefined
-    /** Path to use for the handler. @default "/" */
-    path?: string | undefined
     /** Transports keyed by chain ID. Defaults to `http()` for each chain. */
     transports?: Record<number, Transport> | undefined
   }
@@ -1404,6 +1415,120 @@ function mergeCallsFromRequest(
     },
   ]
   return merged
+}
+
+/** Normalizes external fee-payer relay URLs before forwarding fill payloads. */
+function normalizeExternalFeePayerUrl(
+  value: string,
+  options: normalizeExternalFeePayerUrl.Options = {},
+): string {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new RpcResponse.InvalidParamsError({ message: 'Invalid fee payer URL.' })
+  }
+
+  const allowUnsafe = options.allowUnsafe === true
+  if (url.protocol !== 'http:' && url.protocol !== 'https:')
+    throw new RpcResponse.InvalidParamsError({ message: 'Invalid fee payer URL protocol.' })
+  if (!allowUnsafe && url.protocol !== 'https:')
+    throw new RpcResponse.InvalidParamsError({ message: 'Invalid fee payer URL protocol.' })
+  if (!allowUnsafe && isUnsafeHostname(url.hostname))
+    throw new RpcResponse.InvalidParamsError({ message: 'Invalid fee payer URL host.' })
+
+  url.username = ''
+  url.password = ''
+  url.hash = ''
+  return url.href
+}
+
+declare namespace normalizeExternalFeePayerUrl {
+  type Options = {
+    /** Whether to allow non-HTTPS or local/private external fee payer URLs. */
+    allowUnsafe?: boolean | undefined
+  }
+}
+
+function isUnsafeHostname(hostname: string): boolean {
+  const host = normalizeHostname(hostname)
+  if (host === 'localhost' || host.endsWith('.localhost')) return true
+  const ipv4 = parseIpv4(host)
+  if (ipv4) return isUnsafeIpv4(ipv4)
+  if (!host.includes(':')) return false
+  const ipv6 = parseIpv6(host)
+  if (!ipv6) return true
+  return isUnsafeIpv6(ipv6)
+}
+
+function normalizeHostname(hostname: string): string {
+  return hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .split('%')[0]!
+}
+
+function parseIpv4(value: string): [number, number, number, number] | undefined {
+  const parts = value.split('.')
+  if (parts.length !== 4 || parts.some((part) => !/^\d+$/.test(part))) return undefined
+  const numbers = parts.map((part) => Number(part))
+  if (numbers.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return undefined
+  return numbers as [number, number, number, number]
+}
+
+function isUnsafeIpv4(parts: [number, number, number, number]): boolean {
+  const [a, b] = parts
+  if (a === 0 || a === 10 || a === 127) return true
+  if (a === 100 && b >= 64 && b <= 127) return true
+  if (a === 169 && b === 254) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  if (a >= 224) return true
+  return false
+}
+
+function parseIpv6(
+  value: string,
+): [number, number, number, number, number, number, number, number] | undefined {
+  const halves = value.split('::')
+  if (halves.length > 2) return undefined
+
+  const left = halves[0] ? halves[0].split(':') : []
+  const right = halves[1] ? halves[1].split(':') : []
+  const missing = halves.length === 2 ? 8 - left.length - right.length : 0
+  if (missing < 0) return undefined
+
+  const parts = [...left, ...Array(missing).fill('0'), ...right]
+  if (parts.length !== 8) return undefined
+
+  const numbers = parts.map((part) =>
+    /^[\da-f]{1,4}$/i.test(part) ? Number.parseInt(part, 16) : NaN,
+  )
+  if (numbers.some((part) => !Number.isInteger(part) || part < 0 || part > 0xffff)) return undefined
+  return numbers as [number, number, number, number, number, number, number, number]
+}
+
+function isUnsafeIpv6(parts: [number, number, number, number, number, number, number, number]) {
+  const [a] = parts
+  if (parts.every((part) => part === 0)) return true
+  if (parts.slice(0, 7).every((part) => part === 0) && parts[7] === 1) return true
+  if ((a & 0xfe00) === 0xfc00) return true
+  if ((a & 0xffc0) === 0xfe80) return true
+  if ((a & 0xffc0) === 0xfec0) return true
+  if ((a & 0xff00) === 0xff00) return true
+
+  const ipv4 = ipv4FromIpv6(parts)
+  if (ipv4) return isUnsafeIpv4(ipv4)
+  return false
+}
+
+function ipv4FromIpv6(
+  parts: [number, number, number, number, number, number, number, number],
+): [number, number, number, number] | undefined {
+  const mapped = parts.slice(0, 5).every((part) => part === 0) && parts[5] === 0xffff
+  const compatible = parts.slice(0, 6).every((part) => part === 0)
+  if (!mapped && !compatible) return undefined
+  return [parts[6]! >> 8, parts[6]! & 0xff, parts[7]! >> 8, parts[7]! & 0xff]
 }
 
 /**
