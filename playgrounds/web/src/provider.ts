@@ -19,6 +19,7 @@ import { requestTurnkeyEmailOtp, type TurnkeyEmailOtpClient } from './turnkeyOtp
 export type AdapterType = 'secp256k1' | 'webAuthn' | 'turnkey' | 'tempoWallet' | 'dialogRefImpl'
 export type Env = 'mainnet' | 'testnet' | 'devnet'
 export type DialogMode = 'iframe' | 'popup'
+export type MppMode = 'push' | 'pull'
 export type ProviderValue = ReturnType<typeof Provider.create>
 type TurnkeyPlaygroundClient = turnkey.Client & TurnkeyEmailOtpClient
 
@@ -63,9 +64,17 @@ export const host =
   new URLSearchParams(window.location.search).get('host') ?? import.meta.env.VITE_WALLET_HOST
 
 export let dialogMode: DialogMode = 'iframe'
+export let mppMode: MppMode = 'push'
 export let theme: DialogNs.Theme | undefined
 export let provider: ProviderValue = createProvider('tempoWallet')
 let turnkeyClient: TurnkeyClient | undefined
+
+function mpp() {
+  return {
+    maxDeposit: '0.05',
+    mode: mppMode,
+  } as const
+}
 
 export function createProvider(adapterType: AdapterType): ProviderValue {
   if (adapterType === 'tempoWallet')
@@ -75,7 +84,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         host,
         theme,
       }),
-      mpp: true,
+      mpp: mpp(),
       testnet,
     })
 
@@ -86,7 +95,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         host: import.meta.env.VITE_REF_DIALOG_HOST,
         theme,
       }),
-      mpp: true,
+      mpp: mpp(),
       testnet,
     })
 
@@ -94,7 +103,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     const ceremony = WebAuthnCeremony.server({ url: '/webauthn' })
     return Provider.create({
       adapter: webAuthn({ ceremony }),
-      mpp: true,
+      mpp: mpp(),
       testnet,
     })
   }
@@ -118,7 +127,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
           })
         },
       }),
-      mpp: true,
+      mpp: mpp(),
       testnet,
     })
   }
@@ -134,7 +143,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         return { accounts: [newAccount] }
       },
     }),
-    mpp: true,
+    mpp: mpp(),
     testnet,
   })
 }
@@ -146,6 +155,12 @@ export function switchAdapter(adapterType: AdapterType) {
 
 export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 'tempoWallet') {
   dialogMode = mode
+  Mppx.restore()
+  provider = createProvider(adapterType)
+}
+
+export function switchMppMode(mode: MppMode, adapterType: AdapterType = 'tempoWallet') {
+  mppMode = mode
   Mppx.restore()
   provider = createProvider(adapterType)
 }
