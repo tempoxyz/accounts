@@ -2,7 +2,7 @@ import { Provider as ox_Provider } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { BaseError, hashMessage } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
-import { Account as TempoAccount, Actions } from 'viem/tempo'
+import { Actions } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Account from '../Account.js'
@@ -28,25 +28,6 @@ export function local(options: local.Options): Adapter.Adapter {
   const { createAccount, icon, loadAccounts, name, rdns } = options
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
-    async function withAccessKey<result>(
-      options: Pick<Account.find.Options, 'address' | 'calls' | 'chainId'>,
-      fn: (
-        account: TempoAccount.Account,
-        keyAuthorization?: KeyAuthorization.Signed,
-      ) => Promise<result>,
-    ): Promise<result> {
-      const account = getAccount({ ...options, signable: true })
-      const keyAuthorization = AccessKey.getPending(account, { store })
-      try {
-        return await fn(account, keyAuthorization ?? undefined)
-      } catch (error) {
-        if (account.source !== 'accessKey') throw error
-        AccessKey.invalidate(account, error, { store })
-        const root = getAccount({ accessKey: false, address: options.address, signable: true })
-        return await fn(root, undefined)
-      }
-    }
-
     return {
       actions: {
         async createAccount(parameters) {
@@ -139,7 +120,7 @@ export function local(options: local.Options): Adapter.Adapter {
 
           // Slot allocation:
           //   1. `personalSign` digest, if present.
-          //   2. Else key-auth digest (existing 1-prompt fold for `authorizeAccessKey`).
+          //   2. Else unsigned key-auth digest (existing 1-prompt fold for `authorizeAccessKey`).
           //   3. Else caller's `rest.digest`.
           // When BOTH `personalSign` and `authorizeAccessKey` are present,
           // `personalSign` wins the load-accounts ceremony and the key
@@ -222,20 +203,38 @@ export function local(options: local.Options): Adapter.Adapter {
               return undefined
             })(),
           })
-          const { account, prepared } = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
+          const attempt = await AccessKey.selectForTransaction({
+            address:
+              parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
+            calls: parameters.calls,
+            chainId: parameters.chainId ?? store.getState().chainId,
+            client,
+            store,
+          })
+          if (attempt) {
+            try {
+              const prepared = await attempt.prepare({
                 ...rest,
                 ...(feePayer ? { feePayer: true } : {}),
-                keyAuthorization,
-                type: 'tempo',
-              }),
-            }),
-          )
-          return await account.signTransaction(prepared as never)
+              })
+              return await prepared.sign()
+            } catch {}
+          }
+
+          const account = getAccount({
+            accessKey: false,
+            address: parameters.from,
+            signable: true,
+          })
+          const prepared = await prepareTransactionRequest(client, {
+            account,
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+            keyAuthorization: undefined,
+            type: 'tempo',
+          })
+          const signed = await account.signTransaction(prepared as never)
+          return signed
         },
         async signTypedData({ data, address }) {
           const account = getAccount({ address, signable: true })
@@ -257,26 +256,41 @@ export function local(options: local.Options): Adapter.Adapter {
               return undefined
             })(),
           })
-          const { account, prepared } = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
+          const attempt = await AccessKey.selectForTransaction({
+            address:
+              parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
+            calls: parameters.calls,
+            chainId: parameters.chainId ?? store.getState().chainId,
+            client,
+            store,
+          })
+          if (attempt) {
+            try {
+              const prepared = await attempt.prepare({
                 ...rest,
                 ...(feePayer ? { feePayer: true } : {}),
-                keyAuthorization,
-                type: 'tempo',
-              }),
-            }),
-          )
+              })
+              return await prepared.send()
+            } catch {}
+          }
+
+          const account = getAccount({
+            accessKey: false,
+            address: parameters.from,
+            signable: true,
+          })
+          const prepared = await prepareTransactionRequest(client, {
+            account,
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+            keyAuthorization: undefined,
+            type: 'tempo',
+          })
           const signed = await account.signTransaction(prepared as never)
-          const result = await client.request({
+          return await client.request({
             method: 'eth_sendRawTransaction' as never,
             params: [signed],
           })
-          AccessKey.removePending(account, { store })
-          return result
         },
         async sendTransactionSync(parameters) {
           const { feePayer, ...rest } = parameters
@@ -288,26 +302,41 @@ export function local(options: local.Options): Adapter.Adapter {
               return undefined
             })(),
           })
-          const { account, prepared } = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
+          const attempt = await AccessKey.selectForTransaction({
+            address:
+              parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
+            calls: parameters.calls,
+            chainId: parameters.chainId ?? store.getState().chainId,
+            client,
+            store,
+          })
+          if (attempt) {
+            try {
+              const prepared = await attempt.prepare({
                 ...rest,
                 ...(feePayer ? { feePayer: true } : {}),
-                keyAuthorization,
-                type: 'tempo',
-              }),
-            }),
-          )
+              })
+              return await prepared.sendSync()
+            } catch {}
+          }
+
+          const account = getAccount({
+            accessKey: false,
+            address: parameters.from,
+            signable: true,
+          })
+          const prepared = await prepareTransactionRequest(client, {
+            account,
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+            keyAuthorization: undefined,
+            type: 'tempo',
+          })
           const signed = await account.signTransaction(prepared as never)
-          const result = await client.request({
+          return await client.request({
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],
           })
-          AccessKey.removePending(account, { store })
-          return result
         },
       },
     }

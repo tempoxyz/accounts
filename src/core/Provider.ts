@@ -1,7 +1,6 @@
 import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
 import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { parseSiweMessage } from 'viem/siwe'
@@ -27,7 +26,7 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     chains: readonly [Chain, ...Chain[]]
     /** Returns a viem Account for the given address (or active account). */
     getAccount: Account.Find
-    /** Returns local or on-chain publication status for an access key. */
+    /** Returns local or on-chain authorization status for an access key. */
     getAccessKeyStatus(
       options?: getAccessKeyStatus.Options | undefined,
     ): Promise<getAccessKeyStatus.ReturnType>
@@ -271,8 +270,8 @@ export function create(options: create.Options = {}): create.ReturnType {
                     type FillParams = z.output<typeof Rpc.transactionRequest> & {
                       keyAuthorization?: unknown
                     }
+                    const client = getClient({ chainId, feePayer })
                     const fill = (params: FillParams) => {
-                      const client = getClient({ chainId, feePayer })
                       const fillRequest = {
                         ...params,
                         chainId: params.chainId ?? client.chain?.id,
@@ -315,22 +314,17 @@ export function create(options: create.Options = {}): create.ReturnType {
                         }
                       })()
                       if (account?.source === 'accessKey') {
-                        const keyAuth = AccessKey.getPending(account, { store })
-                        if (keyAuth) {
+                        const attempt = await AccessKey.selectForTransaction({
+                          account,
+                          client,
+                          store,
+                        })
+                        if (attempt)
                           try {
-                            const result = await fill({
-                              ...parameters,
-                              keyAuthorization: {
-                                address: keyAuth.address,
-                                ...KeyAuthorization.toRpc(keyAuth),
-                              } as never,
-                            })
-                            return result
-                          } catch (error) {
-                            AccessKey.invalidate(account, error, { store })
+                            return await attempt.fill(parameters)
+                          } catch {
                             return await fill(parameters)
                           }
-                        }
                       }
                     }
 
@@ -1165,7 +1159,7 @@ export declare namespace getAccessKeyStatus {
     chainId?: number | undefined
   }
 
-  /** Access-key publication status. */
+  /** Access-key authorization status. */
   type ReturnType = AccessKey.Status
 }
 

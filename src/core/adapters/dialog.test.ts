@@ -21,16 +21,24 @@ describe('dialog', () => {
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
     const clientRequests: unknown[] = []
     const signRequests: unknown[] = []
-    vi.spyOn(AccessKey, 'selectAccount').mockReturnValue({
-      accessKeyAddress: '0x0000000000000000000000000000000000000099',
-      address: '0x0000000000000000000000000000000000000099',
-      signTransaction: async (request: unknown) => {
-        signRequests.push(request)
-        return '0xsigned'
-      },
-      source: 'accessKey',
-      type: 'local',
-    } as never)
+    vi.spyOn(AccessKey, 'selectForTransaction').mockResolvedValue({
+      fill: async () => ({ capabilities: { sponsored: false }, tx: {} }),
+      prepare: async (request) => ({
+        request: request as never,
+        send: async () => {
+          signRequests.push(request)
+          clientRequests.push({ method: 'eth_sendRawTransaction', params: ['0xsigned'] })
+          return '0xtransaction'
+        },
+        sendSync: async () => {
+          throw new Error('unexpected sendSync')
+        },
+        sign: async () => {
+          signRequests.push(request)
+          return '0xsigned'
+        },
+      }),
+    })
     const adapter = dialog({ dialog: Dialog.noop() })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
@@ -87,7 +95,7 @@ describe('dialog', () => {
   test('behavior: sendTransaction falls through when no access key is selected', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
-    vi.spyOn(AccessKey, 'selectAccount').mockReturnValue(undefined)
+    vi.spyOn(AccessKey, 'selectForTransaction').mockResolvedValue(undefined)
     const lookups: unknown[] = []
     const adapter = dialog({ dialog: Dialog.noop() })({
       getAccount: (options) => {
@@ -140,7 +148,7 @@ describe('dialog', () => {
   test('error: wallet validation errors keep their RPC code', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
-    vi.spyOn(AccessKey, 'selectAccount').mockReturnValue(undefined)
+    vi.spyOn(AccessKey, 'selectForTransaction').mockResolvedValue(undefined)
     const adapter = dialog({ dialog: Dialog.noop() })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
