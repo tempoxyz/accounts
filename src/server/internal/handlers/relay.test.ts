@@ -393,6 +393,7 @@ describe('behavior: with feePayer.feeToken', () => {
 
 describe('behavior: external feePayer URL validation', () => {
   const externalUrl = 'https://relay.example.com'
+  const walletFeePayerAccount = accounts[1]!
   let appServer: Server
   let walletServer: Server
   let client: ReturnType<typeof getClient<typeof chain>>
@@ -402,6 +403,7 @@ describe('behavior: external feePayer URL validation', () => {
     appServer = await createServer(
       relay({
         chains: [chain],
+        features: 'all',
         transports: { [chain.id]: http() },
         feePayer: {
           account: feePayerAccount,
@@ -413,9 +415,10 @@ describe('behavior: external feePayer URL validation', () => {
     walletServer = await createServer(
       relay({
         chains: [chain],
+        features: 'all',
         transports: { [chain.id]: http() },
         feePayer: {
-          account: feePayerAccount,
+          account: walletFeePayerAccount,
           validate: () => false,
         },
       }).listener,
@@ -435,7 +438,7 @@ describe('behavior: external feePayer URL validation', () => {
     walletServer.close()
   })
 
-  test('proxies allowed external URL', async () => {
+  test('proxies allowed external URL and relays app sponsor metadata', async () => {
     const result = await fillTransaction(client, {
       account: userAccount.address,
       calls: [transferCall()],
@@ -443,8 +446,110 @@ describe('behavior: external feePayer URL validation', () => {
     })
 
     expect(result.transaction.feePayerSignature).toBeDefined()
+    expect(result.transaction.gas).toBeDefined()
     expect(result.capabilities?.sponsored).toBe(true)
-    expect(result.capabilities?.sponsor?.name).toBe('App Sponsor')
+    expect(result.capabilities?.sponsor).toMatchInlineSnapshot(`
+      {
+        "address": "${feePayerAccount.address}",
+        "name": "App Sponsor",
+        "url": "https://app.example.com",
+      }
+    `)
+  })
+
+  test('behavior: externally sponsored tx can be signed and broadcast', async () => {
+    const { transaction } = await fillTransaction(client, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feePayer: externalUrl as never,
+    })
+    const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
+    const envelope = TxEnvelopeTempo.deserialize(serialized)
+    const signature = await userAccount.sign({
+      hash: TxEnvelopeTempo.getSignPayload(envelope),
+    })
+    const signed = TxEnvelopeTempo.serialize(envelope, {
+      signature: SignatureEnvelope.from(signature),
+    })
+    const receipt = (await getClient().request({
+      method: 'eth_sendRawTransactionSync' as never,
+      params: [signed],
+    })) as { feePayer?: string | undefined }
+
+    expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    expect(receipt.feePayer).not.toBe(walletFeePayerAccount.address.toLowerCase())
+  })
+
+  test('behavior: external feePayer autoSwap recovers from InsufficientBalance', async () => {
+    const sender = accounts[11]!
+
+    const rpc = getClient({ account: accounts[0]! })
+    const { token: base } = await Actions.token.createSync(rpc, {
+      name: 'External Swap Base',
+      symbol: 'EXTBASE',
+      currency: 'USD',
+      quoteToken: addresses.alphaUsd,
+    })
+    await sendTransactionSync(rpc, {
+      calls: [
+        Actions.token.grantRoles.call({ token: base, role: 'issuer', to: rpc.account!.address }),
+        Actions.token.mint.call({
+          token: base,
+          to: rpc.account!.address,
+          amount: parseUnits('10000', 6),
+        }),
+        Actions.token.mint.call({
+          token: addresses.alphaUsd,
+          to: rpc.account!.address,
+          amount: parseUnits('10000', 6),
+        }),
+        Actions.token.approve.call({
+          token: base,
+          spender: Addresses.stablecoinDex,
+          amount: parseUnits('10000', 6),
+        }),
+        Actions.token.approve.call({
+          token: addresses.alphaUsd,
+          spender: Addresses.stablecoinDex,
+          amount: parseUnits('10000', 6),
+        }),
+      ],
+    })
+    await Actions.dex.createPairSync(rpc, { base })
+    await Actions.dex.placeSync(rpc, {
+      token: base,
+      amount: parseUnits('500', 6),
+      type: 'sell',
+      tick: Tick.fromPrice('1.001'),
+    })
+
+    await Actions.token.mintSync(rpc, {
+      token: addresses.alphaUsd,
+      amount: parseUnits('1000', 6),
+      to: sender.address,
+    })
+    await Actions.fee.setUserToken(getClient({ account: sender }), { token: addresses.alphaUsd })
+
+    const transferAmount = parseUnits('5', 6)
+    const result = await fillTransaction(client, {
+      account: sender.address,
+      ...Actions.token.transfer.call({
+        token: base,
+        to: recipient.address,
+        amount: transferAmount,
+      }),
+      feePayer: externalUrl as never,
+    })
+
+    const { transaction, capabilities } = result
+    expect(transaction.calls).toHaveLength(3)
+    expect(transaction.feePayerSignature).toBeDefined()
+    expect(capabilities?.sponsored).toBe(true)
+    expect(capabilities?.sponsor?.name).toBe('App Sponsor')
+    expect(capabilities?.autoSwap?.slippage).toBe(0.05)
+    expect(capabilities?.autoSwap?.maxIn.symbol).toBe('AlphaUSD')
+    expect(capabilities?.autoSwap?.minOut.symbol).toBe('EXTBASE')
+    expect(capabilities?.autoSwap?.minOut.formatted).toBe('5')
   })
 
   test.each([
