@@ -38,7 +38,7 @@ By the end of this guide you'll have a protected articles route, a recurring sub
   <SubscriptionPayment />
 </Demo>
 
-The example uses a 10-second period for local testing. Production plans should use `day` or `week` periods.
+The demo uses a daily plan and checks the collection route every 10 seconds. Early collection returns `null`, which shows that scheduled collection is safe to run before the next period is due.
 
 ## Walkthrough
 
@@ -80,19 +80,22 @@ import { Mppx, tempo } from 'mppx/hono'
 import { privateKeyToAccount } from 'viem/accounts'
 
 const app = new Hono()
+const account = privateKeyToAccount(process.env.ACCOUNT_PRIVATE_KEY)
+const currency = '0x20c0000000000000000000000000000000000000'
+const store = Store.memory()
 
 const mppx = Mppx.create({
   methods: [
     tempo.subscription({
-      account: privateKeyToAccount(process.env.ACCOUNT_PRIVATE_KEY),
-      currency: '0x20c0000000000000000000000000000000000000',
+      account,
+      currency,
       feePayer: true,
       resolve({ input }) {
         const subscriber = input.headers.get('X-Subscriber')
         if (!subscriber) return null
         return { key: `articles:${subscriber.toLowerCase()}` }
       },
-      store: Store.memory(),
+      store,
       testnet: true,
     }),
   ],
@@ -131,7 +134,7 @@ app.get(
 )
 ```
 
-For local testing, set `periodCount: 10` and `periodUnit: 'dev_second'`. Production plans should use `day` or `week` periods.
+Tempo subscription periods use `day` or `week` units. Run collection more often than the period so overdue subscriptions are billed promptly.
 
 ### Call the Route from the Client
 
@@ -170,13 +173,16 @@ You can skip this step when you only collect on the request path. `mppx.subscrip
 
 ### Collect from a Schedule
 
-Call `mppx.tempo.subscription.renew` from a cron worker. It returns a receipt when it collects the next period, or `null` when the subscription is already current, missing, inactive, or superseded.
+Call `tempo.renewSubscription` from a cron worker. It returns a receipt when it collects the next period, or `null` when the subscription is already current, missing, inactive, or superseded.
 
 ```ts twoslash [worker/index.ts]
 // @noErrors
 async function collectDueSubscriptions() {
   for (const subscriptionId of await database.subscriptions.listDueIds()) {
-    const result = await mppx.tempo.subscription.renew({ subscriptionId })
+    const result = await tempo.renewSubscription({
+      store,
+      subscriptionId,
+    })
     if (!result) continue
 
     console.log('collected subscription', {
@@ -226,13 +232,16 @@ const mppx = Mppx.create({
 })
 ```
 
-### Treat `renew` as Idempotent
+### Treat Collection as Idempotent
 
-It is safe for cron to call `renew` early or more than once. A `null` result means no payment was collected, so your scheduler can continue without treating it as an error.
+It is safe for cron to call `renewSubscription` early or more than once. A `null` result means no payment was collected, so your scheduler can continue without treating it as an error.
 
 ```ts twoslash [worker/index.ts]
 // @noErrors
-const result = await mppx.tempo.subscription.renew({ subscriptionId })
+const result = await tempo.renewSubscription({
+  store,
+  subscriptionId,
+})
 
 if (!result) return
 
@@ -282,7 +291,10 @@ Record renewal attempts, receipts, and errors. Alert on repeated failures, expir
 ```ts twoslash [worker/index.ts]
 // @noErrors
 try {
-  await mppx.tempo.subscription.renew({ subscriptionId })
+  await tempo.renewSubscription({
+    store,
+    subscriptionId,
+  })
 } catch (error) {
   await logger.error('subscription renewal failed', {
     error,
@@ -315,9 +327,9 @@ try {
   </CheckboxCard>
   <CheckboxCard
     id="subscriptions.idempotent-renew"
-    href="#treat-renew-as-idempotent"
+    href="#treat-collection-as-idempotent"
   >
-    `renew` returning `null` is handled as nothing due.
+    `renewSubscription` returning `null` is handled as nothing due.
   </CheckboxCard>
   <CheckboxCard
     id="subscriptions.fee-payer-monitoring"
@@ -335,7 +347,7 @@ try {
     id="subscriptions.production-periods"
     href="#keep-periods-reviewable"
   >
-    Local-only periods such as `dev_second` stay out of production.
+    Subscription plans use Tempo-supported `day` or `week` periods.
   </CheckboxCard>
 </CheckboxCards>
 
