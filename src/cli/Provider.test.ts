@@ -490,6 +490,7 @@ describe('Provider.create', () => {
           "chainId": ${chain.id},
           "expiry": ${expiry_2},
           "keyAddress": "${account.capabilities.keyAuthorization!.keyId.toLowerCase()}",
+          "keyAuthorizationStatus": "authorized",
           "keyType": "secp256k1",
           "walletAddress": "${root.address}",
           "walletType": "passkey",
@@ -497,6 +498,14 @@ describe('Provider.create', () => {
       `)
       expect(key).toMatch(/^0x[0-9a-f]{64}$/i)
       expect(keyAuthorization).toMatch(/^0x[0-9a-f]+$/i)
+
+      await provider.request({
+        method: 'eth_signTransaction',
+        params: [{ calls: [transferCall] }],
+      })
+      expect(
+        (await Keyring.load({ path: keysPath }))[0]?.keyAuthorizationStatus,
+      ).toMatchInlineSnapshot(`"authorized"`)
     } finally {
       await server.closeAsync()
     }

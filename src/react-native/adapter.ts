@@ -8,7 +8,6 @@ import {
   RpcResponse,
 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { prepareTransactionRequest } from 'viem/actions'
 import { Actions, Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 
 import * as AccessKey from '../core/AccessKey.js'
@@ -42,11 +41,15 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
             managedKeyStorageKey(address, chainId),
           ]
       let entry: ManagedKeyEntry | null = null
+      let storageKey_selected: string | undefined
       for (const storageKey of storageKeys) {
         entry = await secureStorage.getItem<ManagedKeyEntry>(storageKey)
-        if (entry) break
+        if (entry) {
+          storageKey_selected = storageKey
+          break
+        }
       }
-      if (!entry) return undefined
+      if (!entry || !storageKey_selected) return undefined
 
       const account =
         entry.keyType === 'p256'
@@ -56,15 +59,27 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       const deserialized = KeyAuthorization.deserialize(entry.keyAuthorization)
       if (!deserialized.signature) throw new Error('Managed access key is missing a signature.')
       const keyAuthorization = deserialized as KeyAuthorization.Signed
+      const keyAuthorizationMatches =
+        keyAuthorization.address.toLowerCase() === keyAddress.toLowerCase()
+      const keyAuthorizationStatus = entry.keyAuthorizationStatus ?? 'pending'
 
-      if (keyAuthorization.address.toLowerCase() === keyAddress.toLowerCase())
-        AccessKey.save({
-          address,
-          keyAuthorization,
-          privateKey: entry.key,
-          store,
-        })
-      else
+      if (keyAuthorizationMatches) {
+        if (keyAuthorizationStatus === 'authorized')
+          AccessKey.saveAuthorized({
+            address,
+            keyAuthorization,
+            privateKey: entry.key,
+            store,
+          })
+        else
+          AccessKey.savePending({
+            address,
+            keyAuthorization,
+            ...(keyAuthorizationStatus === 'pending' ? { keyAuthorizationPending: true } : {}),
+            privateKey: entry.key,
+            store,
+          })
+      } else
         store.setState((state) => ({
           accessKeys: state.accessKeys.filter(
             (accessKey) =>
@@ -74,12 +89,17 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
 
       return {
         account,
+        chainId: entry.chainId,
         expiry: entry.expiry,
         key: entry.key,
         keyAddress,
+        keyAuthorizationMatches,
+        keyAuthorizationStatus,
         keyType: entry.keyType,
         publicKey: account.publicKey,
+        storageKey: storageKey_selected,
         storedAuthorization: keyAuthorization,
+        walletAddress: address,
       }
     }
 
@@ -127,7 +147,7 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
     ) {
       if (!managedKey) return
 
-      AccessKey.save({
+      AccessKey.savePending({
         address,
         keyAuthorization,
         privateKey: managedKey.key,
@@ -145,10 +165,29 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
         key: managedKey.key,
         keyAddress: managedKey.keyAddress,
         keyAuthorization: KeyAuthorization.serialize(keyAuthorization),
+        keyAuthorizationStatus: 'signed',
         keyType: managedKey.keyType,
         walletAddress: address,
       }
       await secureStorage.setItem(storageKey, entry)
+    }
+
+    async function saveManagedKeyStatus(
+      managedKey: loadManagedKey.ReturnType,
+      status: NonNullable<ManagedKeyEntry['keyAuthorizationStatus']>,
+    ) {
+      const { secureStorage } = options
+      if (!secureStorage) return
+      await secureStorage.setItem(managedKey.storageKey, {
+        chainId: managedKey.chainId,
+        expiry: managedKey.expiry,
+        key: managedKey.key,
+        keyAddress: managedKey.keyAddress,
+        keyAuthorization: KeyAuthorization.serialize(managedKey.storedAuthorization),
+        keyAuthorizationStatus: status,
+        keyType: managedKey.keyType,
+        walletAddress: managedKey.walletAddress,
+      } satisfies ManagedKeyEntry)
     }
 
     async function isManagedKeyAuthorized(
@@ -162,7 +201,8 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
         })
         return (
           metadata.address.toLowerCase() === managedKey.keyAddress.toLowerCase() &&
-          !metadata.isRevoked
+          !metadata.isRevoked &&
+          (metadata.expiry === 0n || metadata.expiry >= BigInt(Math.floor(Date.now() / 1000)))
         )
       } catch {
         return false
@@ -189,27 +229,54 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       return result.keyAuthorization
     }
 
-    async function withManagedAccessKey<result>(
-      fn: (
-        account: TempoAccount.Account,
-        keyAuthorization?: KeyAuthorization.Signed | undefined,
-      ) => Promise<result>,
+    async function prepareManagedTransaction(
+      client: ReturnType<typeof getClient>,
+      parameters: AccessKey.selectForTransaction.PrepareParameters,
     ) {
       const rootAddress = store.getState().accounts[store.getState().activeAccount]?.address
-      const managedKey = rootAddress ? await loadManagedKey(rootAddress) : undefined
+      let managedKey = rootAddress ? await loadManagedKey(rootAddress) : undefined
+
+      if (rootAddress && managedKey && !managedKey.keyAuthorizationMatches)
+        await reauthorizeManagedKey(rootAddress, managedKey)
+
+      if (
+        rootAddress &&
+        managedKey?.keyAuthorizationMatches &&
+        managedKey.keyAuthorizationStatus === 'authorized'
+      )
+        if (!(await isManagedKeyAuthorized(rootAddress, managedKey)))
+          await reauthorizeManagedKey(rootAddress, managedKey)
+
+      if (
+        rootAddress &&
+        managedKey &&
+        (!managedKey.keyAuthorizationMatches || managedKey.keyAuthorizationStatus === 'authorized')
+      )
+        managedKey = (await loadManagedKey(rootAddress)) ?? managedKey
 
       const account = managedKey?.account ?? getAccount({ signable: true })
-      let keyAuthorization = AccessKey.getPending(account, { store })
-      if (rootAddress && managedKey && !keyAuthorization)
-        if (!(await isManagedKeyAuthorized(rootAddress, managedKey)))
-          keyAuthorization = await reauthorizeManagedKey(rootAddress, managedKey)
+      const attempt = await AccessKey.selectForTransaction({
+        account,
+        client,
+        store,
+      })
+      if (!attempt)
+        throw new core_Provider.UnauthorizedError({
+          message: `Account "${account.address}" cannot sign with an access key.`,
+        })
+      const prepared = await attempt.prepare(parameters)
+      if (
+        managedKey &&
+        managedKey.keyAuthorizationStatus !== 'authorized' &&
+        !prepared.keyAuthorization
+      )
+        await saveManagedKeyStatus(managedKey, 'authorized')
+      return { managedKey, prepared }
+    }
 
-      try {
-        return await fn(account, keyAuthorization ?? undefined)
-      } catch (error) {
-        AccessKey.remove(account, { store })
-        throw error
-      }
+    async function loadManagedAccount(address: Adapter.signPersonalMessage.Parameters['address']) {
+      await loadManagedKey(address)
+      return getAccount({ address, signable: true })
     }
 
     async function authorize(request: {
@@ -333,74 +400,54 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
         async sendTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { account, prepared } = await withManagedAccessKey(
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                ...(keyAuthorization ? { keyAuthorization } : {}),
-                type: 'tempo',
-              } as never),
-            }),
-          )
-          const signed = await account.signTransaction(prepared as never)
-          const result = await client.request({
+          const { managedKey, prepared } = await prepareManagedTransaction(client, {
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+          })
+          const signed = await prepared.sign()
+          if (managedKey && prepared.keyAuthorization)
+            await saveManagedKeyStatus(managedKey, 'pending')
+          return (await client.request({
             method: 'eth_sendRawTransaction' as never,
             params: [signed],
-          })
-          AccessKey.removePending(account, { store })
-          return result
+          })) as Hex.Hex
         },
         async sendTransactionSync(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { account, prepared } = await withManagedAccessKey(
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                ...(keyAuthorization ? { keyAuthorization } : {}),
-                type: 'tempo',
-              } as never),
-            }),
-          )
-          const signed = await account.signTransaction(prepared as never)
+          const { managedKey, prepared } = await prepareManagedTransaction(client, {
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+          })
+          const signed = await prepared.sign()
+          if (managedKey && prepared.keyAuthorization)
+            await saveManagedKeyStatus(managedKey, 'pending')
           const result = await client.request({
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],
           })
-          AccessKey.removePending(account, { store })
-          return result
+          if (managedKey && prepared.keyAuthorization)
+            await saveManagedKeyStatus(managedKey, 'authorized')
+          return result as AccessKey.selectForTransaction.SendSyncReturnType
         },
         async signPersonalMessage({ address, data }) {
-          await loadManagedKey(address)
-          const account = getAccount({ address, signable: true })
+          const account = await loadManagedAccount(address)
           return await account.signMessage({ message: { raw: data } })
         },
         async signTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { account, prepared } = await withManagedAccessKey(
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                ...(keyAuthorization ? { keyAuthorization } : {}),
-                type: 'tempo',
-              } as never),
-            }),
-          )
-          return await account.signTransaction(prepared as never)
+          const { managedKey, prepared } = await prepareManagedTransaction(client, {
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+          })
+          const signed = await prepared.sign()
+          if (managedKey && prepared.keyAuthorization)
+            await saveManagedKeyStatus(managedKey, 'pending')
+          return signed
         },
         async signTypedData({ address, data }) {
-          await loadManagedKey(address)
-          const account = getAccount({ address, signable: true })
+          const account = await loadManagedAccount(address)
           return await account.signTypedData(JSON.parse(data) as never)
         },
       },
@@ -444,8 +491,13 @@ declare namespace loadManagedKey {
   }
 
   type ReturnType = resolveManagedKey.ReturnType & {
+    chainId: number
     expiry: number
+    keyAuthorizationMatches: boolean
+    keyAuthorizationStatus: NonNullable<ManagedKeyEntry['keyAuthorizationStatus']>
+    storageKey: string
     storedAuthorization: KeyAuthorization.Signed
+    walletAddress: core_Address.Address
   }
 }
 
@@ -456,6 +508,7 @@ type ManagedKeyEntry = {
   key: Hex.Hex
   keyAddress: core_Address.Address
   keyAuthorization: Hex.Hex
+  keyAuthorizationStatus?: 'signed' | 'pending' | 'authorized' | undefined
   keyType: 'secp256k1' | 'p256'
   walletAddress: core_Address.Address
 }

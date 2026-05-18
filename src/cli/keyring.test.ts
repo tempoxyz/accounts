@@ -115,4 +115,31 @@ describe('Keyring.find', () => {
       }
     `)
   })
+
+  test('persists key authorization status', async () => {
+    const path = await createPath()
+
+    await Keyring.upsert(
+      {
+        chainId: chain.id,
+        expiry: 1,
+        key: '0x11',
+        keyAddress: accessKey.address,
+        keyAuthorization: '0x22',
+        keyAuthorizationStatus: 'pending',
+        keyType: 'secp256k1',
+        walletAddress: root.address,
+        walletType: 'passkey',
+      },
+      { path },
+    )
+
+    const entry = await Keyring.find({
+      chainId: chain.id,
+      path,
+      walletAddress: root.address,
+    })
+
+    expect(entry?.keyAuthorizationStatus).toMatchInlineSnapshot(`"pending"`)
+  })
 })

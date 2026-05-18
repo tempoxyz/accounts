@@ -11,7 +11,6 @@ import {
   RpcResponse,
 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { prepareTransactionRequest } from 'viem/actions'
 import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 import * as z from 'zod/mini'
 
@@ -44,14 +43,24 @@ export function cli(options: cli.Options): Adapter.Adapter {
       const deserialized = KeyAuthorization.deserialize(entry.keyAuthorization)
       if (!deserialized.signature) throw new Error('Managed access key is missing a signature.')
       const keyAuthorization = deserialized as KeyAuthorization.Signed
-      AccessKey.save({
-        address,
-        keyAuthorization,
-        privateKey: entry.key,
-        store,
-      })
+      const keyAuthorizationStatus = entry.keyAuthorizationStatus ?? 'pending'
+      if (keyAuthorizationStatus === 'authorized')
+        AccessKey.saveAuthorized({
+          address,
+          keyAuthorization,
+          privateKey: entry.key,
+          store,
+        })
+      else
+        AccessKey.savePending({
+          address,
+          keyAuthorization,
+          ...(keyAuthorizationStatus === 'pending' ? { keyAuthorizationPending: true } : {}),
+          privateKey: entry.key,
+          store,
+        })
 
-      return entry
+      return { ...entry, keyAuthorizationStatus }
     }
 
     async function resolveManagedKey(
@@ -104,7 +113,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
       if (!managedKey) return
 
       const signed = KeyAuthorization.fromRpc(z.encode(CliAuth.keyAuthorization, keyAuthorization))
-      AccessKey.save({
+      AccessKey.savePending({
         address,
         keyAuthorization: signed,
         privateKey: managedKey.key,
@@ -118,6 +127,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
           key: managedKey.key,
           keyAddress: managedKey.keyAddress,
           keyAuthorization: KeyAuthorization.serialize(signed),
+          keyAuthorizationStatus: 'signed',
           keyType: managedKey.keyType,
           ...(keyAuthorization.limits
             ? { limits: keyAuthorization.limits.map((limit) => ({ ...limit })) }
@@ -129,23 +139,45 @@ export function cli(options: cli.Options): Adapter.Adapter {
       )
     }
 
-    async function withManagedAccessKey<result>(
-      fn: (
-        account: TempoAccount.Account,
-        keyAuthorization?: KeyAuthorization.Signed | undefined,
-      ) => Promise<result>,
+    async function saveManagedKeyStatus(
+      entry: Keyring.Entry,
+      status: NonNullable<Keyring.Entry['keyAuthorizationStatus']>,
+    ) {
+      await Keyring.upsert(
+        { ...entry, keyAuthorizationStatus: status },
+        options.keysPath ? { path: options.keysPath } : {},
+      )
+    }
+
+    async function prepareManagedTransaction(
+      client: ReturnType<typeof getClient>,
+      parameters: AccessKey.selectForTransaction.PrepareParameters,
     ) {
       const rootAddress = store.getState().accounts[store.getState().activeAccount]?.address
-      if (rootAddress) await loadManagedKey(rootAddress)
-
+      const managedKey = rootAddress ? await loadManagedKey(rootAddress) : undefined
       const account = getAccount({ signable: true })
-      const keyAuthorization = AccessKey.getPending(account, { store })
-      try {
-        return await fn(account, keyAuthorization ?? undefined)
-      } catch (error) {
-        AccessKey.remove(account, { store })
-        throw error
-      }
+      const attempt = await AccessKey.selectForTransaction({
+        account,
+        client,
+        store,
+      })
+      if (!attempt)
+        throw new core_Provider.UnauthorizedError({
+          message: `Account "${account.address}" cannot sign with an access key.`,
+        })
+      const prepared = await attempt.prepare(parameters)
+      if (
+        managedKey &&
+        managedKey.keyAuthorizationStatus !== 'authorized' &&
+        !prepared.keyAuthorization
+      )
+        await saveManagedKeyStatus(managedKey, 'authorized')
+      return { managedKey, prepared }
+    }
+
+    async function loadManagedAccount(address: Adapter.signPersonalMessage.Parameters['address']) {
+      await loadManagedKey(address)
+      return getAccount({ address, signable: true })
     }
 
     async function authorize(request: {
@@ -285,74 +317,54 @@ export function cli(options: cli.Options): Adapter.Adapter {
         async sendTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { account, prepared } = await withManagedAccessKey(
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                ...(keyAuthorization ? { keyAuthorization } : {}),
-                type: 'tempo',
-              } as never),
-            }),
-          )
-          const signed = await account.signTransaction(prepared as never)
-          const result = await client.request({
+          const { managedKey, prepared } = await prepareManagedTransaction(client, {
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+          })
+          const signed = await prepared.sign()
+          if (managedKey && prepared.keyAuthorization)
+            await saveManagedKeyStatus(managedKey, 'pending')
+          return (await client.request({
             method: 'eth_sendRawTransaction' as never,
             params: [signed],
-          })
-          AccessKey.removePending(account, { store })
-          return result
+          })) as Hex.Hex
         },
         async sendTransactionSync(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { account, prepared } = await withManagedAccessKey(
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                ...(keyAuthorization ? { keyAuthorization } : {}),
-                type: 'tempo',
-              } as never),
-            }),
-          )
-          const signed = await account.signTransaction(prepared as never)
+          const { managedKey, prepared } = await prepareManagedTransaction(client, {
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+          })
+          const signed = await prepared.sign()
+          if (managedKey && prepared.keyAuthorization)
+            await saveManagedKeyStatus(managedKey, 'pending')
           const result = await client.request({
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],
           })
-          AccessKey.removePending(account, { store })
-          return result
+          if (managedKey && prepared.keyAuthorization)
+            await saveManagedKeyStatus(managedKey, 'authorized')
+          return result as AccessKey.selectForTransaction.SendSyncReturnType
         },
         async signPersonalMessage({ address, data }) {
-          await loadManagedKey(address)
-          const account = getAccount({ address, signable: true })
+          const account = await loadManagedAccount(address)
           return await account.signMessage({ message: { raw: data } })
         },
         async signTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { account, prepared } = await withManagedAccessKey(
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                ...(keyAuthorization ? { keyAuthorization } : {}),
-                type: 'tempo',
-              } as never),
-            }),
-          )
-          return await account.signTransaction(prepared as never)
+          const { managedKey, prepared } = await prepareManagedTransaction(client, {
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+          })
+          const signed = await prepared.sign()
+          if (managedKey && prepared.keyAuthorization)
+            await saveManagedKeyStatus(managedKey, 'pending')
+          return signed
         },
         async signTypedData({ address, data }) {
-          await loadManagedKey(address)
-          const account = getAccount({ address, signable: true })
+          const account = await loadManagedAccount(address)
           return await account.signTypedData(JSON.parse(data) as never)
         },
       },

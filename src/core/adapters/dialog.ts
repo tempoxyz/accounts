@@ -136,7 +136,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       keyPair: AccessKey.generate.ReturnType['keyPair'],
     ) {
       const keyAuthorization = KeyAuthorization.fromRpc(keyAuth)
-      AccessKey.save({ address, keyAuthorization, keyPair, store })
+      AccessKey.savePending({ address, keyAuthorization, keyPair, store })
     }
 
     const dialogInstance = dialog({ host, store, theme })

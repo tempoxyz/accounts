@@ -26,7 +26,7 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     chains: readonly [Chain, ...Chain[]]
     /** Returns a viem Account for the given address (or active account). */
     getAccount: Account.Find
-    /** Returns local or on-chain authorization status for an access key. */
+    /** Returns local or on-chain publication status for an access key. */
     getAccessKeyStatus(
       options?: getAccessKeyStatus.Options | undefined,
     ): Promise<getAccessKeyStatus.ReturnType>
@@ -1159,7 +1159,7 @@ export declare namespace getAccessKeyStatus {
     chainId?: number | undefined
   }
 
-  /** Access-key authorization status. */
+  /** Access-key publication status. */
   type ReturnType = AccessKey.Status
 }
 

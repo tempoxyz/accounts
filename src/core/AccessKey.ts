@@ -21,17 +21,19 @@ const removalErrorNames = new Set([
   'SignatureTypeMismatch',
 ])
 
-/** Access-key authorization states. */
+/** Access-key publication states. */
 export const status = {
   /** No matching usable access key was found. */
   missing: 'missing',
-  /** A matching key exists locally and still needs a transaction to include its authorization. */
+  /** A matching key exists locally and still needs its first transaction to publish the authorization. */
   pending: 'pending',
-  /** A matching key is authorized on-chain and can be used without another authorization. */
-  authorized: 'authorized',
+  /** A matching key exists on-chain and can be used. */
+  published: 'published',
+  /** A matching key exists but is past its expiry. */
+  expired: 'expired',
 } as const
 
-/** Authorization state for an access key. */
+/** Publication state for an access key. */
 export type Status = (typeof status)[keyof typeof status]
 
 /** Access key entry stored alongside accounts. */
@@ -72,14 +74,6 @@ export type AccessKey = {
     }
 >
 
-/** Returns the pending key authorization for an access key account without checking on-chain state. */
-export function getPending(
-  account: TempoAccount.Account,
-  options: { store: Store.Store },
-): KeyAuthorization.Signed | undefined {
-  return getEntry(account, options)?.keyAuthorization
-}
-
 async function getPendingAuthorization(
   account: TempoAccount.Account,
   options: {
@@ -93,12 +87,12 @@ async function getPendingAuthorization(
   if (!entry || !keyAuthorization) return undefined
   if (!entry.keyAuthorizationPending || !client) return keyAuthorization
 
-  const authorizationStatus = await getAuthorizedStatus(client, {
+  const publicationStatus = await getPublishedStatus(client, {
     accessKey: entry.address,
     address: entry.access,
     now: Date.now() / 1000,
   }).catch(() => status.pending)
-  if (authorizationStatus === status.authorized) {
+  if (publicationStatus === status.published) {
     removePending(account, { store })
     return undefined
   }
@@ -198,7 +192,7 @@ export function saveAuthorization(
     signature: SignatureEnvelope.from(signature),
   })
 
-  save({
+  savePending({
     address,
     keyAuthorization,
     ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
@@ -274,8 +268,7 @@ declare namespace signAuthorization {
   type ReturnType = KeyAuthorization.Rpc
 }
 
-/** Hydrates an access key entry to a viem Account. Only works for locally-generated keys. */
-export function hydrate(accessKey: AccessKey): TempoAccount.Account {
+function hydrate(accessKey: AccessKey): TempoAccount.Account {
   if ('keyPair' in accessKey && accessKey.keyPair)
     return TempoAccount.fromWebCryptoP256(accessKey.keyPair, { access: accessKey.access })
   if ('privateKey' in accessKey && accessKey.privateKey) {
@@ -292,7 +285,7 @@ export function hydrate(accessKey: AccessKey): TempoAccount.Account {
 }
 
 /** Removes an access key entry for the given account from the store. */
-export function remove(account: TempoAccount.Account, options: { store: Store.Store }): void {
+function remove(account: TempoAccount.Account, options: { store: Store.Store }): void {
   if (account.source !== 'accessKey') return
   const { store } = options
   const accessKeyAddress = account.accessKeyAddress
@@ -304,23 +297,14 @@ export function remove(account: TempoAccount.Account, options: { store: Store.St
 }
 
 /** Invalidates a stored access key when the error proves it is no longer usable. */
-export function invalidate(
+function invalidate(
   account: TempoAccount.Account,
   error: unknown,
-  options: invalidate.Options,
-): boolean {
-  if (account.source !== 'accessKey') return false
-  if (!shouldRemoveForError(error)) return false
+  options: { store: Store.Store },
+): void {
+  if (account.source !== 'accessKey') return
+  if (!shouldRemoveForError(error)) return
   remove(account, options)
-  return true
-}
-
-export declare namespace invalidate {
-  /** Options for {@link invalidate}. */
-  type Options = {
-    /** Reactive state store. */
-    store: Store.Store
-  }
 }
 
 /** Permanently removes the pending key authorization for an access key account. */
@@ -450,6 +434,8 @@ export declare namespace selectForTransaction {
 
   /** Prepared access-key transaction with lifecycle-aware execution methods. */
   type Prepared = {
+    /** Pending key authorization attached to this transaction, if any. */
+    keyAuthorization?: KeyAuthorization.Signed | undefined
     /** Prepared request that will be signed by the selected access key. */
     request: PreparedRequest
     /** Signs the prepared transaction and marks an attached authorization as pending. */
@@ -509,6 +495,7 @@ function createTransactionAttempt(options: {
         return createPreparedTransaction({
           account,
           client,
+          keyAuthorization,
           request: request as never,
           store,
         })
@@ -523,10 +510,11 @@ function createTransactionAttempt(options: {
 function createPreparedTransaction(options: {
   account: TempoAccount.AccessKeyAccount
   client: Client<Transport>
+  keyAuthorization?: KeyAuthorization.Signed | undefined
   request: selectForTransaction.PreparedRequest
   store: Store.Store
 }): selectForTransaction.Prepared {
-  const { account, client, request, store } = options
+  const { account, client, keyAuthorization, request, store } = options
 
   async function sign() {
     try {
@@ -540,6 +528,7 @@ function createPreparedTransaction(options: {
   }
 
   return {
+    ...(keyAuthorization ? { keyAuthorization } : {}),
     request,
     sign,
     async send() {
@@ -586,7 +575,7 @@ async function fillTransaction(
   })) as selectForTransaction.FillReturnType
 }
 
-/** Returns authorization status for a stored or on-chain access key. */
+/** Returns publication status for a stored or on-chain access key. */
 export async function getStatus(options: getStatus.Options): Promise<getStatus.ReturnType> {
   const { accessKey, address, calls, chainId, client, store } = options
   const now = options.now ?? Date.now() / 1000
@@ -595,23 +584,23 @@ export async function getStatus(options: getStatus.Options): Promise<getStatus.R
     .accessKeys.find((key) => matches(key, { accessKey, address, calls, chainId }))
 
   if (local) {
-    if (isExpired(local.expiry, now)) return status.missing
+    if (isExpired(local.expiry, now)) return status.expired
     if (local.keyAuthorization) {
       if (local.keyAuthorizationPending && client) {
-        const authorizationStatus = await getAuthorizedStatus(client, {
+        const publicationStatus = await getPublishedStatus(client, {
           accessKey: local.address,
           address,
           now,
         }).catch(() => status.pending)
-        if (authorizationStatus === status.authorized) return status.authorized
+        if (publicationStatus === status.published) return status.published
       }
       return status.pending
     }
-    if (client) return await getAuthorizedStatus(client, { accessKey: local.address, address, now })
-    return status.authorized
+    if (client) return await getPublishedStatus(client, { accessKey: local.address, address, now })
+    return status.published
   }
 
-  if (accessKey && client) return await getAuthorizedStatus(client, { accessKey, address, now })
+  if (accessKey && client) return await getPublishedStatus(client, { accessKey, address, now })
   return status.missing
 }
 
@@ -626,7 +615,7 @@ export declare namespace getStatus {
     calls?: readonly { to?: Address.Address | undefined; data?: Hex.Hex | undefined }[] | undefined
     /** Chain ID the access key must be authorized on. */
     chainId: number
-    /** Client used to verify authorized state on-chain. */
+    /** Client used to verify published state on-chain. */
     client?: Client<Transport> | undefined
     /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
     now?: number | undefined
@@ -634,26 +623,8 @@ export declare namespace getStatus {
     store: Store.Store
   }
 
-  /** Access-key authorization status. */
+  /** Access-key publication status. */
   type ReturnType = Status
-}
-
-/** Removes an access key from the store. */
-export function revoke(options: revoke.Options): void {
-  const { address, store } = options
-  const { accessKeys } = store.getState()
-  store.setState({
-    accessKeys: accessKeys.filter((a) => a.access.toLowerCase() !== address.toLowerCase()),
-  })
-}
-
-export declare namespace revoke {
-  type Options = {
-    /** Root account address. */
-    address: Address.Address
-    /** Reactive state store. */
-    store: Store.Store
-  }
 }
 
 function scopesMatch(
@@ -712,7 +683,7 @@ function isExpired(expiry: number | undefined, now: number): boolean {
   return typeof expiry === 'number' && expiry < now
 }
 
-async function getAuthorizedStatus(
+async function getPublishedStatus(
   client: Client<Transport>,
   options: { accessKey: Address.Address; address: Address.Address; now: number },
 ): Promise<Status> {
@@ -723,8 +694,8 @@ async function getAuthorizedStatus(
       accessKey,
     })
     if (metadata.isRevoked) return status.missing
-    if (metadata.expiry > 0n && metadata.expiry < BigInt(Math.floor(now))) return status.missing
-    return status.authorized
+    if (metadata.expiry > 0n && metadata.expiry < BigInt(Math.floor(now))) return status.expired
+    return status.published
   } catch (error) {
     if (!(error instanceof Error)) throw error
     const parsed = ExecutionError.parse(error)
@@ -786,16 +757,45 @@ function shouldRemoveForError(error: unknown): boolean {
   return removalErrorNames.has(parsed.errorName)
 }
 
-/** Saves an access key to the store with its pending key authorization. */
-export function save(options: save.Options): void {
-  const { address, keyAuthorization, keyPair, privateKey, store } = options
+/** Saves an access key authorization that still needs to be included on-chain. */
+export function savePending(options: savePending.Options): void {
+  saveAccessKey({ ...options, pending: true })
+}
+
+export declare namespace savePending {
+  type Options = saveAccessKey.Options & {
+    /** Whether the authorization may already be in a signed transaction. */
+    keyAuthorizationPending?: boolean | undefined
+  }
+}
+
+/** Saves an access key that is already authorized on-chain. */
+export function saveAuthorized(options: saveAuthorized.Options): void {
+  saveAccessKey({ ...options, pending: false })
+}
+
+export declare namespace saveAuthorized {
+  type Options = Omit<saveAccessKey.Options, 'keyAuthorizationPending'>
+}
+
+function saveAccessKey(options: saveAccessKey.Options & { pending: boolean }): void {
+  const {
+    address,
+    keyAuthorization,
+    keyAuthorizationPending,
+    keyPair,
+    pending,
+    privateKey,
+    store,
+  } = options
 
   const base = {
     address: keyAuthorization.address,
     access: address,
     chainId: Number(keyAuthorization.chainId),
     expiry: keyAuthorization.expiry ?? undefined,
-    keyAuthorization,
+    ...(pending ? { keyAuthorization } : {}),
+    ...(keyAuthorizationPending ? { keyAuthorizationPending } : {}),
     keyType: keyAuthorization.type,
     limits: keyAuthorization.limits as AccessKey['limits'],
     scopes: keyAuthorization.scopes as AccessKey['scopes'],
@@ -817,12 +817,14 @@ export function save(options: save.Options): void {
   }))
 }
 
-export declare namespace save {
+declare namespace saveAccessKey {
   type Options = {
     /** Root account address that owns this access key. */
     address: Address.Address
-    /** Signed key authorization to attach until the key is observed on-chain. */
+    /** Signed key authorization for deriving and storing access-key metadata. */
     keyAuthorization: KeyAuthorization.Signed
+    /** Whether the authorization may already be in a signed transaction. */
+    keyAuthorizationPending?: boolean | undefined
     /** The exported private key backing the access key. */
     privateKey?: Hex.Hex | undefined
     /** The WebCrypto key pair backing the access key. Only present for locally-generated keys. */
