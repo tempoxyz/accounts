@@ -56,18 +56,18 @@ export function SendBody({
 
   return (
     <div
-      className="flex w-full max-w-[420px] flex-col gap-4 bg-[#181818] p-6"
+      className="flex w-full max-w-[420px] flex-col gap-4 bg-panel-2 p-6"
       style={bodyAnimation(delay)}
     >
       <div className="flex flex-col gap-1">
-        <p className="text-[13px] text-white/50">Available balance</p>
-        <p className="font-mono text-[28px] tabular-nums text-white">
+        <p className="text-[13px] text-foreground-muted">Available balance</p>
+        <p className="font-mono text-[28px] tabular-nums text-foreground">
           {connectedBalance ?? "$0.00"}
         </p>
       </div>
 
       <div className="flex flex-col gap-2">
-        <p className="text-[12px] text-white/50">Saved recipients</p>
+        <p className="text-[12px] text-foreground-muted">Saved recipients</p>
         <div className="flex flex-col gap-1.5">
           {DESTINATIONS.map((d) => {
             const active = d.id === selectedId;
@@ -76,19 +76,15 @@ export function SendBody({
                 key={d.id}
                 type="button"
                 onClick={() => onSelect(d.id)}
-                className="flex items-center justify-between gap-3 border px-3 py-2.5 text-left outline-none transition-colors duration-150"
-                style={{
-                  borderColor: active ? "#2e2e2e" : "transparent",
-                  background: active ? "#262626" : "#1f1f1f",
-                }}
+                className={`flex items-center justify-between gap-3 border px-3 py-2.5 text-left outline-none transition-colors duration-150 ${active ? "border-panel-edge bg-panel-4" : "border-transparent bg-panel-3"}`}
               >
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[13px] text-white">{d.label}</span>
-                  <span className="font-mono text-[11px] text-white/40">
+                  <span className="text-[13px] text-foreground">{d.label}</span>
+                  <span className="font-mono text-[11px] text-foreground-subtle">
                     {shorten(d.address)}
                   </span>
                 </div>
-                <span className="shrink-0 font-mono text-[11px] text-white/50">
+                <span className="shrink-0 font-mono text-[11px] text-foreground-muted">
                   {d.memo}
                 </span>
               </button>
@@ -104,7 +100,7 @@ export function SendBody({
         className="h-11 w-full"
       />
       {result?.summary ? (
-        <p className="font-mono text-[12px] text-white/50">{result.summary}</p>
+        <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
       ) : null}
     </div>
   );

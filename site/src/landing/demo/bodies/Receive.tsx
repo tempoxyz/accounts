@@ -49,15 +49,15 @@ export function ReceiveBody({
 
   return (
     <div
-      className="flex w-full max-w-[420px] flex-col gap-5 bg-[#181818] p-6"
+      className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6"
       style={bodyAnimation(delay)}
     >
       <div className="flex flex-col gap-1.5">
-        <p className="text-[13px] text-white/50">Receive into</p>
-        <div className="flex w-full items-center justify-between gap-3 border border-[#2e2e2e] bg-[#1f1f1f] px-3 py-2.5">
+        <p className="text-[13px] text-foreground-muted">Receive into</p>
+        <div className="flex w-full items-center justify-between gap-3 border border-panel-edge bg-panel-3 px-3 py-2.5">
           <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-[13px] text-white">Account</span>
-            <span className="font-mono text-[11px] text-white/40">
+            <span className="text-[13px] text-foreground">Account</span>
+            <span className="font-mono text-[11px] text-foreground-subtle">
               {shorten(address)}
             </span>
           </div>
@@ -71,7 +71,7 @@ export function ReceiveBody({
       <button
         type="button"
         onClick={onCopy}
-        className="flex h-11 w-full items-center justify-center bg-white px-4 text-[14px] text-[#181818] outline-none transition-opacity hover:opacity-90 focus-visible:opacity-90"
+        className="flex h-11 w-full items-center justify-center bg-cta px-4 text-[14px] text-cta-fg outline-none transition-opacity hover:opacity-90 focus-visible:opacity-90"
       >
         {copied ? "Copied" : "Copy address"}
       </button>

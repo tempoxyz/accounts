@@ -69,15 +69,8 @@ export function ScrollableTabs<T extends string>({
                 type="button"
                 data-tab={t}
                 onClick={() => onChange(t)}
-                className="flex shrink-0 items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none transition-colors duration-150"
-                style={{
-                  background: active ? "#141414" : "#0c0c0c",
-                  border: active
-                    ? "1px solid #2e2e2e"
-                    : "1px solid transparent",
-                  color: active ? "#ffffff" : "rgba(255,255,255,0.5)",
-                  scrollSnapAlign: "center",
-                }}
+                className={`flex shrink-0 items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none transition-colors duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
+                style={{ scrollSnapAlign: "center" }}
               >
                 {t}
               </button>
@@ -87,12 +80,12 @@ export function ScrollableTabs<T extends string>({
       </div>
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-[#0c0c0c] to-transparent transition-opacity duration-200"
+        className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-panel-0 to-transparent transition-opacity duration-200"
         style={{ opacity: edges.left ? 1 : 0 }}
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-[#0c0c0c] to-transparent transition-opacity duration-200"
+        className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-panel-0 to-transparent transition-opacity duration-200"
         style={{ opacity: edges.right ? 1 : 0 }}
       />
     </div>

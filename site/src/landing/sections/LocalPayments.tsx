@@ -76,10 +76,10 @@ export default function LocalPayments() {
             <DepositCode amount={amount.id} />
           </div>
           <div className="-mx-9 -mb-[26px] mt-auto">
-            <div className="bg-[#141414] px-5 py-5">
+            <div className="bg-panel-1 px-5 py-5">
               <div key={method} className="flex flex-col gap-2">
                 <p
-                  className="text-[14px] text-white"
+                  className="text-[14px] text-foreground"
                   style={{
                     animation: `fadeUp 360ms cubic-bezier(0.23, 1, 0.32, 1) 0ms both`,
                   }}
@@ -87,7 +87,7 @@ export default function LocalPayments() {
                   {INFO[method].title}
                 </p>
                 <p
-                  className="text-[12px] text-white/50"
+                  className="text-[12px] text-foreground-muted"
                   style={{
                     animation: `fadeUp 360ms cubic-bezier(0.23, 1, 0.32, 1) 80ms both`,
                   }}
@@ -120,26 +120,24 @@ export default function LocalPayments() {
 /* ─── Syntax tokens (mono color palette matches the adapter section) ─── */
 
 const Keyword = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#f47066" }}>{children}</span>
+  <span style={{ color: "var(--syn-red)" }}>{children}</span>
 );
 const Str = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#96d0ff" }}>{children}</span>
+  <span style={{ color: "var(--syn-blue)" }}>{children}</span>
 );
 const Fn = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#dcbdfb" }}>{children}</span>
+  <span style={{ color: "var(--syn-purple)" }}>{children}</span>
 );
 const Var = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#6db6ff" }}>{children}</span>
+  <span style={{ color: "var(--syn-cyan)" }}>{children}</span>
 );
 const Cmnt = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#7d8590" }}>{children}</span>
+  <span style={{ color: "var(--syn-muted)" }}>{children}</span>
 );
 const Hl = ({ children }: { children: React.ReactNode }) => (
   <span
     className="hl-token rounded-[4px] px-[5px]"
     style={{
-      background: "rgba(255, 255, 255, 0.12)",
-      boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.2)",
       animation: `highlightFlash 900ms cubic-bezier(0.23, 1, 0.32, 1) both`,
     }}
   >
@@ -150,7 +148,7 @@ const Hl = ({ children }: { children: React.ReactNode }) => (
 function DepositCode({ amount }: { amount: DepositAmountId }) {
   return (
     <pre
-      className="code-pre scrollbar-hide max-h-[320px] overflow-auto font-mono text-[15px] leading-[1.5] text-[#adbac7]"
+      className="code-pre scrollbar-hide max-h-[320px] overflow-auto font-mono text-[15px] leading-[1.5] text-code"
       style={{
         tabSize: 2,
         animation: `fadeUp 360ms cubic-bezier(0.23, 1, 0.32, 1) 0ms both`,

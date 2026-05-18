@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { LockIcon, TempoLogo } from "../../icons";
 import type {
   Adapter,
   DemoDef,
@@ -99,40 +100,34 @@ export function BrowserMockup({
   const activeStep = String(activeIndex + 1).padStart(2, "0");
 
   return (
-    <div className="relative z-10 mx-auto w-full max-w-[1089px] border border-[#141414] bg-[rgba(11,11,11,0.75)] backdrop-blur-sm">
+    <div className="relative z-10 mx-auto w-full max-w-[1089px] border border-panel-3 bg-background/75 backdrop-blur-sm">
       {/* URL bar — wraps to two rows on small screens so the wallet info stays visible. */}
-      <div className="m-3 mb-0 flex flex-wrap items-center justify-between gap-2 bg-[#101010] p-3 sm:m-[27px] sm:gap-3">
+      <div className="m-3 mb-0 flex flex-wrap items-center justify-between gap-2 bg-panel-deep p-3 sm:m-[27px] sm:gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <img
-            src="/icons/lock.svg"
-            alt=""
-            width={12}
-            height={15}
-            className="block shrink-0"
-          />
-          <p className="truncate font-mono text-[12px] whitespace-nowrap text-white sm:text-[14px]">
+          <LockIcon width={12} height={15} className="shrink-0 text-accent-live" />
+          <p className="truncate font-mono text-[12px] whitespace-nowrap text-foreground sm:text-[14px]">
             {def.url}
           </p>
         </div>
         {connected ? (
           <div className="flex shrink-0 items-center gap-2">
-            <span aria-hidden className="size-1.5 rounded-full bg-[#22c55e]" />
-            <span className="font-mono text-[11px] text-white">
+            <span aria-hidden className="size-1.5 rounded-full bg-accent-live" />
+            <span className="font-mono text-[11px] text-foreground">
               {shorten(connected.address)}
             </span>
             {connected.balanceDisplay ? (
               <>
-                <span className="hidden text-[11px] text-white/30 sm:inline">·</span>
-                <span className="hidden font-mono text-[11px] text-white sm:inline">
+                <span className="hidden text-[11px] text-foreground-subtle sm:inline">·</span>
+                <span className="hidden font-mono text-[11px] text-foreground sm:inline">
                   {connected.balanceDisplay}
                 </span>
               </>
             ) : null}
-            <span className="text-[11px] text-white/30">·</span>
+            <span className="text-[11px] text-foreground-subtle">·</span>
             <button
               type="button"
               onClick={onDisconnect}
-              className="text-[11px] text-white/50 outline-none transition-colors duration-150 hover:text-white focus-visible:text-white"
+              className="text-[11px] text-foreground-muted outline-none transition-colors duration-150 hover:text-foreground focus-visible:text-foreground"
             >
               Disconnect
             </button>
@@ -154,12 +149,12 @@ export function BrowserMockup({
             type="button"
             aria-expanded={mobileNavOpen}
             onClick={() => setMobileNavOpen((v) => !v)}
-            className="flex w-full items-center justify-between gap-3 border-t border-[#222] bg-black px-5 py-4 text-left text-white outline-none"
+            className="flex w-full items-center justify-between gap-3 border-t border-panel-border bg-background px-5 py-4 text-left text-foreground outline-none"
           >
             <div className="flex items-baseline gap-3">
               <span
                 aria-hidden
-                className="font-mono text-[11px] tracking-[0.05em] text-white/50"
+                className="font-mono text-[11px] tracking-[0.05em] text-foreground-muted"
               >
                 {activeStep}
               </span>
@@ -168,7 +163,7 @@ export function BrowserMockup({
             <ChevronDown open={mobileNavOpen} />
           </button>
           <div
-            className="absolute right-0 bottom-full left-0 z-20 overflow-hidden border-t border-[#222] bg-[#0c0c0c] transition-[max-height] duration-300 ease-out"
+            className="absolute right-0 bottom-full left-0 z-20 overflow-hidden border-t border-panel-border bg-panel-0 transition-[max-height] duration-300 ease-out"
             style={{
               maxHeight: mobileNavOpen ? `${DEMO_STEPS.length * 56}px` : "0px",
             }}
@@ -185,16 +180,12 @@ export function BrowserMockup({
                       onChangeDemo(d);
                       setMobileNavOpen(false);
                     }}
-                    className="flex items-center justify-between gap-3 border-b border-[#222] px-5 py-3.5 text-left outline-none last:border-b-0"
-                    style={{
-                      background: active ? "rgba(255,255,255,0.04)" : "transparent",
-                      color: active ? "#ffffff" : "rgba(255,255,255,0.55)",
-                    }}
+                    className={`flex items-center justify-between gap-3 border-b border-panel-border px-5 py-3.5 text-left outline-none last:border-b-0 ${active ? "bg-foreground/[0.04] text-foreground" : "text-foreground-muted"}`}
                   >
                     <div className="flex items-baseline gap-3">
                       <span
                         aria-hidden
-                        className="font-mono text-[11px] tracking-[0.05em] text-white/30"
+                        className="font-mono text-[11px] tracking-[0.05em] text-foreground-subtle"
                       >
                         {step}
                       </span>
@@ -208,7 +199,7 @@ export function BrowserMockup({
         </div>
 
         {/* Desktop: always-visible numbered stepper nav on the left */}
-        <nav className="hidden flex-col border-r border-[#222] sm:flex">
+        <nav className="hidden flex-col border-r border-panel-border sm:flex">
           {DEMO_STEPS.map((d, i) => {
             const active = d === demo;
             const step = String(i + 1).padStart(2, "0");
@@ -217,21 +208,12 @@ export function BrowserMockup({
                 key={d}
                 type="button"
                 onClick={() => onChangeDemo(d)}
-                className="group flex items-center justify-between gap-3 border-b border-[#222] px-5 py-6 text-left outline-none transition-colors duration-150 last:border-b-0"
-                style={{
-                  background: active ? "#000" : "transparent",
-                  color: active ? "#ffffff" : "rgba(255,255,255,0.55)",
-                }}
+                className={`group flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none transition-colors duration-150 last:border-b-0 ${active ? "bg-background text-foreground" : "text-foreground-muted"}`}
               >
                 <div className="flex min-w-0 items-baseline gap-3">
                   <span
                     aria-hidden
-                    className="font-mono text-[11px] tracking-[0.05em]"
-                    style={{
-                      color: active
-                        ? "rgba(255,255,255,0.5)"
-                        : "rgba(255,255,255,0.3)",
-                    }}
+                    className={`font-mono text-[11px] tracking-[0.05em] ${active ? "text-foreground-muted" : "text-foreground-subtle"}`}
                   >
                     {step}
                   </span>
@@ -253,16 +235,10 @@ export function BrowserMockup({
             <div className="flex w-full min-w-0 items-start gap-3">
               <div
                 aria-hidden
-                className="grid aspect-square h-9 shrink-0 place-items-center bg-black"
+                className="grid aspect-square h-9 shrink-0 place-items-center bg-background text-foreground"
                 style={{ animation: `fadeUp 480ms cubic-bezier(0.23, 1, 0.32, 1) 120ms both` }}
               >
-                <img
-                  src="/icons/tempo-logo.svg"
-                  alt=""
-                  width={14}
-                  height={15}
-                  className="block"
-                />
+                <TempoLogo width={14} height={15} />
               </div>
               <div className="flex w-full min-w-0 flex-col items-start gap-4">
                 <div className="flex w-full min-w-0 flex-col items-start gap-2">

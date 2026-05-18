@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import AsciiBackground from "../ascii-bg";
+import { useTheme } from "../useTheme";
 import { BrowserMockup } from "./components/BrowserMockup";
 import { GridBackdrop } from "./components/GridBackdrop";
 import { DEMOS } from "./config";
@@ -37,6 +38,8 @@ export default function Demo() {
   const [connected, setConnected] = useState<Connected | null>(null);
   const providerRef = useRef<AccountsProvider | null>(null);
   const providerAdapterRef = useRef<Adapter | null>(null);
+  const providerSchemeRef = useRef<"light" | "dark" | null>(null);
+  const { resolved } = useTheme();
 
   const refreshBalance = async (
     provider: AccountsProvider,
@@ -84,13 +87,36 @@ export default function Demo() {
     setLastVariant(null);
   };
 
+  // Recreate the provider when EITHER the adapter or the resolved
+  // landing theme changes. Tempo's dialog adapter dedupes by host, so
+  // re-running `createProvider` just `syncTheme`s the cached iframe —
+  // no flicker, no session loss.
   const ensureProvider = (next: Adapter) => {
-    if (providerAdapterRef.current !== next) {
-      providerRef.current = createProvider(next);
+    if (
+      !providerRef.current ||
+      providerAdapterRef.current !== next ||
+      providerSchemeRef.current !== resolved
+    ) {
+      providerRef.current = createProvider(next, resolved);
       providerAdapterRef.current = next;
+      providerSchemeRef.current = resolved;
     }
-    return providerRef.current!;
+    return providerRef.current;
   };
+
+  useEffect(() => {
+    if (
+      providerRef.current &&
+      providerAdapterRef.current &&
+      providerSchemeRef.current !== resolved
+    ) {
+      providerRef.current = createProvider(
+        providerAdapterRef.current,
+        resolved,
+      );
+      providerSchemeRef.current = resolved;
+    }
+  }, [resolved]);
 
   // On mount: hydrate from persisted storage. If we already have a
   // connected account from a previous session, reflect "done" state so
@@ -259,7 +285,7 @@ export default function Demo() {
     <section className="relative px-6 pt-2 pb-16 sm:pt-4 sm:pb-[100px]">
       <div className="relative">
         <div className="pointer-events-none absolute -inset-x-6 inset-y-0 flex items-center justify-center">
-          <div className="pointer-events-auto relative h-full max-h-[588px] w-full overflow-hidden bg-[#0e0e0e]">
+          <div className="pointer-events-auto relative h-full max-h-[588px] w-full overflow-hidden bg-panel-deep">
             <AsciiBackground />
           </div>
         </div>
@@ -278,7 +304,7 @@ export default function Demo() {
         />
       </div>
 
-      <p className="mt-6 text-center text-[11px] text-white/40">
+      <p className="mt-6 text-center text-[11px] text-foreground-subtle">
         Demos sign real mainnet transactions for $0.01.
       </p>
     </section>

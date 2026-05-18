@@ -67,25 +67,247 @@
   font-weight: 900;
 }
 
+/* ─── Landing page colour catalogue ──────────────────────────────────────
+ *
+ * Every hex used anywhere on the marketing landing page lives in this file.
+ * Components consume tokens via Tailwind utilities (bg-panel-1, text-code,
+ * ...) or via `var(--name)` directly. Canvas code (ascii-bg, InteractiveQr,
+ * dino-game) reads tokens via `getComputedStyle(canvas).getPropertyValue`.
+ *
+ * Edit colours below to retheme the page in one place. Dark mode is the
+ * default (under `:root`); the light overrides live under
+ * `.accounts-landing[data-theme="light"]`.
+ *
+ * Tiers:
+ *   1 — semantic chrome (background / foreground / borders / dash)
+ *   2 — panel chrome (the recurring #0c..#2e dark greys)
+ *   3 — code + syntax (Hl* spans, code-pre)
+ *   4 — CTA, SVG ink, footer glow, accent
+ *   5 — brand token rings (theme-invariant)
+ *   6 — customize preview swatches + per-card palettes (theme-invariant)
+ *   7 — dino-game canvas palette
+ *   8 — ascii-bg / InteractiveQr canvas dot
+ * ───────────────────────────────────────────────────────────────────── */
+
 :root {
-  color-scheme: dark;
+  /* Tier 1 — chrome */
   --background: #0a0a0a;
   --surface: #131313;
   --surface-2: #1a1a1a;
-  --border: rgba(255, 255, 255, 0.06);
-  --border-strong: rgba(255, 255, 255, 0.1);
   --foreground: #f5f5f5;
+  --foreground-rgb: 245, 245, 245;
   --foreground-muted: rgba(245, 245, 245, 0.6);
   --foreground-subtle: rgba(245, 245, 245, 0.38);
+  --border: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.1);
   --dash-color: #222;
   --dash-length: 5px;
   --dash-gap: 1.5px;
   --dash-thickness: 1px;
+
+  /* Tier 2 — panels */
+  --panel-0: #0c0c0c;
+  --panel-1: #141414;
+  --panel-2: #181818;
+  --panel-3: #1f1f1f;
+  --panel-4: #262626;
+  --panel-5: #292929;
+  --panel-edge: #2e2e2e;
+  --panel-deep: #101010;
+  --panel-border: #222222;
+
+  /* Tier 3 — code + syntax */
+  --code-bg: #0a0a0a;
+  --code-fg: #adbac7;
+  --code-fg-rgb: 173, 187, 199;
+  --code-fg-dim: rgba(173, 187, 199, 0.25);
+  --syn-red: #f47066;
+  --syn-blue: #96d0ff;
+  --syn-purple: #dcbdfb;
+  --syn-cyan: #6db6ff;
+  --syn-orange: #f0a868;
+  --syn-muted: #7d8590;
+
+  /* Tier 4 — CTA / SVG ink / accent */
+  --cta: #ffffff;
+  --cta-fg: #181818;
+  --fill-0: #ffffff;
+  --stroke-0: #ffffff;
+  --footer-glow: rgba(0, 0, 0, 0.85);
+  --accent-live: #22c55e;
+
+  /* Tier 5 — brand token rings (theme-invariant) */
+  --brand-usdc: #2775ca;
+  --brand-usdt: #26a17b;
+  --brand-eth: #627eea;
+
+  /* Tier 6 — customize swatches + preview palettes (theme-invariant)
+   * These describe what the SDK *previews* look like, not the marketing
+   * site chrome itself, so they keep the same value in light mode. */
+  --swatch-neutral: #71717a;
+  --swatch-blue: #3b82f6;
+  --swatch-red: #eb0000;
+  --swatch-amber: #f59e0b;
+  --swatch-green: #22c55e;
+  --swatch-purple: #a855f7;
+
+  --preview-dark-bg: #141414;
+  --preview-dark-border: #2e2e2e;
+  --preview-dark-header: #ededed;
+  --preview-dark-meta: #a1a1a1;
+  --preview-dark-skeleton: #292929;
+  --preview-dark-button-bg: #050505;
+
+  --preview-light-bg: #f8f8f8;
+  --preview-light-border: #e5e5e5;
+  --preview-light-header: #1a1a1a;
+  --preview-light-meta: #737373;
+  --preview-light-skeleton: #e5e5e5;
+
+  --preview-pizza-bg: #fff5f5;
+  --preview-pizza-border: #2e2e2e;
+  --preview-pizza-header: #2d2d2d;
+  --preview-pizza-meta: #000000;
+  --preview-pizza-skeleton: #ffdad4;
+  --preview-pizza-button-bg: #eb0000;
+
+  --preview-invoice-bg: #395241;
+  --preview-invoice-header: #ededed;
+  --preview-invoice-meta: #ffe3e3;
+  --preview-invoice-skeleton: #2e4435;
+  --preview-invoice-button-bg: #26392c;
+
+  --preview-reload-bg: #ffd4a3;
+  --preview-reload-border: #2e2e2e;
+  --preview-reload-header: #ff941a;
+  --preview-reload-meta: #a1a1a1;
+  --preview-reload-skeleton: #ffc27b;
+  --preview-reload-button-bg: #ffc27b;
+
+  --preview-marketplace-meta: #7a1f1f;
+
+  --preview-button-text: #ffffff;
+
+  --preview-rainbow: conic-gradient(
+    from 90deg at 50% 50%,
+    #f87171,
+    #fbbf24,
+    #34d399,
+    #60a5fa,
+    #a78bfa,
+    #f472b6,
+    #f87171
+  );
+
+  /* Tier 7 — dino-game canvas */
+  --dino-body: #f5a623;
+  --dino-skin: #e0c9a6;
+  --dino-eye: #0a0a0a;
+  --dino-shadow: #737373;
+  --dino-shade: #525252;
+  --dino-line: #404040;
+  --dino-detail: #a3a3a3;
+  --dino-leather: #8b5e3c;
+  --dino-debris: #2a2a2a;
+  --salt-fill: #d4d4d4;
+  --salt-highlight: #fafafa;
+  --salt-edge: #a3a3a3;
+  --salt-streak: #e5e5e5;
+  --sparkle-light: #fafafa;
+  --sparkle-warm: #f5a623;
+  --score-fg: #a3a3a3;
+  --game-over-fg: #fafafa;
+  --game-over-sub: #a3a3a3;
+
+  /* Tier 8 — ascii-bg / InteractiveQr dot field */
+  --canvas-dot-rgb: 125, 125, 125;
+  --canvas-dot-alpha-base: 0.07;
+  --canvas-dot-alpha-hover: 0.1;
+
+  /* Fonts + motion */
   --font-pilat: "Pilat", Arial, Helvetica, sans-serif;
   --font-geist-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
+/* The same overrides apply when the bootstrap script (vocs.config.ts) has
+ * tagged the html root before React has hydrated `data-theme` onto the
+ * <main>. This avoids a flash-of-dark on first paint in light mode. */
+.accounts-landing[data-theme="light"],
+:root[data-accounts-landing-theme="light"] .accounts-landing {
+  /* Tier 1 — chrome */
+  --background: #ffffff;
+  --surface: #f8f8f8;
+  --surface-2: #f0f0f0;
+  --foreground: #0a0a0a;
+  --foreground-rgb: 10, 10, 10;
+  --foreground-muted: rgba(10, 10, 10, 0.62);
+  --foreground-subtle: rgba(10, 10, 10, 0.42);
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --dash-color: rgba(0, 0, 0, 0.18);
+
+  /* Tier 2 — panels */
+  --panel-0: #fafafa;
+  --panel-1: #f4f4f4;
+  --panel-2: #eeeeee;
+  --panel-3: #e4e4e4;
+  --panel-4: #d9d9d9;
+  --panel-5: #cfcfcf;
+  --panel-edge: #d4d4d4;
+  --panel-deep: #f9f9f9;
+  --panel-border: rgba(0, 0, 0, 0.1);
+
+  /* Tier 3 — code + syntax (GitHub-light flavoured) */
+  --code-bg: #f6f8fa;
+  --code-fg: #24292f;
+  --code-fg-rgb: 36, 41, 47;
+  --code-fg-dim: rgba(36, 41, 47, 0.28);
+  --syn-red: #cf222e;
+  --syn-blue: #0550ae;
+  --syn-purple: #8250df;
+  --syn-cyan: #0969da;
+  --syn-orange: #bc4c00;
+  --syn-muted: #57606a;
+
+  /* Tier 4 — CTA / SVG ink / accent */
+  --cta: #0a0a0a;
+  --cta-fg: #ffffff;
+  --fill-0: #0a0a0a;
+  --stroke-0: #0a0a0a;
+  --footer-glow: rgba(255, 255, 255, 0.85);
+  --accent-live: #16a34a;
+
+  /* Tier 6 — soften the preview-card outlines in light mode. The
+   * #2e2e2e value was designed for dark mode where it sits as a faint
+   * outline on a near-black page; on a white page that same colour
+   * reads as a heavy black stroke around the demo cards. */
+  --preview-dark-border: rgba(0, 0, 0, 0.16);
+  --preview-pizza-border: rgba(0, 0, 0, 0.10);
+  --preview-reload-border: rgba(0, 0, 0, 0.10);
+
+  /* Tier 7 — dino-game canvas (orange + skin stay constant; greys invert
+   * so the miner/salt/bird stay visible against a white sky). */
+  --dino-shadow: #404040;
+  --dino-shade: #262626;
+  --dino-detail: #525252;
+  --dino-debris: #d4d4d4;
+  --salt-fill: #525252;
+  --salt-highlight: #737373;
+  --salt-edge: #404040;
+  --salt-streak: #8a8a8a;
+  --sparkle-light: #404040;
+  --score-fg: #404040;
+  --game-over-fg: #0a0a0a;
+  --game-over-sub: #525252;
+
+  /* Tier 8 — ascii-bg / InteractiveQr dot field */
+  --canvas-dot-rgb: 80, 80, 80;
+  --canvas-dot-alpha-base: 0.1;
+  --canvas-dot-alpha-hover: 0.18;
+}
+
 @theme inline {
+  /* Tier 1 chrome → Tailwind utilities */
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -94,6 +316,34 @@
   --color-foreground: var(--foreground);
   --color-foreground-muted: var(--foreground-muted);
   --color-foreground-subtle: var(--foreground-subtle);
+
+  /* Tier 2 panels → bg-panel-0 ... bg-panel-edge / bg-panel-deep */
+  --color-panel-0: var(--panel-0);
+  --color-panel-1: var(--panel-1);
+  --color-panel-2: var(--panel-2);
+  --color-panel-3: var(--panel-3);
+  --color-panel-4: var(--panel-4);
+  --color-panel-5: var(--panel-5);
+  --color-panel-edge: var(--panel-edge);
+  --color-panel-deep: var(--panel-deep);
+  --color-panel-border: var(--panel-border);
+
+  /* Tier 3 code + syntax → text-code / text-syn-red / ... */
+  --color-code: var(--code-fg);
+  --color-code-bg: var(--code-bg);
+  --color-syn-red: var(--syn-red);
+  --color-syn-blue: var(--syn-blue);
+  --color-syn-purple: var(--syn-purple);
+  --color-syn-cyan: var(--syn-cyan);
+  --color-syn-orange: var(--syn-orange);
+  --color-syn-muted: var(--syn-muted);
+
+  /* Tier 4 → bg-cta / text-cta-fg / bg-accent-live */
+  --color-cta: var(--cta);
+  --color-cta-fg: var(--cta-fg);
+  --color-accent-live: var(--accent-live);
+
+  /* Fonts + easing */
   --font-sans: var(--font-pilat);
   --font-mono: var(--font-geist-mono);
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
@@ -118,9 +368,15 @@
 .accounts-landing {
   background: var(--background);
   color: var(--foreground);
+  color-scheme: dark;
   font-family: var(--font-pilat), Arial, Helvetica, sans-serif;
   font-weight: 350;
   -webkit-font-smoothing: antialiased;
+}
+
+.accounts-landing[data-theme="light"],
+:root[data-accounts-landing-theme="light"] .accounts-landing {
+  color-scheme: light;
 }
 
 .accounts-landing button:not(:disabled) {
@@ -187,12 +443,12 @@
 
 @keyframes highlightFlash {
   0% {
-    background: rgba(255, 255, 255, 0.18);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+    background: rgba(var(--foreground-rgb), 0.18);
+    box-shadow: inset 0 0 0 1px rgba(var(--foreground-rgb), 0.28);
   }
   100% {
-    background: rgba(255, 255, 255, 0.05);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    background: rgba(var(--foreground-rgb), 0.05);
+    box-shadow: inset 0 0 0 1px rgba(var(--foreground-rgb), 0.08);
   }
 }
 
@@ -231,7 +487,7 @@
 }
 
 .accounts-landing .code-pre:has(.hl-token:hover) *:not(.hl-token):not(.hl-token *) {
-  color: rgba(173, 187, 199, 0.25) !important;
+  color: var(--code-fg-dim) !important;
 }
 
 .accounts-landing .dash-y,

@@ -18,17 +18,17 @@ export function SubscribeBody({
 
   return (
     <div
-      className="flex w-full max-w-[420px] flex-col gap-5 bg-[#181818] p-6"
+      className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6"
       style={bodyAnimation(delay)}
     >
       <div className="flex flex-col gap-1">
-        <p className="text-[13px] text-white/50">Pro Plan</p>
-        <p className="font-mono text-[28px] tabular-nums text-white">
-          $24.99<span className="text-white/40">/mo</span>
+        <p className="text-[13px] text-foreground-muted">Pro Plan</p>
+        <p className="font-mono text-[28px] tabular-nums text-foreground">
+          $24.99<span className="text-foreground-subtle">/mo</span>
         </p>
       </div>
 
-      <p className="text-[12px] text-white/50">
+      <p className="text-[12px] text-foreground-muted">
         Cancel anytime · auto-renews · access key authorized once.
       </p>
 
@@ -39,7 +39,7 @@ export function SubscribeBody({
         className="h-11 w-full"
       />
       {result?.summary ? (
-        <p className="font-mono text-[12px] text-white/50">{result.summary}</p>
+        <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
       ) : null}
     </div>
   );

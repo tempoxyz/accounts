@@ -33,13 +33,13 @@ function TokenRow({
   token: string;
 }) {
   return (
-    <div className="flex flex-col gap-2 bg-[#1f1f1f] px-4 py-3 sm:px-5 sm:py-4">
-      <p className="text-[12px] text-white/50">{label}</p>
+    <div className="flex flex-col gap-2 bg-panel-3 px-4 py-3 sm:px-5 sm:py-4">
+      <p className="text-[12px] text-foreground-muted">{label}</p>
       <div className="flex items-baseline justify-between gap-2.5">
-        <p className="font-mono text-[20px] leading-none tabular-nums text-white sm:text-[24px]">
+        <p className="font-mono text-[20px] leading-none tabular-nums text-foreground sm:text-[24px]">
           {amount}
         </p>
-        <span className="bg-[#262626] px-2 py-0.5 font-mono text-[11px] tracking-wide text-white/70">
+        <span className="bg-panel-4 px-2 py-0.5 font-mono text-[11px] tracking-wide text-foreground-muted">
           {token}
         </span>
       </div>
@@ -62,11 +62,11 @@ export function TradeBody({
 
   return (
     <div
-      className="flex w-full max-w-[420px] flex-col gap-3 bg-[#181818] p-6"
+      className="flex w-full max-w-[420px] flex-col gap-3 bg-panel-2 p-6"
       style={bodyAnimation(delay)}
     >
       <TokenRow label="From" amount="100" token="USDC" />
-      <div className="flex items-center justify-center py-2 text-white/60">
+      <div className="flex items-center justify-center py-2 text-foreground-muted">
         <SwapArrow />
       </div>
       <TokenRow label="To" amount="92.34" token="EURC" />
@@ -78,7 +78,7 @@ export function TradeBody({
         className="mt-2 h-11 w-full"
       />
       {result?.summary ? (
-        <p className="font-mono text-[12px] text-white/50">{result.summary}</p>
+        <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
       ) : null}
     </div>
   );

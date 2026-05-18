@@ -53,11 +53,17 @@ const cardDashStyle: React.CSSProperties = {
   backgroundRepeat: "no-repeat",
 };
 
+// Only paint the bottom + right of the outer frame. The cards already
+// contribute the top and left edges via `cardDashStyle`, so painting
+// them again here would double-up (visually fine in dark mode where
+// `--dash-color` is solid `#222`, but in light mode it's
+// `rgba(0,0,0,0.18)` and two overlapping lines alpha-blend to a
+// noticeably darker stroke than the rest of the page).
 const frameDashStyle: React.CSSProperties = {
-  backgroundImage: `${HORIZONTAL_DASH}, ${HORIZONTAL_DASH}, ${VERTICAL_DASH}, ${VERTICAL_DASH}`,
+  backgroundImage: `${HORIZONTAL_DASH}, ${VERTICAL_DASH}`,
   backgroundSize:
-    "100% var(--dash-thickness), 100% var(--dash-thickness), var(--dash-thickness) 100%, var(--dash-thickness) 100%",
-  backgroundPosition: "top left, bottom left, top left, top right",
+    "100% var(--dash-thickness), var(--dash-thickness) 100%",
+  backgroundPosition: "bottom left, top right",
   backgroundRepeat: "no-repeat",
 };
 
@@ -122,7 +128,7 @@ export default function Guides() {
       className="px-6 pt-12 sm:pt-[55px]"
       style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
     >
-      <h2 className="text-[24px] leading-tight text-white sm:text-[24px]">
+      <h2 className="text-[24px] leading-tight text-foreground sm:text-[24px]">
         Guides
       </h2>
 
@@ -142,7 +148,7 @@ export default function Guides() {
               onMouseLeave={() =>
                 setHovered((prev) => (prev === g.title ? null : prev))
               }
-              className="group relative flex min-h-[200px] flex-col justify-end gap-3 overflow-hidden p-6 text-white outline-none transition-colors duration-150 focus-visible:bg-white/[0.03] sm:min-h-[260px] sm:p-9"
+              className="group relative flex min-h-[200px] flex-col justify-end gap-3 overflow-hidden p-6 text-foreground outline-none transition-colors duration-150 focus-visible:bg-foreground/[0.03] sm:min-h-[260px] sm:p-9"
               style={cardDashStyle}
             >
               {isHovered ? (

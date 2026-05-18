@@ -24,16 +24,16 @@ export function PrimaryButton({
       type="button"
       onClick={onClick}
       disabled={status === "running"}
-      className={`flex h-10 items-center justify-center gap-2 bg-white px-4 outline-none transition-opacity hover:opacity-90 focus-visible:opacity-90 disabled:opacity-80 ${className}`}
+      className={`flex h-10 items-center justify-center gap-2 bg-cta px-4 outline-none transition-opacity hover:opacity-90 focus-visible:opacity-90 disabled:opacity-80 ${className}`}
     >
       {status === "running" ? (
         <span
           aria-hidden
-          className="size-1.5 shrink-0 rounded-full bg-[#181818]"
+          className="size-1.5 shrink-0 rounded-full bg-cta-fg"
           style={{ animation: "pulseDot 900ms ease-in-out infinite" }}
         />
       ) : null}
-      <span className="text-[14px] text-[#181818]">{label}</span>
+      <span className="text-[14px] text-cta-fg">{label}</span>
     </button>
   );
 }
@@ -56,10 +56,10 @@ export function SecondaryButton({
       type="button"
       onClick={onClick}
       disabled={status === "running"}
-      className={`flex h-10 items-center justify-center gap-2 bg-[#1f1f1f] px-4 outline-none transition-opacity hover:opacity-90 focus-visible:opacity-90 disabled:opacity-80 ${className}`}
+      className={`flex h-10 items-center justify-center gap-2 bg-panel-3 px-4 outline-none transition-opacity hover:opacity-90 focus-visible:opacity-90 disabled:opacity-80 ${className}`}
     >
       {prefix}
-      <span className="text-[14px] text-white">{label}</span>
+      <span className="text-[14px] text-foreground">{label}</span>
     </button>
   );
 }

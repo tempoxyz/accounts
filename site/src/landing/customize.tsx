@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTheme } from "./useTheme";
 
 const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
 
@@ -28,6 +29,10 @@ type CustomTheme = {
   scheme: "light" | "dark";
 };
 
+// Note: the accent presets are passed as `Dialog.Theme["accent"]` to the
+// SDK and recorded as the literal hex value. To keep that contract clear
+// these stay as hex strings (also mirrored into styles.css as
+// `--swatch-*` tokens for visual reference).
 const ACCENT_PRESETS = [
   { id: "neutral", label: "Neutral", color: "#71717a" },
   { id: "blue", label: "Blue", color: "#3b82f6" },
@@ -53,7 +58,11 @@ const RADIUS_BY_ID: Record<CustomTheme["radius"], string> = {
   full: "9999px",
 };
 
-/** Build a Palette for the Custom preset. Same shape applied to every card. */
+// The preview palettes describe what the *SDK dialog* looks like, so
+// they're intentionally theme-invariant (the page's light/dark toggle
+// doesn't repaint these — they're sample wallets). All colour values are
+// kept in styles.css as `--preview-*` tokens so the catalogue stays
+// single-sourced.
 function customPalette(theme: CustomTheme): Palette {
   const radius = RADIUS_BY_ID[theme.radius];
   // The SDK's `full` preset is designed for small elements (buttons,
@@ -63,26 +72,26 @@ function customPalette(theme: CustomTheme): Palette {
   const cardRadius = theme.radius === "full" ? "32px" : radius;
   if (theme.scheme === "dark") {
     return {
-      bg: "#141414",
-      border: "#2e2e2e",
+      bg: "var(--preview-dark-bg)",
+      border: "var(--preview-dark-border)",
       rounded: cardRadius,
-      headerColor: "#ededed",
-      metaColor: "#a1a1a1",
-      skeleton: "#292929",
+      headerColor: "var(--preview-dark-header)",
+      metaColor: "var(--preview-dark-meta)",
+      skeleton: "var(--preview-dark-skeleton)",
       buttonBg: theme.accent,
-      buttonText: "#ffffff",
+      buttonText: "var(--preview-button-text)",
       buttonRounded: radius,
     };
   }
   return {
-    bg: "#fafafa",
-    border: "#e5e5e5",
+    bg: "var(--preview-light-bg)",
+    border: "var(--preview-light-border)",
     rounded: cardRadius,
-    headerColor: "#1a1a1a",
-    metaColor: "#737373",
-    skeleton: "#e5e5e5",
+    headerColor: "var(--preview-light-header)",
+    metaColor: "var(--preview-light-meta)",
+    skeleton: "var(--preview-light-skeleton)",
     buttonBg: theme.accent,
-    buttonText: "#ffffff",
+    buttonText: "var(--preview-button-text)",
     buttonRounded: radius,
   };
 }
@@ -92,62 +101,62 @@ const NATIVE: Record<
   Palette
 > = {
   orderPizza: {
-    bg: "#fff5f5",
-    border: "#2e2e2e",
+    bg: "var(--preview-pizza-bg)",
+    border: "var(--preview-pizza-border)",
     rounded: "24px",
-    headerColor: "#2d2d2d",
-    metaColor: "#000000",
-    skeleton: "#FFDAD4",
-    buttonBg: "#eb0000",
-    buttonText: "#ffffff",
+    headerColor: "var(--preview-pizza-header)",
+    metaColor: "var(--preview-pizza-meta)",
+    skeleton: "var(--preview-pizza-skeleton)",
+    buttonBg: "var(--preview-pizza-button-bg)",
+    buttonText: "var(--preview-button-text)",
     buttonRounded: "9999px",
   },
   balancesDark: {
-    bg: "#141414",
-    border: "#2e2e2e",
-    headerColor: "#ededed",
-    metaColor: "#a1a1a1",
-    skeleton: "#292929",
-    buttonBg: "#050505",
-    buttonText: "#ffffff",
+    bg: "var(--preview-dark-bg)",
+    border: "var(--preview-dark-border)",
+    headerColor: "var(--preview-dark-header)",
+    metaColor: "var(--preview-dark-meta)",
+    skeleton: "var(--preview-dark-skeleton)",
+    buttonBg: "var(--preview-dark-button-bg)",
+    buttonText: "var(--preview-button-text)",
   },
   clearInvoice: {
-    bg: "#395241",
-    headerColor: "#ededed",
-    metaColor: "#ffe3e3",
-    skeleton: "#2e4435",
-    buttonBg: "#26392c",
-    buttonText: "#ffffff",
+    bg: "var(--preview-invoice-bg)",
+    headerColor: "var(--preview-invoice-header)",
+    metaColor: "var(--preview-invoice-meta)",
+    skeleton: "var(--preview-invoice-skeleton)",
+    buttonBg: "var(--preview-invoice-button-bg)",
+    buttonText: "var(--preview-button-text)",
   },
   reload: {
-    bg: "#ffd4a3",
-    border: "#2e2e2e",
-    headerColor: "#ff941a",
-    metaColor: "#a1a1a1",
-    skeleton: "#ffc27b",
-    buttonBg: "#ffc27b",
-    buttonText: "#ffffff",
+    bg: "var(--preview-reload-bg)",
+    border: "var(--preview-reload-border)",
+    headerColor: "var(--preview-reload-header)",
+    metaColor: "var(--preview-reload-meta)",
+    skeleton: "var(--preview-reload-skeleton)",
+    buttonBg: "var(--preview-reload-button-bg)",
+    buttonText: "var(--preview-button-text)",
   },
 };
 
 const MINIMAL: Palette = {
-  bg: "#395241",
-  headerColor: "#ededed",
-  metaColor: "#ffe3e3",
-  skeleton: "#2e4435",
-  buttonBg: "#26392c",
-  buttonText: "#ffffff",
+  bg: "var(--preview-invoice-bg)",
+  headerColor: "var(--preview-invoice-header)",
+  metaColor: "var(--preview-invoice-meta)",
+  skeleton: "var(--preview-invoice-skeleton)",
+  buttonBg: "var(--preview-invoice-button-bg)",
+  buttonText: "var(--preview-button-text)",
 };
 
 const MARKETPLACE: Palette = {
-  bg: "#fff5f5",
-  border: "#2e2e2e",
+  bg: "var(--preview-pizza-bg)",
+  border: "var(--preview-pizza-border)",
   rounded: "24px",
-  headerColor: "#2d2d2d",
-  metaColor: "#7a1f1f",
-  skeleton: "#FFDAD4",
-  buttonBg: "#eb0000",
-  buttonText: "#ffffff",
+  headerColor: "var(--preview-pizza-header)",
+  metaColor: "var(--preview-marketplace-meta)",
+  skeleton: "var(--preview-pizza-skeleton)",
+  buttonBg: "var(--preview-pizza-button-bg)",
+  buttonText: "var(--preview-button-text)",
   buttonRounded: "9999px",
 };
 
@@ -456,12 +465,7 @@ function ThemeSwitcher({
             key={p}
             type="button"
             onClick={() => onChange(p)}
-            className="flex items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none transition-colors duration-150"
-            style={{
-              background: active ? "#141414" : "#0c0c0c",
-              border: active ? "1px solid #2e2e2e" : "1px solid transparent",
-              color: active ? "#ffffff" : "rgba(255,255,255,0.5)",
-            }}
+            className={`flex items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none transition-colors duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
           >
             {p}
           </button>
@@ -484,10 +488,10 @@ function CustomThemeToolbar({
   onChange: (next: CustomTheme) => void;
 }) {
   return (
-    <div className="flex w-full max-w-[920px] flex-col gap-3 border border-[#2e2e2e] bg-[#0c0c0c] px-5 py-4 sm:flex-row sm:flex-nowrap sm:items-center sm:justify-center sm:gap-x-6">
+    <div className="flex w-full max-w-[920px] flex-col gap-3 border border-panel-edge bg-panel-0 px-5 py-4 sm:flex-row sm:flex-nowrap sm:items-center sm:justify-center sm:gap-x-6">
       {/* Accent */}
       <div className="flex items-center gap-2.5">
-        <span className="font-mono text-[10px] tracking-[0.18em] text-white/20 uppercase">
+        <span className="font-mono text-[10px] tracking-[0.18em] text-foreground-subtle uppercase">
           Accent
         </span>
         <div className="flex items-center gap-1.5">
@@ -504,15 +508,15 @@ function CustomThemeToolbar({
                 style={{
                   background: a.color,
                   boxShadow: active
-                    ? "0 0 0 2px #0c0c0c, 0 0 0 4px rgba(255,255,255,0.6)"
-                    : "0 0 0 1px rgba(255,255,255,0.15)",
+                    ? "0 0 0 2px var(--panel-0), 0 0 0 4px var(--foreground-muted)"
+                    : "0 0 0 1px var(--border-strong)",
                 }}
               />
             );
           })}
         </div>
         <label
-          className="ml-1 grid size-5 cursor-pointer place-items-center overflow-hidden rounded-full border border-dashed border-white/20"
+          className="ml-1 grid size-5 cursor-pointer place-items-center overflow-hidden rounded-full border border-dashed border-border-strong"
           aria-label="Custom accent"
           title="Custom color"
         >
@@ -525,18 +529,16 @@ function CustomThemeToolbar({
           <span
             aria-hidden
             className="pointer-events-none absolute size-5 rounded-full"
-            style={{
-              background: `conic-gradient(from 90deg at 50% 50%, #f87171, #fbbf24, #34d399, #60a5fa, #a78bfa, #f472b6, #f87171)`,
-            }}
+            style={{ background: "var(--preview-rainbow)" }}
           />
         </label>
       </div>
 
-      <span aria-hidden className="hidden h-4 w-px bg-white/10 sm:block" />
+      <span aria-hidden className="hidden h-4 w-px bg-border-strong sm:block" />
 
       {/* Radius */}
       <div className="flex items-center gap-2.5">
-        <span className="font-mono text-[10px] tracking-[0.18em] text-white/20 uppercase">
+        <span className="font-mono text-[10px] tracking-[0.18em] text-foreground-subtle uppercase">
           Radius
         </span>
         <div className="flex items-center gap-1">
@@ -548,14 +550,7 @@ function CustomThemeToolbar({
                 type="button"
                 onClick={() => onChange({ ...theme, radius: r.id })}
                 aria-pressed={active}
-                className="flex items-center justify-center px-2 py-1 font-mono text-[12px] outline-none transition-colors duration-150"
-                style={{
-                  background: active ? "#1f1f1f" : "transparent",
-                  border: active
-                    ? "1px solid #2e2e2e"
-                    : "1px solid transparent",
-                  color: active ? "#ffffff" : "rgba(255,255,255,0.5)",
-                }}
+                className={`flex items-center justify-center border px-2 py-1 font-mono text-[12px] outline-none transition-colors duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
               >
                 {r.label}
               </button>
@@ -564,11 +559,11 @@ function CustomThemeToolbar({
         </div>
       </div>
 
-      <span aria-hidden className="hidden h-4 w-px bg-white/10 sm:block" />
+      <span aria-hidden className="hidden h-4 w-px bg-border-strong sm:block" />
 
       {/* Scheme */}
       <div className="flex items-center gap-2.5">
-        <span className="font-mono text-[10px] tracking-[0.18em] text-white/20 uppercase">
+        <span className="font-mono text-[10px] tracking-[0.18em] text-foreground-subtle uppercase">
           Scheme
         </span>
         <div className="flex items-center gap-1">
@@ -580,14 +575,7 @@ function CustomThemeToolbar({
                 type="button"
                 onClick={() => onChange({ ...theme, scheme: s })}
                 aria-pressed={active}
-                className="flex items-center justify-center px-2 py-1 font-mono text-[12px] capitalize outline-none transition-colors duration-150"
-                style={{
-                  background: active ? "#1f1f1f" : "transparent",
-                  border: active
-                    ? "1px solid #2e2e2e"
-                    : "1px solid transparent",
-                  color: active ? "#ffffff" : "rgba(255,255,255,0.5)",
-                }}
+                className={`flex items-center justify-center border px-2 py-1 font-mono text-[12px] capitalize outline-none transition-colors duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
               >
                 {s}
               </button>
@@ -601,11 +589,18 @@ function CustomThemeToolbar({
 
 export default function Customize() {
   const [theme, setTheme] = useState<ThemePreset>("Default");
-  const [custom, setCustom] = useState<CustomTheme>({
+  // The Custom preset seeds its initial `scheme` from the landing page's
+  // resolved theme so opening the section in site light mode previews
+  // the SDK's light scheme by default. After the first paint the user
+  // owns the value — the Custom toolbar's Light/Dark toggle still works
+  // exactly as before. (Using a lazy `useState` initialiser so we don't
+  // re-seed when the user later flips the site theme.)
+  const { resolved } = useTheme();
+  const [custom, setCustom] = useState<CustomTheme>(() => ({
     accent: "#3b82f6",
     radius: "medium",
-    scheme: "dark",
-  });
+    scheme: resolved,
+  }));
 
   const cards = (
     <>
@@ -623,10 +618,10 @@ export default function Customize() {
       style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
     >
       <div className="flex flex-col items-center gap-3 text-center">
-        <h2 className="text-[32px] leading-[1.1] tracking-[-0.02em] text-white sm:text-[40px]">
+        <h2 className="text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-[40px]">
           Customize to <br className="sm:hidden" /> match your app
         </h2>
-        <p className="max-w-[600px] text-[16px] text-white/50 sm:text-[18px]">
+        <p className="max-w-[600px] text-[16px] text-foreground-muted sm:text-[18px]">
           The Accounts SDK ships with full control on customizability to allow
           you to design embed like your native styles.
         </p>

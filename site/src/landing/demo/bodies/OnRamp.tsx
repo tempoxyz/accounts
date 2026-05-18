@@ -19,19 +19,19 @@ export function OnRampBody({
 
   return (
     <div
-      className="flex w-full max-w-[420px] flex-col gap-4 bg-[#181818] p-6"
+      className="flex w-full max-w-[420px] flex-col gap-4 bg-panel-2 p-6"
       style={bodyAnimation(delay)}
     >
       <div className="flex flex-col gap-1">
-        <p className="text-[13px] text-white/50">Available balance</p>
-        <p className="font-mono text-[28px] tabular-nums text-white">
+        <p className="text-[13px] text-foreground-muted">Available balance</p>
+        <p className="font-mono text-[28px] tabular-nums text-foreground">
           {connectedBalance ?? "$0.00"}
         </p>
       </div>
-      <p className="text-[13px] text-white/50">
+      <p className="text-[13px] text-foreground-muted">
         The wallet renders the full deposit UI (cards, Apple Pay, crypto, X
         verification) — your app just calls{" "}
-        <span className="font-mono text-white/80">wallet_deposit</span>.
+        <span className="font-mono text-foreground">wallet_deposit</span>.
       </p>
       <PrimaryButton
         label={buttonLabel}
@@ -40,7 +40,7 @@ export function OnRampBody({
         className="h-11 w-full"
       />
       {result?.summary ? (
-        <p className="font-mono text-[12px] text-white/50">{result.summary}</p>
+        <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
       ) : null}
     </div>
   );

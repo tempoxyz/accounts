@@ -11,6 +11,7 @@ import type {
   DemoResult,
   Status,
 } from "../demo/types";
+import { useTheme } from "../useTheme";
 
 /**
  * Shared session state for landing sections. Mirrors the lifecycle in
@@ -27,11 +28,28 @@ export function useTempoSession() {
   const [balanceDisplay, setBalanceDisplay] = useState<string | null>(null);
   const [result, setResult] = useState<DemoResult | null>(null);
   const providerRef = useRef<AccountsProvider | null>(null);
+  const providerSchemeRef = useRef<"light" | "dark" | null>(null);
+  const { resolved } = useTheme();
 
+  // Recreate the provider when the resolved landing theme flips so the
+  // wallet dialog opens in matching light/dark. The dialog adapter
+  // dedupes by host, so this just calls `syncTheme` on the cached
+  // iframe — no full reload, and storage (cookies + localStorage) is
+  // shared so the signed-in session carries over.
   const getProvider = () => {
-    if (!providerRef.current) providerRef.current = createProvider("tempoAuth");
+    if (!providerRef.current || providerSchemeRef.current !== resolved) {
+      providerRef.current = createProvider("tempoAuth", resolved);
+      providerSchemeRef.current = resolved;
+    }
     return providerRef.current;
   };
+
+  useEffect(() => {
+    if (providerRef.current && providerSchemeRef.current !== resolved) {
+      providerRef.current = createProvider("tempoAuth", resolved);
+      providerSchemeRef.current = resolved;
+    }
+  }, [resolved]);
 
   const refreshBalance = async (
     p: AccountsProvider,

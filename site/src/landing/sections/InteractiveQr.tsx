@@ -2,11 +2,17 @@
 
 import { Cuer } from "cuer";
 import { useContext, useEffect, useRef, useState } from "react";
+import { readCssVar, useTheme } from "../useTheme";
 
-/* ─── Tweakables ──────────────────────────────────────────────────────── */
+/* ─── Tweakables ──────────────────────────────────────────────────────── *
+ *
+ * Colour comes from the landing token catalogue (`--canvas-dot-rgb` in
+ * styles.css, Tier 8) so the QR retints with the page theme. The QR's
+ * own alpha levels stay in code — they're tuned for legibility, not
+ * theme, so we override the dot-field hover alpha locally.
+ *
+ * ───────────────────────────────────────────────────────────────────── */
 
-/** Same RGB as `ascii-bg.tsx` so the QR reads as the same hue family. */
-const COLOR = "150, 150, 150";
 /** Resting opacity for data-module dots. */
 const BASE_ALPHA = 0.8;
 /** Peak opacity under the cursor / brightest trail point. */
@@ -114,6 +120,7 @@ function DotCanvas({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { resolved } = useTheme();
   const stateRef = useRef({
     targetX: -9999,
     targetY: -9999,
@@ -131,6 +138,8 @@ function DotCanvas({
     if (!canvas || !container) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    const COLOR = readCssVar(canvas, "--canvas-dot-rgb") || "150, 150, 150";
 
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     canvas.width = Math.round(size * dpr);
@@ -365,7 +374,7 @@ function DotCanvas({
       container.removeEventListener("mousemove", onMove);
       container.removeEventListener("mouseleave", onLeave);
     };
-  }, [matrix, size]);
+  }, [matrix, size, resolved]);
 
   return (
     <div ref={containerRef} className="absolute inset-0">

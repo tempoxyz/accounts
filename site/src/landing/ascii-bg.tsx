@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { readCssVar, useTheme } from "./useTheme";
 
-/* ─── Tweakables ──────────────────────────────────────────────────────── */
+/* ─── Tweakables ──────────────────────────────────────────────────────── *
+ *
+ * Colour + alpha values live in `styles.css` under `--canvas-dot-*`
+ * (Tier 8) and flip with the landing theme. The geometric tweakables
+ * below (spacing, hover radius, breathing speed, ...) stay in code
+ * because they're motion-design knobs, not colour decisions.
+ *
+ * ───────────────────────────────────────────────────────────────────── */
 
-/** Foreground color of the dots, as `R, G, B`. Alpha is applied separately. */
-const COLOR = "150, 150, 150";
 /** Background color painted behind the dots. `null` = transparent. */
 const BACKGROUND: string | null = null;
 
@@ -16,10 +22,6 @@ const BASE_RADIUS = 1;
 /** Per-dot pseudo-random brightness variance (0 = uniform, 1 = full range). */
 const JITTER = 0.2;
 
-/** Resting opacity (0..1) far from the cursor. */
-const BASE_ALPHA = 0.07;
-/** Peak opacity (0..1) directly under the cursor / brightest trail point. */
-const HOVER_ALPHA = 0.2;
 /** Multiplier on dot radius at the cursor center. */
 const HOVER_SCALE = 3.5;
 /** Cursor influence radius in pixels. */
@@ -32,7 +34,7 @@ const TRAIL_LIFE_MS = 100;
 /** Glow radius around each trail point in pixels. */
 const TRAIL_RADIUS = 150;
 
-/** Ambient breathing amplitude as a fraction of BASE_ALPHA. 0 = static. */
+/** Ambient breathing amplitude as a fraction of base alpha. 0 = static. */
 const BREATH_AMPLITUDE = 10;
 /** Breathing animation speed in cycles per second (Hz). Lower = slower. */
 const BREATH_SPEED = 0.3;
@@ -53,6 +55,7 @@ function hash(x: number, y: number) {
 export default function AsciiBackground({ className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { resolved } = useTheme();
   const stateRef = useRef({
     targetX: -9999,
     targetY: -9999,
@@ -70,6 +73,10 @@ export default function AsciiBackground({ className }: Props) {
     if (!canvas || !container) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    const COLOR = readCssVar(canvas, "--canvas-dot-rgb") || "125, 125, 125";
+    const BASE_ALPHA = Number(readCssVar(canvas, "--canvas-dot-alpha-base")) || 0.07;
+    const HOVER_ALPHA = Number(readCssVar(canvas, "--canvas-dot-alpha-hover")) || 0.1;
 
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     let width = 0;
@@ -212,7 +219,7 @@ export default function AsciiBackground({ className }: Props) {
       container.removeEventListener("mousemove", onMove);
       container.removeEventListener("mouseleave", onLeave);
     };
-  }, []);
+  }, [resolved]);
 
   return (
     <div

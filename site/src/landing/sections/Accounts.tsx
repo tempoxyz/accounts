@@ -68,10 +68,10 @@ export default function Accounts() {
             <LifecycleCode action={action} />
           </div>
           <div className="-mx-9 -mb-[26px] mt-auto">
-            <div className="bg-[#141414] px-5 py-5">
+            <div className="bg-panel-1 px-5 py-5">
               <div key={action} className="flex flex-col gap-2">
                 <p
-                  className="text-[14px] text-white"
+                  className="text-[14px] text-foreground"
                   style={{
                     animation: `fadeUp 360ms cubic-bezier(0.23, 1, 0.32, 1) 0ms both`,
                   }}
@@ -79,7 +79,7 @@ export default function Accounts() {
                   {INFO[action].title}
                 </p>
                 <p
-                  className="text-[12px] text-white/50"
+                  className="text-[12px] text-foreground-muted"
                   style={{
                     animation: `fadeUp 360ms cubic-bezier(0.23, 1, 0.32, 1) 80ms both`,
                   }}
@@ -127,29 +127,29 @@ const INFO: Record<LifecycleId, { title: string; description: string }> = {
 /* ─── Syntax tokens (mono color palette matches the adapter section) ─── */
 
 const Keyword = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#f47066" }}>{children}</span>
+  <span style={{ color: "var(--syn-red)" }}>{children}</span>
 );
 const Str = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#96d0ff" }}>{children}</span>
+  <span style={{ color: "var(--syn-blue)" }}>{children}</span>
 );
 const Fn = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#dcbdfb" }}>{children}</span>
+  <span style={{ color: "var(--syn-purple)" }}>{children}</span>
 );
 const Var = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#6db6ff" }}>{children}</span>
+  <span style={{ color: "var(--syn-cyan)" }}>{children}</span>
 );
 const Num = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#f0a868" }}>{children}</span>
+  <span style={{ color: "var(--syn-orange)" }}>{children}</span>
 );
 const Cmnt = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#7d8590" }}>{children}</span>
+  <span style={{ color: "var(--syn-muted)" }}>{children}</span>
 );
 
 function LifecycleCode({ action }: { action: LifecycleId }) {
   return (
     <pre
       key={action}
-      className="code-pre overflow-x-auto font-mono text-[15px] leading-[1.5] text-[#adbac7]"
+      className="code-pre overflow-x-auto font-mono text-[15px] leading-[1.5] text-code"
       style={{
         tabSize: 2,
         animation: `fadeUp 360ms cubic-bezier(0.23, 1, 0.32, 1) 0ms both`,

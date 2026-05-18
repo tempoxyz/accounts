@@ -3,7 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import AsciiBackground from "./ascii-bg";
 import { defaultAuthorizeAccessKey, isTrustedHost } from "./demo/sdk";
+import {
+  AgentCopyIcon,
+  CopyIcon,
+  DocsIcon,
+  GithubIcon,
+  TempoLogo,
+} from "./icons";
 import { useTempoSession } from "./sections/useTempoSession";
+import { ThemeSwitch } from "./theme-switch";
 
 type PackageManager = "npm" | "pnpm" | "bun";
 type Adapter = "tempoAuth" | "webAuth" | "privy" | "turnkey";
@@ -96,30 +104,26 @@ function TopNav() {
       <a
         href="/"
         aria-label="Tempo"
-        className="grid size-12 place-items-center bg-black"
+        className="grid size-12 place-items-center bg-background text-foreground"
       >
-        <img
-          src="/icons/tempo-logo.svg"
-          alt=""
-          width={20}
-          height={21}
-          />
+        <TempoLogo width={20} height={21} />
       </a>
       <div className="flex items-center gap-7 px-3">
         <a
           href="https://docs.tempo.xyz/accounts"
-          className="flex items-center gap-2 text-[12px] text-white outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
+          className="flex items-center gap-2 text-[12px] text-foreground outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
         >
-          <img src="/icons/docs.svg" alt="" width={16} height={16} />
+          <DocsIcon />
           DOCS
         </a>
         <a
           href="https://github.com/tempoxyz/accounts"
-          className="flex items-center gap-2 text-[12px] text-white outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
+          className="flex items-center gap-2 text-[12px] text-foreground outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
         >
-          <img src="/icons/github.svg" alt="" width={16} height={16} />
+          <GithubIcon />
           GITHUB
         </a>
+        <ThemeSwitch />
       </div>
     </nav>
   );
@@ -163,10 +167,10 @@ function HeroIntro() {
       style={{ animation: `fadeUp 600ms ${easeOut} 80ms both` }}
     >
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-[32px] leading-[1.1] tracking-[-0.02em] text-white sm:text-5xl sm:whitespace-nowrap">
+        <h1 className="text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-5xl sm:whitespace-nowrap">
           Accounts SDK
         </h1>
-        <p className="max-w-lg text-[16px] text-white/50 sm:text-xl">
+        <p className="max-w-lg text-[16px] text-foreground-muted sm:text-xl">
           The fastest way to build stablecoin-powered apps, wallets, and agentic
           workflows.
         </p>
@@ -174,7 +178,7 @@ function HeroIntro() {
 
       <div className="flex w-full max-w-[560px]">
         <div
-          className="flex w-full items-center justify-between bg-[#141414] px-4 py-3"
+          className="flex w-full items-center justify-between bg-panel-1 px-4 py-3"
           onMouseEnter={() => setPaused(true)}
           onMouseLeave={() => setPaused(false)}
         >
@@ -190,7 +194,7 @@ function HeroIntro() {
             >
               <span
                 key={`in-${pmIndex}`}
-                className="text-white/25"
+                className="text-foreground-subtle"
                 style={{
                   gridArea: "1 / 1",
                   animation: `pmSlideIn ${PM_SWAP_MS}ms ${easeOut} both`,
@@ -203,7 +207,7 @@ function HeroIntro() {
                 <span
                   key={`out-${outgoingIndex}-${pmIndex}`}
                   aria-hidden
-                  className="text-white/25"
+                  className="text-foreground-subtle"
                   style={{
                     gridArea: "1 / 1",
                     animation: `pmSlideOut ${PM_SWAP_MS}ms ${easeOut} both`,
@@ -214,13 +218,13 @@ function HeroIntro() {
                 </span>
               ) : null}
             </span>
-            <span className="pl-[1ch] text-white">{cmd.pkg}</span>
+            <span className="pl-[1ch] text-foreground">{cmd.pkg}</span>
           </p>
           <button
             type="button"
             onClick={() => copyInstall(fullCommand)}
             aria-label={copiedInstall ? "Copied" : `Copy ${fullCommand}`}
-            className="grid size-[18px] place-items-center outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
+            className="grid size-[18px] place-items-center text-foreground outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
           >
             {copiedInstall ? (
               <svg
@@ -229,6 +233,7 @@ function HeroIntro() {
                 viewBox="0 0 18 18"
                 fill="none"
                 aria-hidden
+                className="text-foreground"
               >
                 <path
                   d="M3.75 9.5L7.25 13L14.25 5"
@@ -236,11 +241,10 @@ function HeroIntro() {
                   strokeWidth="1.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="text-white"
                 />
               </svg>
             ) : (
-              <img src="/icons/copy.svg" alt="" width={18} height={18} />
+              <CopyIcon className="text-foreground" />
             )}
           </button>
         </div>
@@ -249,7 +253,7 @@ function HeroIntro() {
       <div className="mt-[-14px] flex items-center gap-5">
         <a
           href="https://docs.tempo.xyz/accounts"
-          className="flex items-center gap-1.5 text-[12px] text-white outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
+          className="flex items-center gap-1.5 text-[12px] text-foreground outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
         >
           View docs
           <svg
@@ -268,15 +272,15 @@ function HeroIntro() {
             />
           </svg>
         </a>
-        <span aria-hidden className="text-[12px] text-white/20">
+        <span aria-hidden className="text-[12px] text-foreground-subtle">
           |
         </span>
         <button
           type="button"
           onClick={() => copyAgent(agentInstructions)}
-          className="flex items-center gap-1 text-[12px] text-white/50 outline-none transition-colors hover:text-white focus-visible:text-white"
+          className="flex items-center gap-1 text-[12px] text-foreground-muted outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
         >
-          <img src="/icons/agent-copy.svg" alt="" width={16} height={16} />
+          <AgentCopyIcon />
           {copiedAgent ? "Copied" : "Copy instructions for my agent"}
         </button>
       </div>
@@ -285,25 +289,21 @@ function HeroIntro() {
 }
 
 const Keyword = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#f47066" }}>{children}</span>
+  <span style={{ color: "var(--syn-red)" }}>{children}</span>
 );
 const Str = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#96d0ff" }}>{children}</span>
+  <span style={{ color: "var(--syn-blue)" }}>{children}</span>
 );
 const Fn = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#dcbdfb" }}>{children}</span>
+  <span style={{ color: "var(--syn-purple)" }}>{children}</span>
 );
 const Var = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "#6db6ff" }}>{children}</span>
+  <span style={{ color: "var(--syn-cyan)" }}>{children}</span>
 );
 const Hl = ({ children }: { children: React.ReactNode }) => (
   <span
     className="hl-token rounded-[4px] px-[5px]"
-    style={{
-      background: "rgba(255, 255, 255, 0.12)",
-      boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.2)",
-      animation: `highlightFlash 900ms ${easeOut} both`,
-    }}
+    style={{ animation: `highlightFlash 900ms ${easeOut} both` }}
   >
     {children}
   </span>
@@ -321,7 +321,7 @@ function CodeBlock({ adapter }: { adapter: Adapter }) {
 
   return (
     <pre
-      className="code-pre scrollbar-hide max-h-[320px] overflow-auto font-mono text-[15px] leading-[1.5] text-[#adbac7]"
+      className="code-pre scrollbar-hide max-h-[320px] overflow-auto font-mono text-[15px] leading-[1.5] text-code"
       style={{ tabSize: 2 }}
     >
       <code>
@@ -402,23 +402,22 @@ function AdapterTabs({
 
   return (
     <div className="flex items-stretch gap-3">
-      <span className="flex items-center pr-1 font-mono text-[10px] tracking-[0.18em] text-white/20 uppercase">
+      <span className="flex items-center pr-1 font-mono text-[10px] tracking-[0.18em] text-foreground-subtle uppercase">
         Adapter
       </span>
       {/*
         Inactive pills get the dimmer bg from the row container itself
-        (`bg-[#0c0c0c]`). The active pill's brighter bg + border come
+        (`bg-panel-0`). The active pill's brighter bg + border come
         from a single floating <span> that slides between positions —
         buttons are transparent so the slide reads through them.
       */}
-      <div ref={tabsRef} className="relative flex items-center bg-[#0c0c0c]">
+      <div ref={tabsRef} className="relative flex items-center bg-panel-0">
         <span
           aria-hidden
-          className="pointer-events-none absolute top-0 bottom-0 border bg-[#141414]"
+          className="pointer-events-none absolute top-0 bottom-0 border border-panel-edge bg-panel-1"
           style={{
             transform: `translateX(${highlight.left}px)`,
             width: highlight.width,
-            borderColor: "#2e2e2e",
             opacity: highlight.ready ? 1 : 0,
             transition: highlight.ready
               ? `transform 280ms ${easeOut}, width 280ms ${easeOut}, opacity 200ms ease-out`
@@ -433,10 +432,7 @@ function AdapterTabs({
               type="button"
               data-adapter={t.id}
               onClick={() => setAdapter(t.id)}
-              className="relative z-10 flex items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none transition-colors duration-150"
-              style={{
-                color: active ? "#ffffff" : "rgba(255,255,255,0.5)",
-              }}
+              className={`relative z-10 flex items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none transition-colors duration-150 ${active ? "text-foreground" : "text-foreground-muted"}`}
             >
               {t.label}
             </button>
@@ -465,9 +461,9 @@ function BalancesCard({
     { sym: "ETH", value: "0.42" },
   ];
   const ringColors: Record<string, string> = {
-    USDC: "#2775ca",
-    USDT: "#26a17b",
-    ETH: "#627eea",
+    USDC: "var(--brand-usdc)",
+    USDT: "var(--brand-usdt)",
+    ETH: "var(--brand-eth)",
   };
 
   const cta =
@@ -478,18 +474,18 @@ function BalancesCard({
         : "Sign in";
 
   return (
-    <div className="flex w-full max-w-[420px] flex-col gap-5 bg-[#181818] p-6">
+    <div className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6">
       <div className="flex flex-col gap-1">
-        <p className="text-[13px] text-white/50">Available balance</p>
-        <p className="font-mono text-[28px] tabular-nums text-white">
+        <p className="text-[13px] text-foreground-muted">Available balance</p>
+        <p className="font-mono text-[28px] tabular-nums text-foreground">
           {connected ? (balanceDisplay ?? "$0.00") : "$0.00"}
         </p>
       </div>
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-[12px] text-white/50">Balances</p>
-          <p className="text-[11px] text-white/40">View all</p>
+          <p className="text-[12px] text-foreground-muted">Balances</p>
+          <p className="text-[11px] text-foreground-subtle">View all</p>
         </div>
         <div className="flex flex-col gap-2">
           {balances.map((b, i) => (
@@ -509,18 +505,18 @@ function BalancesCard({
                 ) : (
                   <span
                     aria-hidden
-                    className="block size-[20px] shrink-0 rounded-full bg-[#292929]"
+                    className="block size-[20px] shrink-0 rounded-full bg-panel-5"
                     style={{
                       animation: `pulseDot 1600ms ease-in-out ${i * 120}ms infinite`,
                     }}
                   />
                 )}
                 {connected ? (
-                  <span className="text-[13px] text-white">{b.sym}</span>
+                  <span className="text-[13px] text-foreground">{b.sym}</span>
                 ) : (
                   <span
                     aria-hidden
-                    className="block h-3 w-14 bg-[#292929]"
+                    className="block h-3 w-14 bg-panel-5"
                     style={{
                       animation: `pulseDot 1600ms ease-in-out ${i * 120 + 80}ms infinite`,
                     }}
@@ -528,13 +524,13 @@ function BalancesCard({
                 )}
               </div>
               {connected ? (
-                <span className="font-mono text-[13px] tabular-nums text-white">
+                <span className="font-mono text-[13px] tabular-nums text-foreground">
                   {b.value}
                 </span>
               ) : (
                 <span
                   aria-hidden
-                  className="block h-3 w-[46px] bg-[#292929]"
+                  className="block h-3 w-[46px] bg-panel-5"
                   style={{
                     animation: `pulseDot 1600ms ease-in-out ${i * 120 + 160}ms infinite`,
                   }}
@@ -549,12 +545,12 @@ function BalancesCard({
         type="button"
         onClick={onSignIn}
         disabled={status === "running"}
-        className="flex h-11 w-full items-center justify-center gap-2 bg-white px-4 text-[14px] text-[#181818] outline-none transition-opacity hover:opacity-90 focus-visible:opacity-90 disabled:cursor-progress disabled:opacity-80"
+        className="flex h-11 w-full items-center justify-center gap-2 bg-cta px-4 text-[14px] text-cta-fg outline-none transition-opacity hover:opacity-90 focus-visible:opacity-90 disabled:cursor-progress disabled:opacity-80"
       >
         {status === "running" ? (
           <span
             aria-hidden
-            className="size-1.5 shrink-0 rounded-full bg-[#181818]"
+            className="size-1.5 shrink-0 rounded-full bg-cta-fg"
             style={{ animation: "pulseDot 900ms ease-in-out infinite" }}
           />
         ) : null}
@@ -606,13 +602,13 @@ function DemoSplit() {
     <section className="relative px-6 pt-20 pb-0 sm:pt-[80px]">
       <div className="flex flex-col items-center gap-3 text-center">
         <h2
-          className="text-[32px] leading-[1.1] tracking-[-0.02em] text-white sm:text-[48px] sm:whitespace-nowrap"
+          className="text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-[48px] sm:whitespace-nowrap"
           style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
         >
           Bring your own wallet provider
         </h2>
         <p
-          className="max-w-[520px] text-[16px] text-white/50 sm:text-[20px]"
+          className="max-w-[520px] text-[16px] text-foreground-muted sm:text-[20px]"
           style={{ animation: `fadeUp 600ms ${easeOut} 80ms both` }}
         >
           Accounts SDK is provider-agnostic. Bring your own wallet. Keep the
@@ -623,20 +619,20 @@ function DemoSplit() {
         className="-mx-6 mt-8 grid grid-cols-1 sm:mt-12 lg:grid-cols-[1fr_626px]"
         style={{ animation: `fadeUp 700ms ${easeOut} 120ms both` }}
       >
-        <div className="flex flex-col gap-10 bg-[#0c0c0c] px-9 py-[26px] lg:min-h-[540px]">
+        <div className="flex flex-col gap-10 bg-panel-0 px-9 py-[26px] lg:min-h-[540px]">
           <AdapterTabs adapter={adapter} setAdapter={handleAdapterChange} />
           <CodeBlock adapter={adapter} />
           <div className="-mx-9 -mb-[26px] mt-auto">
-            <div className="bg-[#141414] px-5 py-5">
+            <div className="bg-panel-1 px-5 py-5">
               <div key={adapter} className="flex flex-col gap-2">
                 <p
-                  className="text-[14px] text-white"
+                  className="text-[14px] text-foreground"
                   style={{ animation: `fadeUp 360ms ${easeOut} 0ms both` }}
                 >
                   {adapterInfo[adapter].title}
                 </p>
                 <p
-                  className="text-[12px] text-white/50"
+                  className="text-[12px] text-foreground-muted"
                   style={{ animation: `fadeUp 360ms ${easeOut} 80ms both` }}
                 >
                   {adapterInfo[adapter].description}
@@ -645,7 +641,7 @@ function DemoSplit() {
             </div>
           </div>
         </div>
-        <div className="dash-l relative flex items-center justify-center overflow-hidden bg-[#0a0a0a] px-6 py-12 lg:min-h-[540px]">
+        <div className="dash-l relative flex items-center justify-center overflow-hidden bg-background px-6 py-12 lg:min-h-[540px]">
           <AsciiBackground />
           <div className="relative z-10 w-full max-w-[420px]">
             <BalancesCard

@@ -33,23 +33,23 @@ export function PayPerUseBody({
 
   return (
     <div
-      className="flex w-full max-w-[420px] flex-col gap-5 bg-[#181818] p-6"
+      className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6"
       style={bodyAnimation(delay)}
     >
       <div className="flex items-end justify-between">
         <div className="flex flex-col gap-1">
-          <p className="text-[13px] text-white/50">API calls today</p>
-          <p className="font-mono text-[28px] tabular-nums text-white">
+          <p className="text-[13px] text-foreground-muted">API calls today</p>
+          <p className="font-mono text-[28px] tabular-nums text-foreground">
             {calls.toLocaleString()}
-            <span className="text-white/40">{" / "}{cap.toLocaleString()}</span>
+            <span className="text-foreground-subtle">{" / "}{cap.toLocaleString()}</span>
           </p>
         </div>
-        <p className="font-mono text-[12px] text-white/50">$0.012 / call</p>
+        <p className="font-mono text-[12px] text-foreground-muted">$0.012 / call</p>
       </div>
 
-      <div className="h-1 w-full bg-[#262626]">
+      <div className="h-1 w-full bg-panel-4">
         <div
-          className="h-full bg-white"
+          className="h-full bg-foreground"
           style={{
             width: `${filled ? pct : 0}%`,
             transition: `width 1100ms ${easeOut}`,
@@ -57,7 +57,7 @@ export function PayPerUseBody({
         />
       </div>
 
-      <p className="text-[13px] text-white/50">
+      <p className="text-[13px] text-foreground-muted">
         Settles automatically per call. No prompt after authorization until the
         cap is reached.
       </p>
@@ -69,7 +69,7 @@ export function PayPerUseBody({
         className="h-11 w-full"
       />
       {result?.summary ? (
-        <p className="font-mono text-[12px] text-white/50">{result.summary}</p>
+        <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
       ) : null}
     </div>
   );

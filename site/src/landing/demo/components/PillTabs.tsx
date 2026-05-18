@@ -18,12 +18,7 @@ export function PillTabs<T extends string>({
             key={t}
             type="button"
             onClick={() => onChange(t)}
-            className="flex items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none transition-colors duration-150"
-            style={{
-              background: active ? "#141414" : "#0c0c0c",
-              border: active ? "1px solid #2e2e2e" : "1px solid transparent",
-              color: active ? "#ffffff" : "rgba(255,255,255,0.5)",
-            }}
+            className={`flex items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none transition-colors duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
           >
             {t}
           </button>

@@ -38,12 +38,12 @@ export function LogInBody({
 
   return (
     <div
-      className="flex w-full max-w-[420px] flex-col gap-5 bg-[#181818] p-6"
+      className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6"
       style={bodyAnimation(delay)}
     >
       <div className="flex flex-col gap-1.5">
-        <p className="text-[18px] text-white">Sign in to your account</p>
-        <p className="text-[13px] text-white/50">{description}</p>
+        <p className="text-[18px] text-foreground">Sign in to your account</p>
+        <p className="text-[13px] text-foreground-muted">{description}</p>
       </div>
 
       <PrimaryButton
@@ -54,7 +54,7 @@ export function LogInBody({
       />
 
       {status === "done" && result?.summary ? (
-        <p className="font-mono text-[12px] text-white/50">{result.summary}</p>
+        <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
       ) : null}
     </div>
   );

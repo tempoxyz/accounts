@@ -50,7 +50,12 @@ export function defaultAuthorizeAccessKey() {
   } as const;
 }
 
-export function buildAdapter(adapter: Adapter) {
+/** Resolved colour-scheme to apply to the Tempo wallet dialog. Mirrors
+ * the landing page's `data-theme` so the popup opens light/dark to match
+ * the surrounding page. */
+export type DialogScheme = "light" | "dark";
+
+export function buildAdapter(adapter: Adapter, scheme: DialogScheme = "dark") {
   if (adapter === "webAuth") return webAuthn();
   // tempoAuth + privy share the dialog adapter under the hood.
   // Dev: use popup — iframe mode trips React 19's logComponentRender
@@ -59,12 +64,15 @@ export function buildAdapter(adapter: Adapter) {
   const isDev = import.meta.env.DEV;
   return tempoWallet({
     name: "Accounts SDK",
-    theme: { radius: "large", scheme: "dark" },
+    theme: { radius: "large", scheme },
     ...(isDev ? { dialog: Dialog.popup() } : {}),
   });
 }
 
-export function createProvider(adapter: Adapter): AccountsProvider {
+export function createProvider(
+  adapter: Adapter,
+  scheme: DialogScheme = "dark",
+): AccountsProvider {
   // Storage pattern lifted from wallet-next/src/lib/config.ts:
   // cookie + localStorage is synchronous (no async hydration delay) and
   // is what the wallet itself uses. `key` namespaces everything to this
@@ -74,7 +82,7 @@ export function createProvider(adapter: Adapter): AccountsProvider {
     Storage.localStorage({ key: STORAGE_KEY }),
   );
   return Provider.create({
-    adapter: buildAdapter(adapter),
+    adapter: buildAdapter(adapter, scheme),
     persistCredentials: true,
     storage,
   });
