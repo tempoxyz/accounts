@@ -1,8 +1,8 @@
 # Access Key Example
 
 Demonstrates using `authorizeAccessKey` with the `tempoWallet` (dialog)
-connector. An access key is automatically authorized on connect — subsequent
-transactions are signed locally without the wallet popup.
+connector. An access key is automatically authorized on connect -- subsequent
+matching transfers are signed locally without the wallet popup.
 
 ## Setup
 

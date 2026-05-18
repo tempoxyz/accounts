@@ -1,13 +1,11 @@
 import { useRef } from 'react'
-import { formatUnits, parseUnits, stringify, type Hex } from 'viem'
-import { Actions } from 'viem/tempo'
+import { formatUnits, stringify, type Hex } from 'viem'
 import {
   useChains,
   useConnect,
   useConnection,
   useConnectors,
   useDisconnect,
-  useSendTransactionSync,
   useSwitchChain,
 } from 'wagmi'
 import { Hooks } from 'wagmi/tempo'
@@ -39,8 +37,8 @@ export default function App() {
           <h2>Balance</h2>
           <Balance />
 
-          <h2>Send Transaction</h2>
-          <SendTransaction />
+          <h2>Transfer</h2>
+          <Transfer />
         </>
       )}
     </div>
@@ -144,22 +142,20 @@ function Balance() {
   )
 }
 
-function SendTransaction() {
-  const { mutate: sendTransactionSync, data, error, isPending } = useSendTransactionSync()
+function Transfer() {
+  const transfer = Hooks.wallet.useTransfer()
   return (
     <div>
       <form
         onSubmit={(e) => {
           e.preventDefault()
           const form = new FormData(e.currentTarget)
-          sendTransactionSync({
-            calls: [
-              Actions.token.transfer.call({
-                to: form.get('to') as string as Hex,
-                token: pathUsd,
-                amount: parseUnits((form.get('amount') as string) || '0', 6),
-              }),
-            ],
+          const amount = (form.get('amount') as string) || '0'
+          const to = form.get('to') as Hex
+          transfer.mutate({
+            amount,
+            to,
+            token: 'pathusd',
           })
         }}
         style={{ display: 'flex', gap: 8, alignItems: 'center' }}
@@ -171,17 +167,19 @@ function SendTransaction() {
           style={{ flex: 1, fontFamily: 'monospace' }}
         />
         <input name="amount" defaultValue="1" placeholder="Amount" style={{ width: 80 }} />
-        <button type="submit" disabled={isPending}>
+        <button type="submit" disabled={transfer.isPending}>
           Send
         </button>
       </form>
-      {error && <pre style={{ color: 'red' }}>{`${error.name}: ${error.message}`}</pre>}
-      {data !== undefined && (
+      {transfer.error && (
+        <pre style={{ color: 'red' }}>{`${transfer.error.name}: ${transfer.error.message}`}</pre>
+      )}
+      {transfer.data !== undefined && (
         <>
-          <p>✅ Transaction success!</p>
+          <p>✅ Transfer success!</p>
           <details>
             <summary>Receipt</summary>
-            <pre>{stringify(data, null, 2)}</pre>
+            <pre>{stringify(transfer.data, null, 2)}</pre>
           </details>
         </>
       )}

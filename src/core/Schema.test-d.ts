@@ -156,6 +156,24 @@ describe('Encoded', () => {
     }>()
   })
 
+  test('wallet_deposit', () => {
+    expectTypeOf<Rpc.wallet_deposit.Encoded>().toMatchTypeOf<{
+      method: 'wallet_deposit'
+      params:
+        | readonly [
+            {
+              address?: Hex | undefined
+              amount?: string | undefined
+              chainId?: Hex | undefined
+              displayName?: string | undefined
+              token?: Hex | string | undefined
+            },
+          ]
+        | undefined
+      returns: { receipts?: readonly { transactionHash: Hex }[] | undefined } | undefined
+    }>()
+  })
+
   test('wallet_switchEthereumChain', () => {
     expectTypeOf<Rpc.wallet_switchEthereumChain.Encoded>().toEqualTypeOf<{
       method: 'wallet_switchEthereumChain'

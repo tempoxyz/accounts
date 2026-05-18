@@ -11,6 +11,7 @@
     "preview": "vp preview"
   },
   "dependencies": {
+    "@privy-io/js-sdk-core": "^0.61.3",
     "@turnkey/core": "1.13.0",
     "accounts": "workspace:*",
     "mppx": "catalog:",

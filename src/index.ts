@@ -15,6 +15,7 @@ export * as TrustedHosts from './core/TrustedHosts.js'
 export * as WebAuthnCeremony from './core/WebAuthnCeremony.js'
 export { dialog, dialog as tempoWallet } from './core/adapters/dialog.js'
 export { local } from './core/adapters/local.js'
+export { privy } from './core/adapters/privy.js'
 export { turnkey } from './core/adapters/turnkey.js'
 export { webAuthn } from './core/adapters/webAuthn.js'
 export {

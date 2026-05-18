@@ -1,58 +1,270 @@
 ---
 title: Fee Sponsorship
-description: Pay transaction fees for users from a server-controlled policy.
+description: Sponsor transaction fees from a server-controlled policy.
 ---
+
+import { Cards, Card } from 'vocs'
+import { ConnectAccount } from '../../../components/ConnectAccount'
+import { Demo, DemoReset } from '../../../components/Demo'
+import { SponsoredPayment } from '../../../components/SponsoredPayment'
+import * as Steps from '../../../components/Steps'
 
 # Fee Sponsorship
 
-Sponsor fees for user transactions while keeping signing and sponsorship policy separate.
+Let connected accounts complete approved actions without keeping fee tokens on hand. Your app decides which transactions qualify for sponsorship, pays the network fee for those requests, and leaves every other transaction on the normal self-funded path.
 
 ## Demo
 
-Target workspace: `examples/fee-sponsorship/`.
+By the end of this guide you'll have a fee sponsorship flow where the user signs in, your server decides whether to sponsor a request, and matching transfers can be routed through the server-owned fee payer.
 
-Seed implementations: `examples/fee-payer/` and `examples/fee-payer-and-webauthn/`.
-
-:::warning[Stub]
-The existing examples should be consolidated under the guide slug after the adapter toggle and server policy shape are finalized.
-:::
+<Demo
+  title="Sponsored Transfer"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/fee-payer"
+  wagmiConfig="feeSponsorship"
+  headerAction={<DemoReset />}
+  className="flex flex-col gap-3"
+>
+  <Steps.Step
+    label="Create an account, or use an existing one."
+    action={<ConnectAccount />}
+  />
+  <SponsoredPayment value={2} />
+</Demo>
 
 ## Walkthrough
 
 ::::steps
 
-### Install the SDK
+### Connect an Account
 
-```bash
-pnpm add accounts wagmi viem
+Follow the [Connect Accounts](/docs/guides/connect-accounts) guide to set up Wagmi with Tempo Wallet, WebAuthn, or another signing adapter. Fee sponsorship works after the user has a connected account that can sign the transaction.
+
+### Install the Server Dependencies
+
+Install [Hono](https://hono.dev) for the server snippets in this guide.
+
+:::code-group
+
+```bash [npm]
+npm i hono
 ```
 
-### Configure the Provider
+```bash [pnpm]
+pnpm i hono
+```
 
-Configure the client adapter and a server handler that can attach fee payer behavior.
+```bash [bun]
+bun i hono
+```
 
-### Connect the user's account
+:::
 
-Connect the account with Tempo Wallet or WebAuthn.
+:::tip[Any framework works]
+`Handler.relay` supports the Web Fetch API and Node.js `RequestListener`, so you can mount it in Hono, Express, Next.js, Bun, Deno, Elysia, or another server framework.
+:::
 
-### Submit the request
+### Mount the Relay
 
-Submit the transaction through the sponsored flow so the server can apply the fee payer.
+Create a [`Handler.relay`](/docs/server/handler.relay) with a `feePayer` account and expose it under `/relay`. The relay fills incoming transactions, signs the fee payer portion when sponsorship is approved, and returns a transaction that the connected account can sign.
 
-### Verify the result
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Handler } from 'accounts/server'
+import { Hono } from 'hono'
+import { privateKeyToAccount } from 'viem/accounts'
 
-Inspect the receipt and show which address paid fees.
+const app = new Hono()
+const relay = Handler.relay({
+  feePayer: {
+    account: privateKeyToAccount(process.env.RELAY_PRIVATE_KEY),
+    name: 'My App',
+    url: 'https://myapp.com',
+  },
+  path: '/relay',
+})
+
+app.all('/relay/*', (c) => relay.fetch(c.req.raw))
+
+export default app
+```
+
+:::tip[Using a different framework?]
+`Handler.relay` exposes both `fetch` (Web Fetch API) and `listener` (Node.js `RequestListener`) entrypoints, so you can plug the same relay into any server framework:
+
+```ts
+createServer(relay.listener)               // Node.js
+Bun.serve({ fetch: relay.fetch })          // Bun
+Deno.serve({ fetch: relay.fetch })         // Deno
+app.all('*', c => relay.fetch(c.request))  // Elysia
+app.use(relay.listener)                    // Express
+app.use(c => relay.fetch(c.req.raw))       // Hono
+export const GET = relay.fetch             // Next.js
+export const POST = relay.fetch            // Next.js
+```
+:::
+
+:::warning[Add a sponsorship policy]
+The minimal example sponsors any transaction sent to the relay. Before funding a production fee payer account, add `feePayer.validate`, rate limits, and logging so your server only sponsors the requests your app intends to support.
+:::
+
+### Configure the Connector
+
+Pass the relay URL to your connector with `feePayer`. This tells Tempo Wallet which app relay should sponsor the transaction when signing locally or falling back to the hosted wallet UI.
+
+:::code-group
+
+```tsx twoslash [Tempo Wallet]
+// @noErrors
+import { createConfig, http } from 'wagmi'
+import { tempo, tempoModerato } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  chains: [tempo, tempoModerato],
+  connectors: [
+    tempoWallet({
+      testnet: true,
+      feePayer: import.meta.env.VITE_FEE_PAYER_URL ?? '/relay', // [!code focus]
+    }),
+  ],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+    [tempoModerato.id]: http(),
+  },
+})
+```
+
+```tsx twoslash [Domain-bound Passkeys]
+// @noErrors
+import { createConfig, http } from 'wagmi'
+import { tempo, tempoModerato } from 'wagmi/chains'
+import { webAuthn } from 'wagmi/tempo'
+
+export const config = createConfig({
+  chains: [tempo, tempoModerato],
+  connectors: [
+    webAuthn({
+      testnet: true,
+      authUrl: '/auth',
+      feePayer: '/relay', // [!code focus]
+    }),
+  ],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+    [tempoModerato.id]: http(),
+  },
+})
+```
+
+:::
+
+### Send a Transfer
+
+Call [`Hooks.wallet.useTransfer`](https://wagmi.sh/tempo/hooks/wallet.useTransfer) normally. With `feePayer` configured, the transfer uses your relay by default, where the server decides whether to sponsor it.
+
+```tsx twoslash [Transfer.tsx]
+// @noErrors
+import { Hooks } from 'wagmi/tempo'
+
+export function Transfer() {
+  const transfer = Hooks.wallet.useTransfer()
+
+  return (
+    <button
+      disabled={transfer.isPending}
+      onClick={() =>
+        transfer.mutate({
+          amount: '1',
+          to: '0x0000000000000000000000000000000000000001',
+          token: 'pathusd',
+        })
+      }
+    >
+      {transfer.isPending ? 'Sending...' : 'Pay $1'}
+    </button>
+  )
+}
+```
+
+### Show the Fee Payer
+
+The transfer result includes the submitted receipt. When sponsorship succeeds, `receipt.feePayer` is the server-owned account that paid the transaction fee.
+
+```tsx twoslash [Transfer.tsx]
+// @noErrors
+import { Hooks } from 'wagmi/tempo'
+
+export function Transfer() {
+  const transfer = Hooks.wallet.useTransfer()
+
+  return (
+    <div>
+      <button onClick={() => transfer.mutate({ /* ... */ })}>Pay $1</button>
+      {transfer.data?.receipt.feePayer && (
+        <p>
+          Fees paid by <code>{transfer.data.receipt.feePayer}</code>
+        </p>
+      )}
+    </div>
+  )
+}
+```
+
+:::tip[Per-request control]
+The transfer above does not pass a `feePayer` override. The connector-level `feePayer` value is used by default. Only pass `feePayer: false` when you intentionally want the connected account to pay its own transaction fee.
+:::
 
 ::::
 
 ## Best Practices
 
-- Keep sponsorship policy server-side.
-- Log rejected sponsorship attempts with enough context to debug policy failures.
-- Keep spinner and approval text short in CLI or terminal flows.
+### Validate Sponsorship Server-Side
+
+Treat the relay as the policy boundary. Use `feePayer.validate` to check the account, target contracts, calldata, token amounts, and any app-level limits before signing. Returning `false` does not reject the transaction outright — the relay re-fills it for self-payment.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Handler } from 'accounts/server'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const blocked = '0x0000000000000000000000000000000000000001'
+
+const handler = Handler.relay({
+  feePayer: {
+    account: privateKeyToAccount('0x...'),
+    validate: (request) =>
+      request.from?.toLowerCase() !== blocked.toLowerCase(), // [!code focus]
+  },
+})
+```
 
 ## Next Steps
 
-- [Handler.feePayer](/docs/server/handler.feePayer)
-- [Transfers](/docs/guides/transfers)
-- [Tempo Wallet adapter](/docs/adapters/tempo-wallet)
+<Cards>
+  <Card
+    description="Run the Tempo Wallet fee sponsorship example locally."
+    to="https://github.com/tempoxyz/accounts/tree/main/examples/fee-payer"
+    icon="lucide:badge-dollar-sign"
+    title="Fee Payer Example"
+  />
+  <Card
+    description="Configure the relay that fills, validates, and signs sponsored transactions."
+    to="/docs/server/handler.relay"
+    icon="lucide:hand-coins"
+    title="Handler.relay"
+  />
+  <Card
+    description="Send stablecoin transfers from a connected account."
+    to="/docs/guides/transfers"
+    icon="lucide:send"
+    title="Transfers"
+  />
+  <Card
+    description="Configure Tempo Wallet with auth, access keys, and fee sponsorship."
+    to="/docs/wagmi/tempoWallet"
+    icon="lucide:wallet"
+    title="Tempo Wallet"
+  />
+</Cards>
