@@ -531,10 +531,10 @@ export function privy<const client extends privy.Client>(
               })
           await requireSession()
           walletAccounts = selectWalletAccounts(await loadEthereumWallets(privyClient), addresses)
-          // Drop any in-flight boot-time `restore()` reference so re-entrant
-          // `restore()` calls (e.g. from `accountForSigning`) don't `await` a
-          // stale IIFE that would later overwrite `walletAccounts` with the
-          // intersection against now-replaced persisted accounts.
+          // Drop any in-flight `restore()` (from a concurrent `accountForSigning`)
+          // so re-entrant `restore()` calls don't `await` a stale IIFE that would
+          // later overwrite `walletAccounts` with the intersection against
+          // now-replaced persisted accounts.
           restore_promise = undefined
 
           const account = walletAccounts[0]
@@ -575,10 +575,10 @@ export function privy<const client extends privy.Client>(
           const addresses = await options.loadAccounts({ client: privyClient, parameters })
           await requireSession()
           walletAccounts = selectWalletAccounts(await loadEthereumWallets(privyClient), addresses)
-          // Drop any in-flight boot-time `restore()` reference so re-entrant
-          // `restore()` calls (e.g. from `accountForSigning`) don't `await` a
-          // stale IIFE that would later overwrite `walletAccounts` with the
-          // intersection against now-replaced persisted accounts.
+          // Drop any in-flight `restore()` (from a concurrent `accountForSigning`)
+          // so re-entrant `restore()` calls don't `await` a stale IIFE that would
+          // later overwrite `walletAccounts` with the intersection against
+          // now-replaced persisted accounts.
           restore_promise = undefined
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters?.digest
