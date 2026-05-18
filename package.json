@@ -9,7 +9,7 @@
     "docs:build": "pnpm --filter site build",
     "docs:dev": "pnpm --filter site dev",
     "docs:preview": "pnpm --filter site preview",
-    "check:types": "tsc -b --noEmit && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types",
+    "check:types": "pnpm -r --parallel --include-workspace-root --filter accounts --filter './examples/*' --filter './playgrounds/web' exec tsc -b --noEmit",
     "dev:dialog": "pnpm --filter tempo-app dev",
     "dev:dialog-ref": "pnpm --filter dialog-ref dev",
     "dev:hosts": "./scripts/dev:hosts.sh",
