@@ -7,13 +7,14 @@ import { useDisconnect, WagmiProvider } from 'wagmi'
 import LucideExternalLink from '~icons/lucide/external-link'
 import LucideRotateCcw from '~icons/lucide/rotate-ccw'
 
-import { spendPermissionsWagmiConfig, wagmiConfig } from '../wagmi.js'
+import { spendPermissionsWagmiConfig, themingWagmiConfig, wagmiConfig } from '../wagmi.js'
 import * as Steps from './Steps.js'
 
 const queryClient = new QueryClient()
 const wagmiConfigs = {
   default: wagmiConfig,
   spendPermissions: spendPermissionsWagmiConfig,
+  theming: themingWagmiConfig,
 }
 
 export function Demo(props: Demo.Props) {

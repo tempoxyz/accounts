@@ -38,6 +38,25 @@ export const spendPermissionsWagmiConfig: Config = createConfig({
   },
 })
 
+export const themingWagmiConfig: Config = createConfig({
+  chains: [tempoModerato, tempo],
+  connectors: [
+    tempoWallet({
+      mpp: true,
+      testnet: true,
+      theme: {
+        accent: '#ff007a',
+        radius: 'full',
+      },
+    }),
+  ],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempoModerato.id]: http(),
+    [tempo.id]: http(),
+  },
+})
+
 declare module 'wagmi' {
   interface Register {
     config: typeof wagmiConfig
