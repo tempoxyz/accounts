@@ -1031,8 +1031,13 @@ export function create(options: create.Options = {}): create.ReturnType {
     const polyfill = polyfill_option ?? isFetchWritable()
     const getClient = ({ chainId }: { chainId?: number | undefined }) => {
       const client = provider.getClient({ chainId })
-      const account = provider.getAccount()
-      return Object.assign(client, { account })
+      const account = provider.getAccount({ accessKey: false })
+      return Object.assign(client, {
+        account: {
+          address: account.address,
+          type: 'json-rpc' as const,
+        },
+      })
     }
     const mppx = Mppx.create({
       methods: [
