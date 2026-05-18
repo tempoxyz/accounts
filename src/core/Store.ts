@@ -1,53 +1,15 @@
-import type { Address, Hex, RpcRequest, RpcResponse, WebCryptoP256 } from 'ox'
-import type { KeyAuthorization } from 'ox/tempo'
+import type { RpcRequest, RpcResponse } from 'ox'
 import type { Mutate, StoreApi } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { createStore } from 'zustand/vanilla'
 
 import type { OneOf } from '../internal/types.js'
+import type { AccessKey } from './AccessKey.js'
 import type { Store as Account } from './Account.js'
 import * as Storage from './Storage.js'
 
-export type { Account }
-
-/** Access key entry stored alongside accounts. */
-export type AccessKey = {
-  /** Access key address. */
-  address: Address.Address
-  /** Owner of the access key. */
-  access: Address.Address
-  /** Chain ID this access key authorization is scoped to. */
-  chainId: number
-  /** Unix timestamp when the access key expires. */
-  expiry?: number | undefined
-  /** Signed key authorization to attach until the key is observed on-chain. */
-  keyAuthorization?: KeyAuthorization.Signed | undefined
-  /** Whether the key authorization is pending confirmation on-chain. */
-  keyAuthorizationPending?: boolean | undefined
-  /** Key type. */
-  keyType: 'secp256k1' | 'p256' | 'webAuthn' | 'webCrypto'
-  /** TIP-20 spending limits for the access key. */
-  limits?: { token: Address.Address; limit: bigint; period?: number | undefined }[] | undefined
-  /** Call scopes restricting which contracts/selectors this key can call. */
-  scopes?:
-    | {
-        address: Address.Address
-        selector?: Hex.Hex | string | undefined
-        recipients?: readonly Address.Address[] | undefined
-      }[]
-    | undefined
-} & OneOf<
-  | {}
-  | {
-      /** The exported private key backing the access key. */
-      privateKey: Hex.Hex
-    }
-  | {
-      /** The WebCrypto key pair backing the access key. */
-      keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>
-    }
->
+export type { AccessKey, Account }
 
 /** Reactive state for the provider. */
 export type State = {

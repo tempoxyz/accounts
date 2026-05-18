@@ -3,10 +3,9 @@ import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import type { Client, Transport } from 'viem'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
 
+import type { OneOf } from '../internal/types.js'
 import * as ExecutionError from './ExecutionError.js'
 import type * as Store from './Store.js'
-
-type AccessKey = Store.AccessKey
 
 const status = {
   /** No matching usable access key was found. */
@@ -20,6 +19,44 @@ const status = {
 } as const
 
 type Status = (typeof status)[keyof typeof status]
+
+/** Access key entry stored alongside accounts. */
+export type AccessKey = {
+  /** Access key address. */
+  address: Address.Address
+  /** Owner of the access key. */
+  access: Address.Address
+  /** Chain ID this access key authorization is scoped to. */
+  chainId: number
+  /** Unix timestamp when the access key expires. */
+  expiry?: number | undefined
+  /** Signed key authorization to attach until the key is observed on-chain. */
+  keyAuthorization?: KeyAuthorization.Signed | undefined
+  /** Whether the key authorization is pending confirmation on-chain. */
+  keyAuthorizationPending?: boolean | undefined
+  /** Key type. */
+  keyType: 'secp256k1' | 'p256' | 'webAuthn' | 'webCrypto'
+  /** TIP-20 spending limits for the access key. */
+  limits?: { token: Address.Address; limit: bigint; period?: number | undefined }[] | undefined
+  /** Call scopes restricting which contracts/selectors this key can call. */
+  scopes?:
+    | {
+        address: Address.Address
+        selector?: Hex.Hex | string | undefined
+        recipients?: readonly Address.Address[] | undefined
+      }[]
+    | undefined
+} & OneOf<
+  | {}
+  | {
+      /** The exported private key backing the access key. */
+      privateKey: Hex.Hex
+    }
+  | {
+      /** The WebCrypto key pair backing the access key. */
+      keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>
+    }
+>
 
 /** Calls used to match access key scopes. */
 type Call = {
@@ -68,7 +105,7 @@ type Selection = {
   /** Pending key authorization to attach, if the key is not yet known published. */
   authorization?: KeyAuthorization.Signed | undefined
   /** Stored access key record. */
-  record: Store.AccessKey
+  record: AccessKey
   /** Publication status for the selected access key. */
   status: 'pending' | 'published'
 }
@@ -320,7 +357,7 @@ export declare namespace add {
   }
 
   /** Stored access key record. */
-  type ReturnType = Store.AccessKey
+  type ReturnType = AccessKey
 }
 
 /** Marks a key authorization as pending confirmation on-chain. */
