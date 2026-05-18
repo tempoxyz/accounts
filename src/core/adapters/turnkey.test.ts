@@ -94,10 +94,10 @@ describe('turnkey', () => {
     `)
   })
 
-  test('default: loadAccounts delegates login and caches wallet accounts for signing', async () => {
-    const { adapter, client } = setup()
+  test('default: loadAccounts returns accounts for store-backed signing', async () => {
+    const { adapter, client, store } = setup()
 
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+    await connect({ adapter, store })
     const result = await adapter.actions.signPersonalMessage(
       { address, data: '0x68656c6c6f' },
       { method: 'personal_sign', params: ['0x68656c6c6f', address] },
@@ -148,9 +148,9 @@ describe('turnkey', () => {
   })
 
   test('default: signs transactions with a hydrated Tempo account', async () => {
-    const { adapter, client } = setup()
+    const { adapter, client, store } = setup()
 
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+    await connect({ adapter, store })
     const result = await adapter.actions.signTransaction(
       {
         chainId: 1,
@@ -181,7 +181,7 @@ describe('turnkey', () => {
   })
 
   test('default: accepts prefixed Turnkey public keys', async () => {
-    const { adapter, client } = setup()
+    const { adapter, client, store } = setup()
     const walletAccount = toWalletAccount(account)
     client.wallets = [
       {
@@ -194,7 +194,7 @@ describe('turnkey', () => {
       },
     ]
 
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+    await connect({ adapter, store })
     const result = await adapter.actions.signTransaction(
       {
         chainId: 1,
@@ -319,7 +319,7 @@ describe('turnkey', () => {
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
   })
 
-  test('behavior: silent restore only reconnects persisted provider accounts', async () => {
+  test('behavior: silent restore uses persisted provider accounts', async () => {
     const { adapter, client, store } = setup()
     client.wallets = [
       {
@@ -347,7 +347,7 @@ describe('turnkey', () => {
     `)
   })
 
-  test('behavior: silent restore ignores non-Ethereum wallet accounts', async () => {
+  test('behavior: silent restore rejects connected accounts missing from Turnkey metadata', async () => {
     const { adapter, client, store } = setup()
     client.wallets = [
       {
@@ -367,9 +367,43 @@ describe('turnkey', () => {
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
-    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: No Turnkey account connected.]')
+    ).rejects.toMatchInlineSnapshot(
+      '[RpcResponse.InternalError: Connected Turnkey account "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" was not found in fetched Turnkey wallet accounts. Reconnect with Turnkey.]',
+    )
 
+    expect(client.fetchCalls).toMatchInlineSnapshot(`1`)
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+    expect(store.getState().accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: reconnecting refreshes wallet account metadata', async () => {
+    const { adapter, client, store } = setup()
+
+    await connect({ adapter, store })
+    client.wallets = [
+      {
+        accounts: [toWalletAccount(account), toWalletAccount(account_2)],
+      },
+    ]
+    await connect({ adapter, store })
+
+    await adapter.actions.signPersonalMessage(
+      { address, data: '0x68656c6c6f' },
+      { method: 'personal_sign', params: ['0x68656c6c6f', address] },
+    )
+
+    expect(client.fetchCalls).toMatchInlineSnapshot(`2`)
+    expect(client.signPayloads).toMatchInlineSnapshot(`
+      [
+        "0x50b2c43fd39106bafbba0da34fc430e1f91e3c96ea2acee2bc34119f92b37750",
+      ]
+    `)
   })
 
   test('behavior: expired sessions clear provider accounts', async () => {
@@ -404,8 +438,8 @@ describe('turnkey', () => {
   })
 
   test('error: signing an unconnected account fails', async () => {
-    const { adapter } = setup()
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+    const { adapter, store } = setup()
+    await connect({ adapter, store })
 
     await expect(
       adapter.actions.signPersonalMessage(
@@ -479,6 +513,16 @@ function setup(options: setup.Options = {}) {
     store,
   })
   return { adapter, client, store }
+}
+
+async function connect(options: Pick<ReturnType<typeof setup>, 'adapter' | 'store'>) {
+  const { adapter, store } = options
+  const loaded = await adapter.actions.loadAccounts(undefined, {
+    method: 'wallet_connect',
+    params: undefined,
+  })
+  store.setState({ accounts: loaded.accounts, activeAccount: 0 })
+  return loaded
 }
 
 declare namespace setup {
