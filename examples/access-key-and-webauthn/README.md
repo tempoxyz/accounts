@@ -1,7 +1,7 @@
 # Access Key + WebAuthn Example
 
 Combines domain-bound WebAuthn authentication with automatic access key
-authorization. After the initial passkey ceremony, transactions are signed
+authorization. After the initial passkey ceremony, matching transfers are signed
 locally without further prompts.
 
 ## Setup

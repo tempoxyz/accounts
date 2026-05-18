@@ -7,17 +7,29 @@ import { useDisconnect, WagmiProvider } from 'wagmi'
 import LucideExternalLink from '~icons/lucide/external-link'
 import LucideRotateCcw from '~icons/lucide/rotate-ccw'
 
-import { wagmiConfig } from '../wagmi.js'
+import { spendPermissionsWagmiConfig, wagmiConfig } from '../wagmi.js'
 import * as Steps from './Steps.js'
 
 const queryClient = new QueryClient()
+const wagmiConfigs = {
+  default: wagmiConfig,
+  spendPermissions: spendPermissionsWagmiConfig,
+}
 
 export function Demo(props: Demo.Props) {
-  const { badge = 'DEMO', children, className, githubUrl, headerAction, title } = props
+  const {
+    badge = 'DEMO',
+    children,
+    className,
+    githubUrl,
+    headerAction,
+    title,
+    wagmiConfig = 'default',
+  } = props
   const repoPath = githubUrl.replace(/^https?:\/\/github\.com\//, '')
   const gitpickCommand = `pnpx gitpick ${repoPath}`
   return (
-    <WagmiProvider config={wagmiConfig}>
+    <WagmiProvider config={wagmiConfigs[wagmiConfig]}>
       <QueryClientProvider client={queryClient}>
         <Steps.Provider>
           <div className="my-4 border border-primary bg-surface" data-demo>
@@ -46,6 +58,8 @@ export namespace Demo {
     /** Optional element rendered on the right side of the header (e.g. a reset button). */
     headerAction?: React.ReactNode | undefined
     title: string
+    /** Which docs Wagmi config to use for this demo. */
+    wagmiConfig?: keyof typeof wagmiConfigs | undefined
   }
 
   export function Header(props: Header.Props) {

@@ -1,58 +1,229 @@
 ---
 title: Spend Permissions
-description: Authorize scoped access for repeat account activity.
+description: Authorize spend limits, call scopes, and expiries so repeat transfers can be signed without a confirmation prompt.
 ---
+
+import { Cards, Card } from 'vocs'
+import { ConnectAccount } from '../../../components/ConnectAccount'
+import { Demo, DemoReset } from '../../../components/Demo'
+import { SendPayment } from '../../../components/SendPayment'
+import * as Steps from '../../../components/Steps'
 
 # Spend Permissions
 
-Authorize scoped account access so an app or service can perform repeat activity without prompting the user for every request.
+Spend permissions let a connected Tempo account approve a scoped access key once, then use that key for repeat activity that stays inside the approved policy.
+
+Use them when an app needs to make the same kind of payment more than once: checkouts, metered APIs, recurring actions, or any flow where asking for a confirmation prompt on every transfer would be noisy. The user still approves the boundary up front: token, amount, allowed call targets, optional recipients, and expiry.
 
 ## Demo
 
-Target workspace: `examples/spend-permissions/`.
+By the end of this guide you'll configure a bounded spend permission: the user signs in, approves the policy once, then matching transfers can be signed locally without another Tempo Wallet prompt.
 
-Seed implementations: `examples/access-key/` and `examples/access-key-and-webauthn/`.
-
-:::warning[Stub]
-This page needs a human pass to define the product language around spend limits, expiry, and revocation before the example is renamed to the guide slug.
-:::
+<Demo
+  title="Spend Permission"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/access-key"
+  headerAction={<DemoReset />}
+  className="flex flex-col gap-3"
+  wagmiConfig="spendPermissions"
+>
+  <Steps.Step
+    label="Create an account, or use an existing one."
+    action={<ConnectAccount />}
+  />
+  <SendPayment />
+</Demo>
 
 ## Walkthrough
 
 ::::steps
 
-### Install the SDK
+### Connect an Account
 
-```bash
-pnpm add accounts wagmi viem
+Follow the [Connect Accounts](/docs/guides/connect-accounts) guide to set up Wagmi with a Tempo signing adapter and let the user sign in. This guide uses Tempo Wallet because the example is hosted there, but the `authorizeAccessKey` shape is the same for adapters that support access key authorization.
+
+### Define the Spend Policy
+
+Add `authorizeAccessKey` to the connector. The callback returns the permission the user will approve during `wallet_connect`.
+
+```tsx twoslash [src/config.ts]
+// @noErrors
+import { Expiry } from 'accounts'
+import { parseUnits } from 'viem'
+import { createConfig, http } from 'wagmi'
+import { tempo, tempoModerato } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
+
+const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+
+export const config = createConfig({
+  chains: [tempoModerato, tempo],
+  connectors: [
+    tempoWallet({
+      testnet: true,
+      authorizeAccessKey: () => ({ // [!code focus]
+        expiry: Expiry.days(1), // [!code focus]
+        limits: [ // [!code focus]
+          { token: pathUsd, limit: parseUnits('100', 6) }, // [!code focus]
+        ], // [!code focus]
+        scopes: [ // [!code focus]
+          { address: pathUsd, selector: 'transfer(address,uint256)' }, // [!code focus]
+        ], // [!code focus]
+      }), // [!code focus]
+    }),
+  ],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+    [tempoModerato.id]: http(),
+  },
+})
 ```
 
-### Configure the Provider
+:::warning[Bound permissions are required]
 
-Use the adapter that owns user approval for the access request.
+Tempo Wallet approval pages require at least one `limits` entry and one `scopes` entry. `limits` define how much the access key can spend, while `scopes` define which calls it can make. Without both, the approval would be too broad for a user to review safely.
 
-### Connect the user's account
+Local adapters may accept broader keys, but production apps should keep the same bounded policy everywhere.
 
-Connect the account before requesting scoped access.
+:::
 
-### Submit the request
+### Sign In with the Policy
 
-Call the access-key authorization flow with the intended expiry and permissions.
+Use the same sign-in button from the Connect Accounts guide. When the user approves the connection, Tempo Wallet also signs the access key authorization returned by `authorizeAccessKey`.
 
-### Verify the result
+```tsx twoslash [src/Connect.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
 
-Store the returned access key material only in the environment that is allowed to use it, then test revocation.
+export function Connect() {
+  const connect = useConnect()
+  const [connector] = useConnectors()
+
+  return (
+    <button
+      disabled={connect.isPending}
+      onClick={() => connect.connect({ connector })}
+    >
+      {connect.isPending ? 'Check prompt...' : 'Sign in'}
+    </button>
+  )
+}
+```
+
+### Send Within the Permission
+
+Submit calls that match the approved scopes. The SDK selects the access key when the transfer fits the spend policy; otherwise it falls back to the connected account's normal signing path.
+
+```tsx twoslash [src/Transfer.tsx]
+// @noErrors
+import { Hooks } from 'wagmi/tempo'
+
+export function Transfer() {
+  const transfer = Hooks.wallet.useTransfer()
+
+  return (
+    <button
+      disabled={transfer.isPending}
+      onClick={() =>
+        transfer.mutate({
+          amount: '1',
+          to: '0x0000000000000000000000000000000000000001',
+          token: 'pathusd',
+        })
+      }
+    >
+      {transfer.isPending ? 'Sending...' : 'Pay $1'}
+    </button>
+  )
+}
+```
 
 ::::
 
 ## Best Practices
 
-- Keep permissions as narrow as the workflow allows.
-- Prefer short expiries for automation and longer-lived access only after explicit user approval.
-- Show users where they can revoke access.
+### Pair Limits with Scopes
+
+Use `limits` for how much the key may spend, and `scopes` for what calls it may make. A transfer permission should usually include `transfer(address, uint256)` for the token you intend to support.
+
+```tsx twoslash [src/config.ts]
+// @noErrors
+import { Expiry } from 'accounts'
+import { parseUnits } from 'viem'
+
+const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+
+const spendPermission = {
+  expiry: Expiry.days(1),
+  limits: [{ token: pathUsd, limit: parseUnits('100', 6) }],
+  scopes: [
+    { address: pathUsd, selector: 'transfer(address,uint256)' },
+  ],
+}
+```
+
+### Keep Expiry Short
+
+Start with a short expiry and ask the user to renew when the workflow needs more time. The access key example uses `Expiry.days(1)`, which is a good default for checkout and metered usage flows.
+
+```ts twoslash
+import { Expiry } from 'accounts'
+
+const expiry = Expiry.days(1)
+```
+
+### Use Recipient Scopes
+
+If your app always pays one recipient, include `recipients` on the scope. Only omit it when the recipient is truly user-selected at transfer time.
+
+```ts twoslash
+// @noErrors
+const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+
+const scopes = [
+  {
+    address: pathUsd,
+    selector: 'transfer(address,uint256)',
+    recipients: ['0x0000000000000000000000000000000000000001'],
+  },
+]
+```
+
+### Match Token Decimals
+
+Build limits with `parseUnits` and the token's real decimal count. pathUSD uses 6 decimals, so `parseUnits('100', 6)` means a 100 pathUSD cap.
+
+```ts twoslash
+import { parseUnits } from 'viem'
+
+const limit = parseUnits('100', 6)
+```
 
 ## Next Steps
 
-- [wallet_authorizeAccessKey](/docs/rpc/wallet_authorizeAccessKey)
-- [wallet_revokeAccessKey](/docs/rpc/wallet_revokeAccessKey)
-- [Custom adapter](/docs/adapters/custom)
+<Cards>
+  <Card
+    description="Send stablecoin transfers from a connected account, initiated by the user or by your server."
+    icon="lucide:send"
+    to="/docs/guides/transfers"
+    title="Transfers"
+  />
+  <Card
+    description="Read the low-level RPC shape for access key approval, including limits, scopes, expiry, and recipients."
+    icon="lucide:shield-check"
+    to="/docs/rpc/wallet_authorizeAccessKey"
+    title="wallet_authorizeAccessKey"
+  />
+  <Card
+    description="Revoke an access key when a user turns off a spend permission."
+    icon="lucide:shield-x"
+    to="/docs/rpc/wallet_revokeAccessKey"
+    title="wallet_revokeAccessKey"
+  />
+  <Card
+    description="Review HTTPS, trusted host, and adapter-specific production requirements."
+    icon="lucide:rocket"
+    to="/docs/production"
+    title="Production"
+  />
+</Cards>
