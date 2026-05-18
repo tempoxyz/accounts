@@ -55,6 +55,7 @@ type Page =
 | { path: '/docs/guides/fee-sponsorship'; render: 'static' }
 | { path: '/docs/guides/spend-permissions'; render: 'static' }
 | { path: '/docs/guides/subscriptions'; render: 'static' }
+| { path: '/docs/guides/swaps'; render: 'static' }
 | { path: '/docs/guides/theming'; render: 'static' }
 | { path: '/docs/guides/transfers'; render: 'static' }
 | { path: '/docs/enterprise/hosted-universal-wallets'; render: 'static' }

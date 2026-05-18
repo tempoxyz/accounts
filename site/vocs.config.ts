@@ -48,6 +48,7 @@ const config: Config = defineConfig({
           { text: 'Transfers', link: '/docs/guides/transfers' },
           { text: 'Spend Permissions', link: '/docs/guides/spend-permissions' },
           { text: 'Subscriptions', link: '/docs/guides/subscriptions' },
+          { text: 'Swaps', link: '/docs/guides/swaps' },
           { text: 'Fee Sponsorship', link: '/docs/guides/fee-sponsorship' },
           { text: 'Theming', link: '/docs/guides/theming' },
           { text: 'CLI', link: '/docs/guides/cli' },
