@@ -10,6 +10,7 @@ import LucideRotateCcw from '~icons/lucide/rotate-ccw'
 import {
   feeSponsorshipWagmiConfig,
   spendPermissionsWagmiConfig,
+  subscriptionsWagmiConfig,
   themingWagmiConfig,
   wagmiConfig,
 } from '../wagmi.js'
@@ -20,6 +21,7 @@ const wagmiConfigs = {
   default: wagmiConfig,
   feeSponsorship: feeSponsorshipWagmiConfig,
   spendPermissions: spendPermissionsWagmiConfig,
+  subscriptions: subscriptionsWagmiConfig,
   theming: themingWagmiConfig,
 }
 

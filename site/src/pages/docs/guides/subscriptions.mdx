@@ -4,6 +4,11 @@ description: Charge recurring pathUSD payments from a connected Tempo account.
 ---
 
 import { Cards, Card } from 'vocs'
+import { CheckboxCards, CheckboxCard } from '../../../components/CheckboxCard.js'
+import { ConnectAccount } from '../../../components/ConnectAccount'
+import { Demo, DemoReset } from '../../../components/Demo'
+import { SubscriptionPayment, SubscriptionStepLabel } from '../../../components/SubscriptionPayment'
+import * as Steps from '../../../components/Steps'
 
 # Subscriptions
 
@@ -13,21 +18,35 @@ After activation, your server can serve requests during the current billing peri
 
 ## Demo
 
-Run the complete example from `examples/subscriptions`. It gates `GET /api/articles` behind a recurring pathUSD subscription and includes a helper endpoint for collecting the next period.
+By the end of this guide you'll have a protected articles route, a recurring subscription approval, and a server-side collection path for the next billing period.
 
-```bash
-pnpx gitpick tempoxyz/accounts/examples/subscriptions
-cd subscriptions
-cp .env.example .env
-pnpm i
-pnpm dev
-```
+<Demo
+  title="Subscription Payment"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/subscriptions"
+  wagmiConfig="subscriptions"
+  headerAction={<DemoReset />}
+  className="flex flex-col gap-3"
+>
+  <Steps.Step
+    label={
+      <SubscriptionStepLabel badge="User">
+        Create an account, or use an existing one.
+      </SubscriptionStepLabel>
+    }
+    action={<ConnectAccount />}
+  />
+  <SubscriptionPayment />
+</Demo>
 
 The example uses a 10-second period for local testing. Production plans should use `day` or `week` periods.
 
 ## Walkthrough
 
 ::::steps
+
+### Connect an Account
+
+Follow the [Connect Accounts](/docs/guides/connect-accounts) guide to set up Wagmi and let the user sign in. Subscriptions activate from the connected account before your server collects future periods.
 
 ### Install the Server Dependencies
 
@@ -36,20 +55,20 @@ Install [`mppx`](https://github.com/wevm/mppx) for serving and verifying HTTP `4
 :::code-group
 
 ```bash [npm]
-npm i mppx hono viem
+npm i mppx hono
 ```
 
 ```bash [pnpm]
-pnpm i mppx hono viem
+pnpm i mppx hono
 ```
 
 ```bash [bun]
-bun i mppx hono viem
+bun i mppx hono
 ```
 
 :::
 
-### Create the Subscription Handler
+### Set Up `mppx`
 
 Configure `tempo.subscription` with the server account, billing currency, resolver, and store. The resolver returns the stable lookup key for the current subscriber.
 
@@ -60,23 +79,20 @@ import { Store } from 'mppx'
 import { Mppx, tempo } from 'mppx/hono'
 import { privateKeyToAccount } from 'viem/accounts'
 
-const pathUsd = '0x20c0000000000000000000000000000000000000'
 const app = new Hono()
-const account = privateKeyToAccount(process.env.ACCOUNT_PRIVATE_KEY)
-const store = Store.memory()
 
 const mppx = Mppx.create({
   methods: [
     tempo.subscription({
-      account,
-      currency: pathUsd,
+      account: privateKeyToAccount(process.env.ACCOUNT_PRIVATE_KEY),
+      currency: '0x20c0000000000000000000000000000000000000',
       feePayer: true,
-      resolve: ({ input }) => {
+      resolve({ input }) {
         const subscriber = input.headers.get('X-Subscriber')
         if (!subscriber) return null
         return { key: `articles:${subscriber.toLowerCase()}` }
       },
-      store,
+      store: Store.memory(),
       testnet: true,
     }),
   ],
@@ -85,6 +101,10 @@ const mppx = Mppx.create({
 
 :::warning[Use a trusted lookup key]
 `X-Subscriber` keeps the example small. In production, derive the lookup key from a server-trusted session, API key, or user record.
+:::
+
+:::warning[Use a durable store]
+`Store.memory()` keeps the guide runnable. In production, use a durable store so subscription records and access keys survive deploys, restarts, and worker evictions.
 :::
 
 ### Gate the Paid Route
@@ -99,7 +119,7 @@ app.get(
     amount: '0.01',
     periodCount: 1,
     periodUnit: 'day',
-    subscriptionExpires: '2027-01-01T00:00:00.000Z',
+    subscriptionExpires: '2030-01-01T00:00:00.000Z',
   }),
   (c) =>
     c.json({
@@ -120,7 +140,6 @@ Use `fetch` normally. The Accounts SDK handles the `402`, asks the user to appro
 ```tsx twoslash [Articles.tsx]
 // @noErrors
 import { useMutation } from '@tanstack/react-query'
-import { Receipt } from 'mppx'
 import { stringify } from 'viem'
 
 export function Articles(props: { address: `0x${string}` }) {
@@ -131,19 +150,7 @@ export function Articles(props: { address: `0x${string}` }) {
       })
       const body = await res.json()
       if (!res.ok) throw new Error(`${res.status}: ${stringify(body)}`)
-
-      const header = res.headers.get('Payment-Receipt')
-      const receipt = header ? Receipt.deserialize(header) : undefined
-
-      if (receipt?.subscriptionId) {
-        await fetch('/__subscriptions', {
-          body: JSON.stringify({ subscriptionId: receipt.subscriptionId }),
-          headers: { 'Content-Type': 'application/json' },
-          method: 'POST',
-        })
-      }
-
-      return { body, receipt }
+      return body
     },
   })
 
@@ -157,23 +164,9 @@ export function Articles(props: { address: `0x${string}` }) {
 
 ### Index Active Subscriptions
 
-A scheduled worker needs subscription IDs to collect. Store the `subscriptionId` in your app database after activation, then let the scheduled job query due subscriptions.
+A scheduled worker needs subscription IDs to collect. `mppx` renews a known subscription ID; your app database owns enumeration and due-time queries.
 
-```ts twoslash [worker/index.ts]
-// @noErrors
-const subscriptionIds = new Set<string>()
-
-app.post('/__subscriptions', async (c) => {
-  const body = await c.req.json()
-  if (typeof body.subscriptionId !== 'string')
-    return c.json({ error: '`subscriptionId` is required.' }, 400)
-
-  subscriptionIds.add(body.subscriptionId)
-  return c.json({ ok: true })
-})
-```
-
-The in-memory set keeps the guide runnable. Use a durable database in production, and store enough metadata to decide when each subscription is due.
+You can skip this step when you only collect on the request path. `mppx.subscription` can renew an overdue subscription before serving the protected route.
 
 ### Collect from a Schedule
 
@@ -182,7 +175,7 @@ Call `mppx.tempo.subscription.renew` from a cron worker. It returns a receipt wh
 ```ts twoslash [worker/index.ts]
 // @noErrors
 async function collectDueSubscriptions() {
-  for (const subscriptionId of subscriptionIds) {
+  for (const subscriptionId of await database.subscriptions.listDueIds()) {
     const result = await mppx.tempo.subscription.renew({ subscriptionId })
     if (!result) continue
 
@@ -217,33 +210,134 @@ Configure the schedule in `wrangler.jsonc`. Choose an interval that is comfortab
 
 ### Persist Subscription State
 
-Use a durable store for `tempo.subscription` and for your subscription index. In-memory storage is only useful for local examples because records disappear when the process restarts.
+Use a durable store for `tempo.subscription`. In-memory storage is only useful for local examples because subscription records and access keys disappear when the process restarts.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+const store = createDurableSubscriptionStore(env)
+
+const mppx = Mppx.create({
+  methods: [
+    tempo.subscription({
+      // ...
+      store,
+    }),
+  ],
+})
+```
 
 ### Treat `renew` as Idempotent
 
 It is safe for cron to call `renew` early or more than once. A `null` result means no payment was collected, so your scheduler can continue without treating it as an error.
 
+```ts twoslash [worker/index.ts]
+// @noErrors
+const result = await mppx.tempo.subscription.renew({ subscriptionId })
+
+if (!result) return
+
+await database.subscriptionPayments.insert({
+  reference: result.receipt.reference,
+  subscriptionId,
+})
+```
+
 ### Use Server-Trusted Identity
 
 Do not trust client-provided headers for production lookup keys. Resolve subscriptions from the authenticated session, API key, organization ID, or another server-side identity that the user cannot spoof.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+tempo.subscription({
+  // ...
+  async resolve({ input }) {
+    const session = await requireSession(input)
+    return { key: `articles:${session.userId}` }
+  },
+})
+```
 
 ### Keep Periods Reviewable
 
 Show the amount, currency, period, and expiry before the user approves. Use short periods only for development; production subscriptions should use stable billing periods that match the product terms.
 
+```ts twoslash [worker/index.ts]
+// @noErrors
+app.get(
+  '/api/articles',
+  mppx.subscription({
+    amount: '10',
+    periodCount: 1,
+    periodUnit: 'week',
+    subscriptionExpires: '2030-01-01T00:00:00.000Z',
+  }),
+  handler,
+)
+```
+
 ### Monitor Collection Failures
 
 Record renewal attempts, receipts, and errors. Alert on repeated failures, expired subscriptions, unfunded accounts, and fee payer issues.
 
+```ts twoslash [worker/index.ts]
+// @noErrors
+try {
+  await mppx.tempo.subscription.renew({ subscriptionId })
+} catch (error) {
+  await logger.error('subscription renewal failed', {
+    error,
+    subscriptionId,
+  })
+  throw error
+}
+```
+
 ## Production Checklist
 
-- Use a durable `store` for mppx subscription records.
-- Store `subscriptionId`, lookup key, billing plan, next due time, and status in your app database.
-- Run collection from cron, a queue, or a worker scheduler.
-- Treat `renew` returning `null` as “nothing due”.
-- Configure a fee payer and monitor its balance.
-- Add cancellation, expiry, and customer notification flows.
-- Keep local-only periods such as `dev_second` out of production.
+<CheckboxCards>
+  <CheckboxCard
+    id="subscriptions.durable-store"
+    href="#persist-subscription-state"
+  >
+    A durable `store` backs `mppx` subscription records.
+  </CheckboxCard>
+  <CheckboxCard
+    id="subscriptions.app-database"
+    href="#persist-subscription-state"
+  >
+    Your app database stores `subscriptionId`, lookup key, plan, next due time, and status.
+  </CheckboxCard>
+  <CheckboxCard
+    id="subscriptions.scheduled-collection"
+    href="#collect-from-a-schedule"
+  >
+    Collection runs from cron, a queue, or a worker scheduler.
+  </CheckboxCard>
+  <CheckboxCard
+    id="subscriptions.idempotent-renew"
+    href="#treat-renew-as-idempotent"
+  >
+    `renew` returning `null` is handled as nothing due.
+  </CheckboxCard>
+  <CheckboxCard
+    id="subscriptions.fee-payer-monitoring"
+    href="#monitor-collection-failures"
+  >
+    The fee payer is configured and its balance is monitored.
+  </CheckboxCard>
+  <CheckboxCard
+    id="subscriptions.customer-lifecycle"
+    href="#keep-periods-reviewable"
+  >
+    Cancellation, expiry, and customer notification flows are in place.
+  </CheckboxCard>
+  <CheckboxCard
+    id="subscriptions.production-periods"
+    href="#keep-periods-reviewable"
+  >
+    Local-only periods such as `dev_second` stay out of production.
+  </CheckboxCard>
+</CheckboxCards>
 
 ## Next Steps
 

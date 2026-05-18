@@ -6,8 +6,6 @@ import {
   useCallback,
   useContext,
   useId,
-  useMemo,
-  useRef,
   useState,
 } from 'react'
 import { Button } from 'regen-ui'
@@ -71,10 +69,8 @@ export declare namespace Root {
 
 function StepsRoot(props: { children: ReactNode; initial: number | undefined }) {
   const { children, initial } = props
-  // Stable ordered list of Step ids that have registered with this
-  // Provider. Lives in a ref so the slot a Step claims survives across
-  // re-renders and React's strict-mode double-invocation.
-  const idsRef = useRef<string[]>([])
+  // Render-local so React render retries cannot leave abandoned ids behind.
+  const ids: string[] = []
 
   const [current, setStep] = useState(initial ?? 1)
 
@@ -88,18 +84,14 @@ function StepsRoot(props: { children: ReactNode; initial: number | undefined }) 
     [initial],
   )
 
-  const register = useCallback((id: string) => {
-    const ids = idsRef.current
+  function register(id: string) {
     const i = ids.indexOf(id)
     if (i !== -1) return i + 1
     ids.push(id)
     return ids.length
-  }, [])
+  }
 
-  const value = useMemo<StepsContextValue>(
-    () => ({ current, set, register }),
-    [current, set, register],
-  )
+  const value = { current, set, register } satisfies StepsContextValue
   return <StepsContext.Provider value={value}>{children}</StepsContext.Provider>
 }
 

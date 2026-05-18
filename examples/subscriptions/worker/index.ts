@@ -21,7 +21,7 @@ const mppx = Mppx.create({
       // For this example we scope subscriptions per `X-Subscriber` header
       // (the connected account address). Real apps would derive it from
       // a session cookie, JWT, or API key.
-      resolve: ({ input }) => {
+      resolve({ input }) {
         const subscriber = input.headers.get('X-Subscriber')
         if (!subscriber) return null
         return { key: `news:${subscriber.toLowerCase()}` }

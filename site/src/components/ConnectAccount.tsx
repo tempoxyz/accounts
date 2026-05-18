@@ -42,7 +42,13 @@ export function ConnectAccount(props: ConnectAccount.Props = {}) {
       <Button
         variant="secondary"
         loading={disconnect.isPending}
-        onClick={() => disconnect.mutate()}
+        onClick={() =>
+          disconnect.mutate(undefined, {
+            onSuccess: () => {
+              if (!standalone) steps.set('reset')
+            },
+          })
+        }
       >
         Disconnect
       </Button>

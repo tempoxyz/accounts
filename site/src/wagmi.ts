@@ -1,15 +1,20 @@
-import { Expiry } from 'accounts'
+import { Expiry, Storage as AccountsStorage } from 'accounts'
 import { parseUnits } from 'viem'
-import { type Config, createConfig, http } from 'wagmi'
+import { type Config, createConfig, createStorage, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { tempoWallet } from 'wagmi/tempo'
 
 const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+const accountsStorage = AccountsStorage.idb()
+const wagmiStorage = createStorage({
+  storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+})
 
 export const wagmiConfig: Config = createConfig({
   chains: [tempoModerato, tempo],
-  connectors: [tempoWallet({ mpp: true })],
+  connectors: [tempoWallet({ mpp: true, storage: accountsStorage })],
   multiInjectedProviderDiscovery: false,
+  storage: wagmiStorage,
   transports: {
     [tempoModerato.id]: http(),
     [tempo.id]: http(),
@@ -21,6 +26,7 @@ export const spendPermissionsWagmiConfig: Config = createConfig({
   connectors: [
     tempoWallet({
       mpp: true,
+      storage: accountsStorage,
       testnet: true,
       authorizeAccessKey: () => ({
         expiry: Expiry.days(1),
@@ -30,6 +36,7 @@ export const spendPermissionsWagmiConfig: Config = createConfig({
     }),
   ],
   multiInjectedProviderDiscovery: false,
+  storage: wagmiStorage,
   transports: {
     [tempoModerato.id]: http(),
     [tempo.id]: http(),
@@ -46,10 +53,23 @@ export const feeSponsorshipWagmiConfig: Config = createConfig({
         scopes: [{ address: pathUsd, selector: 'transfer(address,uint256)' }],
       }),
       feePayer: '/relay',
+      storage: accountsStorage,
       testnet: true,
     }),
   ],
   multiInjectedProviderDiscovery: false,
+  storage: wagmiStorage,
+  transports: {
+    [tempoModerato.id]: http(),
+    [tempo.id]: http(),
+  },
+})
+
+export const subscriptionsWagmiConfig: Config = createConfig({
+  chains: [tempoModerato, tempo],
+  connectors: [tempoWallet({ storage: accountsStorage, testnet: true })],
+  multiInjectedProviderDiscovery: false,
+  storage: wagmiStorage,
   transports: {
     [tempoModerato.id]: http(),
     [tempo.id]: http(),
@@ -61,6 +81,7 @@ export const themingWagmiConfig: Config = createConfig({
   connectors: [
     tempoWallet({
       mpp: true,
+      storage: accountsStorage,
       testnet: true,
       theme: {
         accent: '#ff007a',
@@ -69,6 +90,7 @@ export const themingWagmiConfig: Config = createConfig({
     }),
   ],
   multiInjectedProviderDiscovery: false,
+  storage: wagmiStorage,
   transports: {
     [tempoModerato.id]: http(),
     [tempo.id]: http(),
