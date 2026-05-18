@@ -25,8 +25,17 @@ function toPathUsdAmount(value: bigint) {
   } satisfies Amount.Amount
 }
 
-function toFeeAmount(receipt: { effectiveGasPrice: bigint; gasUsed: bigint }) {
-  const value = (receipt.effectiveGasPrice * receipt.gasUsed) / 10n ** BigInt(18 - pathUsdDecimals)
+function toBigInt(value: bigint | number | string) {
+  return typeof value === 'bigint' ? value : BigInt(value)
+}
+
+function toFeeAmount(receipt: {
+  effectiveGasPrice?: bigint | number | string | undefined
+  gasUsed?: bigint | number | string | undefined
+}) {
+  if (receipt.effectiveGasPrice === undefined || receipt.gasUsed === undefined) return undefined
+  const value =
+    (toBigInt(receipt.effectiveGasPrice) * toBigInt(receipt.gasUsed)) / 10n ** BigInt(18 - pathUsdDecimals)
   return toPathUsdAmount(value)
 }
 
