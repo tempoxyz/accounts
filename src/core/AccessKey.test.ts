@@ -451,23 +451,34 @@ describe('prepareAuthorization', () => {
   })
 })
 
-describe('saveAuthorization', () => {
-  test('default: saves prepared authorization with provided signature', async () => {
+describe('authorize', () => {
+  test('default: prepares, signs, and saves authorization', async () => {
     const store = createStore()
-    const prepared = await AccessKey.prepareAuthorization({
-      address: accounts[1]!.address,
-      chainId: 1,
-      expiry: 123,
-    })
+    const digests: Hex.Hex[] = []
     const signature = `0x${'11'.repeat(32)}${'22'.repeat(32)}1b` as const
+    const account = {
+      ...accounts[0]!,
+      sign: async (parameters: { hash: Hex.Hex }) => {
+        digests.push(parameters.hash)
+        return signature
+      },
+    } as TempoAccount.Account
 
-    const result = AccessKey.saveAuthorization({
-      address: rootAddress,
-      prepared,
-      signature,
+    const result = await AccessKey.authorize({
+      account,
+      chainId: 1,
+      parameters: {
+        address: accounts[1]!.address,
+        expiry: 123,
+      },
       store,
     })
 
+    expect(digests).toMatchInlineSnapshot(`
+      [
+        "0xea47721547363fc82a5dca62b4544e4718d861b3df10bfac65d30102594b5c26",
+      ]
+    `)
     expect(result).toMatchInlineSnapshot(`
       {
         "chainId": "0x1",
@@ -497,38 +508,6 @@ describe('saveAuthorization', () => {
         },
       ]
     `)
-  })
-})
-
-describe('authorize', () => {
-  test('default: prepares, signs, and saves authorization', async () => {
-    const store = createStore()
-    const digests: Hex.Hex[] = []
-    const signature = `0x${'11'.repeat(32)}${'22'.repeat(32)}1b` as const
-    const account = {
-      ...accounts[0]!,
-      sign: async (parameters: { hash: Hex.Hex }) => {
-        digests.push(parameters.hash)
-        return signature
-      },
-    } as TempoAccount.Account
-
-    await AccessKey.authorize({
-      account,
-      chainId: 1,
-      parameters: {
-        address: accounts[1]!.address,
-        expiry: 123,
-      },
-      store,
-    })
-
-    expect(digests).toMatchInlineSnapshot(`
-      [
-        "0xea47721547363fc82a5dca62b4544e4718d861b3df10bfac65d30102594b5c26",
-      ]
-    `)
-    expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
   })
 })
 

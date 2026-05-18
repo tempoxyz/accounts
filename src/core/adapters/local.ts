@@ -1,5 +1,5 @@
 import { Provider as ox_Provider } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { BaseError, hashMessage } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
 import { Actions } from 'viem/tempo'
@@ -151,12 +151,21 @@ export function local(options: local.Options): Adapter.Adapter {
               peronsalSign_digest || !signature_
                 ? await account.sign({ hash: keyAuthorization_digest! })
                 : signature_
-            return AccessKey.saveAuthorization({
-              address: account.address,
-              prepared: keyAuthorization_unsigned,
-              signature: signature_keyAuthorization,
+            const keyAuthorization = KeyAuthorization.from(
+              keyAuthorization_unsigned.keyAuthorization,
+              {
+                signature: SignatureEnvelope.from(signature_keyAuthorization),
+              },
+            )
+            AccessKey.add({
+              account: account.address,
+              authorization: keyAuthorization,
+              ...(keyAuthorization_unsigned.keyPair
+                ? { keyPair: keyAuthorization_unsigned.keyPair }
+                : {}),
               store,
             })
+            return KeyAuthorization.toRpc(keyAuthorization)
           })()
 
           return {

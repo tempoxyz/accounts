@@ -156,42 +156,6 @@ export declare namespace prepareAuthorization {
   }
 }
 
-/** Saves a prepared access key authorization with an existing signature. */
-export function saveAuthorization(
-  options: saveAuthorization.Options,
-): saveAuthorization.ReturnType {
-  const { address, prepared, signature, store } = options
-  const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
-    signature: SignatureEnvelope.from(signature),
-  })
-
-  add({
-    account: address,
-    authorization: keyAuthorization,
-    ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
-    store,
-  })
-
-  return KeyAuthorization.toRpc(keyAuthorization)
-}
-
-export declare namespace saveAuthorization {
-  /** Options for {@link saveAuthorization}. */
-  type Options = {
-    /** Root account address that owns this access key. */
-    address: Address.Address
-    /** Prepared unsigned key authorization returned by {@link prepareAuthorization}. */
-    prepared: prepareAuthorization.ReturnType
-    /** Signature over the key authorization digest. */
-    signature: Hex.Hex
-    /** Reactive state store. */
-    store: Store.Store
-  }
-
-  /** Signed key authorization in RPC form. */
-  type ReturnType = KeyAuthorization.Rpc
-}
-
 /** Prepares, signs, and saves an access key authorization. */
 export async function authorize(options: authorize.Options): Promise<authorize.ReturnType> {
   const { account, chainId, parameters, store } = options
@@ -201,7 +165,18 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
   })
   const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
   const signature = await account.sign({ hash: digest })
-  return saveAuthorization({ address: account.address, prepared, signature, store })
+  const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
+    signature: SignatureEnvelope.from(signature),
+  })
+
+  add({
+    account: account.address,
+    authorization: keyAuthorization,
+    ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
+    store,
+  })
+
+  return KeyAuthorization.toRpc(keyAuthorization)
 }
 
 export declare namespace authorize {
