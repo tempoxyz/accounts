@@ -12,6 +12,8 @@ import * as Account from './Account.js'
 import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
+import * as AccessKeyStore from './internal/AccessKeyStore.js'
+import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Schema from './Schema.js'
 import * as Storage from './Storage.js'
@@ -291,37 +293,30 @@ export function create(options: create.Options = {}): create.ReturnType {
                     // Inject pending keyAuthorization so the node accounts for
                     // key authorization gas during estimation.
                     if (!parameters.keyAuthorization) {
-                      const account = (() => {
-                        try {
-                          const calls =
-                            parameters.calls ??
-                            (parameters.to
-                              ? [
-                                  {
-                                    data: parameters.data,
-                                    to: parameters.to,
-                                  },
-                                ]
-                              : undefined)
-                          return getAccount({
-                            address: parameters.from,
-                            calls,
-                            chainId: parameters.chainId ?? store.getState().chainId,
-                            signable: true,
-                          })
-                        } catch {
-                          return undefined
-                        }
-                      })()
-                      if (account?.source === 'accessKey') {
-                        const attempt = await AccessKey.selectForTransaction({
-                          account,
+                      const state = store.getState()
+                      const address =
+                        parameters.from ?? state.accounts[state.activeAccount]?.address
+                      if (address) {
+                        const calls =
+                          parameters.calls ??
+                          (parameters.to
+                            ? [
+                                {
+                                  data: parameters.data,
+                                  to: parameters.to,
+                                },
+                              ]
+                            : undefined)
+                        const transaction = await AccessKeyTransaction.create({
+                          address,
+                          calls,
+                          chainId: parameters.chainId ?? state.chainId,
                           client,
                           store,
                         })
-                        if (attempt)
+                        if (transaction)
                           try {
-                            return await attempt.fill(parameters)
+                            return await transaction.fill(parameters)
                           } catch {
                             return await fill(parameters)
                           }
@@ -973,7 +968,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         const address = options.address ?? state.accounts[state.activeAccount]?.address
         if (!address) return AccessKey.status.missing
         const chainId = options.chainId ?? state.chainId
-        return await AccessKey.getStatus({
+        return await AccessKeyTransaction.getStatus({
           ...options,
           address,
           chainId,
@@ -1053,7 +1048,7 @@ export function create(options: create.Options = {}): create.ReturnType {
       if (BigInt(amount) === 0n) return
       const account = provider.getAccount()
       if ('source' in account && account.source === 'accessKey')
-        AccessKey.removePending(account, { store })
+        AccessKeyStore.removePending({ accessKey: account.accessKeyAddress, store })
     })
   }
 

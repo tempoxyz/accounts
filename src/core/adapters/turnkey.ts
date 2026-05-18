@@ -14,6 +14,7 @@ import { Account as TempoAccount } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
+import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as Store from '../Store.js'
 
 const turnkeySessionErrorCodes = new Set([
@@ -439,7 +440,7 @@ export function turnkey<const client extends turnkey.Client>(
             chainId: parameters.chainId,
             feePayer: feePayer === true ? undefined : feePayer,
           })
-          const attempt = await AccessKey.selectForTransaction({
+          const transaction = await AccessKeyTransaction.create({
             address:
               parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
             calls: parameters.calls,
@@ -447,9 +448,9 @@ export function turnkey<const client extends turnkey.Client>(
             client: viemClient,
             store,
           })
-          if (attempt) {
+          if (transaction) {
             try {
-              const prepared = await attempt.prepare({
+              const prepared = await transaction.prepare({
                 ...rest,
                 ...(feePayer ? { feePayer: true } : {}),
               })
@@ -477,7 +478,7 @@ export function turnkey<const client extends turnkey.Client>(
             chainId: parameters.chainId,
             feePayer: feePayer === true ? undefined : feePayer,
           })
-          const attempt = await AccessKey.selectForTransaction({
+          const transaction = await AccessKeyTransaction.create({
             address:
               parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
             calls: parameters.calls,
@@ -485,9 +486,9 @@ export function turnkey<const client extends turnkey.Client>(
             client: viemClient,
             store,
           })
-          if (attempt) {
+          if (transaction) {
             try {
-              const prepared = await attempt.prepare({
+              const prepared = await transaction.prepare({
                 ...rest,
                 ...(feePayer ? { feePayer: true } : {}),
               })
@@ -506,7 +507,7 @@ export function turnkey<const client extends turnkey.Client>(
             chainId: parameters.chainId,
             feePayer: feePayer === true ? undefined : feePayer,
           })
-          const attempt = await AccessKey.selectForTransaction({
+          const transaction = await AccessKeyTransaction.create({
             address:
               parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
             calls: parameters.calls,
@@ -514,9 +515,9 @@ export function turnkey<const client extends turnkey.Client>(
             client: viemClient,
             store,
           })
-          if (attempt) {
+          if (transaction) {
             try {
-              const prepared = await attempt.prepare({
+              const prepared = await transaction.prepare({
                 ...rest,
                 ...(feePayer ? { feePayer: true } : {}),
               })

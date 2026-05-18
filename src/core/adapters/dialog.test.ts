@@ -2,8 +2,8 @@ import { Provider as ox_Provider } from 'ox'
 import { tempoLocalnet } from 'viem/chains'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
-import * as AccessKey from '../AccessKey.js'
 import * as Dialog from '../Dialog.js'
+import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { dialog } from './dialog.js'
@@ -21,7 +21,7 @@ describe('dialog', () => {
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
     const clientRequests: unknown[] = []
     const signRequests: unknown[] = []
-    vi.spyOn(AccessKey, 'selectForTransaction').mockResolvedValue({
+    vi.spyOn(AccessKeyTransaction, 'create').mockResolvedValue({
       fill: async () => ({ capabilities: { sponsored: false }, tx: {} }),
       prepare: async (request) => ({
         request: request as never,
@@ -95,7 +95,7 @@ describe('dialog', () => {
   test('behavior: sendTransaction falls through when no access key is selected', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
-    vi.spyOn(AccessKey, 'selectForTransaction').mockResolvedValue(undefined)
+    vi.spyOn(AccessKeyTransaction, 'create').mockResolvedValue(undefined)
     const lookups: unknown[] = []
     const adapter = dialog({ dialog: Dialog.noop() })({
       getAccount: (options) => {
@@ -148,7 +148,7 @@ describe('dialog', () => {
   test('error: wallet validation errors keep their RPC code', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
-    vi.spyOn(AccessKey, 'selectForTransaction').mockResolvedValue(undefined)
+    vi.spyOn(AccessKeyTransaction, 'create').mockResolvedValue(undefined)
     const adapter = dialog({ dialog: Dialog.noop() })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })

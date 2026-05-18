@@ -4,7 +4,7 @@ import type { Address, JsonRpcAccount } from 'viem/accounts'
 import { Account as TempoAccount } from 'viem/tempo'
 
 import type { OneOf } from '../internal/types.js'
-import * as core_AccessKey from './AccessKey.js'
+import * as core_AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import type * as core_Store from './Store.js'
 
 /** Account stored in the provider state. */
@@ -49,7 +49,7 @@ export function find(options: find.Options): TempoAccount.Account | JsonRpcAccou
 
   // When accessKey is requested, prefer a locally-signable access key for this address.
   if (accessKey) {
-    const account = core_AccessKey.selectAccount({
+    const account = core_AccessKeyTransaction.selectAccountSync({
       address: root.address,
       calls: options.calls,
       chainId: options.chainId ?? store.getState().chainId,

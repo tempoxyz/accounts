@@ -7,6 +7,7 @@ import { Actions } from 'viem/tempo'
 import * as AccessKey from '../AccessKey.js'
 import * as Account from '../Account.js'
 import * as Adapter from '../Adapter.js'
+import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 
 /**
  * Creates a local adapter where the app manages keys and signing in-process.
@@ -203,7 +204,7 @@ export function local(options: local.Options): Adapter.Adapter {
               return undefined
             })(),
           })
-          const attempt = await AccessKey.selectForTransaction({
+          const transaction = await AccessKeyTransaction.create({
             address:
               parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
             calls: parameters.calls,
@@ -211,9 +212,9 @@ export function local(options: local.Options): Adapter.Adapter {
             client,
             store,
           })
-          if (attempt) {
+          if (transaction) {
             try {
-              const prepared = await attempt.prepare({
+              const prepared = await transaction.prepare({
                 ...rest,
                 ...(feePayer ? { feePayer: true } : {}),
               })
@@ -256,7 +257,7 @@ export function local(options: local.Options): Adapter.Adapter {
               return undefined
             })(),
           })
-          const attempt = await AccessKey.selectForTransaction({
+          const transaction = await AccessKeyTransaction.create({
             address:
               parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
             calls: parameters.calls,
@@ -264,9 +265,9 @@ export function local(options: local.Options): Adapter.Adapter {
             client,
             store,
           })
-          if (attempt) {
+          if (transaction) {
             try {
-              const prepared = await attempt.prepare({
+              const prepared = await transaction.prepare({
                 ...rest,
                 ...(feePayer ? { feePayer: true } : {}),
               })
@@ -302,7 +303,7 @@ export function local(options: local.Options): Adapter.Adapter {
               return undefined
             })(),
           })
-          const attempt = await AccessKey.selectForTransaction({
+          const transaction = await AccessKeyTransaction.create({
             address:
               parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
             calls: parameters.calls,
@@ -310,9 +311,9 @@ export function local(options: local.Options): Adapter.Adapter {
             client,
             store,
           })
-          if (attempt) {
+          if (transaction) {
             try {
-              const prepared = await attempt.prepare({
+              const prepared = await transaction.prepare({
                 ...rest,
                 ...(feePayer ? { feePayer: true } : {}),
               })

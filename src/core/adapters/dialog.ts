@@ -5,6 +5,8 @@ import { z } from 'zod/mini'
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
+import * as AccessKeyStore from '../internal/AccessKeyStore.js'
+import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as Schema from '../Schema.js'
 import type * as Store from '../Store.js'
 import * as Rpc from '../zod/rpc.js'
@@ -136,7 +138,13 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       keyPair: AccessKey.generate.ReturnType['keyPair'],
     ) {
       const keyAuthorization = KeyAuthorization.fromRpc(keyAuth)
-      AccessKey.savePending({ address, keyAuthorization, keyPair, store })
+      AccessKeyStore.upsertAuthorization({
+        address,
+        keyAuthorization,
+        keyPair,
+        state: 'signed',
+        store,
+      })
     }
 
     const dialogInstance = dialog({ host, store, theme })
@@ -260,16 +268,16 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               return undefined
             })(),
           })
-          const attempt = await AccessKey.selectForTransaction({
+          const transaction = await AccessKeyTransaction.create({
             address: parameters.from,
             calls: parameters.calls,
             chainId: parameters.chainId,
             client,
             store,
           })
-          if (attempt) {
+          if (transaction) {
             try {
-              const prepared = await attempt.prepare({
+              const prepared = await transaction.prepare({
                 ...rest,
                 ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
               })
@@ -298,16 +306,16 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               return undefined
             })(),
           })
-          const attempt = await AccessKey.selectForTransaction({
+          const transaction = await AccessKeyTransaction.create({
             address: parameters.from,
             calls: parameters.calls,
             chainId: parameters.chainId,
             client,
             store,
           })
-          if (attempt) {
+          if (transaction) {
             try {
-              const prepared = await attempt.prepare({
+              const prepared = await transaction.prepare({
                 ...rest,
                 ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
               })
@@ -332,16 +340,16 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               return undefined
             })(),
           })
-          const attempt = await AccessKey.selectForTransaction({
+          const transaction = await AccessKeyTransaction.create({
             address: parameters.from,
             calls: parameters.calls,
             chainId: parameters.chainId,
             client,
             store,
           })
-          if (attempt) {
+          if (transaction) {
             try {
-              const prepared = await attempt.prepare({
+              const prepared = await transaction.prepare({
                 ...rest,
                 ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
               })
