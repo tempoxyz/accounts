@@ -50,8 +50,7 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
     >
       <div className="flex flex-wrap items-center gap-1.5 text-secondary">
         <span>Balance</span>
-        <code className="text-primary">{balanceText}</code>
-        <span>pathUSD</span>
+        <code className="text-primary">{balanceText} pathUSD</code>
       </div>
       {transfer.isSuccess ? (
         <div className="text-[14px] flex flex-col gap-1.5 mt-2">
