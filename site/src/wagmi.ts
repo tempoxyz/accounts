@@ -5,7 +5,7 @@ import { tempo, tempoModerato } from 'wagmi/chains'
 import { tempoWallet } from 'wagmi/tempo'
 
 const pathUsd = '0x20c0000000000000000000000000000000000000' as const
-const relay = '/relay'
+const feePayer = '/relay'
 
 export const wagmiConfig: Config = createConfig({
   chains: [tempoModerato, tempo],
@@ -46,15 +46,14 @@ export const feeSponsorshipWagmiConfig: Config = createConfig({
         limits: [{ token: pathUsd, limit: parseUnits('100', 6) }],
         scopes: [{ address: pathUsd, selector: 'transfer(address,uint256)' }],
       }),
-      feePayer: relay,
-      relay,
+      feePayer,
       testnet: true,
     }),
   ],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempoModerato.id]: http(`/relay/${tempoModerato.id}`),
-    [tempo.id]: http(`/relay/${tempo.id}`),
+    [tempoModerato.id]: http(`${feePayer}/${tempoModerato.id}`),
+    [tempo.id]: http(`${feePayer}/${tempo.id}`),
   },
 })
 

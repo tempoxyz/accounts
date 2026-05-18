@@ -11,7 +11,7 @@ import * as Steps from '../../../components/Steps'
 
 # Fee Sponsorship
 
-Sponsor transaction fees for connected accounts without moving sponsorship policy into your client. Your app runs a relay with `Handler.relay`, the connector routes wallet RPC through that relay, and each sponsored request can still opt out of fee sponsorship.
+Sponsor transaction fees for connected accounts without moving sponsorship policy into your client. Your app runs a relay with `Handler.relay`, the connector uses that relay as the fee payer, and each sponsored request can still opt out of fee sponsorship.
 
 The runnable [Fee Payer example](https://github.com/tempoxyz/accounts/tree/main/examples/fee-payer) shows the full shape with Tempo Wallet, a Cloudflare Worker relay, and a sponsored pathUSD transfer. The same pattern is available with domain-bound passkeys in the [Fee Payer + WebAuthn example](https://github.com/tempoxyz/accounts/tree/main/examples/fee-payer-and-webauthn).
 
@@ -93,10 +93,12 @@ The minimal example sponsors any transaction sent to the relay. Before funding a
 
 ### Configure the Connector
 
-Pass the relay URL to your connector with both `relay` and `feePayer`. `relay` routes app-side RPC through your relay. `feePayer` tells Tempo Wallet's hosted prompt which app relay should sponsor the transaction when signing falls back to the wallet UI. In development, the Fee Payer example uses a Cloudflare Tunnel so the Tempo Wallet iframe can reach your local relay. In production, use the HTTPS URL of your deployed relay.
+Pass the relay URL to your connector with `feePayer`. This tells Tempo Wallet's hosted prompt which app relay should sponsor the transaction when signing falls back to the wallet UI. Point Wagmi transports at the same relay so app-side fills and broadcasts use the sponsor-aware endpoint too.
 
-:::tip[Keep transports on the relay]
-If you configure Wagmi `transports`, point them at the relay's per-chain URLs. Plain `http()` transports are also forwarded to the Accounts Provider, where they override the relay-generated transports.
+In development, the Fee Payer example uses a Cloudflare Tunnel so the Tempo Wallet iframe can reach your local relay. In production, use the HTTPS URL of your deployed relay.
+
+:::tip[Keep transports on the fee payer]
+If you configure Wagmi `transports`, point them at the fee payer's per-chain relay URLs. Plain `http()` transports go directly to the chain RPC and bypass your relay.
 :::
 
 :::code-group
@@ -107,21 +109,20 @@ import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { tempoWallet } from 'wagmi/connectors'
 
-const relay = import.meta.env.VITE_RELAY_URL ?? '/relay'
+const feePayer = import.meta.env.VITE_FEE_PAYER_URL ?? '/relay'
 
 export const config = createConfig({
   chains: [tempo, tempoModerato],
   connectors: [
     tempoWallet({
       testnet: true,
-      feePayer: relay, // [!code focus]
-      relay, // [!code focus]
+      feePayer, // [!code focus]
     }),
   ],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempo.id]: http(`/relay/${tempo.id}`), // [!code focus]
-    [tempoModerato.id]: http(`/relay/${tempoModerato.id}`), // [!code focus]
+    [tempo.id]: http(`${feePayer}/${tempo.id}`), // [!code focus]
+    [tempoModerato.id]: http(`${feePayer}/${tempoModerato.id}`), // [!code focus]
   },
 })
 ```
@@ -132,7 +133,7 @@ import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { webAuthn } from 'wagmi/tempo'
 
-const relay = '/relay'
+const feePayer = '/relay'
 
 export const config = createConfig({
   chains: [tempo, tempoModerato],
@@ -140,14 +141,13 @@ export const config = createConfig({
     webAuthn({
       testnet: true,
       authUrl: '/auth',
-      feePayer: relay, // [!code focus]
-      relay, // [!code focus]
+      feePayer, // [!code focus]
     }),
   ],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempo.id]: http(`/relay/${tempo.id}`), // [!code focus]
-    [tempoModerato.id]: http(`/relay/${tempoModerato.id}`), // [!code focus]
+    [tempo.id]: http(`${feePayer}/${tempo.id}`), // [!code focus]
+    [tempoModerato.id]: http(`${feePayer}/${tempoModerato.id}`), // [!code focus]
   },
 })
 ```
@@ -156,7 +156,7 @@ export const config = createConfig({
 
 ### Send a Transfer
 
-Call [`Hooks.wallet.useTransfer`](https://wagmi.sh/tempo/hooks/wallet.useTransfer) normally. With `feePayer` and `relay` configured, the transfer uses your relay by default, where the server decides whether to sponsor it.
+Call [`Hooks.wallet.useTransfer`](https://wagmi.sh/tempo/hooks/wallet.useTransfer) normally. With `feePayer` configured, the transfer uses your relay by default, where the server decides whether to sponsor it.
 
 ```tsx twoslash [Transfer.tsx]
 // @noErrors
