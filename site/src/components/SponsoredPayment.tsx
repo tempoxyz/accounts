@@ -12,6 +12,23 @@ import LucideCircleCheck from '~icons/lucide/circle-check'
 import * as Steps from './Steps.js'
 
 const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+const pathUsdDecimals = 6
+const pathUsdSymbol = 'pathUSD'
+const transferAmount = 1_000_000n
+
+function toPathUsdAmount(value: bigint) {
+  return {
+    amount: toHex(value),
+    decimals: pathUsdDecimals,
+    formatted: formatUnits(value, pathUsdDecimals),
+    symbol: pathUsdSymbol,
+  } satisfies Amount.Amount
+}
+
+function toFeeAmount(receipt: { effectiveGasPrice: bigint; gasUsed: bigint }) {
+  const value = (receipt.effectiveGasPrice * receipt.gasUsed) / 10n ** BigInt(18 - pathUsdDecimals)
+  return toPathUsdAmount(value)
+}
 
 function formatAddress(value: string) {
   if (value.length <= 10) return value
@@ -35,15 +52,9 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
   }, [address, balance.data])
   const balanceValue =
     cachedBalance && address && cachedBalance.account === address ? cachedBalance.value : undefined
-  const balanceAmount =
-    balanceValue !== undefined
-      ? ({
-          amount: toHex(balanceValue),
-          decimals: 6,
-          formatted: formatUnits(balanceValue, 6),
-          symbol: 'pathUSD',
-        } satisfies Amount.Amount)
-      : undefined
+  const balanceAmount = balanceValue !== undefined ? toPathUsdAmount(balanceValue) : undefined
+  const feeAmount = transfer.data ? toFeeAmount(transfer.data.receipt) : undefined
+  const spentAmount = toPathUsdAmount(transferAmount)
 
   return (
     <Steps.Step
@@ -78,7 +89,7 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
           </div>
         </div>
         {transfer.isSuccess ? (
-          <div className="flex flex-col gap-1.5 mt-8">
+          <div className="flex flex-col gap-1.5 mt-6">
             <div className="inline-flex items-center gap-x-1.5">
               <LucideCircleCheck aria-hidden className="size-4 text-success shrink-0" />
               <span className="text-success font-medium">Sponsored transfer sent.</span>
@@ -91,6 +102,16 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
                 See receipt
               </a>
             </div>
+            <div className="flex items-center justify-between gap-x-6 text-secondary">
+              <span className="shrink-0">Spent</span>
+              <Amount amount={spentAmount} align="right" className="font-medium text-primary" maxDecimals={6} />
+            </div>
+            {feeAmount ? (
+              <div className="flex items-center justify-between gap-x-6 text-secondary">
+                <span className="shrink-0">Fees paid</span>
+                <Amount amount={feeAmount} align="right" className="font-medium text-primary" maxDecimals={6} />
+              </div>
+            ) : null}
             {transfer.data.receipt.feePayer ? (
               <div className="flex items-center justify-between gap-x-6 text-secondary">
                 <span className="shrink-0">Fees paid by</span>
