@@ -117,13 +117,13 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
             </div>
             {feeAmount ? (
               <div className="flex items-center justify-between gap-x-6 text-secondary">
-                <span className="shrink-0">Fees paid</span>
+                <span className="shrink-0">Sponsor paid</span>
                 <Amount amount={feeAmount} align="right" className="font-medium text-primary" maxDecimals={6} />
               </div>
             ) : null}
             {transfer.data.receipt.feePayer ? (
               <div className="w-full text-right">
-                <span className="text-secondary">Sponsor paid </span>
+                <span className="text-secondary">By </span>
                 <span className="font-medium text-primary" title={transfer.data.receipt.feePayer}>
                   {formatAddress(transfer.data.receipt.feePayer)}
                 </span>
