@@ -50,7 +50,6 @@ const config: Config = defineConfig({
           { text: 'Subscriptions', link: '/docs/guides/subscriptions' },
           { text: 'Fee Sponsorship', link: '/docs/guides/fee-sponsorship' },
           { text: 'Theming', link: '/docs/guides/theming' },
-          { text: 'React Native', link: '/docs/guides/react-native' },
           { text: 'CLI', link: '/docs/guides/cli' },
         ],
       },
