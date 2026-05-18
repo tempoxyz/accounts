@@ -10,15 +10,13 @@ const relay = await (async () => {
   return '/relay'
 })()
 
-const relayTransport = (chainId: number) => http(`${relay.replace(/\/$/, '')}/${chainId}`)
-
 export const config = createConfig({
   chains: [tempo, tempoModerato],
   connectors: [tempoWallet({ testnet: true, relay })],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempo.id]: relayTransport(tempo.id),
-    [tempoModerato.id]: relayTransport(tempoModerato.id),
+    [tempo.id]: http(`${relay}/${tempo.id}`),
+    [tempoModerato.id]: http(`${relay}/${tempoModerato.id}`),
   },
 })
 
