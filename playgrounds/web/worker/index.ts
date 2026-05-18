@@ -42,7 +42,7 @@ const payment = Mppx.create({
         const record = {
           accessKey: subscriptionAccessKey,
           amount: request.amount,
-          billingAnchor: new Date().toISOString(),
+          billingAnchor: secondIso(),
           chainId: request.methodDetails?.chainId,
           currency: request.currency,
           lastChargedPeriod: 0,
@@ -54,7 +54,7 @@ const payment = Mppx.create({
           reference: txHash(activationCount),
           subscriptionExpires: request.subscriptionExpires,
           subscriptionId: `playground_${activationCount}`,
-          timestamp: new Date().toISOString(),
+          timestamp: secondIso(),
         } satisfies Subscription.SubscriptionRecord
         return {
           receipt: Subscription.createSubscriptionReceipt(record),
@@ -72,7 +72,7 @@ const payment = Mppx.create({
           ...subscription,
           lastChargedPeriod: periodIndex,
           reference: txHash(100 + renewalCount),
-          timestamp: new Date().toISOString(),
+          timestamp: secondIso(),
         }
         return {
           receipt: Subscription.createSubscriptionReceipt(record),
@@ -81,7 +81,7 @@ const payment = Mppx.create({
       },
       resolve: ({ input }) => ({ accessKey: subscriptionAccessKey, key: subscriptionKey(input) }),
       store,
-      subscriptionExpires: new Date(Date.now() + 365 * 24 * 60 * 60 * 1_000).toISOString(),
+      subscriptionExpires: secondIso(Date.now() + 365 * 24 * 60 * 60 * 1_000),
       testnet,
     }),
   ],
@@ -128,7 +128,7 @@ export default {
       if (!subscription) return Response.json({ status: 'missing' })
       await subscriptions.put({
         ...subscription,
-        billingAnchor: new Date(Date.now() - 2 * 24 * 60 * 60 * 1_000).toISOString(),
+        billingAnchor: secondIso(Date.now() - 2 * 24 * 60 * 60 * 1_000),
         lastChargedPeriod: 0,
       })
       return Response.json({ status: 'ready', subscriptionId: subscription.subscriptionId })
@@ -139,7 +139,7 @@ export default {
       if (!subscription) return Response.json({ status: 'missing' })
       await subscriptions.put({
         ...subscription,
-        canceledAt: new Date().toISOString(),
+        canceledAt: secondIso(),
       })
       return Response.json({ status: 'canceled', subscriptionId: subscription.subscriptionId })
     }
@@ -184,28 +184,6 @@ export default {
         }),
       )
     }
-
-    if (url.pathname === '/mpp/failure/insufficient-balance')
-      return charge(request, { amount: '1000000', description: 'Insufficient balance' })
-
-    if (url.pathname === '/mpp/failure/expired')
-      return charge(request, {
-        amount: '0.01',
-        description: 'Expired challenge',
-        expires: new Date(Date.now() - 1_000),
-      })
-
-    if (url.pathname === '/mpp/failure/unsupported-mode')
-      return charge(request, {
-        amount: '0.01',
-        description: 'Unsupported settlement mode',
-        supportedModes: ['pull'],
-      })
-
-    if (url.pathname === '/mpp/failure/raw-402')
-      return problem('payment_required', 'MPP disabled raw 402', {
-        detail: 'This response intentionally skips an MPP challenge.',
-      })
 
     if (url.pathname === '/zero-dollar-auth') {
       const result = await payment.charge({
@@ -281,21 +259,8 @@ function txHash(index: number) {
   return `0x${index.toString(16).padStart(64, '0')}` as const
 }
 
-function problem(code: string, title: string, options: { detail: string }) {
-  return Response.json(
-    {
-      detail: options.detail,
-      status: 402,
-      title,
-      type: `https://playground.tempo.xyz/problems/${code}`,
-    },
-    {
-      headers: {
-        'Cache-Control': 'no-store',
-      },
-      status: 402,
-    },
-  )
+function secondIso(ms = Date.now()) {
+  return new Date(Math.ceil(ms / 1_000) * 1_000).toISOString()
 }
 
 function recordInspection(

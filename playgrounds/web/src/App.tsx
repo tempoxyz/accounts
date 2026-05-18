@@ -1,4 +1,4 @@
-import { Mppx, tempo as mppx_tempo } from 'mppx/client'
+import { tempo as mppx_tempo } from 'mppx/client'
 import { Hex, Json } from 'ox'
 import {
   type ComponentProps,
@@ -1985,27 +1985,15 @@ type MppScenarioResult = {
   url: string
 }
 
-type MppRun = (
-  label: string,
-  path: string,
-  init?: RequestInit | undefined,
-) => Promise<MppScenarioResult>
 type MppSseEvent = { data: unknown; event: string }
 type MppSessionState = {
-  acceptedCumulative?: string | undefined
-  channelId?: string | undefined
   lastAction?: string | undefined
   remaining?: string | undefined
   spent?: string | undefined
   status: 'active' | 'closed' | 'idle' | 'open'
 }
 type MppSubscriptionState = {
-  billingAnchor?: string | undefined
-  canceledAt?: string | undefined
-  lastChargedPeriod?: string | number | undefined
-  reference?: string | undefined
   status: 'active' | 'canceled' | 'missing' | 'renewal due'
-  subscriptionId?: string | undefined
 }
 
 function MppPlayground(props: { adapterType: AdapterType; rerender: () => void }) {
@@ -2020,24 +2008,11 @@ function MppPlayground(props: { adapterType: AdapterType; rerender: () => void }
     await provider.request({ method: 'eth_accounts' }).catch(() => undefined)
   }
 
-  const runRaw: MppRun = (label, path, init) =>
-    (async () => {
-      Mppx.restore()
-      try {
-        return await runMppRequest(label, path, init)
-      } finally {
-        switchMppMode(mode, adapterType)
-        rerender()
-        await provider.request({ method: 'eth_accounts' }).catch(() => undefined)
-      }
-    })()
-
   return (
     <>
       <MppOneTimeCharges applyMode={applyMode} mode={mode} />
       <MppSessions adapterType={adapterType} mode={mode} />
       <MppSubscriptions />
-      <MppFailureLab applyMode={applyMode} runRaw={runRaw} />
     </>
   )
 }
@@ -2062,28 +2037,20 @@ function MppOneTimeCharges(props: { applyMode: (mode: MppMode) => Promise<void>;
       result={request.result}
       error={request.error}
     >
-      <MppStateTable
-        rows={[
-          ['Provider mode', mode],
-          ['Paid challenge', 'server accepts push or pull'],
-        ]}
-      />
-      <div>
-        <fieldset style={{ marginBottom: 8, border: 'none', padding: 0 }}>
-          <legend>Provider Mode</legend>
-          {(['push', 'pull'] as const).map((value) => (
-            <label key={value} style={{ marginRight: 12 }}>
-              <input
-                type="radio"
-                name="mppChargeMode"
-                checked={mode === value}
-                onChange={() => void applyMode(value)}
-              />{' '}
-              {value}
-            </label>
-          ))}
-        </fieldset>
-      </div>
+      <fieldset style={{ border: 'none', padding: 0 }}>
+        <legend>Provider Mode</legend>
+        {(['push', 'pull'] as const).map((value) => (
+          <label key={value} style={{ marginRight: 12 }}>
+            <input
+              type="radio"
+              name="mppChargeMode"
+              checked={mode === value}
+              onChange={() => void applyMode(value)}
+            />{' '}
+            {value}
+          </label>
+        ))}
+      </fieldset>
       <Button disabled={request.pending} onClick={() => run('Free proof', '/mpp/charge/free')}>
         Free Proof
       </Button>
@@ -2126,16 +2093,7 @@ function MppSessions(props: { adapterType: AdapterType; mode: MppMode }) {
       result={request.result}
       error={request.error}
     >
-      <MppStateTable
-        rows={[
-          ['State', session.status],
-          ['Channel', session.channelId ?? 'none'],
-          ['Last action', session.lastAction ?? 'none'],
-          ['Authorized', formatMppAmount(session.acceptedCumulative)],
-          ['Spent', formatMppAmount(session.spent)],
-          ['Unspent authorization', formatMppAmount(session.remaining)],
-        ]}
-      />
+      <MppSummary>{formatMppSessionSummary(session)}</MppSummary>
       <Button
         disabled={request.pending || session.status === 'closed'}
         onClick={() =>
@@ -2224,27 +2182,15 @@ function MppSubscriptions() {
       result={request.result}
       error={request.error}
     >
-      <MppStateTable
-        rows={[
-          ['State', subscription.status],
-          ['Subscription', subscription.subscriptionId ?? 'none'],
-          ['Last charged period', subscription.lastChargedPeriod ?? 'none'],
-          ['Billing anchor', subscription.billingAnchor ?? 'none'],
-          ['Reference', subscription.reference ?? 'none'],
-          ['Canceled at', subscription.canceledAt ?? 'none'],
-        ]}
-      />
+      <MppSummary>{formatMppSubscriptionSummary(subscription)}</MppSummary>
       <Button
         disabled={request.pending}
         onClick={() => run('Activate subscription', '/mpp/subscription/news')}
       >
         Activate
       </Button>
-      <Button
-        disabled={request.pending}
-        onClick={() => run('Access again', '/mpp/subscription/news')}
-      >
-        Access Again
+      <Button disabled={request.pending} onClick={() => run('Access', '/mpp/subscription/news')}>
+        Access
       </Button>
       <Button
         disabled={request.pending}
@@ -2254,9 +2200,9 @@ function MppSubscriptions() {
       </Button>
       <Button
         disabled={request.pending}
-        onClick={() => run('Renew subscription', '/mpp/subscription/news')}
+        onClick={() => run('Access / renew', '/mpp/subscription/news')}
       >
-        Renew
+        Access / Renew
       </Button>
       <Button
         disabled={request.pending}
@@ -2266,69 +2212,9 @@ function MppSubscriptions() {
       </Button>
       <Button
         disabled={request.pending}
-        onClick={() => run('Reactivate subscription', '/mpp/subscription/news')}
-      >
-        Reactivate
-      </Button>
-      <Button
-        disabled={request.pending}
         onClick={() => run('Refresh state', '/mpp/subscription/state')}
       >
-        Refresh State
-      </Button>
-    </MppPanel>
-  )
-}
-
-function MppFailureLab(props: { applyMode: (mode: MppMode) => Promise<void>; runRaw: MppRun }) {
-  const { applyMode, runRaw } = props
-  const request = useMppRequest()
-
-  async function run(label: string, path: string) {
-    await request.execute(label, () => runMppRequest(label, path))
-  }
-
-  return (
-    <MppPanel
-      title="Failure Lab"
-      pending={request.pending}
-      result={request.result}
-      error={request.error}
-    >
-      <MppStateTable
-        rows={[
-          ['Insufficient balance', 'account cannot satisfy the charge'],
-          ['Expired challenge', 'client receives an already expired challenge'],
-          ['Unsupported mode', 'provider is push, server requires pull'],
-          ['Raw 402', 'payment-aware fetch is intentionally disabled'],
-        ]}
-      />
-      <Button
-        disabled={request.pending}
-        onClick={() => run('Insufficient balance', '/mpp/failure/insufficient-balance')}
-      >
-        Insufficient Balance
-      </Button>
-      <Button
-        disabled={request.pending}
-        onClick={() => run('Expired challenge', '/mpp/failure/expired')}
-      >
-        Expired Challenge
-      </Button>
-      <Button
-        disabled={request.pending}
-        onClick={async () => {
-          await applyMode('push')
-          await run('Unsupported mode', '/mpp/failure/unsupported-mode')
-        }}
-      >
-        Unsupported Mode
-      </Button>
-      <Button
-        disabled={request.pending}
-        onClick={() => request.execute('Raw 402', () => runRaw('Raw 402', '/mpp/failure/raw-402'))}
-      >
-        Raw 402
+        Refresh
       </Button>
     </MppPanel>
   )
@@ -2381,22 +2267,8 @@ function MppPanel(props: {
   )
 }
 
-function MppStateTable(props: { rows: readonly (readonly [string, unknown])[] }) {
-  const { rows } = props
-  return (
-    <table>
-      <tbody>
-        {rows.map(([label, value]) => (
-          <tr key={label}>
-            <th>{label}</th>
-            <td>
-              {value === undefined || value === null || value === '' ? 'none' : String(value)}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
+function MppSummary(props: { children: ReactNode }) {
+  return <p className="w-full text-sm text-foreground-secondary">{props.children}</p>
 }
 
 function createMppSessionManager() {
@@ -2610,8 +2482,6 @@ function readMppSessionState(result: MppScenarioResult, actionFallback?: string 
   const acceptedCumulative = stringValue(receipt.acceptedCumulative)
   const spent = stringValue(receipt.spent)
   return {
-    acceptedCumulative,
-    channelId: stringValue(receipt.channelId),
     ...(action ? { lastAction: action } : {}),
     remaining: subtractMppAmounts(acceptedCumulative, spent),
     spent,
@@ -2653,13 +2523,22 @@ function readMppSubscriptionState(value: unknown) {
   })()
 
   return {
-    billingAnchor,
-    canceledAt,
-    lastChargedPeriod,
-    reference: stringValue(value.reference),
     status,
-    subscriptionId: stringValue(value.subscriptionId),
   } satisfies MppSubscriptionState
+}
+
+function formatMppSessionSummary(session: MppSessionState) {
+  if (session.status === 'idle') return 'No local session yet.'
+  const parts = [`Session ${session.status}`]
+  if (session.lastAction) parts.push(`last ${session.lastAction}`)
+  if (session.spent) parts.push(`${formatMppAmount(session.spent)} spent`)
+  if (session.remaining) parts.push(`${formatMppAmount(session.remaining)} left`)
+  return parts.join(' · ')
+}
+
+function formatMppSubscriptionSummary(subscription: MppSubscriptionState) {
+  if (subscription.status === 'missing') return 'No subscription stored.'
+  return `Subscription ${subscription.status}.`
 }
 
 function isSubscriptionRenewalDue(
