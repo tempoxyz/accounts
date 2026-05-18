@@ -52,6 +52,31 @@ describe('privy', () => {
     `)
   })
 
+  test('default: createAccount falls back to loadAccounts when not provided', async () => {
+    const { adapter, client } = setup({ createAccount: false })
+
+    const result = await adapter.actions.createAccount(
+      { digest: '0x1234', name: 'Ada' },
+      { method: 'wallet_connect', params: undefined },
+    )
+
+    expect(client.createCalls).toMatchInlineSnapshot(`0`)
+    expect(client.loadCalls).toMatchInlineSnapshot(`1`)
+    expect(client.signPayloads).toMatchInlineSnapshot(`
+      [
+        "0x1234",
+      ]
+    `)
+    expect(result.accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+          "label": "Ada",
+        },
+      ]
+    `)
+  })
+
   test('default: loadAccounts delegates login and caches embedded wallets for signing', async () => {
     const { adapter, client } = setup()
 
@@ -427,7 +452,14 @@ function setup(options: setup.Options = {}) {
   const client = createClient(options)
   const adapter = privy({
     client,
-    createAccount: async () => client.makeWallet(address),
+    ...(options.createAccount === false
+      ? {}
+      : {
+          createAccount: async () => {
+            client.createCalls++
+            return client.makeWallet(address)
+          },
+        }),
     loadAccounts: async () => {
       client.loadCalls++
       return client.wallets
@@ -445,6 +477,8 @@ function setup(options: setup.Options = {}) {
 
 declare namespace setup {
   type Options = {
+    /** Pass `false` to omit the adapter's `createAccount` callback (tests fallback to `loadAccounts`). */
+    createAccount?: false | undefined
     token?: string | null | undefined
     signError?: unknown
     /** Override the value returned by the embedded provider's `secp256k1_sign`. */
@@ -459,6 +493,7 @@ declare namespace setup {
 }
 
 type MockClient = privy.Client & {
+  createCalls: number
   initCalls: number
   loadCalls: number
   logoutCalls: number
@@ -474,6 +509,7 @@ type MockClient = privy.Client & {
 
 function createClient(options: setup.Options = {}) {
   const client: MockClient = {
+    createCalls: 0,
     initCalls: 0,
     loadCalls: 0,
     logoutCalls: 0,

@@ -63,13 +63,15 @@ describe('privy', () => {
     }>()
   })
 
-  test('options require client, createAccount, loadAccounts', () => {
+  test('options require client and loadAccounts; createAccount is optional', () => {
     expectTypeOf<privy.Options>().toMatchTypeOf<{
       client: privy.Client
-      createAccount: (parameters: {
-        client: privy.Client
-        parameters: Adapter.createAccount.Parameters
-      }) => Promise<privy.EmbeddedWallet>
+      createAccount?:
+        | ((parameters: {
+            client: privy.Client
+            parameters: Adapter.createAccount.Parameters
+          }) => Promise<privy.EmbeddedWallet>)
+        | undefined
       loadAccounts: (parameters: {
         client: privy.Client
         parameters?: Adapter.loadAccounts.Parameters | undefined

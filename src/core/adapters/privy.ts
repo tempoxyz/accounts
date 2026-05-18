@@ -443,10 +443,28 @@ export function privy<const client extends privy.Client>(
             )
 
           const privyClient = await getPrivyClient()
-          const account = await options.createAccount({ client: privyClient, parameters })
-          await requireSession()
-          walletAccounts = [account]
+          if (options.createAccount) {
+            const account = await options.createAccount({ client: privyClient, parameters })
+            await requireSession()
+            walletAccounts = [account]
+          } else {
+            walletAccounts = await options.loadAccounts({
+              client: privyClient,
+              parameters: {
+                ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
+                ...(parameters.digest ? { digest: parameters.digest } : {}),
+                ...(personalSign ? { personalSign } : {}),
+              },
+            })
+            await requireSession()
+          }
           restore_promise = undefined
+
+          const account = walletAccounts[0]
+          if (!account)
+            throw new ox_Provider.DisconnectedError({
+              message: 'Privy createAccount returned no wallet.',
+            })
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters.digest
           const keyAuthorization = authorizeAccessKey
@@ -454,7 +472,9 @@ export function privy<const client extends privy.Client>(
             : undefined
 
           return {
-            accounts: [toStoreAccount(account, parameters.name)],
+            accounts: walletAccounts.map((wallet, index) =>
+              toStoreAccount(wallet, index === 0 ? parameters.name : undefined),
+            ),
             ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
             ...(keyAuthorization ? { keyAuthorization } : {}),
             signature: digest
@@ -646,13 +666,18 @@ export declare namespace privy {
   type Options<client extends Client = Client> = {
     /** Existing Privy client, such as `Privy` from `@privy-io/js-sdk-core`. */
     client: client
-    /** Creates/registers a Privy embedded wallet. UI is allowed. */
-    createAccount: (parameters: {
-      /** Initialized Privy client. */
-      client: client
-      /** Provider create-account parameters. */
-      parameters: Adapter.createAccount.Parameters
-    }) => Promise<EmbeddedWallet>
+    /**
+     * Creates/registers a Privy embedded wallet. UI is allowed. Defaults to
+     * `loadAccounts` — apps that don't distinguish register vs login can omit this.
+     */
+    createAccount?:
+      | ((parameters: {
+          /** Initialized Privy client. */
+          client: client
+          /** Provider create-account parameters. */
+          parameters: Adapter.createAccount.Parameters
+        }) => Promise<EmbeddedWallet>)
+      | undefined
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /**
