@@ -46,6 +46,7 @@ export const feeSponsorshipWagmiConfig: Config = createConfig({
         limits: [{ token: pathUsd, limit: parseUnits('100', 6) }],
         scopes: [{ address: pathUsd, selector: 'transfer(address,uint256)' }],
       }),
+      feePayer: relay,
       relay,
       testnet: true,
     }),

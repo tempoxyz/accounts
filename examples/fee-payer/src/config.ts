@@ -12,7 +12,7 @@ const relay = await (async () => {
 
 export const config = createConfig({
   chains: [tempo, tempoModerato],
-  connectors: [tempoWallet({ testnet: true, relay })],
+  connectors: [tempoWallet({ testnet: true, feePayer: relay, relay })],
   multiInjectedProviderDiscovery: false,
   transports: {
     [tempo.id]: http(`${relay}/${tempo.id}`),

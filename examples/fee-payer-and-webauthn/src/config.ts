@@ -6,7 +6,7 @@ const relay = '/relay'
 
 export const config = createConfig({
   chains: [tempo, tempoModerato],
-  connectors: [webAuthn({ testnet: true, authUrl: '/auth', relay })],
+  connectors: [webAuthn({ testnet: true, authUrl: '/auth', feePayer: relay, relay })],
   multiInjectedProviderDiscovery: false,
   transports: {
     [tempo.id]: http(`${relay}/${tempo.id}`),
