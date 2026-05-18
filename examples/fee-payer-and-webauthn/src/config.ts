@@ -2,13 +2,15 @@ import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { webAuthn } from 'wagmi/tempo'
 
+const relay = '/relay'
+
 export const config = createConfig({
   chains: [tempo, tempoModerato],
-  connectors: [webAuthn({ testnet: true, authUrl: '/auth', feePayer: '/relay' })],
+  connectors: [webAuthn({ testnet: true, authUrl: '/auth', relay })],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempo.id]: http(),
-    [tempoModerato.id]: http(),
+    [tempo.id]: http(`${relay}/${tempo.id}`),
+    [tempoModerato.id]: http(`${relay}/${tempoModerato.id}`),
   },
 })
 

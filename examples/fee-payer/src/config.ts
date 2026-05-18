@@ -2,7 +2,7 @@ import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { tempoWallet } from 'wagmi/connectors'
 
-const feePayerUrl = await (async () => {
+const relay = await (async () => {
   if (import.meta.env.MODE === 'development') {
     const { getTunnelUrl } = await import('virtual:vite-plugin-cloudflare-tunnel')
     return `${getTunnelUrl()}/relay`
@@ -10,13 +10,15 @@ const feePayerUrl = await (async () => {
   return '/relay'
 })()
 
+const relayTransport = (chainId: number) => http(`${relay.replace(/\/$/, '')}/${chainId}`)
+
 export const config = createConfig({
   chains: [tempo, tempoModerato],
-  connectors: [tempoWallet({ testnet: true, feePayer: feePayerUrl })],
+  connectors: [tempoWallet({ testnet: true, relay })],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempo.id]: http(),
-    [tempoModerato.id]: http(),
+    [tempo.id]: relayTransport(tempo.id),
+    [tempoModerato.id]: relayTransport(tempoModerato.id),
   },
 })
 

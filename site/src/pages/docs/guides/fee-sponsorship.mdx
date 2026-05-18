@@ -205,7 +205,7 @@ export function Transfer() {
 ```
 
 :::tip[Per-request control]
-With `relay`, requests route through your relay unless they opt out. Pass `feePayer: false` to make the connected account pay its own transaction fee, or pass a URL string to use a different fee payer service for one request.
+The transfer above does not pass a `feePayer` override. With `relay`, requests route through your relay and the relay sponsors them when `Handler.relay` has a `feePayer` configured. Only pass `feePayer: false` when you intentionally want the connected account to pay its own transaction fee.
 :::
 
 ::::
