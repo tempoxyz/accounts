@@ -13,6 +13,11 @@ import * as Steps from './Steps.js'
 
 const pathUsd = '0x20c0000000000000000000000000000000000000' as const
 
+function formatAddress(value: string) {
+  if (value.length <= 10) return value
+  return `${value.slice(0, 6)}...${value.slice(-4)}`
+}
+
 export function SponsoredPayment(props: SponsoredPayment.Props) {
   const { value } = props
   const { address } = useConnection()
@@ -28,7 +33,8 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
   useEffect(() => {
     if (address && balance.data !== undefined) setCachedBalance({ account: address, value: balance.data })
   }, [address, balance.data])
-  const balanceValue = cachedBalance?.account === address ? cachedBalance.value : undefined
+  const balanceValue =
+    cachedBalance && address && cachedBalance.account === address ? cachedBalance.value : undefined
   const balanceAmount =
     balanceValue !== undefined
       ? ({
@@ -60,10 +66,10 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
         </Button>
       }
     >
-      <div className="w-full max-w-[560px] text-[14px]">
-        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-6 text-secondary">
-          <span>Balance</span>
-          <div className="min-w-0 justify-self-end text-right">
+      <div className="w-full min-w-0 text-[14px]" style={{ maxWidth: '50%' }}>
+        <div className="flex items-center justify-between gap-x-6 text-secondary">
+          <span className="shrink-0">Balance</span>
+          <div className="min-w-0 text-right">
             {balanceAmount ? (
               <Amount amount={balanceAmount} align="right" className="text-primary" maxDecimals={6} />
             ) : (
@@ -72,7 +78,7 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
           </div>
         </div>
         {transfer.isSuccess ? (
-          <div className="flex flex-col gap-1.5 mt-2">
+          <div className="flex flex-col gap-1.5 mt-8">
             <div className="inline-flex items-center gap-x-1.5">
               <LucideCircleCheck aria-hidden className="size-4 text-success shrink-0" />
               <span className="text-success font-medium">Sponsored transfer sent.</span>
@@ -86,10 +92,13 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
               </a>
             </div>
             {transfer.data.receipt.feePayer ? (
-              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-6 text-secondary">
-                <span>Fees paid by</span>
-                <span className="min-w-0 truncate text-right text-primary" title={transfer.data.receipt.feePayer}>
-                  {transfer.data.receipt.feePayer}
+              <div className="flex items-center justify-between gap-x-6 text-secondary">
+                <span className="shrink-0">Fees paid by</span>
+                <span
+                  className="min-w-0 font-medium text-right text-primary"
+                  title={transfer.data.receipt.feePayer}
+                >
+                  {formatAddress(transfer.data.receipt.feePayer)}
                 </span>
               </div>
             ) : null}
