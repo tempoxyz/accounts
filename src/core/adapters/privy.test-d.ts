@@ -70,12 +70,12 @@ describe('privy', () => {
         | ((parameters: {
             client: privy.Client
             parameters: Adapter.createAccount.Parameters
-          }) => Promise<privy.EmbeddedWallet>)
+          }) => Promise<privy.AccountSelection>)
         | undefined
       loadAccounts: (parameters: {
         client: privy.Client
         parameters?: Adapter.loadAccounts.Parameters | undefined
-      }) => Promise<readonly privy.EmbeddedWallet[]>
+      }) => Promise<privy.AccountSelection>
     }>()
   })
 
@@ -96,12 +96,10 @@ describe('privy', () => {
       createAccount: async ({ client, parameters }) => {
         expectTypeOf(client).toMatchTypeOf<privy.Client>()
         expectTypeOf(parameters).toEqualTypeOf<Adapter.createAccount.Parameters>()
-        return { address: '0x0', provider: { request: async () => '0x0' } }
       },
       loadAccounts: async ({ client, parameters }) => {
         expectTypeOf(client).toMatchTypeOf<privy.Client>()
         expectTypeOf(parameters).toEqualTypeOf<Adapter.loadAccounts.Parameters | undefined>()
-        return []
       },
     })
   })
@@ -121,11 +119,9 @@ describe('privy', () => {
       client,
       createAccount: async ({ client }) => {
         expectTypeOf(client.raw.delegateWallets).toEqualTypeOf<() => Promise<'delegated'>>()
-        return { address: '0x0', provider: { request: async () => '0x0' } }
       },
       loadAccounts: async ({ client }) => {
         expectTypeOf(client.raw.delegateWallets).toEqualTypeOf<() => Promise<'delegated'>>()
-        return []
       },
     })
   })

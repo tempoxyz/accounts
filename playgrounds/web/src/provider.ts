@@ -1,8 +1,4 @@
-import Privy, {
-  LocalStorage as PrivyLocalStorage,
-  getAllUserEmbeddedEthereumWallets,
-  getEntropyDetailsFromUser,
-} from '@privy-io/js-sdk-core'
+import Privy, { LocalStorage as PrivyLocalStorage } from '@privy-io/js-sdk-core'
 import { TurnkeyClient, generateWalletAccountsFromAddressFormat } from '@turnkey/core'
 import type { CreateSubOrgParams } from '@turnkey/core'
 import {
@@ -154,15 +150,10 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         client,
         async createAccount({ client }) {
           await requestPrivyEmailOtp({ client: client.auth, mode: 'register' })
-          const wallets = await loadPrivyEmbeddedWallets(client)
-          const wallet = wallets[0]
-          if (!wallet) throw new Error('No Privy embedded Ethereum wallet was created.')
-          return wallet
         },
         async loadAccounts({ client }) {
           if (!(await client.getAccessToken().catch(() => null)))
             await requestPrivyEmailOtp({ client: client.auth, mode: 'login' })
-          return await loadPrivyEmbeddedWallets(client)
         },
       }),
       mpp: true,
@@ -221,14 +212,25 @@ function getPrivyClient() {
   if (!appId) throw new Error('VITE_PRIVY_APP_ID is required for the Privy adapter.')
 
   if (!privyClient) {
-    privyClient = new Privy({
+    const inner = new Privy({
       appId,
       ...(import.meta.env.VITE_PRIVY_CLIENT_ID
         ? { clientId: import.meta.env.VITE_PRIVY_CLIENT_ID }
         : {}),
       storage: new PrivyLocalStorage(),
     })
-    mountPrivyEmbeddedWalletIframe(privyClient)
+    mountPrivyEmbeddedWalletIframe(inner)
+    // Wrap `embeddedWallet.getEthereumProvider` so the adapter's internal
+    // `loadEthereumWallets` waits for the secure-context iframe to be ready
+    // before requesting providers.
+    const originalGetEthereumProvider = inner.embeddedWallet.getEthereumProvider.bind(
+      inner.embeddedWallet,
+    )
+    inner.embeddedWallet.getEthereumProvider = (async (params) => {
+      await privyIframeReady
+      return await originalGetEthereumProvider(params)
+    }) as typeof inner.embeddedWallet.getEthereumProvider
+    privyClient = inner
   }
 
   return privyClient
@@ -256,31 +258,6 @@ function mountPrivyEmbeddedWalletIframe(client: Privy) {
     const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
     client.embeddedWallet.onMessage(data)
   })
-}
-
-/**
- * Loads the user's embedded Ethereum wallets from a Privy core instance using the
- * SDK helpers. Used by the playground's `createAccount`/`loadAccounts` callbacks to
- * hand wallets back to the adapter after the email-OTP UI completes.
- */
-async function loadPrivyEmbeddedWallets(client: Privy): Promise<readonly privy.EmbeddedWallet[]> {
-  await privyIframeReady
-  const { user } = await client.user.get()
-  if (!user) return []
-  const wallets = getAllUserEmbeddedEthereumWallets(user)
-  const entropy = getEntropyDetailsFromUser(user)
-  if (!entropy) return []
-  const { entropyId, entropyIdVerifier } = entropy
-  return await Promise.all(
-    wallets.map(async (wallet) => ({
-      address: wallet.address,
-      provider: await client.embeddedWallet.getEthereumProvider({
-        wallet,
-        entropyId,
-        entropyIdVerifier,
-      }),
-    })),
-  )
 }
 
 export function switchTheme(

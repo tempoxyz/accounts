@@ -46,7 +46,9 @@ const privySessionErrorCodes = new Set([
  * (`client.user.get` + `client.embeddedWallet.getEthereumProvider`), so apps don't
  * need to re-run the login UI when the user returns with a still-valid Privy session.
  *
- * Both callbacks must return Privy embedded Ethereum wallets as `{ address, provider }`.
+ * Callbacks only run the Privy auth UI. They may optionally return a subset of
+ * embedded wallet addresses to expose; if omitted, the adapter exposes every
+ * embedded wallet on the resulting Privy user.
  *
  * @example
  * ```ts
@@ -59,12 +61,10 @@ const privySessionErrorCodes = new Set([
  *     client,
  *     // Optional: omit to route registration through `loadAccounts`.
  *     createAccount: async ({ client }) => {
- *       const wallet = await myPrivyRegisterUI(client)
- *       return wallet
+ *       await myPrivyRegisterUI(client)
  *     },
  *     loadAccounts: async ({ client }) => {
- *       const wallets = await myPrivyLoginUI(client)
- *       return wallets
+ *       await myPrivyLoginUI(client)
  *     },
  *   }),
  * })
@@ -155,6 +155,25 @@ export function privy<const client extends privy.Client>(
           }),
         })),
       )
+    }
+
+    function selectWalletAccounts(
+      accounts: readonly privy.EmbeddedWallet[],
+      addresses: privy.AccountSelection,
+    ): readonly privy.EmbeddedWallet[] {
+      if (!addresses) return accounts
+
+      return addresses.map((address) => {
+        const address_ = core_Address.from(address)
+        const account = accounts.find((account) =>
+          isAddressEqual(core_Address.from(account.address), address_),
+        )
+        if (account) return account
+
+        throw new ox_Provider.UnauthorizedError({
+          message: `Privy callback returned address "${address_}" that was not found in the user's embedded wallets.`,
+        })
+      })
     }
 
     async function restore() {
@@ -488,8 +507,6 @@ export function privy<const client extends privy.Client>(
       return typeof value === 'object' && value !== null
     }
 
-    void restore().catch(() => undefined)
-
     return {
       cleanup() {},
       actions: {
@@ -502,35 +519,18 @@ export function privy<const client extends privy.Client>(
             )
 
           const privyClient = await getPrivyClient()
-          if (options.createAccount) {
-            const account = await options.createAccount({ client: privyClient, parameters })
-            await requireSession()
-            // Repopulate the full wallet list to match the multi-wallet behavior
-            // of `loadAccounts`. Keep the newly created wallet first so it stays
-            // the active account.
-            const restored = await loadEthereumWallets(privyClient)
-            const created = core_Address.from(account.address)
-            walletAccounts = [
-              account,
-              ...restored.filter(
-                (wallet) => !isAddressEqual(core_Address.from(wallet.address), created),
-              ),
-            ]
-          } else {
-            // Hold the callback result in a local until `requireSession()`
-            // succeeds so we don't leave stale wallets on the adapter when the
-            // session expired during the user-provided flow.
-            const loaded = await options.loadAccounts({
-              client: privyClient,
-              parameters: {
-                ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
-                ...(parameters.digest ? { digest: parameters.digest } : {}),
-                ...(personalSign ? { personalSign } : {}),
-              },
-            })
-            await requireSession()
-            walletAccounts = loaded
-          }
+          const addresses = options.createAccount
+            ? await options.createAccount({ client: privyClient, parameters })
+            : await options.loadAccounts({
+                client: privyClient,
+                parameters: {
+                  ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
+                  ...(parameters.digest ? { digest: parameters.digest } : {}),
+                  ...(personalSign ? { personalSign } : {}),
+                },
+              })
+          await requireSession()
+          walletAccounts = selectWalletAccounts(await loadEthereumWallets(privyClient), addresses)
           // Drop any in-flight boot-time `restore()` reference so re-entrant
           // `restore()` calls (e.g. from `accountForSigning`) don't `await` a
           // stale IIFE that would later overwrite `walletAccounts` with the
@@ -572,12 +572,9 @@ export function privy<const client extends privy.Client>(
             )
 
           const privyClient = await getPrivyClient()
-          // Hold the callback result in a local until `requireSession()`
-          // succeeds so we don't leave stale wallets on the adapter when the
-          // session expired during the user-provided flow.
-          const loaded = await options.loadAccounts({ client: privyClient, parameters })
+          const addresses = await options.loadAccounts({ client: privyClient, parameters })
           await requireSession()
-          walletAccounts = loaded
+          walletAccounts = selectWalletAccounts(await loadEthereumWallets(privyClient), addresses)
           // Drop any in-flight boot-time `restore()` reference so re-entrant
           // `restore()` calls (e.g. from `accountForSigning`) don't `await` a
           // stale IIFE that would later overwrite `walletAccounts` with the
@@ -671,8 +668,15 @@ export declare namespace privy {
     /** Existing Privy client, such as `Privy` from `@privy-io/js-sdk-core`. */
     client: client
     /**
-     * Creates/registers a Privy embedded wallet. UI is allowed. Defaults to
-     * `loadAccounts` — apps that don't distinguish register vs login can omit this.
+     * Runs the Privy registration UI. May optionally return a subset of the user's
+     * embedded wallet addresses to expose to the provider; if omitted, the adapter
+     * exposes every embedded wallet on the resulting Privy user.
+     *
+     * The adapter materializes EIP-1193 providers internally via
+     * `client.embeddedWallet.getEthereumProvider` — callbacks should not.
+     *
+     * Defaults to `loadAccounts` — apps that don't distinguish register vs login
+     * can omit this.
      */
     createAccount?:
       | ((parameters: {
@@ -680,13 +684,15 @@ export declare namespace privy {
           client: client
           /** Provider create-account parameters. */
           parameters: Adapter.createAccount.Parameters
-        }) => Promise<EmbeddedWallet>)
+        }) => Promise<AccountSelection>)
       | undefined
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /**
-     * Loads/logs into existing Privy embedded wallets in response to a
-     * user-initiated `wallet_connect`. UI is allowed and expected.
+     * Runs the Privy login UI in response to a user-initiated `wallet_connect`.
+     * May optionally return a subset of the user's embedded wallet addresses to
+     * expose to the provider; if omitted, the adapter exposes every embedded
+     * wallet on the Privy user.
      *
      * Silent restore on page reload pulls wallets directly from the Privy SDK
      * (`client.user.get` + `client.embeddedWallet.getEthereumProvider`) and does
@@ -697,12 +703,18 @@ export declare namespace privy {
       client: client
       /** Provider load-accounts parameters. */
       parameters?: Adapter.loadAccounts.Parameters | undefined
-    }) => Promise<readonly EmbeddedWallet[]>
+    }) => Promise<AccountSelection>
     /** Display name of the provider. @default "Privy" */
     name?: string | undefined
     /** Reverse DNS identifier. @default "io.privy" */
     rdns?: string | undefined
   }
+
+  /**
+   * Optional subset of embedded wallet addresses returned from `createAccount` /
+   * `loadAccounts`. `void`/`undefined` means "expose every embedded wallet".
+   */
+  type AccountSelection = readonly Address[] | void
 
   /**
    * Minimal structural Privy client surface used by the adapter for session checks,

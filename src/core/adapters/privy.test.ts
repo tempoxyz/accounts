@@ -441,12 +441,12 @@ function setup(options: setup.Options = {}) {
       : {
           createAccount: async () => {
             client.createCalls++
-            return client.makeWallet(address)
+            return undefined
           },
         }),
     loadAccounts: async () => {
       client.loadCalls++
-      return client.wallets
+      return undefined
     },
   })({
     getAccount: (() => {
