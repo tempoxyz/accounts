@@ -9,10 +9,17 @@ describe('privy', () => {
       auth: {
         logout: (parameters?: { userId: string } | undefined) => Promise<void> | void
       }
+      embeddedWallet: {
+        getEthereumProvider: (parameters: {
+          wallet: privy.LinkedAccount
+          entropyId: string
+          entropyIdVerifier: string
+        }) => Promise<privy.EthereumProvider> | privy.EthereumProvider
+      }
       getAccessToken: () => Promise<string | null>
       initialize?: (() => Promise<void> | void) | undefined
       user: {
-        get: () => Promise<{ user: { id: string } }>
+        get: () => Promise<{ user: privy.User }>
       }
     }>()
   })
@@ -23,10 +30,17 @@ describe('privy', () => {
         logout: () => Promise<void>
         login: () => Promise<void>
       }
+      embeddedWallet: {
+        getEthereumProvider: (parameters: {
+          wallet: privy.LinkedAccount
+          entropyId: string
+          entropyIdVerifier: string
+        }) => Promise<privy.EthereumProvider>
+      }
       getAccessToken: () => Promise<string | null>
       initialize: () => Promise<void>
       user: {
-        get: () => Promise<{ user: { id: string } }>
+        get: () => Promise<{ user: privy.User }>
       }
       // Extra app-specific fields are fine.
       privyVersion: string
@@ -49,7 +63,7 @@ describe('privy', () => {
     }>()
   })
 
-  test('options require client and loadAccounts; createAccount/restoreAccounts are optional', () => {
+  test('options require client and loadAccounts; createAccount is optional', () => {
     expectTypeOf<privy.Options>().toMatchTypeOf<{
       client: privy.Client
       createAccount?:
@@ -62,9 +76,6 @@ describe('privy', () => {
         client: privy.Client
         parameters?: Adapter.loadAccounts.Parameters | undefined
       }) => Promise<readonly privy.EmbeddedWallet[]>
-      restoreAccounts?:
-        | ((parameters: { client: privy.Client }) => Promise<readonly privy.EmbeddedWallet[]>)
-        | undefined
     }>()
   })
 
@@ -76,6 +87,9 @@ describe('privy', () => {
     privy({
       client: {
         auth: { logout: async () => {} },
+        embeddedWallet: {
+          getEthereumProvider: async () => ({ request: async () => '0x0' }),
+        },
         getAccessToken: async () => null,
         user: { get: async () => ({ user: { id: 'u' } }) },
       },
@@ -89,16 +103,15 @@ describe('privy', () => {
         expectTypeOf(parameters).toEqualTypeOf<Adapter.loadAccounts.Parameters | undefined>()
         return []
       },
-      restoreAccounts: async ({ client }) => {
-        expectTypeOf(client).toMatchTypeOf<privy.Client>()
-        return []
-      },
     })
   })
 
   test('callbacks preserve the concrete client type', () => {
     const client = {
       auth: { logout: async () => {} },
+      embeddedWallet: {
+        getEthereumProvider: async () => ({ request: async () => '0x0' }),
+      },
       getAccessToken: async () => null,
       user: { get: async () => ({ user: { id: 'u' } }) },
       // App-specific extras must remain visible to callbacks.
@@ -111,10 +124,6 @@ describe('privy', () => {
         return { address: '0x0', provider: { request: async () => '0x0' } }
       },
       loadAccounts: async ({ client }) => {
-        expectTypeOf(client.raw.delegateWallets).toEqualTypeOf<() => Promise<'delegated'>>()
-        return []
-      },
-      restoreAccounts: async ({ client }) => {
         expectTypeOf(client.raw.delegateWallets).toEqualTypeOf<() => Promise<'delegated'>>()
         return []
       },

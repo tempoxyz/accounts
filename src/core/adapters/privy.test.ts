@@ -393,7 +393,7 @@ describe('privy', () => {
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
-  test('behavior: restore surfaces restoreAccounts session errors as `Privy session expired.`', async () => {
+  test('behavior: restore surfaces silent-restore session errors as `Privy session expired.`', async () => {
     const { adapter, store } = setup({
       restoreError: Object.assign(new Error('boom'), { code: 'session_expired' }),
     })
@@ -407,24 +407,6 @@ describe('privy', () => {
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
     ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: Privy session expired.]')
-
-    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
-  })
-
-  test('behavior: restore without a restoreAccounts callback disconnects persisted state', async () => {
-    const { adapter, store } = setup({ restoreAccounts: false })
-    // Let the boot-time `void restore()` settle against an empty store first.
-    await new Promise((resolve) => setTimeout(resolve, 150))
-    store.setState({ accounts: [{ address }], activeAccount: 0 })
-
-    await expect(
-      adapter.actions.signPersonalMessage(
-        { address, data: '0x68656c6c6f' },
-        { method: 'personal_sign', params: ['0x68656c6c6f', address] },
-      ),
-    ).rejects.toMatchInlineSnapshot(
-      '[Provider.DisconnectedError: Privy adapter cannot silently restore wallets without a `restoreAccounts` callback. Reconnect via `wallet_connect`.]',
-    )
 
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
@@ -462,15 +444,6 @@ function setup(options: setup.Options = {}) {
       client.loadCalls++
       return client.wallets
     },
-    ...(options.restoreAccounts === false
-      ? {}
-      : {
-          restoreAccounts: async () => {
-            client.restoreCalls++
-            if (options.restoreError) throw options.restoreError
-            return client.wallets
-          },
-        }),
   })({
     getAccount: (() => {
       throw new Error('not implemented')
@@ -486,9 +459,7 @@ declare namespace setup {
   type Options = {
     /** Pass `false` to omit the adapter's `createAccount` callback (tests fallback to `loadAccounts`). */
     createAccount?: false | undefined
-    /** Pass `false` to omit the adapter's `restoreAccounts` callback (tests silent-restore disabled). */
-    restoreAccounts?: false | undefined
-    /** Make the test `restoreAccounts` callback throw, to test restore-side session errors. */
+    /** Make the mock client's `user.get` throw, to test restore-side session errors. */
     restoreError?: unknown
     token?: string | null | undefined
     signError?: unknown
@@ -552,7 +523,7 @@ function createClient(options: setup.Options = {}) {
         },
       }
     },
-    /** Adds an embedded wallet so the test `restoreAccounts` callback returns it. */
+    /** Adds an embedded wallet so silent restore (`user.get`) returns it. */
     addWallet(address: string) {
       client.wallets.push(client.makeWallet(address))
     },
@@ -560,6 +531,15 @@ function createClient(options: setup.Options = {}) {
       logout(parameters?: { userId: string } | undefined) {
         client.logoutCalls++
         client.logoutWith.push(parameters?.userId)
+      },
+    },
+    embeddedWallet: {
+      async getEthereumProvider({ wallet }) {
+        const existing = client.wallets.find(
+          (w) =>
+            core_Address.from(w.address) === core_Address.from(wallet.address as string),
+        )
+        return (existing ?? client.makeWallet(wallet.address as string)).provider
       },
     },
     async getAccessToken() {
@@ -570,7 +550,21 @@ function createClient(options: setup.Options = {}) {
     },
     user: {
       async get() {
-        return { user: { id: 'user_1' } }
+        client.restoreCalls++
+        if (options.restoreError) throw options.restoreError
+        return {
+          user: {
+            id: 'user_1',
+            linked_accounts: client.wallets.map((wallet, index) => ({
+              address: wallet.address,
+              chain_type: 'ethereum',
+              connector_type: 'embedded',
+              type: 'wallet',
+              wallet_client_type: 'privy',
+              wallet_index: index,
+            })),
+          },
+        }
       },
     },
   }

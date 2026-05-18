@@ -47,48 +47,25 @@ const privySessionErrorCodes = new Set([
  * need to re-run the login UI when the user returns with a still-valid Privy session.
  *
  * Both callbacks must return Privy embedded Ethereum wallets as `{ address, provider }`.
- * Privy ships `getAllUserEmbeddedEthereumWallets` and `getEntropyDetailsFromUser` from
- * `@privy-io/js-sdk-core` to resolve these from a `User`.
  *
  * @example
  * ```ts
- * import Privy, {
- *   getAllUserEmbeddedEthereumWallets,
- *   getEntropyDetailsFromUser,
- * } from '@privy-io/js-sdk-core'
+ * import Privy from '@privy-io/js-sdk-core'
  *
  * const client = new Privy({ appId: import.meta.env.VITE_PRIVY_APP_ID })
- *
- * async function loadPrivyWallets(client: Privy) {
- *   const { user } = await client.user.get()
- *   const { entropyId, entropyIdVerifier } = getEntropyDetailsFromUser(user)
- *   return Promise.all(
- *     getAllUserEmbeddedEthereumWallets(user).map(async (wallet) => ({
- *       address: wallet.address,
- *       provider: await client.embeddedWallet.getEthereumProvider({
- *         wallet,
- *         entropyId,
- *         entropyIdVerifier,
- *       }),
- *     })),
- *   )
- * }
  *
  * const provider = Provider.create({
  *   adapter: privy({
  *     client,
  *     // Optional: omit to route registration through `loadAccounts`.
  *     createAccount: async ({ client }) => {
- *       await myPrivyRegisterUI(client)
- *       const wallets = await loadPrivyWallets(client)
- *       return wallets[0]!
+ *       const wallet = await myPrivyRegisterUI(client)
+ *       return wallet
  *     },
  *     loadAccounts: async ({ client }) => {
- *       if (!(await client.getAccessToken())) await myPrivyLoginUI(client)
- *       return loadPrivyWallets(client)
+ *       const wallets = await myPrivyLoginUI(client)
+ *       return wallets
  *     },
- *     // Silent restore on page reload (no UI).
- *     restoreAccounts: ({ client }) => loadPrivyWallets(client),
  *   }),
  * })
  * ```
@@ -132,6 +109,46 @@ export function privy<const client extends privy.Client>(
       return !!token
     }
 
+    /**
+     * Loads the user's Privy embedded Ethereum wallets and constructs their
+     * EIP-1193 providers. Mirrors `getAllUserEmbeddedEthereumWallets` +
+     * `getEntropyDetailsFromUser` from `@privy-io/js-sdk-core`: per the SDK,
+     * `entropyId` is the **primary** embedded wallet's address (wallet_index === 0)
+     * shared across all wallets of the same user, and `entropyIdVerifier` is
+     * hardcoded to `'ethereum-address-verifier'` for Ethereum wallets.
+     */
+    async function loadEthereumWallets(
+      privyClient: privy.Client,
+    ): Promise<readonly privy.EmbeddedWallet[]> {
+      const { user } = await privyClient.user.get()
+      const wallets = (user?.linked_accounts ?? [])
+        .filter(
+          (account) =>
+            account.type === 'wallet' &&
+            account.wallet_client_type === 'privy' &&
+            account.connector_type === 'embedded' &&
+            account.chain_type === 'ethereum' &&
+            typeof account.address === 'string',
+        )
+        .slice()
+        .sort((a, b) => (a.wallet_index ?? 0) - (b.wallet_index ?? 0))
+
+      const primary = wallets[0]
+      if (!primary) return []
+      const entropyId = primary.address as string
+
+      return await Promise.all(
+        wallets.map(async (wallet) => ({
+          address: core_Address.from(wallet.address as string),
+          provider: await privyClient.embeddedWallet.getEthereumProvider({
+            wallet,
+            entropyId,
+            entropyIdVerifier: 'ethereum-address-verifier',
+          }),
+        })),
+      )
+    }
+
     async function restore() {
       await Store.waitForHydration(store)
       if (walletAccounts.length > 0) return
@@ -147,25 +164,11 @@ export function privy<const client extends privy.Client>(
           throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
         }
 
-        // Silent restore requires an app-supplied `restoreAccounts` hook because
-        // reconstructing Privy's EIP-1193 provider needs entropy details derived
-        // from the Privy User (via `getEntropyDetailsFromUser`), which the adapter
-        // cannot extract without depending on `@privy-io/js-sdk-core`.
-        if (!options.restoreAccounts) {
+        const restored = await loadEthereumWallets(await getPrivyClient()).catch((error) => {
+          if (!isSessionError(error)) throw error
           clear()
-          throw new ox_Provider.DisconnectedError({
-            message:
-              'Privy adapter cannot silently restore wallets without a `restoreAccounts` callback. Reconnect via `wallet_connect`.',
-          })
-        }
-
-        const restored = await options
-          .restoreAccounts({ client: await getPrivyClient() })
-          .catch((error) => {
-            if (!isSessionError(error)) throw error
-            clear()
-            throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
-          })
+          throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
+        })
         walletAccounts = persisted
           .map((account) =>
             restored.find((walletAccount) =>
@@ -486,21 +489,17 @@ export function privy<const client extends privy.Client>(
           if (options.createAccount) {
             const account = await options.createAccount({ client: privyClient, parameters })
             await requireSession()
-            // Repopulate the full wallet list when the app provides
-            // `restoreAccounts`, matching the multi-wallet behavior of `loadAccounts`.
-            // Keep the newly created wallet first so it stays the active account.
-            if (options.restoreAccounts) {
-              const restored = await options.restoreAccounts({ client: privyClient })
-              const created = core_Address.from(account.address)
-              walletAccounts = [
-                account,
-                ...restored.filter(
-                  (wallet) => !isAddressEqual(core_Address.from(wallet.address), created),
-                ),
-              ]
-            } else {
-              walletAccounts = [account]
-            }
+            // Repopulate the full wallet list to match the multi-wallet behavior
+            // of `loadAccounts`. Keep the newly created wallet first so it stays
+            // the active account.
+            const restored = await loadEthereumWallets(privyClient)
+            const created = core_Address.from(account.address)
+            walletAccounts = [
+              account,
+              ...restored.filter(
+                (wallet) => !isAddressEqual(core_Address.from(wallet.address), created),
+              ),
+            ]
           } else {
             walletAccounts = await options.loadAccounts({
               client: privyClient,
@@ -655,8 +654,9 @@ export declare namespace privy {
      * Loads/logs into existing Privy embedded wallets in response to a
      * user-initiated `wallet_connect`. UI is allowed and expected.
      *
-     * Silent restore on page reload goes through `restoreAccounts` (when
-     * provided) and does NOT call this function.
+     * Silent restore on page reload pulls wallets directly from the Privy SDK
+     * (`client.user.get` + `client.embeddedWallet.getEthereumProvider`) and does
+     * NOT call this function.
      */
     loadAccounts: (parameters: {
       /** Initialized Privy client. */
@@ -668,26 +668,12 @@ export declare namespace privy {
     name?: string | undefined
     /** Reverse DNS identifier. @default "io.privy" */
     rdns?: string | undefined
-    /**
-     * Silently restores Privy embedded wallets on page reload (no UI). Also used
-     * after `createAccount` to repopulate the full wallet list.
-     *
-     * Apps using `@privy-io/js-sdk-core` typically implement this with
-     * `getEntropyDetailsFromUser(user)` + `getAllUserEmbeddedEthereumWallets(user)`.
-     *
-     * If omitted, the adapter cannot silently restore wallets on reload; the app
-     * must call `wallet_connect` (which routes through `loadAccounts`) to reattach
-     * embedded providers.
-     */
-    restoreAccounts?:
-      | ((parameters: { client: client }) => Promise<readonly EmbeddedWallet[]>)
-      | undefined
   }
 
   /**
-   * Minimal structural Privy client surface used by the adapter for session checks
-   * and disconnect. Wallet/provider construction is delegated to the app's
-   * `loadAccounts` / `restoreAccounts` callbacks.
+   * Minimal structural Privy client surface used by the adapter for session checks,
+   * silent restore, and disconnect. User-initiated `wallet_connect`/registration
+   * is delegated to the app's `loadAccounts` / `createAccount` callbacks.
    *
    * Satisfied by `Privy` from `@privy-io/js-sdk-core` — apps pass the SDK instance
    * directly. The adapter never imports `@privy-io/js-sdk-core` itself; the structural
@@ -702,15 +688,40 @@ export declare namespace privy {
        */
       logout: (parameters?: { userId: string } | undefined) => Promise<void> | void
     }
+    /** Embedded wallet API used by the adapter to materialize EIP-1193 providers. */
+    embeddedWallet: {
+      /** Returns an EIP-1193 provider for a Privy embedded Ethereum wallet. */
+      getEthereumProvider(parameters: {
+        wallet: LinkedAccount
+        entropyId: string
+        entropyIdVerifier: string
+      }): Promise<EthereumProvider> | EthereumProvider
+    }
     /** Returns the current Privy access token, or `null` if no session. */
     getAccessToken: () => Promise<string | null>
     /** Initializes the client. Called once by the adapter, before any other method. */
     initialize?: (() => Promise<void> | void) | undefined
-    /** User API used by the adapter to scope `auth.logout` to the active user. */
+    /** User API used by the adapter to scope `auth.logout` and to silently restore wallets. */
     user: {
       /** Returns the currently authenticated Privy user. */
-      get: () => Promise<{ user: { id: string } }>
+      get: () => Promise<{ user: User }>
     }
+  }
+
+  /** Minimal Privy user shape used by the adapter for silent restore. */
+  type User = {
+    id: string
+    linked_accounts?: readonly LinkedAccount[] | undefined
+  }
+
+  /** Minimal Privy linked account shape used by the adapter for silent restore. */
+  type LinkedAccount = {
+    address?: string | undefined
+    chain_type?: string | undefined
+    connector_type?: string | undefined
+    type?: string | undefined
+    wallet_client_type?: string | undefined
+    wallet_index?: number | undefined
   }
 
   /** Minimal EIP-1193 provider surface used by the adapter for `secp256k1_sign`. */
