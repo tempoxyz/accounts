@@ -147,11 +147,6 @@
       "src": "./src/react/index.ts",
       "default": "./dist/react/index.js"
     },
-    "./privy": {
-      "types": "./dist/privy/index.d.ts",
-      "src": "./src/privy/index.ts",
-      "default": "./dist/privy/index.js"
-    },
     "./wagmi": {
       "types": "./dist/wagmi/index.d.ts",
       "src": "./src/wagmi/index.ts",
