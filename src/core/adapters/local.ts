@@ -29,6 +29,68 @@ export function local(options: local.Options): Adapter.Adapter {
   const { createAccount, icon, loadAccounts, name, rdns } = options
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
+    async function prepareTransaction(parameters: Adapter.signTransaction.Parameters) {
+      const { feePayer, ...rest } = parameters
+      const client = getClient({
+        chainId: parameters.chainId,
+        feePayer: (() => {
+          if (feePayer === false) return false
+          if (typeof feePayer === 'string') return feePayer
+          return undefined
+        })(),
+      })
+      const request = {
+        ...rest,
+        ...(feePayer ? { feePayer: true as const } : {}),
+      }
+      const state = store.getState()
+      const transaction = await AccessKeyTransaction.create({
+        address: parameters.from ?? state.accounts[state.activeAccount]?.address,
+        calls: parameters.calls,
+        chainId: parameters.chainId ?? state.chainId,
+        client,
+        store,
+      })
+      if (transaction) {
+        try {
+          return await transaction.prepare(request)
+        } catch {}
+      }
+
+      const account = getAccount({
+        accessKey: false,
+        address: parameters.from,
+        signable: true,
+      })
+      const prepared = await prepareTransactionRequest(client, {
+        account,
+        ...request,
+        keyAuthorization: undefined,
+        type: 'tempo',
+      })
+      async function sign() {
+        return await account.signTransaction(prepared as never)
+      }
+      return {
+        request: prepared,
+        sign,
+        async send() {
+          const signed = await sign()
+          return (await client.request({
+            method: 'eth_sendRawTransaction' as never,
+            params: [signed],
+          })) as Adapter.sendTransaction.ReturnType
+        },
+        async sendSync() {
+          const signed = await sign()
+          return (await client.request({
+            method: 'eth_sendRawTransactionSync' as never,
+            params: [signed],
+          })) as Adapter.sendTransactionSync.ReturnType
+        },
+      }
+    }
+
     return {
       actions: {
         async createAccount(parameters) {
@@ -204,47 +266,8 @@ export function local(options: local.Options): Adapter.Adapter {
           return await account.signMessage({ message: { raw: data } })
         },
         async signTransaction(parameters) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient({
-            chainId: parameters.chainId,
-            feePayer: (() => {
-              if (feePayer === false) return false
-              if (typeof feePayer === 'string') return feePayer
-              return undefined
-            })(),
-          })
-          const transaction = await AccessKeyTransaction.create({
-            address:
-              parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
-            calls: parameters.calls,
-            chainId: parameters.chainId ?? store.getState().chainId,
-            client,
-            store,
-          })
-          if (transaction) {
-            try {
-              const prepared = await transaction.prepare({
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-              })
-              return await prepared.sign()
-            } catch {}
-          }
-
-          const account = getAccount({
-            accessKey: false,
-            address: parameters.from,
-            signable: true,
-          })
-          const prepared = await prepareTransactionRequest(client, {
-            account,
-            ...rest,
-            ...(feePayer ? { feePayer: true } : {}),
-            keyAuthorization: undefined,
-            type: 'tempo',
-          })
-          const signed = await account.signTransaction(prepared as never)
-          return signed
+          const prepared = await prepareTransaction(parameters)
+          return await prepared.sign()
         },
         async signTypedData({ data, address }) {
           const account = getAccount({ address, signable: true })
@@ -257,96 +280,12 @@ export function local(options: local.Options): Adapter.Adapter {
           return await account.signTypedData(parsed)
         },
         async sendTransaction(parameters) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient({
-            chainId: parameters.chainId,
-            feePayer: (() => {
-              if (feePayer === false) return false
-              if (typeof feePayer === 'string') return feePayer
-              return undefined
-            })(),
-          })
-          const transaction = await AccessKeyTransaction.create({
-            address:
-              parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
-            calls: parameters.calls,
-            chainId: parameters.chainId ?? store.getState().chainId,
-            client,
-            store,
-          })
-          if (transaction) {
-            try {
-              const prepared = await transaction.prepare({
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-              })
-              return await prepared.send()
-            } catch {}
-          }
-
-          const account = getAccount({
-            accessKey: false,
-            address: parameters.from,
-            signable: true,
-          })
-          const prepared = await prepareTransactionRequest(client, {
-            account,
-            ...rest,
-            ...(feePayer ? { feePayer: true } : {}),
-            keyAuthorization: undefined,
-            type: 'tempo',
-          })
-          const signed = await account.signTransaction(prepared as never)
-          return await client.request({
-            method: 'eth_sendRawTransaction' as never,
-            params: [signed],
-          })
+          const prepared = await prepareTransaction(parameters)
+          return await prepared.send()
         },
         async sendTransactionSync(parameters) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient({
-            chainId: parameters.chainId,
-            feePayer: (() => {
-              if (feePayer === false) return false
-              if (typeof feePayer === 'string') return feePayer
-              return undefined
-            })(),
-          })
-          const transaction = await AccessKeyTransaction.create({
-            address:
-              parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
-            calls: parameters.calls,
-            chainId: parameters.chainId ?? store.getState().chainId,
-            client,
-            store,
-          })
-          if (transaction) {
-            try {
-              const prepared = await transaction.prepare({
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-              })
-              return await prepared.sendSync()
-            } catch {}
-          }
-
-          const account = getAccount({
-            accessKey: false,
-            address: parameters.from,
-            signable: true,
-          })
-          const prepared = await prepareTransactionRequest(client, {
-            account,
-            ...rest,
-            ...(feePayer ? { feePayer: true } : {}),
-            keyAuthorization: undefined,
-            type: 'tempo',
-          })
-          const signed = await account.signTransaction(prepared as never)
-          return await client.request({
-            method: 'eth_sendRawTransactionSync' as never,
-            params: [signed],
-          })
+          const prepared = await prepareTransaction(parameters)
+          return await prepared.sendSync()
         },
       },
     }
