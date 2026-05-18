@@ -44,29 +44,14 @@ export function cli(options: cli.Options): Adapter.Adapter {
       const deserialized = KeyAuthorization.deserialize(entry.keyAuthorization)
       if (!deserialized.signature) throw new Error('Managed access key is missing a signature.')
       const keyAuthorization = deserialized as KeyAuthorization.Signed
-      const keyAuthorizationStatus = entry.keyAuthorizationStatus ?? 'pending'
       AccessKey.add({
         account: address,
         authorization: keyAuthorization,
         privateKey: entry.key,
         store,
       })
-      if (keyAuthorizationStatus === 'pending')
-        AccessKey.markPending({
-          account: address,
-          accessKey: keyAuthorization.address,
-          chainId: Number(keyAuthorization.chainId),
-          store,
-        })
-      if (keyAuthorizationStatus === 'authorized')
-        AccessKey.markPublished({
-          account: address,
-          accessKey: keyAuthorization.address,
-          chainId: Number(keyAuthorization.chainId),
-          store,
-        })
 
-      return { ...entry, keyAuthorizationStatus }
+      return entry
     }
 
     async function resolveManagedKey(
@@ -133,7 +118,6 @@ export function cli(options: cli.Options): Adapter.Adapter {
           key: managedKey.key,
           keyAddress: managedKey.keyAddress,
           keyAuthorization: KeyAuthorization.serialize(signed),
-          keyAuthorizationStatus: 'signed',
           keyType: managedKey.keyType,
           ...(keyAuthorization.limits
             ? { limits: keyAuthorization.limits.map((limit) => ({ ...limit })) }
@@ -141,16 +125,6 @@ export function cli(options: cli.Options): Adapter.Adapter {
           walletAddress: address,
           walletType: 'passkey',
         },
-        options.keysPath ? { path: options.keysPath } : {},
-      )
-    }
-
-    async function saveManagedKeyStatus(
-      entry: Keyring.Entry,
-      status: NonNullable<Keyring.Entry['keyAuthorizationStatus']>,
-    ) {
-      await Keyring.upsert(
-        { ...entry, keyAuthorizationStatus: status },
         options.keysPath ? { path: options.keysPath } : {},
       )
     }
@@ -166,7 +140,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
       const state = store.getState()
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
       if (!address) throw new core_Provider.DisconnectedError({ message: 'No active account.' })
-      const managedKey = await loadManagedKey(address)
+      await loadManagedKey(address)
       const transaction = await AccessKeyTransaction.create({
         address,
         calls: options.calls,
@@ -178,14 +152,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
         throw new core_Provider.UnauthorizedError({
           message: `Account "${address}" cannot sign with an access key.`,
         })
-      const prepared = await transaction.prepare(parameters)
-      if (
-        managedKey &&
-        managedKey.keyAuthorizationStatus !== 'authorized' &&
-        !prepared.keyAuthorization
-      )
-        await saveManagedKeyStatus(managedKey, 'authorized')
-      return { managedKey, prepared }
+      return await transaction.prepare(parameters)
     }
 
     async function loadManagedAccount(address: Adapter.signPersonalMessage.Parameters['address']) {
@@ -330,7 +297,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
         async sendTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { managedKey, prepared } = await prepareManagedTransaction(
+          const prepared = await prepareManagedTransaction(
             client,
             {
               ...rest,
@@ -341,18 +308,12 @@ export function cli(options: cli.Options): Adapter.Adapter {
               chainId: parameters.chainId,
             },
           )
-          const signed = await prepared.sign()
-          if (managedKey && prepared.keyAuthorization)
-            await saveManagedKeyStatus(managedKey, 'pending')
-          return (await client.request({
-            method: 'eth_sendRawTransaction' as never,
-            params: [signed],
-          })) as Hex.Hex
+          return await prepared.send()
         },
         async sendTransactionSync(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { managedKey, prepared } = await prepareManagedTransaction(
+          const prepared = await prepareManagedTransaction(
             client,
             {
               ...rest,
@@ -363,23 +324,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
               chainId: parameters.chainId,
             },
           )
-          const signed = await prepared.sign()
-          if (managedKey && prepared.keyAuthorization)
-            await saveManagedKeyStatus(managedKey, 'pending')
-          const result = await client.request({
-            method: 'eth_sendRawTransactionSync' as never,
-            params: [signed],
-          })
-          if (managedKey && prepared.keyAuthorization) {
-            await saveManagedKeyStatus(managedKey, 'authorized')
-            AccessKey.markPublished({
-              account: managedKey.walletAddress,
-              accessKey: managedKey.keyAddress,
-              chainId: managedKey.chainId,
-              store,
-            })
-          }
-          return result as AccessKeyTransaction.create.SendSyncReturnType
+          return await prepared.sendSync()
         },
         async signPersonalMessage({ address, data }) {
           const account = await loadManagedAccount(address)
@@ -388,7 +333,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
         async signTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { managedKey, prepared } = await prepareManagedTransaction(
+          const prepared = await prepareManagedTransaction(
             client,
             {
               ...rest,
@@ -399,10 +344,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
               chainId: parameters.chainId,
             },
           )
-          const signed = await prepared.sign()
-          if (managedKey && prepared.keyAuthorization)
-            await saveManagedKeyStatus(managedKey, 'pending')
-          return signed
+          return await prepared.sign()
         },
         async signTypedData({ address, data }) {
           const account = await loadManagedAccount(address)

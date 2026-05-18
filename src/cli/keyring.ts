@@ -21,8 +21,6 @@ export type Entry = {
   key: Hex.Hex
   /** Serialized key authorization payload. */
   keyAuthorization: Hex.Hex
-  /** Durable authorization state for the serialized key authorization. */
-  keyAuthorizationStatus?: 'signed' | 'pending' | 'authorized' | undefined
   /** Authorization expiry timestamp. */
   expiry: NonNullable<AccessKey['expiry']>
   /** TIP-20 spending limits. */
@@ -136,7 +134,6 @@ function parse(text: string): readonly Entry[] {
       key: key.key,
       keyAddress: key.keyAddress,
       keyAuthorization: key.keyAuthorization,
-      ...(key.keyAuthorizationStatus ? { keyAuthorizationStatus: key.keyAuthorizationStatus } : {}),
       keyType: key.keyType,
       ...(key.limits?.length ? { limits: key.limits } : {}),
       walletAddress: key.walletAddress,
@@ -179,8 +176,6 @@ function parse(text: string): readonly Entry[] {
     if (name === 'key_address') key.keyAddress = stripQuotes(value) as Address.Address
     if (name === 'key') key.key = stripQuotes(value) as Hex.Hex
     if (name === 'key_authorization') key.keyAuthorization = stripQuotes(value) as Hex.Hex
-    if (name === 'key_authorization_status')
-      key.keyAuthorizationStatus = stripQuotes(value) as Entry['keyAuthorizationStatus']
     if (name === 'expiry') key.expiry = Number.parseInt(value, 10)
   }
 
@@ -202,9 +197,6 @@ function stringify(keys: readonly Entry[]) {
       `key_address = "${key.keyAddress}"`,
       `key = "${key.key}"`,
       `key_authorization = "${key.keyAuthorization}"`,
-      ...(key.keyAuthorizationStatus
-        ? [`key_authorization_status = "${key.keyAuthorizationStatus}"`]
-        : []),
       `expiry = ${key.expiry}`,
       '',
       ...(key.limits ?? []).flatMap((limit) => [
