@@ -314,36 +314,36 @@ function WalletDeposit() {
           execute(() =>
             provider.request({
               method: 'wallet_deposit',
-              params: [{}],
+              params: [{ amount: '25' }],
             }),
           )
         }
       >
-        Deposit
+        Deposit $25
       </Button>
       <Button
         onClick={() =>
           execute(() =>
             provider.request({
               method: 'wallet_deposit',
-              params: [{ value: '50' }],
+              params: [{ amount: '200' }],
             }),
           )
         }
       >
-        Deposit ($50)
+        Deposit $200
       </Button>
       <Button
         onClick={() =>
           execute(() =>
             provider.request({
               method: 'wallet_deposit',
-              params: [{ displayName: 'DoorDash' }],
+              params: [{ amount: '25', token: 'pathusd' }],
             }),
           )
         }
       >
-        Deposit (displayName: DoorDash)
+        Deposit $25 pathUSD
       </Button>
     </Method>
   )

@@ -793,7 +793,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         message: '`deposit` not supported by adapter.',
                       })
                     return (await actions.deposit(
-                      request._decoded.params[0],
+                      request._decoded.params?.[0] ?? {},
                       request,
                     )) satisfies Rpc.wallet_deposit.Encoded['returns']
                   }
