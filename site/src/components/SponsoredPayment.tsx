@@ -123,7 +123,7 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
             ) : null}
             {transfer.data.receipt.feePayer ? (
               <div className="w-full text-right">
-                <span className="text-secondary">By </span>
+                <span className="text-secondary">Sponsor paid </span>
                 <span className="font-medium text-primary" title={transfer.data.receipt.feePayer}>
                   {formatAddress(transfer.data.receipt.feePayer)}
                 </span>
