@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo } from 'react'
-import { Button } from 'regen-ui'
-import { formatUnits } from 'viem'
+import { useEffect, useMemo, useState } from 'react'
+import { Amount, Button } from 'regen-ui'
+import { formatUnits, toHex } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { useConnection } from 'wagmi'
 import { tempoModerato } from 'wagmi/chains'
@@ -22,10 +22,22 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
     token: pathUsd,
     query: { refetchInterval: 1_000 },
   })
+  const [cachedBalance, setCachedBalance] = useState<{ account: string; value: bigint }>()
   const steps = Steps.use(value)
   const to = useMemo(() => privateKeyToAccount(generatePrivateKey()).address, [])
-  const balanceText =
-    balance.data !== undefined ? formatUnits(balance.data, 6) : balance.isLoading ? 'Loading...' : '-'
+  useEffect(() => {
+    if (address && balance.data !== undefined) setCachedBalance({ account: address, value: balance.data })
+  }, [address, balance.data])
+  const balanceValue = cachedBalance?.account === address ? cachedBalance.value : undefined
+  const balanceAmount =
+    balanceValue !== undefined
+      ? ({
+          amount: toHex(balanceValue),
+          decimals: 6,
+          formatted: formatUnits(balanceValue, 6),
+          symbol: 'pathUSD',
+        } satisfies Amount.Amount)
+      : undefined
 
   return (
     <Steps.Step
@@ -50,7 +62,11 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
     >
       <div className="flex flex-wrap items-center gap-1.5 text-secondary">
         <span>Balance</span>
-        <code className="text-primary">{balanceText} pathUSD</code>
+        {balanceAmount ? (
+          <Amount amount={balanceAmount} className="text-primary" maxDecimals={6} />
+        ) : (
+          <span className="text-primary">{balance.isLoading ? 'Loading...' : '-'}</span>
+        )}
       </div>
       {transfer.isSuccess ? (
         <div className="text-[14px] flex flex-col gap-1.5 mt-2">
