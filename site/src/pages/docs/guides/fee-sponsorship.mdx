@@ -93,12 +93,12 @@ The minimal example sponsors any transaction sent to the relay. Before funding a
 
 ### Configure the Connector
 
-Pass the relay URL to your connector with `feePayer`. This tells Tempo Wallet's hosted prompt which app relay should sponsor the transaction when signing falls back to the wallet UI. Point Wagmi transports at the same relay so app-side fills and broadcasts use the sponsor-aware endpoint too.
+Pass the relay URL to your connector with `feePayer`. This tells Tempo Wallet which app relay should sponsor the transaction when signing locally or falling back to the hosted wallet UI.
 
 In development, the Fee Payer example uses a Cloudflare Tunnel so the Tempo Wallet iframe can reach your local relay. In production, use the HTTPS URL of your deployed relay.
 
-:::tip[Keep transports on the fee payer]
-If you configure Wagmi `transports`, point them at the fee payer's per-chain relay URLs. Plain `http()` transports go directly to the chain RPC and bypass your relay.
+:::tip[Use normal transports]
+Keep Wagmi `transports` on normal chain RPC transports. The connector-level `feePayer` value is the sponsor configuration.
 :::
 
 :::code-group
@@ -121,8 +121,8 @@ export const config = createConfig({
   ],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempo.id]: http(`${feePayer}/${tempo.id}`), // [!code focus]
-    [tempoModerato.id]: http(`${feePayer}/${tempoModerato.id}`), // [!code focus]
+    [tempo.id]: http(),
+    [tempoModerato.id]: http(),
   },
 })
 ```
@@ -146,8 +146,8 @@ export const config = createConfig({
   ],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempo.id]: http(`${feePayer}/${tempo.id}`), // [!code focus]
-    [tempoModerato.id]: http(`${feePayer}/${tempoModerato.id}`), // [!code focus]
+    [tempo.id]: http(),
+    [tempoModerato.id]: http(),
   },
 })
 ```

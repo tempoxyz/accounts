@@ -9,8 +9,8 @@ export const config = createConfig({
   connectors: [webAuthn({ testnet: true, authUrl: '/auth', feePayer })],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempo.id]: http(`${feePayer}/${tempo.id}`),
-    [tempoModerato.id]: http(`${feePayer}/${tempoModerato.id}`),
+    [tempo.id]: http(),
+    [tempoModerato.id]: http(),
   },
 })
 

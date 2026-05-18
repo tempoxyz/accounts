@@ -15,8 +15,8 @@ export const config = createConfig({
   connectors: [tempoWallet({ testnet: true, feePayer })],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempo.id]: http(`${feePayer}/${tempo.id}`),
-    [tempoModerato.id]: http(`${feePayer}/${tempoModerato.id}`),
+    [tempo.id]: http(),
+    [tempoModerato.id]: http(),
   },
 })
 

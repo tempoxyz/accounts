@@ -52,8 +52,8 @@ export const feeSponsorshipWagmiConfig: Config = createConfig({
   ],
   multiInjectedProviderDiscovery: false,
   transports: {
-    [tempoModerato.id]: http(`${feePayer}/${tempoModerato.id}`),
-    [tempo.id]: http(`${feePayer}/${tempo.id}`),
+    [tempoModerato.id]: http(),
+    [tempo.id]: http(),
   },
 })
 
