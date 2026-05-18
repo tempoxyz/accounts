@@ -1,3 +1,4 @@
+import Privy, { LocalStorage as PrivyLocalStorage } from '@privy-io/js-sdk-core'
 import { TurnkeyClient, generateWalletAccountsFromAddressFormat } from '@turnkey/core'
 import type { CreateSubOrgParams } from '@turnkey/core'
 import {
@@ -6,6 +7,7 @@ import {
   dialog,
   Dialog,
   local,
+  privy,
   Provider,
   turnkey,
   webAuthn,
@@ -14,9 +16,16 @@ import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
+import { requestPrivyEmailOtp } from './privyOtpStore.js'
 import { requestTurnkeyEmailOtp, type TurnkeyEmailOtpClient } from './turnkeyOtpStore.js'
 
-export type AdapterType = 'secp256k1' | 'webAuthn' | 'turnkey' | 'tempoWallet' | 'dialogRefImpl'
+export type AdapterType =
+  | 'secp256k1'
+  | 'webAuthn'
+  | 'turnkey'
+  | 'privy'
+  | 'tempoWallet'
+  | 'dialogRefImpl'
 export type Env = 'mainnet' | 'testnet' | 'devnet'
 export type DialogMode = 'iframe' | 'popup'
 export type MppMode = 'push' | 'pull'
@@ -68,6 +77,8 @@ export let mppMode: MppMode = 'push'
 export let theme: DialogNs.Theme | undefined
 export let provider: ProviderValue = createProvider('tempoWallet')
 let turnkeyClient: TurnkeyClient | undefined
+let privyClient: Privy | undefined
+let privyIframeReady: Promise<void> | undefined
 
 function mpp() {
   return {
@@ -132,6 +143,24 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     })
   }
 
+  if (adapterType === 'privy') {
+    const client = getPrivyClient()
+    return Provider.create({
+      adapter: privy({
+        client,
+        async createAccount({ client }) {
+          await requestPrivyEmailOtp({ client: client.auth, mode: 'register' })
+        },
+        async loadAccounts({ client }) {
+          if (!(await client.getAccessToken().catch(() => null)))
+            await requestPrivyEmailOtp({ client: client.auth, mode: 'login' })
+        },
+      }),
+      mpp: true,
+      testnet,
+    })
+  }
+
   const privateKey = generatePrivateKey()
   const account = Account.fromSecp256k1(privateKey)
   return Provider.create({
@@ -176,6 +205,59 @@ function getTurnkeyAdapterClient() {
   })
 
   return turnkeyClient as TurnkeyPlaygroundClient
+}
+
+function getPrivyClient() {
+  const appId = import.meta.env.VITE_PRIVY_APP_ID
+  if (!appId) throw new Error('VITE_PRIVY_APP_ID is required for the Privy adapter.')
+
+  if (!privyClient) {
+    const inner = new Privy({
+      appId,
+      ...(import.meta.env.VITE_PRIVY_CLIENT_ID
+        ? { clientId: import.meta.env.VITE_PRIVY_CLIENT_ID }
+        : {}),
+      storage: new PrivyLocalStorage(),
+    })
+    mountPrivyEmbeddedWalletIframe(inner)
+    // Wrap `embeddedWallet.getEthereumProvider` so the adapter's internal
+    // `loadEthereumWallets` waits for the secure-context iframe to be ready
+    // before requesting providers.
+    const originalGetEthereumProvider = inner.embeddedWallet.getEthereumProvider.bind(
+      inner.embeddedWallet,
+    )
+    inner.embeddedWallet.getEthereumProvider = (async (params) => {
+      await privyIframeReady
+      return await originalGetEthereumProvider(params)
+    }) as typeof inner.embeddedWallet.getEthereumProvider
+    privyClient = inner
+  }
+
+  return privyClient
+}
+
+/** Mount the Privy secure-context iframe per https://docs.privy.io/recipes/core-js. */
+function mountPrivyEmbeddedWalletIframe(client: Privy) {
+  const iframe = document.createElement('iframe')
+  iframe.src = client.embeddedWallet.getURL()
+  iframe.title = 'Privy embedded wallet'
+  iframe.style.display = 'none'
+
+  privyIframeReady = new Promise<void>((resolve) => {
+    iframe.addEventListener('load', () => resolve())
+  })
+
+  document.body.appendChild(iframe)
+
+  client.setMessagePoster(
+    iframe.contentWindow as unknown as Parameters<Privy['setMessagePoster']>[0],
+  )
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== iframe.contentWindow) return
+    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+    client.embeddedWallet.onMessage(data)
+  })
 }
 
 export function switchTheme(
