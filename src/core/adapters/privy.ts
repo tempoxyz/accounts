@@ -432,6 +432,7 @@ export function privy<const client extends privy.Client>(
     void restore().catch(() => undefined)
 
     return {
+      cleanup() {},
       actions: {
         async createAccount(parameters) {
           const { authorizeAccessKey, personalSign } = parameters
