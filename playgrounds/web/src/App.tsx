@@ -2010,15 +2010,15 @@ function MppPlayground(props: { adapterType: AdapterType; rerender: () => void }
 
   return (
     <>
-      <MppOneTimeCharges applyMode={applyMode} mode={mode} />
+      <MppOneTimeCharges applyMode={applyMode} />
       <MppSessions adapterType={adapterType} mode={mode} />
       <MppSubscriptions />
     </>
   )
 }
 
-function MppOneTimeCharges(props: { applyMode: (mode: MppMode) => Promise<void>; mode: MppMode }) {
-  const { applyMode, mode } = props
+function MppOneTimeCharges(props: { applyMode: (mode: MppMode) => Promise<void> }) {
+  const { applyMode } = props
   const request = useMppRequest()
 
   async function run(label: string, path: string) {
@@ -2037,20 +2037,6 @@ function MppOneTimeCharges(props: { applyMode: (mode: MppMode) => Promise<void>;
       result={request.result}
       error={request.error}
     >
-      <fieldset style={{ border: 'none', padding: 0 }}>
-        <legend>Provider Mode</legend>
-        {(['push', 'pull'] as const).map((value) => (
-          <label key={value} style={{ marginRight: 12 }}>
-            <input
-              type="radio"
-              name="mppChargeMode"
-              checked={mode === value}
-              onChange={() => void applyMode(value)}
-            />{' '}
-            {value}
-          </label>
-        ))}
-      </fieldset>
       <Button disabled={request.pending} onClick={() => run('Free proof', '/mpp/charge/free')}>
         Free Proof
       </Button>
