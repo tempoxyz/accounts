@@ -48,8 +48,8 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
         </Button>
       }
     >
-      <div className="flex flex-wrap items-center gap-2 text-secondary">
-        <span>User balance</span>
+      <div className="flex flex-wrap items-center gap-1.5 text-secondary">
+        <span>Balance</span>
         <code className="text-primary">{balanceText}</code>
         <span>pathUSD</span>
       </div>
