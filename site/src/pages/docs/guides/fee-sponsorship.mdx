@@ -11,13 +11,11 @@ import * as Steps from '../../../components/Steps'
 
 # Fee Sponsorship
 
-Sponsor transaction fees for connected accounts without moving sponsorship policy into your client. Your app runs a relay with `Handler.relay`, the connector uses that relay as the fee payer, and each sponsored request can still opt out of fee sponsorship.
-
-The runnable [Fee Payer example](https://github.com/tempoxyz/accounts/tree/main/examples/fee-payer) shows the full shape with Tempo Wallet, a Cloudflare Worker relay, and a sponsored pathUSD transfer. The same pattern is available with domain-bound passkeys in the [Fee Payer + WebAuthn example](https://github.com/tempoxyz/accounts/tree/main/examples/fee-payer-and-webauthn).
+Let connected accounts complete approved actions without keeping fee tokens on hand. Your app decides which transactions qualify for sponsorship, pays the network fee for those requests, and leaves every other transaction on the normal self-funded path.
 
 ## Demo
 
-By the end of this guide you'll have the same fee sponsorship pattern as the Fee Payer example: the user signs in, your server decides whether to sponsor a request, and matching transfers can be routed through the server-owned fee payer.
+By the end of this guide you'll have a fee sponsorship flow where the user signs in, your server decides whether to sponsor a request, and matching transfers can be routed through the server-owned fee payer.
 
 <Demo
   title="Sponsored Transfer"
@@ -43,22 +41,26 @@ Follow the [Connect Accounts](/docs/guides/connect-accounts) guide to set up Wag
 
 ### Install the Server Dependencies
 
-Install the Accounts SDK with Wagmi, Viem, and a server framework. This guide uses [Hono](https://hono.dev), matching the Fee Payer example.
+Install [Hono](https://hono.dev) for the server snippets in this guide.
 
 :::code-group
 
 ```bash [npm]
-npm i accounts wagmi viem hono
+npm i hono
 ```
 
 ```bash [pnpm]
-pnpm i accounts wagmi viem hono
+pnpm i hono
 ```
 
 ```bash [bun]
-bun i accounts wagmi viem hono
+bun i hono
 ```
 
+:::
+
+:::tip[Any framework works]
+`Handler.relay` supports the Web Fetch API and Node.js `RequestListener`, so you can mount it in Hono, Express, Next.js, Bun, Deno, Elysia, or another server framework.
 :::
 
 ### Mount the Relay
@@ -72,20 +74,34 @@ import { Hono } from 'hono'
 import { privateKeyToAccount } from 'viem/accounts'
 
 const app = new Hono()
+const relay = Handler.relay({
+  feePayer: {
+    account: privateKeyToAccount(process.env.RELAY_PRIVATE_KEY),
+    name: 'My App',
+    url: 'https://myapp.com',
+  },
+  path: '/relay',
+})
 
-app.all('/relay/*', (c) =>
-  Handler.relay({
-    feePayer: {
-      account: privateKeyToAccount(process.env.RELAY_PRIVATE_KEY),
-      name: 'My App',
-      url: 'https://myapp.com',
-    },
-    path: '/relay',
-  }).fetch(c.req.raw),
-)
+app.all('/relay/*', (c) => relay.fetch(c.req.raw))
 
 export default app
 ```
+
+:::tip[Using a different framework?]
+`Handler.relay` exposes both `fetch` (Web Fetch API) and `listener` (Node.js `RequestListener`) entrypoints, so you can plug the same relay into any server framework:
+
+```ts
+createServer(relay.listener)               // Node.js
+Bun.serve({ fetch: relay.fetch })          // Bun
+Deno.serve({ fetch: relay.fetch })         // Deno
+app.all('*', c => relay.fetch(c.request))  // Elysia
+app.use(relay.listener)                    // Express
+app.use(c => relay.fetch(c.req.raw))       // Hono
+export const GET = relay.fetch             // Next.js
+export const POST = relay.fetch            // Next.js
+```
+:::
 
 :::warning[Add a sponsorship policy]
 The minimal example sponsors any transaction sent to the relay. Before funding a production fee payer account, add `feePayer.validate`, rate limits, and logging so your server only sponsors the requests your app intends to support.
@@ -94,12 +110,6 @@ The minimal example sponsors any transaction sent to the relay. Before funding a
 ### Configure the Connector
 
 Pass the relay URL to your connector with `feePayer`. This tells Tempo Wallet which app relay should sponsor the transaction when signing locally or falling back to the hosted wallet UI.
-
-In development, the Fee Payer example uses a Cloudflare Tunnel so the Tempo Wallet iframe can reach your local relay. In production, use the HTTPS URL of your deployed relay.
-
-:::tip[Use normal transports]
-Keep Wagmi `transports` on normal chain RPC transports. The connector-level `feePayer` value is the sponsor configuration.
-:::
 
 :::code-group
 
@@ -233,18 +243,6 @@ const handler = Handler.relay({
   },
 })
 ```
-
-### Keep the Fee Payer Reachable
-
-Tempo Wallet runs outside your app origin, so local private-network endpoints are not always reachable from the embedded approval flow. Use the tunnel setup from `examples/fee-payer` during development, and use a stable HTTPS relay URL in deployed environments.
-
-### Limit the Fee Payer Account
-
-Fund the fee payer account with only the amount and fee token required for the workflow. Rotate the private key if it is exposed, and keep it in your server secret store rather than browser-readable environment variables.
-
-### Log Decisions
-
-Log sponsorship approvals and rejections with account, chain, requested calls, and validation reason. Do not log private keys, raw signatures, session cookies, or other secret material.
 
 ## Next Steps
 

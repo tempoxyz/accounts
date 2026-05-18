@@ -2,18 +2,35 @@
 
 import { useMemo } from 'react'
 import { Button } from 'regen-ui'
+import { formatUnits } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
+import { useConnection } from 'wagmi'
 import { tempoModerato } from 'wagmi/chains'
 import { Hooks } from 'wagmi/tempo'
 import LucideCircleCheck from '~icons/lucide/circle-check'
 
 import * as Steps from './Steps.js'
 
+const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+
 export function SponsoredPayment(props: SponsoredPayment.Props) {
   const { value } = props
+  const { address } = useConnection()
   const transfer = Hooks.wallet.useTransfer()
+  const balance = Hooks.token.useGetBalance({
+    account: address,
+    token: pathUsd,
+    query: { refetchInterval: 1_000 },
+  })
   const steps = Steps.use(value)
   const to = useMemo(() => privateKeyToAccount(generatePrivateKey()).address, [])
+  const balanceText =
+    balance.isLoading || balance.isRefetching
+      ? 'Loading...'
+      : balance.data !== undefined
+        ? formatUnits(balance.data, 6)
+        : '-'
+
   return (
     <Steps.Step
       value={value}
@@ -27,7 +44,7 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
             transfer.mutate({
               amount: '1',
               to,
-              token: 'pathusd',
+              token: pathUsd,
             })
           }
         >
@@ -35,8 +52,13 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
         </Button>
       }
     >
+      <div className="flex flex-wrap items-center gap-2 text-secondary">
+        <span>User balance</span>
+        <code className="text-primary">{balanceText}</code>
+        <span>pathUSD</span>
+      </div>
       {transfer.isSuccess ? (
-        <div className="text-[14px] flex flex-col gap-1.5">
+        <div className="text-[14px] flex flex-col gap-1.5 mt-2">
           <div className="inline-flex items-center gap-x-1.5">
             <LucideCircleCheck aria-hidden className="size-4 text-success shrink-0" />
             <span className="text-success font-medium">Sponsored transfer sent.</span>
