@@ -12,10 +12,9 @@ export default function App() {
     <div>
       <h1>Swaps Example</h1>
       <p>
-        Demonstrates the <code>wallet_swap</code> RPC via the{' '}
-        <code>Hooks.wallet.useSwap</code> hook from <code>wagmi/tempo</code>. Each button opens
-        the wallet's swap dialog with different pre-filled fields; the user confirms in the
-        wallet before the swap is broadcast.
+        Demonstrates the <code>wallet_swap</code> RPC via the <code>Hooks.wallet.useSwap</code> hook
+        from <code>wagmi/tempo</code>. Each button opens the wallet's swap dialog with different
+        pre-filled fields; the user confirms in the wallet before the swap is broadcast.
       </p>
 
       <h2>Connection</h2>
@@ -90,7 +89,9 @@ function Faucet() {
   const fund = Hooks.faucet.useFundSync()
   return (
     <div>
-      <p>Mints testnet pathUSD to your account so the swap buttons below have something to spend.</p>
+      <p>
+        Mints testnet pathUSD to your account so the swap buttons below have something to spend.
+      </p>
       <button
         type="button"
         disabled={fund.isPending || !address}
