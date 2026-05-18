@@ -314,6 +314,18 @@ function WalletDeposit() {
           execute(() =>
             provider.request({
               method: 'wallet_deposit',
+              params: [{}],
+            }),
+          )
+        }
+      >
+        Deposit
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_deposit',
               params: [{ amount: '25' }],
             }),
           )
