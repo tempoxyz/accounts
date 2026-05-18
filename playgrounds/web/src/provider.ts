@@ -21,15 +21,13 @@ import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
 import { requestPrivyEmailOtp } from './privyOtpStore.js'
-import { ensurePrivyReactLoggedIn, getPrivyReactAdapterClient } from './privyReactBridge.js'
 import { requestTurnkeyEmailOtp, type TurnkeyEmailOtpClient } from './turnkeyOtpStore.js'
 
 export type AdapterType =
   | 'secp256k1'
   | 'webAuthn'
   | 'turnkey'
-  | 'privyCore'
-  | 'privyReact'
+  | 'privy'
   | 'tempoWallet'
   | 'dialogRefImpl'
 export type Env = 'mainnet' | 'testnet' | 'devnet'
@@ -149,48 +147,22 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     })
   }
 
-  if (adapterType === 'privyCore') {
-    const core = getPrivyCore()
-    const client = makePrivyCoreClient(core)
-    return Provider.create({
-      adapter: privy({
-        client,
-        async createAccount() {
-          await requestPrivyEmailOtp({ client: core.auth, mode: 'register' })
-          const wallets = await client.loadEthereumWallets()
-          const wallet = wallets[0]
-          if (!wallet) throw new Error('No Privy embedded Ethereum wallet was created.')
-          return wallet
-        },
-        async loadAccounts() {
-          if (!(await core.getAccessToken().catch(() => null)))
-            await requestPrivyEmailOtp({ client: core.auth, mode: 'login' })
-          return await client.loadEthereumWallets()
-        },
-      }),
-      mpp: true,
-      testnet,
-    })
-  }
-
-  if (adapterType === 'privyReact') {
-    const client = getPrivyReactAdapterClient()
+  if (adapterType === 'privy') {
+    const client = getPrivyClient()
     return Provider.create({
       adapter: privy({
         client,
         async createAccount({ client }) {
-          // Privy's modal handles signup vs login automatically; with
-          // `createOnLogin: 'users-without-wallets'` configured on PrivyProvider,
-          // a wallet is provisioned for new users as part of login.
-          await ensurePrivyReactLoggedIn()
-          const wallets = await client.loadEthereumWallets()
+          await requestPrivyEmailOtp({ client: client.auth, mode: 'register' })
+          const wallets = await loadPrivyEmbeddedWallets(client)
           const wallet = wallets[0]
-          if (!wallet) throw new Error('No Privy embedded Ethereum wallet was created after login.')
+          if (!wallet) throw new Error('No Privy embedded Ethereum wallet was created.')
           return wallet
         },
         async loadAccounts({ client }) {
-          await ensurePrivyReactLoggedIn()
-          return await client.loadEthereumWallets()
+          if (!(await client.getAccessToken().catch(() => null)))
+            await requestPrivyEmailOtp({ client: client.auth, mode: 'login' })
+          return await loadPrivyEmbeddedWallets(client)
         },
       }),
       mpp: true,
@@ -244,19 +216,7 @@ function getTurnkeyAdapterClient() {
   return turnkeyClient as TurnkeyPlaygroundClient
 }
 
-function createTurnkeySubOrgParams(name?: string | undefined) {
-  return {
-    ...(name ? { userName: name } : {}),
-    customWallet: {
-      walletName: 'Tempo Playground',
-      walletAccounts: generateWalletAccountsFromAddressFormat({
-        addresses: [turnkeyEthereumAddressFormat],
-      }),
-    },
-  } satisfies CreateSubOrgParams
-}
-
-function getPrivyCore() {
+function getPrivyClient() {
   const appId = import.meta.env.VITE_PRIVY_APP_ID
   if (!appId) throw new Error('VITE_PRIVY_APP_ID is required for the Privy adapter.')
 
@@ -299,41 +259,28 @@ function mountPrivyEmbeddedWalletIframe(client: Privy) {
 }
 
 /**
- * Wires `@privy-io/js-sdk-core` into the minimal {@link privy.Client} surface the
- * accounts adapter expects. All Privy-specific wallet filtering and the per-wallet
- * `getEthereumProvider` plumbing lives here, in playground code — not in the adapter.
+ * Loads the user's embedded Ethereum wallets from a Privy core instance using the
+ * SDK helpers. Used by the playground's `createAccount`/`loadAccounts` callbacks to
+ * hand wallets back to the adapter after the email-OTP UI completes.
  */
-function makePrivyCoreClient(client: Privy): privy.Client {
-  return {
-    initialize: () => client.initialize(),
-    getAccessToken: () => client.getAccessToken(),
-    async loadEthereumWallets() {
-      await privyIframeReady
-      const { user } = await client.user.get()
-      if (!user) return []
-      const wallets = getAllUserEmbeddedEthereumWallets(user)
-      const entropy = getEntropyDetailsFromUser(user)
-      if (!entropy) return []
-      const { entropyId, entropyIdVerifier } = entropy
-      return await Promise.all(
-        wallets.map(async (wallet) => ({
-          address: wallet.address,
-          provider: await client.embeddedWallet.getEthereumProvider({
-            wallet,
-            entropyId,
-            entropyIdVerifier,
-          }),
-        })),
-      )
-    },
-    async logout() {
-      const userId = await client.user
-        .get()
-        .then(({ user }) => user?.id)
-        .catch(() => undefined)
-      await client.auth.logout(userId ? { userId } : undefined)
-    },
-  }
+async function loadPrivyEmbeddedWallets(client: Privy): Promise<readonly privy.EmbeddedWallet[]> {
+  await privyIframeReady
+  const { user } = await client.user.get()
+  if (!user) return []
+  const wallets = getAllUserEmbeddedEthereumWallets(user)
+  const entropy = getEntropyDetailsFromUser(user)
+  if (!entropy) return []
+  const { entropyId, entropyIdVerifier } = entropy
+  return await Promise.all(
+    wallets.map(async (wallet) => ({
+      address: wallet.address,
+      provider: await client.embeddedWallet.getEthereumProvider({
+        wallet,
+        entropyId,
+        entropyIdVerifier,
+      }),
+    })),
+  )
 }
 
 export function switchTheme(

@@ -458,18 +458,32 @@ declare namespace setup {
   }
 }
 
-function createClient(options: setup.Options = {}) {
-  /** Addresses the shim treats as embedded ETH wallets during silent restore. */
-  const linkedAddresses: string[] = []
+type MockClient = privy.Client & {
+  initCalls: number
+  loadCalls: number
+  logoutCalls: number
+  logoutWith: (string | undefined)[]
+  restoreCalls: number
+  signPayloads: Hex.Hex[]
+  signWith: string[]
+  wallets: privy.EmbeddedWallet[]
+  linkedAccounts: privy.LinkedAccount[]
+  makeWallet: (address: string) => privy.EmbeddedWallet
+  addLinkedWallet: (address: string, wallet_index?: number) => void
+}
 
-  const client = {
+function createClient(options: setup.Options = {}) {
+  const client: MockClient = {
     initCalls: 0,
     loadCalls: 0,
     logoutCalls: 0,
+    logoutWith: [] as (string | undefined)[],
     restoreCalls: 0,
     signPayloads: [] as Hex.Hex[],
     signWith: [] as string[],
     wallets: [] as privy.EmbeddedWallet[],
+    /** Linked accounts returned by `client.user.get` to drive silent restore. */
+    linkedAccounts: [] as privy.LinkedAccount[],
     makeWallet(address: string): privy.EmbeddedWallet {
       return {
         address,
@@ -498,35 +512,66 @@ function createClient(options: setup.Options = {}) {
         },
       }
     },
-    /** Registers an embedded ETH wallet so silent restore picks it up. */
-    addLinkedWallet(address: string) {
-      linkedAddresses.push(address)
+    /** Registers an embedded ETH wallet so silent restore picks it up via `user.get`. */
+    addLinkedWallet(address: string, wallet_index = client.linkedAccounts.length) {
+      client.linkedAccounts.push({
+        type: 'wallet',
+        wallet_client_type: 'privy',
+        connector_type: 'embedded',
+        chain_type: 'ethereum',
+        address,
+        wallet_index,
+      })
+    },
+    auth: {
+      logout(parameters?: { userId: string } | undefined) {
+        client.logoutCalls++
+        client.logoutWith.push(parameters?.userId)
+      },
+    },
+    embeddedWallet: {
+      async getEthereumProvider(parameters: {
+        wallet: privy.LinkedAccount
+        entropyId: string
+        entropyIdVerifier: string
+      }) {
+        if (options.getEthereumProviderError) throw options.getEthereumProviderError
+        const wallet_address = parameters.wallet.address as string
+        return {
+          async request(req: { method: string; params?: readonly unknown[] | undefined }) {
+            if (req.method !== 'secp256k1_sign') throw new Error(`unexpected method: ${req.method}`)
+            if (options.signError) throw options.signError
+            const hash = (req.params as readonly Hex.Hex[])[0] as Hex.Hex
+            client.signPayloads.push(hash)
+            client.signWith.push(wallet_address)
+            if (options.signResult !== undefined) return options.signResult
+            const privateKey =
+              options.signWithPrivateKey ??
+              (() => {
+                try {
+                  return privateKeyForAddress(wallet_address)
+                } catch {
+                  return privateKeyA
+                }
+              })()
+            return signWithKey(privateKey, hash)
+          },
+        }
+      },
     },
     async getAccessToken() {
       return options.token === undefined ? 'token' : options.token
     },
-    async loadEthereumWallets(): Promise<readonly privy.EmbeddedWallet[]> {
-      client.restoreCalls++
-      if (options.userGetError) throw options.userGetError
-      if (options.getEthereumProviderError) throw options.getEthereumProviderError
-      return linkedAddresses.map((linked) => client.makeWallet(linked))
-    },
-    logout() {
-      client.logoutCalls++
-    },
     initialize() {
       client.initCalls++
     },
-  } satisfies privy.Client & {
-    initCalls: number
-    loadCalls: number
-    logoutCalls: number
-    restoreCalls: number
-    signPayloads: Hex.Hex[]
-    signWith: string[]
-    wallets: privy.EmbeddedWallet[]
-    makeWallet: (address: string) => privy.EmbeddedWallet
-    addLinkedWallet: (address: string) => void
+    user: {
+      async get() {
+        client.restoreCalls++
+        if (options.userGetError) throw options.userGetError
+        return { user: { id: 'user_1', linked_accounts: client.linkedAccounts.slice() } }
+      },
+    },
   }
 
   client.wallets = [client.makeWallet(address)]

@@ -185,8 +185,7 @@ function ConfigPanel(props: {
             <option value="tempoWallet">tempoWallet</option>
             <option value="dialogRefImpl">dialogRefImpl</option>
             <option value="turnkey">turnkey</option>
-            <option value="privyCore">privyCore</option>
-            <option value="privyReact">privyReact</option>
+            <option value="privy">privy</option>
             <option value="webAuthn">webAuthn</option>
             <option value="secp256k1">secp256k1</option>
           </select>
