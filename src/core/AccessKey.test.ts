@@ -933,12 +933,11 @@ describe('create', () => {
     const result = await AccessKeyTransaction.create({
       address: rootAddress,
       chainId: 1,
-      client: {} as never,
+      client: { chain: { id: 1 } } as never,
       store,
     })
 
     const prepared = await result?.prepare({
-      chainId: 1,
       from: rootAddress,
       gas: 21_000n,
       maxFeePerGas: 1n,
@@ -961,6 +960,7 @@ describe('create', () => {
       address: rootAddress,
       chainId: 1,
       client: {
+        chain: { id: 1 },
         request: async (request: unknown) => {
           requests.push(request)
           return '0xtransaction'
@@ -970,7 +970,6 @@ describe('create', () => {
     })
 
     const prepared = await result?.prepare({
-      chainId: 1,
       from: rootAddress,
       gas: 21_000n,
       maxFeePerGas: 1n,
@@ -984,9 +983,13 @@ describe('create', () => {
     const stored = getStored(accessKey, store)
     expect(stored?.keyAuthorization).toBe(keyAuthorization)
     expect(stored?.keyAuthorizationPending).toMatchInlineSnapshot(`true`)
-    expect((requests[0] as { method: string }).method).toMatchInlineSnapshot(
-      `"eth_sendRawTransaction"`,
-    )
+    expect(requests.map((request) => (request as { method: string }).method))
+      .toMatchInlineSnapshot(`
+        [
+          "eth_fillTransaction",
+          "eth_sendRawTransaction",
+        ]
+      `)
   })
 
   test('behavior: clears pending authorization when pending key is published on-chain', async () => {
