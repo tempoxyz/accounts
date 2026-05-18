@@ -74,6 +74,7 @@ overrides:
   wrangler: ^4.90.1
 
 patchedDependencies:
+  mppx@0.6.23: bb3bcf73df04aef2ff59994eefe152d50723b3ec1f99e21c84c82707fcf1002f
   vocs@0.0.0: 0749dd43af96e1423a849f589c6b765ac71042c00b84c5d521e0af05bf159b6e
 
 importers:
@@ -94,7 +95,7 @@ importers:
         version: 0.0.7(typescript@5.9.3)
       mppx:
         specifier: 'catalog:'
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.3.6))
+        version: 0.6.23(patch_hash=bb3bcf73df04aef2ff59994eefe152d50723b3ec1f99e21c84c82707fcf1002f)(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.3.6))
       ox:
         specifier: ~0.14.18
         version: 0.14.20(typescript@5.9.3)(zod@4.3.6)
@@ -516,7 +517,7 @@ importers:
         version: 4.12.18
       mppx:
         specifier: ^0.6.23
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
+        version: 0.6.23(patch_hash=bb3bcf73df04aef2ff59994eefe152d50723b3ec1f99e21c84c82707fcf1002f)(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       react:
         specifier: ^19.2.5
         version: 19.2.5
@@ -568,7 +569,7 @@ importers:
         version: 4.12.18
       mppx:
         specifier: ^0.6.23
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
+        version: 0.6.23(patch_hash=bb3bcf73df04aef2ff59994eefe152d50723b3ec1f99e21c84c82707fcf1002f)(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       react:
         specifier: ^19.2.5
         version: 19.2.5
@@ -620,7 +621,7 @@ importers:
         version: 4.12.18
       mppx:
         specifier: ^0.6.23
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
+        version: 0.6.23(patch_hash=bb3bcf73df04aef2ff59994eefe152d50723b3ec1f99e21c84c82707fcf1002f)(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       react:
         specifier: ^19.2.5
         version: 19.2.5
@@ -773,7 +774,7 @@ importers:
         version: link:../..
       mppx:
         specifier: 'catalog:'
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
+        version: 0.6.23(patch_hash=bb3bcf73df04aef2ff59994eefe152d50723b3ec1f99e21c84c82707fcf1002f)(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       react:
         specifier: ^19.2.5
         version: 19.2.5
@@ -822,7 +823,7 @@ importers:
         version: link:../..
       mppx:
         specifier: 'catalog:'
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
+        version: 0.6.23(patch_hash=bb3bcf73df04aef2ff59994eefe152d50723b3ec1f99e21c84c82707fcf1002f)(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       react:
         specifier: ^19.2.5
         version: 19.2.5
@@ -978,7 +979,7 @@ importers:
         version: 11.15.0
       mppx:
         specifier: 'catalog:'
-        version: 0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
+        version: 0.6.23(patch_hash=bb3bcf73df04aef2ff59994eefe152d50723b3ec1f99e21c84c82707fcf1002f)(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3))
       ox:
         specifier: ~0.14.18
         version: 0.14.20(typescript@5.9.3)(zod@4.4.3)
@@ -17207,7 +17208,7 @@ snapshots:
       pkg-types: 1.3.1
       ufo: 1.6.3
 
-  mppx@0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.3.6)):
+  mppx@0.6.23(patch_hash=bb3bcf73df04aef2ff59994eefe152d50723b3ec1f99e21c84c82707fcf1002f)(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.3.6)):
     dependencies:
       incur: 0.4.5
       ox: 0.14.20(typescript@5.9.3)(zod@4.4.3)
@@ -17221,7 +17222,7 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  mppx@0.6.23(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3)):
+  mppx@0.6.23(patch_hash=bb3bcf73df04aef2ff59994eefe152d50723b3ec1f99e21c84c82707fcf1002f)(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.12.18)(typescript@5.9.3)(viem@2.49.2(typescript@5.9.3)(zod@4.4.3)):
     dependencies:
       incur: 0.4.5
       ox: 0.14.20(typescript@5.9.3)(zod@4.4.3)

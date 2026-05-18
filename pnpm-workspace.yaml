@@ -114,4 +114,5 @@ trustPolicyExclude:
   - undici-types@6.19.8
 
 patchedDependencies:
+  mppx@0.6.23: patches/mppx@0.6.23.patch
   vocs@0.0.0: patches/vocs@0.0.0.patch

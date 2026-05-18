@@ -1,50 +1,278 @@
 ---
 title: Subscriptions
-description: Build recurring payment flows with account permissions.
+description: Charge connected accounts on a recurring schedule with MPP subscriptions.
 ---
+
+import { Cards, Card } from 'vocs'
+import { ConnectAccount } from '../../../components/ConnectAccount'
+import { Demo, DemoReset } from '../../../components/Demo'
+import { ServerSubscription } from '../../../components/ServerSubscription'
+import * as Steps from '../../../components/Steps'
 
 # Subscriptions
 
-Build a recurring payment flow that uses account permissions for repeat charges.
+Build recurring payments with a server-owned subscription endpoint and a connected Tempo account.
+
+Subscriptions use the Machine Payments Protocol (MPP). Your server returns a `402 Payment Required` challenge for a recurring plan, and the Accounts SDK fulfills it from the connected account before retrying the original `fetch`.
+
+The first request activates the subscription and collects the first period. Later requests in the same period use the active subscription. When a new period starts, the server renews before returning the protected resource.
+
+Tempo subscriptions currently support `day` and `week` periods. The smallest period is `1 day`. Use `periodCount: 30` with `periodUnit: 'day'` for a fixed 30-day plan.
 
 ## Demo
 
-Target workspace: `examples/subscriptions/`.
+By the end of this section you'll have an HTTP endpoint that charges a recurring $0.01 pathUSD subscription before returning articles.
 
-:::warning[Stub]
-This guide needs product and protocol decisions before implementation: billing cadence, cancellation UX, spend caps, and how the server proves each charge is authorized.
-:::
+The button below hits a real `/api/articles` endpoint hosted on this docs site. The connected account auto-fulfills the `402 Payment Required` challenge, activates the subscription, and retries the request.
+
+<Demo
+  title="Subscriptions"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/subscriptions"
+  headerAction={<DemoReset />}
+  className="flex flex-col gap-3"
+>
+  <Steps.Step
+    label="Create an account, or use an existing one."
+    action={<ConnectAccount />}
+  />
+  <ServerSubscription />
+</Demo>
 
 ## Walkthrough
 
 ::::steps
 
-### Install the SDK
+### Install Dependencies
 
-```bash
-pnpm add accounts wagmi viem
+Install the Accounts SDK, Wagmi, Hono, and `mppx`.
+
+:::code-group
+
+```bash [npm]
+npm i accounts @tanstack/react-query wagmi viem mppx hono
 ```
 
-### Configure the Provider
+```bash [pnpm]
+pnpm i accounts @tanstack/react-query wagmi viem mppx hono
+```
 
-Use Tempo Wallet, WebAuthn, or a custom adapter depending on who owns signing.
+```bash [bun]
+bun i accounts @tanstack/react-query wagmi viem mppx hono
+```
 
-### Connect the user's account
+:::
 
-Connect the subscriber account and display the subscription terms.
+### Configure the Client
 
-### Submit the request
+Use the Tempo connector in Wagmi. The Accounts SDK handles MPP subscription challenges through the connected account.
 
-Request the permission needed for recurring charges.
+```ts twoslash [src/config.ts]
+// @noErrors
+import { createConfig, http } from 'wagmi'
+import { tempo, tempoModerato } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/tempo'
 
-### Verify the result
+export const config = createConfig({
+  chains: [tempoModerato, tempo],
+  connectors: [tempoWallet()],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+    [tempoModerato.id]: http(),
+  },
+})
 
-Run one scheduled charge in the example workspace and show cancellation state.
+declare module 'wagmi' {
+  interface Register {
+    config: typeof config
+  }
+}
+```
+
+### Create the Subscription Endpoint
+
+Create an MPP instance with `tempo.subscription`, then gate the protected route. The method owns activation, renewal, and subscription lookup.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Hono } from 'hono'
+import { Store } from 'mppx'
+import { Mppx, tempo } from 'mppx/hono'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const pathUsd = '0x20c0000000000000000000000000000000000000'
+const app = new Hono()
+const oneYear = 365 * 24 * 60 * 60 * 1_000
+const account = privateKeyToAccount(process.env.ACCOUNT_PRIVATE_KEY)
+const store = Store.memory()
+
+const mppx = Mppx.create({
+  methods: [
+    tempo.subscription({
+      account,
+      currency: pathUsd,
+      feePayer: true,
+      feePayerPolicy: {
+        maxGas: 6_000_000n,
+        maxTotalFee: 1_000_000_000_000_000_000n,
+      },
+      resolve: ({ input }) => {
+        const subscriber = input.headers.get('X-Subscriber')
+        if (!subscriber) return null
+        return { key: `articles:${subscriber.toLowerCase()}` }
+      },
+      store,
+      testnet: true,
+    }),
+  ],
+  realm: process.env.MPP_REALM,
+  secretKey: process.env.MPP_SECRET_KEY,
+})
+
+app.get(
+  '/api/articles',
+  mppx.subscription({
+    amount: '0.01',
+    periodCount: 1,
+    periodUnit: 'day',
+    subscriptionExpires: new Date(
+      Math.ceil((Date.now() + oneYear) / 1_000) * 1_000,
+    ).toISOString(),
+  }),
+  (c) =>
+    c.json({
+      articles: [
+        { id: 1, title: 'Subscriptions are live' },
+        { id: 2, title: 'Recurring access keys keep requests quiet' },
+      ],
+    }),
+)
+
+async function renewSubscriptions(subscriptionIds: string[]) {
+  await Promise.all(
+    subscriptionIds.map((subscriptionId) =>
+      tempo.renewSubscription({ store, subscriptionId }),
+    ),
+  )
+}
+
+export default app
+```
+
+The `resolve` callback maps each authenticated request to one subscription record. This example uses `X-Subscriber` for clarity; production apps should derive the key from an authenticated session, JWT, or API key.
+
+`subscriptionExpires` must be representable as whole seconds. Once it passes, the server stops treating the subscription as reusable and issues a fresh challenge.
+
+Call `tempo.renewSubscription` from a cron job or queue worker. It bills only overdue subscriptions and returns `null` when the subscription is already current.
+
+### Call It from React
+
+Call the route with `fetch`. The SDK intercepts the `402`, asks for approval once, submits the subscription credential, and retries the request.
+
+```tsx twoslash [Articles.tsx]
+// @noErrors
+import { useState } from 'react'
+import { useConnection } from 'wagmi'
+
+export function Articles() {
+  const { address } = useConnection()
+  const [data, setData] = useState<unknown>()
+  const [error, setError] = useState<Error | undefined>()
+  const [isPending, setPending] = useState(false)
+
+  return (
+    <div>
+      <button
+        type="button"
+        disabled={isPending || !address}
+        onClick={async () => {
+          setPending(true)
+          setError(undefined)
+          try {
+            const res = await fetch('/api/articles', {
+              headers: { 'X-Subscriber': address! },
+            })
+            const body = await res.json()
+            if (!res.ok) throw new Error(`${res.status}: ${JSON.stringify(body)}`)
+            setData(body)
+          } catch (e) {
+            setError(e as Error)
+          } finally {
+            setPending(false)
+          }
+        }}
+      >
+        {isPending ? 'Loading...' : 'GET /api/articles'}
+      </button>
+      {error && <pre>{error.message}</pre>}
+      {data !== undefined && <pre>{JSON.stringify(data, null, 2)}</pre>}
+    </div>
+  )
+}
+```
 
 ::::
 
+## Best Practices
+
+### Authenticate the Lookup Key
+
+Do not trust a client-supplied subscriber header in production. Derive the subscription key from a session cookie, JWT, API key, or another server-verified identity.
+
+### Use Durable Storage
+
+`Store.memory()` is only for examples. Use Cloudflare KV, Durable Objects, Postgres, or another atomic store so subscriptions survive restarts and concurrent renewal attempts stay safe.
+
+### Keep Plan Terms Stable
+
+Treat `amount`, `currency`, `recipient`, `periodUnit`, `periodCount`, and `subscriptionExpires` as the subscription contract. If any of them changes, issue a new challenge and activate a new subscription.
+
+### Handle Cancellation
+
+Give users a clear way to cancel. Record the cancellation effective time, stop renewals after the paid period ends, and return a fresh `402` for requests after cancellation.
+
+### Monitor Renewals
+
+Log activation and renewal receipts with the subscription ID and period index. Alert on failed renewals, insufficient balances, stale in-flight renewals, and expired authorizations.
+
+## Production Checklist
+
+- [ ] Replace `X-Subscriber` with a server-authenticated identity.
+- [ ] Use a durable atomic `Store`.
+- [ ] Store `ACCOUNT_PRIVATE_KEY` in a secret manager.
+- [ ] Generate a strong `MPP_SECRET_KEY`.
+- [ ] Show amount, currency, period, recipient, and expiry before activation.
+- [ ] Use production chain, currency, and recipient values.
+- [ ] Persist subscription ID, lookup key, billing anchor, and period index.
+- [ ] Add cancellation and revocation handling.
+- [ ] Test concurrent requests against the same subscription.
+- [ ] Test expired subscriptions, failed renewals, and insufficient balances.
+
 ## Next Steps
 
-- [Spend Permissions](/docs/guides/spend-permissions)
-- [Transfers](/docs/guides/transfers)
-- [Bring Your Auth](/docs/enterprise/bring-your-auth)
+<Cards>
+  <Card
+    description="Send stablecoin transfers from a connected account, initiated by the user or by your server."
+    to="/docs/guides/transfers"
+    icon="lucide:send"
+    title="Transfers"
+  />
+  <Card
+    description="Authorize spend limits, scopes, and durations for repeat account activity."
+    to="/docs/guides/spend-permissions"
+    icon="lucide:shield"
+    title="Spend Permissions"
+  />
+  <Card
+    description="Sponsor transaction fees for users so subscriptions feel seamless."
+    to="/docs/guides/fee-sponsorship"
+    icon="lucide:badge-dollar-sign"
+    title="Fee Sponsorship"
+  />
+  <Card
+    description="Let agents and other servers pay your endpoints with the Machine Payments Protocol."
+    to="/docs/guides/machine-payments"
+    icon="lucide:bot"
+    title="Machine Payments (MPP)"
+  />
+</Cards>
