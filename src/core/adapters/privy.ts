@@ -223,14 +223,30 @@ export function privy<const client extends privy.Client>(
       const result = await walletAccount.provider
         .request({ method: 'secp256k1_sign', params: [payload] })
         .catch((error) => {
-          if (isUnsupportedError(error)) throw unsupportedRawSigningError()
+          const code = getPrivyErrorCode(error)
+          const message = getPrivyErrorMessage(error).toLowerCase()
+          const unsupported =
+            (typeof code === 'number' && (code === 4200 || code === -32601)) ||
+            (typeof code === 'string' && code.toLowerCase().includes('unsupported')) ||
+            message.includes('unsupported') ||
+            message.includes('method not found')
+          if (unsupported)
+            throw new ox_Provider.UnsupportedMethodError({
+              message:
+                'Privy adapter requires raw secp256k1 hash signing via `secp256k1_sign` for Tempo transactions and access keys.',
+            })
           if (isSessionError(error)) {
             clear()
             throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
           }
           throw error
         })
-      const signature = assertHexResult(result)
+      if (typeof result !== 'string' || !Hex.validate(result))
+        throw new ox_Provider.ProviderRpcError(
+          -32603,
+          'Privy provider returned a non-hex secp256k1_sign result.',
+        )
+      const signature: Hex.Hex = result
 
       // Verify Privy returned a signature for the wallet we asked.
       const expected = core_Address.from(walletAccount.address)
@@ -248,59 +264,50 @@ export function privy<const client extends privy.Client>(
       return signature
     }
 
-    function assertHexResult(result: unknown): Hex.Hex {
-      if (typeof result !== 'string' || !Hex.validate(result))
-        throw new ox_Provider.ProviderRpcError(
-          -32603,
-          'Privy provider returned a non-hex secp256k1_sign result.',
-        )
-      // secp256k1 signature is 65 bytes (r,s,v) → 130 hex chars + '0x'.
-      if (result.length !== 132)
-        throw new ox_Provider.ProviderRpcError(
-          -32603,
-          `Privy provider returned a malformed secp256k1_sign result (expected 65 bytes, got ${(result.length - 2) / 2}).`,
-        )
-      return result
-    }
-
-    async function prepareKeyAuthorization(options: Adapter.authorizeAccessKey.Parameters) {
+    /**
+     * Builds, signs, and saves an access key authorization for the given Privy
+     * wallet. Generates a local P256 key pair when no external key is provided.
+     */
+    async function authorizeAccessKeyFor(
+      account: privy.EmbeddedWallet,
+      options: Adapter.authorizeAccessKey.Parameters,
+    ) {
       const { expiry, limits, scopes } = options
       const chainId = options.chainId ?? getClient().chain.id
 
-      if (options.publicKey || options.address) {
-        const address =
-          options.address ?? core_Address.fromPublicKey(PublicKey.from(options.publicKey!))
-        const keyAuthorization = KeyAuthorization.from({
-          address,
-          chainId: BigInt(chainId),
-          expiry,
-          limits,
-          scopes,
-          type: options.keyType ?? 'secp256k1',
-        })
-        return { keyAuthorization }
-      }
+      const prepared = await (async () => {
+        if (options.publicKey || options.address) {
+          const address =
+            options.address ?? core_Address.fromPublicKey(PublicKey.from(options.publicKey!))
+          return {
+            keyAuthorization: KeyAuthorization.from({
+              address,
+              chainId: BigInt(chainId),
+              expiry,
+              limits,
+              scopes,
+              type: options.keyType ?? 'secp256k1',
+            }),
+          }
+        }
 
-      const keyPair = await WebCryptoP256.createKeyPair()
-      const address = core_Address.fromPublicKey(PublicKey.from(keyPair.publicKey))
-      const keyAuthorization = KeyAuthorization.from({
-        address,
-        chainId: BigInt(chainId),
-        expiry,
-        limits,
-        scopes,
-        type: 'p256',
-      })
-      return { keyAuthorization, keyPair }
-    }
+        const keyPair = await WebCryptoP256.createKeyPair()
+        const address = core_Address.fromPublicKey(PublicKey.from(keyPair.publicKey))
+        return {
+          keyAuthorization: KeyAuthorization.from({
+            address,
+            chainId: BigInt(chainId),
+            expiry,
+            limits,
+            scopes,
+            type: 'p256',
+          }),
+          keyPair,
+        }
+      })()
 
-    async function signKeyAuthorization(
-      account: privy.EmbeddedWallet,
-      prepared: Awaited<ReturnType<typeof prepareKeyAuthorization>>,
-    ) {
-      const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
       const signature = await signPayload({
-        payload: digest,
+        payload: KeyAuthorization.getSignPayload(prepared.keyAuthorization),
         walletAccount: account,
       })
       const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
@@ -380,19 +387,36 @@ export function privy<const client extends privy.Client>(
       )
     }
 
-    function isUnsupportedError(error: unknown) {
-      const code = getPrivyErrorCode(error)
-      if (typeof code === 'number' && (code === 4200 || code === -32601)) return true
-      if (typeof code === 'string' && code.toLowerCase().includes('unsupported')) return true
-      const message = getPrivyErrorMessage(error).toLowerCase()
-      return message.includes('unsupported') || message.includes('method not found')
-    }
-
-    function unsupportedRawSigningError() {
-      return new ox_Provider.UnsupportedMethodError({
-        message:
-          'Privy adapter requires raw secp256k1 hash signing via `secp256k1_sign` for Tempo transactions and access keys.',
+    /**
+     * Builds a signed Tempo transaction via the access-key path when available, or
+     * falls back to root-account signing. Returns the signed tx, a viem client
+     * configured for the requested chain/fee-payer, and the access-key account when
+     * the access-key path was used (so callers can `removePending` after broadcast).
+     */
+    async function buildTransaction(parameters: Adapter.signTransaction.Parameters) {
+      const viemClient = getClient({
+        chainId: parameters.chainId,
+        feePayer: parameters.feePayer === true ? undefined : parameters.feePayer,
       })
+
+      const result = await withAccessKey(
+        { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
+        async (account, keyAuthorization) => {
+          const { feePayer, ...rest } = parameters
+          const prepared = await prepareTransactionRequest(viemClient, {
+            account,
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+            keyAuthorization,
+            type: 'tempo',
+          } as never)
+          return await account.signTransaction(prepared as never)
+        },
+      )
+      if (result !== undefined)
+        return { account: result.account, signed: result.result, viemClient }
+
+      return { account: undefined, signed: await signTransaction(parameters), viemClient }
     }
 
     function isSessionError(error: unknown) {
@@ -488,17 +512,16 @@ export function privy<const client extends privy.Client>(
             })
             await requireSession()
           }
-          restore_promise = undefined
 
           const account = walletAccounts[0]
           if (!account)
             throw new ox_Provider.DisconnectedError({
-              message: 'Privy createAccount returned no wallet.',
+              message: 'Privy returned no wallet.',
             })
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters.digest
           const keyAuthorization = authorizeAccessKey
-            ? await signKeyAuthorization(account, await prepareKeyAuthorization(authorizeAccessKey))
+            ? await authorizeAccessKeyFor(account, authorizeAccessKey)
             : undefined
 
           return {
@@ -527,16 +550,12 @@ export function privy<const client extends privy.Client>(
           const privyClient = await getPrivyClient()
           walletAccounts = await options.loadAccounts({ client: privyClient, parameters })
           await requireSession()
-          restore_promise = undefined
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters?.digest
           const account = walletAccounts[0]
           const keyAuthorization =
             authorizeAccessKey && account
-              ? await signKeyAuthorization(
-                  account,
-                  await prepareKeyAuthorization(authorizeAccessKey),
-                )
+              ? await authorizeAccessKeyFor(account, authorizeAccessKey)
               : undefined
 
           return {
@@ -554,8 +573,7 @@ export function privy<const client extends privy.Client>(
         },
         async authorizeAccessKey(parameters) {
           const account = await accountForSigning(undefined)
-          const prepared = await prepareKeyAuthorization(parameters)
-          const keyAuthorization = await signKeyAuthorization(account, prepared)
+          const keyAuthorization = await authorizeAccessKeyFor(account, parameters)
           return { keyAuthorization, rootAddress: core_Address.from(account.address) }
         },
         async signPersonalMessage(parameters) {
@@ -566,26 +584,7 @@ export function privy<const client extends privy.Client>(
           })
         },
         async signTransaction(parameters) {
-          const result = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
-            async (account, keyAuthorization) => {
-              const { feePayer, ...rest } = parameters
-              const viemClient = getClient({
-                chainId: parameters.chainId,
-                feePayer: feePayer === true ? undefined : feePayer,
-              })
-              const prepared = await prepareTransactionRequest(viemClient, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                keyAuthorization,
-                type: 'tempo',
-              } as never)
-              return await account.signTransaction(prepared as never)
-            },
-          )
-          if (result !== undefined) return result.result
-          return await signTransaction(parameters)
+          return (await buildTransaction(parameters)).signed
         },
         async signTypedData(parameters) {
           const account = await accountForSigning(parameters.address)
@@ -601,74 +600,16 @@ export function privy<const client extends privy.Client>(
           })
         },
         async sendTransaction(parameters) {
-          const result = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
-            async (account, keyAuthorization) => {
-              const { feePayer, ...rest } = parameters
-              const viemClient = getClient({
-                chainId: parameters.chainId,
-                feePayer: feePayer === true ? undefined : feePayer,
-              })
-              const prepared = await prepareTransactionRequest(viemClient, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                keyAuthorization,
-                type: 'tempo',
-              } as never)
-              const signed = await account.signTransaction(prepared as never)
-              return await viemClient.request({
-                method: 'eth_sendRawTransaction' as never,
-                params: [signed],
-              })
-            },
-          )
-          if (result !== undefined) {
-            AccessKey.removePending(result.account, { store })
-            return result.result
-          }
-          const signed = await signTransaction(parameters)
-          const viemClient = getClient({
-            chainId: parameters.chainId,
-            feePayer: parameters.feePayer === true ? undefined : parameters.feePayer,
-          })
+          const { account, signed, viemClient } = await buildTransaction(parameters)
+          if (account) AccessKey.removePending(account, { store })
           return await viemClient.request({
             method: 'eth_sendRawTransaction' as never,
             params: [signed],
           })
         },
         async sendTransactionSync(parameters) {
-          const result = await withAccessKey(
-            { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
-            async (account, keyAuthorization) => {
-              const { feePayer, ...rest } = parameters
-              const viemClient = getClient({
-                chainId: parameters.chainId,
-                feePayer: feePayer === true ? undefined : feePayer,
-              })
-              const prepared = await prepareTransactionRequest(viemClient, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                keyAuthorization,
-                type: 'tempo',
-              } as never)
-              const signed = await account.signTransaction(prepared as never)
-              return await viemClient.request({
-                method: 'eth_sendRawTransactionSync' as never,
-                params: [signed],
-              })
-            },
-          )
-          if (result !== undefined) {
-            AccessKey.removePending(result.account, { store })
-            return result.result
-          }
-          const signed = await signTransaction(parameters)
-          const viemClient = getClient({
-            chainId: parameters.chainId,
-            feePayer: parameters.feePayer === true ? undefined : parameters.feePayer,
-          })
+          const { account, signed, viemClient } = await buildTransaction(parameters)
+          if (account) AccessKey.removePending(account, { store })
           return await viemClient.request({
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],

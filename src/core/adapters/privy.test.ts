@@ -341,7 +341,7 @@ describe('privy', () => {
     ).rejects.toThrowError(/Address.*invalid/i)
   })
 
-  test('error: secp256k1_sign result must be 65 bytes', async () => {
+  test('error: malformed secp256k1_sign result is rejected by signer recovery', async () => {
     const { adapter } = setup({ signResult: '0x1234' })
     await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
 
@@ -351,7 +351,7 @@ describe('privy', () => {
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
     ).rejects.toMatchInlineSnapshot(
-      '[ProviderRpcError: Privy provider returned a malformed secp256k1_sign result (expected 65 bytes, got 2).]',
+      `[Provider.UnauthorizedError: Privy provider returned a signature for "unknown" that does not match the requested wallet "${address}".]`,
     )
   })
 
