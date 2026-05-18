@@ -131,9 +131,17 @@ export function privy<const client extends privy.Client>(
             typeof account.address === 'string',
         )
         .slice()
-        .sort((a, b) => (a.wallet_index ?? 0) - (b.wallet_index ?? 0))
+        .sort((a, b) => {
+          // Wallets without a `wallet_index` are sorted to the end so they
+          // never accidentally become primary when a sibling has an index.
+          const a_index = a.wallet_index ?? Number.POSITIVE_INFINITY
+          const b_index = b.wallet_index ?? Number.POSITIVE_INFINITY
+          return a_index - b_index
+        })
 
-      const primary = wallets[0]
+      // Primary is the wallet with `wallet_index === 0`. Fall back to the
+      // lowest-indexed wallet only when no wallet declares index 0.
+      const primary = wallets.find((wallet) => wallet.wallet_index === 0) ?? wallets[0]
       if (!primary) return []
       const entropyId = primary.address as string
 
@@ -177,7 +185,15 @@ export function privy<const client extends privy.Client>(
           )
           .filter((account): account is privy.EmbeddedWallet => !!account)
 
-        if (walletAccounts.length === 0) return
+        // If the persisted accounts no longer exist in Privy (different user
+        // signed in, wallets removed), wipe the stale state so callers see a
+        // clean disconnected state instead of ghost accounts without providers.
+        if (walletAccounts.length === 0) {
+          clear()
+          throw new ox_Provider.DisconnectedError({
+            message: 'Privy session no longer matches persisted accounts.',
+          })
+        }
 
         store.setState({
           accounts: walletAccounts.map((account) => toStoreAccount(account)),
@@ -501,7 +517,10 @@ export function privy<const client extends privy.Client>(
               ),
             ]
           } else {
-            walletAccounts = await options.loadAccounts({
+            // Hold the callback result in a local until `requireSession()`
+            // succeeds so we don't leave stale wallets on the adapter when the
+            // session expired during the user-provided flow.
+            const loaded = await options.loadAccounts({
               client: privyClient,
               parameters: {
                 ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
@@ -510,6 +529,7 @@ export function privy<const client extends privy.Client>(
               },
             })
             await requireSession()
+            walletAccounts = loaded
           }
 
           const account = walletAccounts[0]
@@ -547,8 +567,12 @@ export function privy<const client extends privy.Client>(
             )
 
           const privyClient = await getPrivyClient()
-          walletAccounts = await options.loadAccounts({ client: privyClient, parameters })
+          // Hold the callback result in a local until `requireSession()`
+          // succeeds so we don't leave stale wallets on the adapter when the
+          // session expired during the user-provided flow.
+          const loaded = await options.loadAccounts({ client: privyClient, parameters })
           await requireSession()
+          walletAccounts = loaded
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters?.digest
           const account = walletAccounts[0]

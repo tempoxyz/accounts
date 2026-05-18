@@ -303,7 +303,7 @@ describe('privy', () => {
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
-  test('behavior: silent restore yields No Privy account connected when persisted address is missing', async () => {
+  test('behavior: silent restore clears stale persisted accounts when Privy no longer has them', async () => {
     const { adapter, client, store } = setup()
     // Persisted address that is NOT linked on the Privy user.
     store.setState({ accounts: [{ address: other }], activeAccount: 0 })
@@ -313,9 +313,13 @@ describe('privy', () => {
         { address: other, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', other] },
       ),
-    ).rejects.toMatchInlineSnapshot('[Provider.DisconnectedError: No Privy account connected.]')
+    ).rejects.toMatchInlineSnapshot(
+      '[Provider.DisconnectedError: Privy session no longer matches persisted accounts.]',
+    )
 
     expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
+    // Stale persisted accounts are wiped so the adapter and store agree.
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
   test('error: silent restore rejects non-hex secp256k1_sign results', async () => {
@@ -536,8 +540,7 @@ function createClient(options: setup.Options = {}) {
     embeddedWallet: {
       async getEthereumProvider({ wallet }) {
         const existing = client.wallets.find(
-          (w) =>
-            core_Address.from(w.address) === core_Address.from(wallet.address as string),
+          (w) => core_Address.from(w.address) === core_Address.from(wallet.address as string),
         )
         return (existing ?? client.makeWallet(wallet.address as string)).provider
       },
