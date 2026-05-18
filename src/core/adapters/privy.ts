@@ -38,28 +38,54 @@ const privySessionErrorCodes = new Set([
  * Ethereum wallets.
  *
  * The adapter owns silent reconnect, session-expiry cleanup, and signing. Apps supply
- * the UI-bearing registration/login flows via `createAccount` and `loadAccounts`, which
- * fire only on user-initiated `wallet_connect`/registration — never during silent
- * restore on page reload.
+ * the UI-bearing login flow via `loadAccounts` (and optionally a distinct `createAccount`
+ * for registration). Callbacks fire only on user-initiated `wallet_connect`/registration —
+ * never during silent restore on page reload.
  *
  * Silent restore on page reload pulls wallets directly from the Privy SDK
  * (`client.user.get` + `client.embeddedWallet.getEthereumProvider`), so apps don't
  * need to re-run the login UI when the user returns with a still-valid Privy session.
  *
+ * Both callbacks must return Privy embedded Ethereum wallets as `{ address, provider }`.
+ * Privy ships `getAllUserEmbeddedEthereumWallets` and `getEntropyDetailsFromUser` from
+ * `@privy-io/js-sdk-core` to resolve these from a `User`.
+ *
  * @example
  * ```ts
- * import Privy from '@privy-io/js-sdk-core'
+ * import Privy, {
+ *   getAllUserEmbeddedEthereumWallets,
+ *   getEntropyDetailsFromUser,
+ * } from '@privy-io/js-sdk-core'
  *
  * const client = new Privy({ appId: import.meta.env.VITE_PRIVY_APP_ID })
+ *
+ * async function loadPrivyWallets(client: Privy) {
+ *   const { user } = await client.user.get()
+ *   const { entropyId } = getEntropyDetailsFromUser(user)
+ *   return Promise.all(
+ *     getAllUserEmbeddedEthereumWallets(user).map(async (wallet) => ({
+ *       address: wallet.address,
+ *       provider: await client.embeddedWallet.getEthereumProvider({
+ *         wallet,
+ *         entropyId,
+ *         entropyIdVerifier: 'ethereum-address-verifier',
+ *       }),
+ *     })),
+ *   )
+ * }
  *
  * const provider = Provider.create({
  *   adapter: privy({
  *     client,
+ *     // Optional: omit to route registration through `loadAccounts`.
  *     createAccount: async ({ client }) => {
- *       // ...drive Privy email/OTP UI, then return the new embedded wallet.
+ *       await myPrivyRegisterUI(client)
+ *       const wallets = await loadPrivyWallets(client)
+ *       return wallets[0]!
  *     },
  *     loadAccounts: async ({ client }) => {
- *       // ...drive Privy login UI, then return the user's embedded wallets.
+ *       if (!(await client.getAccessToken())) await myPrivyLoginUI(client)
+ *       return loadPrivyWallets(client)
  *     },
  *   }),
  * })
