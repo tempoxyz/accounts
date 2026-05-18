@@ -4,6 +4,7 @@ import { Mppx, tempo } from 'mppx/hono'
 import { privateKeyToAccount } from 'viem/accounts'
 
 const app = new Hono()
+const account = privateKeyToAccount(process.env.ACCOUNT_PRIVATE_KEY)
 
 // Persisted subscription state. In-memory is fine for the example, but in
 // production use a durable store (Cloudflare KV, Durable Objects, Postgres,
@@ -13,7 +14,7 @@ const store = Store.memory()
 const mppx = Mppx.create({
   methods: [
     tempo.subscription({
-      account: privateKeyToAccount(process.env.ACCOUNT_PRIVATE_KEY),
+      account,
       currency: '0x20c0000000000000000000000000000000000000',
       feePayer: true,
       // The lookup key identifies *which* subscription a request belongs to.
@@ -35,8 +36,8 @@ app.get(
   '/api/articles',
   mppx.subscription({
     amount: '0.01',
-    periodCount: 1,
-    periodUnit: 'day',
+    periodCount: 10,
+    periodUnit: 'dev_second',
     subscriptionExpires: new Date(
       Math.ceil((Date.now() + 365 * 24 * 60 * 60 * 1_000) / 1_000) * 1_000,
     ).toISOString(),
@@ -50,5 +51,21 @@ app.get(
       ],
     }),
 )
+
+app.post('/__subscriptions/collect', async (c) => {
+  const body = await c.req.json().catch(() => null)
+  const subscriptionId =
+    body && typeof body === 'object' && 'subscriptionId' in body ? body.subscriptionId : undefined
+
+  if (typeof subscriptionId !== 'string')
+    return c.json({ error: '`subscriptionId` is required.' }, 400)
+
+  const result = await mppx.tempo.subscription.renew({ subscriptionId })
+  return c.json({
+    receipt: result?.receipt ?? null,
+    renewed: result !== null,
+    subscriptionId,
+  })
+})
 
 export default app
