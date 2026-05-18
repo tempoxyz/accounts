@@ -7,13 +7,20 @@ import { useDisconnect, WagmiProvider } from 'wagmi'
 import LucideExternalLink from '~icons/lucide/external-link'
 import LucideRotateCcw from '~icons/lucide/rotate-ccw'
 
-import { spendPermissionsWagmiConfig, wagmiConfig } from '../wagmi.js'
+import {
+  feeSponsorshipWagmiConfig,
+  spendPermissionsWagmiConfig,
+  themingWagmiConfig,
+  wagmiConfig,
+} from '../wagmi.js'
 import * as Steps from './Steps.js'
 
 const queryClient = new QueryClient()
 const wagmiConfigs = {
   default: wagmiConfig,
+  feeSponsorship: feeSponsorshipWagmiConfig,
   spendPermissions: spendPermissionsWagmiConfig,
+  theming: themingWagmiConfig,
 }
 
 export function Demo(props: Demo.Props) {
@@ -113,7 +120,6 @@ export namespace Demo {
       githubUrl: string
     }
   }
-
 }
 
 /**
@@ -132,9 +138,9 @@ export function DemoReset() {
       type="button"
       aria-label="Restart"
       onClick={async () => {
-          await disconnect.disconnectAsync()
-          steps.set('reset')
-        }}
+        await disconnect.disconnectAsync()
+        steps.set('reset')
+      }}
       className="text-secondary hover:text-primary flex size-7 items-center justify-center cursor-pointer leading-none"
     >
       <LucideRotateCcw aria-hidden className="size-4 block" />

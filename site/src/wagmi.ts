@@ -25,10 +25,47 @@ export const spendPermissionsWagmiConfig: Config = createConfig({
       authorizeAccessKey: () => ({
         expiry: Expiry.days(1),
         limits: [{ token: pathUsd, limit: parseUnits('100', 6) }],
-        scopes: [
-          { address: pathUsd, selector: 'transfer(address,uint256)' },
-        ],
+        scopes: [{ address: pathUsd, selector: 'transfer(address,uint256)' }],
       }),
+    }),
+  ],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempoModerato.id]: http(),
+    [tempo.id]: http(),
+  },
+})
+
+export const feeSponsorshipWagmiConfig: Config = createConfig({
+  chains: [tempoModerato, tempo],
+  connectors: [
+    tempoWallet({
+      authorizeAccessKey: () => ({
+        expiry: Expiry.days(1),
+        limits: [{ token: pathUsd, limit: parseUnits('100', 6) }],
+        scopes: [{ address: pathUsd, selector: 'transfer(address,uint256)' }],
+      }),
+      feePayer: '/relay',
+      testnet: true,
+    }),
+  ],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempoModerato.id]: http(),
+    [tempo.id]: http(),
+  },
+})
+
+export const themingWagmiConfig: Config = createConfig({
+  chains: [tempoModerato, tempo],
+  connectors: [
+    tempoWallet({
+      mpp: true,
+      testnet: true,
+      theme: {
+        accent: '#ff007a',
+        radius: 'full',
+      },
     }),
   ],
   multiInjectedProviderDiscovery: false,
