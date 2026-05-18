@@ -25,11 +25,7 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
   const steps = Steps.use(value)
   const to = useMemo(() => privateKeyToAccount(generatePrivateKey()).address, [])
   const balanceText =
-    balance.isLoading || balance.isRefetching
-      ? 'Loading...'
-      : balance.data !== undefined
-        ? formatUnits(balance.data, 6)
-        : '-'
+    balance.data !== undefined ? formatUnits(balance.data, 6) : balance.isLoading ? 'Loading...' : '-'
 
   return (
     <Steps.Step

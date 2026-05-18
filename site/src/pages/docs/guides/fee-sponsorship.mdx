@@ -119,14 +119,12 @@ import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { tempoWallet } from 'wagmi/connectors'
 
-const feePayer = import.meta.env.VITE_FEE_PAYER_URL ?? '/relay'
-
 export const config = createConfig({
   chains: [tempo, tempoModerato],
   connectors: [
     tempoWallet({
       testnet: true,
-      feePayer, // [!code focus]
+      feePayer: import.meta.env.VITE_FEE_PAYER_URL ?? '/relay', // [!code focus]
     }),
   ],
   multiInjectedProviderDiscovery: false,
@@ -143,15 +141,13 @@ import { createConfig, http } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { webAuthn } from 'wagmi/tempo'
 
-const feePayer = '/relay'
-
 export const config = createConfig({
   chains: [tempo, tempoModerato],
   connectors: [
     webAuthn({
       testnet: true,
       authUrl: '/auth',
-      feePayer, // [!code focus]
+      feePayer: '/relay', // [!code focus]
     }),
   ],
   multiInjectedProviderDiscovery: false,
