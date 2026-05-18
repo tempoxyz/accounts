@@ -105,11 +105,50 @@ describe('create', () => {
 
     await fund(root.address)
 
+    await provider.request({
+      method: 'eth_signTransaction',
+      params: [{ calls: [transferCall], feeToken: Addresses.pathUsd }],
+    })
+    const accessKey_pending = provider.store
+      .getState()
+      .accessKeys.find(
+        (key) =>
+          key.access.toLowerCase() === root.address.toLowerCase() &&
+          key.chainId === chain.id &&
+          !!key.keyAuthorization,
+      )!
+    const entry_pending = await secureStorage.getItem<{
+      keyAuthorizationStatus?: string | undefined
+    }>(`managedKey.${root.address.toLowerCase()}.${chain.id}.${accessKey_pending.keyType}`)
+
+    expect(entry_pending?.keyAuthorizationStatus).toMatchInlineSnapshot(`"pending"`)
+    expect(accessKey_pending.keyAuthorization).toBeDefined()
+    expect(accessKey_pending.keyAuthorizationPending).toMatchInlineSnapshot(`true`)
+
     const receipt = await provider.request({
       method: 'eth_sendTransactionSync',
       params: [{ calls: [transferCall], feeToken: Addresses.pathUsd }],
     })
+    const accessKey_authorized = provider.store
+      .getState()
+      .accessKeys.find(
+        (key) => key.address.toLowerCase() === accessKey_pending.address.toLowerCase(),
+      )!
+    const entry_authorized = await secureStorage.getItem<{
+      keyAuthorizationStatus?: string | undefined
+    }>(`managedKey.${root.address.toLowerCase()}.${chain.id}.${accessKey_pending.keyType}`)
+
     expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+    expect({
+      keyAuthorization: accessKey_authorized.keyAuthorization,
+      keyAuthorizationPending: accessKey_authorized.keyAuthorizationPending,
+    }).toMatchInlineSnapshot(`
+      {
+        "keyAuthorization": undefined,
+        "keyAuthorizationPending": undefined,
+      }
+    `)
+    expect(entry_authorized?.keyAuthorizationStatus).toMatchInlineSnapshot(`"authorized"`)
     expect(browser.calls()).toMatchInlineSnapshot(`2`)
   })
 })

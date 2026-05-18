@@ -10,8 +10,8 @@ import {
 import { KeyAuthorization } from 'ox/tempo'
 import { Actions, Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 
+import * as AccessKey from '../core/AccessKey.js'
 import * as Adapter from '../core/Adapter.js'
-import * as AccessKeyStore from '../core/internal/AccessKeyStore.js'
 import * as AccessKeyTransaction from '../core/internal/AccessKeyTransaction.js'
 import type * as Storage from '../core/Storage.js'
 
@@ -65,20 +65,33 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       const keyAuthorizationStatus = entry.keyAuthorizationStatus ?? 'pending'
 
       if (keyAuthorizationMatches) {
-        AccessKeyStore.upsertAuthorization({
-          address,
-          keyAuthorization,
+        AccessKey.add({
+          account: address,
+          authorization: keyAuthorization,
           privateKey: entry.key,
-          state: keyAuthorizationStatus,
           store,
         })
+        if (keyAuthorizationStatus === 'pending')
+          AccessKey.markPending({
+            account: address,
+            accessKey: keyAuthorization.address,
+            chainId: Number(keyAuthorization.chainId),
+            store,
+          })
+        if (keyAuthorizationStatus === 'authorized')
+          AccessKey.markPublished({
+            account: address,
+            accessKey: keyAuthorization.address,
+            chainId: Number(keyAuthorization.chainId),
+            store,
+          })
       } else
-        store.setState((state) => ({
-          accessKeys: state.accessKeys.filter(
-            (accessKey) =>
-              accessKey.address.toLowerCase() !== keyAuthorization.address.toLowerCase(),
-          ),
-        }))
+        AccessKey.remove({
+          account: address,
+          accessKey: keyAuthorization.address,
+          chainId: Number(keyAuthorization.chainId),
+          store,
+        })
 
       return {
         account,
@@ -140,11 +153,10 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
     ) {
       if (!managedKey) return
 
-      AccessKeyStore.upsertAuthorization({
-        address,
-        keyAuthorization,
+      AccessKey.add({
+        account: address,
+        authorization: keyAuthorization,
         privateKey: managedKey.key,
-        state: 'signed',
         store,
       })
 
@@ -436,8 +448,15 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],
           })
-          if (managedKey && prepared.keyAuthorization)
+          if (managedKey && prepared.keyAuthorization) {
             await saveManagedKeyStatus(managedKey, 'authorized')
+            AccessKey.markPublished({
+              account: managedKey.walletAddress,
+              accessKey: managedKey.keyAddress,
+              chainId: managedKey.chainId,
+              store,
+            })
+          }
           return result as AccessKeyTransaction.create.SendSyncReturnType
         },
         async signPersonalMessage({ address, data }) {

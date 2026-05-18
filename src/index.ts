@@ -1,4 +1,3 @@
-export * as AccessKey from './core/AccessKey.js'
 export * as Adapter from './core/Adapter.js'
 export * as IntersectionObserver from './core/IntersectionObserver.js'
 export * as Dialog from './core/Dialog.js'

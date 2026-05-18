@@ -5,7 +5,6 @@ import { z } from 'zod/mini'
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
-import * as AccessKeyStore from '../internal/AccessKeyStore.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as Schema from '../Schema.js'
 import type * as Store from '../Store.js'
@@ -135,14 +134,13 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     function saveAccessKey(
       address: Address.Address,
       keyAuth: KeyAuthorization.Rpc,
-      keyPair: AccessKey.generate.ReturnType['keyPair'],
+      keyPair: Awaited<ReturnType<typeof AccessKey.generate>>['keyPair'],
     ) {
       const keyAuthorization = KeyAuthorization.fromRpc(keyAuth)
-      AccessKeyStore.upsertAuthorization({
-        address,
-        keyAuthorization,
+      AccessKey.add({
+        account: address,
+        authorization: keyAuthorization,
         keyPair,
-        state: 'signed',
         store,
       })
     }

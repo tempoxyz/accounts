@@ -14,8 +14,8 @@ import { KeyAuthorization } from 'ox/tempo'
 import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 import * as z from 'zod/mini'
 
+import * as AccessKey from '../core/AccessKey.js'
 import * as Adapter from '../core/Adapter.js'
-import * as AccessKeyStore from '../core/internal/AccessKeyStore.js'
 import * as AccessKeyTransaction from '../core/internal/AccessKeyTransaction.js'
 import * as CliAuth from '../server/CliAuth.js'
 import * as Keyring from './keyring.js'
@@ -45,13 +45,26 @@ export function cli(options: cli.Options): Adapter.Adapter {
       if (!deserialized.signature) throw new Error('Managed access key is missing a signature.')
       const keyAuthorization = deserialized as KeyAuthorization.Signed
       const keyAuthorizationStatus = entry.keyAuthorizationStatus ?? 'pending'
-      AccessKeyStore.upsertAuthorization({
-        address,
-        keyAuthorization,
+      AccessKey.add({
+        account: address,
+        authorization: keyAuthorization,
         privateKey: entry.key,
-        state: keyAuthorizationStatus,
         store,
       })
+      if (keyAuthorizationStatus === 'pending')
+        AccessKey.markPending({
+          account: address,
+          accessKey: keyAuthorization.address,
+          chainId: Number(keyAuthorization.chainId),
+          store,
+        })
+      if (keyAuthorizationStatus === 'authorized')
+        AccessKey.markPublished({
+          account: address,
+          accessKey: keyAuthorization.address,
+          chainId: Number(keyAuthorization.chainId),
+          store,
+        })
 
       return { ...entry, keyAuthorizationStatus }
     }
@@ -106,11 +119,10 @@ export function cli(options: cli.Options): Adapter.Adapter {
       if (!managedKey) return
 
       const signed = KeyAuthorization.fromRpc(z.encode(CliAuth.keyAuthorization, keyAuthorization))
-      AccessKeyStore.upsertAuthorization({
-        address,
-        keyAuthorization: signed,
+      AccessKey.add({
+        account: address,
+        authorization: signed,
         privateKey: managedKey.key,
-        state: 'signed',
         store,
       })
 
@@ -358,8 +370,15 @@ export function cli(options: cli.Options): Adapter.Adapter {
             method: 'eth_sendRawTransactionSync' as never,
             params: [signed],
           })
-          if (managedKey && prepared.keyAuthorization)
+          if (managedKey && prepared.keyAuthorization) {
             await saveManagedKeyStatus(managedKey, 'authorized')
+            AccessKey.markPublished({
+              account: managedKey.walletAddress,
+              accessKey: managedKey.keyAddress,
+              chainId: managedKey.chainId,
+              store,
+            })
+          }
           return result as AccessKeyTransaction.create.SendSyncReturnType
         },
         async signPersonalMessage({ address, data }) {

@@ -12,7 +12,6 @@ import * as Account from './Account.js'
 import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
-import * as AccessKeyStore from './internal/AccessKeyStore.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Schema from './Schema.js'
@@ -966,11 +965,13 @@ export function create(options: create.Options = {}): create.ReturnType {
       async getAccessKeyStatus(options: getAccessKeyStatus.Options = {}) {
         const state = store.getState()
         const address = options.address ?? state.accounts[state.activeAccount]?.address
-        if (!address) return AccessKey.status.missing
+        if (!address) return 'missing'
         const chainId = options.chainId ?? state.chainId
-        return await AccessKeyTransaction.getStatus({
-          ...options,
-          address,
+        const { accessKey, calls } = options
+        return await AccessKey.getStatus({
+          account: address,
+          ...(accessKey ? { accessKey } : {}),
+          ...(calls ? { calls } : {}),
           chainId,
           client: provider.getClient({ chainId }),
           store,
@@ -1048,7 +1049,12 @@ export function create(options: create.Options = {}): create.ReturnType {
       if (BigInt(amount) === 0n) return
       const account = provider.getAccount()
       if ('source' in account && account.source === 'accessKey')
-        AccessKeyStore.removePending({ accessKey: account.accessKeyAddress, store })
+        AccessKey.markPublished({
+          account: account.address,
+          accessKey: account.accessKeyAddress,
+          chainId: store.getState().chainId,
+          store,
+        })
     })
   }
 
@@ -1155,7 +1161,7 @@ export declare namespace getAccessKeyStatus {
   }
 
   /** Access-key publication status. */
-  type ReturnType = AccessKey.Status
+  type ReturnType = 'missing' | 'pending' | 'published' | 'expired'
 }
 
 export declare namespace mpp {

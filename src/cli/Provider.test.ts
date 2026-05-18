@@ -474,14 +474,44 @@ describe('Provider.create', () => {
       const account = result.accounts[0]!
       await fund(account.address)
 
+      await provider.request({
+        method: 'eth_signTransaction',
+        params: [{ calls: [transferCall] }],
+      })
+      const keyAddress = account.capabilities.keyAuthorization!.keyId
+      const entry_pending = (await Keyring.load({ path: keysPath })).find(
+        (entry) => entry.keyAddress.toLowerCase() === keyAddress.toLowerCase(),
+      )!
+      const accessKey_pending = provider.store
+        .getState()
+        .accessKeys.find((key) => key.address.toLowerCase() === keyAddress.toLowerCase())!
+
+      expect(entry_pending.keyAuthorizationStatus).toMatchInlineSnapshot(`"pending"`)
+      expect(accessKey_pending.keyAuthorization).toBeDefined()
+      expect(accessKey_pending.keyAuthorizationPending).toMatchInlineSnapshot(`true`)
+
       const receipt = await provider.request({
         method: 'eth_sendTransactionSync',
         params: [{ calls: [transferCall] }],
       })
-      const [entry] = await Keyring.load({ path: keysPath })
-      const { key, keyAuthorization, ...persisted } = entry!
+      const entry_authorized = (await Keyring.load({ path: keysPath })).find(
+        (entry) => entry.keyAddress.toLowerCase() === keyAddress.toLowerCase(),
+      )!
+      const accessKey_authorized = provider.store
+        .getState()
+        .accessKeys.find((key) => key.address.toLowerCase() === keyAddress.toLowerCase())!
+      const { key, keyAuthorization, ...persisted } = entry_authorized
 
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+      expect({
+        keyAuthorization: accessKey_authorized.keyAuthorization,
+        keyAuthorizationPending: accessKey_authorized.keyAuthorizationPending,
+      }).toMatchInlineSnapshot(`
+        {
+          "keyAuthorization": undefined,
+          "keyAuthorizationPending": undefined,
+        }
+      `)
       expect({
         ...persisted,
         keyAddress: persisted.keyAddress.toLowerCase(),
@@ -498,14 +528,6 @@ describe('Provider.create', () => {
       `)
       expect(key).toMatch(/^0x[0-9a-f]{64}$/i)
       expect(keyAuthorization).toMatch(/^0x[0-9a-f]+$/i)
-
-      await provider.request({
-        method: 'eth_signTransaction',
-        params: [{ calls: [transferCall] }],
-      })
-      expect(
-        (await Keyring.load({ path: keysPath }))[0]?.keyAuthorizationStatus,
-      ).toMatchInlineSnapshot(`"authorized"`)
     } finally {
       await server.closeAsync()
     }
