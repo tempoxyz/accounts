@@ -10,6 +10,7 @@ import LucideRotateCcw from '~icons/lucide/rotate-ccw'
 import {
   feeSponsorshipWagmiConfig,
   spendPermissionsWagmiConfig,
+  themingWagmiConfig,
   wagmiConfig,
 } from '../wagmi.js'
 import * as Steps from './Steps.js'
@@ -19,6 +20,7 @@ const wagmiConfigs = {
   default: wagmiConfig,
   feeSponsorship: feeSponsorshipWagmiConfig,
   spendPermissions: spendPermissionsWagmiConfig,
+  theming: themingWagmiConfig,
 }
 
 export function Demo(props: Demo.Props) {
