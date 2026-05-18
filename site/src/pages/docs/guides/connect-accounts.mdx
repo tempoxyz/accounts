@@ -11,7 +11,7 @@ import { Demo, DemoReset } from '../../../components/Demo'
 
 Connect a Tempo account in your application using the [Tempo Accounts SDK](/docs) and [Wagmi](https://wagmi.sh).
 
-The Accounts SDK ships several signing adapters — [Tempo Wallet](/docs/adapters/tempo-wallet), [domain-bound Passkeys](/docs/adapters/webauthn), [Turnkey](/docs/adapters/turnkey), and more. Each adapter exposes the same Wagmi connector surface, so the integration code in this guide is the same regardless of which adapter you pick. Choose an adapter once in your Wagmi config; the rest of your app stays adapter-agnostic.
+The Accounts SDK ships several signing adapters — [Tempo Wallet](/docs/adapters/tempo-wallet), [domain-bound Passkeys](/docs/adapters/webauthn), [Turnkey](/docs/adapters/turnkey), [Privy](/docs/adapters/privy), and more. Each adapter exposes the same Wagmi connector surface, so the integration code in this guide is the same regardless of which adapter you pick. Choose an adapter once in your Wagmi config; the rest of your app stays adapter-agnostic.
 
 :::info[Which adapter should I use?]
 
@@ -224,7 +224,7 @@ export function Example() {
 
 <Cards>
   <Card
-    description="Choose between Tempo Wallet, WebAuthn, Turnkey, and custom signing infrastructure"
+    description="Choose between Tempo Wallet, WebAuthn, Turnkey, Privy, and custom signing infrastructure"
     to="/docs/adapters"
     icon="lucide:route"
     title="Choose an Adapter"

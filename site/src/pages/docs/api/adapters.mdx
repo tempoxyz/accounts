@@ -14,6 +14,7 @@ Adapters control how accounts are created and managed. Pass an adapter to `Provi
 | [`dialog`](/docs/api/dialog) (default) | Hosted dialog                      | Apps wanting a universal account experience                                                         |
 | [`webAuthn`](/docs/api/webAuthn)       | Domain-bound passkeys              | Wallets integrating Passkey accounts, or Apps wanting to host and manage their own Passkey accounts |
 | [`turnkey`](/docs/api/turnkey)         | `@turnkey/core` client sessions    | Apps using Turnkey-managed wallet accounts                                                          |
+| [`privy`](/docs/api/privy)             | `@privy-io/js-sdk-core` sessions   | Apps using Privy auth and embedded wallets                                                          |
 | [`secp256k1`](/docs/api/secp256k1)     | In-process `secp256k1` private key | Server-side signers with a pinned key, or development with a random in-storage key                  |
 | [`local`](/docs/api/local)             | Arbitrary keys                     | Custom signing and key management                                                                   |
 
@@ -37,6 +38,12 @@ Adapters control how accounts are created and managed. Pass an adapter to `Provi
     icon="lucide:shield"
     to="/docs/api/turnkey"
     title="turnkey"
+  />
+  <Card
+    description="Uses Privy auth and embedded wallets"
+    icon="lucide:shield"
+    to="/docs/api/privy"
+    title="privy"
   />
   <Card
     description="Signs in-process with a secp256k1 private key (also exported as dangerous_secp256k1)"

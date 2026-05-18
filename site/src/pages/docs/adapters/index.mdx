@@ -16,8 +16,9 @@ Adapters decide where keys live, who runs authentication, and how account reques
 | [Tempo Wallet](/docs/adapters/tempo-wallet) | Tempo Wallet        | Apps that want a universal wallet without owning signing infrastructure.            |
 | [WebAuthn (Passkeys)](/docs/adapters/webauthn) | Your app origin  | Teams that want domain-bound passkeys and Tempo account features.                   |
 | [Turnkey](/docs/adapters/turnkey)           | Turnkey             | Apps that want Turnkey to own key custody and authentication.                       |
+| [Privy](/docs/adapters/privy)               | Privy               | Apps that want Privy auth and embedded wallets with Tempo account features.         |
 | [Private Key](/docs/adapters/private-key)   | Your environment    | Server-side signers with a pinned key, or development with a random in-storage key. |
-| [Custom](/docs/adapters/custom)             | Your infrastructure | Privy, AWS KMS, internal signers, and hosted wallet products.                       |
+| [Custom](/docs/adapters/custom)             | Your infrastructure | AWS KMS, internal signers, and other hosted wallet products.                        |
 
 ```mermaid
 sequenceDiagram
@@ -54,6 +55,12 @@ sequenceDiagram
     icon='<svg viewBox="-18 -12 50 50" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="m8.023 11.354 6.518 14.253H0l6.518-14.253a.828.828 0 0 1 1.505 0ZM7.27 9.145a4.576 4.576 0 0 0 4.579-4.572A4.576 4.576 0 0 0 7.269 0a4.576 4.576 0 0 0-4.578 4.573A4.576 4.576 0 0 0 7.27 9.145Z" fill="currentColor"/></svg>'
     to="/docs/adapters/turnkey"
     title="Turnkey"
+  />
+  <Card
+    description="Accounts backed by Privy auth and embedded wallets"
+    icon="lucide:shield"
+    to="/docs/adapters/privy"
+    title="Privy"
   />
   <Card
     description="Direct private key accounts"

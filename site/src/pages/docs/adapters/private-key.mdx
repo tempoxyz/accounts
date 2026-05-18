@@ -93,7 +93,7 @@ const provider = Provider.create({
 
 ### When Not to Use This
 
-Do not use the generated browser form for production end-user wallets unless your threat model explicitly accepts plaintext key persistence. If you need domain-bound user authentication and non-exportable keys, prefer [WebAuthn](/docs/adapters/webauthn). If you want hosted custody and policy controls, prefer [Turnkey](/docs/adapters/turnkey).
+Do not use the generated browser form for production end-user wallets unless your threat model explicitly accepts plaintext key persistence. If you need domain-bound user authentication and non-exportable keys, prefer [WebAuthn](/docs/adapters/webauthn). If you want hosted custody or auth-managed embedded wallets, prefer [Turnkey](/docs/adapters/turnkey) or [Privy](/docs/adapters/privy).
 
 Also avoid sharing one long-lived private key across unrelated environments. Development, staging, production, and CI should each use different keys so a leak in one environment does not compromise the others.
 
