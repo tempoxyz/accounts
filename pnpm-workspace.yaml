@@ -69,6 +69,7 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 overrides:
   accounts: 'workspace:*'
   '@sinclair/typebox': '^0.34.0'
+  'brace-expansion@>=5.0.0 <5.0.6': '5.0.6'
   viem: 'catalog:'
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
@@ -86,6 +87,7 @@ overrides:
   tar: '7.5.15'
   vite-plus: 'catalog:'
   vp: 'catalog:'
+  'ws@>=8.0.0 <8.20.1': '8.20.1'
   wrangler: 'catalog:'
 
 packages:
