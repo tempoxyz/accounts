@@ -74,7 +74,7 @@ export function turnkey<const client extends turnkey.Client>(
     let turnkeyClient_promise: Promise<client> | undefined
     let expiry_timeout: ReturnType<typeof setTimeout> | undefined
     let restore_promise: Promise<void> | undefined
-    let walletAccounts: readonly turnkey.WalletAccount[] = []
+    let walletAccounts_cache: readonly turnkey.WalletAccount[] | undefined
 
     async function getTurnkeyClient(): Promise<client> {
       turnkeyClient_promise ??= (async () => {
@@ -135,6 +135,16 @@ export function turnkey<const client extends turnkey.Client>(
       )
     }
 
+    async function refreshWalletAccounts() {
+      walletAccounts_cache = await fetchWalletAccounts()
+      return walletAccounts_cache
+    }
+
+    async function getWalletAccounts() {
+      walletAccounts_cache ??= await fetchWalletAccounts()
+      return walletAccounts_cache
+    }
+
     function selectWalletAccounts(
       accounts: readonly turnkey.WalletAccount[],
       addresses: turnkey.AccountSelection,
@@ -158,7 +168,7 @@ export function turnkey<const client extends turnkey.Client>(
       if (expiry_timeout) clearTimeout(expiry_timeout)
       expiry_timeout = undefined
       restore_promise = undefined
-      walletAccounts = []
+      walletAccounts_cache = undefined
       store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
     }
 
@@ -185,7 +195,7 @@ export function turnkey<const client extends turnkey.Client>(
 
     async function restore() {
       await Store.waitForHydration(store)
-      if (walletAccounts.length > 0) return
+      if (walletAccounts_cache) return
       if (restore_promise) return await restore_promise
 
       restore_promise = (async () => {
@@ -196,21 +206,7 @@ export function turnkey<const client extends turnkey.Client>(
         const session = await getValidSession()
         if (!session) return
 
-        const restored = await fetchWalletAccounts()
-        walletAccounts = persisted
-          .map((account) =>
-            restored.find((walletAccount) =>
-              isAddressEqual(core_Address.from(walletAccount.address), account.address),
-            ),
-          )
-          .filter((account): account is turnkey.WalletAccount => !!account)
-
-        if (walletAccounts.length === 0) return
-
-        store.setState({
-          accounts: walletAccounts.map((account) => toStoreAccount(account)),
-          activeAccount: Math.min(state.activeAccount, walletAccounts.length - 1),
-        })
+        await refreshWalletAccounts()
       })()
 
       try {
@@ -225,24 +221,32 @@ export function turnkey<const client extends turnkey.Client>(
       if (!session) throw new ox_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
     }
 
-    async function accountForSigning(address: Address | undefined) {
+    async function getTurnkeyAccount(address: Address | undefined) {
       await restore()
       await requireSession()
 
-      const address_ = address ?? store.getState().accounts[store.getState().activeAccount]?.address
-      if (!address_) throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
+      const state = store.getState()
+      const address_ = address ?? state.accounts[state.activeAccount]?.address
+      if (!address_) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
 
-      const account = walletAccounts.find((account) =>
-        isAddressEqual(core_Address.from(account.address), address_),
-      )
-      if (account) return account
-
-      if (walletAccounts.length === 0)
+      if (state.accounts.length === 0)
         throw new ox_Provider.DisconnectedError({
           message: 'No Turnkey account connected.',
         })
 
-      throw new ox_Provider.UnauthorizedError({ message: `Account "${address_}" not found.` })
+      const connected = state.accounts.some((account) => isAddressEqual(account.address, address_))
+      if (!connected)
+        throw new ox_Provider.UnauthorizedError({ message: `Account "${address_}" not found.` })
+
+      const find = (accounts: readonly turnkey.WalletAccount[]) =>
+        accounts.find((account) => isAddressEqual(core_Address.from(account.address), address_))
+
+      const account = find(await getWalletAccounts())
+      if (account) return toTempoAccount(account)
+
+      throw new RpcResponse.InternalError({
+        message: `Connected Turnkey account "${address_}" was not found in fetched Turnkey wallet accounts. Reconnect with Turnkey.`,
+      })
     }
 
     function signatureToHex(value: turnkey.SignatureResponse): Hex.Hex {
@@ -304,7 +308,7 @@ export function turnkey<const client extends turnkey.Client>(
     }
 
     async function signTransaction(parameters: Adapter.signTransaction.Parameters) {
-      const account = toTempoAccount(await accountForSigning(parameters.from))
+      const account = await getTurnkeyAccount(parameters.from)
       const { feePayer, ...rest } = parameters
       const viemClient = getClient({
         chainId: parameters.chainId,
@@ -370,11 +374,11 @@ export function turnkey<const client extends turnkey.Client>(
                 },
               })
           await requireSession()
-          walletAccounts = selectWalletAccounts(await fetchWalletAccounts(), addresses)
+          const accounts = selectWalletAccounts(await refreshWalletAccounts(), addresses)
           restore_promise = undefined
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters.digest
-          const account = walletAccounts[0]
+          const account = accounts[0]
           const keyAuthorization = authorizeAccessKey
             ? account
               ? await AccessKey.authorize({
@@ -387,7 +391,7 @@ export function turnkey<const client extends turnkey.Client>(
             : undefined
 
           return {
-            accounts: walletAccounts.map((account, index) =>
+            accounts: accounts.map((account, index) =>
               toStoreAccount(account, index === 0 ? parameters.name : undefined),
             ),
             ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
@@ -414,11 +418,11 @@ export function turnkey<const client extends turnkey.Client>(
           const turnkeyClient = await getTurnkeyClient()
           const addresses = await options.loadAccounts({ client: turnkeyClient, parameters })
           await requireSession()
-          walletAccounts = selectWalletAccounts(await fetchWalletAccounts(), addresses)
+          const accounts = selectWalletAccounts(await refreshWalletAccounts(), addresses)
           restore_promise = undefined
 
           const digest = personalSign ? hashMessage(personalSign.message) : parameters?.digest
-          const account = walletAccounts[0]
+          const account = accounts[0]
           const keyAuthorization =
             authorizeAccessKey && account
               ? await AccessKey.authorize({
@@ -430,7 +434,7 @@ export function turnkey<const client extends turnkey.Client>(
               : undefined
 
           return {
-            accounts: walletAccounts.map((account) => toStoreAccount(account)),
+            accounts: accounts.map((account) => toStoreAccount(account)),
             ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
             ...(keyAuthorization ? { keyAuthorization } : {}),
             signature:
@@ -444,22 +448,20 @@ export function turnkey<const client extends turnkey.Client>(
           }
         },
         async authorizeAccessKey(parameters) {
-          const account = await accountForSigning(undefined)
+          const account = await getTurnkeyAccount(undefined)
           const keyAuthorization = await AccessKey.authorize({
-            account: toTempoAccount(account),
+            account,
             chainId: getClient().chain.id,
             parameters,
             store,
           })
-          return { keyAuthorization, rootAddress: core_Address.from(account.address) }
+          return { keyAuthorization, rootAddress: account.address }
         },
         async signPersonalMessage(parameters) {
-          const turnkeyClient = await getTurnkeyClient()
-          const account = await accountForSigning(parameters.address)
-          return await signPayload({
-            payload: hashMessage({ raw: parameters.data }),
-            turnkeyClient,
-            walletAccount: account,
+          return await (
+            await getTurnkeyAccount(parameters.address)
+          ).sign({
+            hash: hashMessage({ raw: parameters.data }),
           })
         },
         async signTransaction(parameters) {
@@ -485,18 +487,16 @@ export function turnkey<const client extends turnkey.Client>(
           return await signTransaction(parameters)
         },
         async signTypedData(parameters) {
-          const turnkeyClient = await getTurnkeyClient()
-          const account = await accountForSigning(parameters.address)
           const typedData = JSON.parse(parameters.data) as {
             domain: Record<string, unknown>
             message: Record<string, unknown>
             primaryType: string
             types: Record<string, unknown>
           }
-          return await signPayload({
-            payload: hashTypedData(typedData as never),
-            turnkeyClient,
-            walletAccount: account,
+          return await (
+            await getTurnkeyAccount(parameters.address)
+          ).sign({
+            hash: hashTypedData(typedData as never),
           })
         },
         async sendTransaction(parameters) {

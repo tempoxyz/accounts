@@ -166,7 +166,7 @@ export function define(meta: Meta, fn: SetupFn): Adapter {
 
 /** Spreads decoded params. */
 export type ActionRequest<item extends Schema.Item> =
-  Schema.Decoded<item>['params'] extends readonly [infer first] ? first : never
+  NonNullable<Schema.Decoded<item>['params']> extends readonly [infer first] ? first : never
 
 export declare namespace getClient {
   type Options = {

@@ -1,0 +1,191 @@
+---
+title: Swaps
+description: Open the Tempo swap flow from a connected account with optional pre-filled intent fields.
+---
+
+import { Cards, Card } from 'vocs'
+import { ConnectAccount } from '../../../components/ConnectAccount'
+import { Demo, DemoReset } from '../../../components/Demo'
+import { SwapTokens } from '../../../components/SwapTokens'
+import * as Steps from '../../../components/Steps'
+
+# Swaps
+
+Open the Tempo swap flow from a connected account using the [Tempo Accounts SDK](/docs).
+
+Use swaps when your app needs a user to exchange one supported token for another. The SDK calls [`wallet_swap`](/docs/rpc/wallet_swap), opens the UI with any fields you pre-fill, and returns a receipt after the user confirms.
+
+You can pre-fill the token pair, amount, swap direction, and slippage. Omit fields when the user should choose them in the UI.
+
+## Demo
+
+By the end of this guide you'll have a button that opens a pre-filled swap from pathUSD to alphaUSD. The full example lives in [`examples/swaps`](https://github.com/tempoxyz/accounts/tree/main/examples/swaps).
+
+<Demo
+  title="Swap Tokens"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/swaps"
+  headerAction={<DemoReset />}
+  className="flex flex-col gap-3"
+>
+  <Steps.Step
+    label="Create an account, or use an existing one."
+    action={<ConnectAccount />}
+  />
+  <SwapTokens />
+</Demo>
+
+## Walkthrough
+
+::::steps
+
+### Connect an Account
+
+Follow the [Connect Accounts](/docs/guides/connect-accounts) guide to let the user sign in. Swaps run after the user has a connected account that can confirm the request.
+
+### Open the Swap Flow
+
+Call [`Hooks.wallet.useSwap`](https://wagmi.sh/tempo/hooks/wallet.useSwap) and pass the fields your app already knows. The user still reviews and confirms the swap in the UI.
+
+```tsx twoslash [Swap.tsx]
+// @noErrors
+import { Hooks } from 'wagmi/tempo'
+
+const pathUsd = '0x20c0000000000000000000000000000000000000'
+const alphaUsd = '0x20c0000000000000000000000000000000000001'
+
+export function Swap() {
+  const swap = Hooks.wallet.useSwap()
+
+  return (
+    <button
+      disabled={swap.isPending}
+      onClick={() =>
+        swap.mutate({
+          amount: '1',
+          pairToken: alphaUsd,
+          slippage: 0.01,
+          token: pathUsd,
+          type: 'sell',
+        })
+      }
+    >
+      {swap.isPending ? 'Opening...' : 'Sell 1 pathUSD'}
+    </button>
+  )
+}
+```
+
+### Show the Result
+
+When the swap succeeds, the hook returns the submitted receipt. Use the receipt hash to link to the block explorer or refresh balances in your app.
+
+```tsx twoslash [Swap.tsx]
+// @noErrors
+import { tempoModerato } from 'wagmi/chains'
+import { Hooks } from 'wagmi/tempo'
+
+export function Swap() {
+  const swap = Hooks.wallet.useSwap()
+
+  return (
+    <div>
+      <button onClick={() => swap.mutate({ /* ... */ })}>Swap</button>
+      {swap.isSuccess && (
+        <a
+          href={`${tempoModerato.blockExplorers.default.url}/tx/${swap.data.receipt.transactionHash}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          See receipt
+        </a>
+      )}
+    </div>
+  )
+}
+```
+
+::::
+
+## Best Practices
+
+### Choose the Direction Carefully
+
+Use `type: 'sell'` when `amount` is the exact amount of `token` the user is selling. Use `type: 'buy'` when `amount` is the exact amount of `token` the user wants to receive.
+
+```tsx twoslash [Swap.tsx]
+// @noErrors
+swap.mutate({
+  amount: '1',
+  pairToken: alphaUsd,
+  token: pathUsd,
+  type: 'sell',
+})
+```
+
+### Keep Slippage Explicit
+
+Set `slippage` only when your UI explains the tolerance to the user. The value is a decimal fraction, so `0.01` means 1%.
+
+```tsx twoslash [Swap.tsx]
+// @noErrors
+swap.mutate({
+  amount: '1',
+  pairToken: alphaUsd,
+  slippage: 0.01,
+  token: pathUsd,
+  type: 'sell',
+})
+```
+
+### Surface Pending and Error State
+
+Disable duplicate submissions while the wallet prompt is open, and surface `swap.error` when the request is rejected or fails.
+
+```tsx twoslash [Swap.tsx]
+// @noErrors
+import { Hooks } from 'wagmi/tempo'
+
+export function Swap() {
+  const swap = Hooks.wallet.useSwap()
+
+  return (
+    <div>
+      <button disabled={swap.isPending} onClick={() => swap.mutate({ /* ... */ })}>
+        {swap.isPending ? 'Opening...' : 'Swap'}
+      </button>
+      {swap.error && (
+        <pre>{`${swap.error.name}: ${swap.error.message}`}</pre>
+      )}
+    </div>
+  )
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    description="Run the complete swaps example locally."
+    to="https://github.com/tempoxyz/accounts/tree/main/examples/swaps"
+    icon="lucide:arrow-left-right"
+    title="Swaps Example"
+  />
+  <Card
+    description="Read the low-level request and response shape for the swap flow."
+    to="/docs/rpc/wallet_swap"
+    icon="lucide:braces"
+    title="wallet_swap"
+  />
+  <Card
+    description="Send stablecoin transfers from a connected account."
+    to="/docs/guides/transfers"
+    icon="lucide:send"
+    title="Transfers"
+  />
+  <Card
+    description="Sponsor transaction fees for your users so account actions are feeless from their perspective."
+    to="/docs/guides/fee-sponsorship"
+    icon="lucide:badge-dollar-sign"
+    title="Fee Sponsorship"
+  />
+</Cards>

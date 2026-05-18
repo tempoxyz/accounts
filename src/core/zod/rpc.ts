@@ -746,16 +746,23 @@ export namespace wallet_switchEthereumChain {
 export namespace wallet_deposit {
   export const schema = Schema.defineItem({
     method: z.literal('wallet_deposit'),
-    params: z.readonly(
-      z.tuple([
-        z.object({
-          address: z.optional(u.address()),
-          chainId: z.optional(u.number()),
-          displayName: z.optional(z.string()),
-          token: z.optional(u.address()),
-          value: z.optional(z.string()),
-        }),
-      ]),
+    params: z.optional(
+      z.readonly(
+        z.tuple([
+          z.object({
+            address: z.optional(u.address()),
+            /** Human-readable amount to pre-fill (e.g. `"50"`). */
+            amount: z.optional(z.string()),
+            chainId: z.optional(u.number()),
+            displayName: z.optional(z.string()),
+            /**
+             * Token to pre-fill, accepted as either a contract address or a
+             * supported deposit token symbol (case-insensitive, e.g. `"USDC"`).
+             */
+            token: z.optional(z.union([u.address(), z.string()])),
+          }),
+        ]),
+      ),
     ),
     returns: z.optional(
       z.object({

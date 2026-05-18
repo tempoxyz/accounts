@@ -3,7 +3,6 @@ auditConfig:
     - GHSA-rmmr-r34h-pfm5 # affected versions have been removed from npm.
 
 allowBuilds:
-  bufferutil: true
   cloudflared: true
   cpu-features: true
   es5-ext: true
@@ -12,7 +11,6 @@ allowBuilds:
   sharp: true
   simple-git-hooks: true
   ssh2: true
-  utf-8-validate: true
   workerd: true
 
 blockExoticSubdeps: true
@@ -69,6 +67,7 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 overrides:
   accounts: 'workspace:*'
   '@sinclair/typebox': '^0.34.0'
+  'brace-expansion@>=5.0.0 <5.0.6': '5.0.6'
   viem: 'catalog:'
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
@@ -87,6 +86,7 @@ overrides:
   tar: '7.5.15'
   vite-plus: 'catalog:'
   vp: 'catalog:'
+  'ws@>=8.0.0 <8.20.1': '8.20.1'
   wrangler: 'catalog:'
 
 packages:
@@ -110,8 +110,11 @@ trustPolicyExclude:
   - '@noble/curves@1.8.0'
   - '@noble/hashes@1.7.0'
   - chokidar@4.0.3
+  - jose@4.15.9
+  - react-device-detect@2.2.3
   - semver@6.3.1
   - slow-redact@0.3.2
+  - ua-parser-js@1.0.41
   - undici-types@6.19.8
 
 patchedDependencies:

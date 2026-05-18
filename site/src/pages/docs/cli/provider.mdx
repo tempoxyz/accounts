@@ -13,11 +13,11 @@ When `wallet_connect` or `wallet_authorizeAccessKey` runs, the provider:
 - prompts them to approve the access key
 - persists the resulting key under `keysPath` for re-use across CLI invocations
 
-Subsequent transaction signing happens locally with the managed key -- no further browser round-trip is required until the key expires.
+Subsequent transaction signing happens locally with the managed key — no further browser round-trip is required until the key expires.
 
 ## Usage
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create()
@@ -27,7 +27,7 @@ const provider = Provider.create()
 
 The CLI adapter requires `capabilities.authorizeAccessKey` on `wallet_connect` — the user must explicitly grant a scoped access key during the device-code ceremony.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 // @noErrors
 import { Expiry } from 'accounts'
 import { Provider } from 'accounts/cli'
@@ -63,7 +63,7 @@ await connect(client, { // [!code focus]
 
 Default Server Authentication configuration for `wallet_connect`. See [`Provider.auth`](/docs/api/provider#auth) for full semantics.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -78,7 +78,7 @@ const provider = Provider.create({
 
 Supported chains. The first chain is the default.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 import { tempo } from 'viem/chains'
 
@@ -94,7 +94,7 @@ const provider = Provider.create({
 
 Fee payer configuration. See [`Provider.feePayer`](/docs/api/provider#feepayer) for full semantics.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -111,7 +111,7 @@ Host URL for the device-code flow. The browser is opened at `${host}?code=<code>
 
 Designed to point at a service exposing the `CliAuth` handlers from `accounts/server`.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -126,7 +126,7 @@ const provider = Provider.create({
 
 Filesystem path for the managed access-key keyring. Generated keys, their authorizations, and expiry metadata are written to this TOML file so the CLI can re-use them across invocations.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -141,7 +141,7 @@ const provider = Provider.create({
 
 Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU).
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -152,19 +152,29 @@ const provider = Provider.create({
 ### mpp
 
 - **Type:** `boolean | Provider.mpp.Options`
-- **Default:** `false`
+- **Default:** `true`
 
-Enable [Machine Payment Protocol](https://mpp.dev) (mppx) support. Pass `true` to enable with defaults, or an options object to configure.
+Enable [Machine Payment Protocol](https://mpp.dev) (mppx) support. Enabled by default — pass `false` to disable, or an options object to configure.
 
 :::info
-The CLI provider defaults `mpp.mode` to `'pull'` — the CLI signs transactions locally and forwards the serialized payload to the server, which is the safest mode when the host environment owns the broadcasting endpoint.
+For CLI tools that need to control the payment mode, use `mpp: { mode: 'pull' }` so the CLI signs transactions locally and forwards the serialized payload to the server.
 :::
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
-  mpp: true, // [!code focus]
+  mpp: false, // [!code focus]
+})
+```
+
+```ts twoslash [cli.ts]
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  mpp: { // [!code focus]
+    mode: 'pull', // [!code focus]
+  }, // [!code focus]
 })
 ```
 
@@ -175,7 +185,7 @@ const provider = Provider.create({
 
 Display name of the provider.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -190,7 +200,7 @@ const provider = Provider.create({
 
 Browser opener override. Useful for headless environments, CI, or to intercept the URL before opening (e.g. to print it to the terminal).
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -207,7 +217,7 @@ const provider = Provider.create({
 
 Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -222,7 +232,7 @@ const provider = Provider.create({
 
 How often (in milliseconds) the CLI polls the device-code endpoint while waiting for the user to approve the request in the browser.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -237,7 +247,7 @@ const provider = Provider.create({
 
 Reverse DNS identifier.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -252,7 +262,7 @@ const provider = Provider.create({
 
 Base URL for a wallet relay endpoint. See [`Provider.relay`](/docs/api/provider#relay) for full semantics.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -267,7 +277,7 @@ const provider = Provider.create({
 
 Storage adapter for persistence. Defaults to an in-memory map; managed access keys are persisted separately to `keysPath`.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 import { Storage } from 'accounts'
 
@@ -283,7 +293,7 @@ const provider = Provider.create({
 
 Use testnet. When `true`, the default chain will be the first testnet chain in `chains`.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -298,7 +308,7 @@ const provider = Provider.create({
 
 How long (in milliseconds) the CLI waits for the user to complete the device-code ceremony before throwing a timeout error.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
@@ -313,7 +323,7 @@ const provider = Provider.create({
 
 Per-chain transports keyed by chain ID. Layered on top of `relay`. See [`Provider.transports`](/docs/api/provider#transports) for full semantics.
 
-```ts twoslash
+```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 import { http } from 'viem'
 import { tempo } from 'viem/chains'

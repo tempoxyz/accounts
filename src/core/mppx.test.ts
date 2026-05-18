@@ -66,7 +66,7 @@ describe('mppx integration', () => {
     `)
   })
 
-  test('pull mode publishes a pending access key on first charge', async () => {
+  test('pull mode publishes a pending access key authorization', async () => {
     const provider = Provider.create({
       adapter: headlessWebAuthn(),
       chains: [chain],
@@ -94,7 +94,7 @@ describe('mppx integration', () => {
     expect(metadata.isRevoked).toMatchInlineSnapshot(`false`)
   })
 
-  test('pull mode keeps pending access key after failed verification', async () => {
+  test('pull mode keeps access key authorization pending after failed verification', async () => {
     const failingServer = await createServer(async (req, res) => {
       if (req.headers.authorization) {
         res.writeHead(402, { 'Content-Type': 'application/json' })
@@ -122,13 +122,40 @@ describe('mppx integration', () => {
         method: 'wallet_authorizeAccessKey',
         params: [{ expiry: Expiry.days(1) }],
       })
+      const key = provider.store.getState().accessKeys[0]!
 
       const res = await fetch(`${failingServer.url}/fortune`)
       expect(res.status).toMatchInlineSnapshot(`402`)
       expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
+
+      const status = await provider.getAccessKeyStatus({ accessKey: key.address })
+      expect(status).toMatchInlineSnapshot(`"pending"`)
     } finally {
       await failingServer.closeAsync()
     }
+  })
+
+  test('push mode publishes pending access key authorization', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+      chains: [chain],
+      mpp: { mode: 'push' },
+    })
+    const address = await connect(provider)
+    await fund(address)
+
+    await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [{ expiry: Expiry.days(1) }],
+    })
+    const key = provider.store.getState().accessKeys[0]!
+
+    const res = await fetch(`${server.url}/fortune`)
+    expect(res.status).toMatchInlineSnapshot(`200`)
+    expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
+
+    const status = await provider.getAccessKeyStatus({ accessKey: key.address })
+    expect(status).toMatchInlineSnapshot(`"published"`)
   })
 })
 
