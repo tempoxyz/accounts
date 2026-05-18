@@ -60,35 +60,42 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
         </Button>
       }
     >
-      <div className="flex flex-wrap items-center gap-1.5 text-secondary">
-        <span>Balance</span>
-        {balanceAmount ? (
-          <Amount amount={balanceAmount} className="text-primary" maxDecimals={6} />
-        ) : (
-          <span className="text-primary">{balance.isLoading ? 'Loading...' : '-'}</span>
-        )}
-      </div>
-      {transfer.isSuccess ? (
-        <div className="text-[14px] flex flex-col gap-1.5 mt-2">
-          <div className="inline-flex items-center gap-x-1.5">
-            <LucideCircleCheck aria-hidden className="size-4 text-success shrink-0" />
-            <span className="text-success font-medium">Sponsored transfer sent.</span>
-            <a
-              href={`${tempoModerato.blockExplorers.default.url}/tx/${transfer.data.receipt.transactionHash}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-info hover:underline"
-            >
-              See receipt
-            </a>
+      <div className="w-full max-w-[560px] text-[14px]">
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-6 text-secondary">
+          <span>Balance</span>
+          <div className="min-w-0 justify-self-end text-right">
+            {balanceAmount ? (
+              <Amount amount={balanceAmount} align="right" className="text-primary" maxDecimals={6} />
+            ) : (
+              <span className="text-primary">{balance.isLoading ? 'Loading...' : '-'}</span>
+            )}
           </div>
-          {transfer.data.receipt.feePayer ? (
-            <div className="text-secondary">
-              Fees paid by <code>{transfer.data.receipt.feePayer}</code>
-            </div>
-          ) : null}
         </div>
-      ) : null}
+        {transfer.isSuccess ? (
+          <div className="flex flex-col gap-1.5 mt-2">
+            <div className="inline-flex items-center gap-x-1.5">
+              <LucideCircleCheck aria-hidden className="size-4 text-success shrink-0" />
+              <span className="text-success font-medium">Sponsored transfer sent.</span>
+              <a
+                href={`${tempoModerato.blockExplorers.default.url}/tx/${transfer.data.receipt.transactionHash}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-info hover:underline"
+              >
+                See receipt
+              </a>
+            </div>
+            {transfer.data.receipt.feePayer ? (
+              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-6 text-secondary">
+                <span>Fees paid by</span>
+                <span className="min-w-0 truncate text-right text-primary" title={transfer.data.receipt.feePayer}>
+                  {transfer.data.receipt.feePayer}
+                </span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
       {transfer.error ? (
         <pre className="text-danger overflow-auto">{`${transfer.error.name}: ${transfer.error.message}`}</pre>
       ) : null}
