@@ -779,8 +779,10 @@ export declare namespace privy {
   }
 
   /**
-   * Embedded-wallet shape returned from `createAccount`/`loadAccounts`. The adapter
-   * calls `provider.request({ method: 'secp256k1_sign', params: [hash] })` for signing.
+   * Materialized Privy embedded wallet — the `{ address, provider }` shape the
+   * adapter caches internally after calling
+   * `client.embeddedWallet.getEthereumProvider`. The adapter calls
+   * `provider.request({ method: 'secp256k1_sign', params: [hash] })` for signing.
    */
   type EmbeddedWallet = {
     address: string

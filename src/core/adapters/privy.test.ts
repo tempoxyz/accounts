@@ -401,8 +401,6 @@ describe('privy', () => {
     const { adapter, store } = setup({
       restoreError: Object.assign(new Error('boom'), { code: 'session_expired' }),
     })
-    // Let the boot-time `void restore()` settle against an empty store first.
-    await new Promise((resolve) => setTimeout(resolve, 150))
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
