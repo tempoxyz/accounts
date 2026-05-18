@@ -122,12 +122,10 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
               </div>
             ) : null}
             {transfer.data.receipt.feePayer ? (
-              <div className="flex justify-end text-primary">
-                <span
-                  className="min-w-0 font-medium text-right text-primary"
-                  title={transfer.data.receipt.feePayer}
-                >
-                  By {formatAddress(transfer.data.receipt.feePayer)}
+              <div className="w-full text-right">
+                <span className="text-secondary">By </span>
+                <span className="font-medium text-primary" title={transfer.data.receipt.feePayer}>
+                  {formatAddress(transfer.data.receipt.feePayer)}
                 </span>
               </div>
             ) : null}
