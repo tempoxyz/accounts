@@ -14,7 +14,7 @@ import * as Steps from './Steps.js'
 const pathUsd = '0x20c0000000000000000000000000000000000000' as const
 const pathUsdDecimals = 6
 const pathUsdSymbol = 'pathUSD'
-const collectionCheckMs = 10_000
+const subscriptionPeriodMs = 10_000
 
 function toPathUsdAmount(value: bigint) {
   return {
@@ -28,7 +28,7 @@ function toPathUsdAmount(value: bigint) {
 function getNextRenewalAt(receipt: Receipt.Receipt) {
   const timestamp = Date.parse(receipt.timestamp)
   if (!Number.isFinite(timestamp)) return undefined
-  return timestamp + collectionCheckMs
+  return timestamp + subscriptionPeriodMs
 }
 
 export function SubscriptionStepLabel(props: {
@@ -197,7 +197,7 @@ function CollectStep(props: {
     onSettled: (data) => {
       setNow(Date.now())
       setNextCollectAt(
-        data?.receipt ? getNextRenewalAt(data.receipt) : Date.now() + collectionCheckMs,
+        data?.receipt ? getNextRenewalAt(data.receipt) : Date.now() + subscriptionPeriodMs,
       )
     },
   })
@@ -236,8 +236,8 @@ function CollectStep(props: {
         <div className="text-secondary">
           {receipt
             ? collect.isPending
-              ? 'Checking the collection route.'
-              : `Next collection check in ${secondsUntilCollect ?? 0}s.`
+              ? 'Collecting the next period.'
+              : `Next collection in ${secondsUntilCollect ?? 0}s.`
             : 'Subscribe first.'}
         </div>
         {collect.data ? (

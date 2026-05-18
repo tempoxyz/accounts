@@ -1,4 +1,4 @@
-import { renewSubscription } from '../../../subscriptions.js'
+import { subscriptions } from '../../../subscriptions.js'
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   if (typeof subscriptionId !== 'string')
     return Response.json({ error: '`subscriptionId` is required.' }, { status: 400 })
 
-  const result = await renewSubscription(subscriptionId)
+  const result = await subscriptions.tempo.subscription.renew({ subscriptionId })
   return Response.json({
     receipt: result?.receipt ?? null,
     renewed: result !== null,

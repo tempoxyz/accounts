@@ -7,7 +7,7 @@ import { tempoModerato } from 'wagmi/chains'
 import { Hooks } from 'wagmi/tempo'
 
 const pathUsd = '0x20c0000000000000000000000000000000000000' as const
-const collectionCheckMs = 10_000
+const subscriptionPeriodMs = 10_000
 
 export default function App() {
   const { address, status } = useConnection()
@@ -19,7 +19,7 @@ export default function App() {
         recurring pathUSD subscription, and the SDK auto-fulfills the{' '}
         <code>402 Payment Required</code> challenge by signing a recurring access key authorization
         with the connected account. Subsequent requests within the billing period reuse the active
-        subscription, and the server can collect the next payment when the period elapses.
+        subscription, and the server renews it automatically when the period elapses.
       </p>
 
       <h2>Connection</h2>
@@ -129,13 +129,20 @@ function Subscribe({ address }: { address: `0x${string}` }) {
   return (
     <div>
       <p>
-        $0.01 / day for unlimited articles. The first call prompts you to authorize a recurring
-        access key; later calls within the period skip the on-chain transfer and the wallet prompt.
+        $0.01 / 10 seconds for unlimited articles. The first call prompts you to authorize a
+        recurring access key; later calls within the period skip the on-chain transfer and the
+        wallet prompt.
       </p>
-      <button type="button" disabled={subscription.isPending} onClick={() => subscription.mutate()}>
+      <button
+        type="button"
+        disabled={subscription.isPending}
+        onClick={() => subscription.mutate()}
+      >
         {subscription.isPending ? 'Subscribing...' : 'GET /api/articles'}
       </button>
-      {subscription.error && <pre style={{ color: 'red' }}>{formatError(subscription.error)}</pre>}
+      {subscription.error && (
+        <pre style={{ color: 'red' }}>{formatError(subscription.error)}</pre>
+      )}
       {subscription.data?.receipt && (
         <pre>{stringify({ receipt: subscription.data.receipt }, null, 2)}</pre>
       )}
@@ -181,8 +188,8 @@ function CollectPayment({ receipt }: { receipt: Receipt.Receipt | undefined }) {
       {currentReceipt?.subscriptionId ? (
         <p>
           {isDue
-            ? 'Checking the collection route now.'
-            : `Checking collection in ${secondsUntilRenewal ?? 0}s. Early collection returns nothing due.`}
+            ? 'Subscription is due. Click collect to charge the next period.'
+            : `Subscription due in ${secondsUntilRenewal ?? 0}s. You can click early to see that no renewal is needed yet.`}
         </p>
       ) : (
         <p>Subscribe once, then collect the next period from the server.</p>
@@ -199,7 +206,9 @@ function CollectPayment({ receipt }: { receipt: Receipt.Receipt | undefined }) {
       >
         {collection.isPending ? 'Collecting...' : 'Collect subscription'}
       </button>
-      {collection.error && <pre style={{ color: 'red' }}>{formatError(collection.error)}</pre>}
+      {collection.error && (
+        <pre style={{ color: 'red' }}>{formatError(collection.error)}</pre>
+      )}
       {collection.data !== undefined && (
         <pre>{stringify({ collection: collection.data }, null, 2)}</pre>
       )}
@@ -210,7 +219,7 @@ function CollectPayment({ receipt }: { receipt: Receipt.Receipt | undefined }) {
 function getNextRenewalAt(receipt: Receipt.Receipt) {
   const timestamp = Date.parse(receipt.timestamp)
   if (!Number.isFinite(timestamp)) return undefined
-  return timestamp + collectionCheckMs
+  return timestamp + subscriptionPeriodMs
 }
 
 type CollectResponse = {
