@@ -12,7 +12,7 @@ const wagmiStorage = createStorage({
 
 export const wagmiConfig: Config = createConfig({
   chains: [tempoModerato, tempo],
-  connectors: [tempoWallet({ mpp: true, storage: accountsStorage })],
+  connectors: [tempoWallet({ storage: accountsStorage, testnet: true })],
   multiInjectedProviderDiscovery: false,
   storage: wagmiStorage,
   transports: {
@@ -57,17 +57,6 @@ export const feeSponsorshipWagmiConfig: Config = createConfig({
       testnet: true,
     }),
   ],
-  multiInjectedProviderDiscovery: false,
-  storage: wagmiStorage,
-  transports: {
-    [tempoModerato.id]: http(),
-    [tempo.id]: http(),
-  },
-})
-
-export const subscriptionsWagmiConfig: Config = createConfig({
-  chains: [tempoModerato, tempo],
-  connectors: [tempoWallet({ storage: accountsStorage, testnet: true })],
   multiInjectedProviderDiscovery: false,
   storage: wagmiStorage,
   transports: {
