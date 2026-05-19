@@ -133,16 +133,10 @@ function Subscribe({ address }: { address: `0x${string}` }) {
         recurring access key; later calls within the period skip the on-chain transfer and the
         wallet prompt.
       </p>
-      <button
-        type="button"
-        disabled={subscription.isPending}
-        onClick={() => subscription.mutate()}
-      >
+      <button type="button" disabled={subscription.isPending} onClick={() => subscription.mutate()}>
         {subscription.isPending ? 'Subscribing...' : 'GET /api/articles'}
       </button>
-      {subscription.error && (
-        <pre style={{ color: 'red' }}>{formatError(subscription.error)}</pre>
-      )}
+      {subscription.error && <pre style={{ color: 'red' }}>{formatError(subscription.error)}</pre>}
       {subscription.data?.receipt && (
         <pre>{stringify({ receipt: subscription.data.receipt }, null, 2)}</pre>
       )}
@@ -206,9 +200,7 @@ function CollectPayment({ receipt }: { receipt: Receipt.Receipt | undefined }) {
       >
         {collection.isPending ? 'Collecting...' : 'Collect subscription'}
       </button>
-      {collection.error && (
-        <pre style={{ color: 'red' }}>{formatError(collection.error)}</pre>
-      )}
+      {collection.error && <pre style={{ color: 'red' }}>{formatError(collection.error)}</pre>}
       {collection.data !== undefined && (
         <pre>{stringify({ collection: collection.data }, null, 2)}</pre>
       )}
