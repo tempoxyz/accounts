@@ -1,6 +1,6 @@
 import { Hex, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
-import { encodeErrorResult, encodeFunctionResult } from 'viem'
+import { BaseError, encodeErrorResult, encodeFunctionResult } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
@@ -345,6 +345,27 @@ describe('create invalidation', () => {
       transaction?.fill({ chainId: 1, from: rootAddress }),
     ).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: network failed]`)
     expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
+  })
+})
+
+describe('isUnavailableError', () => {
+  test('default: recognizes unavailable key revert errors', () => {
+    expect(AccessKey.isUnavailableError(createRevert('KeyNotFound'))).toMatchInlineSnapshot(`true`)
+    expect(AccessKey.isUnavailableError(createRevert('KeyAlreadyRevoked'))).toMatchInlineSnapshot(
+      `true`,
+    )
+    expect(AccessKey.isUnavailableError(createRevert('SpendingLimitExceeded')))
+      .toMatchInlineSnapshot(`false`)
+  })
+
+  test('behavior: recognizes nested viem error data', () => {
+    const error = new BaseError('revoke failed', {
+      cause: Object.assign(new Error('execution reverted'), {
+        data: { errorName: 'KeyAlreadyRevoked' },
+      }),
+    })
+
+    expect(AccessKey.isUnavailableError(error)).toMatchInlineSnapshot(`true`)
   })
 })
 
