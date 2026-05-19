@@ -1132,15 +1132,11 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
           experimental_fallback: true,
           experimental_fallbackDelay: 0,
         }),
-      ).rejects.toThrowErrorMatchingInlineSnapshot(`
-        [TransactionExecutionError: An internal error was received.
-
-        Request Arguments:
-          from:  0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-
-        Details: plain send failure
-        Version: viem@2.49.3]
-      `)
+      ).rejects.toMatchObject({
+        name: 'TransactionExecutionError',
+        shortMessage: 'An internal error was received.',
+        details: 'plain send failure',
+      })
     })
   })
 
