@@ -98,6 +98,29 @@ describe('Encoded', () => {
     >()
   })
 
+  test('wallet_connect: showDeposit', () => {
+    type Capabilities = NonNullable<
+      NonNullable<Rpc.wallet_connect.Encoded['params']>[number]['capabilities']
+    >
+    type Register = Extract<Capabilities, { method: 'register' }>
+    type Login = Extract<Capabilities, { method?: 'login' | undefined }>
+    type ShowDeposit = Register['showDeposit']
+    type ShowDepositObject = Exclude<Exclude<ShowDeposit, boolean | undefined>, undefined>
+
+    expectTypeOf<ShowDeposit>().toMatchTypeOf<
+      | boolean
+      | {
+          amount?: string | undefined
+          displayName?: string | undefined
+          token?: string | undefined
+        }
+      | undefined
+    >()
+    expectTypeOf<Login>().not.toHaveProperty('showDeposit')
+    expectTypeOf<ShowDepositObject>().not.toHaveProperty('address')
+    expectTypeOf<ShowDepositObject>().not.toHaveProperty('chainId')
+  })
+
   test('wallet_connect: returns', () => {
     expectTypeOf<Rpc.wallet_connect.Encoded['returns']>().toHaveProperty('accounts')
     expectTypeOf<

@@ -56,9 +56,10 @@ function connectRequest(
   options: {
     accessKey?: typeof accessKey | undefined
     expiry?: number | undefined
+    showDeposit?: z.output<typeof CliAuth.createRequest>['showDeposit'] | undefined
   } = {},
 ) {
-  const { accessKey: key = accessKey, expiry: expiry_ = expiry } = options
+  const { accessKey: key = accessKey, expiry: expiry_ = expiry, showDeposit } = options
 
   return {
     method: 'wallet_connect',
@@ -70,6 +71,7 @@ function connectRequest(
             keyType: key.keyType,
             publicKey: key.publicKey,
           },
+          ...(showDeposit !== undefined ? { method: 'register' as const, showDeposit } : {}),
         },
       },
     ],
@@ -205,6 +207,52 @@ describe('Provider.create', () => {
             "http://service/cli-auth?code=ABCDEFGH",
           ],
         }
+      `)
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('behavior: forwards showDeposit through registration device-code requests', async () => {
+    const handler = createHandler()
+    const server = await createServer(handler.listener)
+    const pendingShowDeposit: z.output<typeof CliAuth.pendingResponse>['showDeposit'][] = []
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (url) => {
+          const code = new URL(url).searchParams.get('code')!
+          const response = await fetch(`${server.url}/cli-auth/pending/${code}`)
+          const pending = z.decode(CliAuth.pendingResponse, (await response.json()) as never)
+          pendingShowDeposit.push(pending.showDeposit)
+          await fetch(`${server.url}/cli-auth`, {
+            body: JSON.stringify(await authorizePending(server.url, code)),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          })
+        },
+        host: `${server.url}/cli-auth`,
+      })
+
+      await provider.request(
+        connectRequest({
+          showDeposit: {
+            amount: '50',
+            displayName: 'DoorDash',
+            token: 'USDC',
+          },
+        }),
+      )
+
+      expect(pendingShowDeposit).toMatchInlineSnapshot(`
+        [
+          {
+            "amount": "50",
+            "displayName": "DoorDash",
+            "token": "USDC",
+          },
+        ]
       `)
     } finally {
       await server.closeAsync()

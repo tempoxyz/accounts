@@ -428,6 +428,30 @@ export namespace wallet_connect {
   export const authorizeAccessKey = z.optional(wallet_authorizeAccessKey.parameters)
 
   /**
+   * Shows an optional funding prompt after `wallet_connect` registration succeeds.
+   *
+   * `true` uses the connected account as the deposit target. Object form
+   * pre-fills deposit UI hints. The deposit chain comes from the surrounding
+   * `wallet_connect` chain context.
+   */
+  export const showDeposit = z.optional(
+    z.union([
+      z.boolean(),
+      z.object({
+        /** Human-readable amount to pre-fill (e.g. `"50"`). */
+        amount: z.optional(z.string()),
+        /** Display name shown in the deposit UI (e.g. the app name). */
+        displayName: z.optional(z.string()),
+        /**
+         * Token to pre-fill, accepted as either a contract address or a
+         * supported deposit token symbol (case-insensitive, e.g. `"USDC"`).
+         */
+        token: z.optional(z.union([u.address(), z.string()])),
+      }),
+    ]),
+  )
+
+  /**
    * SIWE round-trip configuration. Bare string is shorthand for `{ url }`.
    *
    * - `auth: '/api/auth'` derives `${url}/challenge`, `${url}` (verify), `${url}/logout`.
@@ -484,6 +508,7 @@ export namespace wallet_connect {
           method: z.literal('register'),
           name: z.optional(z.string()),
           personalSign,
+          showDeposit,
           userId: z.optional(z.string()),
         }),
         z.object({
@@ -558,6 +583,7 @@ export namespace wallet_connect_strict {
   const authorizeAccessKey = z.optional(wallet_authorizeAccessKey_strict.parameters)
   const auth = wallet_connect.auth
   const personalSign = wallet_connect.personalSign
+  const showDeposit = wallet_connect.showDeposit
 
   export const parameters = z.object({
     capabilities: z.optional(
@@ -569,6 +595,7 @@ export namespace wallet_connect_strict {
           method: z.literal('register'),
           name: z.optional(z.string()),
           personalSign,
+          showDeposit,
           userId: z.optional(z.string()),
         }),
         z.object({

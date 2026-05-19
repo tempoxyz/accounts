@@ -178,6 +178,9 @@ export declare namespace getClient {
 }
 
 export declare namespace createAccount {
+  type Capabilities = NonNullable<NonNullable<Rpc.wallet_connect.Decoded['params']>[number]['capabilities']>
+  type ShowDeposit = Extract<Capabilities, { method: 'register' }>['showDeposit']
+
   type Parameters = {
     /** Grant an access key during the ceremony. */
     authorizeAccessKey?: authorizeAccessKey.Parameters | undefined
@@ -192,6 +195,8 @@ export declare namespace createAccount {
      * no extra prompt over a plain `wallet_connect` register.
      */
     personalSign?: { message: string } | undefined
+    /** Show the deposit flow after the connect ceremony succeeds. */
+    showDeposit?: ShowDeposit | undefined
     /** Opaque user identifier (e.g. for WebAuthn `user.id`). */
     userId?: string | undefined
   }

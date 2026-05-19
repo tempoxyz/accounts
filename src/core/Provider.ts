@@ -643,6 +643,9 @@ export function create(options: create.Options = {}): create.ReturnType {
                               ...(personalSign_request
                                 ? { personalSign: personalSign_request }
                                 : {}),
+                              ...(capabilities.showDeposit !== undefined
+                                ? { showDeposit: capabilities.showDeposit }
+                                : {}),
                             },
                             request,
                           )

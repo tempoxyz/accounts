@@ -216,9 +216,10 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       account?: Adapter.authorizeAccessKey.ReturnType['rootAddress'] | undefined
       authorizeAccessKey: Adapter.authorizeAccessKey.Parameters | undefined
       method: 'wallet_authorizeAccessKey' | 'wallet_connect'
+      showDeposit?: Adapter.createAccount.Parameters['showDeposit'] | undefined
     }) {
       const { host, redirectUri, open = defaultOpen } = options
-      const { account, authorizeAccessKey, method } = request
+      const { account, authorizeAccessKey, method, showDeposit } = request
 
       const managedKey =
         authorizeAccessKey && !authorizeAccessKey.publicKey && !authorizeAccessKey.address
@@ -251,6 +252,7 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
           ? { limits: authorizeAccessKey.limits.map((l) => ({ ...l, limit: String(l.limit) })) }
           : {}),
         pubKey: publicKey,
+        ...(showDeposit !== undefined ? { showDeposit } : {}),
         state,
       })
 
@@ -303,8 +305,29 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
             rootAddress: result.accountAddress,
           }
         },
-        async createAccount(params, request) {
-          return this.loadAccounts(params, request)
+        async createAccount(parameters) {
+          if (parameters?.digest)
+            throw unsupported(
+              '`wallet_connect` digest signing not supported by React Native adapter.',
+            )
+
+          const result = await authorize({
+            authorizeAccessKey: parameters?.authorizeAccessKey,
+            method: 'wallet_connect',
+            ...(parameters?.showDeposit !== undefined
+              ? { showDeposit: parameters.showDeposit }
+              : {}),
+          })
+
+          return {
+            accounts: [
+              {
+                address: result.accountAddress,
+                capabilities: {},
+              },
+            ],
+            keyAuthorization: KeyAuthorization.toRpc(result.keyAuthorization),
+          }
         },
         async loadAccounts(parameters) {
           if (parameters?.digest)
@@ -490,6 +513,7 @@ function buildAuthUrl(
     keyType?: string | undefined
     limits?: readonly { token: string; limit: string }[] | undefined
     pubKey: Hex.Hex
+    showDeposit?: Adapter.createAccount.Parameters['showDeposit'] | undefined
     state: string
   },
 ): string {
@@ -501,6 +525,9 @@ function buildAuthUrl(
   url.searchParams.set('chainId', String(params.chainId))
   if (typeof params.expiry !== 'undefined') url.searchParams.set('expiry', String(params.expiry))
   if (params.limits) url.searchParams.set('limits', JSON.stringify(params.limits))
+  if (params.showDeposit === true) url.searchParams.set('showDeposit', 'true')
+  else if (params.showDeposit)
+    url.searchParams.set('showDeposit', JSON.stringify(params.showDeposit))
   url.searchParams.set('callback', params.callback)
   url.searchParams.set('state', params.state)
   return url.toString()
