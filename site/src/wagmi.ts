@@ -21,17 +21,6 @@ export const wagmiConfig: Config = createConfig({
   },
 })
 
-/** Mainnet Wagmi config for the deposits guide demo. */
-export const depositsWagmiConfig: Config = createConfig({
-  chains: [tempo],
-  connectors: [tempoWallet({ storage: accountsStorage })],
-  multiInjectedProviderDiscovery: false,
-  storage: wagmiStorage,
-  transports: {
-    [tempo.id]: http(),
-  },
-})
-
 export const spendPermissionsWagmiConfig: Config = createConfig({
   chains: [tempoModerato, tempo],
   connectors: [

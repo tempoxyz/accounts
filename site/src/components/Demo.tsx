@@ -8,7 +8,6 @@ import LucideExternalLink from '~icons/lucide/external-link'
 import LucideRotateCcw from '~icons/lucide/rotate-ccw'
 
 import {
-  depositsWagmiConfig,
   feeSponsorshipWagmiConfig,
   spendPermissionsWagmiConfig,
   themingWagmiConfig,
@@ -19,7 +18,6 @@ import * as Steps from './Steps.js'
 const queryClient = new QueryClient()
 const wagmiConfigs = {
   default: wagmiConfig,
-  deposits: depositsWagmiConfig,
   feeSponsorship: feeSponsorshipWagmiConfig,
   spendPermissions: spendPermissionsWagmiConfig,
   theming: themingWagmiConfig,
