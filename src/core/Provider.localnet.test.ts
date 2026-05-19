@@ -418,6 +418,22 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         expect(capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
       })
 
+      test('default: object-form auth with url derives challenge and verify', async () => {
+        const provider = Provider.create({ adapter: adapter() })
+
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [{ capabilities: { method: 'register', auth: { url: authBase } } }],
+        })
+
+        const capabilities = result.accounts[0]!.capabilities
+        expect(capabilities.auth).toEqual({ token: expect.any(String) })
+        expect(capabilities.personalSign).toEqual({
+          message: expect.stringContaining('wants you to sign in'),
+        })
+        expect(capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
+      })
+
       test('default: object-form auth with explicit endpoints uses the override URLs', async () => {
         const provider = Provider.create({ adapter: adapter() })
 
@@ -437,6 +453,32 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         })
 
         expect(result.accounts[0]!.capabilities.auth).toEqual({ token: expect.any(String) })
+      })
+
+      test('default: forwarded auth without verify returns signature for downstream verify', async () => {
+        const provider = Provider.create({ adapter: adapter() })
+
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [
+            {
+              capabilities: {
+                method: 'register',
+                auth: {
+                  challenge: `${authBase}/challenge`,
+                  logout: `${authBase}/logout`,
+                },
+              },
+            },
+          ],
+        })
+
+        const capabilities = result.accounts[0]!.capabilities
+        expect(capabilities.auth).toBeUndefined()
+        expect(capabilities.personalSign).toEqual({
+          message: expect.stringContaining('wants you to sign in'),
+        })
+        expect(capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
       })
 
       test('error: verify endpoint returns 401 → InternalError; user already signed', async () => {

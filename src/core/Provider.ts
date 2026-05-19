@@ -568,6 +568,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                           auth_input as NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
                         )
                       : undefined
+                    if (auth_request && typeof auth_request === 'object' && !auth_request.challenge)
+                      throw new RpcResponse.InvalidParamsError({
+                        message:
+                          '`auth` capability must include either `url` or an explicit `challenge` endpoint.',
+                      })
                     if (auth_request && capabilities?.personalSign)
                       throw new RpcResponse.InvalidParamsError({
                         message:
@@ -712,7 +717,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                                       },
                                     }
                                   : {}),
-                                ...(signature && (!auth_request || auth_result)
+                                ...(signature && (!auth_request || auth_result || !verifyUrl)
                                   ? { signature }
                                   : {}),
                                 ...(email !== undefined ? { email } : {}),
@@ -1263,14 +1268,16 @@ function resolveAuthEndpoint(
 }
 
 /**
- * Pre-resolves the `auth` capability into its absolute, fully-explicit
- * object form. Run once at the dapp-side Provider so forwarding adapters
- * (dialog) carry absolute URLs to the wallet host — the wallet's
- * `window.location.origin` belongs to the wallet, not the dapp, and
- * cannot resolve relative paths correctly.
+ * Pre-resolves the `auth` capability into its absolute object form. Run
+ * once at the dapp-side Provider so forwarding adapters (dialog) carry
+ * absolute URLs to the wallet host — the wallet's `window.location.origin`
+ * belongs to the wallet, not the dapp, and cannot resolve relative paths
+ * correctly.
  *
- * `logout` is omitted when the input doesn't supply enough info to derive
- * one (it's optional in the protocol).
+ * Individual endpoints are omitted when the input doesn't supply enough
+ * info to derive them. `logout` is optional in the protocol; `verify` can
+ * also be omitted by wallet-host re-entry so the dapp-origin Provider runs
+ * verification and receives the session cookie.
  */
 function absolutizeAuth(
   auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
@@ -1294,10 +1301,6 @@ function absolutizeAuth(
 
 function assertSameAuthOrigin(auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>): void {
   if (typeof auth !== 'object') return
-  if (!auth.challenge || !auth.verify)
-    throw new RpcResponse.InvalidParamsError({
-      message: '`auth` requires both `challenge` and `verify` endpoints.',
-    })
   const urls = [auth.challenge, auth.verify, auth.logout].filter(
     (u): u is string => typeof u === 'string',
   )
