@@ -75,7 +75,7 @@ overrides:
   mermaid: '^11.14.1'
   ox: '~0.14.18'
   postcss: '8.5.14'
-  protobufjs: '7.5.7'
+  protobufjs: '7.5.8'
   '@protobufjs/utf8': '1.1.1'
   qs: '6.15.1'
   # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
