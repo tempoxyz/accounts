@@ -61,15 +61,60 @@ jobs:
       - name: Setup Docker
         uses: docker/setup-docker-action@b2189fbf2a6592b51fee7cdd93ee2bfaeba733db # v5.1.0
 
+      - name: Resolve Tempo image tag
+        id: tempo-image
+        env:
+          MATRIX_TAG: ${{ matrix.tag }}
+          VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+
+          async function main() {
+            const input = process.env.MATRIX_TAG
+            let tag = input
+
+            if (input.startsWith('http')) {
+              const headers = { 'content-type': 'application/json' }
+              if (process.env.VITE_RPC_CREDENTIALS)
+                headers.Authorization = `Basic ${Buffer.from(process.env.VITE_RPC_CREDENTIALS).toString('base64')}`
+
+              const response = await fetch(input, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: 1,
+                  method: 'web3_clientVersion',
+                  params: [],
+                }),
+              })
+              if (!response.ok) throw new Error(`web3_clientVersion failed: ${response.status}`)
+
+              const json = await response.json()
+              if (json.error) throw new Error(JSON.stringify(json.error))
+
+              const sha = String(json.result).match(/tempo\/v[\d.]+-([a-f0-9]+)\//)?.[1]
+              if (!sha) throw new Error(`Unable to resolve Tempo image tag from ${json.result}`)
+              tag = `sha-${sha}`
+            }
+
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=${tag}\n`)
+          }
+
+          main().catch((error) => {
+            console.error(error)
+            process.exit(1)
+          })
+          NODE
+
       - name: Resolve Tempo image digest
-        if: "!startsWith(matrix.tag, 'http')"
         id: tempo-digest
         run: |
-          digest=$(docker manifest inspect ghcr.io/tempoxyz/tempo:${{ matrix.tag }} -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .Descriptor.digest' 2>/dev/null || docker buildx imagetools inspect ghcr.io/tempoxyz/tempo:${{ matrix.tag }} --format '{{.Manifest.Digest}}')
+          digest=$(docker manifest inspect ghcr.io/tempoxyz/tempo:${{ steps.tempo-image.outputs.tag }} -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .Descriptor.digest' 2>/dev/null || docker buildx imagetools inspect ghcr.io/tempoxyz/tempo:${{ steps.tempo-image.outputs.tag }} --format '{{.Manifest.Digest}}')
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Cache Tempo Docker image
-        if: "!startsWith(matrix.tag, 'http')"
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         id: docker-cache
         with:
@@ -77,18 +122,18 @@ jobs:
           key: tempo-image-${{ steps.tempo-digest.outputs.digest }}
 
       - name: Load cached Tempo image
-        if: "!startsWith(matrix.tag, 'http') && steps.docker-cache.outputs.cache-hit == 'true'"
+        if: steps.docker-cache.outputs.cache-hit == 'true'
         run: docker load -i /tmp/tempo-image.tar
 
       - name: Pull and cache Tempo image
-        if: "!startsWith(matrix.tag, 'http') && steps.docker-cache.outputs.cache-hit != 'true'"
+        if: steps.docker-cache.outputs.cache-hit != 'true'
         run: |
-          docker pull ghcr.io/tempoxyz/tempo:${{ matrix.tag }}
-          docker save ghcr.io/tempoxyz/tempo:${{ matrix.tag }} -o /tmp/tempo-image.tar
+          docker pull ghcr.io/tempoxyz/tempo:${{ steps.tempo-image.outputs.tag }}
+          docker save ghcr.io/tempoxyz/tempo:${{ steps.tempo-image.outputs.tag }} -o /tmp/tempo-image.tar
 
       - name: Run tests
         run: pnpm test --bail=1
         env:
           CI: true
-          VITE_NODE_TAG: ${{ matrix.tag }}
+          VITE_NODE_TAG: ${{ steps.tempo-image.outputs.tag }}
           VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}
