@@ -290,3 +290,31 @@ describe('validateSearch', () => {
     expect(remote.rejectAll).not.toHaveBeenCalled()
   })
 })
+
+describe('respond', () => {
+  test('behavior: defer returns the provider result without sending a response', async () => {
+    const send = vi.fn()
+    const remote = Remote.create({
+      messenger: {
+        on: vi.fn(),
+        ready: vi.fn(),
+        send,
+      } as never,
+      provider: {
+        request: vi.fn(async () => ({ ok: true })),
+      } as never,
+    })
+
+    const result = await remote.respond(
+      { id: 1, jsonrpc: '2.0', method: 'wallet_connect' } as never,
+      { defer: true },
+    )
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "ok": true,
+      }
+    `)
+    expect(send).not.toHaveBeenCalled()
+  })
+})

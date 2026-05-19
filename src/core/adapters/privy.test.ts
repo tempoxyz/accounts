@@ -179,6 +179,20 @@ describe('privy', () => {
     `)
   })
 
+  test('error: secp256k1 access key requires external key material', async () => {
+    const { adapter, store } = setup()
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.authorizeAccessKey!(
+        { expiry: 123, keyType: 'secp256k1' },
+        { method: 'wallet_authorizeAccessKey', params: [{ expiry: 123, keyType: 'secp256k1' }] },
+      ),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: \`keyType: "secp256k1"\` requires externally generated key material; provide \`publicKey\` or \`address\`.]`,
+    )
+  })
+
   test('default: revokeAccessKey revokes with the connected Privy account', async () => {
     const { adapter, client, store } = setup()
     store.setState({

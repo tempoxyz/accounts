@@ -371,7 +371,7 @@ describe('isUnavailableError', () => {
 })
 
 describe('generate', () => {
-  test('default: returns access key and key pair', async () => {
+  test('default: returns p256 access key and key pair', async () => {
     const result = await AccessKey.generate()
 
     expect(result.accessKey.address).toMatch(/^0x[0-9a-f]{40}$/i)
@@ -395,6 +395,22 @@ describe('prepareAuthorization', () => {
     expect(result.keyAuthorization.expiry).toMatchInlineSnapshot(`123`)
     expect(result.keyAuthorization.type).toMatchInlineSnapshot(`"p256"`)
     expect(result.keyPair).toBeDefined()
+  })
+
+  test('error: rejects secp256k1 authorization without external key material', async () => {
+    await expect(
+      AccessKey.prepareAuthorization({ chainId: 1, expiry: 123, keyType: 'secp256k1' }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: \`keyType: "secp256k1"\` requires externally generated key material; provide \`publicKey\` or \`address\`.]`,
+    )
+  })
+
+  test('error: rejects webAuthn authorization without external key material', async () => {
+    await expect(
+      AccessKey.prepareAuthorization({ chainId: 1, expiry: 123, keyType: 'webAuthn' }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: \`keyType: "webAuthn"\` requires externally generated key material; provide \`publicKey\` or \`address\`.]`,
+    )
   })
 
   test('behavior: prepares external key authorization from address', async () => {
@@ -466,6 +482,27 @@ describe('prepareAuthorization', () => {
         "limits": undefined,
         "scopes": undefined,
         "type": "p256",
+      }
+    `)
+  })
+
+  test('behavior: prepares external secp256k1 authorization from public key', async () => {
+    const result = await AccessKey.prepareAuthorization({
+      chainId: 123n,
+      expiry: 456,
+      keyType: 'secp256k1',
+      publicKey: accounts[1]!.publicKey,
+    })
+
+    expect(result.keyPair).toBeUndefined()
+    expect(result.keyAuthorization).toMatchInlineSnapshot(`
+      {
+        "address": "${accounts[1]!.address.toLowerCase()}",
+        "chainId": 123n,
+        "expiry": 456,
+        "limits": undefined,
+        "scopes": undefined,
+        "type": "secp256k1",
       }
     `)
   })

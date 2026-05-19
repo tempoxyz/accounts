@@ -7,11 +7,15 @@ description: Connect account(s) with optional capabilities like access key autho
 
 Requests to connect account(s) with optional capabilities.
 
+Set register `capabilities.showDeposit` to `true` or funding hints to show an
+optional deposit prompt after a new account connects. The deposit target is
+always the connected account on the active connect chain.
+
 ## Request
 
 `capabilities` is a discriminated union over `method` — `'register'` or
 `'login'`. Both branches share the `digest`, `authorizeAccessKey`, `auth`, and
-`personalSign` fields.
+`personalSign` fields. The register branch also accepts `showDeposit`.
 
 ```ts
 type Request = {
@@ -37,6 +41,8 @@ type ConnectRegisterCapabilities = {
   name?: string
   /** Sign an EIP-191 message in the same passkey ceremony. */
   personalSign?: { message: string }
+  /** Show an optional deposit prompt after the account connects. */
+  showDeposit?: ShowDeposit
   /** Stable user identifier passed to the WebAuthn credential. */
   userId?: string
 }
@@ -55,6 +61,15 @@ type ConnectLoginCapabilities = {
   personalSign?: { message: string }
   /** Show an account picker before authenticating. */
   selectAccount?: boolean
+}
+
+type ShowDeposit = boolean | {
+  /** Human-readable amount to pre-fill (e.g. `"50"`). */
+  amount?: string
+  /** Display name shown in the deposit UI (e.g. the app name). */
+  displayName?: string
+  /** Token contract address or supported token symbol to pre-fill. */
+  token?: `0x${string}` | string
 }
 
 type AuthorizeAccessKeyCapability = {

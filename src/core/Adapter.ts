@@ -178,6 +178,11 @@ export declare namespace getClient {
 }
 
 export declare namespace createAccount {
+  type Capabilities = NonNullable<
+    NonNullable<Rpc.wallet_connect.Decoded['params']>[number]['capabilities']
+  >
+  type ShowDeposit = Extract<Capabilities, { method: 'register' }>['showDeposit']
+
   type Parameters = {
     /** Grant an access key during the ceremony. */
     authorizeAccessKey?: authorizeAccessKey.Parameters | undefined
@@ -192,6 +197,8 @@ export declare namespace createAccount {
      * no extra prompt over a plain `wallet_connect` register.
      */
     personalSign?: { message: string } | undefined
+    /** Show the deposit flow after the connect ceremony succeeds. */
+    showDeposit?: ShowDeposit | undefined
     /** Opaque user identifier (e.g. for WebAuthn `user.id`). */
     userId?: string | undefined
   }
@@ -235,6 +242,11 @@ export declare namespace withdrawZone {
 }
 
 export declare namespace loadAccounts {
+  type Capabilities = NonNullable<
+    NonNullable<Rpc.wallet_connect.Decoded['params']>[number]['capabilities']
+  >
+  type ShowDeposit = Extract<Capabilities, { method: 'register' }>['showDeposit']
+
   type Parameters = {
     /** Grant an access key during the ceremony. */
     authorizeAccessKey?: authorizeAccessKey.Parameters | undefined
@@ -251,6 +263,8 @@ export declare namespace loadAccounts {
     personalSign?: { message: string } | undefined
     /** When `true`, prompts the user to pick from all available credentials instead of using the last-used one. */
     selectAccount?: boolean | undefined
+    /** Show the deposit flow after a register ceremony signs in to an existing account. */
+    showDeposit?: ShowDeposit | undefined
   }
   type ReturnType = {
     /** Loaded accounts. */
@@ -301,7 +315,7 @@ export declare namespace authorizeAccessKey {
     chainId?: bigint | undefined
     /** Unix timestamp (seconds) when the key expires. */
     expiry: number
-    /** Key type of the external public key. Required when `publicKey` or `address` is provided. */
+    /** External key type. Defaults to `secp256k1` for external keys. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
     limits?: readonly { token: Address; limit: bigint; period?: number | undefined }[] | undefined

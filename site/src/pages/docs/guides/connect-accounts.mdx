@@ -11,7 +11,7 @@ import { Demo, DemoReset } from '../../../components/Demo'
 
 Connect a Tempo account in your application using the [Tempo Accounts SDK](/docs) and [Wagmi](https://wagmi.sh).
 
-The Accounts SDK ships several signing adapters — [Tempo Wallet](/docs/adapters/tempo-wallet), [domain-bound Passkeys](/docs/adapters/webauthn), [Turnkey](/docs/adapters/turnkey), and more. Each adapter exposes the same Wagmi connector surface, so the integration code in this guide is the same regardless of which adapter you pick. Choose an adapter once in your Wagmi config; the rest of your app stays adapter-agnostic.
+The Accounts SDK ships several signing adapters — [Tempo Wallet](/docs/adapters/tempo-wallet), [domain-bound Passkeys](/docs/adapters/webauthn), [Turnkey](/docs/adapters/turnkey), [Privy](/docs/adapters/privy), and more. Each adapter exposes the same Wagmi connector surface, so the integration code in this guide is the same regardless of which adapter you pick. Choose an adapter once in your Wagmi config; the rest of your app stays adapter-agnostic.
 
 :::info[Which adapter should I use?]
 
@@ -136,6 +136,61 @@ export function Example() {
 
 :::
 
+### Prompt for Funds
+
+If users should have a chance to fund a new account immediately, pass the
+`showDeposit` capability on a registration connect request. The wallet shows the
+standard deposit picker after registration succeeds. The prompt is optional, so
+the user can continue without depositing.
+
+`showDeposit` only applies to registration. Existing users who sign in with a
+saved account skip the deposit prompt.
+
+```tsx twoslash [Example.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
+
+export function Example() {
+  const connect = useConnect()
+  const [connector] = useConnectors()
+
+  return (
+    <button
+      onClick={() =>
+        connect.connect({
+          connector,
+          capabilities: {
+            method: 'register',
+            showDeposit: true,
+          },
+        })
+      }
+    >
+      Sign up
+    </button>
+  )
+}
+```
+
+Use the object form when you want to pre-fill deposit details. The deposit target
+is always the newly connected account on the active connect chain, so
+`showDeposit` does not accept `address` or `chainId`.
+
+```tsx twoslash [Example.tsx]
+// @noErrors
+connect.connect({
+  connector,
+  capabilities: {
+    method: 'register',
+    showDeposit: {
+      amount: '50',
+      displayName: 'Example',
+      token: 'USDC',
+    },
+  },
+})
+```
+
 ### Display Account & Sign Out
 
 After the user has signed in, display the account information and a sign out button.
@@ -224,7 +279,7 @@ export function Example() {
 
 <Cards>
   <Card
-    description="Choose between Tempo Wallet, WebAuthn, Turnkey, and custom signing infrastructure"
+    description="Choose between Tempo Wallet, WebAuthn, Turnkey, Privy, and custom signing infrastructure"
     to="/docs/adapters"
     icon="lucide:route"
     title="Choose an Adapter"

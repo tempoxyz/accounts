@@ -3,6 +3,7 @@ import {
   Hex,
   Provider as ox_Provider,
   PublicKey,
+  RpcResponse,
   Secp256k1,
   Signature,
   WebCryptoP256,
@@ -328,6 +329,11 @@ export function privy<const client extends privy.Client>(
             }),
           }
         }
+
+        if (options.keyType && options.keyType !== 'p256')
+          throw new RpcResponse.InvalidParamsError({
+            message: `\`keyType: "${options.keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
+          })
 
         const keyPair = await WebCryptoP256.createKeyPair()
         const address = core_Address.fromPublicKey(PublicKey.from(keyPair.publicKey))

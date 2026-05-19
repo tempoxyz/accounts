@@ -164,6 +164,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
       account?: Adapter.authorizeAccessKey.ReturnType['rootAddress'] | undefined
       authorizeAccessKey: Adapter.authorizeAccessKey.Parameters | undefined
       method: 'wallet_authorizeAccessKey' | 'wallet_connect'
+      showDeposit?: Adapter.createAccount.Parameters['showDeposit'] | undefined
     }) {
       const {
         host,
@@ -204,6 +205,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
         ...(keyType ? { keyType } : {}),
         ...(authorizeAccessKey?.limits ? { limits: authorizeAccessKey.limits } : {}),
         pubKey: publicKey,
+        ...(request.showDeposit !== undefined ? { showDeposit: request.showDeposit } : {}),
       }
       const created = await post({
         body,
@@ -269,8 +271,27 @@ export function cli(options: cli.Options): Adapter.Adapter {
             rootAddress: result.accountAddress,
           }
         },
-        async createAccount(params, request) {
-          return this.loadAccounts(params, request)
+        async createAccount(parameters) {
+          if (parameters?.digest)
+            throw unsupported('`wallet_connect` digest signing not supported by CLI adapter.')
+
+          const result = await authorize({
+            authorizeAccessKey: parameters?.authorizeAccessKey,
+            method: 'wallet_connect',
+            ...(parameters?.showDeposit !== undefined
+              ? { showDeposit: parameters.showDeposit }
+              : {}),
+          })
+
+          return {
+            accounts: [
+              {
+                address: result.accountAddress,
+                capabilities: {},
+              },
+            ],
+            keyAuthorization: z.encode(CliAuth.keyAuthorization, result.keyAuthorization),
+          }
         },
         async loadAccounts(parameters) {
           if (parameters?.digest)
@@ -279,6 +300,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
           const result = await authorize({
             authorizeAccessKey: parameters?.authorizeAccessKey,
             method: 'wallet_connect',
+            ...(parameters?.showDeposit !== undefined
+              ? { showDeposit: parameters.showDeposit }
+              : {}),
           })
 
           return {

@@ -741,6 +741,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
   const [limits, setLimits] = useState<LimitInput[]>([{ token: '', amount: '100', period: '' }])
   const [scopeSelector, setScopeSelector] = useState('transfer(address,uint256)')
   const [authEnabled, setAuthEnabled] = useState(false)
+  const [showDepositEnabled, setShowDepositEnabled] = useState(false)
   const turnkey = adapterType === 'turnkey'
 
   // Once the tokenlist resolves, hydrate any unselected limit row with the first token.
@@ -801,6 +802,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
             ...(digest ? { digest } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
             ...(auth ? { auth } : {}),
+            ...(showDepositEnabled ? { showDeposit: true } : {}),
           } as const)
         : {
             ...(digest ? { digest } : {}),
@@ -965,6 +967,18 @@ function WalletConnect(props: { adapterType: AdapterType }) {
                 type="checkbox"
               />{' '}
               Authenticate with Server
+            </label>
+          </legend>
+        </fieldset>
+        <fieldset style={{ marginBottom: 8 }}>
+          <legend>
+            <label>
+              <input
+                checked={showDepositEnabled}
+                onChange={(e) => setShowDepositEnabled(e.target.checked)}
+                type="checkbox"
+              />{' '}
+              Show Deposit
             </label>
           </legend>
         </fieldset>

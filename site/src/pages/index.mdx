@@ -64,6 +64,12 @@ The Accounts SDK ships with several signing adapters. Pick the one that matches 
     title="Turnkey"
   />
   <Card
+    description="Accounts backed by Privy auth and embedded wallets"
+    icon="lucide:shield"
+    to="/docs/adapters/privy"
+    title="Privy"
+  />
+  <Card
     description="Direct private key accounts"
     icon="lucide:key-round"
     to="/docs/adapters/private-key"
@@ -204,7 +210,7 @@ function Connect() {
     title="Sponsor Fees"
   />
   <Card
-    description="Choose between Tempo Wallet, WebAuthn, and custom signing infrastructure"
+    description="Choose between Tempo Wallet, WebAuthn, Turnkey, Privy, and custom signing infrastructure"
     icon="lucide:route"
     to="/docs/adapters"
     title="Choose an Adapter"

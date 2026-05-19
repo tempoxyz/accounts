@@ -637,6 +637,9 @@ export function create(options: create.Options = {}): create.ReturnType {
                               ...(personalSign_request
                                 ? { personalSign: personalSign_request }
                                 : {}),
+                              ...(capabilities.showDeposit !== undefined
+                                ? { showDeposit: capabilities.showDeposit }
+                                : {}),
                             },
                             request,
                           )
@@ -645,6 +648,9 @@ export function create(options: create.Options = {}): create.ReturnType {
                             digest: capabilities.digest,
                             authorizeAccessKey,
                             name: capabilities.name ?? 'default',
+                            ...(capabilities.showDeposit !== undefined
+                              ? { showDeposit: capabilities.showDeposit }
+                              : {}),
                             userId: capabilities.userId ?? Hex.random(16),
                             ...(personalSign_request ? { personalSign: personalSign_request } : {}),
                           },

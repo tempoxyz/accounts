@@ -27,11 +27,14 @@ async function fund(address: viem_Address) {
 
 function createOpen(options: { mismatchFirstCall?: boolean | undefined } = {}) {
   let calls = 0
+  const urls: string[] = []
 
   return {
     calls: () => calls,
+    urls: () => urls,
     open: async (url: string) => {
       calls += 1
+      urls.push(url)
 
       const authUrl = new URL(url)
       const callback = authUrl.searchParams.get('callback')
@@ -111,5 +114,67 @@ describe('create', () => {
     })
     expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
     expect(browser.calls()).toMatchInlineSnapshot(`2`)
+  })
+
+  test('behavior: forwards showDeposit boolean to the mobile auth URL for registration', async () => {
+    const browser = createOpen()
+    const provider = Provider.create({
+      authorizeAccessKey: () => ({
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }),
+      chains: [chain],
+      host: 'https://wallet-next.tempo.xyz',
+      open: browser.open,
+      redirectUri: 'accounts-playground://auth',
+      secureStorage: Storage.memory(),
+    })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', showDeposit: true } }],
+    })
+
+    expect(new URL(browser.urls()[0]!).searchParams.get('showDeposit')).toMatchInlineSnapshot(
+      `"true"`,
+    )
+  })
+
+  test('behavior: forwards showDeposit params to the mobile auth URL for registration', async () => {
+    const browser = createOpen()
+    const provider = Provider.create({
+      authorizeAccessKey: () => ({
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }),
+      chains: [chain],
+      host: 'https://wallet-next.tempo.xyz',
+      open: browser.open,
+      redirectUri: 'accounts-playground://auth',
+      secureStorage: Storage.memory(),
+    })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: {
+            method: 'register',
+            showDeposit: {
+              amount: '50',
+              displayName: 'DoorDash',
+              token: 'USDC',
+            },
+          },
+        },
+      ],
+    })
+
+    expect(JSON.parse(new URL(browser.urls()[0]!).searchParams.get('showDeposit')!))
+      .toMatchInlineSnapshot(`
+      {
+        "amount": "50",
+        "displayName": "DoorDash",
+        "token": "USDC",
+      }
+    `)
   })
 })

@@ -27,8 +27,6 @@ export function PrivyEmailOtp() {
 
   if (!request) return null
 
-  const label = request.mode === 'register' ? 'Register' : 'Continue'
-
   function cancel(event: MouseEvent<HTMLDivElement>) {
     if (pending || event.target !== event.currentTarget) return
     rejectPrivyEmailOtp(new Error('Privy email OTP cancelled.'))
@@ -70,12 +68,9 @@ export function PrivyEmailOtp() {
     try {
       setError(undefined)
       setPending(true)
-      await request.client.email.loginWithCode(
-        email_,
-        code_,
-        request.mode === 'register' ? 'login-or-sign-up' : 'no-signup',
-        { embedded: { ethereum: { createOnLogin: 'users-without-wallets' } } },
-      )
+      await request.client.email.loginWithCode(email_, code_, 'login-or-sign-up', {
+        embedded: { ethereum: { createOnLogin: 'users-without-wallets' } },
+      })
       resolvePrivyEmailOtp()
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error))
@@ -88,7 +83,7 @@ export function PrivyEmailOtp() {
     <div className="privy-otp-backdrop" onClick={cancel} role="presentation">
       <section aria-label="Privy email OTP" className="privy-otp-panel">
         <header className="privy-otp-header">
-          <h2>{label} with Privy</h2>
+          <h2>Continue with Privy</h2>
         </header>
 
         {!sent ? (

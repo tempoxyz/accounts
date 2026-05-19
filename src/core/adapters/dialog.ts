@@ -1,4 +1,4 @@
-import { Address, Provider as ox_Provider, RpcRequest as ox_RpcRequest } from 'ox'
+import { Address, Provider as ox_Provider, RpcRequest as ox_RpcRequest, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { z } from 'zod/mini'
 
@@ -114,11 +114,16 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     async function generateAccessKey(options: Adapter.authorizeAccessKey.Parameters | undefined) {
       if (!options) return undefined
       if (options.publicKey || options.address) return undefined
+      if (options.keyType && options.keyType !== 'p256')
+        throw new RpcResponse.InvalidParamsError({
+          message: `\`keyType: "${options.keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
+        })
 
-      const { accessKey, keyPair } = await AccessKey.generate()
+      const generated = await AccessKey.generate()
+      const { accessKey } = generated
       return {
         accessKey,
-        keyPair,
+        generated,
         request: {
           ...options,
           publicKey: accessKey.publicKey,
@@ -134,13 +139,13 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     function saveAccessKey(
       address: Address.Address,
       keyAuth: KeyAuthorization.Rpc,
-      keyPair: Awaited<ReturnType<typeof AccessKey.generate>>['keyPair'],
+      generated: Awaited<ReturnType<typeof AccessKey.generate>>,
     ) {
       const keyAuthorization = KeyAuthorization.fromRpc(keyAuth)
       AccessKey.add({
         account: address,
         authorization: keyAuthorization,
-        keyPair,
+        keyPair: generated.keyPair,
         store,
       })
     }
@@ -198,7 +203,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const keyAuthorization = capabilities?.keyAuthorization
 
           if (accessKey && address && keyAuthorization)
-            saveAccessKey(address, keyAuthorization, accessKey.keyPair)
+            saveAccessKey(address, keyAuthorization, accessKey.generated)
 
           return {
             accounts: accounts.map((a) => ({ address: a.address })),
@@ -237,7 +242,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           const keyAuthorization = capabilities?.keyAuthorization
 
           if (accessKey && address && keyAuthorization)
-            saveAccessKey(address, keyAuthorization, accessKey.keyPair)
+            saveAccessKey(address, keyAuthorization, accessKey.generated)
 
           return {
             accounts: accounts.map((a) => ({ address: a.address })),
@@ -382,7 +387,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
 
           if (accessKey) {
             const account = getAccount({ signable: false })
-            saveAccessKey(account.address, result.keyAuthorization, accessKey.keyPair)
+            saveAccessKey(account.address, result.keyAuthorization, accessKey.generated)
           }
 
           return result

@@ -7,13 +7,17 @@ import { Cards, Card } from 'vocs'
 
 # Custom Adapter
 
-The Accounts SDK exposes a low-level `Adapter.define` API for authoring custom adapters. Use it when none of the built-in adapters ([`tempoWallet`](/docs/adapters/tempo-wallet), [`webAuthn`](/docs/adapters/webauthn), [`turnkey`](/docs/adapters/turnkey), [`secp256k1`](/docs/adapters/private-key)) match your custody model.
+The Accounts SDK exposes a low-level `Adapter.define` API for authoring custom adapters. Use it when none of the built-in adapters ([`tempoWallet`](/docs/adapters/tempo-wallet), [`webAuthn`](/docs/adapters/webauthn), [`turnkey`](/docs/adapters/turnkey), [`privy`](/docs/adapters/privy), [`secp256k1`](/docs/adapters/private-key)) match your custody model.
 
 Use it when you want:
 
 - A signer not covered by a built-in adapter.
 - Full control over the JSON-RPC actions exposed to the provider.
 - A thin wrapper that adds metadata or middleware around an existing adapter.
+
+:::tip
+If you use Turnkey or Privy, start with their built-in adapters before writing a custom adapter. They already cover session restore, account loading, provider signing, and the callback shape for app-owned auth.
+:::
 
 :::tip
 If your signer can produce a private key or sign arbitrary digests, consider wrapping the [`local`](/docs/api/local) adapter first — it implements every required action for you and only asks you to supply `createAccount` and `loadAccounts`. Reach for `Adapter.define` directly when you need to override signing, request translation, or session lifecycle behavior.
@@ -117,6 +121,12 @@ The built-in adapters are good blueprints when you build your own.
     icon="lucide:file-code"
     to="https://github.com/tempoxyz/accounts/blob/main/src/core/adapters/turnkey.ts"
     title="turnkey"
+  />
+  <Card
+    description="Adapter that loads Privy embedded wallets from SDK state after app-owned auth."
+    icon="lucide:file-code"
+    to="https://github.com/tempoxyz/accounts/blob/main/src/core/adapters/privy.ts"
+    title="privy"
   />
   <Card
     description="Remote-forwarding adapter that shows how `forwardsAuth` is used."

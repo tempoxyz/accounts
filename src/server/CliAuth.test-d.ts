@@ -13,12 +13,27 @@ describe('createRequest', () => {
       keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
       limits?: readonly { token: Hex; limit: bigint }[] | undefined
       pubKey: Hex
+      showDeposit?:
+        | boolean
+        | {
+            amount?: string | undefined
+            displayName?: string | undefined
+            token?: string | undefined
+          }
+        | undefined
     }>()
   })
 
   test('does not include scopes in v1', () => {
     type Request = z.output<typeof CliAuth.createRequest>
     expectTypeOf<Request>().not.toHaveProperty('scopes')
+  })
+
+  test('showDeposit does not include address or chainId', () => {
+    type Request = z.output<typeof CliAuth.createRequest>
+    type ShowDeposit = Exclude<Exclude<Request['showDeposit'], boolean | undefined>, undefined>
+    expectTypeOf<ShowDeposit>().not.toHaveProperty('address')
+    expectTypeOf<ShowDeposit>().not.toHaveProperty('chainId')
   })
 })
 
@@ -44,6 +59,14 @@ describe('pendingResponse', () => {
       keyType: 'secp256k1' | 'p256' | 'webAuthn'
       limits?: readonly { token: Hex; limit: bigint }[] | undefined
       pubKey: Hex
+      showDeposit?:
+        | boolean
+        | {
+            amount?: string | undefined
+            displayName?: string | undefined
+            token?: string | undefined
+          }
+        | undefined
       status: 'pending'
     }>()
   })

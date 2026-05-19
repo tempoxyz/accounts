@@ -109,6 +109,7 @@ async function createRequest(
     expiry?: number | undefined
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     limits?: readonly { token: `0x${string}`; limit: bigint }[] | undefined
+    showDeposit?: z.output<typeof CliAuth.createRequest>['showDeposit'] | undefined
   } = {},
 ) {
   const key = options.accessKey ?? accessKey
@@ -128,6 +129,7 @@ async function createRequest(
         : { keyType: key.keyType }),
       ...('limits' in options ? (options.limits ? { limits: options.limits } : {}) : { limits }),
       pubKey: key.publicKey,
+      ...(options.showDeposit !== undefined ? { showDeposit: options.showDeposit } : {}),
     } satisfies z.output<typeof CliAuth.createRequest>,
   }
 }
@@ -666,6 +668,51 @@ describe('pending', () => {
           },
         ],
         "pubKey": "${accessKey.publicKey}",
+        "status": "pending",
+      }
+    `)
+  })
+
+  test('behavior: preserves showDeposit for browser approval', async () => {
+    const store = CliAuth.Store.memory()
+    const { request } = await createRequest('device-code-verifier', {
+      showDeposit: {
+        amount: '50',
+        displayName: 'DoorDash',
+        token: 'USDC',
+      },
+    })
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
+      request,
+      store,
+    })
+
+    const result = await CliAuth.pending({
+      code,
+      store,
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "accessKeyAddress": "${accessKey.address.toLowerCase()}",
+        "chainId": 1337n,
+        "code": "ABCDEFGH",
+        "expiry": ${expiry},
+        "keyType": "p256",
+        "limits": [
+          {
+            "limit": 1000n,
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+        "pubKey": "${accessKey.publicKey}",
+        "showDeposit": {
+          "amount": "50",
+          "displayName": "DoorDash",
+          "token": "USDC",
+        },
         "status": "pending",
       }
     `)

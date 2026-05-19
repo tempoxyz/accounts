@@ -148,12 +148,9 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: privy({
         client,
-        async createAccount({ client }) {
-          await requestPrivyEmailOtp({ client: client.auth, mode: 'register' })
-        },
         async loadAccounts({ client }) {
           if (!(await client.getAccessToken().catch(() => null)))
-            await requestPrivyEmailOtp({ client: client.auth, mode: 'login' })
+            await requestPrivyEmailOtp({ client: client.auth })
         },
       }),
       mpp: true,

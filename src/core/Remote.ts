@@ -110,6 +110,8 @@ export declare namespace ready {
 
 export declare namespace respond {
   type Options = {
+    /** Return the resolved result without sending the RPC response. */
+    defer?: boolean | undefined
     /** Error to respond with (takes precedence over result). */
     error?: { code: number; message: string } | undefined
     /**
@@ -237,7 +239,7 @@ export function create(options: create.Options): Remote {
     },
 
     async respond(request, options = {}) {
-      const { error, onError, selector } = options
+      const { defer, error, onError, selector } = options
       const shared = { id: request.id, jsonrpc: '2.0' } as const
 
       if (error) {
@@ -254,6 +256,7 @@ export function create(options: create.Options): Remote {
         let result =
           'result' in options ? options.result : await provider?.request(request as never)
         if (selector) result = selector(result)
+        if (defer) return result
         messenger.send(
           'rpc-response',
           Object.assign(RpcResponse.from({ ...shared, result }), { _request: request }),
