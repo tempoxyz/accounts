@@ -85,6 +85,9 @@ describe('mppx integration', () => {
 
     const res = await fetch(`${server.url}/fortune`)
     expect(res.status).toBe(200)
+
+    const status = await provider.getAccessKeyStatus({ accessKey: key.address })
+    expect(status).toMatchInlineSnapshot(`"published"`)
     expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
 
     const metadata = await Actions.accessKey.getMetadata(client, {
@@ -152,10 +155,10 @@ describe('mppx integration', () => {
 
     const res = await fetch(`${server.url}/fortune`)
     expect(res.status).toMatchInlineSnapshot(`200`)
-    expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
 
     const status = await provider.getAccessKeyStatus({ accessKey: key.address })
     expect(status).toMatchInlineSnapshot(`"published"`)
+    expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
   })
 })
 

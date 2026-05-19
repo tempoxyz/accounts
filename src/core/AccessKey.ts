@@ -278,7 +278,15 @@ export async function getStatus(options: StatusQuery): Promise<Status> {
           account,
           now,
         }).catch(() => status.pending)
-        if (publicationStatus === status.published) return status.published
+        if (publicationStatus === status.published) {
+          markPublished({
+            accessKey: local.address,
+            account,
+            chainId,
+            store,
+          })
+          return status.published
+        }
       }
       return status.pending
     }
