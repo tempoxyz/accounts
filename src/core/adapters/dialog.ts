@@ -266,13 +266,16 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               return undefined
             })(),
           })
-          const transaction = await AccessKeyTransaction.create({
-            address: parameters.from,
-            calls: parameters.calls,
-            chainId: parameters.chainId,
-            client,
-            store,
-          })
+          const transaction =
+            parameters.from && typeof parameters.chainId !== 'undefined'
+              ? await AccessKeyTransaction.create({
+                  address: parameters.from,
+                  calls: parameters.calls,
+                  chainId: parameters.chainId,
+                  client,
+                  store,
+                })
+              : undefined
           if (transaction) {
             try {
               const prepared = await transaction.prepare({
@@ -304,13 +307,16 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               return undefined
             })(),
           })
-          const transaction = await AccessKeyTransaction.create({
-            address: parameters.from,
-            calls: parameters.calls,
-            chainId: parameters.chainId,
-            client,
-            store,
-          })
+          const transaction =
+            parameters.from && typeof parameters.chainId !== 'undefined'
+              ? await AccessKeyTransaction.create({
+                  address: parameters.from,
+                  calls: parameters.calls,
+                  chainId: parameters.chainId,
+                  client,
+                  store,
+                })
+              : undefined
           if (transaction) {
             try {
               const prepared = await transaction.prepare({
@@ -338,13 +344,16 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               return undefined
             })(),
           })
-          const transaction = await AccessKeyTransaction.create({
-            address: parameters.from,
-            calls: parameters.calls,
-            chainId: parameters.chainId,
-            client,
-            store,
-          })
+          const transaction =
+            parameters.from && typeof parameters.chainId !== 'undefined'
+              ? await AccessKeyTransaction.create({
+                  address: parameters.from,
+                  calls: parameters.calls,
+                  chainId: parameters.chainId,
+                  client,
+                  store,
+                })
+              : undefined
           if (transaction) {
             try {
               const prepared = await transaction.prepare({

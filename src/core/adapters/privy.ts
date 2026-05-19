@@ -398,14 +398,17 @@ export function privy<const client extends privy.Client>(
         feePayer: parameters.feePayer === true ? undefined : parameters.feePayer,
       })
 
-      const transaction = await AccessKeyTransaction.create({
-        address:
-          parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
-        calls: parameters.calls,
-        chainId: parameters.chainId ?? store.getState().chainId,
-        client: viemClient,
-        store,
-      })
+      const state = store.getState()
+      const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      const transaction = address
+        ? await AccessKeyTransaction.create({
+            address,
+            calls: parameters.calls,
+            chainId: parameters.chainId ?? state.chainId,
+            client: viemClient,
+            store,
+          })
+        : undefined
       if (transaction) {
         const { feePayer, ...rest } = parameters
         try {

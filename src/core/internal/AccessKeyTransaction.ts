@@ -27,37 +27,9 @@ const removalErrorNames = new Set([
   'SignatureTypeMismatch',
 ])
 
-/** Synchronously selects and hydrates a locally-signable access key account for a root account. */
-export function selectAccountSync(
-  options: selectAccountSync.Options,
-): ReturnType<typeof AccessKey.selectAccountSync> {
-  const { address, calls, chainId, store } = options
-  return AccessKey.selectAccountSync({
-    account: address,
-    calls,
-    chainId,
-    store,
-  })
-}
-
-export declare namespace selectAccountSync {
-  /** Options for {@link selectAccountSync}. */
-  type Options = {
-    /** Root account address. */
-    address: Address.Address
-    /** Calls to match against access key scopes. */
-    calls?: readonly Call[] | undefined
-    /** Chain ID the access key must be authorized on. */
-    chainId: number
-    /** Reactive state store. */
-    store: Store.Store
-  }
-}
-
 /** Creates a lifecycle-aware access-key transaction when a matching key is available. */
 export async function create(options: create.Options): Promise<create.ReturnType> {
   const { address, calls, chainId, client, store } = options
-  if (!address || typeof chainId === 'undefined') return undefined
   const selection = await AccessKey.select({
     account: address,
     calls,
@@ -73,11 +45,11 @@ export declare namespace create {
   /** Options for {@link create}. */
   type Options = {
     /** Root account address. */
-    address?: Address.Address | undefined
+    address: Address.Address
     /** Calls to match against access key scopes. */
     calls?: readonly Call[] | undefined
     /** Chain ID the access key must be authorized on. */
-    chainId?: number | undefined
+    chainId: number
     /** Client used to prepare, submit, and check access-key transactions. */
     client: Client<Transport>
     /** Reactive state store. */
@@ -104,8 +76,6 @@ export declare namespace create {
 
   /** Prepared access-key transaction with lifecycle-aware execution methods. */
   type Prepared = {
-    /** Pending key authorization attached to this transaction, if any. */
-    keyAuthorization?: KeyAuthorization.Signed | undefined
     /** Prepared request that will be signed by the selected access key. */
     request: PreparedRequest
     /** Signs the prepared transaction and marks an attached authorization as pending. */
@@ -201,7 +171,6 @@ function createPreparedTransaction(options: {
   }
 
   return {
-    ...(selection.authorization ? { keyAuthorization: selection.authorization } : {}),
     request,
     sign,
     async send() {

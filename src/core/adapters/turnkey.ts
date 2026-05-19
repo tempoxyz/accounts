@@ -440,14 +440,17 @@ export function turnkey<const client extends turnkey.Client>(
             chainId: parameters.chainId,
             feePayer: feePayer === true ? undefined : feePayer,
           })
-          const transaction = await AccessKeyTransaction.create({
-            address:
-              parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
-            calls: parameters.calls,
-            chainId: parameters.chainId ?? store.getState().chainId,
-            client: viemClient,
-            store,
-          })
+          const state = store.getState()
+          const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+          const transaction = address
+            ? await AccessKeyTransaction.create({
+                address,
+                calls: parameters.calls,
+                chainId: parameters.chainId ?? state.chainId,
+                client: viemClient,
+                store,
+              })
+            : undefined
           if (transaction) {
             try {
               const prepared = await transaction.prepare({
@@ -478,14 +481,17 @@ export function turnkey<const client extends turnkey.Client>(
             chainId: parameters.chainId,
             feePayer: feePayer === true ? undefined : feePayer,
           })
-          const transaction = await AccessKeyTransaction.create({
-            address:
-              parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
-            calls: parameters.calls,
-            chainId: parameters.chainId ?? store.getState().chainId,
-            client: viemClient,
-            store,
-          })
+          const state = store.getState()
+          const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+          const transaction = address
+            ? await AccessKeyTransaction.create({
+                address,
+                calls: parameters.calls,
+                chainId: parameters.chainId ?? state.chainId,
+                client: viemClient,
+                store,
+              })
+            : undefined
           if (transaction) {
             try {
               const prepared = await transaction.prepare({
@@ -507,14 +513,17 @@ export function turnkey<const client extends turnkey.Client>(
             chainId: parameters.chainId,
             feePayer: feePayer === true ? undefined : feePayer,
           })
-          const transaction = await AccessKeyTransaction.create({
-            address:
-              parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
-            calls: parameters.calls,
-            chainId: parameters.chainId ?? store.getState().chainId,
-            client: viemClient,
-            store,
-          })
+          const state = store.getState()
+          const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+          const transaction = address
+            ? await AccessKeyTransaction.create({
+                address,
+                calls: parameters.calls,
+                chainId: parameters.chainId ?? state.chainId,
+                client: viemClient,
+                store,
+              })
+            : undefined
           if (transaction) {
             try {
               const prepared = await transaction.prepare({

@@ -44,13 +44,16 @@ export function local(options: local.Options): Adapter.Adapter {
         ...(feePayer ? { feePayer: true as const } : {}),
       }
       const state = store.getState()
-      const transaction = await AccessKeyTransaction.create({
-        address: parameters.from ?? state.accounts[state.activeAccount]?.address,
-        calls: parameters.calls,
-        chainId: parameters.chainId ?? state.chainId,
-        client,
-        store,
-      })
+      const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      const transaction = address
+        ? await AccessKeyTransaction.create({
+            address,
+            calls: parameters.calls,
+            chainId: parameters.chainId ?? state.chainId,
+            client,
+            store,
+          })
+        : undefined
       if (transaction) {
         try {
           return await transaction.prepare(request)

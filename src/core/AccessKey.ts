@@ -66,12 +66,28 @@ type Call = {
   data?: Hex.Hex | undefined
 }
 
-/** Access key query. */
-type Query = {
+/** Access key status query. */
+type StatusQuery = {
   /** Root account address. */
   account: Address.Address
   /** Specific access key address to match. */
   accessKey?: Address.Address | undefined
+  /** Calls to match against access key scopes. */
+  calls?: readonly Call[] | undefined
+  /** Chain ID the access key must be authorized on. */
+  chainId: number
+  /** Client used to verify publication state on-chain. */
+  client: Client<Transport>
+  /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
+  now?: number | undefined
+  /** Reactive state store. */
+  store: Store.Store
+}
+
+/** Access key selection query. */
+type SelectQuery = {
+  /** Root account address. */
+  account: Address.Address
   /** Calls to match against access key scopes. */
   calls?: readonly Call[] | undefined
   /** Chain ID the access key must be authorized on. */
@@ -117,8 +133,6 @@ type Selection = {
   authorization?: KeyAuthorization.Signed | undefined
   /** Stored access key record. */
   record: AccessKey
-  /** Publication status for the selected access key. */
-  status: 'pending' | 'published'
 }
 
 /** Generates a P256 key pair and access key account. */
@@ -248,7 +262,7 @@ export declare namespace authorize {
 }
 
 /** Returns publication status for a stored or on-chain access key. */
-export async function getStatus(options: Query): Promise<Status> {
+export async function getStatus(options: StatusQuery): Promise<Status> {
   const { accessKey, account, calls, chainId, client, store } = options
   const now = options.now ?? Date.now() / 1000
   const local = list({ account, accessKey, chainId, store }).find((key) =>
@@ -276,10 +290,10 @@ export async function getStatus(options: Query): Promise<Status> {
 }
 
 /** Selects a locally-signable access key for an intent. */
-export async function select(options: Query): Promise<Selection | undefined> {
-  const { accessKey, account, calls, chainId, client, store } = options
+export async function select(options: SelectQuery): Promise<Selection | undefined> {
+  const { account, calls, chainId, client, store } = options
   const now = options.now ?? Date.now() / 1000
-  const records = list({ account, accessKey, chainId, store })
+  const records = list({ account, chainId, store })
 
   for (const record of records) {
     if (!scopesMatch(record, { calls })) continue
@@ -314,7 +328,6 @@ export async function select(options: Query): Promise<Selection | undefined> {
       accessKey: record.address,
       ...(authorization ? { authorization } : {}),
       record,
-      status: authorization ? 'pending' : 'published',
     }
   }
 }
@@ -398,42 +411,6 @@ export function remove(options: Key): void {
   store.setState((state) => ({
     accessKeys: state.accessKeys.filter((record) => !matches(record, key)),
   }))
-}
-
-/** Synchronously selects and hydrates a locally-signable access key account. */
-export function selectAccountSync(
-  options: selectAccountSync.Options,
-): TempoAccount.AccessKeyAccount | undefined {
-  const { account, calls, chainId, store } = options
-  const now = options.now ?? Date.now() / 1000
-  const records = list({ account, chainId, store })
-
-  for (const record of records) {
-    if (!scopesMatch(record, { calls })) continue
-    if (isExpired(record.expiry, now)) {
-      remove({ accessKey: record.address, account: record.access, chainId: record.chainId, store })
-      continue
-    }
-
-    const account_accessKey = hydrate(record)
-    if (account_accessKey) return account_accessKey
-  }
-}
-
-export declare namespace selectAccountSync {
-  /** Options for {@link selectAccountSync}. */
-  type Options = {
-    /** Root account address. */
-    account: Address.Address
-    /** Calls to match against access key scopes. */
-    calls?: readonly Call[] | undefined
-    /** Chain ID the access key must be authorized on. */
-    chainId: number
-    /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
-    now?: number | undefined
-    /** Reactive state store. */
-    store: Store.Store
-  }
 }
 
 function scopesMatch(
