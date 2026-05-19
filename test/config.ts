@@ -12,14 +12,7 @@ import {
 } from 'viem'
 import { type Address, english, generateMnemonic, type JsonRpcAccount } from 'viem/accounts'
 import { tempoDevnet, tempoLocalnet, tempoModerato } from 'viem/chains'
-import {
-  Account,
-  type TempoAddress,
-  type z_KeyAuthorization,
-  type z_SignatureEnvelope,
-  type z_TokenId,
-  type z_TxEnvelopeTempo,
-} from 'viem/tempo'
+import { Account } from 'viem/tempo'
 
 export const id =
   (typeof process !== 'undefined' &&
@@ -62,15 +55,14 @@ export const addresses = {
   alphaUsd: '0x20c0000000000000000000000000000000000001',
 } as const
 
-// Remove once viem publishes portable Tempo chain inference declarations.
-type _TempoInference =
-  | TempoAddress.Address
-  | z_KeyAuthorization.Signed
-  | z_SignatureEnvelope.SignatureEnvelope
-  | z_TokenId.TokenIdOrAddress
-  | z_TxEnvelopeTempo.Call
+type TempoChain =
+  | (Omit<typeof tempoLocalnet, 'rpcUrls'> & {
+      rpcUrls: { default: { http: readonly string[] } }
+    })
+  | typeof tempoModerato
+  | typeof tempoDevnet
 
-export const chain = (() => {
+export const chain: TempoChain = (() => {
   if (nodeEnv === 'testnet') return tempoModerato
   return defineChain({
     ...tempoLocalnet,
