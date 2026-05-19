@@ -139,6 +139,29 @@ describe('create', () => {
     )
   })
 
+  test('behavior: forwards showDeposit boolean to the mobile auth URL for login', async () => {
+    const browser = createOpen()
+    const provider = Provider.create({
+      authorizeAccessKey: () => ({
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }),
+      chains: [chain],
+      host: 'https://wallet-next.tempo.xyz',
+      open: browser.open,
+      redirectUri: 'accounts-playground://auth',
+      secureStorage: Storage.memory(),
+    })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login', showDeposit: true } }],
+    })
+
+    expect(new URL(browser.urls()[0]!).searchParams.get('showDeposit')).toMatchInlineSnapshot(
+      `"true"`,
+    )
+  })
+
   test('behavior: forwards showDeposit params to the mobile auth URL for registration', async () => {
     const browser = createOpen()
     const provider = Provider.create({
@@ -161,6 +184,7 @@ describe('create', () => {
             showDeposit: {
               amount: '50',
               displayName: 'DoorDash',
+              on: 'register',
               token: 'USDC',
             },
           },
@@ -173,6 +197,7 @@ describe('create', () => {
       {
         "amount": "50",
         "displayName": "DoorDash",
+        "on": "register",
         "token": "USDC",
       }
     `)

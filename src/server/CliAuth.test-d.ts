@@ -18,6 +18,7 @@ describe('createRequest', () => {
         | {
             amount?: string | undefined
             displayName?: string | undefined
+            on?: 'login' | 'register' | undefined
             token?: string | undefined
           }
         | undefined
@@ -64,6 +65,7 @@ describe('pendingResponse', () => {
         | {
             amount?: string | undefined
             displayName?: string | undefined
+            on?: 'login' | 'register' | undefined
             token?: string | undefined
           }
         | undefined

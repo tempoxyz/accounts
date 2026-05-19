@@ -7,15 +7,15 @@ description: Connect account(s) with optional capabilities like access key autho
 
 Requests to connect account(s) with optional capabilities.
 
-Set register `capabilities.showDeposit` to `true` or funding hints to show an
-optional deposit prompt after a new account connects. The deposit target is
-always the connected account on the active connect chain.
+Set `capabilities.showDeposit` to `true` or funding hints to show an optional
+deposit prompt after an account connects. The deposit target is always the
+connected account on the active connect chain.
 
 ## Request
 
 `capabilities` is a discriminated union over `method` — `'register'` or
-`'login'`. Both branches share the `digest`, `authorizeAccessKey`, `auth`, and
-`personalSign` fields. The register branch also accepts `showDeposit`.
+`'login'`. Both branches share the `digest`, `authorizeAccessKey`, `auth`,
+`personalSign`, and `showDeposit` fields.
 
 ```ts
 type Request = {
@@ -59,6 +59,8 @@ type ConnectLoginCapabilities = {
   auth?: Auth
   /** Sign an EIP-191 message in the same passkey ceremony. */
   personalSign?: { message: string }
+  /** Show an optional deposit prompt after the account connects. */
+  showDeposit?: ShowDeposit
   /** Show an account picker before authenticating. */
   selectAccount?: boolean
 }
@@ -68,6 +70,8 @@ type ShowDeposit = boolean | {
   amount?: string
   /** Display name shown in the deposit UI (e.g. the app name). */
   displayName?: string
+  /** Connect method that should show the deposit prompt. Defaults to both methods. */
+  on?: 'login' | 'register'
   /** Token contract address or supported token symbol to pre-fill. */
   token?: `0x${string}` | string
 }

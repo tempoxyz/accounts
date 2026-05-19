@@ -18,6 +18,7 @@ const showDeposit = z.optional(
     z.object({
       amount: z.optional(z.string()),
       displayName: z.optional(z.string()),
+      on: z.optional(z.union([z.literal('login'), z.literal('register')])),
       token: z.optional(z.union([u.address(), z.string()])),
     }),
   ]),

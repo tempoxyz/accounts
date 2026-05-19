@@ -108,9 +108,7 @@ export default function App() {
       setError(null)
       let result = await provider.request({
         method: 'wallet_connect',
-        ...(showDeposit
-          ? { params: [{ capabilities: { method: 'register', showDeposit: true } }] }
-          : {}),
+        ...(showDeposit ? { params: [{ capabilities: { showDeposit: true } }] } : {}),
       })
 
       const addr = result.accounts[0]?.address

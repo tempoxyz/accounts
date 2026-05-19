@@ -56,10 +56,11 @@ function connectRequest(
   options: {
     accessKey?: typeof accessKey | undefined
     expiry?: number | undefined
+    method?: 'login' | 'register' | undefined
     showDeposit?: z.output<typeof CliAuth.createRequest>['showDeposit'] | undefined
   } = {},
 ) {
-  const { accessKey: key = accessKey, expiry: expiry_ = expiry, showDeposit } = options
+  const { accessKey: key = accessKey, expiry: expiry_ = expiry, method, showDeposit } = options
 
   return {
     method: 'wallet_connect',
@@ -71,7 +72,8 @@ function connectRequest(
             keyType: key.keyType,
             publicKey: key.publicKey,
           },
-          ...(showDeposit !== undefined ? { method: 'register' as const, showDeposit } : {}),
+          ...(method ? { method } : {}),
+          ...(showDeposit !== undefined ? { showDeposit } : {}),
         },
       },
     ],
@@ -237,9 +239,11 @@ describe('Provider.create', () => {
 
       await provider.request(
         connectRequest({
+          method: 'register',
           showDeposit: {
             amount: '50',
             displayName: 'DoorDash',
+            on: 'register',
             token: 'USDC',
           },
         }),
@@ -250,8 +254,48 @@ describe('Provider.create', () => {
           {
             "amount": "50",
             "displayName": "DoorDash",
+            "on": "register",
             "token": "USDC",
           },
+        ]
+      `)
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('behavior: forwards showDeposit through login device-code requests', async () => {
+    const handler = createHandler()
+    const server = await createServer(handler.listener)
+    const pendingShowDeposit: z.output<typeof CliAuth.pendingResponse>['showDeposit'][] = []
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (url) => {
+          const code = new URL(url).searchParams.get('code')!
+          const response = await fetch(`${server.url}/cli-auth/pending/${code}`)
+          const pending = z.decode(CliAuth.pendingResponse, (await response.json()) as never)
+          pendingShowDeposit.push(pending.showDeposit)
+          await fetch(`${server.url}/cli-auth`, {
+            body: JSON.stringify(await authorizePending(server.url, code)),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          })
+        },
+        host: `${server.url}/cli-auth`,
+      })
+
+      await provider.request(
+        connectRequest({
+          method: 'login',
+          showDeposit: true,
+        }),
+      )
+
+      expect(pendingShowDeposit).toMatchInlineSnapshot(`
+        [
+          true,
         ]
       `)
     } finally {

@@ -679,6 +679,7 @@ describe('pending', () => {
       showDeposit: {
         amount: '50',
         displayName: 'DoorDash',
+        on: 'register',
         token: 'USDC',
       },
     })
@@ -711,6 +712,7 @@ describe('pending', () => {
         "showDeposit": {
           "amount": "50",
           "displayName": "DoorDash",
+          "on": "register",
           "token": "USDC",
         },
         "status": "pending",

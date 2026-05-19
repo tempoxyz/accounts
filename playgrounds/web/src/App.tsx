@@ -808,6 +808,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
             ...(digest ? { digest } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
             ...(auth ? { auth } : {}),
+            ...(showDepositEnabled ? { showDeposit: true } : {}),
           }
 
     execute(() =>

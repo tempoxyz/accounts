@@ -245,7 +245,7 @@ export declare namespace loadAccounts {
   type Capabilities = NonNullable<
     NonNullable<Rpc.wallet_connect.Decoded['params']>[number]['capabilities']
   >
-  type ShowDeposit = Extract<Capabilities, { method: 'register' }>['showDeposit']
+  type ShowDeposit = Extract<Capabilities, { method?: 'login' | undefined }>['showDeposit']
 
   type Parameters = {
     /** Grant an access key during the ceremony. */
@@ -263,7 +263,7 @@ export declare namespace loadAccounts {
     personalSign?: { message: string } | undefined
     /** When `true`, prompts the user to pick from all available credentials instead of using the last-used one. */
     selectAccount?: boolean | undefined
-    /** Show the deposit flow after a register ceremony signs in to an existing account. */
+    /** Show the deposit flow after the connect ceremony succeeds. */
     showDeposit?: ShowDeposit | undefined
   }
   type ReturnType = {

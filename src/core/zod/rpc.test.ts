@@ -213,6 +213,18 @@ describe('wallet_connect.capabilities.request: showDeposit', () => {
     })
   })
 
+  test('accepts true on the login branch', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'login',
+        showDeposit: true,
+      }),
+    ).toEqual({
+      method: 'login',
+      showDeposit: true,
+    })
+  })
+
   test('accepts false on the register branch', () => {
     expect(
       z.parse(Rpc.wallet_connect.capabilities.request, {
@@ -225,6 +237,18 @@ describe('wallet_connect.capabilities.request: showDeposit', () => {
     })
   })
 
+  test('accepts false on the login branch', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'login',
+        showDeposit: false,
+      }),
+    ).toEqual({
+      method: 'login',
+      showDeposit: false,
+    })
+  })
+
   test('accepts deposit parameters on the register branch', () => {
     expect(
       z.parse(Rpc.wallet_connect.capabilities.request, {
@@ -232,6 +256,7 @@ describe('wallet_connect.capabilities.request: showDeposit', () => {
         showDeposit: {
           amount: '50',
           displayName: 'DoorDash',
+          on: 'register',
           token: 'USDC',
         },
       }),
@@ -240,19 +265,29 @@ describe('wallet_connect.capabilities.request: showDeposit', () => {
       showDeposit: {
         amount: '50',
         displayName: 'DoorDash',
+        on: 'register',
         token: 'USDC',
       },
     })
   })
 
-  test('ignores showDeposit on the login branch', () => {
+  test('accepts deposit parameters on the login branch', () => {
     expect(
       z.parse(Rpc.wallet_connect.capabilities.request, {
         method: 'login',
-        showDeposit: true,
+        showDeposit: {
+          amount: '25',
+          on: 'login',
+          token: 'USDC',
+        },
       }),
     ).toEqual({
       method: 'login',
+      showDeposit: {
+        amount: '25',
+        on: 'login',
+        token: 'USDC',
+      },
     })
   })
 
@@ -261,6 +296,15 @@ describe('wallet_connect.capabilities.request: showDeposit', () => {
       z.parse(Rpc.wallet_connect.capabilities.request, {
         method: 'register',
         showDeposit: { amount: 50 },
+      }),
+    ).toThrow()
+  })
+
+  test('rejects invalid showDeposit event filters', () => {
+    expect(() =>
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'register',
+        showDeposit: { on: 'connect' },
       }),
     ).toThrow()
   })
@@ -324,6 +368,22 @@ describe('wallet_connect_strict.parameters: showDeposit', () => {
     })
   })
 
+  test('accepts true on the login branch', () => {
+    expect(
+      z.parse(Rpc.wallet_connect_strict.parameters, {
+        capabilities: {
+          method: 'login',
+          showDeposit: true,
+        },
+      }),
+    ).toEqual({
+      capabilities: {
+        method: 'login',
+        showDeposit: true,
+      },
+    })
+  })
+
   test('accepts false on the register branch', () => {
     expect(
       z.parse(Rpc.wallet_connect_strict.parameters, {
@@ -340,6 +400,22 @@ describe('wallet_connect_strict.parameters: showDeposit', () => {
     })
   })
 
+  test('accepts false on the login branch', () => {
+    expect(
+      z.parse(Rpc.wallet_connect_strict.parameters, {
+        capabilities: {
+          method: 'login',
+          showDeposit: false,
+        },
+      }),
+    ).toEqual({
+      capabilities: {
+        method: 'login',
+        showDeposit: false,
+      },
+    })
+  })
+
   test('accepts deposit parameters on the register branch', () => {
     expect(
       z.parse(Rpc.wallet_connect_strict.parameters, {
@@ -348,6 +424,7 @@ describe('wallet_connect_strict.parameters: showDeposit', () => {
           showDeposit: {
             amount: '100',
             displayName: 'DoorDash',
+            on: 'register',
             token: 'USDC',
           },
         },
@@ -358,23 +435,33 @@ describe('wallet_connect_strict.parameters: showDeposit', () => {
         showDeposit: {
           amount: '100',
           displayName: 'DoorDash',
+          on: 'register',
           token: 'USDC',
         },
       },
     })
   })
 
-  test('ignores showDeposit on the login branch', () => {
+  test('accepts deposit parameters on the login branch', () => {
     expect(
       z.parse(Rpc.wallet_connect_strict.parameters, {
         capabilities: {
           method: 'login',
-          showDeposit: true,
+          showDeposit: {
+            amount: '25',
+            on: 'login',
+            token: 'USDC',
+          },
         },
       }),
     ).toEqual({
       capabilities: {
         method: 'login',
+        showDeposit: {
+          amount: '25',
+          on: 'login',
+          token: 'USDC',
+        },
       },
     })
   })

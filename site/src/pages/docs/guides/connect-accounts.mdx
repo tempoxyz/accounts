@@ -178,13 +178,10 @@ When you're ready to go live, follow the [Deploying to Production](/docs/product
 
 ### Prompt for Funds
 
-If users should have a chance to fund a new account immediately, pass the
-`showDeposit` capability on a registration connect request. The wallet shows the
-standard deposit picker after registration succeeds. The prompt is optional, so
-the user can continue without depositing.
-
-`showDeposit` only applies to registration. Existing users who sign in with a
-saved account skip the deposit prompt.
+If users should have a chance to fund their account immediately after connecting,
+pass the `showDeposit` capability. The wallet shows the standard deposit picker
+after connect succeeds. The prompt is optional, so the user can continue without
+depositing.
 
 ```tsx twoslash [Example.tsx]
 // @noErrors
@@ -200,7 +197,6 @@ export function Example() {
         connect.connect({
           connector,
           capabilities: { // [!code focus]
-            method: 'register', // [!code focus]
             showDeposit: true, // [!code focus]
           }, // [!code focus]
         })
@@ -215,17 +211,18 @@ export function Example() {
 :::tip
 
 Use the object form when you want to pre-fill deposit details. The deposit target
-is always the newly connected account on the active connect chain.
+is always the newly connected account on the active connect chain. Add
+`on: 'register'` when the prompt should only appear after sign up.
 
 ```tsx twoslash [Example.tsx]
 // @noErrors
 connect.connect({
   connector,
   capabilities: { // [!code focus]
-    method: 'register', // [!code focus]
     showDeposit: { // [!code focus]
       amount: '50', // [!code focus]
       displayName: 'Example', // [!code focus]
+      on: 'register', // [!code focus]
       token: 'USDC', // [!code focus]
     }, // [!code focus]
   }, // [!code focus]

@@ -105,6 +105,7 @@ describe('Encoded', () => {
     type Register = Extract<Capabilities, { method: 'register' }>
     type Login = Extract<Capabilities, { method?: 'login' | undefined }>
     type ShowDeposit = Register['showDeposit']
+    type LoginShowDeposit = Login['showDeposit']
     type ShowDepositObject = Exclude<Exclude<ShowDeposit, boolean | undefined>, undefined>
 
     expectTypeOf<ShowDeposit>().toMatchTypeOf<
@@ -112,11 +113,12 @@ describe('Encoded', () => {
       | {
           amount?: string | undefined
           displayName?: string | undefined
+          on?: 'login' | 'register' | undefined
           token?: string | undefined
         }
       | undefined
     >()
-    expectTypeOf<Login>().not.toHaveProperty('showDeposit')
+    expectTypeOf<LoginShowDeposit>().toEqualTypeOf<ShowDeposit>()
     expectTypeOf<ShowDepositObject>().not.toHaveProperty('address')
     expectTypeOf<ShowDepositObject>().not.toHaveProperty('chainId')
   })

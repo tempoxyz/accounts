@@ -428,11 +428,12 @@ export namespace wallet_connect {
   export const authorizeAccessKey = z.optional(wallet_authorizeAccessKey.parameters)
 
   /**
-   * Shows an optional funding prompt after `wallet_connect` registration succeeds.
+   * Shows an optional funding prompt after `wallet_connect` succeeds.
    *
-   * `true` uses the connected account as the deposit target. Object form
-   * pre-fills deposit UI hints. The deposit chain comes from the surrounding
-   * `wallet_connect` chain context.
+   * `true` prompts after both registration and login. Object form pre-fills
+   * deposit UI hints and can scope the prompt to a specific connect method
+   * with `on`. The deposit chain comes from the surrounding `wallet_connect`
+   * chain context.
    */
   export const showDeposit = z.optional(
     z.union([
@@ -442,6 +443,8 @@ export namespace wallet_connect {
         amount: z.optional(z.string()),
         /** Display name shown in the deposit UI (e.g. the app name). */
         displayName: z.optional(z.string()),
+        /** Connect method that should show the deposit prompt. Defaults to both methods. */
+        on: z.optional(z.union([z.literal('login'), z.literal('register')])),
         /**
          * Token to pre-fill, accepted as either a contract address or a
          * supported deposit token symbol (case-insensitive, e.g. `"USDC"`).
@@ -519,6 +522,7 @@ export namespace wallet_connect {
           method: z.optional(z.literal('login')),
           personalSign,
           selectAccount: z.optional(z.boolean()),
+          showDeposit,
         }),
       ]),
     ),
@@ -606,6 +610,7 @@ export namespace wallet_connect_strict {
           method: z.optional(z.literal('login')),
           personalSign,
           selectAccount: z.optional(z.boolean()),
+          showDeposit,
         }),
       ]),
     ),
