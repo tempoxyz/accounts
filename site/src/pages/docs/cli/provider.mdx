@@ -27,10 +27,6 @@ const provider = Provider.create()
 
 The CLI adapter requires `capabilities.authorizeAccessKey` on `wallet_connect` — the user must explicitly grant a scoped access key during the device-code ceremony.
 
-New account registration shows a post-connect funding prompt by default before
-the user returns to the terminal. Set `capabilities.showDeposit` to `false` to
-suppress it, or to `true`/object form to request the prompt explicitly.
-
 ```ts twoslash [cli.ts]
 // @noErrors
 import { Expiry } from 'accounts'
@@ -54,8 +50,6 @@ await connect(client, { // [!code focus]
         selector: 'transfer(address,uint256)', // [!code focus]
       }], // [!code focus]
     }, // [!code focus]
-    method: 'register', // [!code focus]
-    showDeposit: true, // [!code focus]
   }, // [!code focus]
 }) // [!code focus]
 ```
