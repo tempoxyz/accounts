@@ -984,32 +984,27 @@ function WalletConnect(props: { adapterType: AdapterType }) {
             </label>
           </legend>
           {showDepositEnabled && (
-            <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ display: 'grid', gap: 12 }}>
               <div
                 style={{
                   display: 'grid',
-                  gap: 8,
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                  gap: 12,
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
                 }}
               >
-                <label style={{ display: 'grid', gap: 4 }}>
+                <label style={{ display: 'grid', gap: 6 }}>
                   <span>Amount</span>
                   <input name="showDepositAmount" placeholder="50" />
                 </label>
-                <label style={{ display: 'grid', gap: 4 }}>
+                <label style={{ display: 'grid', gap: 6 }}>
                   <span>Token</span>
-                  <input name="showDepositToken" placeholder="USDC or 0x…" />
-                </label>
-                <label style={{ display: 'grid', gap: 4 }}>
-                  <span>Display name</span>
-                  <input name="showDepositDisplayName" placeholder="example.com" />
-                </label>
-                <label style={{ display: 'grid', gap: 4 }}>
-                  <span>On</span>
-                  <select name="showDepositOn" defaultValue="">
-                    <option value="">Login and register</option>
-                    <option value="login">Login</option>
-                    <option value="register">Register</option>
+                  <select name="showDepositToken" defaultValue="">
+                    <option value="" />
+                    {tokenlist.map((t) => (
+                      <option key={t.address} value={t.address}>
+                        {t.symbol}
+                      </option>
+                    ))}
                   </select>
                 </label>
               </div>
@@ -1031,27 +1026,16 @@ function buildShowDeposit(
   form: FormData,
 ): true | {
   amount?: string | undefined
-  displayName?: string | undefined
-  on?: 'login' | 'register' | undefined
   token?: string | undefined
 } {
   const amount = String(form.get('showDepositAmount') ?? '').trim()
-  const displayName = String(form.get('showDepositDisplayName') ?? '').trim()
-  const on = getShowDepositOn(form.get('showDepositOn'))
   const token = String(form.get('showDepositToken') ?? '').trim()
   const showDeposit = {
     ...(amount ? { amount } : {}),
-    ...(displayName ? { displayName } : {}),
-    ...(on ? { on } : {}),
     ...(token ? { token } : {}),
   }
   if (Object.keys(showDeposit).length === 0) return true
   return showDeposit
-}
-
-function getShowDepositOn(value: FormDataEntryValue | null): 'login' | 'register' | undefined {
-  if (value === 'login' || value === 'register') return value
-  return undefined
 }
 
 function EthRequestAccounts() {
