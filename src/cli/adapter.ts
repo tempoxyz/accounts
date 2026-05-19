@@ -300,6 +300,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
           const result = await authorize({
             authorizeAccessKey: parameters?.authorizeAccessKey,
             method: 'wallet_connect',
+            ...(parameters?.showDeposit !== undefined
+              ? { showDeposit: parameters.showDeposit }
+              : {}),
           })
 
           return {
