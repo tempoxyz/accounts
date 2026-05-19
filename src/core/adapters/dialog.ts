@@ -194,20 +194,18 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           })
 
           const address = accounts[0]?.address
-          const keyAuthorization = accounts[0]?.capabilities.keyAuthorization
+          const capabilities = accounts[0]?.capabilities
+          const keyAuthorization = capabilities?.keyAuthorization
 
           if (accessKey && address && keyAuthorization)
             saveAccessKey(address, keyAuthorization, accessKey.keyPair)
 
           return {
             accounts: accounts.map((a) => ({ address: a.address })),
+            ...(capabilities?.auth ? { auth: capabilities.auth } : {}),
             ...(keyAuthorization ? { keyAuthorization } : {}),
-            ...(accounts[0]?.capabilities.signature
-              ? { signature: accounts[0].capabilities.signature }
-              : {}),
-            ...(accounts[0]?.capabilities.personalSign
-              ? { personalSign: accounts[0].capabilities.personalSign }
-              : {}),
+            ...(capabilities?.signature ? { signature: capabilities.signature } : {}),
+            ...(capabilities?.personalSign ? { personalSign: capabilities.personalSign } : {}),
           }
         },
 
@@ -235,20 +233,18 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           })
 
           const address = accounts[0]?.address
-          const keyAuthorization = accounts[0]?.capabilities.keyAuthorization
+          const capabilities = accounts[0]?.capabilities
+          const keyAuthorization = capabilities?.keyAuthorization
 
           if (accessKey && address && keyAuthorization)
             saveAccessKey(address, keyAuthorization, accessKey.keyPair)
 
           return {
             accounts: accounts.map((a) => ({ address: a.address })),
+            ...(capabilities?.auth ? { auth: capabilities.auth } : {}),
             ...(keyAuthorization ? { keyAuthorization } : {}),
-            ...(accounts[0]?.capabilities.signature
-              ? { signature: accounts[0].capabilities.signature }
-              : {}),
-            ...(accounts[0]?.capabilities.personalSign
-              ? { personalSign: accounts[0].capabilities.personalSign }
-              : {}),
+            ...(capabilities?.signature ? { signature: capabilities.signature } : {}),
+            ...(capabilities?.personalSign ? { personalSign: capabilities.personalSign } : {}),
           }
         },
 

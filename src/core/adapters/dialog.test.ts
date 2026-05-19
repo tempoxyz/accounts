@@ -92,6 +92,72 @@ describe('dialog', () => {
     expect(store.getState().requestQueue).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: loadAccounts forwards auth capabilities returned by the dialog', async () => {
+    const storage = Storage.memory()
+    const store = Store.create({ chainId: tempoLocalnet.id, storage })
+    const adapter = dialog({ dialog: Dialog.noop() })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store,
+    })
+    const request = {
+      method: 'wallet_connect' as const,
+      params: [
+        {
+          capabilities: {
+            auth: {
+              url: 'https://app.example/auth',
+              returnToken: true,
+            },
+          },
+          chainId: '0x1079' as const,
+        },
+      ] as const,
+    }
+
+    const promise = adapter.actions.loadAccounts(undefined, request)
+
+    await vi.waitFor(() => {
+      if (!store.getState().requestQueue[0]) throw new Error('request not queued')
+    })
+
+    const queued = store.getState().requestQueue[0]!
+    store.setState({
+      requestQueue: [
+        {
+          request: queued.request,
+          result: {
+            accounts: [
+              {
+                address,
+                capabilities: {
+                  auth: { token: 'test-token' },
+                },
+              },
+            ],
+          },
+          status: 'success',
+        },
+      ],
+    })
+
+    await expect(promise).resolves.toMatchInlineSnapshot(`
+      {
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "auth": {
+          "token": "test-token",
+        },
+      }
+    `)
+  })
+
   test('behavior: sendTransaction falls through when no access key is selected', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })

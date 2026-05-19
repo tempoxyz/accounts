@@ -201,6 +201,8 @@ export declare namespace createAccount {
     email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
+    /** Server Authentication result, if the auth capability was requested. */
+    auth?: { token?: string | undefined } | undefined
     /**
      * Echo of the `personalSign` request, present iff the caller supplied
      * `personalSign`. The signature lives on the top-level `signature`
@@ -257,6 +259,8 @@ export declare namespace loadAccounts {
     email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
+    /** Server Authentication result, if the auth capability was requested. */
+    auth?: { token?: string | undefined } | undefined
     /**
      * Echo of the `personalSign` request, present iff the caller supplied
      * `personalSign`. The signature lives on the top-level `signature`

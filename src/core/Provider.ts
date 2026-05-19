@@ -602,56 +602,61 @@ export function create(options: create.Options = {}): create.ReturnType {
                       ? { message: auth.message }
                       : capabilities?.personalSign
 
-                    const { keyAuthorization, accounts, email, personalSign, signature, username } =
-                      await (async () => {
-                        if (capabilities?.method === 'register') {
-                          // If a stored account already has this label, sign in
-                          // with its credential instead of creating a new one.
-                          const existing = capabilities.name
-                            ? store
-                                .getState()
-                                .accounts.find(
-                                  (a) =>
-                                    'credential' in a &&
-                                    a.label?.toLowerCase() === capabilities.name!.toLowerCase(),
-                                )
-                            : undefined
-                          if (existing && 'credential' in existing)
-                            return await actions.loadAccounts(
-                              {
-                                credentialId: existing.credential?.id,
-                                digest: capabilities.digest,
-                                authorizeAccessKey,
-                                ...(personalSign_request
-                                  ? { personalSign: personalSign_request }
-                                  : {}),
-                              },
-                              request,
-                            )
-                          return await actions.createAccount(
+                    const {
+                      accounts,
+                      auth: auth_capability,
+                      email,
+                      keyAuthorization,
+                      personalSign,
+                      signature,
+                      username,
+                    } = await (async () => {
+                      if (capabilities?.method === 'register') {
+                        // If a stored account already has this label, sign in
+                        // with its credential instead of creating a new one.
+                        const existing = capabilities.name
+                          ? store
+                              .getState()
+                              .accounts.find(
+                                (a) =>
+                                  'credential' in a &&
+                                  a.label?.toLowerCase() === capabilities.name!.toLowerCase(),
+                              )
+                          : undefined
+                        if (existing && 'credential' in existing)
+                          return await actions.loadAccounts(
                             {
+                              credentialId: existing.credential?.id,
                               digest: capabilities.digest,
                               authorizeAccessKey,
-                              name: capabilities.name ?? 'default',
-                              userId: capabilities.userId ?? Hex.random(16),
                               ...(personalSign_request
                                 ? { personalSign: personalSign_request }
                                 : {}),
                             },
                             request,
                           )
-                        }
-                        return await actions.loadAccounts(
+                        return await actions.createAccount(
                           {
-                            credentialId: capabilities?.credentialId,
-                            digest: capabilities?.digest,
+                            digest: capabilities.digest,
                             authorizeAccessKey,
-                            selectAccount: capabilities?.selectAccount,
+                            name: capabilities.name ?? 'default',
+                            userId: capabilities.userId ?? Hex.random(16),
                             ...(personalSign_request ? { personalSign: personalSign_request } : {}),
                           },
                           request,
                         )
-                      })()
+                      }
+                      return await actions.loadAccounts(
+                        {
+                          credentialId: capabilities?.credentialId,
+                          digest: capabilities?.digest,
+                          authorizeAccessKey,
+                          selectAccount: capabilities?.selectAccount,
+                          ...(personalSign_request ? { personalSign: personalSign_request } : {}),
+                        },
+                        request,
+                      )
+                    })()
 
                     store.setState({
                       accounts: resolveAccounts(accounts),
@@ -712,7 +717,9 @@ export function create(options: create.Options = {}): create.ReturnType {
                                   : {}),
                                 ...(email !== undefined ? { email } : {}),
                                 ...(username !== undefined ? { username } : {}),
-                                ...(auth_result ? { auth: auth_result } : {}),
+                                ...((auth_result ?? auth_capability)
+                                  ? { auth: auth_result ?? auth_capability }
+                                  : {}),
                                 ...(personalSign
                                   ? { personalSign: { message: personalSign.message } }
                                   : {}),
