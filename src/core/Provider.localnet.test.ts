@@ -418,6 +418,22 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         expect(capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
       })
 
+      test('default: object-form auth with url derives challenge and verify', async () => {
+        const provider = Provider.create({ adapter: adapter() })
+
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [{ capabilities: { method: 'register', auth: { url: authBase } } }],
+        })
+
+        const capabilities = result.accounts[0]!.capabilities
+        expect(capabilities.auth).toEqual({ token: expect.any(String) })
+        expect(capabilities.personalSign).toEqual({
+          message: expect.stringContaining('wants you to sign in'),
+        })
+        expect(capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
+      })
+
       test('default: object-form auth with explicit endpoints uses the override URLs', async () => {
         const provider = Provider.create({ adapter: adapter() })
 
@@ -437,6 +453,32 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         })
 
         expect(result.accounts[0]!.capabilities.auth).toEqual({ token: expect.any(String) })
+      })
+
+      test('default: forwarded auth without verify returns signature for downstream verify', async () => {
+        const provider = Provider.create({ adapter: adapter() })
+
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [
+            {
+              capabilities: {
+                method: 'register',
+                auth: {
+                  challenge: `${authBase}/challenge`,
+                  logout: `${authBase}/logout`,
+                },
+              },
+            },
+          ],
+        })
+
+        const capabilities = result.accounts[0]!.capabilities
+        expect(capabilities.auth).toBeUndefined()
+        expect(capabilities.personalSign).toEqual({
+          message: expect.stringContaining('wants you to sign in'),
+        })
+        expect(capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
       })
 
       test('error: verify endpoint returns 401 → InternalError; user already signed', async () => {
@@ -1139,7 +1181,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
           from:  0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
         Details: plain send failure
-        Version: viem@2.49.3]
+        Version: viem@2.50.4]
       `)
     })
   })
@@ -1961,6 +2003,24 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       })
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
       expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
+    })
+
+    test('behavior: fills pending keyAuthorization with the active account when from is omitted', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      const result = await provider.request({
+        method: 'eth_fillTransaction',
+        params: [fillTx],
+      })
+      expect(result.tx.gas).toBeDefined()
+      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
     })
 
     test('behavior: removes stale access key and retries on error', async () => {

@@ -4,7 +4,6 @@ import type { Address, JsonRpcAccount } from 'viem/accounts'
 import { Account as TempoAccount } from 'viem/tempo'
 
 import type { OneOf } from '../internal/types.js'
-import * as core_AccessKey from './AccessKey.js'
 import type * as core_Store from './Store.js'
 
 /** Account stored in the provider state. */
@@ -35,7 +34,7 @@ export type Store = {
 export function find(options: find.Options & { signable: true }): TempoAccount.Account
 export function find(options: find.Options): TempoAccount.Account | JsonRpcAccount
 export function find(options: find.Options): TempoAccount.Account | JsonRpcAccount {
-  const { accessKey = true, address, signable = false, store } = options
+  const { address, signable = false, store } = options
   const { accounts, activeAccount } = store.getState()
 
   const activeAddr = accounts[activeAccount]?.address
@@ -47,30 +46,13 @@ export function find(options: find.Options): TempoAccount.Account | JsonRpcAccou
       ? new Provider.UnauthorizedError({ message: `Account "${address}" not found.` })
       : new Provider.DisconnectedError({ message: 'No active account.' })
 
-  // When accessKey is requested, prefer a locally-signable access key for this address.
-  if (accessKey) {
-    const account = core_AccessKey.selectAccount({
-      address: root.address,
-      calls: options.calls,
-      chainId: options.chainId ?? store.getState().chainId,
-      store,
-    })
-    if (account) return account
-  }
-
   return hydrate(root, { signable }) as never
 }
 
 export declare namespace find {
   type Options = {
-    /** Whether to prefer an access key for this account. @default true */
-    accessKey?: boolean | undefined
     /** Address to find. Defaults to the active account. */
     address?: Address | undefined
-    /** Calls to match against access key scopes. When provided, access keys whose scopes don't cover these calls are skipped. */
-    calls?: readonly { to?: Address | undefined; data?: Hex | undefined }[] | undefined
-    /** Chain ID the access key must be authorized on. Defaults to the active chain. */
-    chainId?: number | undefined
     /** Whether to hydrate signing capability. @default false */
     signable?: boolean | undefined
     /** Reactive state store. */

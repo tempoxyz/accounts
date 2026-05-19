@@ -1,5 +1,28 @@
 # accounts
 
+## 0.13.0
+
+### Minor Changes
+
+- 0666744: **Breaking:** Changed `Handler.auth()` to require callers to provide `origin` or `domain`, so SIWE challenge and verify flows pinned domain binding instead of deriving it from request `Host` headers.
+- f652ff2: **Breaking:** Updated `wallet_deposit` params to use `amount` and `token` and removed `value`.
+
+  ```diff
+  provider.request({
+    method: 'wallet_deposit',
+  - params: [{ value: '25' }],
+  + params: [{ amount: '25', token: 'pathUSD' }],
+  })
+  ```
+
+### Patch Changes
+
+- ab516b7: Fixed WebAuthn credential storage to bind credentials to their registered user id and use atomic duplicate rejection when the configured `Kv` supports it.
+- 4029a37: Fixed dialog auth capability handling to forward returned auth tokens through wallet connection account results.
+- bdd6b39: Rejected unsafe app-provided external fee-payer URLs unless relay config explicitly allowed unsafe URLs.
+- c64d825: Fixed `wallet_connect` auth handling to allow derived or forwarded auth endpoints without dropping the SIWE signature.
+- dd5d399: Fixed access-key authorization lifecycle handling so pending authorizations stayed attached until publication was known.
+
 ## 0.12.2
 
 ### Patch Changes

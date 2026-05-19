@@ -1,0 +1,148 @@
+---
+title: Deposits
+description: Open the Tempo deposit flow from a connected account and let the user choose deposit details.
+---
+
+import { Cards, Card } from 'vocs'
+import { ConnectAccount } from '../../../components/ConnectAccount'
+import { Demo, DemoReset } from '../../../components/Demo'
+import { DepositFunds } from '../../../components/DepositFunds'
+import * as Steps from '../../../components/Steps'
+
+# Deposits
+
+Open the Tempo deposit flow from a connected account using the [Tempo Accounts SDK](/docs).
+
+Use deposits when your app needs a user to add funds to their account. The SDK calls [`wallet_deposit`](/docs/rpc/wallet_deposit), opens the UI, and returns receipts when the selected deposit path submits account activity immediately.
+
+In the default flow, the UI asks the user to choose the destination account, amount, chain, and token.
+
+## Demo
+
+By the end of this guide you'll have a button that opens the deposit flow without amount or token pre-filled.
+
+<Demo
+  title="Deposit Funds"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/deposits"
+  headerAction={<DemoReset />}
+  className="flex flex-col gap-3"
+>
+  <Steps.Step
+    label="Create an account, or use an existing one."
+    action={<ConnectAccount />}
+  />
+  <DepositFunds />
+</Demo>
+
+## Walkthrough
+
+::::steps
+
+### Connect an Account
+
+Follow the [Connect Accounts](/docs/guides/connect-accounts) guide to let the user sign in. Deposits run after the user has a connected account that can review the request.
+
+### Open the Deposit Flow
+
+Call [`Hooks.wallet.useDeposit`](https://wagmi.sh/tempo/hooks/wallet.useDeposit) and invoke `deposit.mutate({})`. The UI collects the deposit details from the user.
+
+```tsx twoslash [Deposit.tsx]
+// @noErrors
+import { Hooks } from 'wagmi/tempo'
+
+export function Deposit() {
+  const deposit = Hooks.wallet.useDeposit()
+
+  return (
+    <button
+      disabled={deposit.isPending}
+      onClick={() => deposit.mutate({})}
+    >
+      {deposit.isPending ? 'Opening...' : 'Open deposit'}
+    </button>
+  )
+}
+```
+
+:::tip[Optional pre-fill]
+If your app already knows the token or amount, pass them as hints. Omit fields when the user should choose them in the UI.
+
+```tsx twoslash [Deposit.tsx]
+// @noErrors
+const pathUsd = '0x20c0000000000000000000000000000000000000'
+
+deposit.mutate({
+  amount: '10',
+  token: pathUsd,
+})
+```
+
+:::
+
+### Show the Result
+
+Some deposit paths return receipts immediately. Use those receipt hashes to link to the Tempo explorer or refresh balances in your app.
+
+Other paths can settle asynchronously. When `deposit.data?.receipts` is missing, show a submitted state and let your balance query update when funds arrive.
+
+```tsx twoslash [Deposit.tsx]
+// @noErrors
+import { tempo } from 'wagmi/chains'
+import { Hooks } from 'wagmi/tempo'
+
+export function Deposit() {
+  const deposit = Hooks.wallet.useDeposit()
+  const receipt = deposit.data?.receipts?.[0]
+
+  return (
+    <div>
+      <button onClick={() => deposit.mutate({ /* ... */ })}>Deposit</button>
+      {deposit.isSuccess && (
+        <div>
+          <span>Deposit submitted.</span>
+          {receipt && (
+            <a
+              href={`${tempo.blockExplorers.default.url}/tx/${receipt.transactionHash}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              See receipt
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+::::
+
+## Next Steps
+
+<Cards>
+  <Card
+    description="Run the complete deposits example locally."
+    to="https://github.com/tempoxyz/accounts/tree/main/examples/deposits"
+    icon="lucide:download"
+    title="Deposits Example"
+  />
+  <Card
+    description="Read the low-level request and response shape for the deposit flow."
+    to="/docs/rpc/wallet_deposit"
+    icon="lucide:braces"
+    title="wallet_deposit"
+  />
+  <Card
+    description="Send stablecoin transfers from a connected account."
+    to="/docs/guides/transfers"
+    icon="lucide:send"
+    title="Transfers"
+  />
+  <Card
+    description="Exchange one supported token for another."
+    to="/docs/guides/swaps"
+    icon="lucide:arrow-left-right"
+    title="Swaps"
+  />
+</Cards>

@@ -48,11 +48,12 @@ Join the Telegram group to chat with the team and other devs: [@mpp_devs](https:
 
 ## Examples
 
-| Example                                                                 | Description                                                                      |
-| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| [basic](./examples/basic)                                               | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallet.  |
-| [cli](./examples/cli)                                                   | Minimal CLI setup to connect and authorize local keys using Tempo Wallet.        |
-| [webauthn](./examples/webauthn)               | Domain-bound passkey example using Wagmi and the `webAuthn` connector.           |
+| Example                                                       | Description                                                                      |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [basic](./examples/basic)                                     | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallet.  |
+| [deposits](./examples/deposits)                               | Open the deposit UI with optional pre-filled fields.                             |
+| [cli](./examples/cli)                                         | Minimal CLI setup to connect and authorize local keys using Tempo Wallet.        |
+| [webauthn](./examples/webauthn)                               | Domain-bound passkey example using Wagmi and the `webAuthn` connector.           |
 | [access-key](./examples/access-key)                           | Authorize access keys using Tempo Wallet to submit transactions without prompts. |
 | [access-key-and-webauthn](./examples/access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                               |
 | [fee-payer](./examples/fee-payer)                             | Sponsor transactions via Tempo Wallet.                                           |

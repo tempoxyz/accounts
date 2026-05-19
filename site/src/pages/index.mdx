@@ -1,80 +1,325 @@
 ---
-title: Accounts SDK
-description: Adapter-based account infrastructure for apps and wallets building on Tempo.
+title: Accounts SDK - Getting Started
+description: Set up the Tempo Accounts SDK to create, manage, and interact with accounts on Tempo.
 ---
 
 import { Cards, Card } from 'vocs'
+import { ConnectAccount } from '../components/ConnectAccount'
+import { Demo, DemoReset } from '../components/Demo'
+import { SendPayment } from '../components/SendPayment'
+import * as Steps from '../components/Steps'
 
-# Accounts SDK
+# Getting Started
 
-Build account experiences on Tempo without locking your app to one signing model. The Accounts SDK routes app requests through adapters, so the same product flow can run through Tempo Wallet, domain-bound WebAuthn, or your own signing infrastructure.
+## Overview
+
+The Tempo Accounts SDK is a TypeScript library for applications and wallets to create, manage, and interact with accounts on Tempo.
+
+### Demo
+
+Below is a live example of the Tempo Wallet adapter from the Accounts SDK — connect a Tempo account and send a payment to see the end-to-end flow.
+
+<Demo
+  title="Make a Payment"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/basic"
+  headerAction={<DemoReset />}
+  className="flex flex-col gap-3"
+>
+  <Steps.Step
+    label="Create an account, or use an existing one."
+    action={<ConnectAccount />}
+  />
+  <SendPayment />
+</Demo>
+
+### Quick Prompt
+
+You can integrate the Accounts SDK, and achieve a flow like the demo above by prompting your agent:
+
+```
+Read accounts.tempo.xyz and integrate Tempo accounts into my application
+```
+
+### Adapters
+
+The Accounts SDK ships with several signing adapters. Pick the one that matches how you want to custody your Tempo account.
 
 <Cards>
   <Card
-    title="Start with Tempo Wallet"
-    description="Use the hosted universal wallet when you want embedded account creation, signing, onramp, and transaction orchestration."
-    to="/docs/adapters/tempo-wallet"
+    description="Universal account hosted on Tempo"
     icon="lucide:wallet"
+    to="/docs/adapters/tempo-wallet"
+    title="Tempo Wallet"
   />
   <Card
-    title="Bring passkeys to your domain"
-    description="Use WebAuthn when you want to own the passkey ceremony and plug those accounts into Tempo features."
-    to="/docs/adapters/webauthn"
+    description="Passkey accounts bound to your own origin"
     icon="lucide:fingerprint"
+    to="/docs/adapters/webauthn"
+    title="WebAuthn (Passkeys)"
   />
   <Card
-    title="Bring your auth"
-    description="Use a custom adapter for Privy, AWS KMS, Turnkey, internal signers, or hosted wallet infrastructure."
-    to="/docs/adapters/custom"
+    description="Accounts custodied by Turnkey infrastructure"
+    icon='<svg viewBox="-18 -12 50 50" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="m8.023 11.354 6.518 14.253H0l6.518-14.253a.828.828 0 0 1 1.505 0ZM7.27 9.145a4.576 4.576 0 0 0 4.579-4.572A4.576 4.576 0 0 0 7.269 0a4.576 4.576 0 0 0-4.578 4.573A4.576 4.576 0 0 0 7.27 9.145Z" fill="currentColor"/></svg>'
+    to="/docs/adapters/turnkey"
+    title="Turnkey"
+  />
+  <Card
+    description="Direct private key accounts"
     icon="lucide:key-round"
+    to="/docs/adapters/private-key"
+    title="Private Key"
   />
   <Card
-    title="Read the docs"
-    description="Install the SDK, choose an adapter, and pair guides with runnable examples."
-    to="/docs"
-    icon="lucide:book-open"
+    description="Bring your own auth infrastructure"
+    icon="lucide:plug"
+    to="/docs/adapters/custom"
+    title="Custom"
   />
 </Cards>
 
-## Choose an adapter
+## Install
 
-| Adapter | Use it when |
-| --- | --- |
-| [Tempo Wallet](/docs/adapters/tempo-wallet) | You want a universal wallet without owning auth or signing infrastructure. |
-| [WebAuthn](/docs/adapters/webauthn) | You want domain-bound passkey accounts on your own app origin. |
-| [Custom adapter](/docs/adapters/custom) | You want to connect Privy, AWS KMS, Turnkey, internal signers, or your own hosted wallet. |
+The Tempo Accounts SDK is available as an [NPM package](https://www.npmjs.com/package/accounts) under `accounts`
 
-## Demo
+:::code-group
 
-:::warning[Stub]
-The live demo shell belongs here. The first pass pins the IA and copy; the real demo should mount the same connect, pay, and authorize flows behind an adapter toggle for Tempo Wallet and WebAuthn.
+```bash [npm]
+npm i accounts
+```
+
+```bash [pnpm]
+pnpm i accounts
+```
+
+```bash [bun]
+bun i accounts
+```
+
 :::
 
-| Flow | Tempo Wallet | WebAuthn |
-| --- | --- | --- |
-| Connect account | Stub | Stub |
-| Make a payment | Stub | Stub |
-| Authorize access | Stub | Stub |
+## Wagmi Usage
 
-## Build paths
+The Tempo Accounts SDK is best used in conjunction with [Wagmi](https://wagmi.sh/) to provide a seamless experience for developers and end-users.
+
+::::steps
+
+### Set up Wagmi
+
+Get started with Wagmi by following the [official guide](https://wagmi.sh/react/getting-started).
+
+### Configure
+
+After you have set up Wagmi, you can configure the Tempo Accounts SDK with `tempoWallet` from `wagmi/connectors` or `webAuthn` from `wagmi/tempo`.
+
+:::code-group
+
+```tsx twoslash [Tempo Wallet]
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors' // [!code hl]
+
+export const wagmiConfig = createConfig({
+  chains: [tempo],
+  connectors: [tempoWallet()], // [!code hl]
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+
+```tsx twoslash [Domain-bound Passkeys]
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { webAuthn } from 'wagmi/tempo' // [!code hl]
+
+export const wagmiConfig = createConfig({
+  chains: [tempo],
+  connectors: [webAuthn({ authUrl: '/auth' })], // [!code hl]
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+
+:::
+
+:::info[What connector should I use?]
+Most apps should use **Tempo Wallet** - it provides a universal account experience with embedded onramp, access keys, and transaction orchestration. **Domain-bound Passkeys** is for apps that want to manage domain-bound passkey accounts directly. [Learn more](/docs/faq#what-connector-should-i-use).
+:::
+
+:::tip
+If you are using a wallet connection library and cannot supply a custom connector,
+you can use `Provider.create()` to create a new provider instance, and inject itself
+into the wallet connection library via [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963).
+
+```tsx
+import { Provider } from 'accounts'
+Provider.create()
+```
+
+:::
+
+### Use Accounts
+
+You can now use [Wagmi Hooks](https://wagmi.sh/react/api/hooks) like `useConnect`, or [Tempo Hooks](https://wagmi.sh/tempo) like `useTransfer`.
+
+```tsx twoslash
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
+
+function Connect() {
+  const connect = useConnect()
+  const connectors = useConnectors()
+
+  return connectors?.map((connector) => (
+    <button
+      key={connector.uid}
+      onClick={() => connect.connect({ connector })}
+    >
+      Connect
+    </button>
+  ))
+}
+```
+
+### Next Steps
 
 <Cards>
   <Card
-    title="Connect Accounts"
-    description="Connect users with Tempo Wallet or WebAuthn and read their account state."
-    to="/docs/guides/connect-accounts"
+    description="Embed Tempo Wallet or domain-bound passkeys into your app"
     icon="lucide:user-plus"
+    to="/docs/guides/connect-accounts"
+    title="Create & Use Accounts"
   />
   <Card
-    title="Transfers"
-    description="Send stablecoin transfers from a connected account, initiated by the user or by your server."
-    to="/docs/guides/transfers"
+    description="Send stablecoin transfers from a connected account, initiated by the user or by your server"
     icon="lucide:send"
+    to="/docs/guides/transfers"
+    title="Send Transfers"
   />
   <Card
-    title="Fee Sponsorship"
-    description="Sponsor user transactions from a server-side policy and fee payer."
-    to="/docs/guides/fee-sponsorship"
+    description="Sponsor account fees from a server-controlled policy"
     icon="lucide:badge-dollar-sign"
+    to="/docs/guides/fee-sponsorship"
+    title="Sponsor Fees"
+  />
+  <Card
+    description="Choose between Tempo Wallet, WebAuthn, and custom signing infrastructure"
+    icon="lucide:route"
+    to="/docs/adapters"
+    title="Choose an Adapter"
+  />
+  <Card
+    description="Hooks to connect wallets, sign transactions, and more"
+    icon='<svg viewBox="-80 -80 789 789" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M71.788 366.47C71.788 386.294 87.8583 402.364 107.682 402.364H179.47C199.294 402.364 215.364 386.294 215.364 366.47L215.364 222.894C215.364 203.07 231.434 187 251.258 187C271.082 187 287.152 203.07 287.152 222.894V366.47C287.152 386.294 303.222 402.364 323.046 402.364H394.834C414.658 402.364 430.728 386.294 430.728 366.47V222.894C430.728 203.07 446.798 187 466.622 187C486.446 187 502.516 203.07 502.516 222.894V438.258C502.516 458.082 486.446 474.152 466.622 474.152H35.894C16.0703 474.152 0 458.082 0 438.258L1.26782e-05 222.894C1.40786e-05 203.07 16.0703 187 35.894 187C55.7177 187 71.788 203.07 71.788 222.894L71.788 366.47ZM581.142 482.698C607.573 482.698 629 461.271 629 434.84C629 408.408 607.573 386.981 581.142 386.981C554.71 386.981 533.283 408.408 533.283 434.84C533.283 461.271 554.71 482.698 581.142 482.698Z" fill="currentColor"/></svg>'
+    to="https://wagmi.sh/react/api/hooks"
+    title="Wagmi Hooks"
+  />
+  <Card
+    description="Hooks to transfer stablecoins, interact with the stablecoin DEX, and read token data"
+    icon='<svg viewBox="0 0 178 178" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M58.2683 51.1115C58.6089 50.0871 59.567 49.3954 60.6469 49.3954H136.216C137.116 49.3954 137.753 50.2773 137.468 51.1326L129.819 74.0819C129.478 75.1062 128.519 75.798 127.439 75.798H105.18C104.1 75.798 103.142 76.4897 102.801 77.5141L86.3416 126.889C86.001 127.913 85.0429 128.605 83.963 128.605H60.1428C59.2425 128.605 58.606 127.723 58.8912 126.868L75.3344 77.5372C75.6193 76.6819 74.9831 75.7999 74.0829 75.7999H51.8705C50.9702 75.7999 50.3338 74.918 50.6188 74.0626L58.2683 51.1115Z" fill="currentColor"/></svg>'
+    to="https://wagmi.sh/tempo"
+    title="Tempo Hooks"
   />
 </Cards>
+
+::::
+
+## Vanilla + Viem Usage
+
+You can get started with the Tempo Accounts SDK by creating a new `Provider` instance.
+Once set up, you can use the provider to interact with accounts via JSON-RPC, or use [Viem Actions](https://viem.sh/tempo) with `.getClient(){:js}`.
+
+```tsx twoslash
+// @noErrors
+import { Provider } from 'accounts'
+import { parseUnits } from 'viem'
+import { tempoActions } from 'viem/tempo'
+
+const provider = Provider.create()
+
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
+})
+
+const client = provider.getClient().extend(tempoActions())
+
+const { receipt } = await client.token.transferSync({
+  token: '0x20c0000000000000000000000000000000000001',
+  to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEbb',
+  amount: parseUnits('10', 6),
+})
+```
+
+## Examples
+
+Check out these examples to get started with the Tempo Accounts SDK.
+
+| Example                                                                                                                | Description                                                                       |                                         |
+| ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------- |
+| [Embed Tempo Wallet](https://github.com/tempoxyz/accounts/tree/main/examples/basic)                                    | Wagmi-based setup using the `tempoWallet` connector to connect to Tempo Wallets.  | [Guide](/docs/guides/connect-accounts)  |
+| [Deposits](https://github.com/tempoxyz/accounts/tree/main/examples/deposits)                                           | Open the deposit UI from a connected account.                                     | [Guide](/docs/guides/deposits)          |
+| [Embed Domain-bound Passkeys](https://github.com/tempoxyz/accounts/tree/main/examples/webauthn)                        | Domain-bound passkey example using Wagmi and the `webAuthn` connector.            | [Guide](/docs/guides/authentication)    |
+| [CLI + Tempo Wallets](https://github.com/tempoxyz/accounts/tree/main/examples/cli)                                     | Minimal CLI setup to connect and authorize local keys using Tempo Wallets.        | [Guide](/docs/guides/cli)               |
+| [Access Keys + Tempo Wallets](https://github.com/tempoxyz/accounts/tree/main/examples/access-key)                      | Authorize access keys using Tempo Wallets to submit transactions without prompts. | [Guide](/docs/guides/spend-permissions) |
+| [Access Keys + Domain-bound Passkeys](https://github.com/tempoxyz/accounts/tree/main/examples/access-key-and-webauthn) | Authorize access keys using domain-bound Passkeys.                                | [Guide](/docs/guides/spend-permissions) |
+| [Sponsor Fees + Tempo Wallets](https://github.com/tempoxyz/accounts/tree/main/examples/fee-payer)                      | Sponsor transactions via Tempo Wallets.                                           | [Guide](/docs/guides/fee-sponsorship)   |
+| [Sponsor Fees + Domain-bound Passkeys](https://github.com/tempoxyz/accounts/tree/main/examples/fee-payer-and-webauthn) | Sponsor transactions via domain-bound Passkeys.                                   | [Guide](/docs/guides/fee-sponsorship)   |
+
+## Secure Origins (HTTPS)
+
+The Tempo Accounts SDK is designed to be used on secure origins (HTTPS). If you are using HTTP,
+it will fallback to using a popup instead of an iframe. This is because
+WebAuthn is not supported on iframes embedded on insecure origins (HTTP).
+
+Web frameworks typically default to HTTP in development environments. You
+will need to ensure to turn on HTTPS in development to leverage the iframe dialog.
+
+### Portless
+
+[Portless](https://github.com/vercel-labs/portless) replaces port numbers with stable, named `.localhost` URLs and can enable HTTPS with auto-generated certificates.
+
+```sh
+npm install -g portless
+portless run dev
+# → https://myapp.localhost
+```
+
+### Next.js
+
+HTTPS can be enabled on Next.js' dev server by setting the `--experimental-https` flag on the `next dev` command.
+
+```bash
+next dev --experimental-https
+```
+
+### Vite
+
+HTTPS can be enabled on Vite's dev server by installing and configuring the `vite-plugin-mkcert` plugin.
+
+```bash
+npm i vite-plugin-mkcert
+```
+
+:::code-group
+
+```ts [vite.config.ts]
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import mkcert from 'vite-plugin-mkcert'
+
+export default defineConfig({
+  plugins: [
+    mkcert(),
+    react(),
+  ],
+})
+```
+
+:::
+
+## Getting Help
+
+Have questions or building something cool with the Accounts SDK?
+
+Join the Telegram group to chat with the team and other devs: [@mpp_devs](https://t.me/mpp_devs)

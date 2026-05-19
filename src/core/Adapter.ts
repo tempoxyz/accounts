@@ -143,7 +143,7 @@ export type Instance = {
 export declare namespace SetupFn {
   /** Parameters passed to an adapter's setup function. */
   export type Parameters = {
-    /** Returns the rehydrated local account for the given address, or the active account if omitted. */
+    /** Returns the rehydrated root account for the given address, or the active account if omitted. */
     getAccount: Account.Find
     /** Get the viem client for a given chain ID. Defaults to the active chain. */
     getClient: (options?: getClient.Options | undefined) => Client<Transport, typeof tempo>
@@ -206,6 +206,8 @@ export declare namespace createAccount {
     email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
+    /** Server Authentication result, if the auth capability was requested. */
+    auth?: { token?: string | undefined } | undefined
     /**
      * Echo of the `personalSign` request, present iff the caller supplied
      * `personalSign`. The signature lives on the top-level `signature`
@@ -262,6 +264,8 @@ export declare namespace loadAccounts {
     email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
+    /** Server Authentication result, if the auth capability was requested. */
+    auth?: { token?: string | undefined } | undefined
     /**
      * Echo of the `personalSign` request, present iff the caller supplied
      * `personalSign`. The signature lives on the top-level `signature`

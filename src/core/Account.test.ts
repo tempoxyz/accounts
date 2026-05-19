@@ -87,12 +87,9 @@ describe('hydrate', () => {
 })
 
 describe('find', () => {
-  function setup(
-    storeAccounts: readonly Account.Store[] = [],
-    accessKeys: readonly Store.AccessKey[] = [],
-  ) {
+  function setup(storeAccounts: readonly Account.Store[] = []) {
     const store = Store.create({ chainId: tempoLocalnet.id })
-    store.setState({ accounts: storeAccounts, accessKeys, activeAccount: 0 })
+    store.setState({ accounts: storeAccounts, activeAccount: 0 })
     return store
   }
 
@@ -145,52 +142,10 @@ describe('find', () => {
     expect(typeof result.sign).toMatchInlineSnapshot(`"function"`)
   })
 
-  test('behavior: prefers access key over root account', async () => {
-    const keyPair = await WebCryptoP256.createKeyPair()
-    const store = setup(
-      [{ address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] }],
-      [
-        {
-          address: '0x0000000000000000000000000000000000000099',
-          access: accounts[0].address,
-          chainId: tempoLocalnet.id,
-          keyType: 'webCrypto',
-          keyPair,
-        },
-      ],
-    )
-
-    const result = Account.find({ chainId: tempoLocalnet.id, store, signable: true })
-
-    expect(result.source).toMatchInlineSnapshot(`"accessKey"`)
-  })
-
-  test('behavior: accessKey false skips access key', async () => {
-    const keyPair = await WebCryptoP256.createKeyPair()
-    const store = setup(
-      [{ address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] }],
-      [
-        {
-          address: '0x0000000000000000000000000000000000000099',
-          access: accounts[0].address,
-          chainId: tempoLocalnet.id,
-          keyType: 'webCrypto',
-          keyPair,
-        },
-      ],
-    )
-
-    const result = Account.find({ accessKey: false, signable: true, store })
-
-    expect(result.address).toMatchInlineSnapshot(`"${accounts[0].address}"`)
-    expect(result.source).not.toBe('accessKey')
-  })
-
   test('behavior: falls back to root when no access key exists', () => {
-    const store = setup(
-      [{ address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] }],
-      [],
-    )
+    const store = setup([
+      { address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] },
+    ])
 
     const result = Account.find({ signable: true, store })
 

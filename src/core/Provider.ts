@@ -1,8 +1,8 @@
 import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
 import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
+import type { JsonRpcAccount } from 'viem/accounts'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { parseSiweMessage } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
@@ -13,6 +13,7 @@ import * as Account from './Account.js'
 import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
+import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Schema from './Schema.js'
 import * as Storage from './Storage.js'
@@ -25,8 +26,8 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
   ox_Provider.Emitter & {
     /** Configured chains. */
     chains: readonly [Chain, ...Chain[]]
-    /** Returns a viem Account for the given address (or active account). */
-    getAccount: Account.Find
+    /** Returns the active root account as a viem JSON-RPC account. */
+    getAccount(): JsonRpcAccount
     /** Returns local or on-chain publication status for an access key. */
     getAccessKeyStatus(
       options?: getAccessKeyStatus.Options | undefined,
@@ -271,8 +272,8 @@ export function create(options: create.Options = {}): create.ReturnType {
                     type FillParams = z.output<typeof Rpc.transactionRequest> & {
                       keyAuthorization?: unknown
                     }
+                    const client = getClient({ chainId, feePayer })
                     const fill = (params: FillParams) => {
-                      const client = getClient({ chainId, feePayer })
                       const fillRequest = {
                         ...params,
                         chainId: params.chainId ?? client.chain?.id,
@@ -292,45 +293,38 @@ export function create(options: create.Options = {}): create.ReturnType {
                     // Inject pending keyAuthorization so the node accounts for
                     // key authorization gas during estimation.
                     if (!parameters.keyAuthorization) {
-                      const account = (() => {
-                        try {
-                          const calls =
-                            parameters.calls ??
-                            (parameters.to
-                              ? [
-                                  {
-                                    data: parameters.data,
-                                    to: parameters.to,
-                                  },
-                                ]
-                              : undefined)
-                          return getAccount({
-                            address: parameters.from,
-                            calls,
-                            chainId: parameters.chainId ?? store.getState().chainId,
-                            signable: true,
-                          })
-                        } catch {
-                          return undefined
-                        }
-                      })()
-                      if (account?.source === 'accessKey') {
-                        const keyAuth = AccessKey.getPending(account, { store })
-                        if (keyAuth) {
+                      const state = store.getState()
+                      const address =
+                        parameters.from ?? state.accounts[state.activeAccount]?.address
+                      if (address) {
+                        const calls =
+                          parameters.calls ??
+                          (parameters.to
+                            ? [
+                                {
+                                  data: parameters.data,
+                                  to: parameters.to,
+                                },
+                              ]
+                            : undefined)
+                        const transaction = await AccessKeyTransaction.create({
+                          address,
+                          calls,
+                          chainId: parameters.chainId ?? state.chainId,
+                          client,
+                          store,
+                        })
+                        if (transaction)
                           try {
-                            const result = await fill({
+                            return await transaction.fill({
                               ...parameters,
-                              keyAuthorization: {
-                                address: keyAuth.address,
-                                ...KeyAuthorization.toRpc(keyAuth),
-                              } as never,
+                              chainId: parameters.chainId ?? state.chainId,
+                              from: parameters.from ?? address,
+                              ...(feePayer ? { feePayer: true } : {}),
                             })
-                            return result
-                          } catch (error) {
-                            AccessKey.invalidate(account, error, { store })
+                          } catch {
                             return await fill(parameters)
                           }
-                        }
                       }
                     }
 
@@ -574,6 +568,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                           auth_input as NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
                         )
                       : undefined
+                    if (auth_request && typeof auth_request === 'object' && !auth_request.challenge)
+                      throw new RpcResponse.InvalidParamsError({
+                        message:
+                          '`auth` capability must include either `url` or an explicit `challenge` endpoint.',
+                      })
                     if (auth_request && capabilities?.personalSign)
                       throw new RpcResponse.InvalidParamsError({
                         message:
@@ -608,38 +607,33 @@ export function create(options: create.Options = {}): create.ReturnType {
                       ? { message: auth.message }
                       : capabilities?.personalSign
 
-                    const { keyAuthorization, accounts, email, personalSign, signature, username } =
-                      await (async () => {
-                        if (capabilities?.method === 'register') {
-                          // If a stored account already has this label, sign in
-                          // with its credential instead of creating a new one.
-                          const existing = capabilities.name
-                            ? store
-                                .getState()
-                                .accounts.find(
-                                  (a) =>
-                                    'credential' in a &&
-                                    a.label?.toLowerCase() === capabilities.name!.toLowerCase(),
-                                )
-                            : undefined
-                          if (existing && 'credential' in existing)
-                            return await actions.loadAccounts(
-                              {
-                                credentialId: existing.credential?.id,
-                                digest: capabilities.digest,
-                                authorizeAccessKey,
-                                ...(personalSign_request
-                                  ? { personalSign: personalSign_request }
-                                  : {}),
-                              },
-                              request,
-                            )
-                          return await actions.createAccount(
+                    const {
+                      accounts,
+                      auth: auth_capability,
+                      email,
+                      keyAuthorization,
+                      personalSign,
+                      signature,
+                      username,
+                    } = await (async () => {
+                      if (capabilities?.method === 'register') {
+                        // If a stored account already has this label, sign in
+                        // with its credential instead of creating a new one.
+                        const existing = capabilities.name
+                          ? store
+                              .getState()
+                              .accounts.find(
+                                (a) =>
+                                  'credential' in a &&
+                                  a.label?.toLowerCase() === capabilities.name!.toLowerCase(),
+                              )
+                          : undefined
+                        if (existing && 'credential' in existing)
+                          return await actions.loadAccounts(
                             {
+                              credentialId: existing.credential?.id,
                               digest: capabilities.digest,
                               authorizeAccessKey,
-                              name: capabilities.name ?? 'default',
-                              userId: capabilities.userId ?? Hex.random(16),
                               ...(personalSign_request
                                 ? { personalSign: personalSign_request }
                                 : {}),
@@ -649,18 +643,28 @@ export function create(options: create.Options = {}): create.ReturnType {
                             },
                             request,
                           )
-                        }
-                        return await actions.loadAccounts(
+                        return await actions.createAccount(
                           {
-                            credentialId: capabilities?.credentialId,
-                            digest: capabilities?.digest,
+                            digest: capabilities.digest,
                             authorizeAccessKey,
-                            selectAccount: capabilities?.selectAccount,
+                            name: capabilities.name ?? 'default',
+                            userId: capabilities.userId ?? Hex.random(16),
                             ...(personalSign_request ? { personalSign: personalSign_request } : {}),
                           },
                           request,
                         )
-                      })()
+                      }
+                      return await actions.loadAccounts(
+                        {
+                          credentialId: capabilities?.credentialId,
+                          digest: capabilities?.digest,
+                          authorizeAccessKey,
+                          selectAccount: capabilities?.selectAccount,
+                          ...(personalSign_request ? { personalSign: personalSign_request } : {}),
+                        },
+                        request,
+                      )
+                    })()
 
                     store.setState({
                       accounts: resolveAccounts(accounts),
@@ -716,12 +720,14 @@ export function create(options: create.Options = {}): create.ReturnType {
                                       },
                                     }
                                   : {}),
-                                ...(signature && (!auth_request || auth_result)
+                                ...(signature && (!auth_request || auth_result || !verifyUrl)
                                   ? { signature }
                                   : {}),
                                 ...(email !== undefined ? { email } : {}),
                                 ...(username !== undefined ? { username } : {}),
-                                ...(auth_result ? { auth: auth_result } : {}),
+                                ...((auth_result ?? auth_capability)
+                                  ? { auth: auth_result ?? auth_capability }
+                                  : {}),
                                 ...(personalSign
                                   ? { personalSign: { message: personalSign.message } }
                                   : {}),
@@ -976,15 +982,20 @@ export function create(options: create.Options = {}): create.ReturnType {
     ),
     {
       chains,
-      getAccount,
+      getAccount() {
+        const account = getAccount()
+        return { address: account.address, type: 'json-rpc' as const }
+      },
       async getAccessKeyStatus(options: getAccessKeyStatus.Options = {}) {
         const state = store.getState()
         const address = options.address ?? state.accounts[state.activeAccount]?.address
-        if (!address) return AccessKey.status.missing
+        if (!address) return 'missing'
         const chainId = options.chainId ?? state.chainId
+        const { accessKey, calls } = options
         return await AccessKey.getStatus({
-          ...options,
-          address,
+          account: address,
+          ...(accessKey ? { accessKey } : {}),
+          ...(calls ? { calls } : {}),
           chainId,
           client: provider.getClient({ chainId }),
           store,
@@ -1034,7 +1045,8 @@ export function create(options: create.Options = {}): create.ReturnType {
     const polyfill = polyfill_option ?? isFetchWritable()
     const getClient = ({ chainId }: { chainId?: number | undefined }) => {
       const client = provider.getClient({ chainId })
-      const account = provider.getAccount({ accessKey: false })
+      const account = store.getState().accounts[store.getState().activeAccount]
+      if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
       return Object.assign(client, {
         account: {
           address: account.address,
@@ -1042,27 +1054,12 @@ export function create(options: create.Options = {}): create.ReturnType {
         },
       })
     }
-    const mppx = Mppx.create({
+    Mppx.create({
       methods: [
         mppx_tempo({ ...methodOptions, getClient, mode }),
         mppx_tempo.subscription({ getClient }),
       ],
       polyfill,
-    })
-    mppx.onPaymentResponse(({ challenge, method }) => {
-      if (method.name !== 'tempo' || method.intent !== 'charge') return
-      const amount = challenge.request.amount
-      if (
-        typeof amount !== 'string' &&
-        typeof amount !== 'number' &&
-        typeof amount !== 'bigint' &&
-        typeof amount !== 'boolean'
-      )
-        return
-      if (BigInt(amount) === 0n) return
-      const account = provider.getAccount()
-      if ('source' in account && account.source === 'accessKey')
-        AccessKey.removePending(account, { store })
     })
   }
 
@@ -1169,7 +1166,7 @@ export declare namespace getAccessKeyStatus {
   }
 
   /** Access-key publication status. */
-  type ReturnType = AccessKey.Status
+  type ReturnType = 'missing' | 'pending' | 'published' | 'expired'
 }
 
 export declare namespace mpp {
@@ -1274,14 +1271,16 @@ function resolveAuthEndpoint(
 }
 
 /**
- * Pre-resolves the `auth` capability into its absolute, fully-explicit
- * object form. Run once at the dapp-side Provider so forwarding adapters
- * (dialog) carry absolute URLs to the wallet host — the wallet's
- * `window.location.origin` belongs to the wallet, not the dapp, and
- * cannot resolve relative paths correctly.
+ * Pre-resolves the `auth` capability into its absolute object form. Run
+ * once at the dapp-side Provider so forwarding adapters (dialog) carry
+ * absolute URLs to the wallet host — the wallet's `window.location.origin`
+ * belongs to the wallet, not the dapp, and cannot resolve relative paths
+ * correctly.
  *
- * `logout` is omitted when the input doesn't supply enough info to derive
- * one (it's optional in the protocol).
+ * Individual endpoints are omitted when the input doesn't supply enough
+ * info to derive them. `logout` is optional in the protocol; `verify` can
+ * also be omitted by wallet-host re-entry so the dapp-origin Provider runs
+ * verification and receives the session cookie.
  */
 function absolutizeAuth(
   auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
@@ -1305,10 +1304,6 @@ function absolutizeAuth(
 
 function assertSameAuthOrigin(auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>): void {
   if (typeof auth !== 'object') return
-  if (!auth.challenge || !auth.verify)
-    throw new RpcResponse.InvalidParamsError({
-      message: '`auth` requires both `challenge` and `verify` endpoints.',
-    })
   const urls = [auth.challenge, auth.verify, auth.logout].filter(
     (u): u is string => typeof u === 'string',
   )

@@ -2,8 +2,8 @@ import { Provider as ox_Provider } from 'ox'
 import { tempoLocalnet } from 'viem/chains'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
-import * as AccessKey from '../AccessKey.js'
 import * as Dialog from '../Dialog.js'
+import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { dialog } from './dialog.js'
@@ -21,16 +21,24 @@ describe('dialog', () => {
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
     const clientRequests: unknown[] = []
     const signRequests: unknown[] = []
-    vi.spyOn(AccessKey, 'selectAccount').mockReturnValue({
-      accessKeyAddress: '0x0000000000000000000000000000000000000099',
-      address: '0x0000000000000000000000000000000000000099',
-      signTransaction: async (request: unknown) => {
-        signRequests.push(request)
-        return '0xsigned'
-      },
-      source: 'accessKey',
-      type: 'local',
-    } as never)
+    vi.spyOn(AccessKeyTransaction, 'create').mockResolvedValue({
+      fill: async () => ({ capabilities: { sponsored: false }, tx: {} }),
+      prepare: async (request) => ({
+        request: request as never,
+        send: async () => {
+          signRequests.push(request)
+          clientRequests.push({ method: 'eth_sendRawTransaction', params: ['0xsigned'] })
+          return '0xtransaction'
+        },
+        sendSync: async () => {
+          throw new Error('unexpected sendSync')
+        },
+        sign: async () => {
+          signRequests.push(request)
+          return '0xsigned'
+        },
+      }),
+    })
     const adapter = dialog({ dialog: Dialog.noop() })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
@@ -84,10 +92,76 @@ describe('dialog', () => {
     expect(store.getState().requestQueue).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: loadAccounts forwards auth capabilities returned by the dialog', async () => {
+    const storage = Storage.memory()
+    const store = Store.create({ chainId: tempoLocalnet.id, storage })
+    const adapter = dialog({ dialog: Dialog.noop() })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store,
+    })
+    const request = {
+      method: 'wallet_connect' as const,
+      params: [
+        {
+          capabilities: {
+            auth: {
+              url: 'https://app.example/auth',
+              returnToken: true,
+            },
+          },
+          chainId: '0x1079' as const,
+        },
+      ] as const,
+    }
+
+    const promise = adapter.actions.loadAccounts(undefined, request)
+
+    await vi.waitFor(() => {
+      if (!store.getState().requestQueue[0]) throw new Error('request not queued')
+    })
+
+    const queued = store.getState().requestQueue[0]!
+    store.setState({
+      requestQueue: [
+        {
+          request: queued.request,
+          result: {
+            accounts: [
+              {
+                address,
+                capabilities: {
+                  auth: { token: 'test-token' },
+                },
+              },
+            ],
+          },
+          status: 'success',
+        },
+      ],
+    })
+
+    await expect(promise).resolves.toMatchInlineSnapshot(`
+      {
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "auth": {
+          "token": "test-token",
+        },
+      }
+    `)
+  })
+
   test('behavior: sendTransaction falls through when no access key is selected', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
-    vi.spyOn(AccessKey, 'selectAccount').mockReturnValue(undefined)
+    vi.spyOn(AccessKeyTransaction, 'create').mockResolvedValue(undefined)
     const lookups: unknown[] = []
     const adapter = dialog({ dialog: Dialog.noop() })({
       getAccount: (options) => {
@@ -137,10 +211,60 @@ describe('dialog', () => {
     expect(lookups).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: revokeAccessKey clears the forwarded key from local state', async () => {
+    const storage = Storage.memory()
+    const store = Store.create({ chainId: tempoLocalnet.id, storage })
+    store.setState({
+      accessKeys: [
+        {
+          access: address,
+          address: recipient,
+          chainId: tempoLocalnet.id,
+          keyType: 'p256',
+        } as never,
+      ],
+    })
+    const adapter = dialog({ dialog: Dialog.noop() })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store,
+    })
+    const request = {
+      method: 'wallet_revokeAccessKey' as const,
+      params: [{ accessKeyAddress: recipient, address }] as const,
+    }
+
+    const promise = adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: recipient, address },
+      request,
+    )
+
+    await vi.waitFor(() => {
+      if (!store.getState().requestQueue[0]) throw new Error('request not queued')
+    })
+
+    const queued = store.getState().requestQueue[0]!
+    store.setState({
+      requestQueue: [
+        {
+          request: queued.request,
+          result: undefined,
+          status: 'success',
+        },
+      ],
+    })
+
+    await expect(promise).resolves.toMatchInlineSnapshot(`undefined`)
+    expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+  })
+
   test('error: wallet validation errors keep their RPC code', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
-    vi.spyOn(AccessKey, 'selectAccount').mockReturnValue(undefined)
+    vi.spyOn(AccessKeyTransaction, 'create').mockResolvedValue(undefined)
     const adapter = dialog({ dialog: Dialog.noop() })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })

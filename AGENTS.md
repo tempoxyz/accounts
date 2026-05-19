@@ -78,6 +78,7 @@
 - **Inline snapshots over direct assertions** — prefer `toMatchInlineSnapshot()` over `.toBe()`, `.toEqual()`, etc. for return values. Use `toThrowErrorMatchingInlineSnapshot()` for error assertions. Never use try/catch + `expect.unreachable()` for error tests.
 - **Snapshot whole objects, omit nondeterministic properties** — destructure out nondeterministic fields (e.g. `blockHash`, `gasUsed`, timestamps) and snapshot the rest, rather than cherry-picking individual fields to assert.
 - **Unit and type tests as you go** — write unit tests and `.test-d.ts` type tests alongside implementation for each module. Save high-level integration tests (with and without browser) for the end.
+- **Mark localnet tests explicitly** — tests that touch RPC/localnet should use the `*.localnet.test.ts` suffix so only those files inherit `test/setup.ts`; pure `*.test.ts` files run in the no-setup `lib/pure` project.
 
 ## Git Conventions
 
