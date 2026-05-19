@@ -62,6 +62,7 @@ export const addresses = {
   alphaUsd: '0x20c0000000000000000000000000000000000001',
 } as const
 
+// Remove once viem publishes portable Tempo chain inference declarations.
 type _TempoInference =
   | TempoAddress.Address
   | z_KeyAuthorization.Signed
