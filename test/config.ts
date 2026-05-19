@@ -13,9 +13,12 @@ import {
 import { type Address, english, generateMnemonic, type JsonRpcAccount } from 'viem/accounts'
 import { tempoDevnet, tempoLocalnet, tempoModerato } from 'viem/chains'
 import {
-  // biome-ignore lint/correctness/noUnusedImports: This is needed to ensure TypeScript can reference viem/tempo types portably
-  type z_TokenId as _,
   Account,
+  type TempoAddress,
+  type z_KeyAuthorization,
+  type z_SignatureEnvelope,
+  type z_TokenId,
+  type z_TxEnvelopeTempo,
 } from 'viem/tempo'
 
 export const id =
@@ -59,11 +62,14 @@ export const addresses = {
   alphaUsd: '0x20c0000000000000000000000000000000000001',
 } as const
 
-type ConfiguredChain =
-  | (Omit<typeof tempoLocalnet, 'rpcUrls'> & { rpcUrls: Chain['rpcUrls'] })
-  | typeof tempoModerato
+type _TempoInference =
+  | TempoAddress.Address
+  | z_KeyAuthorization.Signed
+  | z_SignatureEnvelope.SignatureEnvelope
+  | z_TokenId.TokenIdOrAddress
+  | z_TxEnvelopeTempo.Call
 
-export const chain: ConfiguredChain = (() => {
+export const chain = (() => {
   if (nodeEnv === 'testnet') return tempoModerato
   return defineChain({
     ...tempoLocalnet,
