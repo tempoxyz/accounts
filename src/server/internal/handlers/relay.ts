@@ -17,8 +17,8 @@ import {
 } from 'viem'
 import type { LocalAccount } from 'viem/accounts'
 import { simulateCalls } from 'viem/actions'
-import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { Abis, Actions, Addresses, Capabilities, Transaction, VirtualAddress } from 'viem/tempo'
+import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 
 import * as ExecutionError from '../../../core/ExecutionError.js'
 import * as Schema from '../../../core/Schema.js'

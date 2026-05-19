@@ -2,7 +2,7 @@ import { Address, Base64, Bytes, Hex, PublicKey } from 'ox'
 import { KeyAuthorization as TempoKeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { createClient, http, type Chain, type Client, type Transport } from 'viem'
 import { verifyHash } from 'viem/actions'
-import { tempo } from 'viem/chains'
+import { tempo } from 'viem/tempo/chains'
 import * as z from 'zod/mini'
 
 import * as u from '../core/zod/utils.js'

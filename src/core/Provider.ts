@@ -3,9 +3,9 @@ import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
 import type { JsonRpcAccount } from 'viem/accounts'
-import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { parseSiweMessage } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
+import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 import * as z from 'zod/mini'
 
 import * as AccessKey from './AccessKey.js'
@@ -1134,7 +1134,7 @@ export declare namespace create {
      * @example
      * ```ts
      * import { http } from 'viem'
-     * import { tempo, tempoModerato } from 'viem/chains'
+     * import { tempo, tempoModerato } from 'viem/tempo/chains'
      *
      * const provider = Provider.create({
      *   transports: {

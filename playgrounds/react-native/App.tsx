@@ -15,8 +15,8 @@ import {
   View,
 } from 'react-native'
 import { formatUnits, parseUnits, type Address, type Hex as viem_Hex } from 'viem'
-import { tempoModerato } from 'viem/chains'
 import { Actions } from 'viem/tempo'
+import { tempoModerato } from 'viem/tempo/chains'
 
 import { Provider } from '../../dist/react-native/index.js'
 

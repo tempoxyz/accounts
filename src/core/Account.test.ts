@@ -1,5 +1,5 @@
-import { tempoLocalnet } from 'viem/chains'
 import { WebCryptoP256 } from 'viem/tempo'
+import { tempoLocalnet } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 
 import { accounts, privateKeys } from '../../test/config.js'

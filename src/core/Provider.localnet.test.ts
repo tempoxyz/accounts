@@ -11,8 +11,8 @@ import {
   verifyTypedData,
   waitForTransactionReceipt,
 } from 'viem/actions'
-import { tempo, tempoModerato } from 'viem/chains'
 import { Account as TempoAccount, Actions, Addresses } from 'viem/tempo'
+import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 
 import { headlessWebAuthn, secp256k1 } from '../../test/adapters.js'

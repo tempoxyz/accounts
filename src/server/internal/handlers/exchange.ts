@@ -9,8 +9,8 @@ import {
   parseUnits,
   type Transport,
 } from 'viem'
-import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { Actions, Addresses } from 'viem/tempo'
+import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 import * as z from 'zod/mini'
 
 import * as ExecutionError from '../../../core/ExecutionError.js'

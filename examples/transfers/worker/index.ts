@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { Mppx, tempo } from 'mppx/hono'
-import { tempoModerato } from 'viem/chains'
+import { tempoModerato } from 'viem/tempo/chains'
 
 const app = new Hono()
 

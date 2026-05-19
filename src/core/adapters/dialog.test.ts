@@ -1,5 +1,5 @@
 import { Provider as ox_Provider } from 'ox'
-import { tempoLocalnet } from 'viem/chains'
+import { tempoLocalnet } from 'viem/tempo/chains'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Dialog from '../Dialog.js'

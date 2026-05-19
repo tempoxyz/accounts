@@ -1,6 +1,6 @@
 import { CliAuth } from 'accounts/server'
 import { createClient, http } from 'viem'
-import { tempoModerato } from 'viem/chains'
+import { tempoModerato } from 'viem/tempo/chains'
 
 /** Viem client for Tempo Moderato RPC used by `approve`. */
 export const client = createClient({

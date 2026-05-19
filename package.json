@@ -86,7 +86,7 @@
     "expo-secure-store": "^55.0.12",
     "expo-web-browser": "^55.0.13",
     "react": ">=18",
-    "viem": ">=2.43.3",
+    "viem": ">=2.50.4",
     "wagmi": ">=0.0.0"
   },
   "peerDependenciesMeta": {

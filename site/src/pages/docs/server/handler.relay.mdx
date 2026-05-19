@@ -425,7 +425,7 @@ const handler = Handler.relay({
 Supported chains. The handler resolves the client based on the `chainId` in the incoming transaction.
 
 ```ts twoslash
-import { tempo } from 'viem/chains'
+import { tempo } from 'viem/tempo/chains'
 import { Handler } from 'accounts/server'
 
 const handler = Handler.relay({
@@ -611,7 +611,7 @@ Transports keyed by chain ID.
 
 ```ts twoslash
 import { http } from 'viem'
-import { tempo } from 'viem/chains'
+import { tempo } from 'viem/tempo/chains'
 import { Handler } from 'accounts/server'
 
 const handler = Handler.relay({

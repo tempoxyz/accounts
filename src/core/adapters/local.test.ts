@@ -1,6 +1,6 @@
 import type { Hex } from 'viem'
 import { hashMessage, verifyMessage } from 'viem'
-import { tempoLocalnet } from 'viem/chains'
+import { tempoLocalnet } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 
 import {

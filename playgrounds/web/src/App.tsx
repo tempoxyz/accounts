@@ -11,9 +11,9 @@ import {
 import { Button as RegenButton } from 'regen-ui'
 import { formatUnits, parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
-import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
+import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 
 import { PrivyEmailOtp } from './PrivyEmailOtp.js'
 import {

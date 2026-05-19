@@ -1,7 +1,7 @@
 import { Hex, WebCryptoP256 } from 'ox'
 import { type Address, createClient, defineChain, parseUnits } from 'viem'
-import { tempoLocalnet, tempoModerato } from 'viem/chains'
 import { Account as TempoAccount, Actions, Addresses } from 'viem/tempo'
+import { tempoLocalnet, tempoModerato } from 'viem/tempo/chains'
 import { afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, http } from '../../test/config.js'

@@ -47,7 +47,7 @@ export const POST = handler.fetch           // Next.js
 Supported chains. The handler resolves the client based on chain IDs carried by device-code requests and key authorizations. The first chain is used as the default when a request omits `chainId`.
 
 ```ts twoslash
-import { tempo } from 'viem/chains'
+import { tempo } from 'viem/tempo/chains'
 import { Handler } from 'accounts/server'
 
 const handler = Handler.codeAuth({
@@ -182,7 +182,7 @@ Transports keyed by chain ID. Override per chain to point at a private RPC endpo
 
 ```ts twoslash
 import { http } from 'viem'
-import { tempo } from 'viem/chains'
+import { tempo } from 'viem/tempo/chains'
 import { Handler } from 'accounts/server'
 
 const handler = Handler.codeAuth({

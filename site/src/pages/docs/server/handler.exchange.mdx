@@ -87,7 +87,7 @@ const handler = Handler.exchange({
 Supported chains. The first chain is used to resolve the default client when a request omits `chainId`.
 
 ```ts twoslash
-import { tempo } from 'viem/chains'
+import { tempo } from 'viem/tempo/chains'
 import { Handler } from 'accounts/server'
 
 const handler = Handler.exchange({
@@ -174,7 +174,7 @@ Transports keyed by chain ID.
 
 ```ts twoslash
 import { http } from 'viem'
-import { tempo } from 'viem/chains'
+import { tempo } from 'viem/tempo/chains'
 import { Handler } from 'accounts/server'
 
 const handler = Handler.exchange({

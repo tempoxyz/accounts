@@ -1,7 +1,7 @@
 import type { KeyAuthorization } from 'ox/tempo'
 import type { Client, Hex, Transport } from 'viem'
 import type { Address } from 'viem/accounts'
-import type { tempo } from 'viem/chains'
+import type { tempo } from 'viem/tempo/chains'
 
 import type * as Account from './Account.js'
 import type * as Schema from './Schema.js'

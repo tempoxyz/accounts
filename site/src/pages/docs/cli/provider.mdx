@@ -80,7 +80,7 @@ Supported chains. The first chain is the default.
 
 ```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
-import { tempo } from 'viem/chains'
+import { tempo } from 'viem/tempo/chains'
 
 const provider = Provider.create({
   chains: [tempo], // [!code focus]
@@ -326,7 +326,7 @@ Per-chain transports keyed by chain ID. Layered on top of `relay`. See [`Provide
 ```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 import { http } from 'viem'
-import { tempo } from 'viem/chains'
+import { tempo } from 'viem/tempo/chains'
 
 const provider = Provider.create({
   transports: { // [!code focus]
