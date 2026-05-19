@@ -11,11 +11,11 @@ import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
 import type { Address } from 'viem/accounts'
 import { prepareTransactionRequest } from 'viem/actions'
-import type { Account as TempoAccount } from 'viem/tempo'
 import { Transaction as TempoTransaction } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
+import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as Store from '../Store.js'
 
 const privySessionErrorCodes = new Set([
@@ -352,47 +352,14 @@ export function privy<const client extends privy.Client>(
         signature: SignatureEnvelope.from(signature),
       })
 
-      AccessKey.save({
-        address: core_Address.from(account.address),
-        keyAuthorization,
+      AccessKey.add({
+        account: core_Address.from(account.address),
+        authorization: keyAuthorization,
         ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
         store,
       })
 
       return KeyAuthorization.toRpc(keyAuthorization)
-    }
-
-    async function withAccessKey<result>(
-      options: {
-        address?: Address | undefined
-        calls?: Adapter.signTransaction.Parameters['calls']
-        chainId?: number | undefined
-      },
-      fn: (
-        account: TempoAccount.Account,
-        keyAuthorization?: KeyAuthorization.Signed,
-      ) => Promise<result>,
-    ): Promise<{ account: TempoAccount.Account; result: result } | undefined> {
-      const account = (() => {
-        try {
-          return getAccount({ ...options, signable: true })
-        } catch {
-          return undefined
-        }
-      })()
-      if (!account || account.source !== 'accessKey') return undefined
-
-      const keyAuthorization = AccessKey.getPending(account, { store })
-      try {
-        const result = await fn(account, keyAuthorization ?? undefined)
-        return { account, result }
-      } catch (error) {
-        // Only fall back to root signing when the key was actually invalidated
-        // (e.g. expired/revoked). Otherwise rethrow so callers don't silently
-        // bypass the access-key boundary on transient or user-rejection errors.
-        if (AccessKey.invalidate(account, error, { store })) return undefined
-        throw error
-      }
     }
 
     async function signTransaction(parameters: Adapter.signTransaction.Parameters) {
@@ -425,36 +392,52 @@ export function privy<const client extends privy.Client>(
       )
     }
 
-    /**
-     * Builds a signed Tempo transaction via the access-key path when available, or
-     * falls back to root-account signing. Returns the signed tx, a viem client
-     * configured for the requested chain/fee-payer, and the access-key account when
-     * the access-key path was used (so callers can `removePending` after broadcast).
-     */
-    async function buildTransaction(parameters: Adapter.signTransaction.Parameters) {
+    async function prepareTransaction(parameters: Adapter.signTransaction.Parameters) {
       const viemClient = getClient({
         chainId: parameters.chainId,
         feePayer: parameters.feePayer === true ? undefined : parameters.feePayer,
       })
 
-      const result = await withAccessKey(
-        { address: parameters.from, calls: parameters.calls, chainId: parameters.chainId },
-        async (account, keyAuthorization) => {
-          const { feePayer, ...rest } = parameters
-          const prepared = await prepareTransactionRequest(viemClient, {
-            account,
+      const transaction = await AccessKeyTransaction.create({
+        address:
+          parameters.from ?? store.getState().accounts[store.getState().activeAccount]?.address,
+        calls: parameters.calls,
+        chainId: parameters.chainId ?? store.getState().chainId,
+        client: viemClient,
+        store,
+      })
+      if (transaction) {
+        const { feePayer, ...rest } = parameters
+        try {
+          return await transaction.prepare({
             ...rest,
             ...(feePayer ? { feePayer: true } : {}),
-            keyAuthorization,
-            type: 'tempo',
-          } as never)
-          return await account.signTransaction(prepared as never)
-        },
-      )
-      if (result !== undefined)
-        return { account: result.account, signed: result.result, viemClient }
+          })
+        } catch {}
+      }
 
-      return { account: undefined, signed: await signTransaction(parameters), viemClient }
+      async function sign() {
+        return await signTransaction(parameters)
+      }
+
+      return {
+        request: undefined as never,
+        sign,
+        async send() {
+          const signed = await sign()
+          return await viemClient.request({
+            method: 'eth_sendRawTransaction' as never,
+            params: [signed],
+          })
+        },
+        async sendSync() {
+          const signed = await sign()
+          return await viemClient.request({
+            method: 'eth_sendRawTransactionSync' as never,
+            params: [signed],
+          })
+        },
+      }
     }
 
     function isSessionError(error: unknown) {
@@ -614,7 +597,7 @@ export function privy<const client extends privy.Client>(
           })
         },
         async signTransaction(parameters) {
-          return (await buildTransaction(parameters)).signed
+          return await (await prepareTransaction(parameters)).sign()
         },
         async signTypedData(parameters) {
           const account = await accountForSigning(parameters.address)
@@ -630,20 +613,10 @@ export function privy<const client extends privy.Client>(
           })
         },
         async sendTransaction(parameters) {
-          const { account, signed, viemClient } = await buildTransaction(parameters)
-          if (account) AccessKey.removePending(account, { store })
-          return await viemClient.request({
-            method: 'eth_sendRawTransaction' as never,
-            params: [signed],
-          })
+          return await (await prepareTransaction(parameters)).send()
         },
         async sendTransactionSync(parameters) {
-          const { account, signed, viemClient } = await buildTransaction(parameters)
-          if (account) AccessKey.removePending(account, { store })
-          return await viemClient.request({
-            method: 'eth_sendRawTransactionSync' as never,
-            params: [signed],
-          })
+          return await (await prepareTransaction(parameters)).sendSync()
         },
         async disconnect() {
           try {

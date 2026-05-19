@@ -143,7 +143,7 @@ export type Instance = {
 export declare namespace SetupFn {
   /** Parameters passed to an adapter's setup function. */
   export type Parameters = {
-    /** Returns the rehydrated local account for the given address, or the active account if omitted. */
+    /** Returns the rehydrated root account for the given address, or the active account if omitted. */
     getAccount: Account.Find
     /** Get the viem client for a given chain ID. Defaults to the active chain. */
     getClient: (options?: getClient.Options | undefined) => Client<Transport, typeof tempo>

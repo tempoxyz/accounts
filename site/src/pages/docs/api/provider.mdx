@@ -373,15 +373,16 @@ const provider = Provider.create({
 The provider type is exported as `Provider` and is the intersection of [`ox.Provider.Provider`](https://oxlib.sh/Provider) (the EIP-1193 surface) and [`ox.Provider.Emitter`](https://oxlib.sh/Provider#emitter) plus a few extra accessors:
 
 ```ts
-import type { Account, Address, Hex, Provider as ox_Provider } from 'ox'
+import type { Address, Hex, Provider as ox_Provider } from 'ox'
 import type { Chain, Client as ViemClient, Transport } from 'viem'
+import type { JsonRpcAccount } from 'viem/accounts'
 import type { tempo } from 'viem/chains'
 
 export type Provider = ox_Provider.Provider & ox_Provider.Emitter & {
   /** Configured chains. */
   chains: readonly [Chain, ...Chain[]]
-  /** Returns a viem Account for the given address (or active account). */
-  getAccount: Account.Find
+  /** Returns the active root account as a viem JSON-RPC account. */
+  getAccount(): JsonRpcAccount
   /** Returns local or on-chain publication status for an access key. */
   getAccessKeyStatus(options?: {
     address?: Address | undefined

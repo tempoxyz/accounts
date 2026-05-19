@@ -58,7 +58,6 @@ export function local(options: local.Options): Adapter.Adapter {
       }
 
       const account = getAccount({
-        accessKey: false,
         address: parameters.from,
         signable: true,
       })
@@ -146,7 +145,7 @@ export function local(options: local.Options): Adapter.Adapter {
           }
         },
         async authorizeAccessKey(parameters) {
-          const account = getAccount({ accessKey: false, signable: true })
+          const account = getAccount({ signable: true })
           const keyAuthorization = await AccessKey.authorize({
             account,
             chainId: getClient().chain.id,
@@ -240,7 +239,7 @@ export function local(options: local.Options): Adapter.Adapter {
           }
         },
         async revokeAccessKey(parameters) {
-          const account = getAccount({ accessKey: false, signable: true })
+          const account = getAccount({ signable: true })
           const client = getClient()
           try {
             await Actions.accessKey.revoke(client, {

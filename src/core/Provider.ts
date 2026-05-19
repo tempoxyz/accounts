@@ -2,6 +2,7 @@ import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
+import type { JsonRpcAccount } from 'viem/accounts'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { parseSiweMessage } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
@@ -25,8 +26,8 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
   ox_Provider.Emitter & {
     /** Configured chains. */
     chains: readonly [Chain, ...Chain[]]
-    /** Returns a viem Account for the given address (or active account). */
-    getAccount: Account.Find
+    /** Returns the active root account as a viem JSON-RPC account. */
+    getAccount(): JsonRpcAccount
     /** Returns local or on-chain publication status for an access key. */
     getAccessKeyStatus(
       options?: getAccessKeyStatus.Options | undefined,
@@ -966,7 +967,10 @@ export function create(options: create.Options = {}): create.ReturnType {
     ),
     {
       chains,
-      getAccount,
+      getAccount() {
+        const account = getAccount()
+        return { address: account.address, type: 'json-rpc' as const }
+      },
       async getAccessKeyStatus(options: getAccessKeyStatus.Options = {}) {
         const state = store.getState()
         const address = options.address ?? state.accounts[state.activeAccount]?.address
@@ -1026,7 +1030,8 @@ export function create(options: create.Options = {}): create.ReturnType {
     const polyfill = polyfill_option ?? isFetchWritable()
     const getClient = ({ chainId }: { chainId?: number | undefined }) => {
       const client = provider.getClient({ chainId })
-      const account = provider.getAccount({ accessKey: false })
+      const account = store.getState().accounts[store.getState().activeAccount]
+      if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
       return Object.assign(client, {
         account: {
           address: account.address,
@@ -1034,32 +1039,12 @@ export function create(options: create.Options = {}): create.ReturnType {
         },
       })
     }
-    const mppx = Mppx.create({
+    Mppx.create({
       methods: [
         mppx_tempo({ ...methodOptions, getClient, mode }),
         mppx_tempo.subscription({ getClient }),
       ],
       polyfill,
-    })
-    mppx.onPaymentResponse(({ challenge, method }) => {
-      if (method.name !== 'tempo' || method.intent !== 'charge') return
-      const amount = challenge.request.amount
-      if (
-        typeof amount !== 'string' &&
-        typeof amount !== 'number' &&
-        typeof amount !== 'bigint' &&
-        typeof amount !== 'boolean'
-      )
-        return
-      if (BigInt(amount) === 0n) return
-      const account = provider.getAccount()
-      if ('source' in account && account.source === 'accessKey')
-        AccessKey.markPublished({
-          account: account.address,
-          accessKey: account.accessKeyAddress,
-          chainId: store.getState().chainId,
-          store,
-        })
     })
   }
 
