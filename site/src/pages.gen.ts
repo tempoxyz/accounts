@@ -8,7 +8,6 @@ import type { PathsForPages, GetConfigResponse } from 'waku/router';
 type Page =
 | { path: '/'; render: 'static' }
 | { path: '/docs/faq'; render: 'static' }
-| { path: '/docs'; render: 'static' }
 | { path: '/docs/production'; render: 'static' }
 | { path: '/docs/wagmi/tempoWallet'; render: 'static' }
 | { path: '/docs/wagmi/webAuthn'; render: 'static' }
