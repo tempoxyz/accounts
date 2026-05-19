@@ -315,7 +315,12 @@ export function create(options: create.Options = {}): create.ReturnType {
                         })
                         if (transaction)
                           try {
-                            return await transaction.fill(parameters)
+                            return await transaction.fill({
+                              ...parameters,
+                              chainId: parameters.chainId ?? state.chainId,
+                              from: parameters.from ?? address,
+                              ...(feePayer ? { feePayer: true } : {}),
+                            })
                           } catch {
                             return await fill(parameters)
                           }

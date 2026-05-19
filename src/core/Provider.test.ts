@@ -1963,6 +1963,24 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
     })
 
+    test('behavior: fills pending keyAuthorization with the active account when from is omitted', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      const result = await provider.request({
+        method: 'eth_fillTransaction',
+        params: [fillTx],
+      })
+      expect(result.tx.gas).toBeDefined()
+      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
+    })
+
     test('behavior: removes stale access key and retries on error', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)

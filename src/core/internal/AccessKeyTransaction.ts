@@ -242,14 +242,14 @@ async function fillTransaction(
   client: Client<Transport>,
   parameters: create.FillParameters,
 ): Promise<create.FillReturnType> {
+  const { keyAuthorization, ...rest } = parameters as create.FillParameters & {
+    keyAuthorization?: unknown
+  }
   const formatter = client.chain?.formatters?.transactionRequest
-  const formatted =
-    formatter && !parameters.keyAuthorization
-      ? formatter.format({ ...parameters } as never, 'fillTransaction')
-      : parameters
+  const formatted = formatter ? formatter.format({ ...rest } as never, 'fillTransaction') : rest
   return (await client.request({
     method: 'eth_fillTransaction' as never,
-    params: [formatted as never],
+    params: [{ ...formatted, ...(keyAuthorization ? { keyAuthorization } : {}) } as never],
   })) as create.FillReturnType
 }
 
