@@ -59,7 +59,11 @@ export const addresses = {
   alphaUsd: '0x20c0000000000000000000000000000000000001',
 } as const
 
-export const chain = (() => {
+type ConfiguredChain =
+  | (Omit<typeof tempoLocalnet, 'rpcUrls'> & { rpcUrls: Chain['rpcUrls'] })
+  | typeof tempoModerato
+
+export const chain: ConfiguredChain = (() => {
   if (nodeEnv === 'testnet') return tempoModerato
   return defineChain({
     ...tempoLocalnet,
