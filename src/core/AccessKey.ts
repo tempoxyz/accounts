@@ -77,7 +77,7 @@ type Query = {
   /** Chain ID the access key must be authorized on. */
   chainId: number
   /** Client used to verify publication state on-chain. */
-  client?: Client<Transport> | undefined
+  client: Client<Transport>
   /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
   now?: number | undefined
   /** Reactive state store. */
@@ -90,6 +90,17 @@ type Key = {
   account: Address.Address
   /** Access key address. */
   accessKey: Address.Address
+  /** Chain ID the access key is scoped to. */
+  chainId: number
+  /** Reactive state store. */
+  store: Store.Store
+}
+
+type ListQuery = {
+  /** Root account address. */
+  account: Address.Address
+  /** Specific access key address to match. */
+  accessKey?: Address.Address | undefined
   /** Chain ID the access key is scoped to. */
   chainId: number
   /** Reactive state store. */
@@ -247,7 +258,7 @@ export async function getStatus(options: Query): Promise<Status> {
   if (local) {
     if (isExpired(local.expiry, now)) return status.expired
     if (local.keyAuthorization) {
-      if (local.keyAuthorizationPending && client) {
+      if (local.keyAuthorizationPending) {
         const publicationStatus = await getPublishedStatus(client, {
           accessKey: local.address,
           account,
@@ -257,11 +268,10 @@ export async function getStatus(options: Query): Promise<Status> {
       }
       return status.pending
     }
-    if (client) return await getPublishedStatus(client, { accessKey: local.address, account, now })
-    return status.published
+    return await getPublishedStatus(client, { accessKey: local.address, account, now })
   }
 
-  if (accessKey && client) return await getPublishedStatus(client, { accessKey, account, now })
+  if (accessKey) return await getPublishedStatus(client, { accessKey, account, now })
   return status.missing
 }
 
@@ -282,7 +292,7 @@ export async function select(options: Query): Promise<Selection | undefined> {
     if (!account_accessKey) continue
 
     let authorization = record.keyAuthorization
-    if (authorization && record.keyAuthorizationPending && client) {
+    if (authorization && record.keyAuthorizationPending) {
       const publicationStatus = await getPublishedStatus(client, {
         accessKey: record.address,
         account: record.access,
@@ -530,9 +540,7 @@ async function getPublishedStatus(
   }
 }
 
-function list(
-  options: Query & { calls?: never; client?: never; now?: never },
-): readonly AccessKey[] {
+function list(options: ListQuery): readonly AccessKey[] {
   const { store, ...query } = options
   return store.getState().accessKeys.filter((key) => matches(key, query))
 }

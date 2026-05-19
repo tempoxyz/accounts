@@ -64,6 +64,14 @@ function createMetadataClient(
   }
 }
 
+function createMissingClient() {
+  return {
+    call: async () => {
+      throw createRevert('KeyNotFound')
+    },
+  }
+}
+
 function createFillClient(
   accessKey: Hex.Hex,
   options: { isRevoked?: boolean | undefined; keyId?: Hex.Hex | undefined } = {},
@@ -1078,6 +1086,7 @@ describe('getStatus', () => {
     const result = await AccessKey.getStatus({
       account: rootAddress,
       chainId: 1,
+      client: createMetadataClient(accessKey.address) as never,
       store,
     })
 
@@ -1102,6 +1111,7 @@ describe('getStatus', () => {
     const result = await AccessKey.getStatus({
       account: rootAddress,
       chainId: 1,
+      client: createMetadataClient(accessKey.accessKeyAddress) as never,
       store,
     })
 
@@ -1149,6 +1159,7 @@ describe('getStatus', () => {
     const result = await AccessKey.getStatus({
       account: rootAddress,
       chainId: 1,
+      client: createMetadataClient(accessKey.address) as never,
       now: 101,
       store,
     })
@@ -1176,6 +1187,7 @@ describe('getStatus', () => {
       account: rootAddress,
       calls: [{ to: '0x0000000000000000000000000000000000000def', data: '0xdeadbeef' }],
       chainId: 1,
+      client: createMissingClient() as never,
       store,
     })
 
