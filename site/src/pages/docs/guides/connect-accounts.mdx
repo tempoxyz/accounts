@@ -136,61 +136,6 @@ export function Example() {
 
 :::
 
-### Prompt for Funds
-
-If users should have a chance to fund a new account immediately, pass the
-`showDeposit` capability on a registration connect request. The wallet shows the
-standard deposit picker after registration succeeds. The prompt is optional, so
-the user can continue without depositing.
-
-`showDeposit` only applies to registration. Existing users who sign in with a
-saved account skip the deposit prompt.
-
-```tsx twoslash [Example.tsx]
-// @noErrors
-import { useConnect, useConnectors } from 'wagmi'
-
-export function Example() {
-  const connect = useConnect()
-  const [connector] = useConnectors()
-
-  return (
-    <button
-      onClick={() =>
-        connect.connect({
-          connector,
-          capabilities: {
-            method: 'register',
-            showDeposit: true,
-          },
-        })
-      }
-    >
-      Sign up
-    </button>
-  )
-}
-```
-
-Use the object form when you want to pre-fill deposit details. The deposit target
-is always the newly connected account on the active connect chain, so
-`showDeposit` does not accept `address` or `chainId`.
-
-```tsx twoslash [Example.tsx]
-// @noErrors
-connect.connect({
-  connector,
-  capabilities: {
-    method: 'register',
-    showDeposit: {
-      amount: '50',
-      displayName: 'Example',
-      token: 'USDC',
-    },
-  },
-})
-```
-
 ### Display Account & Sign Out
 
 After the user has signed in, display the account information and a sign out button.
@@ -230,6 +175,61 @@ When you're ready to go live, follow the [Deploying to Production](/docs/product
 ::::
 
 ## Best Practices
+
+### Prompt for Funds
+
+If users should have a chance to fund a new account immediately, pass the
+`showDeposit` capability on a registration connect request. The wallet shows the
+standard deposit picker after registration succeeds. The prompt is optional, so
+the user can continue without depositing.
+
+`showDeposit` only applies to registration. Existing users who sign in with a
+saved account skip the deposit prompt.
+
+```tsx twoslash [Example.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
+
+export function Example() {
+  const connect = useConnect()
+  const [connector] = useConnectors()
+
+  return (
+    <button
+      onClick={() =>
+        connect.connect({
+          connector,
+          capabilities: { // [!code focus]
+            method: 'register', // [!code focus]
+            showDeposit: true, // [!code focus]
+          }, // [!code focus]
+        })
+      }
+    >
+      Sign up
+    </button>
+  )
+}
+```
+
+Use the object form when you want to pre-fill deposit details. The deposit target
+is always the newly connected account on the active connect chain, so
+`showDeposit` does not accept `address` or `chainId`.
+
+```tsx twoslash [Example.tsx]
+// @noErrors
+connect.connect({
+  connector,
+  capabilities: { // [!code focus]
+    method: 'register', // [!code focus]
+    showDeposit: { // [!code focus]
+      amount: '50', // [!code focus]
+      displayName: 'Example', // [!code focus]
+      token: 'USDC', // [!code focus]
+    }, // [!code focus]
+  }, // [!code focus]
+})
+```
 
 ### Loading State
 
