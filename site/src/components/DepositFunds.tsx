@@ -17,13 +17,13 @@ export function DepositFunds() {
   return (
     <Steps.Step
       value={steps.value}
-      label="Open the deposit flow."
+      label="Open the mainnet deposit flow."
       action={
         <Button
           variant={steps.active ? 'primary' : 'secondary'}
           disabled={!steps.active || deposit.isPending}
           loading={deposit.isPending}
-          onClick={() => deposit.mutate({})}
+          onClick={() => deposit.mutate({ chainId: tempo.id })}
         >
           Open deposit
         </Button>
