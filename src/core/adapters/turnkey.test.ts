@@ -1,5 +1,7 @@
 import { Hex, PublicKey } from 'ox'
+import { decodeFunctionData } from 'viem'
 import type { Address } from 'viem/accounts'
+import { Abis } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
 import { accounts } from '../../../test/config.js'
@@ -292,6 +294,54 @@ describe('turnkey', () => {
     `)
   })
 
+  test('default: revokeAccessKey revokes with the connected Turnkey account', async () => {
+    const { adapter, client, store } = setup()
+    store.setState({
+      accounts: [{ address }],
+      activeAccount: 0,
+      accessKeys: [
+        {
+          access: address,
+          address: other,
+          chainId: 1,
+          keyType: 'secp256k1',
+        } as never,
+      ],
+    })
+
+    await adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: other, address },
+      { method: 'wallet_revokeAccessKey', params: [{ accessKeyAddress: other, address }] },
+    )
+
+    const transaction = client.transactions[0] as
+      | { account: { address: Address }; data: Hex.Hex; to: Address }
+      | undefined
+    const decoded = transaction
+      ? decodeFunctionData({ abi: Abis.accountKeychain, data: transaction.data })
+      : undefined
+    expect(
+      transaction &&
+        decoded && {
+          account: transaction.account.address,
+          args: decoded.args,
+          functionName: decoded.functionName,
+          to: transaction.to,
+        },
+    )
+      .toMatchInlineSnapshot(`
+        {
+          "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+          "args": [
+            "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+          ],
+          "functionName": "revokeKey",
+          "to": "0xaAAAaaAA00000000000000000000000000000000",
+        }
+      `)
+    expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+  })
+
   test('behavior: signing silently restores wallet accounts from an existing session', async () => {
     const { adapter, client, store } = setup()
     store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -508,7 +558,13 @@ function setup(options: setup.Options = {}) {
     getAccount: (() => {
       throw new Error('not implemented')
     }) as never,
-    getClient: (() => ({ chain: { id: 1 } })) as never,
+    getClient: (() => ({
+      chain: { id: 1 },
+      sendTransaction: async (parameters: unknown) => {
+        client.transactions.push(parameters)
+        return Hex.padLeft('0x1', 32)
+      },
+    })) as never,
     storage,
     store,
   })
@@ -546,6 +602,7 @@ function createClient(options: setup.Options = {}) {
     loadCalls: 0,
     signPayloads: [] as Hex.Hex[],
     signWith: [] as string[],
+    transactions: [] as unknown[],
     wallets: [{ accounts: [toWalletAccount(account)] }] as WalletShape[],
   }
   const client = {
@@ -572,6 +629,9 @@ function createClient(options: setup.Options = {}) {
     },
     get signWith() {
       return state.signWith
+    },
+    get transactions() {
+      return state.transactions
     },
     get wallets() {
       return state.wallets
@@ -610,6 +670,7 @@ function createClient(options: setup.Options = {}) {
     loadCalls: number
     signPayloads: Hex.Hex[]
     signWith: string[]
+    transactions: unknown[]
     wallets: WalletShape[]
   }
 

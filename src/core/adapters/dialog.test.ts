@@ -145,6 +145,56 @@ describe('dialog', () => {
     expect(lookups).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: revokeAccessKey clears the forwarded key from local state', async () => {
+    const storage = Storage.memory()
+    const store = Store.create({ chainId: tempoLocalnet.id, storage })
+    store.setState({
+      accessKeys: [
+        {
+          access: address,
+          address: recipient,
+          chainId: tempoLocalnet.id,
+          keyType: 'p256',
+        } as never,
+      ],
+    })
+    const adapter = dialog({ dialog: Dialog.noop() })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store,
+    })
+    const request = {
+      method: 'wallet_revokeAccessKey' as const,
+      params: [{ accessKeyAddress: recipient, address }] as const,
+    }
+
+    const promise = adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: recipient, address },
+      request,
+    )
+
+    await vi.waitFor(() => {
+      if (!store.getState().requestQueue[0]) throw new Error('request not queued')
+    })
+
+    const queued = store.getState().requestQueue[0]!
+    store.setState({
+      requestQueue: [
+        {
+          request: queued.request,
+          result: undefined,
+          status: 'success',
+        },
+      ],
+    })
+
+    await expect(promise).resolves.toMatchInlineSnapshot(`undefined`)
+    expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+  })
+
   test('error: wallet validation errors keep their RPC code', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })

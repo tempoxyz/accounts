@@ -1,6 +1,6 @@
 import { Provider as ox_Provider } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
-import { BaseError, hashMessage } from 'viem'
+import { hashMessage } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
 import { Actions } from 'viem/tempo'
 
@@ -248,20 +248,16 @@ export function local(options: local.Options): Adapter.Adapter {
             await Actions.accessKey.revoke(client, {
               account,
               accessKey: parameters.accessKeyAddress,
-            } as never)
+            })
           } catch (error) {
-            const isKeyNotFound =
-              error instanceof BaseError &&
-              !!error.walk(
-                (e) => (e as { data?: { errorName?: string } }).data?.errorName === 'KeyNotFound',
-              )
-            if (!isKeyNotFound) throw error
+            if (!AccessKey.isUnavailableError(error)) throw error
           }
-          store.setState((state) => ({
-            accessKeys: state.accessKeys.filter(
-              (a) => a.address?.toLowerCase() !== parameters.accessKeyAddress.toLowerCase(),
-            ),
-          }))
+          AccessKey.remove({
+            accessKey: parameters.accessKeyAddress,
+            account: account.address,
+            chainId: client.chain.id,
+            store,
+          })
         },
         async signPersonalMessage({ data, address }) {
           const account = getAccount({ address, signable: true })

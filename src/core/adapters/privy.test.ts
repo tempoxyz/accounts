@@ -1,4 +1,7 @@
 import { Address as core_Address, Hex, Secp256k1, Signature } from 'ox'
+import { decodeFunctionData } from 'viem'
+import type { Address } from 'viem/accounts'
+import { Abis } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
 import * as Storage from '../Storage.js'
@@ -174,6 +177,54 @@ describe('privy', () => {
     	  "rootAddress": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
     	}
     `)
+  })
+
+  test('default: revokeAccessKey revokes with the connected Privy account', async () => {
+    const { adapter, client, store } = setup()
+    store.setState({
+      accounts: [{ address }],
+      activeAccount: 0,
+      accessKeys: [
+        {
+          access: address,
+          address: other,
+          chainId: 1,
+          keyType: 'secp256k1',
+        } as never,
+      ],
+    })
+
+    await adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: other, address },
+      { method: 'wallet_revokeAccessKey', params: [{ accessKeyAddress: other, address }] },
+    )
+
+    const transaction = client.transactions[0] as
+      | { account: { address: Address }; data: Hex.Hex; to: Address }
+      | undefined
+    const decoded = transaction
+      ? decodeFunctionData({ abi: Abis.accountKeychain, data: transaction.data })
+      : undefined
+    expect(
+      transaction &&
+        decoded && {
+          account: transaction.account.address,
+          args: decoded.args,
+          functionName: decoded.functionName,
+          to: transaction.to,
+        },
+    )
+      .toMatchInlineSnapshot(`
+        {
+          "account": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+          "args": [
+            "0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF",
+          ],
+          "functionName": "revokeKey",
+          "to": "0xaAAAaaAA00000000000000000000000000000000",
+        }
+      `)
+    expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: signing silently restores wallet accounts via the Privy SDK', async () => {
@@ -450,7 +501,13 @@ function setup(options: setup.Options = {}) {
     getAccount: (() => {
       throw new Error('not implemented')
     }) as never,
-    getClient: (() => ({ chain: { id: 1 } })) as never,
+    getClient: (() => ({
+      chain: { id: 1 },
+      sendTransaction: async (parameters: unknown) => {
+        client.transactions.push(parameters)
+        return Hex.padLeft('0x1', 32)
+      },
+    })) as never,
     storage,
     store,
   })
@@ -481,6 +538,7 @@ type MockClient = privy.Client & {
   restoreCalls: number
   signPayloads: Hex.Hex[]
   signWith: string[]
+  transactions: unknown[]
   wallets: privy.EmbeddedWallet[]
   makeWallet: (address: string) => privy.EmbeddedWallet
   addWallet: (address: string) => void
@@ -496,6 +554,7 @@ function createClient(options: setup.Options = {}) {
     restoreCalls: 0,
     signPayloads: [] as Hex.Hex[],
     signWith: [] as string[],
+    transactions: [] as unknown[],
     wallets: [] as privy.EmbeddedWallet[],
     makeWallet(address: string): privy.EmbeddedWallet {
       return {

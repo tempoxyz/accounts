@@ -10,7 +10,7 @@ import {
 import { hashMessage, hashTypedData, isAddressEqual } from 'viem'
 import type { Address } from 'viem/accounts'
 import { prepareTransactionRequest } from 'viem/actions'
-import { Account as TempoAccount } from 'viem/tempo'
+import { Account as TempoAccount, Actions } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
@@ -426,6 +426,23 @@ export function turnkey<const client extends turnkey.Client>(
             store,
           })
           return { keyAuthorization, rootAddress: account.address }
+        },
+        async revokeAccessKey(parameters) {
+          const account = await getTurnkeyAccount(parameters.address)
+          try {
+            await Actions.accessKey.revoke(getClient(), {
+              account,
+              accessKey: parameters.accessKeyAddress,
+            })
+          } catch (error) {
+            if (!AccessKey.isUnavailableError(error)) throw error
+          }
+          AccessKey.remove({
+            accessKey: parameters.accessKeyAddress,
+            account: account.address,
+            chainId: store.getState().chainId,
+            store,
+          })
         },
         async signPersonalMessage(parameters) {
           return await (

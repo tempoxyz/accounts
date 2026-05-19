@@ -392,8 +392,14 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           return result
         },
 
-        async revokeAccessKey(_params, request) {
+        async revokeAccessKey(params, request) {
           await provider.request(request)
+          AccessKey.remove({
+            accessKey: params.accessKeyAddress,
+            account: params.address,
+            chainId: store.getState().chainId,
+            store,
+          })
         },
 
         async deposit(_params, request) {

@@ -9,9 +9,9 @@ import {
 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
-import type { Address } from 'viem/accounts'
+import type { Address, LocalAccount } from 'viem/accounts'
 import { prepareTransactionRequest } from 'viem/actions'
-import { Transaction as TempoTransaction } from 'viem/tempo'
+import { Actions, Transaction as TempoTransaction } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
@@ -75,7 +75,7 @@ export function privy<const client extends privy.Client>(
 ): Adapter.Adapter {
   const { icon, name = 'Privy', rdns = 'io.privy' } = options
 
-  return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
+  return Adapter.define({ icon, name, rdns }, ({ getClient, store }) => {
     let privyClient_promise: Promise<client> | undefined
     let restore_promise: Promise<void> | undefined
     let walletAccounts: readonly privy.EmbeddedWallet[] = []
@@ -375,8 +375,17 @@ export function privy<const client extends privy.Client>(
         ...(feePayer ? { feePayer: true } : {}),
         type: 'tempo',
       } as never)
+      return await signPreparedTransaction(account, prepared)
+    }
+
+    async function signPreparedTransaction(account: privy.EmbeddedWallet, prepared: unknown) {
       const presign = (() => {
-        if ('feePayerSignature' in prepared && prepared.feePayerSignature)
+        if (
+          prepared &&
+          typeof prepared === 'object' &&
+          'feePayerSignature' in prepared &&
+          prepared.feePayerSignature
+        )
           return { ...prepared, feePayerSignature: null }
         return prepared
       })()
@@ -591,6 +600,35 @@ export function privy<const client extends privy.Client>(
           const account = await accountForSigning(undefined)
           const keyAuthorization = await authorizeAccessKeyFor(account, parameters)
           return { keyAuthorization, rootAddress: core_Address.from(account.address) }
+        },
+        async revokeAccessKey(parameters) {
+          const account = await accountForSigning(parameters.address)
+          const account_tempo = {
+            address: core_Address.from(account.address),
+            source: 'privy',
+            signTransaction: async (request: unknown) =>
+              await signPreparedTransaction(account, request),
+            type: 'local',
+          } satisfies {
+            address: Address
+            signTransaction: (request: unknown) => Promise<Hex.Hex>
+            source: 'privy'
+            type: 'local'
+          }
+          try {
+            await Actions.accessKey.revoke(getClient(), {
+              account: account_tempo as LocalAccount<'privy'>,
+              accessKey: parameters.accessKeyAddress,
+            })
+          } catch (error) {
+            if (!AccessKey.isUnavailableError(error)) throw error
+          }
+          AccessKey.remove({
+            accessKey: parameters.accessKeyAddress,
+            account: core_Address.from(account.address),
+            chainId: store.getState().chainId,
+            store,
+          })
         },
         async signPersonalMessage(parameters) {
           const account = await accountForSigning(parameters.address)

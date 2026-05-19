@@ -1,6 +1,6 @@
 import { AbiFunction, Address, Hex, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
-import type { Client, Transport } from 'viem'
+import { BaseError, type Client, type Transport } from 'viem'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
 
 import type { OneOf } from '../internal/types.js'
@@ -17,6 +17,8 @@ const status = {
   /** A matching key exists but is past its expiry. */
   expired: 'expired',
 } as const
+
+const unavailableErrorNames = new Set(['KeyAlreadyRevoked', 'KeyNotFound'])
 
 type Status = (typeof status)[keyof typeof status]
 
@@ -421,6 +423,20 @@ export function remove(options: Key): void {
   }))
 }
 
+/** Returns whether an error means an access key is already unavailable on-chain. */
+export function isUnavailableError(error: unknown): boolean {
+  if (error instanceof BaseError) {
+    const found = error.walk((e) => {
+      const errorName = (e as { data?: { errorName?: string } }).data?.errorName
+      return !!errorName && unavailableErrorNames.has(errorName)
+    })
+    if (found) return true
+  }
+
+  if (!(error instanceof Error)) return false
+  return unavailableErrorNames.has(ExecutionError.parse(error).errorName)
+}
+
 function scopesMatch(
   key: AccessKey,
   options: {
@@ -517,10 +533,7 @@ async function getPublishedStatus(
     if (metadata.expiry > 0n && metadata.expiry < BigInt(Math.floor(now))) return status.expired
     return status.published
   } catch (error) {
-    if (!(error instanceof Error)) throw error
-    const parsed = ExecutionError.parse(error)
-    if (parsed.errorName === 'KeyNotFound' || parsed.errorName === 'KeyAlreadyRevoked')
-      return status.missing
+    if (isUnavailableError(error)) return status.missing
     throw error
   }
 }
