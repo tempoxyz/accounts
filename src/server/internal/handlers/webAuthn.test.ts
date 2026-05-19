@@ -68,7 +68,7 @@ describe('POST /register', () => {
 })
 
 describe('kv', () => {
-  test('store without atomic create is rejected', () => {
+  test('store without atomic create is accepted', () => {
     const kv: Kv.Kv = {
       async get() {
         return undefined
@@ -83,9 +83,7 @@ describe('kv', () => {
         origin: 'http://localhost',
         rpId: 'localhost',
       }),
-    ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: \`webAuthn({ kv })\` requires a Kv with atomic \`create\` support]`,
-    )
+    ).not.toThrow()
   })
 })
 

@@ -20,6 +20,17 @@ const defaults = {
 
 const sessionKey = (token: string) => `session:${token}`
 
+async function createCredential(
+  kv: Kv.Kv,
+  key: string,
+  value: { publicKey: string; userId?: string | undefined },
+) {
+  if (kv.create) return await kv.create(key, value)
+  if (await kv.get(key)) return false
+  await kv.set(key, value)
+  return true
+}
+
 /**
  * Session payload persisted in the session store and surfaced via
  * `getSession`. Mirrors the shape of the WebAuthn login response so
@@ -89,8 +100,6 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
     ...rest
   } = options
   const origin = options.origin as string | string[]
-  if (!kv.create) throw new Error('`webAuthn({ kv })` requires a Kv with atomic `create` support')
-  const create = kv.create.bind(kv)
 
   const router = from(rest)
 
@@ -151,7 +160,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       const userId = stored.userId
         ? Base64.fromBytes(Bytes.fromString(stored.userId), { pad: false, url: true })
         : undefined
-      const created = await create(`credential:${credentialId}`, {
+      const created = await createCredential(kv, `credential:${credentialId}`, {
         publicKey,
         ...(userId ? { userId } : {}),
       })
@@ -398,7 +407,12 @@ export declare namespace webAuthn {
     cookie?: boolean | undefined
     /** Cookie name for the session token. @default "accounts_webauthn" */
     cookieName?: string | undefined
-    /** Key-value store for challenges, credentials, and sessions. */
+    /**
+     * Key-value store for challenges, credentials, and sessions. When
+     * `create` is available, credential registration uses it to reject
+     * duplicates atomically. Otherwise, registration falls back to
+     * best-effort `get` then `set` storage.
+     */
     kv: Kv.Kv
     /** Called after a successful registration. The returned response is merged onto the default JSON response. */
     onRegister?: (parameters: {

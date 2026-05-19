@@ -20,10 +20,10 @@ export type Kv = {
    * Atomic create-if-absent. Returns `true` when the value was written,
    * `false` when a non-expired value already exists.
    *
-   * Optional. Required for unique-key semantics (e.g. WebAuthn credential
-   * registration). Backends without a linearizable create primitive (e.g.
-   * eventually-consistent stores like Cloudflare KV) should leave this
-   * undefined; consumers that require uniqueness will refuse the store.
+   * Optional. Backends with a linearizable create primitive should
+   * implement this so consumers can atomically reject duplicates.
+   * Consumers may fall back to `get` then `set` when strict atomicity is
+   * not required.
    */
   create?: (key: string, value: unknown, options?: set.Options | undefined) => Promise<boolean>
   /**
@@ -61,11 +61,10 @@ export function from<kv extends Kv>(kv: kv): kv {
  * Cloudflare KV's minimum TTL is 60 seconds; the platform enforces its own
  * minimum independent of what's passed here.
  *
- * **Not safe for one-time-consume semantics.** Cloudflare KV is eventually
- * consistent across data centers — concurrent read+delete races can let
- * the same key be "consumed" twice. `take` is intentionally NOT
- * implemented. Use a Durable Object (or another linearizable backend)
- * for the SIWE challenge nonce store.
+ * **Not safe for one-time-consume or unique-key semantics.**
+ * Cloudflare KV is eventually consistent across data centers, so `take`
+ * and `create` are intentionally NOT implemented. Use a Durable Object
+ * (or another linearizable backend) for the SIWE challenge nonce store.
  */
 export function cloudflare(kv: cloudflare.Parameters): Kv {
   return from({
@@ -94,10 +93,11 @@ export declare namespace cloudflare {
 
 /**
  * Adapt a Cloudflare Durable Object namespace into a `Kv` with atomic
- * `take`. Unlike `Kv.cloudflare`, a Durable Object's storage is
- * single-actor and linearizable — `take` (read+delete) is guaranteed
- * atomic across concurrent callers, which makes this the recommended
- * backend for SIWE challenge nonce storage on Cloudflare Workers.
+ * `take` and `create`. Unlike `Kv.cloudflare`, a Durable Object's
+ * storage is single-actor and linearizable, so `take` (read+delete) and
+ * `create` (create-if-absent) are guaranteed atomic across concurrent
+ * callers. This makes it the recommended backend for SIWE challenge
+ * nonce storage on Cloudflare Workers.
  *
  * Pair with `Kv.NonceStorage` (or your own DO class implementing the
  * same fetch protocol).

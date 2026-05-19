@@ -1,11 +1,11 @@
 ---
 title: Kv.durableObject
-description: Kv adapter backed by a Cloudflare Durable Object with atomic take.
+description: Kv adapter backed by a Cloudflare Durable Object with atomic take and create.
 ---
 
 # `Kv.durableObject`
 
-Adapts a Cloudflare Durable Object namespace into a [`Kv`](/docs/server/kv) with atomic [`take`](/docs/server/kv#take-key-optional). Unlike [`Kv.cloudflare`](/docs/server/kv.cloudflare), a Durable Object's storage is single-actor and linearizable — `take` (read+delete) is guaranteed atomic across concurrent callers, which makes this the recommended backend for SIWE challenge nonce storage on Cloudflare Workers.
+Adapts a Cloudflare Durable Object namespace into a [`Kv`](/docs/server/kv) with atomic [`take`](/docs/server/kv#take-key-optional) and [`create`](/docs/server/kv#create-key-value-options-optional). Unlike [`Kv.cloudflare`](/docs/server/kv.cloudflare), a Durable Object's storage is single-actor and linearizable — `take` (read+delete) and `create` (create-if-absent) are guaranteed atomic across concurrent callers, which makes this the recommended backend for SIWE challenge nonce storage on Cloudflare Workers.
 
 Pair with [`NonceStorage`](/docs/server/kv#noncestorage) (or your own DO class implementing the same fetch protocol).
 
@@ -81,4 +81,4 @@ const handler = Handler.auth({
 
 ## Return Type
 
-A [`Kv`](/docs/server/kv#interface) instance with `get`, `set`, `delete`, and the linearizable `take`.
+A [`Kv`](/docs/server/kv#interface) instance with `get`, `set`, `delete`, and the linearizable `take` and `create`.
