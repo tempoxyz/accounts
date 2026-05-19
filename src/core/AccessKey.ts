@@ -1,4 +1,4 @@
-import { AbiFunction, Address, Hex, PublicKey, WebCryptoP256 } from 'ox'
+import { AbiFunction, Address, Hex, PublicKey, RpcResponse, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { BaseError, type Client, type Transport } from 'viem'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
@@ -179,6 +179,10 @@ export async function prepareAuthorization(
     })
     return { keyAuthorization }
   }
+  if (keyType && keyType !== 'p256')
+    throw new RpcResponse.InvalidParamsError({
+      message: `\`keyType: "${keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
+    })
 
   const keyPair = await WebCryptoP256.createKeyPair()
   const keyAuthorization = KeyAuthorization.from({

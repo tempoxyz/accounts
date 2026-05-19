@@ -181,6 +181,8 @@ const provider = Provider.create({
 
 You can also pre-derive the access key locally by passing `publicKey` or `address` with `keyType`. The wallet still authorizes that key during `wallet_connect`; the app keeps the signing material.
 
+For `keyType: 'secp256k1'`, generate and store the private key in your app or backend, then pass either the derived `address` or the `publicKey` in `authorizeAccessKey`.
+
 ```ts twoslash
 // @noErrors
 import { Expiry, Provider } from 'accounts'

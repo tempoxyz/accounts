@@ -1,4 +1,5 @@
-import { Provider as ox_Provider } from 'ox'
+import { Address, Hex, Provider as ox_Provider, PublicKey } from 'ox'
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { tempoLocalnet } from 'viem/chains'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
@@ -10,6 +11,47 @@ import { dialog } from './dialog.js'
 
 const address = '0x0000000000000000000000000000000000000001'
 const recipient = '0x0000000000000000000000000000000000000002'
+
+function createKeyAuthorization(options: {
+  expiry: number
+  keyType: 'secp256k1' | 'p256'
+  publicKey: Hex.Hex
+}) {
+  const { expiry, keyType, publicKey } = options
+  return KeyAuthorization.toRpc(
+    KeyAuthorization.from(
+      {
+        address: Address.fromPublicKey(PublicKey.from(publicKey)),
+        chainId: BigInt(tempoLocalnet.id),
+        expiry,
+        type: keyType,
+      },
+      { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
+    ),
+  )
+}
+
+function setup() {
+  const storage = Storage.memory()
+  const store = Store.create({ chainId: tempoLocalnet.id, storage })
+  const adapter = dialog({ dialog: Dialog.noop() })({
+    getAccount: (options) => {
+      if (options?.signable) throw new ox_Provider.UnauthorizedError({ message: 'No signer.' })
+      return { address, type: 'json-rpc' } as never
+    },
+    getClient: () => ({}) as never,
+    storage,
+    store,
+  })
+  return { adapter, store }
+}
+
+async function takeRequest(store: Store.Store) {
+  await vi.waitFor(() => {
+    if (!store.getState().requestQueue[0]) throw new Error('request not queued')
+  })
+  return store.getState().requestQueue[0]!
+}
 
 describe('dialog', () => {
   afterEach(() => {
@@ -193,6 +235,160 @@ describe('dialog', () => {
 
     await expect(promise).resolves.toMatchInlineSnapshot(`undefined`)
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: authorizeAccessKey forwards an external secp256k1 key', async () => {
+    const { adapter, store } = setup()
+    const expiry = 123
+    const promise = adapter.actions.authorizeAccessKey!(
+      { address: recipient, expiry, keyType: 'secp256k1' },
+      {
+        method: 'wallet_authorizeAccessKey',
+        params: [{ address: recipient, expiry, keyType: 'secp256k1' }],
+      },
+    )
+
+    const queued = await takeRequest(store)
+    const request = queued.request as {
+      params: [{ address: typeof recipient; expiry: number; keyType: 'secp256k1' }]
+    }
+    const params = request.params[0]
+    const keyAuthorization = KeyAuthorization.toRpc(
+      KeyAuthorization.from(
+        {
+          address: recipient,
+          chainId: BigInt(tempoLocalnet.id),
+          expiry,
+          type: 'secp256k1',
+        },
+        { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
+      ),
+    )
+    store.setState({
+      requestQueue: [
+        {
+          request: queued.request,
+          result: {
+            keyAuthorization,
+            rootAddress: address,
+          },
+          status: 'success',
+        },
+      ],
+    })
+
+    await expect(promise).resolves.toMatchObject({ rootAddress: address })
+    expect(params.keyType).toMatchInlineSnapshot(`"secp256k1"`)
+    expect(params.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000002"`)
+    expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: authorizeAccessKey generates a p256 key by default', async () => {
+    const { adapter, store } = setup()
+    const expiry = 123
+    const promise = adapter.actions.authorizeAccessKey!(
+      { expiry },
+      { method: 'wallet_authorizeAccessKey', params: [{ expiry }] },
+    )
+
+    const queued = await takeRequest(store)
+    const request = queued.request as {
+      params: [{ expiry: number; keyType: 'p256'; publicKey: Hex.Hex }]
+    }
+    const params = request.params[0]
+    store.setState({
+      requestQueue: [
+        {
+          request: queued.request,
+          result: {
+            keyAuthorization: createKeyAuthorization(params),
+            rootAddress: address,
+          },
+          status: 'success',
+        },
+      ],
+    })
+
+    await expect(promise).resolves.toMatchObject({ rootAddress: address })
+    expect(params.keyType).toMatchInlineSnapshot(`"p256"`)
+    expect(store.getState().accessKeys).toMatchObject([
+      {
+        access: address,
+        keyType: 'p256',
+      },
+    ])
+    expect('keyPair' in store.getState().accessKeys[0]!).toMatchInlineSnapshot(`true`)
+  })
+
+  test('behavior: authorizeAccessKey generates a p256 key when requested', async () => {
+    const { adapter, store } = setup()
+    const expiry = 123
+    const promise = adapter.actions.authorizeAccessKey!(
+      { expiry, keyType: 'p256' },
+      { method: 'wallet_authorizeAccessKey', params: [{ expiry, keyType: 'p256' }] },
+    )
+
+    const queued = await takeRequest(store)
+    const request = queued.request as {
+      params: [{ expiry: number; keyType: 'p256'; publicKey: Hex.Hex }]
+    }
+    const params = request.params[0]
+    store.setState({
+      requestQueue: [
+        {
+          request: queued.request,
+          result: {
+            keyAuthorization: createKeyAuthorization(params),
+            rootAddress: address,
+          },
+          status: 'success',
+        },
+      ],
+    })
+
+    await expect(promise).resolves.toMatchObject({ rootAddress: address })
+    expect(params.keyType).toMatchInlineSnapshot(`"p256"`)
+    expect(store.getState().accessKeys).toMatchObject([
+      {
+        access: address,
+        keyType: 'p256',
+      },
+    ])
+    expect('keyPair' in store.getState().accessKeys[0]!).toMatchInlineSnapshot(`true`)
+  })
+
+  test('error: secp256k1 access key requires external key material', async () => {
+    const { adapter, store } = setup()
+
+    await expect(
+      adapter.actions.authorizeAccessKey!(
+        { expiry: 123, keyType: 'secp256k1' },
+        {
+          method: 'wallet_authorizeAccessKey',
+          params: [{ expiry: 123, keyType: 'secp256k1' }],
+        },
+      ),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: \`keyType: "secp256k1"\` requires externally generated key material; provide \`publicKey\` or \`address\`.]`,
+    )
+    expect(store.getState().requestQueue).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('error: webAuthn access key requires external key material', async () => {
+    const { adapter, store } = setup()
+
+    await expect(
+      adapter.actions.authorizeAccessKey!(
+        { expiry: 123, keyType: 'webAuthn' },
+        {
+          method: 'wallet_authorizeAccessKey',
+          params: [{ expiry: 123, keyType: 'webAuthn' }],
+        },
+      ),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: \`keyType: "webAuthn"\` requires externally generated key material; provide \`publicKey\` or \`address\`.]`,
+    )
+    expect(store.getState().requestQueue).toMatchInlineSnapshot(`[]`)
   })
 
   test('error: wallet validation errors keep their RPC code', async () => {

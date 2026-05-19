@@ -297,7 +297,7 @@ export declare namespace authorizeAccessKey {
     chainId?: bigint | undefined
     /** Unix timestamp (seconds) when the key expires. */
     expiry: number
-    /** Key type of the external public key. Required when `publicKey` or `address` is provided. */
+    /** External key type. Defaults to `secp256k1` for external keys. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
     limits?: readonly { token: Address; limit: bigint; period?: number | undefined }[] | undefined
