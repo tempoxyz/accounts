@@ -8,6 +8,7 @@ import LucideExternalLink from '~icons/lucide/external-link'
 import LucideRotateCcw from '~icons/lucide/rotate-ccw'
 
 import {
+  depositsWagmiConfig,
   feeSponsorshipWagmiConfig,
   spendPermissionsWagmiConfig,
   themingWagmiConfig,
@@ -18,6 +19,7 @@ import * as Steps from './Steps.js'
 const queryClient = new QueryClient()
 const wagmiConfigs = {
   default: wagmiConfig,
+  deposits: depositsWagmiConfig,
   feeSponsorship: feeSponsorshipWagmiConfig,
   spendPermissions: spendPermissionsWagmiConfig,
   theming: themingWagmiConfig,
@@ -95,9 +97,7 @@ export namespace Demo {
         <div className="flex items-center gap-1 min-w-0">
           <span className="text-secondary font-mono text-[12px] truncate">
             <span className="text-muted">pnpx gitpick</span>{' '}
-            <span className="text-primary">
-              {props.command.replace(/^pnpx gitpick\s+/, '')}
-            </span>
+            <span className="text-primary">{props.command.replace(/^pnpx gitpick\s+/, '')}</span>
           </span>
           <CopyButton plain value={props.command} />
         </div>
