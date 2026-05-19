@@ -1,5 +1,17 @@
 # accounts
 
+## 0.14.0
+
+### Minor Changes
+
+- feb1ab6: **Breaking:** Updated Tempo chain imports to use scoped chain entrypoints. Bump your Viem version to `>=2.50.4`.
+
+### Patch Changes
+
+- 7aeec48: Fixed access key authorization to reject requests that require external key material when none is provided.
+- 78778cb: Added a Privy adapter for connecting and signing with app-provided Privy embedded wallet accounts.
+- e15757f: Added a `showDeposit` capability to `wallet_connect`.
+
 ## 0.13.0
 
 ### Minor Changes
