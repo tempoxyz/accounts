@@ -354,8 +354,9 @@ describe('isUnavailableError', () => {
     expect(AccessKey.isUnavailableError(createRevert('KeyAlreadyRevoked'))).toMatchInlineSnapshot(
       `true`,
     )
-    expect(AccessKey.isUnavailableError(createRevert('SpendingLimitExceeded')))
-      .toMatchInlineSnapshot(`false`)
+    expect(
+      AccessKey.isUnavailableError(createRevert('SpendingLimitExceeded')),
+    ).toMatchInlineSnapshot(`false`)
   })
 
   test('behavior: recognizes nested viem error data', () => {

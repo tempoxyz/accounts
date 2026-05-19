@@ -213,8 +213,7 @@ describe('privy', () => {
           functionName: decoded.functionName,
           to: transaction.to,
         },
-    )
-      .toMatchInlineSnapshot(`
+    ).toMatchInlineSnapshot(`
         {
           "account": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
           "args": [
