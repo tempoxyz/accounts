@@ -3,7 +3,7 @@ import { Mppx as ServerMppx, tempo } from 'mppx/server'
 import { parseUnits } from 'viem'
 import { Addresses } from 'viem/tempo'
 import { Actions } from 'viem/tempo'
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
+import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vp/test'
 
 import { headlessWebAuthn } from '../../test/adapters.js'
 import { accounts, chain, getClient } from '../../test/config.js'
@@ -95,6 +95,43 @@ describe('mppx integration', () => {
       accessKey: key.address,
     })
     expect(metadata.isRevoked).toMatchInlineSnapshot(`false`)
+  })
+
+  test('default mode snapshots a local access key account lazily', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+      chains: [chain],
+      mpp: true,
+    })
+    const address = await connect(provider)
+    await fund(address)
+
+    await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [{ expiry: Expiry.days(1) }],
+    })
+    const key = provider.store.getState().accessKeys[0]!
+
+    const methods: string[] = []
+    const request = provider.request.bind(provider)
+    vi.spyOn(provider, 'request').mockImplementation((async (
+      args: Parameters<typeof provider.request>[0],
+    ) => {
+      methods.push(args.method)
+      return await request(args)
+    }) as never)
+
+    const first = await fetch(`${server.url}/fortune`)
+    expect(first.status).toMatchInlineSnapshot(`200`)
+
+    const status = await provider.getAccessKeyStatus({ accessKey: key.address })
+    expect(status).toMatchInlineSnapshot(`"published"`)
+
+    methods.length = 0
+    const second = await fetch(`${server.url}/fortune`)
+    expect(second.status).toMatchInlineSnapshot(`200`)
+    expect(methods).toContain('eth_fillTransaction')
+    expect(methods).not.toContain('wallet_sendCalls')
   })
 
   test('pull mode keeps access key authorization pending after failed verification', async () => {

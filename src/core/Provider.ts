@@ -1047,26 +1047,40 @@ export function create(options: create.Options = {}): create.ReturnType {
     return {}
   })()
   if (mpp) {
-    const { mode = 'push', polyfill: polyfill_option, ...methodOptions } = mpp
+    const { mode, polyfill: polyfill_option, ...methodOptions } = mpp
     // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
     // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
     const polyfill = polyfill_option ?? isFetchWritable()
-    const getClient = ({ chainId }: { chainId?: number | undefined }) => {
-      const client = provider.getClient({ chainId })
-      const account = store.getState().accounts[store.getState().activeAccount]
+    const getClient = async ({ chainId }: { chainId?: number | undefined }) => {
+      const state = store.getState()
+      const chainId_ = chainId ?? state.chainId
+      const account = state.accounts[state.activeAccount]
       if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
-      return Object.assign(client, {
-        account: {
-          address: account.address,
-          type: 'json-rpc' as const,
-        },
+
+      const client = provider.getClient({ chainId: chainId_ })
+      const selection = await AccessKey.select({
+        account: account.address,
+        chainId: chainId_,
+        client,
+        store,
+      })
+      return Object.assign({}, client, {
+        account:
+          selection && !selection.authorization
+            ? selection.account
+            : {
+                address: account.address,
+                type: 'json-rpc' as const,
+              },
       })
     }
+    const options_tempo = {
+      ...methodOptions,
+      getClient,
+      ...(mode ? { mode } : {}),
+    }
     Mppx.create({
-      methods: [
-        mppx_tempo({ ...methodOptions, getClient, mode }),
-        mppx_tempo.subscription({ getClient }),
-      ],
+      methods: [mppx_tempo(options_tempo), mppx_tempo.subscription({ getClient })],
       polyfill,
     })
   }
