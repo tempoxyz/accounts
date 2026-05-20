@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { waapi, type WAAPIAnimation } from "animejs";
+import { useEffect, useRef, useState } from "react";
+import { springs } from "./animation";
 import { useTheme } from "./useTheme";
 
 const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
@@ -174,7 +176,6 @@ function paletteFor(
 function Skeleton({
   className,
   bg,
-  delay = 0,
 }: {
   className?: string;
   bg: string;
@@ -186,7 +187,7 @@ function Skeleton({
       className={`block ${className ?? ""}`}
       style={{
         background: bg,
-        animation: `pulseDot 1600ms ease-in-out ${delay}ms infinite`,
+        opacity: 0.82,
       }}
     />
   );
@@ -203,6 +204,7 @@ function CardShell({
 }) {
   return (
     <div
+      data-customize-card
       className="flex h-[384px] shrink-0 flex-col justify-between p-[12.7px]"
       style={{
         width,
@@ -589,6 +591,10 @@ function CustomThemeToolbar({
 
 export default function Customize() {
   const [theme, setTheme] = useState<ThemePreset>("Default");
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const marqueeRef = useRef<HTMLDivElement | null>(null);
+  const marqueeAnimationRef = useRef<WAAPIAnimation | null>(null);
+  const cardAnimationRef = useRef<WAAPIAnimation | null>(null);
   // The Custom preset seeds its initial `scheme` from the landing page's
   // resolved theme so opening the section in site light mode previews
   // the SDK's light scheme by default. After the first paint the user
@@ -602,6 +608,60 @@ export default function Customize() {
     scheme: resolved,
   }));
 
+  useEffect(() => {
+    const el = marqueeRef.current;
+    if (!el) return;
+
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    const start = () => {
+      marqueeAnimationRef.current?.cancel();
+      marqueeAnimationRef.current = null;
+
+      if (media.matches) {
+        el.style.transform = "translate3d(0, 0, 0)";
+        return;
+      }
+
+      marqueeAnimationRef.current = waapi.animate(el, {
+        transform: ["translate3d(0, 0, 0)", "translate3d(-50%, 0, 0)"],
+        duration: 50_000,
+        ease: "linear",
+        loop: true,
+      });
+    };
+
+    start();
+    media.addEventListener("change", start);
+    return () => {
+      media.removeEventListener("change", start);
+      marqueeAnimationRef.current?.cancel();
+      marqueeAnimationRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section || window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+      return;
+
+    cardAnimationRef.current?.cancel();
+    cardAnimationRef.current = waapi.animate(
+      [...section.querySelectorAll<HTMLElement>("[data-customize-card]")],
+      {
+        opacity: [0.72, 1],
+        translateY: [10, 0],
+        delay: (_target, index) => (index % 5) * 22,
+        ease: springs.gentle,
+      },
+    );
+
+    return () => {
+      cardAnimationRef.current?.cancel();
+      cardAnimationRef.current = null;
+    };
+  }, [theme]);
+
   const cards = (
     <>
       <OrderPizzaCard palette={paletteFor(theme, "orderPizza", custom)} />
@@ -614,6 +674,7 @@ export default function Customize() {
 
   return (
     <section
+      ref={sectionRef}
       className="px-6 pt-[100px] pb-[120px]"
       style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
     >
@@ -647,18 +708,13 @@ export default function Customize() {
 
       <div className="group mt-14 -mx-6 overflow-hidden">
         <div
-          className="flex w-max items-center"
-          style={{
-            animation: "marquee 50s linear infinite",
-            animationPlayState: "running",
+          ref={marqueeRef}
+          className="flex w-max items-center will-change-transform"
+          onMouseEnter={() => {
+            marqueeAnimationRef.current?.pause();
           }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.animationPlayState =
-              "paused";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.animationPlayState =
-              "running";
+          onMouseLeave={() => {
+            marqueeAnimationRef.current?.resume();
           }}
         >
           {[0, 1].map((copy) => (

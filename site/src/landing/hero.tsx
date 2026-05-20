@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { stagger, waapi, type WAAPIAnimation } from "animejs";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import AsciiBackground from "./ascii-bg";
 import { defaultAuthorizeAccessKey, isTrustedHost } from "./demo/sdk";
 import {
@@ -10,6 +18,7 @@ import {
   GithubIcon,
   TempoLogo,
 } from "./icons";
+import { springs } from "./animation";
 import { useTempoSession } from "./sections/useTempoSession";
 import { ThemeSwitch } from "./theme-switch";
 
@@ -17,6 +26,13 @@ type PackageManager = "npm" | "pnpm" | "bun";
 type Adapter = "tempoAuth" | "webAuth" | "privy" | "turnkey";
 
 const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
+const PM_ROTATE_MS = 1800;
+const HERO_ENTRANCE_STAGGER_MS = 28;
+const heroEntranceInitialStyle = {
+  opacity: 0,
+  translate: "0 10px",
+  willChange: "opacity, translate",
+} satisfies CSSProperties;
 
 const installCommand: Record<PackageManager, { prefix: string; pkg: string }> =
   {
@@ -95,13 +111,16 @@ function useCopy() {
   return { copied, copy };
 }
 
-function TopNav() {
+function TopNav({
+  staggerStyle,
+}: {
+  staggerStyle: CSSProperties | undefined;
+}) {
   return (
-    <nav
-      className="flex items-center justify-between px-6 py-6"
-      style={{ animation: `fadeUp 480ms ${easeOut} 0ms both` }}
-    >
+    <nav className="flex items-center justify-between px-6 py-6">
       <a
+        data-hero-stagger
+        style={staggerStyle}
         href="/"
         aria-label="Tempo"
         className="grid size-12 place-items-center bg-background text-foreground"
@@ -109,117 +128,229 @@ function TopNav() {
         <TempoLogo width={20} height={21} />
       </a>
       <div className="flex items-center gap-7 px-3">
-        <a
-          href="https://docs.tempo.xyz/accounts"
-          className="flex items-center gap-2 text-[12px] text-foreground outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
+        <span
+          data-hero-stagger
+          style={staggerStyle}
+          className="inline-flex"
         >
-          <DocsIcon />
-          DOCS
-        </a>
-        <a
-          href="https://github.com/tempoxyz/accounts"
-          className="flex items-center gap-2 text-[12px] text-foreground outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
+          <a
+            href="https://docs.tempo.xyz/accounts"
+            className="flex items-center gap-2 text-[12px] text-foreground outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
+          >
+            <DocsIcon />
+            DOCS
+          </a>
+        </span>
+        <span
+          data-hero-stagger
+          style={staggerStyle}
+          className="inline-flex"
         >
-          <GithubIcon />
-          GITHUB
-        </a>
-        <ThemeSwitch />
+          <a
+            href="https://github.com/tempoxyz/accounts"
+            className="flex items-center gap-2 text-[12px] text-foreground outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
+          >
+            <GithubIcon />
+            GITHUB
+          </a>
+        </span>
+        <span data-hero-stagger style={staggerStyle} className="inline-flex">
+          <ThemeSwitch />
+        </span>
       </div>
     </nav>
   );
 }
 
-const PM_SWAP_MS = 280;
-
-function HeroIntro() {
+function HeroIntro({
+  staggerStyle,
+}: {
+  staggerStyle: CSSProperties | undefined;
+}) {
   const [pmIndex, setPmIndex] = useState(0);
-  const [outgoingIndex, setOutgoingIndex] = useState<number | null>(null);
-  const [paused, setPaused] = useState(false);
+  const [pmItems, setPmItems] = useState(() => [{ key: 0, index: 0 }]);
+  const [pmPaused, setPmPaused] = useState(false);
+  const [pmManual, setPmManual] = useState(false);
+  const pmIndexRef = useRef(0);
+  const pmKey = useRef(1);
+  const activePmKey = useRef(0);
+  const animatedPmKey = useRef(0);
+  const prefixRef = useRef<HTMLButtonElement | null>(null);
+  const prefixItemRefs = useRef(new Map<number, HTMLSpanElement>());
+  const prefixAnimations = useRef(new Map<number, WAAPIAnimation>());
+  const prefixWidthAnimation = useRef<WAAPIAnimation | null>(null);
+  const exitingPmKeys = useRef(new Set<number>());
+  const previousPmIndex = useRef(0);
   const { copied: copiedInstall, copy: copyInstall } = useCopy();
   const { copied: copiedAgent, copy: copyAgent } = useCopy();
   const pm = PACKAGE_MANAGERS[pmIndex] ?? "npm";
   const cmd = installCommand[pm];
   const fullCommand = `${cmd.prefix} ${cmd.pkg}`;
-  const outgoingPrefix =
-    outgoingIndex != null
-      ? (installCommand[PACKAGE_MANAGERS[outgoingIndex] ?? "npm"]?.prefix ??
-        null)
-      : null;
+
+  const advancePm = useCallback(() => {
+    const index = (pmIndexRef.current + 1) % PACKAGE_MANAGERS.length;
+    const key = pmKey.current++;
+    pmIndexRef.current = index;
+    activePmKey.current = key;
+    setPmIndex(index);
+    setPmItems((items) => [...items, { key, index }]);
+  }, []);
+
+  const nextPm = () => {
+    setPmManual(true);
+    advancePm();
+  };
 
   useEffect(() => {
-    if (paused) return;
-    const cycle = setInterval(() => {
-      setOutgoingIndex((prev) => (prev == null ? pmIndex : prev));
-      setPmIndex((i) => (i + 1) % PACKAGE_MANAGERS.length);
-    }, 2200);
-    return () => clearInterval(cycle);
-  }, [paused, pmIndex]);
+    if (pmManual || pmPaused) return;
+    const timer = window.setInterval(advancePm, PM_ROTATE_MS);
+    return () => window.clearInterval(timer);
+  }, [advancePm, pmManual, pmPaused]);
 
-  useEffect(() => {
-    if (outgoingIndex == null) return;
-    const t = setTimeout(() => setOutgoingIndex(null), PM_SWAP_MS + 40);
-    return () => clearTimeout(t);
-  }, [outgoingIndex, pmIndex]);
+  useLayoutEffect(() => {
+    const prefix = prefixRef.current;
+    if (!prefix) return;
+
+    const previous = previousPmIndex.current;
+    if (previous !== pmIndex) {
+      const prevPm = PACKAGE_MANAGERS[previous] ?? "npm";
+      const prevCmd = installCommand[prevPm];
+      prefixWidthAnimation.current?.cancel();
+      prefixWidthAnimation.current = waapi.animate(prefix, {
+        width: [`${prevCmd.prefix.length}ch`, `${cmd.prefix.length}ch`],
+        ease: springs.snappy,
+      });
+      previousPmIndex.current = pmIndex;
+    }
+
+    const active = activePmKey.current;
+    for (const item of pmItems) {
+      const el = prefixItemRefs.current.get(item.key);
+      if (!el) continue;
+
+      if (item.key === active) {
+        if (animatedPmKey.current === active) continue;
+        animatedPmKey.current = active;
+        prefixAnimations.current.get(item.key)?.cancel();
+        exitingPmKeys.current.delete(item.key);
+        prefixAnimations.current.set(
+          item.key,
+          waapi.animate(el, {
+            opacity: [0, 1],
+            translateX: [-14, 0],
+            ease: springs.snappy,
+          }),
+        );
+        continue;
+      }
+
+      if (exitingPmKeys.current.has(item.key)) continue;
+
+      prefixAnimations.current.get(item.key)?.cancel();
+      const animation = waapi.animate(el, {
+        opacity: [1, 0],
+        translateX: [0, 14],
+        ease: springs.snappy,
+      });
+      exitingPmKeys.current.add(item.key);
+      prefixAnimations.current.set(item.key, animation);
+      void animation.then(() => {
+        exitingPmKeys.current.delete(item.key);
+        prefixAnimations.current.delete(item.key);
+        setPmItems((items) => items.filter((i) => i.key !== item.key));
+      });
+    }
+  }, [cmd.prefix.length, pmIndex, pmItems]);
+
+  useEffect(
+    () => () => {
+      prefixWidthAnimation.current?.cancel();
+      for (const animation of prefixAnimations.current.values())
+        animation.cancel();
+      prefixAnimations.current.clear();
+    },
+    [],
+  );
 
   return (
     <div
       className="mx-auto flex w-full max-w-[720px] flex-col items-center gap-9 px-6 pt-12 pb-20 sm:pt-[60px]"
-      style={{ animation: `fadeUp 600ms ${easeOut} 80ms both` }}
     >
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-5xl sm:whitespace-nowrap">
+        <h1
+          data-hero-stagger
+          style={staggerStyle}
+          className="text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-5xl sm:whitespace-nowrap"
+        >
           Accounts SDK
         </h1>
-        <p className="max-w-lg text-[16px] text-foreground-muted sm:text-xl">
+        <p
+          data-hero-stagger
+          style={staggerStyle}
+          className="max-w-lg text-[16px] text-foreground-muted sm:text-xl"
+        >
           The fastest way to build stablecoin-powered apps, wallets, and agentic
           workflows.
         </p>
       </div>
 
-      <div className="flex w-full max-w-[560px]">
+      <div
+        data-hero-stagger
+        style={staggerStyle}
+        className="flex w-full max-w-[560px]"
+      >
         <div
           className="flex w-full items-center justify-between bg-panel-1 px-4 py-3"
-          onMouseEnter={() => setPaused(true)}
-          onMouseLeave={() => setPaused(false)}
+          onPointerEnter={() => setPmPaused(true)}
+          onPointerLeave={() => setPmPaused(false)}
+          onFocus={() => setPmPaused(true)}
+          onBlur={(event) => {
+            const next = event.relatedTarget;
+            if (next instanceof Node && event.currentTarget.contains(next))
+              return;
+            setPmPaused(false);
+          }}
         >
-          <p className="flex items-baseline font-mono text-[16px]">
-            <span
-              className="overflow-hidden whitespace-nowrap"
+          <div className="flex items-baseline font-mono text-[16px]">
+            <button
+              ref={prefixRef}
+              type="button"
+              onClick={nextPm}
+              aria-label={`Switch package manager from ${cmd.prefix}`}
+              className="relative inline-block overflow-hidden whitespace-nowrap border-0 bg-transparent p-0 text-left align-bottom outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
               style={{
-                display: "inline-grid",
+                textAlign: "left",
                 width: `${cmd.prefix.length}ch`,
-                transition: `width ${PM_SWAP_MS}ms ${easeOut}`,
-                verticalAlign: "baseline",
               }}
             >
-              <span
-                key={`in-${pmIndex}`}
-                className="text-foreground-subtle"
-                style={{
-                  gridArea: "1 / 1",
-                  animation: `pmSlideIn ${PM_SWAP_MS}ms ${easeOut} both`,
-                  willChange: "transform, opacity, filter",
-                }}
-              >
+              <span aria-hidden className="invisible block">
                 {cmd.prefix}
               </span>
-              {outgoingPrefix != null ? (
-                <span
-                  key={`out-${outgoingIndex}-${pmIndex}`}
-                  aria-hidden
-                  className="text-foreground-subtle"
-                  style={{
-                    gridArea: "1 / 1",
-                    animation: `pmSlideOut ${PM_SWAP_MS}ms ${easeOut} both`,
-                    willChange: "transform, opacity, filter",
-                  }}
-                >
-                  {outgoingPrefix}
-                </span>
-              ) : null}
-            </span>
+              {pmItems.map((item) => {
+                const itemPm = PACKAGE_MANAGERS[item.index] ?? "npm";
+                const itemCmd = installCommand[itemPm];
+                return (
+                  <span
+                    key={item.key}
+                    ref={(el) => {
+                      if (el) prefixItemRefs.current.set(item.key, el);
+                      else prefixItemRefs.current.delete(item.key);
+                    }}
+                    aria-hidden={
+                      item.key === activePmKey.current ? undefined : true
+                    }
+                    className="absolute top-0 left-0 text-left text-foreground-subtle"
+                    style={{
+                      willChange: "transform, opacity",
+                    }}
+                  >
+                    {itemCmd.prefix}
+                  </span>
+                );
+              })}
+            </button>
             <span className="pl-[1ch] text-foreground">{cmd.pkg}</span>
-          </p>
+          </div>
           <button
             type="button"
             onClick={() => copyInstall(fullCommand)}
@@ -250,10 +381,14 @@ function HeroIntro() {
         </div>
       </div>
 
-      <div className="mt-[-14px] flex items-center gap-5">
+      <div
+        data-hero-stagger
+        style={staggerStyle}
+        className="mt-[-14px] flex items-center gap-5"
+      >
         <a
           href="https://docs.tempo.xyz/accounts"
-          className="flex items-center gap-1.5 text-[12px] text-foreground outline-none transition-opacity hover:opacity-75 focus-visible:opacity-75"
+          className="flex items-center gap-1.5 text-[12px] text-foreground outline-none transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90 focus-visible:underline focus-visible:underline-offset-4"
         >
           View docs
           <svg
@@ -275,14 +410,22 @@ function HeroIntro() {
         <span aria-hidden className="text-[12px] text-foreground-subtle">
           |
         </span>
-        <button
-          type="button"
-          onClick={() => copyAgent(agentInstructions)}
-          className="flex items-center gap-1 text-[12px] text-foreground-muted outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
-        >
-          <AgentCopyIcon />
-          {copiedAgent ? "Copied" : "Copy instructions for my agent"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => copyAgent(agentInstructions)}
+            className="flex items-center gap-1 text-[12px] text-foreground-muted outline-none transition-[color,transform] hover:text-foreground active:translate-y-px active:text-foreground focus-visible:text-foreground focus-visible:underline focus-visible:underline-offset-4"
+          >
+            <AgentCopyIcon />
+            Copy agent instructions
+          </button>
+          <span
+            aria-live="polite"
+            className={`text-[12px] text-foreground-subtle transition-opacity duration-150 ${copiedAgent ? "opacity-100" : "opacity-0"}`}
+          >
+            copied
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -658,11 +801,50 @@ function DemoSplit() {
 }
 
 export default function Hero() {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [staggerReady, setStaggerReady] = useState(false);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const items = root.querySelectorAll<HTMLElement>("[data-hero-stagger]");
+    if (items.length === 0) return;
+
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduced) {
+      setStaggerReady(true);
+      return;
+    }
+
+    let disposed = false;
+    const animation = waapi.animate(items, {
+      opacity: [0, 1],
+      translate: ["0 10px", "0 0"],
+      delay: stagger(HERO_ENTRANCE_STAGGER_MS),
+      ease: springs.entrance,
+    });
+
+    void animation.then(() => {
+      if (disposed) return;
+      setStaggerReady(true);
+    });
+
+    return () => {
+      disposed = true;
+      animation.cancel();
+    };
+  }, []);
+
+  const staggerStyle = staggerReady ? undefined : heroEntranceInitialStyle;
+
   return (
-    <>
-      <TopNav />
-      <HeroIntro />
-    </>
+    <div ref={rootRef}>
+      <TopNav staggerStyle={staggerStyle} />
+      <HeroIntro staggerStyle={staggerStyle} />
+    </div>
   );
 }
 
