@@ -16,8 +16,19 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          include: ['./src/**/*.test.ts', '!./src/**/*.browser.test.ts'],
-          name: 'lib',
+          include: [
+            './src/**/*.test.ts',
+            '!./src/**/*.browser.test.ts',
+            '!./src/**/*.localnet.test.ts',
+          ],
+          name: 'lib/pure',
+        },
+      },
+      {
+        extends: true,
+        test: {
+          include: ['./src/**/*.localnet.test.ts'],
+          name: 'lib/localnet',
           globalSetup: [join(import.meta.dirname, './test/setup.global.ts')],
           setupFiles: [join(import.meta.dirname, './test/setup.ts')],
         },

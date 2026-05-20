@@ -1,28 +1,29 @@
 ---
 title: Privy
-description: Stub for integrating Privy-backed auth with the Accounts SDK.
+description: Enterprise notes for integrating Privy-backed auth with the Accounts SDK.
 ---
 
 # Privy
 
-Use a custom adapter when Privy owns authentication or wallet state and the app still wants to use Tempo account features through the Accounts SDK.
+Use the built-in [Privy adapter](/docs/adapters/privy) when Privy owns authentication, session state, and embedded wallets while the app still wants Tempo account features through the Accounts SDK.
 
 ## Demo
 
 Target workspace: `examples/enterprise-privy/`.
 
-:::warning[Stub]
-This page needs a real Privy integration, security review, and a decision on which Privy wallet model is supported before it can become implementation guidance.
+:::tip
+Start with the [Privy adapter guide](/docs/adapters/privy) and the [`privy` API reference](/docs/api/privy). This page is reserved for enterprise deployment notes that go beyond the adapter setup.
 :::
 
 ## Integration Checklist
 
-- Define which Privy session proves user intent.
-- Define where signing happens.
-- Map Privy errors into Accounts SDK provider errors.
-- Run the connect and payment guides through the adapter.
+- Confirm which Privy login methods your app supports.
+- Ensure new users receive embedded Ethereum wallets during signup.
+- Decide whether account selection should expose every embedded wallet or a selected subset.
+- Run the connect and payment guides through the Privy adapter.
 
 ## Next Steps
 
 - [Bring Your Auth](/docs/enterprise/bring-your-auth)
-- [Custom adapter](/docs/adapters/custom)
+- [Privy adapter](/docs/adapters/privy)
+- [`privy` API reference](/docs/api/privy)

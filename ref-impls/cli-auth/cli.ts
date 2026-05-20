@@ -3,8 +3,8 @@ import { Provider } from 'accounts/cli'
 import { Cli, z } from 'incur'
 import { pathToFileURL } from 'node:url'
 import { Hex } from 'ox'
-import { tempoMainnet, tempoTestnet, tempoDevnet } from 'viem/chains'
 import { connect } from 'viem/experimental/erc7846'
+import { tempoMainnet, tempoTestnet, tempoDevnet } from 'viem/tempo/chains'
 
 const defaultHost = 'https://wallet-next.tempo.xyz/api/auth/cli' as const
 const defaultToken = '0x20c0000000000000000000000000000000000000' as const

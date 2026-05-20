@@ -9,6 +9,8 @@ Fills missing transaction fields (gas, nonce, fees) via the node, with wallet-aw
 
 When sent through [`Handler.relay`](/docs/server/handler.relay), the response is enriched with a `capabilities` object containing balance diffs, fee estimates, sponsor info, and swap details.
 
+When the sender has a pending locally managed access key, `Provider` attaches the pending `keyAuthorization` before fill so the returned gas covers first-use key publication. Fill and signing-only flows keep that pending authorization available for retry; successful send and broadcast paths consume it.
+
 ## Request
 
 ```ts

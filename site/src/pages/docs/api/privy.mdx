@@ -1,0 +1,206 @@
+---
+title: privy
+description: Adapter backed by Privy core SDK sessions and embedded wallets.
+---
+
+# `privy`
+
+Creates a Privy adapter backed by `@privy-io/js-sdk-core` sessions and embedded Ethereum wallets.
+
+The adapter owns silent reconnect, session cleanup, embedded wallet loading, and provider signing. Apps provide UI-bearing auth through [`loadAccounts`](#loadaccounts), and optionally [`createAccount`](#createaccount).
+
+## Usage
+
+```ts
+import { Provider, privy } from 'accounts'
+
+import { createPrivyClient } from './privy-client.js'
+import { signInWithPrivyEmail } from './privy-email.js'
+
+const client = createPrivyClient({ appId, clientId })
+
+export const provider = Provider.create({
+  adapter: privy({
+    client,
+    loadAccounts: async ({ client }) => {
+      if (!(await client.getAccessToken().catch(() => null)))
+        await signInWithPrivyEmail(client.auth)
+    },
+  }),
+})
+```
+
+## Parameters
+
+### client
+
+- **Type:** `privy.Client`
+- **Required**
+
+Existing Privy core SDK client, such as `Privy` from `@privy-io/js-sdk-core`. The adapter calls `initialize?.()` once on first use, and uses `getAccessToken`, `user.get`, `embeddedWallet.getEthereumProvider`, and `auth.logout` for the rest of the lifecycle.
+
+```ts
+import { Provider, privy } from 'accounts'
+
+const provider = Provider.create({
+  adapter: privy({
+    client, // [!code focus]
+    loadAccounts: async ({ client }) => { /* ... */ },
+  }),
+})
+```
+
+### icon
+
+- **Type:** `` `data:image/${string}` ``
+- **Optional**
+
+Data URI of the provider icon.
+
+```ts
+import { Provider, privy } from 'accounts'
+
+const provider = Provider.create({
+  adapter: privy({
+    client,
+    loadAccounts: async () => { /* ... */ },
+    icon: 'data:image/svg+xml,...', // [!code focus]
+  }),
+})
+```
+
+### loadAccounts
+
+- **Type:** `(params: { client; parameters? }) => Promise<readonly Address[] | void>`
+- **Required**
+
+Runs the Privy login UI in response to a user-initiated `wallet_connect`. After this callback completes, the adapter loads embedded Ethereum wallets from Privy SDK state with `client.user.get()` and `client.embeddedWallet.getEthereumProvider(...)`.
+
+By default all the user's embedded Ethereum wallets will be connected. Return `Address[]` to select and order those wallets. The first returned address is active by default, matching `eth_requestAccounts`.
+
+When `createAccount` is omitted, register requests call `loadAccounts` too. This fits email and social auth flows where the same Privy ceremony can sign in an existing user or create one.
+
+```ts
+import { Provider, privy } from 'accounts'
+
+const provider = Provider.create({
+  adapter: privy({
+    client,
+    loadAccounts: async ({ client }) => { // [!code focus]
+      await signInWithPrivyEmail(client.auth) // [!code focus]
+    }, // [!code focus]
+  }),
+})
+```
+
+```ts
+import { Provider, privy } from 'accounts'
+
+const provider = Provider.create({
+  adapter: privy({
+    client,
+    loadAccounts: async ({ client }) => {
+      await signInWithPrivyEmail(client.auth)
+      return [selectedAddress] // [!code focus]
+    },
+  }),
+})
+```
+
+### createAccount
+
+- **Type:** `(params: { client; parameters }) => Promise<readonly Address[] | void>`
+- **Optional**
+- **Default:** `loadAccounts`
+
+Runs the Privy registration UI when registration needs a separate flow. The callback must leave the Privy client authenticated and ensure new users get an embedded Ethereum wallet.
+
+Receives the initialized Privy `client` and the provider create-account `parameters` (display name, optional `digest`, `personalSign`, `userId`, etc.). After this callback completes, the adapter loads embedded Ethereum wallets from Privy SDK state.
+
+Like `loadAccounts`, by default all the user's embedded Ethereum wallets will be connected. Return `Address[]` to choose the returned accounts. The first address is active by default.
+
+```ts
+import { Provider, privy } from 'accounts'
+
+const provider = Provider.create({
+  adapter: privy({
+    client,
+    createAccount: async ({ client }) => { // [!code focus]
+      await signInWithPrivyEmail(client.auth) // [!code focus]
+    }, // [!code focus]
+    loadAccounts: async ({ client }) => { /* ... */ },
+  }),
+})
+```
+
+### name
+
+- **Type:** `string`
+- **Default:** `'Privy'`
+
+Display name of the provider.
+
+```ts
+import { Provider, privy } from 'accounts'
+
+const provider = Provider.create({
+  adapter: privy({
+    client,
+    loadAccounts: async () => { /* ... */ },
+    name: 'My Wallet', // [!code focus]
+  }),
+})
+```
+
+### rdns
+
+- **Type:** `string`
+- **Default:** `'io.privy'`
+
+Reverse DNS identifier.
+
+```ts
+import { Provider, privy } from 'accounts'
+
+const provider = Provider.create({
+  adapter: privy({
+    client,
+    loadAccounts: async () => { /* ... */ },
+    rdns: 'com.example.wallet', // [!code focus]
+  }),
+})
+```
+
+## AccountSelection
+
+- **Type:** `readonly Address[] | void`
+
+Optional selected addresses returned from a Privy login or sign-up callback. When omitted, all embedded Ethereum wallets loaded from Privy are used. When provided, the returned addresses select and order the wallets exposed through the provider.
+
+Callbacks should not return `{ address, provider }` objects. The adapter materializes provider handles internally from the Privy client.
+
+## Client Shape
+
+`privy.Client` is a structural type satisfied by `Privy` from `@privy-io/js-sdk-core`. The adapter uses this surface:
+
+```ts
+import { privy } from 'accounts'
+
+type Client = {
+  auth: {
+    logout: (parameters?: { userId: string } | undefined) => Promise<void> | void
+  }
+  embeddedWallet: {
+    getEthereumProvider(parameters: {
+      wallet: privy.LinkedAccount
+      entropyId: string
+      entropyIdVerifier: string
+    }): Promise<privy.EthereumProvider> | privy.EthereumProvider
+  }
+  getAccessToken: () => Promise<string | null>
+  initialize?: (() => Promise<void> | void) | undefined
+  user: {
+    get: () => Promise<{ user: privy.User }>
+  }
+}
+```

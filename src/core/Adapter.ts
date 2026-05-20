@@ -1,7 +1,7 @@
 import type { KeyAuthorization } from 'ox/tempo'
 import type { Client, Hex, Transport } from 'viem'
 import type { Address } from 'viem/accounts'
-import type { tempo } from 'viem/chains'
+import type { tempo } from 'viem/tempo/chains'
 
 import type * as Account from './Account.js'
 import type * as Schema from './Schema.js'
@@ -75,11 +75,11 @@ export type Instance = {
         ) => Promise<void>)
       | undefined
     /** Open the send-token flow. */
-    send?:
+    transfer?:
       | ((
-          params: send.Parameters,
-          request: EncodedRequest<Rpc.wallet_send.Encoded>,
-        ) => Promise<send.ReturnType>)
+          params: transfer.Parameters,
+          request: EncodedRequest<Rpc.wallet_transfer.Encoded>,
+        ) => Promise<transfer.ReturnType>)
       | undefined
     /** Open the swap flow. */
     swap?:
@@ -143,7 +143,7 @@ export type Instance = {
 export declare namespace SetupFn {
   /** Parameters passed to an adapter's setup function. */
   export type Parameters = {
-    /** Returns the rehydrated local account for the given address, or the active account if omitted. */
+    /** Returns the rehydrated root account for the given address, or the active account if omitted. */
     getAccount: Account.Find
     /** Get the viem client for a given chain ID. Defaults to the active chain. */
     getClient: (options?: getClient.Options | undefined) => Client<Transport, typeof tempo>
@@ -166,7 +166,7 @@ export function define(meta: Meta, fn: SetupFn): Adapter {
 
 /** Spreads decoded params. */
 export type ActionRequest<item extends Schema.Item> =
-  Schema.Decoded<item>['params'] extends readonly [infer first] ? first : never
+  NonNullable<Schema.Decoded<item>['params']> extends readonly [infer first] ? first : never
 
 export declare namespace getClient {
   type Options = {
@@ -178,6 +178,11 @@ export declare namespace getClient {
 }
 
 export declare namespace createAccount {
+  type Capabilities = NonNullable<
+    NonNullable<Rpc.wallet_connect.Decoded['params']>[number]['capabilities']
+  >
+  type ShowDeposit = Extract<Capabilities, { method: 'register' }>['showDeposit']
+
   type Parameters = {
     /** Grant an access key during the ceremony. */
     authorizeAccessKey?: authorizeAccessKey.Parameters | undefined
@@ -192,6 +197,8 @@ export declare namespace createAccount {
      * no extra prompt over a plain `wallet_connect` register.
      */
     personalSign?: { message: string } | undefined
+    /** Show the deposit flow after the connect ceremony succeeds. */
+    showDeposit?: ShowDeposit | undefined
     /** Opaque user identifier (e.g. for WebAuthn `user.id`). */
     userId?: string | undefined
   }
@@ -201,6 +208,8 @@ export declare namespace createAccount {
     email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
+    /** Server Authentication result, if the auth capability was requested. */
+    auth?: { token?: string | undefined } | undefined
     /**
      * Echo of the `personalSign` request, present iff the caller supplied
      * `personalSign`. The signature lives on the top-level `signature`
@@ -233,6 +242,11 @@ export declare namespace withdrawZone {
 }
 
 export declare namespace loadAccounts {
+  type Capabilities = NonNullable<
+    NonNullable<Rpc.wallet_connect.Decoded['params']>[number]['capabilities']
+  >
+  type ShowDeposit = Extract<Capabilities, { method?: 'login' | undefined }>['showDeposit']
+
   type Parameters = {
     /** Grant an access key during the ceremony. */
     authorizeAccessKey?: authorizeAccessKey.Parameters | undefined
@@ -249,6 +263,8 @@ export declare namespace loadAccounts {
     personalSign?: { message: string } | undefined
     /** When `true`, prompts the user to pick from all available credentials instead of using the last-used one. */
     selectAccount?: boolean | undefined
+    /** Show the deposit flow after the connect ceremony succeeds. */
+    showDeposit?: ShowDeposit | undefined
   }
   type ReturnType = {
     /** Loaded accounts. */
@@ -257,6 +273,8 @@ export declare namespace loadAccounts {
     email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
+    /** Server Authentication result, if the auth capability was requested. */
+    auth?: { token?: string | undefined } | undefined
     /**
      * Echo of the `personalSign` request, present iff the caller supplied
      * `personalSign`. The signature lives on the top-level `signature`
@@ -297,7 +315,7 @@ export declare namespace authorizeAccessKey {
     chainId?: bigint | undefined
     /** Unix timestamp (seconds) when the key expires. */
     expiry: number
-    /** Key type of the external public key. Required when `publicKey` or `address` is provided. */
+    /** External key type. Defaults to `secp256k1` for external keys. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
     limits?: readonly { token: Address; limit: bigint; period?: number | undefined }[] | undefined
@@ -311,8 +329,6 @@ export declare namespace authorizeAccessKey {
           recipients?: readonly Address[] | undefined
         }[]
       | undefined
-    /** Pre-computed signature over the key authorization digest (skips a second signing ceremony). */
-    signature?: Hex | undefined
   }
 
   type ReturnType = {
@@ -330,9 +346,9 @@ export declare namespace revokeAccessKey {
   }
 }
 
-export declare namespace send {
-  type Parameters = ActionRequest<typeof Rpc.wallet_send.schema>
-  type ReturnType = Rpc.wallet_send.Encoded['returns']
+export declare namespace transfer {
+  type Parameters = ActionRequest<typeof Rpc.wallet_transfer.schema>
+  type ReturnType = Rpc.wallet_transfer.Encoded['returns']
 }
 
 /** Parameters and return type for the `wallet_swap` action. */

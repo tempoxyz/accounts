@@ -11,12 +11,12 @@ import {
   RpcResponse,
 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { prepareTransactionRequest } from 'viem/actions'
 import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 import * as z from 'zod/mini'
 
 import * as AccessKey from '../core/AccessKey.js'
 import * as Adapter from '../core/Adapter.js'
+import * as AccessKeyTransaction from '../core/internal/AccessKeyTransaction.js'
 import * as CliAuth from '../server/CliAuth.js'
 import * as Keyring from './keyring.js'
 
@@ -44,9 +44,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
       const deserialized = KeyAuthorization.deserialize(entry.keyAuthorization)
       if (!deserialized.signature) throw new Error('Managed access key is missing a signature.')
       const keyAuthorization = deserialized as KeyAuthorization.Signed
-      AccessKey.save({
-        address,
-        keyAuthorization,
+      AccessKey.add({
+        account: address,
+        authorization: keyAuthorization,
         privateKey: entry.key,
         store,
       })
@@ -104,9 +104,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
       if (!managedKey) return
 
       const signed = KeyAuthorization.fromRpc(z.encode(CliAuth.keyAuthorization, keyAuthorization))
-      AccessKey.save({
-        address,
-        keyAuthorization: signed,
+      AccessKey.add({
+        account: address,
+        authorization: signed,
         privateKey: managedKey.key,
         store,
       })
@@ -129,31 +129,42 @@ export function cli(options: cli.Options): Adapter.Adapter {
       )
     }
 
-    async function withManagedAccessKey<result>(
-      fn: (
-        account: TempoAccount.Account,
-        keyAuthorization?: KeyAuthorization.Signed | undefined,
-      ) => Promise<result>,
+    async function prepareManagedTransaction(
+      client: ReturnType<typeof getClient>,
+      parameters: AccessKeyTransaction.create.PrepareParameters,
+      options: {
+        calls?: AccessKeyTransaction.create.Options['calls'] | undefined
+        chainId?: number | undefined
+      } = {},
     ) {
-      const rootAddress = store.getState().accounts[store.getState().activeAccount]?.address
-      if (rootAddress) await loadManagedKey(rootAddress)
+      const state = store.getState()
+      const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      if (!address) throw new core_Provider.DisconnectedError({ message: 'No active account.' })
+      await loadManagedKey(address)
+      const transaction = await AccessKeyTransaction.create({
+        address,
+        calls: options.calls,
+        chainId: options.chainId ?? state.chainId,
+        client,
+        store,
+      })
+      if (!transaction)
+        throw new core_Provider.UnauthorizedError({
+          message: `Account "${address}" cannot sign with an access key.`,
+        })
+      return await transaction.prepare(parameters)
+    }
 
-      const account = getAccount({ signable: true })
-      const keyAuthorization = AccessKey.getPending(account, { store })
-      try {
-        const result = await fn(account, keyAuthorization ?? undefined)
-        AccessKey.removePending(account, { store })
-        return result
-      } catch (error) {
-        AccessKey.remove(account, { store })
-        throw error
-      }
+    async function loadManagedAccount(address: Adapter.signPersonalMessage.Parameters['address']) {
+      await loadManagedKey(address)
+      return getAccount({ address, signable: true })
     }
 
     async function authorize(request: {
       account?: Adapter.authorizeAccessKey.ReturnType['rootAddress'] | undefined
       authorizeAccessKey: Adapter.authorizeAccessKey.Parameters | undefined
       method: 'wallet_authorizeAccessKey' | 'wallet_connect'
+      showDeposit?: Adapter.createAccount.Parameters['showDeposit'] | undefined
     }) {
       const {
         host,
@@ -194,6 +205,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
         ...(keyType ? { keyType } : {}),
         ...(authorizeAccessKey?.limits ? { limits: authorizeAccessKey.limits } : {}),
         pubKey: publicKey,
+        ...(request.showDeposit !== undefined ? { showDeposit: request.showDeposit } : {}),
       }
       const created = await post({
         body,
@@ -259,8 +271,27 @@ export function cli(options: cli.Options): Adapter.Adapter {
             rootAddress: result.accountAddress,
           }
         },
-        async createAccount(params, request) {
-          return this.loadAccounts(params, request)
+        async createAccount(parameters) {
+          if (parameters?.digest)
+            throw unsupported('`wallet_connect` digest signing not supported by CLI adapter.')
+
+          const result = await authorize({
+            authorizeAccessKey: parameters?.authorizeAccessKey,
+            method: 'wallet_connect',
+            ...(parameters?.showDeposit !== undefined
+              ? { showDeposit: parameters.showDeposit }
+              : {}),
+          })
+
+          return {
+            accounts: [
+              {
+                address: result.accountAddress,
+                capabilities: {},
+              },
+            ],
+            keyAuthorization: z.encode(CliAuth.keyAuthorization, result.keyAuthorization),
+          }
         },
         async loadAccounts(parameters) {
           if (parameters?.digest)
@@ -269,6 +300,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
           const result = await authorize({
             authorizeAccessKey: parameters?.authorizeAccessKey,
             method: 'wallet_connect',
+            ...(parameters?.showDeposit !== undefined
+              ? { showDeposit: parameters.showDeposit }
+              : {}),
           })
 
           return {
@@ -287,70 +321,57 @@ export function cli(options: cli.Options): Adapter.Adapter {
         async sendTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { account, prepared } = await withManagedAccessKey(
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                ...(keyAuthorization ? { keyAuthorization } : {}),
-                type: 'tempo',
-              } as never),
-            }),
+          const prepared = await prepareManagedTransaction(
+            client,
+            {
+              ...rest,
+              ...(feePayer ? { feePayer: true } : {}),
+            },
+            {
+              calls: parameters.calls as AccessKeyTransaction.create.Options['calls'],
+              chainId: parameters.chainId,
+            },
           )
-          const signed = await account.signTransaction(prepared as never)
-          return await client.request({
-            method: 'eth_sendRawTransaction' as never,
-            params: [signed],
-          })
+          return await prepared.send()
         },
         async sendTransactionSync(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { account, prepared } = await withManagedAccessKey(
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                ...(keyAuthorization ? { keyAuthorization } : {}),
-                type: 'tempo',
-              } as never),
-            }),
+          const prepared = await prepareManagedTransaction(
+            client,
+            {
+              ...rest,
+              ...(feePayer ? { feePayer: true } : {}),
+            },
+            {
+              calls: parameters.calls as AccessKeyTransaction.create.Options['calls'],
+              chainId: parameters.chainId,
+            },
           )
-          const signed = await account.signTransaction(prepared as never)
-          return await client.request({
-            method: 'eth_sendRawTransactionSync' as never,
-            params: [signed],
-          })
+          return await prepared.sendSync()
         },
         async signPersonalMessage({ address, data }) {
-          await loadManagedKey(address)
-          const account = getAccount({ address, signable: true })
+          const account = await loadManagedAccount(address)
           return await account.signMessage({ message: { raw: data } })
         },
         async signTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const { account, prepared } = await withManagedAccessKey(
-            async (account, keyAuthorization) => ({
-              account,
-              prepared: await prepareTransactionRequest(client, {
-                account,
-                ...rest,
-                ...(feePayer ? { feePayer: true } : {}),
-                ...(keyAuthorization ? { keyAuthorization } : {}),
-                type: 'tempo',
-              } as never),
-            }),
+          const prepared = await prepareManagedTransaction(
+            client,
+            {
+              ...rest,
+              ...(feePayer ? { feePayer: true } : {}),
+            },
+            {
+              calls: parameters.calls as AccessKeyTransaction.create.Options['calls'],
+              chainId: parameters.chainId,
+            },
           )
-          return await account.signTransaction(prepared as never)
+          return await prepared.sign()
         },
         async signTypedData({ address, data }) {
-          await loadManagedKey(address)
-          const account = getAccount({ address, signable: true })
+          const account = await loadManagedAccount(address)
           return await account.signTypedData(JSON.parse(data) as never)
         },
       },

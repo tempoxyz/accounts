@@ -250,7 +250,8 @@ html {
   border-top: 0;
 }
 
-.turnkey-otp-backdrop {
+.turnkey-otp-backdrop,
+.privy-otp-backdrop {
   align-items: center;
   background: color-mix(in oklch, var(--background-color-pane), transparent 18%);
   display: flex;
@@ -261,7 +262,8 @@ html {
   z-index: 20;
 }
 
-.turnkey-otp-panel {
+.turnkey-otp-panel,
+.privy-otp-panel {
   background: var(--background-color-surface);
   border: 1px solid var(--border-color-border-pane);
   border-radius: var(--radius-body);
@@ -273,43 +275,51 @@ html {
   width: min(100%, 420px);
 }
 
-.turnkey-otp-header {
+.turnkey-otp-header,
+.privy-otp-header {
   align-items: center;
   display: flex;
   gap: 12px;
   justify-content: space-between;
 }
 
-.turnkey-otp-header h2 {
+.turnkey-otp-header h2,
+.privy-otp-header h2 {
   font-size: 18px;
   font-weight: 600;
   line-height: 1.25;
   margin: 0;
 }
 
-.turnkey-otp-form {
+.turnkey-otp-form,
+.privy-otp-form {
   display: grid;
   gap: 12px;
 }
 
-.turnkey-otp-actions {
+.turnkey-otp-actions,
+.privy-otp-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
 }
 
 .turnkey-otp-copy p,
-.turnkey-otp-error {
+.turnkey-otp-error,
+.privy-otp-copy p,
+.privy-otp-error {
   font-size: 13px;
   line-height: 1.4;
   margin: 0;
 }
 
-.turnkey-otp-copy p {
+.turnkey-otp-copy p,
+.privy-otp-copy p {
   color: var(--text-color-foreground-secondary);
 }
 
-.turnkey-otp-error {
+.turnkey-otp-error,
+.privy-otp-error {
   color: var(--text-color-negative-text);
 }
 
@@ -348,6 +358,13 @@ html {
   input:not([type='checkbox']):not([type='radio']):not([type='color']):hover,
 .playground
   .turnkey-otp-panel
+  input:not([type='checkbox']):not([type='radio']):not([type='color']):focus,
+.playground .privy-otp-panel input:not([type='checkbox']):not([type='radio']):not([type='color']),
+.playground
+  .privy-otp-panel
+  input:not([type='checkbox']):not([type='radio']):not([type='color']):hover,
+.playground
+  .privy-otp-panel
   input:not([type='checkbox']):not([type='radio']):not([type='color']):focus {
   background: transparent;
   border: 0;

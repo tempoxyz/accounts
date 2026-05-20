@@ -1,6 +1,7 @@
 import type { RpcSchema } from 'ox'
 import { describe, expectTypeOf, test } from 'vp/test'
 
+import * as Provider from './Provider.js'
 import type * as Schema from './Schema.js'
 
 type Result<method extends RpcSchema.MethodNameGeneric<Schema.Ox>> = RpcSchema.ExtractReturnType<
@@ -55,5 +56,19 @@ describe('request', () => {
 
   test('wallet_switchEthereumChain', () => {
     expectTypeOf<Result<'wallet_switchEthereumChain'>>().toEqualTypeOf<undefined>()
+  })
+})
+
+describe('create options', () => {
+  test('mpp accepts session deposit options', () => {
+    expectTypeOf<NonNullable<Parameters<typeof Provider.create>[0]>>().toMatchTypeOf<{
+      mpp?:
+        | boolean
+        | {
+            deposit?: string | undefined
+            maxDeposit?: string | undefined
+          }
+        | undefined
+    }>()
   })
 })

@@ -1,31 +1,20 @@
 import type { CreateSubOrgParams, TurnkeyClientMethods } from '@turnkey/core'
 import { useSyncExternalStore } from 'react'
 
-/** Turnkey email OTP flow mode requested by the playground adapter. */
-export type TurnkeyEmailOtpMode = 'login' | 'register'
-
 /** Minimal Turnkey client surface used by the playground email OTP UI. */
 export type TurnkeyEmailOtpClient = {
   /** Completes OTP auth, logging in or registering when needed. */
   completeOtp: TurnkeyClientMethods['completeOtp']
-  /** Creates a session key pair used by OTP verification and auth. */
-  createApiKeyPair: TurnkeyClientMethods['createApiKeyPair']
   /** Sends an OTP code to an email address. */
   initOtp: TurnkeyClientMethods['initOtp']
-  /** Registers with a verified OTP token. */
-  signUpWithOtp: TurnkeyClientMethods['signUpWithOtp']
-  /** Verifies an OTP code. */
-  verifyOtp: TurnkeyClientMethods['verifyOtp']
 }
 
 /** Options for requesting an email OTP auth ceremony. */
 export type TurnkeyEmailOtpOptions = {
   /** Turnkey client that will perform OTP requests. */
   client: TurnkeyEmailOtpClient
-  /** Optional sub-organization params used for registration. */
+  /** Optional sub-organization params used when Turnkey creates a new account. */
   createSubOrgParams?: CreateSubOrgParams | undefined
-  /** Explicit auth mode requested by the adapter. */
-  mode: TurnkeyEmailOtpMode
 }
 
 /** Active email OTP request rendered by the playground UI. */

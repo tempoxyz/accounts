@@ -6,6 +6,7 @@ import { accounts, getClient, nodeEnv, rpcUrl, webAuthnAccounts } from './config
 
 const client = getClient()
 const localnetSetupKey = '__accounts_localnet_setup__'
+const retry_count = 8
 
 type SetupState = {
   promise?: Promise<void> | undefined
@@ -31,10 +32,11 @@ beforeAll(async () => {
       await new Promise((resolve) => setTimeout(resolve, ms))
     }
 
-    async function withRetry(fn: () => Promise<void>) {
+    async function withRetry(label: string, fn: () => Promise<void>) {
       let error: unknown
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < retry_count; i++) {
         try {
+          console.info(`localnet setup: ${label} (${i + 1}/${retry_count})`)
           await fn()
           return
         } catch (e) {
@@ -49,13 +51,14 @@ beforeAll(async () => {
           await wait(200 * (i + 1))
         }
       }
-      throw error
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`localnet setup failed during ${label}: ${message}`, { cause: error })
     }
 
     state.promise = (async () => {
       // Mint liquidity for fee tokens.
       for (const id of [1n, 2n, 3n])
-        await withRetry(async () => {
+        await withRetry(`mint AMM liquidity for token ${id}`, async () => {
           await Actions.amm.mintSync(client, {
             account: accounts[0],
             feeToken: Addresses.pathUsd,
@@ -67,7 +70,7 @@ beforeAll(async () => {
         })
 
       // Fund first account for provider tests.
-      await withRetry(async () => {
+      await withRetry('fund headless WebAuthn account', async () => {
         await Actions.token.transferSync(client, {
           account: accounts[0],
           feeToken: Addresses.pathUsd,

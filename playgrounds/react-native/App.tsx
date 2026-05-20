@@ -15,8 +15,8 @@ import {
   View,
 } from 'react-native'
 import { formatUnits, parseUnits, type Address, type Hex as viem_Hex } from 'viem'
-import { tempoModerato } from 'viem/chains'
 import { Actions } from 'viem/tempo'
+import { tempoModerato } from 'viem/tempo/chains'
 
 import { Provider } from '../../dist/react-native/index.js'
 
@@ -91,6 +91,7 @@ export default function App() {
   const [amount, setAmount] = useState('1')
   const [message, setMessage] = useState('hello world')
   const [network, setNetwork] = useState('mainnet')
+  const [showDeposit, setShowDeposit] = useState(false)
 
   const switchNetwork = useCallback(async (network: string) => {
     provider.request({
@@ -107,6 +108,7 @@ export default function App() {
       setError(null)
       let result = await provider.request({
         method: 'wallet_connect',
+        ...(showDeposit ? { params: [{ capabilities: { showDeposit: true } }] } : {}),
       })
 
       const addr = result.accounts[0]?.address
@@ -128,7 +130,7 @@ export default function App() {
       setError(e instanceof Error ? e.message : String(e))
       setStatus('disconnected')
     }
-  }, [])
+  }, [showDeposit])
 
   const disconnect = useCallback(async () => {
     try {
@@ -245,6 +247,10 @@ export default function App() {
       <Button title="Switch Network" onPress={() => switchNetwork('moderato')} />
 
       <View style={{ marginTop: 16 }}>
+        <Button
+          title={`Show Deposit: ${showDeposit ? 'On' : 'Off'}`}
+          onPress={() => setShowDeposit((value) => !value)}
+        />
         {address ? (
           <Button title="Disconnect" onPress={disconnect} />
         ) : (

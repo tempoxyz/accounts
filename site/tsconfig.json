@@ -4,7 +4,8 @@
     "jsx": "react-jsx",
     "module": "esnext",
     "moduleResolution": "bundler",
-    "noEmit": true
+    "noEmit": true,
+    "types": ["node", "unplugin-icons/types/react"]
   },
   "include": ["**/*.ts", "**/*.tsx", "**/*.mdx"]
 }

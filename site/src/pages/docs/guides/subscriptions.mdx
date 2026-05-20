@@ -1,50 +1,368 @@
 ---
 title: Subscriptions
-description: Build recurring payment flows with account permissions.
+description: Charge recurring payments from a connected Tempo account.
 ---
+
+import { Cards, Card } from 'vocs'
+import { CheckboxCards, CheckboxCard } from '../../../components/CheckboxCard.js'
+import { ConnectAccount } from '../../../components/ConnectAccount'
+import { Demo, DemoReset } from '../../../components/Demo'
+import { SubscriptionPayment, SubscriptionStepLabel } from '../../../components/SubscriptionPayment'
+import * as Steps from '../../../components/Steps'
 
 # Subscriptions
 
-Build a recurring payment flow that uses account permissions for repeat charges.
+Subscriptions let your server charge a recurring amount after the user approves the plan once. The first request returns an HTTP `402 Payment Required` challenge, and the Accounts SDK fulfills it from the connected account.
+
+After activation, your server can serve requests during the current billing period without asking for another confirmation. When the next period is due, a worker, cron job, or request handler can collect the next payment.
 
 ## Demo
 
-Target workspace: `examples/subscriptions/`.
+By the end of this guide you'll have a protected articles route, a recurring subscription approval, and a server-side collection path for the next billing period.
 
-:::warning[Stub]
-This guide needs product and protocol decisions before implementation: billing cadence, cancellation UX, spend caps, and how the server proves each charge is authorized.
-:::
+<Demo
+  title="Subscription Payment"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/subscriptions"
+  headerAction={<DemoReset />}
+  className="flex flex-col gap-3"
+>
+  <Steps.Step
+    label={
+      <SubscriptionStepLabel badge="User">
+        Create an account, or use an existing one.
+      </SubscriptionStepLabel>
+    }
+    action={<ConnectAccount />}
+  />
+  <SubscriptionPayment />
+</Demo>
+
+The example uses a 10-second period for local testing. Production plans should use `day` or `week` periods.
 
 ## Walkthrough
 
 ::::steps
 
-### Install the SDK
+### Connect an Account
 
-```bash
-pnpm add accounts wagmi viem
+Follow the [Connect Accounts](/docs/guides/connect-accounts) guide to set up Wagmi and let the user sign in. Subscriptions activate from the connected account before your server collects future periods.
+
+### Install the Server Dependencies
+
+Install [`mppx`](https://github.com/wevm/mppx) for serving and verifying HTTP `402` payment challenges. This guide uses [Hono](https://hono.dev) on Cloudflare Workers, but the same shape works in other server runtimes.
+
+:::code-group
+
+```bash [npm]
+npm i mppx hono
 ```
 
-### Configure the Provider
+```bash [pnpm]
+pnpm i mppx hono
+```
 
-Use Tempo Wallet, WebAuthn, or a custom adapter depending on who owns signing.
+```bash [bun]
+bun i mppx hono
+```
 
-### Connect the user's account
+:::
 
-Connect the subscriber account and display the subscription terms.
+### Set Up `mppx`
 
-### Submit the request
+Configure `tempo.subscription` with the server account, billing currency, resolver, and store. The resolver returns the stable lookup key for the current subscriber.
 
-Request the permission needed for recurring charges.
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Hono } from 'hono'
+import { Store } from 'mppx'
+import { Mppx, tempo } from 'mppx/hono'
+import { privateKeyToAccount } from 'viem/accounts'
 
-### Verify the result
+const app = new Hono()
 
-Run one scheduled charge in the example workspace and show cancellation state.
+const mppx = Mppx.create({
+  methods: [
+    tempo.subscription({
+      account: privateKeyToAccount(process.env.ACCOUNT_PRIVATE_KEY),
+      currency: '0x20c0000000000000000000000000000000000000',
+      feePayer: true,
+      resolve({ input }) {
+        const subscriber = input.headers.get('X-Subscriber')
+        if (!subscriber) return null
+        return { key: `articles:${subscriber.toLowerCase()}` }
+      },
+      store: Store.memory(),
+      testnet: true,
+    }),
+  ],
+})
+```
+
+:::warning[Use a trusted lookup key]
+`X-Subscriber` keeps the example small. In production, derive the lookup key from a server-trusted session, API key, or user record.
+:::
+
+:::warning[Use a durable store]
+`Store.memory()` keeps the guide runnable. In production, use a durable store so subscription records and access keys survive deploys, restarts, and worker evictions.
+:::
+
+### Gate the Paid Route
+
+Wrap the route with `mppx.subscription`. If there is no active subscription, the middleware returns the payment challenge. After activation or renewal, the route handler runs and the response includes a `Payment-Receipt` header.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+app.get(
+  '/api/articles',
+  mppx.subscription({
+    amount: '0.01',
+    periodCount: 1,
+    periodUnit: 'day',
+    subscriptionExpires: '2030-01-01T00:00:00.000Z',
+  }),
+  (c) =>
+    c.json({
+      articles: [
+        { id: 1, title: 'Designing recurring payments' },
+        { id: 2, title: 'Collecting subscriptions in workers' },
+      ],
+    }),
+)
+```
+
+For local testing, set `periodCount: 10` and `periodUnit: 'dev_second'`. Production plans should use `day` or `week` periods.
+
+### Call the Route from the Client
+
+Use `fetch` normally. The Accounts SDK handles the `402`, asks the user to approve the subscription, and retries the request with the signed credential.
+
+```tsx twoslash [Articles.tsx]
+// @noErrors
+import { useMutation } from '@tanstack/react-query'
+import { stringify } from 'viem'
+
+export function Articles(props: { address: `0x${string}` }) {
+  const articles = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/articles', {
+        headers: { 'X-Subscriber': props.address },
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(`${res.status}: ${stringify(body)}`)
+      return body
+    },
+  })
+
+  return (
+    <button disabled={articles.isPending} onClick={() => articles.mutate()}>
+      {articles.isPending ? 'Loading...' : 'GET /api/articles'}
+    </button>
+  )
+}
+```
+
+### Index Active Subscriptions
+
+A scheduled worker needs subscription IDs to collect. `mppx` renews a known subscription ID; your app database owns enumeration and due-time queries.
+
+You can skip this step when you only collect on the request path. `mppx.subscription` can renew an overdue subscription before serving the protected route.
+
+### Collect from a Schedule
+
+Call `mppx.tempo.subscription.renew` from a cron worker. It returns a receipt when it collects the next period, or `null` when the subscription is already current, missing, inactive, or superseded.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+async function collectDueSubscriptions() {
+  for (const subscriptionId of await database.subscriptions.listDueIds()) {
+    const result = await mppx.tempo.subscription.renew({ subscriptionId })
+    if (!result) continue
+
+    console.log('collected subscription', {
+      reference: result.receipt.reference,
+      subscriptionId,
+    })
+  }
+}
+
+export default {
+  fetch: app.fetch,
+  scheduled(_controller, _env, ctx) {
+    ctx.waitUntil(collectDueSubscriptions())
+  },
+}
+```
+
+Configure the schedule in `wrangler.jsonc`. Choose an interval that is comfortably shorter than the billing period.
+
+```jsonc [wrangler.jsonc]
+{
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  }
+}
+```
 
 ::::
 
+## Best Practices
+
+### Persist Subscription State
+
+Use a durable store for `tempo.subscription`. In-memory storage is only useful for local examples because subscription records and access keys disappear when the process restarts.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+const store = createDurableSubscriptionStore(env)
+
+const mppx = Mppx.create({
+  methods: [
+    tempo.subscription({
+      // ...
+      store,
+    }),
+  ],
+})
+```
+
+### Treat `renew` as Idempotent
+
+It is safe for cron to call `renew` early or more than once. A `null` result means no payment was collected, so your scheduler can continue without treating it as an error.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+const result = await mppx.tempo.subscription.renew({ subscriptionId })
+
+if (!result) return
+
+await database.subscriptionPayments.insert({
+  reference: result.receipt.reference,
+  subscriptionId,
+})
+```
+
+### Use Server-Trusted Identity
+
+Do not trust client-provided headers for production lookup keys. Resolve subscriptions from the authenticated session, API key, organization ID, or another server-side identity that the user cannot spoof.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+tempo.subscription({
+  // ...
+  async resolve({ input }) {
+    const session = await requireSession(input)
+    return { key: `articles:${session.userId}` }
+  },
+})
+```
+
+### Keep Periods Reviewable
+
+Show the amount, currency, period, and expiry before the user approves. Use short periods only for development; production subscriptions should use stable billing periods that match the product terms.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+app.get(
+  '/api/articles',
+  mppx.subscription({
+    amount: '10',
+    periodCount: 1,
+    periodUnit: 'week',
+    subscriptionExpires: '2030-01-01T00:00:00.000Z',
+  }),
+  handler,
+)
+```
+
+### Monitor Collection Failures
+
+Record renewal attempts, receipts, and errors. Alert on repeated failures, expired subscriptions, unfunded accounts, and fee payer issues.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+try {
+  await mppx.tempo.subscription.renew({ subscriptionId })
+} catch (error) {
+  await logger.error('subscription renewal failed', {
+    error,
+    subscriptionId,
+  })
+  throw error
+}
+```
+
+## Production Checklist
+
+<CheckboxCards>
+  <CheckboxCard
+    id="subscriptions.durable-store"
+    href="#persist-subscription-state"
+  >
+    A durable `store` backs `mppx` subscription records.
+  </CheckboxCard>
+  <CheckboxCard
+    id="subscriptions.app-database"
+    href="#persist-subscription-state"
+  >
+    Your app database stores `subscriptionId`, lookup key, plan, next due time, and status.
+  </CheckboxCard>
+  <CheckboxCard
+    id="subscriptions.scheduled-collection"
+    href="#collect-from-a-schedule"
+  >
+    Collection runs from cron, a queue, or a worker scheduler.
+  </CheckboxCard>
+  <CheckboxCard
+    id="subscriptions.idempotent-renew"
+    href="#treat-renew-as-idempotent"
+  >
+    `renew` returning `null` is handled as nothing due.
+  </CheckboxCard>
+  <CheckboxCard
+    id="subscriptions.fee-payer-monitoring"
+    href="#monitor-collection-failures"
+  >
+    The fee payer is configured and its balance is monitored.
+  </CheckboxCard>
+  <CheckboxCard
+    id="subscriptions.customer-lifecycle"
+    href="#keep-periods-reviewable"
+  >
+    Cancellation, expiry, and customer notification flows are in place.
+  </CheckboxCard>
+  <CheckboxCard
+    id="subscriptions.production-periods"
+    href="#keep-periods-reviewable"
+  >
+    Local-only periods such as `dev_second` stay out of production.
+  </CheckboxCard>
+</CheckboxCards>
+
 ## Next Steps
 
-- [Spend Permissions](/docs/guides/spend-permissions)
-- [Payments](/docs/guides/payments)
-- [Bring Your Auth](/docs/enterprise/bring-your-auth)
+<Cards>
+  <Card
+    description="See the complete subscriptions example with a protected route and manual collection helper."
+    icon="lucide:repeat"
+    to="https://github.com/tempoxyz/accounts/tree/main/examples/subscriptions"
+    title="Subscriptions Example"
+  />
+  <Card
+    description="Authorize bounded access keys for repeated account activity."
+    icon="lucide:shield"
+    to="/docs/guides/spend-permissions"
+    title="Spend Permissions"
+  />
+  <Card
+    description="Charge a one-time server-initiated payment before returning a response."
+    icon="lucide:send"
+    to="/docs/guides/transfers"
+    title="Transfers"
+  />
+  <Card
+    description="Review HTTPS, trusted host, and adapter-specific production requirements."
+    icon="lucide:rocket"
+    to="/docs/production"
+    title="Production"
+  />
+</Cards>

@@ -56,7 +56,7 @@
     "typescript": "catalog:",
     "viem": "catalog:",
     "vp": "catalog:",
-    "wagmi": "^3.6.12",
+    "wagmi": "catalog:",
     "zile": "^0.0.25"
   },
   "simple-git-hooks": {
@@ -69,7 +69,7 @@
   "name": "accounts",
   "description": "Tempo Accounts SDK",
   "type": "module",
-  "version": "0.10.6",
+  "version": "0.14.1",
   "dependencies": {
     "hono": "^4.12.18",
     "idb-keyval": "^6.2.2",
@@ -86,7 +86,7 @@
     "expo-secure-store": "^55.0.12",
     "expo-web-browser": "^55.0.13",
     "react": ">=18",
-    "viem": ">=2.43.3",
+    "viem": ">=2.50.4",
     "wagmi": ">=0.0.0"
   },
   "peerDependenciesMeta": {

@@ -20,6 +20,17 @@ const defaults = {
 
 const sessionKey = (token: string) => `session:${token}`
 
+async function createCredential(
+  kv: Kv.Kv,
+  key: string,
+  value: { publicKey: string; userId?: string | undefined },
+) {
+  if (kv.create) return await kv.create(key, value)
+  if (await kv.get(key)) return false
+  await kv.set(key, value)
+  return true
+}
+
 /**
  * Session payload persisted in the session store and surfaced via
  * `getSession`. Mirrors the shape of the WebAuthn login response so
@@ -108,7 +119,11 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         ...(userId ? { user: { id: new TextEncoder().encode(userId), name } } : undefined),
       })
 
-      await kv.set(`challenge:${challenge}`, { created: Date.now(), name }, { ttl: challengeTtl })
+      await kv.set(
+        `challenge:${challenge}`,
+        { created: Date.now(), name, ...(userId ? { userId } : {}) },
+        { ttl: challengeTtl },
+      )
 
       return Response.json({ options })
     } catch (error) {
@@ -125,7 +140,9 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         Bytes.toString(new Uint8Array(deserialized.clientDataJSON)),
       ) as { challenge: string }
       const challenge = Hex.fromBytes(Base64.toBytes(clientData.challenge))
-      const stored = await kv.get<{ created: number; name: string }>(`challenge:${challenge}`)
+      const stored = await kv.get<{ created: number; name: string; userId?: string }>(
+        `challenge:${challenge}`,
+      )
       if (!stored || Date.now() - stored.created > challengeTtl * 1_000)
         throw new Error('Missing or expired challenge')
 
@@ -137,19 +154,67 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
       const { publicKey } = result.credential
       const credentialId = credential.id
+      // Base64url-encode the userId we registered with so it matches
+      // the `userHandle` shape the authenticator emits on `/login`.
+      // Callers see a consistent identifier across both flows.
+      const userId = stored.userId
+        ? Base64.fromBytes(Bytes.fromString(stored.userId), { pad: false, url: true })
+        : undefined
+      const created = await createCredential(kv, `credential:${credentialId}`, {
+        publicKey,
+        ...(userId ? { userId } : {}),
+      })
+      if (!created) throw new Error('Credential already exists')
 
-      const json = { credentialId, publicKey }
-      const [, hook] = await Promise.all([
-        kv.set(`credential:${credentialId}`, { publicKey }),
+      const [hook] = await Promise.all([
         onRegister?.({
           credentialId,
           name: stored.name,
           publicKey,
           request: c.req.raw,
+          ...(userId ? { userId } : {}),
         }),
         kv.delete(`challenge:${challenge}`),
       ])
-      return Session.mergeResponse(json, hook || undefined)
+
+      // Successful registration is also a successful authentication for
+      // the freshly-minted credential. Issue a session here so the
+      // common "register → automatically signed in" flow doesn't require
+      // an extra `/login` round-trip.
+      if (!session)
+        return Session.mergeResponse(
+          { credentialId, publicKey, ...(userId ? { userId } : {}) },
+          hook || undefined,
+        )
+
+      const issuedAt = Math.floor(Date.now() / 1000)
+      const payload: SessionPayload = {
+        credentialId,
+        publicKey,
+        ...(userId ? { userId } : {}),
+        issuedAt,
+        expiresAt: issuedAt + sessionTtl,
+      }
+      const token = Session.generateToken()
+      await kv.set(sessionKey(token), payload, { ttl: sessionTtl })
+
+      const json = {
+        credentialId,
+        publicKey,
+        ...(userId ? { userId } : {}),
+        ...(!cookie ? { token } : {}),
+      }
+
+      const cookieHeader = cookie
+        ? Session.serializeCookie({
+            name: cookieName,
+            protocol: new URL(c.req.url).protocol,
+            ttl: sessionTtl,
+            value: token,
+          })
+        : undefined
+
+      return Session.mergeResponse(json, hook || undefined, cookieHeader)
     } catch (error) {
       return Response.json({ error: (error as Error).message }, { status: 400 })
     }
@@ -199,7 +264,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
       const [stored, credentialData] = await Promise.all([
         kv.get<number>(`challenge:${challenge}`),
-        kv.get<{ publicKey: string }>(`credential:${response.id}`),
+        kv.get<{ publicKey: string; userId?: string }>(`credential:${response.id}`),
       ])
       if (!stored || Date.now() - stored > challengeTtl * 1_000)
         throw new Error('Missing or expired challenge')
@@ -213,12 +278,9 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       })
       if (!valid) throw new Error('Authentication failed')
 
-      const rawResponse = response.raw?.response as unknown as Record<string, string> | undefined
-      const userHandle = rawResponse?.userHandle
-
       const credentialId = response.id
       const publicKey = credentialData.publicKey
-      const userId = userHandle && userHandle.length > 0 ? userHandle : undefined
+      const userId = credentialData.userId
 
       // Hook for side effects (user provisioning, analytics, allow/deny).
       // The legacy contract — return a `Response` to merge fields onto
@@ -345,7 +407,12 @@ export declare namespace webAuthn {
     cookie?: boolean | undefined
     /** Cookie name for the session token. @default "accounts_webauthn" */
     cookieName?: string | undefined
-    /** Key-value store for challenges, credentials, and sessions. */
+    /**
+     * Key-value store for challenges, credentials, and sessions. When
+     * `create` is available, credential registration uses it to reject
+     * duplicates atomically. Otherwise, registration falls back to
+     * best-effort `get` then `set` storage.
+     */
     kv: Kv.Kv
     /** Called after a successful registration. The returned response is merged onto the default JSON response. */
     onRegister?: (parameters: {
@@ -354,6 +421,8 @@ export declare namespace webAuthn {
       name: string
       publicKey: string
       request: Request
+      /** The `userId` provided during `/register/options`, if any. */
+      userId?: string | undefined
     }) => Response | Promise<Response> | void | Promise<void>
     /**
      * Called after a successful authentication, before the session

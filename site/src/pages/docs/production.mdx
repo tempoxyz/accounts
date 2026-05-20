@@ -3,15 +3,53 @@ title: Deploying to Production
 description: Things to consider before deploying your application with the Tempo Accounts SDK to production.
 ---
 
+import { Tabs, Tab } from 'vocs'
+import { CheckboxCards, CheckboxCard } from '../../components/CheckboxCard.js'
+
 # Deploying to Production
 
-Below are some things to consider before deploying to production.
+Each adapter has different production considerations. Pick the adapter you ship with below to walk through what to set up and check off the production checklist.
+
+<Tabs stateKey="adapter">
+
+<Tab title="Tempo Wallet" className="pt-8!">
+
+The [Tempo Wallet adapter](/docs/adapters/tempo-wallet) embeds an iframe-hosted wallet served from `wallet.tempo.xyz`. Production readiness depends on configuring trusted hosts, CSP, and HTTPS so the dialog renders reliably across browsers.
+
+## Production Checklist
+
+<CheckboxCards>
+  <CheckboxCard
+    id="tempo-wallet.trusted-hosts"
+    href="#trusted-hosts"
+  >
+    The production hostname is registered in the trusted hosts list.
+  </CheckboxCard>
+  <CheckboxCard
+    id="tempo-wallet.csp-frame-src"
+    href="#content-security-policy"
+  >
+    The Content Security Policy allows wallet.tempo.xyz as a frame source.
+  </CheckboxCard>
+  <CheckboxCard
+    id="tempo-wallet.https"
+    href="#https"
+  >
+    The app is served over HTTPS.
+  </CheckboxCard>
+  <CheckboxCard
+    id="tempo-wallet.iframe-visibility"
+    href="#iframe-visibility"
+  >
+    The iframe dialog mounts visibly on every page that may trigger it.
+  </CheckboxCard>
+</CheckboxCards>
 
 ## Trusted Hosts
 
-To enable the `iframe` dialog on all browsers in production, ensure your website hostname is added to the [trusted hosts list](https://github.com/tempoxyz/accounts/blob/main/src/trusted-hosts.json). 
+To enable the `iframe` dialog on all browsers in production, ensure your website hostname is added to the [trusted hosts list](https://github.com/tempoxyz/accounts/blob/main/src/trusted-hosts.json).
 
-Without this, the `iframe` dialog will fallback to a popup on browsers that do not support the [IntersectionObserver v2 API](https://web.dev/articles/intersectionobserver-v2).
+Without this, the `iframe` dialog will fall back to a popup on browsers that do not support the [IntersectionObserver v2 API](https://web.dev/articles/intersectionobserver-v2).
 
 ## Content Security Policy
 
@@ -19,6 +57,140 @@ If you've deployed a Content Security Policy, ensure that you have the Tempo Acc
 
 The full set of directives that the Tempo Accounts SDK requires are:
 
-| Directive | Value |
-| --- | --- |
+| Directive   | Value                      |
+| ----------- | -------------------------- |
 | `frame-src` | `https://wallet.tempo.xyz` |
+
+## HTTPS
+
+Browsers refuse to load secure third-party iframes from insecure origins. Tempo Wallet's iframe communication and passkey ceremonies both require a secure context, so production traffic must be served over HTTPS.
+
+## Iframe Visibility
+
+[IntersectionObserver v2](https://web.dev/articles/intersectionobserver-v2) disables iframes that are obscured by overlays, modals, or sticky headers. When the dialog is triggered, verify it is not covered by any other UI — otherwise the user will see a blank surface.
+
+</Tab>
+
+<Tab title="WebAuthn" className="pt-8!">
+
+The [WebAuthn adapter](/docs/adapters/webauthn) binds account keys to your own domain. Treat passkey infrastructure with the same care as user authentication.
+
+## Production Checklist
+
+<CheckboxCards>
+  <CheckboxCard
+    id="webauthn.https-origin"
+    href="#https-origin"
+  >
+    The WebAuthn origin is served over HTTPS in production.
+  </CheckboxCard>
+  <CheckboxCard
+    id="webauthn.persistent-kv"
+    href="#persistent-storage"
+  >
+    The WebAuthn handler is backed by persistent [Kv](/docs/server/kv) storage.
+  </CheckboxCard>
+  <CheckboxCard
+    id="webauthn.rpid-future-proof"
+    href="#choosing-an-rpid"
+  >
+    The RP ID fits both the current hostname and any future subdomain plan.
+  </CheckboxCard>
+  <CheckboxCard
+    id="webauthn.multiple-credentials"
+    href="#multiple-credentials-per-user"
+  >
+    Users can register a backup device or hardware security key.
+  </CheckboxCard>
+  <CheckboxCard
+    id="webauthn.clear-errors"
+    href="#surfacing-clear-errors"
+  >
+    Specific errors are surfaced for failed ceremonies and origin mismatches.
+  </CheckboxCard>
+  <CheckboxCard
+    id="webauthn.rate-limit"
+    href="#rate-limiting"
+  >
+    Registration and login ceremony endpoints are rate-limited.
+  </CheckboxCard>
+</CheckboxCards>
+
+## HTTPS Origin
+
+WebAuthn requires a [secure context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts) outside of `localhost`. Production passkey ceremonies will fail outright over HTTP.
+
+## Persistent Storage
+
+Memory-backed [`Kv`](/docs/server/kv) loses challenges and credential records on restart. Back `Handler.webAuthn` with `Kv.cookie`, `Kv.durableObject`, or `Kv.cloudflare` so registrations survive deploys and restarts.
+
+## Choosing an `rpId`
+
+Passkeys are bound to the `rpId` at registration. Changing it later invalidates every existing credential and locks users out — pick a value that covers any subdomain you may add.
+
+## Multiple Credentials per User
+
+Passkeys live on individual authenticators. Letting users add a backup device or hardware security key prevents lockouts when one device is lost or wiped.
+
+## Surfacing Clear Errors
+
+WebAuthn ceremony failures are easy to misdiagnose. Surface specific error messages for expired challenges, canceled prompts, and RP ID or origin mismatches so users (and support) can recover quickly.
+
+## Rate Limiting
+
+Unbounded `/register/options`, `/register`, `/login/options`, and `/login` endpoints are an enumeration and brute-force vector. Apply per-IP and per-user rate limits.
+
+</Tab>
+
+<Tab title="Private Keys" className="pt-8!">
+
+The [Private Key adapter](/docs/adapters/private-key) signs in-process with a `secp256k1` private key. Production use is appropriate for server-side signers, fee payers, and scripts.
+
+## Production Checklist
+
+<CheckboxCards>
+  <CheckboxCard
+    id="private-key.trusted-server-environments"
+    href="#trusted-server-environments"
+  >
+    Production keys are held only in trusted server environments.
+  </CheckboxCard>
+  <CheckboxCard
+    id="private-key.one-key-per-role"
+    href="#one-key-per-role-and-environment"
+  >
+    One key is used per role and per environment.
+  </CheckboxCard>
+  <CheckboxCard
+    id="private-key.no-logging"
+    href="#never-log-secrets"
+  >
+    Private keys, derived mnemonics, and raw secret values are never logged.
+  </CheckboxCard>
+  <CheckboxCard
+    id="private-key.rotation-runbook"
+    href="#key-rotation-runbook"
+  >
+    A key rotation runbook is in place before shipping.
+  </CheckboxCard>
+</CheckboxCards>
+
+## Trusted Server Environments
+
+Browsers, CI logs, and developer laptops are not trusted environments. Production keys belong on the same machine that signs with them, behind your secret manager.
+
+## One Key per Role and Environment
+
+Sharing a key across dev, staging, and production means one leak compromises every environment. Separate keys also make audit logs and on-chain attribution meaningful.
+
+## Never Log Secrets
+
+Logs flow into observability tools, error trackers, and backups. Strip private keys, derived mnemonics, and raw secret values at the source — never emit them, even at `debug` level.
+
+## Key Rotation Runbook
+
+When a key leaks, you need a tested process to mint, deploy, and revoke before an attacker acts. Practice the runbook before you need it.
+
+</Tab>
+
+</Tabs>

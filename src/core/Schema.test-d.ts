@@ -98,6 +98,31 @@ describe('Encoded', () => {
     >()
   })
 
+  test('wallet_connect: showDeposit', () => {
+    type Capabilities = NonNullable<
+      NonNullable<Rpc.wallet_connect.Encoded['params']>[number]['capabilities']
+    >
+    type Register = Extract<Capabilities, { method: 'register' }>
+    type Login = Extract<Capabilities, { method?: 'login' | undefined }>
+    type ShowDeposit = Register['showDeposit']
+    type LoginShowDeposit = Login['showDeposit']
+    type ShowDepositObject = Exclude<Exclude<ShowDeposit, boolean | undefined>, undefined>
+
+    expectTypeOf<ShowDeposit>().toMatchTypeOf<
+      | boolean
+      | {
+          amount?: string | undefined
+          displayName?: string | undefined
+          on?: 'login' | 'register' | undefined
+          token?: string | undefined
+        }
+      | undefined
+    >()
+    expectTypeOf<LoginShowDeposit>().toEqualTypeOf<ShowDeposit>()
+    expectTypeOf<ShowDepositObject>().not.toHaveProperty('address')
+    expectTypeOf<ShowDepositObject>().not.toHaveProperty('chainId')
+  })
+
   test('wallet_connect: returns', () => {
     expectTypeOf<Rpc.wallet_connect.Encoded['returns']>().toHaveProperty('accounts')
     expectTypeOf<
@@ -121,15 +146,16 @@ describe('Encoded', () => {
     }>()
   })
 
-  test('wallet_send', () => {
-    expectTypeOf<Rpc.wallet_send.Encoded>().toMatchTypeOf<{
-      method: 'wallet_send'
+  test('wallet_transfer', () => {
+    expectTypeOf<Rpc.wallet_transfer.Encoded>().toMatchTypeOf<{
+      method: 'wallet_transfer'
       params:
         | readonly [
             {
+              amount?: string | undefined
+              memo?: string | undefined
               to?: Hex | undefined
-              token?: Hex | undefined
-              value?: string | undefined
+              token?: Hex | string | undefined
             },
           ]
         | undefined
@@ -152,6 +178,24 @@ describe('Encoded', () => {
           ]
         | undefined
       returns: { receipt: { transactionHash: Hex } }
+    }>()
+  })
+
+  test('wallet_deposit', () => {
+    expectTypeOf<Rpc.wallet_deposit.Encoded>().toMatchTypeOf<{
+      method: 'wallet_deposit'
+      params:
+        | readonly [
+            {
+              address?: Hex | undefined
+              amount?: string | undefined
+              chainId?: Hex | undefined
+              displayName?: string | undefined
+              token?: Hex | string | undefined
+            },
+          ]
+        | undefined
+      returns: { receipts?: readonly { transactionHash: Hex }[] | undefined } | undefined
     }>()
   })
 
@@ -221,7 +265,7 @@ describe('Request', () => {
       | 'wallet_depositZone'
       | 'wallet_getBalances'
       | 'wallet_revokeAccessKey'
-      | 'wallet_send'
+      | 'wallet_transfer'
       | 'wallet_swap'
       | 'wallet_withdrawZone'
     >()

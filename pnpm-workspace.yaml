@@ -3,7 +3,6 @@ auditConfig:
     - GHSA-rmmr-r34h-pfm5 # affected versions have been removed from npm.
 
 allowBuilds:
-  bufferutil: true
   cloudflared: true
   cpu-features: true
   es5-ext: true
@@ -12,7 +11,6 @@ allowBuilds:
   sharp: true
   simple-git-hooks: true
   ssh2: true
-  utf-8-validate: true
   workerd: true
 
 blockExoticSubdeps: true
@@ -29,9 +27,9 @@ catalog:
   '@types/react-dom': ^19.2.3
   '@vitejs/devtools': ^0.1.15
   '@vitejs/plugin-react': ^5.2.0
-  '@wagmi/core': ^3.4.10
+  '@wagmi/core': ^3.4.12
   hono: ^4.12.18
-  mppx: ^0.6.19
+  mppx: ^0.6.27
   ox: ~0.14.18
   prool: ~0.2.4
   react: ^19.2.5
@@ -39,12 +37,12 @@ catalog:
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: ^2.48.8
+  viem: ^2.50.4
   vite: ^8.0.5
   vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
-  wagmi: ^3.6.12
-  wrangler: ^4.85.0
+  wagmi: ^3.6.15
+  wrangler: ^4.90.1
   zod: ^4.3.6
 
 minimumReleaseAge: 1440
@@ -68,21 +66,27 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 
 overrides:
   accounts: 'workspace:*'
+  '@sinclair/typebox': '^0.34.0'
+  'brace-expansion@>=5.0.0 <5.0.6': '5.0.6'
+  viem: 'catalog:'
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
   js-yaml@^3: '3.14.2'
   mermaid: '^11.14.1'
   ox: '~0.14.18'
   postcss: '8.5.14'
-  protobufjs: '7.5.6'
+  protobufjs: '7.5.8'
+  '@protobufjs/utf8': '1.1.1'
   qr: '~0.5'
   qs: '6.15.1'
+  # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
+  reselect: '5.1.0'
   react: 'catalog:'
   react-dom: 'catalog:'
   tar: '7.5.15'
-  viem: 'catalog:'
   vite-plus: 'catalog:'
   vp: 'catalog:'
+  'ws@>=8.0.0 <8.20.1': '8.20.1'
   wrangler: 'catalog:'
 
 packages:
@@ -106,7 +110,13 @@ trustPolicyExclude:
   - '@noble/curves@1.8.0'
   - '@noble/hashes@1.7.0'
   - chokidar@4.0.3
+  - jose@4.15.9
+  - react-device-detect@2.2.3
   - semver@6.3.1
   - reselect@5.1.1
   - slow-redact@0.3.2
+  - ua-parser-js@1.0.41
   - undici-types@6.19.8
+
+patchedDependencies:
+  vocs@0.0.0: patches/vocs@0.0.0.patch

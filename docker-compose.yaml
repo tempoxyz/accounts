@@ -2,7 +2,7 @@ name: accounts-sdk
 
 services:
   install:
-    image: node:24-slim
+    image: node:24
     working_dir: /app
     volumes:
       - .:/app
@@ -19,7 +19,7 @@ services:
         pnpm install --frozen-lockfile
 
   playground:
-    image: node:24-slim
+    image: node:24
     working_dir: /app
     volumes:
       - .:/app
@@ -48,7 +48,7 @@ services:
         condition: service_completed_successfully
 
   wagmi:
-    image: node:24-slim
+    image: node:24
     working_dir: /app
     volumes:
       - .:/app
@@ -77,7 +77,7 @@ services:
         condition: service_completed_successfully
 
   dialog-ref:
-    image: node:24-slim
+    image: node:24
     working_dir: /app
     volumes:
       - .:/app
@@ -106,7 +106,7 @@ services:
         condition: service_completed_successfully
 
   docs:
-    image: node:24-slim
+    image: node:24
     working_dir: /app
     volumes:
       - .:/app

@@ -115,6 +115,42 @@ describe('validate', () => {
     `)
   })
 
+  test('default: validates wallet_deposit with amount and token symbol', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_deposit',
+      params: [
+        {
+          amount: '50',
+          displayName: 'DoorDash',
+          token: 'USDC',
+        },
+      ],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_deposit",
+        "params": [
+          {
+            "amount": "50",
+            "displayName": "DoorDash",
+            "token": "USDC",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('default: validates wallet_deposit without params', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_deposit',
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_deposit",
+      }
+    `)
+  })
+
   test('behavior: preserves original request properties', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'eth_accounts',

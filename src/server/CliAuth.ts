@@ -2,7 +2,7 @@ import { Address, Base64, Bytes, Hex, PublicKey } from 'ox'
 import { KeyAuthorization as TempoKeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { createClient, http, type Chain, type Client, type Transport } from 'viem'
 import { verifyHash } from 'viem/actions'
-import { tempo } from 'viem/chains'
+import { tempo } from 'viem/tempo/chains'
 import * as z from 'zod/mini'
 
 import * as u from '../core/zod/utils.js'
@@ -12,6 +12,17 @@ import type { Kv } from './Kv.js'
 const maxLimits = 10
 const limit = z.object({ token: u.address(), limit: u.bigint() })
 const limits = z.readonly(z.array(limit).check(z.maxLength(maxLimits)))
+const showDeposit = z.optional(
+  z.union([
+    z.boolean(),
+    z.object({
+      amount: z.optional(z.string()),
+      displayName: z.optional(z.string()),
+      on: z.optional(z.union([z.literal('login'), z.literal('register')])),
+      token: z.optional(z.union([u.address(), z.string()])),
+    }),
+  ]),
+)
 const defaultTtlMs = 10 * 60 * 1_000
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -38,6 +49,7 @@ export const createRequest = z.object({
   keyType: z.optional(keyType),
   limits: z.optional(limits),
   pubKey: u.hex(),
+  showDeposit,
 })
 
 /** Response body for `POST /cli-auth/device-code`. */
@@ -75,6 +87,7 @@ export const pendingResponse = z.object({
   keyType,
   limits: z.optional(limits),
   pubKey: u.hex(),
+  showDeposit,
   status: z.literal('pending'),
 })
 
@@ -103,6 +116,7 @@ export const entry = u.oneOf([
     keyType,
     limits: z.optional(limits),
     pubKey: u.hex(),
+    showDeposit,
     status: z.literal('pending'),
   }),
   z.object({
@@ -119,6 +133,7 @@ export const entry = u.oneOf([
     keyType,
     limits: z.optional(limits),
     pubKey: u.hex(),
+    showDeposit,
     status: z.literal('authorized'),
   }),
   z.object({
@@ -136,6 +151,7 @@ export const entry = u.oneOf([
     keyType,
     limits: z.optional(limits),
     pubKey: u.hex(),
+    showDeposit,
     status: z.literal('consumed'),
   }),
 ])
@@ -576,6 +592,9 @@ export function from(options: from.Options = {}): CliAuth {
         keyType,
         ...(approved.limits ? { limits: approved.limits } : {}),
         pubKey,
+        ...(options.request.showDeposit !== undefined
+          ? { showDeposit: options.request.showDeposit }
+          : {}),
         status: 'pending',
       })
 
@@ -601,6 +620,7 @@ export function from(options: from.Options = {}): CliAuth {
         keyType: current.keyType,
         ...(current.limits ? { limits: current.limits } : {}),
         pubKey: current.pubKey,
+        ...(current.showDeposit !== undefined ? { showDeposit: current.showDeposit } : {}),
         status: 'pending',
       }
     },

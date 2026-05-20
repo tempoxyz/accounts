@@ -143,7 +143,7 @@ describe('tokenFromRequest (Node.js headers)', () => {
 
 describe('getSession with http.IncomingMessage', () => {
   const store = Kv.memory()
-  const handler = auth({ store, cookie: false })
+  const handler = auth({ store, cookie: false, domain: 'localhost' })
 
   let authServer: Http.Server
   let authUrl: string
