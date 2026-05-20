@@ -1,5 +1,11 @@
 # accounts
 
+## 0.14.1
+
+### Patch Changes
+
+- 62705cb: Added an `on` filter to the `wallet_connect` `showDeposit` capability to direct if the deposit screen should be shown on login or register.
+
 ## 0.14.0
 
 ### Minor Changes

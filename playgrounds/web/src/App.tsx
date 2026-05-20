@@ -1022,12 +1022,12 @@ function WalletConnect(props: { adapterType: AdapterType }) {
   )
 }
 
-function buildShowDeposit(
-  form: FormData,
-): true | {
-  amount?: string | undefined
-  token?: string | undefined
-} {
+function buildShowDeposit(form: FormData):
+  | true
+  | {
+      amount?: string | undefined
+      token?: string | undefined
+    } {
   const amount = String(form.get('showDepositAmount') ?? '').trim()
   const token = String(form.get('showDepositToken') ?? '').trim()
   const showDeposit = {
