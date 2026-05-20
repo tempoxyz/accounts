@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "NODE_OPTIONS='--import tsx' vite",
+    "dev": "node --import tsx scripts/copy-vocs-theme.ts && NODE_OPTIONS='--import tsx' vite",
     "build": "node --import tsx scripts/copy-vocs-theme.ts && vite build",
     "preview": "vite preview",
     "sync:vocs": "node --import tsx scripts/copy-vocs-theme.ts"
