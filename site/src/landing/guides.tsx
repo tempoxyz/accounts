@@ -1,33 +1,3 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import AsciiBackground from "./ascii-bg";
-
-/**
- * Delays opacity transition by one frame after mount so the canvas inside
- * has time to size + draw its first frame. Without this the wrapper's
- * opacity animation runs against an empty canvas, then dots snap in
- * mid-fade — looks like an instant pop instead of a smooth reveal.
- */
-function FadeInOnMount({ children }: { children: React.ReactNode }) {
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const id = window.setTimeout(() => setShown(true), 30);
-    return () => window.clearTimeout(id);
-  }, []);
-  return (
-    <div
-      className="pointer-events-none absolute inset-0"
-      style={{
-        opacity: shown ? 1 : 0,
-        transition: "opacity 420ms cubic-bezier(0.23, 1, 0.32, 1)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
 
 // Tailwind v4 wasn't picking up the custom `.dash-tl` / `.dash-frame`
@@ -107,7 +77,6 @@ function ArrowUpRight() {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden
-      className="transition-transform duration-200 ease-out group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
     >
       <path
         d="M8 17L17 8M17 8H9M17 8V16"
@@ -121,8 +90,6 @@ function ArrowUpRight() {
 }
 
 export default function Guides() {
-  const [hovered, setHovered] = useState<string | null>(null);
-
   return (
     <section
       className="px-6 pt-12 sm:pt-[55px]"
@@ -136,35 +103,23 @@ export default function Guides() {
         className="-mx-6 mt-8 grid grid-cols-1 sm:mt-12 sm:grid-cols-2 lg:grid-cols-3"
         style={frameDashStyle}
       >
-        {GUIDES.map((g) => {
-          const isHovered = hovered === g.title;
-          return (
-            <a
-              key={g.title}
-              href={g.href}
-              target="_blank"
-              rel="noreferrer"
-              onMouseEnter={() => setHovered(g.title)}
-              onMouseLeave={() =>
-                setHovered((prev) => (prev === g.title ? null : prev))
-              }
-              className="group relative flex min-h-[200px] flex-col justify-end gap-3 overflow-hidden p-6 text-foreground outline-none transition-colors duration-150 focus-visible:bg-foreground/[0.03] sm:min-h-[260px] sm:p-9"
-              style={cardDashStyle}
-            >
-              {isHovered ? (
-                <FadeInOnMount>
-                  <AsciiBackground />
-                </FadeInOnMount>
-              ) : null}
-              <span className="relative z-10 inline-flex">
-                <ArrowUpRight />
-              </span>
-              <span className="relative z-10 text-[20px] leading-tight tracking-[-0.01em] sm:text-[24px]">
-                {g.title}
-              </span>
-            </a>
-          );
-        })}
+        {GUIDES.map((g) => (
+          <a
+            key={g.title}
+            href={g.href}
+            target="_blank"
+            rel="noreferrer"
+            className="relative flex min-h-[200px] flex-col justify-end gap-3 overflow-hidden p-6 text-foreground outline-none transition-[background-color,transform] duration-150 hover:bg-foreground/[0.025] active:translate-y-px active:bg-foreground/[0.045] focus-visible:bg-foreground/[0.03] sm:min-h-[260px] sm:p-9"
+            style={cardDashStyle}
+          >
+            <span className="relative z-10 inline-flex">
+              <ArrowUpRight />
+            </span>
+            <span className="relative z-10 text-[20px] leading-tight tracking-[-0.01em] sm:text-[24px]">
+              {g.title}
+            </span>
+          </a>
+        ))}
       </div>
     </section>
   );

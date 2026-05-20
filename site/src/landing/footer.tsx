@@ -1,9 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { DinoGame } from "./dino-game";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 
 const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
+const REVEAL_EDGE_PX = 8;
+
+const DinoGame = lazy(() =>
+  import("./dino-game").then((module) => ({ default: module.DinoGame })),
+);
+
+function GameLoading() {
+  return (
+    <div className="flex h-[280px] w-full items-center justify-center font-mono text-[11px] uppercase tracking-[0.18em] text-foreground-subtle">
+      Loading game
+    </div>
+  );
+}
 
 export default function Footer() {
   const [revealed, setRevealed] = useState(false);
@@ -20,16 +32,26 @@ export default function Footer() {
   return (
     <footer
       ref={footerRef}
-      onMouseEnter={() => setRevealed(true)}
       className="group relative flex items-center justify-center overflow-hidden py-12 text-[13px] text-foreground-subtle sm:py-14 sm:text-[14px]"
       style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
     >
+      {!revealed ? (
+        <div
+          aria-hidden
+          className="fixed inset-x-0 bottom-0 z-50 cursor-default"
+          style={{ height: REVEAL_EDGE_PX }}
+          onPointerEnter={() => setRevealed(true)}
+          onPointerDown={() => setRevealed(true)}
+        />
+      ) : null}
       {revealed ? (
         <div
           className="relative w-full"
           style={{ animation: `slideDown 480ms ${easeOut} 0ms both` }}
         >
-          <DinoGame />
+          <Suspense fallback={<GameLoading />}>
+            <DinoGame />
+          </Suspense>
           <div className="mt-4 flex items-center justify-center gap-5 px-6 text-[11px] text-foreground-subtle sm:px-9">
             <span className="flex items-center gap-1.5">
               <kbd className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded border border-border-strong bg-foreground/[0.05] px-1.5 font-mono text-[10px] leading-none text-foreground-muted">
