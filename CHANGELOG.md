@@ -1,5 +1,11 @@
 # accounts
 
+## 0.14.2
+
+### Patch Changes
+
+- 022d947: Simplified Privy account loading and fixed stale wallet cache handling after failed account selection.
+
 ## 0.14.1
 
 ### Patch Changes
