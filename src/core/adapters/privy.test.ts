@@ -80,10 +80,34 @@ describe('privy', () => {
     `)
   })
 
-  test('default: loadAccounts delegates login and caches embedded wallets for signing', async () => {
-    const { adapter, client } = setup()
+  test('default: createAccount can select the active embedded wallet', async () => {
+    const { adapter, client } = setup({ createAddresses: [other] })
+    client.addWallet(other)
 
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+    const result = await adapter.actions.createAccount(
+      { digest: '0x1234', name: 'Ada' },
+      { method: 'wallet_connect', params: undefined },
+    )
+
+    expect(client.signWith).toMatchInlineSnapshot(`
+      [
+        "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+      ]
+    `)
+    expect(result.accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+          "label": "Ada",
+        },
+      ]
+    `)
+  })
+
+  test('default: loadAccounts delegates login and caches embedded wallets for signing', async () => {
+    const { adapter, client, store } = setup()
+
+    await connect({ adapter, store })
     const result = await adapter.actions.signPersonalMessage(
       { address, data: '0x68656c6c6f' },
       { method: 'personal_sign', params: ['0x68656c6c6f', address] },
@@ -98,6 +122,32 @@ describe('privy', () => {
     expect(result).toMatchInlineSnapshot(
       `"0xe5ddc160e4c8f92de507c7db9b982d4f9b7197bfa421864aeadc586bc96b09ae0ba0c5b131650ae4994cff1839341d00f3735ef5abc62ac8fe2cf50f65208e2a1b"`,
     )
+  })
+
+  test('default: loadAccounts can select and order embedded wallets', async () => {
+    const { adapter, client } = setup({ loadAddresses: [other, address] })
+    client.addWallet(other)
+
+    const result = await adapter.actions.loadAccounts(
+      { digest: '0x1234' },
+      { method: 'wallet_connect', params: undefined },
+    )
+
+    expect(client.signWith).toMatchInlineSnapshot(`
+      [
+        "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+      ]
+    `)
+    expect(result.accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+        },
+        {
+          "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+        },
+      ]
+    `)
   })
 
   test('default: loadAccounts can provision an external access key', async () => {
@@ -142,6 +192,39 @@ describe('privy', () => {
     	  "signature": undefined,
     	}
     `)
+  })
+
+  test('default: signs transactions with a materialized Privy account', async () => {
+    const { adapter, client, store } = setup()
+    await connect({ adapter, store })
+
+    const result = await adapter.actions.signTransaction(
+      {
+        chainId: 1,
+        from: address,
+        gas: 21_000n,
+        maxFeePerGas: 1n,
+        maxPriorityFeePerGas: 1n,
+        nonce: 0,
+        to: other,
+        value: 1n,
+      },
+      { method: 'eth_signTransaction', params: [{ from: address }] },
+    )
+
+    expect(client.signWith).toMatchInlineSnapshot(`
+      [
+        "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+      ]
+    `)
+    expect(client.signPayloads).toMatchInlineSnapshot(`
+      [
+        "0x62f087d34b8a023e0461eb1b9a01267ba5b8400c13d2ffdac615ccec872cc288",
+      ]
+    `)
+    expect(result).toMatchInlineSnapshot(
+      `"0x76f86a010101825208d8d7942b5ad5c4795c026514f8317c7a215e218dccd6cf0180c0808080808080c0b8418b0c18077cb78666296a4c0e8149935124f70d7820ec4e4ae81de428659d6c305c098dea43ccb536e813bb1c136eab5e96611de69489be6291169b2bb2318cde1b"`,
+    )
   })
 
   test('default: authorizeAccessKey signs with the connected Privy account', async () => {
@@ -386,6 +469,27 @@ describe('privy', () => {
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: failed account selection does not poison silent restore cache', async () => {
+    const { adapter, store } = setup({ loadAddresses: [other] })
+    store.setState({ accounts: [{ address: other }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnauthorizedError: Privy callback returned address "${other}" that was not found in the user's embedded wallets.]`,
+    )
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address: other, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', other] },
+      ),
+    ).rejects.toMatchInlineSnapshot(
+      '[Provider.DisconnectedError: Privy session no longer matches persisted accounts.]',
+    )
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
   test('error: silent restore rejects non-hex secp256k1_sign results', async () => {
     const { adapter, store } = setup({ signResult: 'not-hex' })
     store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -410,8 +514,8 @@ describe('privy', () => {
   })
 
   test('error: malformed secp256k1_sign result is rejected by signer recovery', async () => {
-    const { adapter } = setup({ signResult: '0x1234' })
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+    const { adapter, store } = setup({ signResult: '0x1234' })
+    await connect({ adapter, store })
 
     await expect(
       adapter.actions.signPersonalMessage(
@@ -424,8 +528,8 @@ describe('privy', () => {
   })
 
   test('error: signing for an unconnected address while others are connected throws Unauthorized', async () => {
-    const { adapter } = setup()
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+    const { adapter, store } = setup()
+    await connect({ adapter, store })
 
     await expect(
       adapter.actions.signPersonalMessage(
@@ -478,8 +582,8 @@ describe('privy', () => {
   })
 
   test('error: signature recovered from a different key is rejected as Unauthorized', async () => {
-    const { adapter } = setup({ signWithPrivateKey: privateKeyB })
-    await adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined })
+    const { adapter, store } = setup({ signWithPrivateKey: privateKeyB })
+    await connect({ adapter, store })
 
     await expect(
       adapter.actions.signPersonalMessage(
@@ -503,12 +607,12 @@ function setup(options: setup.Options = {}) {
       : {
           createAccount: async () => {
             client.createCalls++
-            return undefined
+            return options.createAddresses
           },
         }),
     loadAccounts: async () => {
       client.loadCalls++
-      return undefined
+      return options.loadAddresses
     },
   })({
     getAccount: (() => {
@@ -527,10 +631,22 @@ function setup(options: setup.Options = {}) {
   return { adapter, client, store }
 }
 
+async function connect(options: Pick<ReturnType<typeof setup>, 'adapter' | 'store'>) {
+  const { adapter, store } = options
+  const loaded = await adapter.actions.loadAccounts(undefined, {
+    method: 'wallet_connect',
+    params: undefined,
+  })
+  store.setState({ accounts: loaded.accounts, activeAccount: 0 })
+  return loaded
+}
+
 declare namespace setup {
   type Options = {
     /** Pass `false` to omit the adapter's `createAccount` callback (tests fallback to `loadAccounts`). */
     createAccount?: false | undefined
+    createAddresses?: readonly Address[] | undefined
+    loadAddresses?: readonly Address[] | undefined
     /** Make the mock client's `user.get` throw, to test restore-side session errors. */
     restoreError?: unknown
     token?: string | null | undefined

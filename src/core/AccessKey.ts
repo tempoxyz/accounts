@@ -251,7 +251,7 @@ export declare namespace authorize {
   /** Options for {@link authorize}. */
   type Options = {
     /** Root account that owns this access key and signs its authorization. */
-    account: TempoAccount.Account
+    account: Pick<TempoAccount.Account, 'address' | 'sign'>
     /** Default chain ID for the authorization when `parameters.chainId` is not set. */
     chainId: bigint | number
     /** Access key authorization parameters. */

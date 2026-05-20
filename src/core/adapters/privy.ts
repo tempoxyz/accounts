@@ -1,14 +1,5 @@
-import {
-  Address as core_Address,
-  Hex,
-  Provider as ox_Provider,
-  PublicKey,
-  RpcResponse,
-  Secp256k1,
-  Signature,
-  WebCryptoP256,
-} from 'ox'
-import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { Address as core_Address, Hex, Provider as ox_Provider, Secp256k1, Signature } from 'ox'
+import { SignatureEnvelope } from 'ox/tempo'
 import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
 import type { Address, LocalAccount } from 'viem/accounts'
 import { prepareTransactionRequest } from 'viem/actions'
@@ -79,7 +70,7 @@ export function privy<const client extends privy.Client>(
   return Adapter.define({ icon, name, rdns }, ({ getClient, store }) => {
     let privyClient_promise: Promise<client> | undefined
     let restore_promise: Promise<void> | undefined
-    let walletAccounts: readonly privy.EmbeddedWallet[] = []
+    let walletAccounts: readonly privy.EmbeddedWallet[] | undefined
 
     async function getPrivyClient(): Promise<client> {
       privyClient_promise ??= (async () => {
@@ -96,9 +87,35 @@ export function privy<const client extends privy.Client>(
       }
     }
 
+    function toTempoAccount(account: privy.EmbeddedWallet) {
+      const address = core_Address.from(account.address)
+
+      async function sign(parameters: { hash: Hex.Hex }) {
+        return await signPayload({
+          payload: parameters.hash,
+          walletAccount: account,
+        })
+      }
+
+      return {
+        address,
+        sign,
+        signTransaction: async (transaction: unknown) =>
+          await privySignTransaction({ sign, transaction }),
+        source: 'privy',
+        type: 'local',
+      } satisfies {
+        address: Address
+        sign: (parameters: { hash: Hex.Hex }) => Promise<Hex.Hex>
+        signTransaction: (transaction: unknown) => Promise<Hex.Hex>
+        source: 'privy'
+        type: 'local'
+      }
+    }
+
     function clear() {
       restore_promise = undefined
-      walletAccounts = []
+      walletAccounts = undefined
       store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
     }
 
@@ -179,7 +196,7 @@ export function privy<const client extends privy.Client>(
 
     async function restore() {
       await Store.waitForHydration(store)
-      if (walletAccounts.length > 0) return
+      if (walletAccounts) return
       if (restore_promise) return await restore_promise
 
       restore_promise = (async () => {
@@ -197,7 +214,8 @@ export function privy<const client extends privy.Client>(
           clear()
           throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
         })
-        walletAccounts = persisted
+        walletAccounts = restored
+        const accounts = persisted
           .map((account) =>
             restored.find((walletAccount) =>
               isAddressEqual(core_Address.from(walletAccount.address), account.address),
@@ -208,7 +226,7 @@ export function privy<const client extends privy.Client>(
         // If the persisted accounts no longer exist in Privy (different user
         // signed in, wallets removed), wipe the stale state so callers see a
         // clean disconnected state instead of ghost accounts without providers.
-        if (walletAccounts.length === 0) {
+        if (accounts.length === 0) {
           clear()
           throw new ox_Provider.DisconnectedError({
             message: 'Privy session no longer matches persisted accounts.',
@@ -216,8 +234,8 @@ export function privy<const client extends privy.Client>(
         }
 
         store.setState({
-          accounts: walletAccounts.map((account) => toStoreAccount(account)),
-          activeAccount: Math.min(state.activeAccount, walletAccounts.length - 1),
+          accounts: accounts.map((account) => toStoreAccount(account)),
+          activeAccount: Math.min(state.activeAccount, accounts.length - 1),
         })
       })()
 
@@ -234,24 +252,31 @@ export function privy<const client extends privy.Client>(
       throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
     }
 
-    async function accountForSigning(address: Address | undefined) {
+    async function getTempoAccount(address: Address | undefined) {
       await restore()
       await requireSession()
 
-      const address_ = address ?? store.getState().accounts[store.getState().activeAccount]?.address
+      const state = store.getState()
+      const address_ = address ?? state.accounts[state.activeAccount]?.address
       if (!address_) throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
 
-      const account = walletAccounts.find((account) =>
-        isAddressEqual(core_Address.from(account.address), address_),
-      )
-      if (account) return account
-
-      if (walletAccounts.length === 0)
+      if (state.accounts.length === 0)
         throw new ox_Provider.DisconnectedError({
           message: 'No Privy account connected.',
         })
 
-      throw new ox_Provider.UnauthorizedError({ message: `Account "${address_}" not found.` })
+      const connected = state.accounts.some((account) => isAddressEqual(account.address, address_))
+      if (!connected)
+        throw new ox_Provider.UnauthorizedError({ message: `Account "${address_}" not found.` })
+
+      const account = (walletAccounts ?? []).find((account) =>
+        isAddressEqual(core_Address.from(account.address), address_),
+      )
+      if (account) return toTempoAccount(account)
+
+      throw new ox_Provider.DisconnectedError({
+        message: 'Privy session no longer matches persisted accounts.',
+      })
     }
 
     async function signPayload(parameters: {
@@ -303,108 +328,87 @@ export function privy<const client extends privy.Client>(
       return signature
     }
 
-    /**
-     * Builds, signs, and saves an access key authorization for the given Privy
-     * wallet. Generates a local P256 key pair when no external key is provided.
-     */
-    async function authorizeAccessKeyFor(
-      account: privy.EmbeddedWallet,
-      options: Adapter.authorizeAccessKey.Parameters,
-    ) {
-      const { expiry, limits, scopes } = options
-      const chainId = options.chainId ?? getClient().chain.id
-
-      const prepared = await (async () => {
-        if (options.publicKey || options.address) {
-          const address =
-            options.address ?? core_Address.fromPublicKey(PublicKey.from(options.publicKey!))
-          return {
-            keyAuthorization: KeyAuthorization.from({
-              address,
-              chainId: BigInt(chainId),
-              expiry,
-              limits,
-              scopes,
-              type: options.keyType ?? 'secp256k1',
-            }),
-          }
-        }
-
-        if (options.keyType && options.keyType !== 'p256')
-          throw new RpcResponse.InvalidParamsError({
-            message: `\`keyType: "${options.keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
-          })
-
-        const keyPair = await WebCryptoP256.createKeyPair()
-        const address = core_Address.fromPublicKey(PublicKey.from(keyPair.publicKey))
-        return {
-          keyAuthorization: KeyAuthorization.from({
-            address,
-            chainId: BigInt(chainId),
-            expiry,
-            limits,
-            scopes,
-            type: 'p256',
-          }),
-          keyPair,
-        }
-      })()
-
-      const signature = await signPayload({
-        payload: KeyAuthorization.getSignPayload(prepared.keyAuthorization),
-        walletAccount: account,
-      })
-      const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
-        signature: SignatureEnvelope.from(signature),
-      })
-
-      AccessKey.add({
-        account: core_Address.from(account.address),
-        authorization: keyAuthorization,
-        ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
-        store,
-      })
-
-      return KeyAuthorization.toRpc(keyAuthorization)
-    }
-
     async function signTransaction(parameters: Adapter.signTransaction.Parameters) {
-      const account = await accountForSigning(parameters.from)
+      const account = await getTempoAccount(parameters.from)
       const { feePayer, ...rest } = parameters
       const viemClient = getClient({
         chainId: parameters.chainId,
         feePayer: feePayer === true ? undefined : feePayer,
       })
       const prepared = await prepareTransactionRequest(viemClient, {
-        account: core_Address.from(account.address),
+        account: account.address,
         ...rest,
         ...(feePayer ? { feePayer: true } : {}),
         type: 'tempo',
       } as never)
-      return await signPreparedTransaction(account, prepared)
+      return await account.signTransaction(prepared)
     }
 
-    async function signPreparedTransaction(account: privy.EmbeddedWallet, prepared: unknown) {
+    async function privySignTransaction(parameters: {
+      sign: (parameters: { hash: Hex.Hex }) => Promise<Hex.Hex>
+      transaction: unknown
+    }) {
+      const { sign, transaction } = parameters
       const presign = (() => {
         if (
-          prepared &&
-          typeof prepared === 'object' &&
-          'feePayerSignature' in prepared &&
-          prepared.feePayerSignature
+          transaction &&
+          typeof transaction === 'object' &&
+          'feePayerSignature' in transaction &&
+          transaction.feePayerSignature
         )
-          return { ...prepared, feePayerSignature: null }
-        return prepared
+          return { ...transaction, feePayerSignature: null }
+        return transaction
       })()
       const unsignedTransaction = await TempoTransaction.serialize(presign as never)
 
-      const signature = await signPayload({
-        payload: keccak256(unsignedTransaction),
-        walletAccount: account,
-      })
+      const signature = await sign({ hash: keccak256(unsignedTransaction) })
       return await TempoTransaction.serialize(
-        prepared as never,
+        transaction as never,
         SignatureEnvelope.from(Signature.fromHex(signature)) as never,
       )
+    }
+
+    async function connectAccounts(parameters: {
+      addresses: privy.AccountSelection
+      authorizeAccessKey?: Adapter.authorizeAccessKey.Parameters | undefined
+      digest?: Hex.Hex | undefined
+      label?: string | undefined
+      noAccountsMessage?: string | undefined
+      personalSign?: { message: string } | undefined
+      privyClient: privy.Client
+    }) {
+      const { addresses, authorizeAccessKey, label, personalSign, privyClient } = parameters
+      await requireSession()
+      const wallets = await loadEthereumWallets(privyClient)
+      const selected = selectWalletAccounts(wallets, addresses)
+      walletAccounts = wallets
+      restore_promise = undefined
+
+      const account = selected[0] ? toTempoAccount(selected[0]) : undefined
+      if (!account && parameters.noAccountsMessage)
+        throw new ox_Provider.DisconnectedError({
+          message: parameters.noAccountsMessage,
+        })
+
+      const digest = personalSign ? hashMessage(personalSign.message) : parameters.digest
+      const keyAuthorization =
+        authorizeAccessKey && account
+          ? await AccessKey.authorize({
+              account,
+              chainId: getClient().chain.id,
+              parameters: authorizeAccessKey,
+              store,
+            })
+          : undefined
+
+      return {
+        accounts: selected.map((account, index) =>
+          toStoreAccount(account, index === 0 ? label : undefined),
+        ),
+        ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
+        ...(keyAuthorization ? { keyAuthorization } : {}),
+        signature: digest && account ? await account.sign({ hash: digest }) : undefined,
+      }
     }
 
     async function prepareTransaction(parameters: Adapter.signTransaction.Parameters) {
@@ -530,38 +534,15 @@ export function privy<const client extends privy.Client>(
                   ...(personalSign ? { personalSign } : {}),
                 },
               })
-          await requireSession()
-          walletAccounts = selectWalletAccounts(await loadEthereumWallets(privyClient), addresses)
-          // Drop any in-flight `restore()` (from a concurrent `accountForSigning`)
-          // so re-entrant `restore()` calls don't `await` a stale IIFE that would
-          // later overwrite `walletAccounts` with the intersection against
-          // now-replaced persisted accounts.
-          restore_promise = undefined
-
-          const account = walletAccounts[0]
-          if (!account)
-            throw new ox_Provider.DisconnectedError({
-              message: 'Privy returned no wallet.',
-            })
-
-          const digest = personalSign ? hashMessage(personalSign.message) : parameters.digest
-          const keyAuthorization = authorizeAccessKey
-            ? await authorizeAccessKeyFor(account, authorizeAccessKey)
-            : undefined
-
-          return {
-            accounts: walletAccounts.map((wallet, index) =>
-              toStoreAccount(wallet, index === 0 ? parameters.name : undefined),
-            ),
-            ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
-            ...(keyAuthorization ? { keyAuthorization } : {}),
-            signature: digest
-              ? await signPayload({
-                  payload: digest,
-                  walletAccount: account,
-                })
-              : undefined,
-          }
+          return await connectAccounts({
+            addresses,
+            ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
+            ...(parameters.digest ? { digest: parameters.digest } : {}),
+            label: parameters.name,
+            ...(personalSign ? { personalSign } : {}),
+            privyClient,
+            noAccountsMessage: 'Privy returned no wallet.',
+          })
         },
         async loadAccounts(parameters) {
           const { authorizeAccessKey, personalSign } =
@@ -574,56 +555,29 @@ export function privy<const client extends privy.Client>(
 
           const privyClient = await getPrivyClient()
           const addresses = await options.loadAccounts({ client: privyClient, parameters })
-          await requireSession()
-          walletAccounts = selectWalletAccounts(await loadEthereumWallets(privyClient), addresses)
-          // Drop any in-flight `restore()` (from a concurrent `accountForSigning`)
-          // so re-entrant `restore()` calls don't `await` a stale IIFE that would
-          // later overwrite `walletAccounts` with the intersection against
-          // now-replaced persisted accounts.
-          restore_promise = undefined
-
-          const digest = personalSign ? hashMessage(personalSign.message) : parameters?.digest
-          const account = walletAccounts[0]
-          const keyAuthorization =
-            authorizeAccessKey && account
-              ? await authorizeAccessKeyFor(account, authorizeAccessKey)
-              : undefined
-
-          return {
-            accounts: walletAccounts.map((account) => toStoreAccount(account)),
-            ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
-            ...(keyAuthorization ? { keyAuthorization } : {}),
-            signature:
-              digest && account
-                ? await signPayload({
-                    payload: digest,
-                    walletAccount: account,
-                  })
-                : undefined,
-          }
+          return await connectAccounts({
+            addresses,
+            ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
+            ...(parameters?.digest ? { digest: parameters.digest } : {}),
+            ...(personalSign ? { personalSign } : {}),
+            privyClient,
+          })
         },
         async authorizeAccessKey(parameters) {
-          const account = await accountForSigning(undefined)
-          const keyAuthorization = await authorizeAccessKeyFor(account, parameters)
-          return { keyAuthorization, rootAddress: core_Address.from(account.address) }
+          const account = await getTempoAccount(undefined)
+          const keyAuthorization = await AccessKey.authorize({
+            account,
+            chainId: getClient().chain.id,
+            parameters,
+            store,
+          })
+          return { keyAuthorization, rootAddress: account.address }
         },
         async revokeAccessKey(parameters) {
-          const account = await accountForSigning(parameters.address)
-          const account_tempo = {
-            address: core_Address.from(account.address),
-            source: 'privy',
-            signTransaction: async (request: unknown) =>
-              await signPreparedTransaction(account, request),
-            type: 'local',
-          } satisfies {
-            address: Address
-            signTransaction: (request: unknown) => Promise<Hex.Hex>
-            source: 'privy'
-            type: 'local'
-          }
+          const account = await getTempoAccount(parameters.address)
           try {
             await Actions.accessKey.revoke(getClient(), {
-              account: account_tempo as LocalAccount<'privy'>,
+              account: account as LocalAccount<'privy'>,
               accessKey: parameters.accessKeyAddress,
             })
           } catch (error) {
@@ -631,32 +585,32 @@ export function privy<const client extends privy.Client>(
           }
           AccessKey.remove({
             accessKey: parameters.accessKeyAddress,
-            account: core_Address.from(account.address),
+            account: account.address,
             chainId: store.getState().chainId,
             store,
           })
         },
         async signPersonalMessage(parameters) {
-          const account = await accountForSigning(parameters.address)
-          return await signPayload({
-            payload: hashMessage({ raw: parameters.data }),
-            walletAccount: account,
+          return await (
+            await getTempoAccount(parameters.address)
+          ).sign({
+            hash: hashMessage({ raw: parameters.data }),
           })
         },
         async signTransaction(parameters) {
           return await (await prepareTransaction(parameters)).sign()
         },
         async signTypedData(parameters) {
-          const account = await accountForSigning(parameters.address)
           const typedData = JSON.parse(parameters.data) as {
             domain: Record<string, unknown>
             message: Record<string, unknown>
             primaryType: string
             types: Record<string, unknown>
           }
-          return await signPayload({
-            payload: hashTypedData(typedData as never),
-            walletAccount: account,
+          return await (
+            await getTempoAccount(parameters.address)
+          ).sign({
+            hash: hashTypedData(typedData as never),
           })
         },
         async sendTransaction(parameters) {
