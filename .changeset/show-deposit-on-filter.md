@@ -1,5 +1,5 @@
 ---
-'accounts': minor
+'accounts': patch
 ---
 
-**Added:** Added an `on` filter to the `wallet_connect` `showDeposit` capability.
+Added an `on` filter to the `wallet_connect` `showDeposit` capability.
