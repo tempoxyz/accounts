@@ -118,6 +118,57 @@ export function Deposit() {
 
 ::::
 
+## Best Practices
+
+### Deposit on Connection
+
+If adding funds is part of onboarding, show the deposit picker immediately after
+the user signs in.
+
+```tsx twoslash [Connect.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
+
+export function Connect() {
+  const connect = useConnect()
+  const [connector] = useConnectors()
+
+  return (
+    <button
+      onClick={() =>
+        connect.connect({
+          connector,
+          capabilities: { // [!code focus]
+            showDeposit: true, // [!code focus]
+          }, // [!code focus]
+        })
+      }
+    >
+      Sign up
+    </button>
+  )
+}
+```
+
+:::tip
+
+Use the object form when you want to pre-fill deposit details.
+
+```tsx twoslash [Connect.tsx]
+// @noErrors
+connect.connect({
+  connector,
+  capabilities: { // [!code focus]
+    showDeposit: { // [!code focus]
+      amount: '10', // [!code focus]
+      token: 'USDC.e', // [!code focus]
+    }, // [!code focus]
+  }, // [!code focus]
+})
+```
+
+:::
+
 ## Next Steps
 
 <Cards>
