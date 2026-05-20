@@ -186,6 +186,13 @@ export function create(options: create.Options = {}): create.ReturnType {
     return url
   }
 
+  /** Converts local-only key variants to the RPC key family used for gas estimation. */
+  function toRpcKeyType(keyType: Account.Store['keyType'] | undefined) {
+    if (keyType === 'webAuthn_headless') return 'webAuthn'
+    if (keyType === 'webCrypto') return 'p256'
+    return keyType
+  }
+
   const provider = Object.assign(
     ox_Provider.from(
       {
@@ -268,6 +275,16 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const parameters = { ...decoded }
                     const chainId = parameters.chainId
                     const feePayer = resolveFeePayer(parameters.feePayer)
+                    const state = store.getState()
+                    const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+                    const account = address
+                      ? state.accounts.find(
+                          (a) => a.address.toLowerCase() === address.toLowerCase(),
+                        )
+                      : undefined
+                    const keyType =
+                      parameters.keyType ??
+                      (!parameters.keyAuthorization ? toRpcKeyType(account?.keyType) : undefined)
 
                     type FillParams = z.output<typeof Rpc.transactionRequest> & {
                       keyAuthorization?: unknown
@@ -278,6 +295,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         ...params,
                         chainId: params.chainId ?? client.chain?.id,
                         ...(feePayer ? { feePayer: true } : {}),
+                        ...(keyType ? { keyType } : {}),
                       }
                       const formatter = client.chain?.formatters?.transactionRequest
                       const formatted =
@@ -293,9 +311,6 @@ export function create(options: create.Options = {}): create.ReturnType {
                     // Inject pending keyAuthorization so the node accounts for
                     // key authorization gas during estimation.
                     if (!parameters.keyAuthorization) {
-                      const state = store.getState()
-                      const address =
-                        parameters.from ?? state.accounts[state.activeAccount]?.address
                       if (address) {
                         const calls =
                           parameters.calls ??
