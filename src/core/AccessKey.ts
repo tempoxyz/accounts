@@ -90,6 +90,8 @@ type StatusQuery = {
 type SelectQuery = {
   /** Root account address. */
   account: Address.Address
+  /** Specific access key address to select. */
+  accessKey?: Address.Address | undefined
   /** Calls to match against access key scopes. */
   calls?: readonly Call[] | undefined
   /** Chain ID the access key must be authorized on. */
@@ -305,9 +307,9 @@ export async function getStatus(options: StatusQuery): Promise<Status> {
 
 /** Selects a locally-signable access key for an intent. */
 export async function select(options: SelectQuery): Promise<Selection | undefined> {
-  const { account, calls, chainId, client, store } = options
+  const { accessKey, account, calls, chainId, client, store } = options
   const now = options.now ?? Date.now() / 1000
-  const records = list({ account, chainId, store })
+  const records = list({ account, ...(accessKey ? { accessKey } : {}), chainId, store })
 
   for (const record of records) {
     if (!scopesMatch(record, { calls })) continue

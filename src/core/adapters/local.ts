@@ -48,6 +48,7 @@ export function local(options: local.Options): Adapter.Adapter {
       const transaction = address
         ? await AccessKeyTransaction.create({
             address,
+            accessKey: parameters.keyId,
             calls: parameters.calls,
             chainId: parameters.chainId ?? state.chainId,
             client,
@@ -57,7 +58,9 @@ export function local(options: local.Options): Adapter.Adapter {
       if (transaction) {
         try {
           return await transaction.prepare(request)
-        } catch {}
+        } catch (error) {
+          if (parameters.keyId) throw error
+        }
       }
 
       const account = getAccount({

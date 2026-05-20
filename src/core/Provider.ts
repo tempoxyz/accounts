@@ -309,6 +309,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                             : undefined)
                         const transaction = await AccessKeyTransaction.create({
                           address,
+                          accessKey: parameters.keyId,
                           calls,
                           chainId: parameters.chainId ?? state.chainId,
                           client,
@@ -322,7 +323,8 @@ export function create(options: create.Options = {}): create.ReturnType {
                               from: parameters.from ?? address,
                               ...(feePayer ? { feePayer: true } : {}),
                             })
-                          } catch {
+                          } catch (error) {
+                            if (parameters.keyId) throw error
                             return await fill(parameters)
                           }
                       }

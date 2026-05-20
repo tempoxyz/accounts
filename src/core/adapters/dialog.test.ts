@@ -253,6 +253,48 @@ describe('dialog', () => {
     expect(lookups).toMatchInlineSnapshot(`[]`)
   })
 
+  test('error: explicit keyId failures do not fall through to dialog', async () => {
+    const storage = Storage.memory()
+    const store = Store.create({ chainId: tempoLocalnet.id, storage })
+    vi.spyOn(AccessKeyTransaction, 'create').mockResolvedValue({
+      fill: async () => ({ capabilities: { sponsored: false }, tx: {} }),
+      prepare: async () => {
+        throw new Error('explicit key unavailable')
+      },
+    } as never)
+    const adapter = dialog({ dialog: Dialog.noop() })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store,
+    })
+
+    await expect(
+      adapter.actions.sendTransaction(
+        {
+          calls: [{ data: '0x12345678', to: recipient }],
+          chainId: 1,
+          from: address,
+          keyId: recipient,
+        },
+        {
+          method: 'eth_sendTransaction',
+          params: [
+            {
+              calls: [{ data: '0x12345678' as const, to: recipient }],
+              chainId: '0x1' as const,
+              from: address,
+              keyId: recipient,
+            },
+          ] as const,
+        },
+      ),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: explicit key unavailable]`)
+    expect(store.getState().requestQueue).toMatchInlineSnapshot(`[]`)
+  })
+
   test('behavior: revokeAccessKey clears the forwarded key from local state', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })

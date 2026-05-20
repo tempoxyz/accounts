@@ -418,6 +418,7 @@ export function privy<const client extends privy.Client>(
       const transaction = address
         ? await AccessKeyTransaction.create({
             address,
+            accessKey: parameters.keyId,
             calls: parameters.calls,
             chainId: parameters.chainId ?? state.chainId,
             client: viemClient,
@@ -431,7 +432,9 @@ export function privy<const client extends privy.Client>(
             ...rest,
             ...(feePayer ? { feePayer: true } : {}),
           })
-        } catch {}
+        } catch (error) {
+          if (parameters.keyId) throw error
+        }
       }
 
       async function sign() {
