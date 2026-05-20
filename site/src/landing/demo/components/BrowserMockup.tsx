@@ -127,7 +127,7 @@ export function BrowserMockup({
             <button
               type="button"
               onClick={onDisconnect}
-              className="text-[11px] text-foreground-muted outline-none transition-colors duration-150 hover:text-foreground focus-visible:text-foreground"
+              className="text-[11px] text-foreground-muted outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 hover:text-foreground focus-visible:text-foreground"
             >
               Disconnect
             </button>
@@ -149,7 +149,7 @@ export function BrowserMockup({
             type="button"
             aria-expanded={mobileNavOpen}
             onClick={() => setMobileNavOpen((v) => !v)}
-            className="flex w-full items-center justify-between gap-3 border-t border-panel-border bg-background px-5 py-4 text-left text-foreground outline-none"
+            className="flex w-full items-center justify-between gap-3 border-t border-panel-border bg-background px-5 py-4 text-left text-foreground outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2"
           >
             <div className="flex items-baseline gap-3">
               <span
@@ -180,7 +180,7 @@ export function BrowserMockup({
                       onChangeDemo(d);
                       setMobileNavOpen(false);
                     }}
-                    className={`flex items-center justify-between gap-3 border-b border-panel-border px-5 py-3.5 text-left outline-none last:border-b-0 ${active ? "bg-foreground/[0.04] text-foreground" : "text-foreground-muted"}`}
+                    className={`flex items-center justify-between gap-3 border-b border-panel-border px-5 py-3.5 text-left outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 last:border-b-0 ${active ? "bg-foreground/[0.04] text-foreground" : "text-foreground-muted"}`}
                   >
                     <div className="flex items-baseline gap-3">
                       <span
@@ -208,7 +208,7 @@ export function BrowserMockup({
                 key={d}
                 type="button"
                 onClick={() => onChangeDemo(d)}
-                className={`group flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none transition-colors duration-150 last:border-b-0 ${active ? "bg-background text-foreground" : "text-foreground-muted"}`}
+                className={`group flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 last:border-b-0 ${active ? "bg-background text-foreground" : "text-foreground-muted"}`}
               >
                 <div className="flex min-w-0 items-baseline gap-3">
                   <span

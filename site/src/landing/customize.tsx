@@ -230,7 +230,7 @@ function Cta({
   return (
     <button
       type="button"
-      className={`grid h-9 place-items-center text-[11.336px] tracking-[0.1134px] outline-none transition-opacity hover:opacity-90 focus-visible:opacity-90 ${full ? "w-full" : "w-[313px] self-center"}`}
+      className={`grid h-9 place-items-center text-[11.336px] tracking-[0.1134px] outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 focus-visible:opacity-90 ${full ? "w-full" : "w-[313px] self-center"}`}
       style={{
         background: palette.buttonBg,
         color: palette.buttonText,
@@ -467,7 +467,7 @@ function ThemeSwitcher({
             key={p}
             type="button"
             onClick={() => onChange(p)}
-            className={`flex items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none transition-colors duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
+            className={`flex items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
           >
             {p}
           </button>
@@ -506,7 +506,7 @@ function CustomThemeToolbar({
                 onClick={() => onChange({ ...theme, accent: a.color })}
                 aria-label={a.label}
                 aria-pressed={active}
-                className="grid size-5 place-items-center rounded-full outline-none transition-transform hover:scale-110 focus-visible:scale-110"
+                className="grid size-5 place-items-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-transform hover:scale-110 focus-visible:scale-110"
                 style={{
                   background: a.color,
                   boxShadow: active
@@ -552,7 +552,7 @@ function CustomThemeToolbar({
                 type="button"
                 onClick={() => onChange({ ...theme, radius: r.id })}
                 aria-pressed={active}
-                className={`flex items-center justify-center border px-2 py-1 font-mono text-[12px] outline-none transition-colors duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
+                className={`flex items-center justify-center border px-2 py-1 font-mono text-[12px] outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
               >
                 {r.label}
               </button>
@@ -577,7 +577,7 @@ function CustomThemeToolbar({
                 type="button"
                 onClick={() => onChange({ ...theme, scheme: s })}
                 aria-pressed={active}
-                className={`flex items-center justify-center border px-2 py-1 font-mono text-[12px] capitalize outline-none transition-colors duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
+                className={`flex items-center justify-center border px-2 py-1 font-mono text-[12px] capitalize outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
               >
                 {s}
               </button>
