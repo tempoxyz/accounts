@@ -490,6 +490,30 @@ describe('privy', () => {
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: failed empty createAccount selection does not poison silent restore cache', async () => {
+    const { adapter, store } = setup({ createAddresses: [] })
+    store.setState({ accounts: [{ address: other }], activeAccount: 0 })
+
+    await expect(
+      adapter.actions.createAccount(
+        { digest: '0x1234', name: 'Ada' },
+        { method: 'wallet_connect', params: undefined },
+      ),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Provider.DisconnectedError: Privy returned no wallet.]`,
+    )
+
+    await expect(
+      adapter.actions.signPersonalMessage(
+        { address: other, data: '0x68656c6c6f' },
+        { method: 'personal_sign', params: ['0x68656c6c6f', other] },
+      ),
+    ).rejects.toMatchInlineSnapshot(
+      '[Provider.DisconnectedError: Privy session no longer matches persisted accounts.]',
+    )
+    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+  })
+
   test('error: silent restore rejects non-hex secp256k1_sign results', async () => {
     const { adapter, store } = setup({ signResult: 'not-hex' })
     store.setState({ accounts: [{ address }], activeAccount: 0 })

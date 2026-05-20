@@ -381,8 +381,6 @@ export function privy<const client extends privy.Client>(
       await requireSession()
       const wallets = await loadEthereumWallets(privyClient)
       const selected = selectWalletAccounts(wallets, addresses)
-      walletAccounts = wallets
-      restore_promise = undefined
 
       const account = selected[0] ? toTempoAccount(selected[0]) : undefined
       if (!account && parameters.noAccountsMessage)
@@ -401,13 +399,17 @@ export function privy<const client extends privy.Client>(
             })
           : undefined
 
+      const signature = digest && account ? await account.sign({ hash: digest }) : undefined
+      walletAccounts = wallets
+      restore_promise = undefined
+
       return {
         accounts: selected.map((account, index) =>
           toStoreAccount(account, index === 0 ? label : undefined),
         ),
         ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
         ...(keyAuthorization ? { keyAuthorization } : {}),
-        signature: digest && account ? await account.sign({ hash: digest }) : undefined,
+        signature,
       }
     }
 
