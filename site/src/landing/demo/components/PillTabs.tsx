@@ -18,7 +18,7 @@ export function PillTabs<T extends string>({
             key={t}
             type="button"
             onClick={() => onChange(t)}
-            className={`flex items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
+            className={`flex items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
           >
             {t}
           </button>

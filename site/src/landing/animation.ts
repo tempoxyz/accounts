@@ -4,5 +4,5 @@ import { spring } from "animejs";
 export const springs = {
   snappy: spring({ stiffness: 2000, damping: 80, mass: 1 }),
   gentle: spring({ stiffness: 800, damping: 50, mass: 1 }),
-  entrance: spring({ stiffness: 420, damping: 42, mass: 1 }),
+  entrance: spring({ stiffness: 220, damping: 26, mass: 1 }),
 } as const;

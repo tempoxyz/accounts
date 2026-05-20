@@ -123,7 +123,7 @@ function TopNav({
         style={staggerStyle}
         href="/"
         aria-label="Tempo"
-        className="grid size-12 place-items-center bg-background text-foreground"
+        className="grid size-12 place-items-center bg-background text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
       >
         <TempoLogo width={20} height={21} />
       </a>
@@ -135,7 +135,7 @@ function TopNav({
         >
           <a
             href="https://docs.tempo.xyz/accounts"
-            className="flex items-center gap-2 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-75 focus-visible:opacity-75"
+            className="flex items-center gap-2 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-75"
           >
             <DocsIcon />
             DOCS
@@ -148,7 +148,7 @@ function TopNav({
         >
           <a
             href="https://github.com/tempoxyz/accounts"
-            className="flex items-center gap-2 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-75 focus-visible:opacity-75"
+            className="flex items-center gap-2 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-75"
           >
             <GithubIcon />
             GITHUB
@@ -317,7 +317,7 @@ function HeroIntro({
               type="button"
               onClick={nextPm}
               aria-label={`Switch package manager from ${cmd.prefix}`}
-              className="relative inline-block overflow-hidden whitespace-nowrap border-0 bg-transparent p-0 text-left align-bottom outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-75 focus-visible:opacity-75"
+              className="relative inline-block overflow-hidden whitespace-nowrap border-0 bg-transparent p-0 text-left align-bottom outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-75"
               style={{
                 textAlign: "left",
                 width: `${cmd.prefix.length}ch`,
@@ -355,7 +355,7 @@ function HeroIntro({
             type="button"
             onClick={() => copyInstall(fullCommand)}
             aria-label={copiedInstall ? "Copied" : `Copy ${fullCommand}`}
-            className="grid size-[18px] place-items-center text-foreground outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-75 focus-visible:opacity-75"
+            className="grid size-[18px] place-items-center text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-75"
           >
             {copiedInstall ? (
               <svg
@@ -388,7 +388,7 @@ function HeroIntro({
       >
         <a
           href="https://docs.tempo.xyz/accounts"
-          className="flex items-center gap-1.5 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90 focus-visible:underline focus-visible:underline-offset-4"
+          className="flex items-center gap-1.5 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90"
         >
           View docs
           <svg
@@ -414,7 +414,7 @@ function HeroIntro({
           <button
             type="button"
             onClick={() => copyAgent(agentInstructions)}
-            className="flex items-center gap-1 text-[12px] text-foreground-muted outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-[color,transform] hover:text-foreground active:translate-y-px active:text-foreground focus-visible:text-foreground focus-visible:underline focus-visible:underline-offset-4"
+            className="flex items-center gap-1 text-[12px] text-foreground-muted outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[color,transform] hover:text-foreground active:translate-y-px active:text-foreground"
           >
             <AgentCopyIcon />
             Copy agent instructions
@@ -575,7 +575,7 @@ function AdapterTabs({
               type="button"
               data-adapter={t.id}
               onClick={() => setAdapter(t.id)}
-              className={`relative z-10 flex items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "text-foreground" : "text-foreground-muted"}`}
+              className={`relative z-10 flex items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "text-foreground" : "text-foreground-muted"}`}
             >
               {t.label}
             </button>
@@ -688,7 +688,7 @@ function BalancesCard({
         type="button"
         onClick={onSignIn}
         disabled={status === "running"}
-        className="flex h-11 w-full items-center justify-center gap-2 bg-cta px-4 text-[14px] text-cta-fg outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 focus-visible:opacity-90 disabled:cursor-progress disabled:opacity-80"
+        className="flex h-11 w-full items-center justify-center gap-2 bg-cta px-4 text-[14px] text-cta-fg outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 disabled:cursor-progress disabled:opacity-80"
       >
         {status === "running" ? (
           <span

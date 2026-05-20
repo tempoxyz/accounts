@@ -109,7 +109,7 @@ export default function Guides() {
             href={g.href}
             target="_blank"
             rel="noreferrer"
-            className="relative flex min-h-[200px] flex-col justify-end gap-3 overflow-hidden p-6 text-foreground outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,transform] duration-150 hover:bg-foreground/[0.025] active:translate-y-px active:bg-foreground/[0.045] focus-visible:bg-foreground/[0.03] sm:min-h-[260px] sm:p-9"
+            className="relative flex min-h-[200px] flex-col justify-end gap-3 overflow-hidden p-6 text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,transform] duration-150 hover:bg-foreground/[0.025] active:translate-y-px active:bg-foreground/[0.045] sm:min-h-[260px] sm:p-9"
             style={cardDashStyle}
           >
             <span className="relative z-10 inline-flex">

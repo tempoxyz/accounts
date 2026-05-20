@@ -31,7 +31,7 @@ export function PayOnceBody({
         type="button"
         onClick={() => onAction()}
         disabled={status === "running"}
-        className="mt-2 flex w-full items-center justify-center bg-cta px-2.5 py-2 outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 focus-visible:opacity-90 disabled:opacity-80"
+        className="mt-2 flex w-full items-center justify-center bg-cta px-2.5 py-2 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 disabled:opacity-80"
       >
         {status === "running" ? (
           <span

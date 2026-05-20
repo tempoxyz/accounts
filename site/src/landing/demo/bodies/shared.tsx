@@ -24,7 +24,7 @@ export function PrimaryButton({
       type="button"
       onClick={onClick}
       disabled={status === "running"}
-      className={`flex h-10 items-center justify-center gap-2 bg-cta px-4 outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 focus-visible:opacity-90 disabled:opacity-80 ${className}`}
+      className={`flex h-10 items-center justify-center gap-2 bg-cta px-4 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 disabled:opacity-80 ${className}`}
     >
       {status === "running" ? (
         <span
@@ -56,7 +56,7 @@ export function SecondaryButton({
       type="button"
       onClick={onClick}
       disabled={status === "running"}
-      className={`flex h-10 items-center justify-center gap-2 bg-panel-3 px-4 outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 focus-visible:opacity-90 disabled:opacity-80 ${className}`}
+      className={`flex h-10 items-center justify-center gap-2 bg-panel-3 px-4 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 disabled:opacity-80 ${className}`}
     >
       {prefix}
       <span className="text-[14px] text-foreground">{label}</span>

@@ -69,7 +69,7 @@ export function TogglePills<const T extends string>({
               type="button"
               data-toggle={o.id}
               onClick={() => onChange(o.id)}
-              className={`relative z-10 flex items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:outline-2 focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "text-foreground" : "text-foreground-muted"}`}
+              className={`relative z-10 flex items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "text-foreground" : "text-foreground-muted"}`}
             >
               {o.label}
             </button>
