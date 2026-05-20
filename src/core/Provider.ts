@@ -14,6 +14,7 @@ import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
+import { createMppRpcClient, createMppSessionClient } from './internal/createMppClient.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Schema from './Schema.js'
 import * as Storage from './Storage.js'
@@ -1050,19 +1051,38 @@ export function create(options: create.Options = {}): create.ReturnType {
     // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
     const polyfill = polyfill_option ?? isFetchWritable()
     const getClient = ({ chainId }: { chainId?: number | undefined }) => {
+      const state = store.getState()
       const client = provider.getClient({ chainId })
-      const account = store.getState().accounts[store.getState().activeAccount]
+      const account = state.accounts[state.activeAccount]
       if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
-      return Object.assign(client, {
-        account: {
-          address: account.address,
-          type: 'json-rpc' as const,
-        },
+      // Charge/subscription methods use the provider path so access-key
+      // selection sees the actual transaction calls.
+      return createMppRpcClient({
+        account: account.address,
+        client,
       })
     }
+    const getClient_session = async ({ chainId }: { chainId?: number | undefined }) => {
+      const state = store.getState()
+      const client = provider.getClient({ chainId })
+      const account = state.accounts[state.activeAccount]
+      if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
+      // Session methods need an access-key account up front so mppx can use
+      // `account.accessKeyAddress` as the channel's authorized signer.
+      return await createMppSessionClient({
+        account: account.address,
+        chainId: chainId ?? state.chainId,
+        client,
+        store,
+      })
+    }
+    const session = mppx_tempo({ ...methodOptions, getClient: getClient_session, mode }).find(
+      (method) => method.intent === 'session',
+    )
     Mppx.create({
       methods: [
-        mppx_tempo({ ...methodOptions, getClient, mode }),
+        mppx_tempo.charge({ ...methodOptions, getClient, mode }),
+        ...(session ? [session] : []),
         mppx_tempo.subscription({ getClient }),
       ],
       polyfill,

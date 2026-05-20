@@ -9,6 +9,7 @@ import { headlessWebAuthn } from '../../test/adapters.js'
 import { accounts, chain, getClient } from '../../test/config.js'
 import { type Server, createServer } from '../../test/utils.js'
 import * as Expiry from './Expiry.js'
+import { createMppSessionClient } from './internal/createMppClient.js'
 import * as Provider from './Provider.js'
 
 const client = getClient()
@@ -152,6 +153,18 @@ describe('mppx integration', () => {
       params: [{ expiry: Expiry.days(1) }],
     })
     const key = provider.store.getState().accessKeys[0]!
+    const client_mpp = await createMppSessionClient({
+      account: address,
+      chainId: chain.id,
+      client: provider.getClient(),
+      store: provider.store,
+    })
+    const address_accessKey = (
+      client_mpp.account as { accessKeyAddress?: `0x${string}` | undefined }
+    ).accessKeyAddress
+    expect(address_accessKey?.toLowerCase() === key.address.toLowerCase()).toMatchInlineSnapshot(
+      `true`,
+    )
 
     const res = await fetch(`${server.url}/fortune`)
     expect(res.status).toMatchInlineSnapshot(`200`)
