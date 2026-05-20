@@ -462,6 +462,7 @@ export function turnkey<const client extends turnkey.Client>(
           const transaction = address
             ? await AccessKeyTransaction.create({
                 address,
+                accessKey: parameters.keyId,
                 calls: parameters.calls,
                 chainId: parameters.chainId ?? state.chainId,
                 client: viemClient,
@@ -475,7 +476,9 @@ export function turnkey<const client extends turnkey.Client>(
                 ...(feePayer ? { feePayer: true } : {}),
               })
               return await prepared.sign()
-            } catch {}
+            } catch (error) {
+              if (parameters.keyId) throw error
+            }
           }
           return await signTransaction(parameters)
         },
@@ -503,6 +506,7 @@ export function turnkey<const client extends turnkey.Client>(
           const transaction = address
             ? await AccessKeyTransaction.create({
                 address,
+                accessKey: parameters.keyId,
                 calls: parameters.calls,
                 chainId: parameters.chainId ?? state.chainId,
                 client: viemClient,
@@ -516,7 +520,9 @@ export function turnkey<const client extends turnkey.Client>(
                 ...(feePayer ? { feePayer: true } : {}),
               })
               return await prepared.send()
-            } catch {}
+            } catch (error) {
+              if (parameters.keyId) throw error
+            }
           }
           const signed = await signTransaction(parameters)
           return await viemClient.request({
@@ -535,6 +541,7 @@ export function turnkey<const client extends turnkey.Client>(
           const transaction = address
             ? await AccessKeyTransaction.create({
                 address,
+                accessKey: parameters.keyId,
                 calls: parameters.calls,
                 chainId: parameters.chainId ?? state.chainId,
                 client: viemClient,
@@ -548,7 +555,9 @@ export function turnkey<const client extends turnkey.Client>(
                 ...(feePayer ? { feePayer: true } : {}),
               })
               return await prepared.sendSync()
-            } catch {}
+            } catch (error) {
+              if (parameters.keyId) throw error
+            }
           }
           const signed = await signTransaction(parameters)
           return await viemClient.request({

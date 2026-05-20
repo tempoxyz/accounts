@@ -271,6 +271,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             parameters.from && typeof parameters.chainId !== 'undefined'
               ? await AccessKeyTransaction.create({
                   address: parameters.from,
+                  accessKey: parameters.keyId,
                   calls: parameters.calls,
                   chainId: parameters.chainId,
                   client,
@@ -285,6 +286,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               })
               return await prepared.sign()
             } catch (error) {
+              if (parameters.keyId) throw error
               console.warn('[accounts] access key sign failed, falling through to dialog:', error)
             }
           }
@@ -312,6 +314,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             parameters.from && typeof parameters.chainId !== 'undefined'
               ? await AccessKeyTransaction.create({
                   address: parameters.from,
+                  accessKey: parameters.keyId,
                   calls: parameters.calls,
                   chainId: parameters.chainId,
                   client,
@@ -326,6 +329,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               })
               return await prepared.send()
             } catch (error) {
+              if (parameters.keyId) throw error
               console.warn('[accounts] access key sign failed, falling through to dialog:', error)
             }
           }
@@ -349,6 +353,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             parameters.from && typeof parameters.chainId !== 'undefined'
               ? await AccessKeyTransaction.create({
                   address: parameters.from,
+                  accessKey: parameters.keyId,
                   calls: parameters.calls,
                   chainId: parameters.chainId,
                   client,
@@ -363,6 +368,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               })
               return await prepared.sendSync()
             } catch (error) {
+              if (parameters.keyId) throw error
               console.warn('[accounts] access key sign failed, falling through to dialog:', error)
             }
           }

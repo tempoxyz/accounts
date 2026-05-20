@@ -29,14 +29,17 @@ const removalErrorNames = new Set([
 
 /** Creates a lifecycle-aware access-key transaction when a matching key is available. */
 export async function create(options: create.Options): Promise<create.ReturnType> {
-  const { address, calls, chainId, client, store } = options
+  const { accessKey, address, calls, chainId, client, store } = options
   const selection = await AccessKey.select({
+    ...(accessKey ? { accessKey } : {}),
     account: address,
     calls,
     chainId,
     client,
     store,
   })
+  if (!selection && accessKey)
+    throw new Error(`Access key ${accessKey} is not available for account ${address}.`)
   if (!selection) return undefined
   return createTransaction({ client, selection, store })
 }
@@ -46,6 +49,8 @@ export declare namespace create {
   type Options = {
     /** Root account address. */
     address: Address.Address
+    /** Exact access key address to use for signing. */
+    accessKey?: Address.Address | undefined
     /** Calls to match against access key scopes. */
     calls?: readonly Call[] | undefined
     /** Chain ID the access key must be authorized on. */

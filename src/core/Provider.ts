@@ -1,7 +1,16 @@
 import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
-import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
+import { KeyAuthorization } from 'ox/tempo'
+import {
+  createWalletClient,
+  custom,
+  http,
+  parseUnits,
+  type Chain,
+  type Client as ViemClient,
+  type Transport,
+} from 'viem'
 import type { JsonRpcAccount } from 'viem/accounts'
 import { parseSiweMessage } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
@@ -309,6 +318,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                             : undefined)
                         const transaction = await AccessKeyTransaction.create({
                           address,
+                          accessKey: parameters.keyId,
                           calls,
                           chainId: parameters.chainId ?? state.chainId,
                           client,
@@ -322,7 +332,8 @@ export function create(options: create.Options = {}): create.ReturnType {
                               from: parameters.from ?? address,
                               ...(feePayer ? { feePayer: true } : {}),
                             })
-                          } catch {
+                          } catch (error) {
+                            if (parameters.keyId) throw error
                             return await fill(parameters)
                           }
                       }
@@ -397,7 +408,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     try {
                       assertConnected()
                       const decoded = request._decoded.params?.[0]
-                      const { calls = [], capabilities, chainId, from } = decoded ?? {}
+                      const { calls = [], capabilities, chainId, from, keyId } = decoded ?? {}
                       const sync = capabilities?.sync
                       const feePayer = resolveFeePayer(
                         capabilities?.feePayer ?? (feePayerConfig ? true : undefined),
@@ -407,6 +418,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         calls,
                         chainId,
                         from: from ?? state.accounts[state.activeAccount]?.address,
+                        ...(keyId ? { keyId } : {}),
                         ...(feePayer ? { feePayer } : {}),
                       }
                       if (!sync) {
@@ -1049,15 +1061,69 @@ export function create(options: create.Options = {}): create.ReturnType {
     // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
     // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
     const polyfill = polyfill_option ?? isFetchWritable()
+    const signers_mpp = new Map<
+      string,
+      { root: Address.Address; selection?: AccessKey.Selection | undefined }
+    >()
     const getClient = ({ chainId }: { chainId?: number | undefined }) => {
-      const client = provider.getClient({ chainId })
+      const client_base = provider.getClient({ chainId })
+      const request = client_base.request.bind(client_base) as (
+        request: unknown,
+      ) => Promise<unknown>
       const account = store.getState().accounts[store.getState().activeAccount]
       if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
-      return Object.assign(client, {
-        account: {
-          address: account.address,
-          type: 'json-rpc' as const,
-        },
+      const chainId_resolved = chainId ?? store.getState().chainId
+      const key = `${account.address.toLowerCase()}:${chainId_resolved}`
+      const signer =
+        signers_mpp.get(key) ??
+        (() => {
+          const selection = AccessKey.selectMppKey({
+            account: account.address,
+            authorizeAccessKey: options.authorizeAccessKey?.(),
+            chainId: chainId_resolved,
+            store,
+          })
+          const signer = { root: account.address, ...(selection ? { selection } : {}) }
+          signers_mpp.set(key, signer)
+          return signer
+        })()
+      return createWalletClient({
+        account: signer.selection
+          ? createMppAccount({ selection: signer.selection, store })
+          : signer.root,
+        chain: client_base.chain,
+        pollingInterval: client_base.pollingInterval,
+        transport: custom({
+          async request(parameters_request: unknown) {
+            if (!signer.selection) return await request(parameters_request)
+            if (!isTransactionRequest(parameters_request)) return await request(parameters_request)
+            const [parameters] = parameters_request.params
+            const keyType =
+              signer.selection.record.keyType === 'webCrypto'
+                ? 'p256'
+                : signer.selection.record.keyType
+            const keyAuthorization =
+              parameters_request.method === 'eth_estimateGas' &&
+              signer.selection.authorization &&
+              !parameters.keyAuthorization
+                ? {
+                    address: signer.selection.authorization.address,
+                    ...KeyAuthorization.toRpc(signer.selection.authorization),
+                  }
+                : undefined
+            return await request({
+              ...parameters_request,
+              params: [
+                {
+                  ...parameters,
+                  ...(!parameters.keyId ? { keyId: signer.selection.accessKey } : {}),
+                  ...(!parameters.keyType ? { keyType } : {}),
+                  ...(keyAuthorization ? { keyAuthorization } : {}),
+                },
+              ],
+            } as never)
+          },
+        }),
       })
     }
     Mppx.create({
@@ -1077,6 +1143,54 @@ export function create(options: create.Options = {}): create.ReturnType {
 const defaultIcon =
   'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>' as const
 const sendCallsMagic = Hash.keccak256(Hex.fromString('TEMPO_5792'))
+
+function isTransactionRequest(request: unknown): request is {
+  method:
+    | 'eth_estimateGas'
+    | 'eth_fillTransaction'
+    | 'eth_sendTransaction'
+    | 'eth_sendTransactionSync'
+    | 'eth_signTransaction'
+    | 'wallet_sendCalls'
+  params: [Record<string, unknown>]
+} {
+  if (!request || typeof request !== 'object') return false
+  const value = request as { method?: unknown; params?: unknown }
+  if (
+    value.method !== 'eth_fillTransaction' &&
+    value.method !== 'eth_estimateGas' &&
+    value.method !== 'eth_sendTransaction' &&
+    value.method !== 'eth_sendTransactionSync' &&
+    value.method !== 'eth_signTransaction' &&
+    value.method !== 'wallet_sendCalls'
+  )
+    return false
+  if (!Array.isArray(value.params)) return false
+  const parameters = value.params[0]
+  if (!parameters || typeof parameters !== 'object') return false
+  return true
+}
+
+function createMppAccount(options: {
+  selection: AccessKey.Selection
+  store: Store.Store
+}): AccessKey.Selection['account'] {
+  const { selection, store } = options
+  return {
+    ...selection.account,
+    async signTransaction(...parameters) {
+      const signed = await selection.account.signTransaction(...parameters)
+      if (selection.authorization)
+        AccessKey.markPending({
+          accessKey: selection.accessKey,
+          account: selection.record.access,
+          chainId: selection.record.chainId,
+          store,
+        })
+      return signed
+    },
+  }
+}
 
 export declare namespace create {
   type Options = {

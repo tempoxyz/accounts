@@ -257,6 +257,58 @@ describe('markPublished', () => {
   })
 })
 
+describe('selectMppKey', () => {
+  test('behavior: selects a locally signable key matching the authorization intent', async () => {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    const scopes = [
+      {
+        address: '0x0000000000000000000000000000000000000001' as const,
+        selector: 'transfer(address,uint256)',
+      },
+    ]
+    const keyAuthorization = createKeyAuthorization(accessKey.accessKeyAddress, { scopes })
+    addAuthorization({
+      address: rootAddress,
+      keyAuthorization,
+      keyPair,
+      state: 'signed',
+      store,
+    })
+
+    const result = AccessKey.selectMppKey({
+      account: rootAddress,
+      authorizeAccessKey: { keyType: 'p256', scopes },
+      chainId: 1,
+      store,
+    })
+
+    expect(result?.accessKey === accessKey.accessKeyAddress).toMatchInlineSnapshot(`true`)
+  })
+
+  test('default: does not select arbitrary keys without an authorization intent', async () => {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    addAuthorization({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(accessKey.accessKeyAddress),
+      keyPair,
+      state: 'signed',
+      store,
+    })
+
+    const result = AccessKey.selectMppKey({
+      account: rootAddress,
+      chainId: 1,
+      store,
+    })
+
+    expect(result).toMatchInlineSnapshot(`undefined`)
+  })
+})
+
 describe('create invalidation', () => {
   async function setup(options: { other?: boolean | undefined } = {}) {
     const store = createStore()
@@ -280,7 +332,7 @@ describe('create invalidation', () => {
       state: 'signed',
       store,
     })
-    return { account_other, store }
+    return { account, account_other, store }
   }
 
   test('behavior: removes matching access key for stale-key errors', async () => {
@@ -345,6 +397,41 @@ describe('create invalidation', () => {
       transaction?.fill({ chainId: 1, from: rootAddress }),
     ).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: network failed]`)
     expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
+  })
+
+  test('behavior: selects an explicit access key by address', async () => {
+    const { account_other, store } = await setup({ other: true })
+    const { client, requests } = createFillClient(account_other.accessKeyAddress)
+
+    const transaction = await AccessKeyTransaction.create({
+      accessKey: account_other.accessKeyAddress,
+      address: rootAddress,
+      chainId: 1,
+      client: client as never,
+      store,
+    })
+    await transaction?.fill({ chainId: 1, from: rootAddress })
+
+    const request = requests[0] as {
+      params: readonly [{ keyAuthorization?: { keyId?: string | undefined } | undefined }]
+    }
+    expect(request.params[0].keyAuthorization?.keyId).toBe(account_other.accessKeyAddress)
+  })
+
+  test('error: explicit access key does not fall back to another key', async () => {
+    const { store } = await setup()
+
+    await expect(
+      AccessKeyTransaction.create({
+        accessKey: '0x0000000000000000000000000000000000000099',
+        address: rootAddress,
+        chainId: 1,
+        client: createMissingClient() as never,
+        store,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Access key 0x0000000000000000000000000000000000000099 is not available for account 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266.]`,
+    )
   })
 })
 

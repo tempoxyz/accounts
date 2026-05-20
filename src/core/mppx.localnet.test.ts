@@ -67,8 +67,10 @@ describe('mppx integration', () => {
   })
 
   test('pull mode publishes a pending access key authorization', async () => {
+    const authorizeAccessKey = { expiry: Expiry.days(1) }
     const provider = Provider.create({
       adapter: headlessWebAuthn(),
+      authorizeAccessKey: () => authorizeAccessKey,
       chains: [chain],
       mpp: { mode: 'pull' },
     })
@@ -77,7 +79,7 @@ describe('mppx integration', () => {
 
     await provider.request({
       method: 'wallet_authorizeAccessKey',
-      params: [{ expiry: Expiry.days(1) }],
+      params: [authorizeAccessKey],
     })
 
     const key = provider.store.getState().accessKeys[0]!
@@ -85,6 +87,7 @@ describe('mppx integration', () => {
 
     const res = await fetch(`${server.url}/fortune`)
     expect(res.status).toBe(200)
+    expect(res.headers.get('Authorization')).toMatchInlineSnapshot(`null`)
 
     const status = await provider.getAccessKeyStatus({ accessKey: key.address })
     expect(status).toMatchInlineSnapshot(`"published"`)

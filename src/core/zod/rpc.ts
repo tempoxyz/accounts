@@ -265,6 +265,7 @@ export namespace wallet_sendCalls {
             capabilities: sendCallsCapabilities,
             chainId: z.optional(u.number()),
             from: z.optional(u.address()),
+            keyId: z.optional(u.address()),
             version: z.optional(z.string()),
           }),
         ]),

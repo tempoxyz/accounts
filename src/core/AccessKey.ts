@@ -90,6 +90,8 @@ type StatusQuery = {
 type SelectQuery = {
   /** Root account address. */
   account: Address.Address
+  /** Specific access key address to select. */
+  accessKey?: Address.Address | undefined
   /** Calls to match against access key scopes. */
   calls?: readonly Call[] | undefined
   /** Chain ID the access key must be authorized on. */
@@ -126,7 +128,7 @@ type ListQuery = {
 }
 
 /** Selected access key for an intent. */
-type Selection = {
+export type Selection = {
   /** Hydrated locally-signable access key account. */
   account: TempoAccount.AccessKeyAccount
   /** Access key address. */
@@ -305,9 +307,9 @@ export async function getStatus(options: StatusQuery): Promise<Status> {
 
 /** Selects a locally-signable access key for an intent. */
 export async function select(options: SelectQuery): Promise<Selection | undefined> {
-  const { account, calls, chainId, client, store } = options
+  const { accessKey, account, calls, chainId, client, store } = options
   const now = options.now ?? Date.now() / 1000
-  const records = list({ account, chainId, store })
+  const records = list({ account, ...(accessKey ? { accessKey } : {}), chainId, store })
 
   for (const record of records) {
     if (!scopesMatch(record, { calls })) continue
@@ -343,6 +345,57 @@ export async function select(options: SelectQuery): Promise<Selection | undefine
       ...(authorization ? { authorization } : {}),
       record,
     }
+  }
+}
+
+/** Selects a locally-signable access key to use as the MPP session signer. */
+export function selectMppKey(options: selectMppKey.Options): selectMppKey.ReturnType {
+  const { account, chainId, store } = options
+  const now = options.now ?? Date.now() / 1000
+  const records = list({ account, chainId, store })
+
+  for (const record of records) {
+    if (isExpired(record.expiry, now)) continue
+    if (!matchesAuthorization(record, options.authorizeAccessKey)) continue
+
+    const account_accessKey = hydrate(record)
+    if (!account_accessKey) continue
+
+    return {
+      account: account_accessKey,
+      accessKey: record.address,
+      ...(record.keyAuthorization ? { authorization: record.keyAuthorization } : {}),
+      record,
+    }
+  }
+}
+
+export declare namespace selectMppKey {
+  /** Options for {@link selectMppKey}. */
+  type Options = {
+    /** Root account address. */
+    account: Address.Address
+    /** Access key authorization intent used to identify MPP-compatible keys. */
+    authorizeAccessKey?: AuthorizationShape | undefined
+    /** Chain ID the access key must be authorized on. */
+    chainId: number
+    /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
+    now?: number | undefined
+    /** Reactive state store. */
+    store: Store.Store
+  }
+
+  /** Selected MPP access key, if one is available. */
+  type ReturnType = Selection | undefined
+
+  /** Access key authorization fields used for MPP signer matching. */
+  type AuthorizationShape = {
+    /** Key type requested by the app. */
+    keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
+    /** TIP-20 spending limits requested by the app. */
+    limits?: readonly KeyAuthorization.TokenLimit[] | undefined
+    /** Call scopes requested by the app. */
+    scopes?: readonly KeyAuthorization.Scope[] | undefined
   }
 }
 
@@ -479,6 +532,73 @@ function scopesMatch(
       return scope.recipients.some((address) => address.toLowerCase() === recipient.toLowerCase())
     })
   })
+}
+
+function matchesAuthorization(
+  record: AccessKey,
+  authorization: selectMppKey.AuthorizationShape | undefined,
+): boolean {
+  if (!authorization) return false
+  if (authorization.keyType && record.keyType !== authorization.keyType) return false
+  if (!limitsEqual(record.limits, authorization.limits)) return false
+  if (!scopesEqual(record.scopes, authorization.scopes)) return false
+  return true
+}
+
+function limitsEqual(
+  a: AccessKey['limits'],
+  b: selectMppKey.AuthorizationShape['limits'],
+): boolean {
+  if (!a || a.length === 0) return !b || b.length === 0
+  if (!b || a.length !== b.length) return false
+  return a.every((limit, index) => {
+    const other = b[index]
+    if (!other) return false
+    if (limit.token.toLowerCase() !== other.token.toLowerCase()) return false
+    if (limit.limit !== other.limit) return false
+    if (limit.period !== other.period) return false
+    return true
+  })
+}
+
+function scopesEqual(
+  a: AccessKey['scopes'],
+  b: selectMppKey.AuthorizationShape['scopes'],
+): boolean {
+  if (!a || a.length === 0) return !b || b.length === 0
+  if (!b || a.length !== b.length) return false
+  return a.every((scope, index) => {
+    const other = b[index]
+    if (!other) return false
+    if (scope.address.toLowerCase() !== other.address.toLowerCase()) return false
+    if (!selectorsEqual(scope.selector, other.selector)) return false
+
+    const recipients = scope.recipients
+    const recipients_other = other.recipients
+    if (!recipients || recipients.length === 0)
+      return !recipients_other || recipients_other.length === 0
+    if (!recipients_other || recipients.length !== recipients_other.length) return false
+    return recipients.every(
+      (recipient, i) => recipient.toLowerCase() === recipients_other[i]?.toLowerCase(),
+    )
+  })
+}
+
+function selectorsEqual(a: Hex.Hex | string | undefined, b: Hex.Hex | string | undefined) {
+  if (!a || !b) return a === b
+  return selectorFrom(a) === selectorFrom(b)
+}
+
+function selectorFrom(selector: Hex.Hex | string) {
+  try {
+    return (
+      selector.startsWith('0x') && selector.length === 10
+        ? selector
+        : AbiFunction.getSelector(selector)
+    ).toLowerCase()
+  } catch {
+    return selector.toLowerCase()
+  }
 }
 
 function isScope(scope: unknown): scope is NonNullable<AccessKey['scopes']>[number] {
