@@ -115,7 +115,6 @@
   --panel-edge: #2e2e2e;
   --panel-deep: #101010;
   --panel-border: #222222;
-  --message-bg: #232323;
 
   /* Tier 3 — code + syntax */
   --code-bg: #0a0a0a;
@@ -142,17 +141,17 @@
   --brand-usdt: #26a17b;
   --brand-eth: #627eea;
 
-  /* Tier 6 — customize swatches + preview palettes (theme-invariant)
-   * These describe what the SDK *previews* look like, not the marketing
-   * site chrome itself, so they keep the same value in light mode. */
-  --swatch-neutral: #71717a;
-  --swatch-blue: #3b82f6;
-  --swatch-red: #eb0000;
-  --swatch-amber: #f59e0b;
-  --swatch-green: #22c55e;
-  --swatch-purple: #a855f7;
+  /* Tier 6 — customize swatches + preview palettes. Swatches mirror Regen's
+   * accent preset tokens; preview palettes describe the SDK preview chrome,
+   * not the marketing site chrome itself. */
+  --swatch-neutral: light-dark(oklch(20.44% 0 0), oklch(94.66% 0 0));
+  --swatch-blue: oklch(47.13% 0.1983 258.78);
+  --swatch-red: light-dark(oklch(58% 0.17 18), oklch(54% 0.145 18));
+  --swatch-amber: light-dark(oklch(81.87% 0.1969 76.46), oklch(72% 0.165 76.46));
+  --swatch-green: light-dark(oklch(73% 0.125 147), oklch(64% 0.115 147));
+  --swatch-purple: light-dark(oklch(57% 0.21 288), oklch(52% 0.19 288));
 
-  --preview-dark-bg: #141414;
+  --preview-dark-bg: #0d0d0d;
   --preview-dark-border: #2e2e2e;
   --preview-dark-header: #ededed;
   --preview-dark-meta: #a1a1a1;
@@ -257,7 +256,6 @@
   --panel-edge: #d4d4d4;
   --panel-deep: #f9f9f9;
   --panel-border: rgba(0, 0, 0, 0.1);
-  --message-bg: #eeeeee;
 
   /* Tier 3 — code + syntax (GitHub-light flavoured) */
   --code-bg: #f6f8fa;
@@ -329,7 +327,6 @@
   --color-panel-edge: var(--panel-edge);
   --color-panel-deep: var(--panel-deep);
   --color-panel-border: var(--panel-border);
-  --color-message-bg: var(--message-bg);
 
   /* Tier 3 code + syntax → text-code / text-syn-red / ... */
   --color-code: var(--code-fg);
@@ -380,6 +377,17 @@
 .accounts-landing[data-theme="light"],
 :root[data-accounts-landing-theme="light"] .accounts-landing {
   color-scheme: light;
+}
+
+.accounts-landing[data-theme-transitions="disabled"],
+.accounts-landing[data-theme-transitions="disabled"] *,
+.accounts-landing[data-theme-transitions="disabled"] *::before,
+.accounts-landing[data-theme-transitions="disabled"] *::after,
+:root[data-accounts-landing-transitions="disabled"] .accounts-landing,
+:root[data-accounts-landing-transitions="disabled"] .accounts-landing *,
+:root[data-accounts-landing-transitions="disabled"] .accounts-landing *::before,
+:root[data-accounts-landing-transitions="disabled"] .accounts-landing *::after {
+  transition: none !important;
 }
 
 .accounts-landing button:not(:disabled) {

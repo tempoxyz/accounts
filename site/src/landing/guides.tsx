@@ -84,11 +84,10 @@ const GUIDES: readonly Guide[] = [
 function ArrowUpRight() {
   return (
     <svg
-      width="24"
-      height="24"
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden
+      className="size-4 sm:size-6"
     >
       <path
         d="M8 17L17 8M17 8H9M17 8V16"
@@ -112,20 +111,20 @@ export default function Guides() {
       </h2>
 
       <div
-        className="-mx-6 mt-8 grid grid-cols-1 sm:mt-12 sm:grid-cols-2 lg:grid-cols-3"
+        className="-mx-6 mt-5 grid grid-cols-1 sm:mt-12 sm:grid-cols-2 lg:grid-cols-3"
         style={frameDashStyle}
       >
         {GUIDES.map((g) => (
           <a
             key={g.title}
             href={g.href}
-            className="relative flex min-h-[200px] flex-col justify-end gap-3 overflow-hidden p-6 text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,transform] duration-150 hover:bg-foreground/[0.025] active:translate-y-px active:bg-foreground/[0.045] sm:min-h-[260px] sm:p-9"
+            className="relative flex min-h-14 items-center justify-between gap-4 overflow-hidden px-6 py-4 text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,transform] duration-150 hover:bg-foreground/[0.025] active:translate-y-px active:bg-foreground/[0.045] sm:min-h-[260px] sm:flex-col sm:items-start sm:justify-end sm:gap-3 sm:p-9"
             style={cardDashStyle}
           >
-            <span className="relative z-10 inline-flex">
+            <span className="relative z-10 order-2 inline-flex text-foreground-muted sm:order-none sm:text-foreground">
               <ArrowUpRight />
             </span>
-            <span className="relative z-10 text-[20px] leading-tight tracking-[-0.01em] sm:text-[24px]">
+            <span className="relative z-10 min-w-0 text-[16px] leading-tight sm:text-[24px]">
               {g.title}
             </span>
           </a>

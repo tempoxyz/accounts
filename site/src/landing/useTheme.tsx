@@ -17,6 +17,8 @@ export type ResolvedTheme = "light" | "dark";
 
 const STORAGE_KEY = "accounts-landing-theme";
 const DATASET_KEY = "accountsLandingTheme";
+const TRANSITIONS_DATASET_KEY = "accountsLandingTransitions";
+const TARGET_TRANSITIONS_DATASET_KEY = "themeTransitions";
 
 const isBrowser = typeof window !== "undefined";
 
@@ -110,15 +112,25 @@ export function ThemeProvider({
   }, [theme]);
 
   useLayoutEffect(() => {
-    const el = target.current;
-    if (!el) return;
-    el.dataset.theme = resolved;
-  }, [target, resolved]);
-
-  useLayoutEffect(() => {
     if (!isBrowser) return;
-    document.documentElement.dataset[DATASET_KEY] = resolved;
-  }, [resolved]);
+    const root = document.documentElement;
+    const el = target.current;
+    root.dataset[TRANSITIONS_DATASET_KEY] = "disabled";
+    if (el) el.dataset[TARGET_TRANSITIONS_DATASET_KEY] = "disabled";
+    if (el) el.dataset.theme = resolved;
+    root.dataset[DATASET_KEY] = resolved;
+
+    const frame = window.requestAnimationFrame(() => {
+      delete root.dataset[TRANSITIONS_DATASET_KEY];
+      if (el) delete el.dataset[TARGET_TRANSITIONS_DATASET_KEY];
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      delete root.dataset[TRANSITIONS_DATASET_KEY];
+      if (el) delete el.dataset[TARGET_TRANSITIONS_DATASET_KEY];
+    };
+  }, [target, resolved]);
 
   const ctx = useMemo<Ctx>(
     () => ({ theme, resolved, setTheme, cycleTheme }),

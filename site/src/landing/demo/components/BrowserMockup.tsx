@@ -53,28 +53,6 @@ function ChevronRight() {
   );
 }
 
-function ChevronDown({ open }: { open: boolean }) {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      aria-hidden
-      className="shrink-0 transition-transform duration-200 ease-out"
-      style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
-    >
-      <path
-        d="M3 5L7 9L11 5"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function DemoGuideCallout({
   guide,
   delay,
@@ -147,7 +125,7 @@ function DemoGuideCallout({
   return (
     <div
       ref={rootRef}
-      className="flex max-w-full flex-col items-start gap-2 self-start bg-message-bg px-3 py-2"
+      className="flex max-w-full flex-col items-start gap-2 self-start bg-panel-2 px-3 py-2"
       style={ready ? undefined : messageInitialStyle}
     >
       <p className="text-[14px] text-foreground sm:text-[16px]">
@@ -245,19 +223,27 @@ export function BrowserMockup({
     [initialDelay, preludeCount],
   );
   const guideDelay = bodyDelay + MESSAGE_BODY_GAP_MS;
+  const rootRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const pressedDemoRef = useRef<DemoKind | null>(null);
   const [animatedMessagesDemo, setAnimatedMessagesDemo] =
     useState<DemoKind | null>(null);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const activeIndex = DEMO_STEPS.indexOf(demo);
-  const activeStep = String(activeIndex + 1).padStart(2, "0");
-  const activeLabel = def.guide.label;
+  const previousDemo =
+    DEMO_STEPS[(activeIndex - 1 + DEMO_STEPS.length) % DEMO_STEPS.length];
+  const nextDemo = DEMO_STEPS[(activeIndex + 1) % DEMO_STEPS.length];
+  const previousIndex = previousDemo ? DEMO_STEPS.indexOf(previousDemo) : -1;
+  const nextIndex = nextDemo ? DEMO_STEPS.indexOf(nextDemo) : -1;
+  const previousStep =
+    previousIndex >= 0 ? String(previousIndex + 1).padStart(2, "0") : "";
+  const nextStep = nextIndex >= 0 ? String(nextIndex + 1).padStart(2, "0") : "";
+  const previousLabel = previousDemo ? DEMOS[previousDemo].guide.label : "";
+  const nextLabel = nextDemo ? DEMOS[nextDemo].guide.label : "";
   const messageStyle =
     animatedMessagesDemo === demo ? undefined : messageInitialStyle;
   const changeDemo = (d: DemoKind) => {
     onChangeDemo(d);
-    setMobileNavOpen(false);
+    rootRef.current?.scrollIntoView({ block: "start", inline: "nearest" });
   };
   const pressDemo = (d: DemoKind) => {
     if (pressedDemoRef.current === d) return;
@@ -310,7 +296,10 @@ export function BrowserMockup({
   }, [demo, initialDelay, preludeCount]);
 
   return (
-    <div className="relative z-10 mx-auto w-full max-w-[1089px] border border-panel-3 bg-background/75 backdrop-blur-sm">
+    <div
+      ref={rootRef}
+      className="relative z-10 mx-auto w-full max-w-[1089px] border border-panel-3 bg-background/75 backdrop-blur-sm"
+    >
       {/* URL bar — wraps to two rows on small screens so the wallet info stays visible. */}
       <div className="m-3 mb-0 flex flex-wrap items-center justify-between gap-2 bg-panel-deep p-3 sm:m-[27px] sm:gap-3">
         <div className="flex min-w-0 items-center gap-3">
@@ -348,70 +337,49 @@ export function BrowserMockup({
       {/* Body — split:
           left pane (sm+) = numbered demo nav (acts as a stepper)
           right pane = chat orchestration + bespoke demo body
-          Mobile shows the nav as a horizontal scroller via overflow-x-auto.
+          Mobile uses a compact previous/current/next stepper below the demo.
       */}
       <div className="grid min-h-[420px] grid-cols-1 sm:min-h-[510px] sm:grid-cols-[260px_1fr]">
-        {/* Mobile: dropdown trigger sits below the demo body. Expanded
-            panel floats up via absolute positioning so it doesn't push
-            the rest of the page around. */}
-        <div className="relative order-2 sm:hidden">
+        <div className="order-2 grid grid-cols-2 border-t border-panel-border bg-background sm:hidden">
           <button
             type="button"
-            aria-expanded={mobileNavOpen}
-            onClick={() => setMobileNavOpen((v) => !v)}
-            className="flex w-full items-center justify-between gap-3 border-t border-panel-border bg-background px-5 py-4 text-left text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
-          >
-            <div className="flex items-baseline gap-3">
-              <span
-                aria-hidden
-                className="font-mono text-[11px] tracking-[0.05em] text-foreground-muted"
-              >
-                {activeStep}
-              </span>
-              <span className="text-[15px]">{activeLabel}</span>
-            </div>
-            <ChevronDown open={mobileNavOpen} />
-          </button>
-          <div
-            className="absolute right-0 bottom-full left-0 z-20 overflow-hidden border-t border-panel-border bg-panel-0 transition-[max-height] duration-300 ease-out"
-            style={{
-              maxHeight: mobileNavOpen ? `${DEMO_STEPS.length * 56}px` : "0px",
+            aria-label={`Previous demo: ${previousLabel}`}
+            onClick={() => {
+              if (previousDemo) changeDemo(previousDemo);
             }}
+            className="flex min-h-14 items-center justify-start gap-3 px-4 text-left text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,color] duration-150 active:bg-foreground/[0.045] active:text-foreground"
           >
-            <div className="flex flex-col">
-              {DEMO_STEPS.map((d, i) => {
-                const active = d === demo;
-                const step = String(i + 1).padStart(2, "0");
-                const label = DEMOS[d].guide.label;
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    onPointerDown={(event) => {
-                      if (event.pointerType === "mouse" && event.button !== 0) return;
-                      pressDemo(d);
-                    }}
-                    onMouseDown={(event) => {
-                      if (event.button !== 0) return;
-                      pressDemo(d);
-                    }}
-                    onClick={() => clickDemo(d)}
-                    className={`relative flex items-center justify-between gap-3 border-b border-panel-border px-5 py-3.5 text-left outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 last:border-b-0 ${active ? "bg-foreground/[0.04] text-foreground" : "text-foreground-muted"}`}
-                  >
-                    <div className="flex items-baseline gap-3">
-                      <span
-                        aria-hidden
-                        className="font-mono text-[11px] tracking-[0.05em] text-foreground-subtle"
-                      >
-                        {step}
-                      </span>
-                      <span className="text-[15px]">{label}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+            <span aria-hidden className="rotate-180">
+              <ChevronRight />
+            </span>
+            <span className="min-w-0">
+              <span className="block font-mono text-[10px] tracking-[0.08em] text-foreground-subtle">
+                {previousStep}
+              </span>
+              <span className="block truncate text-[13px] text-foreground-muted">
+                {previousLabel}
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            aria-label={`Next demo: ${nextLabel}`}
+            onClick={() => {
+              if (nextDemo) changeDemo(nextDemo);
+            }}
+            className="flex min-h-14 items-center justify-end gap-3 border-l border-panel-border px-4 text-right text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,color] duration-150 active:bg-foreground/[0.045] active:text-foreground"
+          >
+            <span className="min-w-0">
+              <span className="block font-mono text-[10px] tracking-[0.08em] text-foreground-subtle">
+                {nextStep}
+              </span>
+              <span className="block truncate text-[13px] text-foreground-muted">
+                {nextLabel}
+              </span>
+            </span>
+            <ChevronRight />
+          </button>
         </div>
 
         {/* Desktop: always-visible numbered stepper nav on the left */}
