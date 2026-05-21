@@ -1,9 +1,4 @@
-import * as React from 'react'
 import { type Config, defineConfig, McpSource } from 'vocs/config'
-
-// Resolves the landing page theme before hydration so the first paint
-// matches the user's stored / system preference. Mirrors `useTheme.tsx`.
-const landingThemeBootstrap = `try{var t=localStorage.getItem("accounts-landing-theme");var r=(t==="light"||t==="dark")?t:(window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark");document.documentElement.dataset.accountsLandingTheme=r;}catch(e){}`
 
 const baseUrl = (() => {
   if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'production') return ''
@@ -23,9 +18,6 @@ const config: Config = defineConfig({
     link: 'https://github.com/tempoxyz/accounts/edit/main/site/src/pages/:path',
     text: 'Suggest changes to this page',
   },
-  head: React.createElement('script', {
-    dangerouslySetInnerHTML: { __html: landingThemeBootstrap },
-  }),
   mcp: {
     enabled: true,
     sources: [
