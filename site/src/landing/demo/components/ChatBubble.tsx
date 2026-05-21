@@ -12,7 +12,7 @@ export function ChatBubble({
   return (
     <div
       data-demo-message
-      className="max-w-full bg-panel-2 px-3 py-2"
+      className="max-w-full bg-message-bg px-3 py-2"
       style={style}
     >
       <p className="text-[14px] break-words text-foreground sm:text-[16px] sm:whitespace-nowrap">

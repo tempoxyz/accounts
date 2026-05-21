@@ -147,7 +147,7 @@ function DemoGuideCallout({
   return (
     <div
       ref={rootRef}
-      className="flex max-w-full flex-col items-start gap-2 self-start bg-panel-2 px-3 py-2"
+      className="flex max-w-full flex-col items-start gap-2 self-start bg-message-bg px-3 py-2"
       style={ready ? undefined : messageInitialStyle}
     >
       <p className="text-[14px] text-foreground sm:text-[16px]">

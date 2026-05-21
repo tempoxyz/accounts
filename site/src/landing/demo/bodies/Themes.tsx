@@ -30,17 +30,17 @@ export function ThemesBody({ delay }: DemoBodyProps) {
   const preview =
     scheme === "light"
       ? {
-          bg: "#ffffff",
-          panel: "#f4f4f5",
-          text: "#18181b",
-          muted: "#71717a",
+          bg: "var(--preview-light-bg)",
+          border: "var(--preview-light-border)",
+          text: "var(--preview-light-header)",
+          muted: "var(--preview-light-meta)",
           buttonText: "#ffffff",
         }
       : {
-          bg: "#18181b",
-          panel: "#27272a",
-          text: "#fafafa",
-          muted: "#a1a1aa",
+          bg: "var(--preview-dark-bg)",
+          border: "var(--preview-dark-border)",
+          text: "var(--preview-dark-header)",
+          muted: "var(--preview-dark-meta)",
           buttonText: "#ffffff",
         };
 
@@ -58,9 +58,10 @@ export function ThemesBody({ delay }: DemoBodyProps) {
       </div>
 
       <div
-        className="flex flex-col gap-4 p-4"
+        className="flex flex-col gap-4 border p-4"
         style={{
           background: preview.bg,
+          borderColor: preview.border,
           color: preview.text,
           borderRadius: radius.value,
         }}
@@ -97,54 +98,12 @@ export function ThemesBody({ delay }: DemoBodyProps) {
       </div>
 
       <div className="grid gap-3">
-        <div className="flex flex-col gap-2">
-          <p className="font-mono text-[11px] tracking-[0.08em] text-foreground-subtle uppercase">
-            Accent
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {ACCENTS.map((item) => {
-              const active = item.id === accent.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  aria-label={item.label}
-                  aria-pressed={active}
-                  onClick={() => setAccent(item)}
-                  className={`size-7 border outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 active:translate-y-px ${active ? "border-foreground" : "border-panel-edge"}`}
-                  style={{ background: item.color }}
-                />
-              );
-            })}
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="flex flex-col gap-2">
-            <p className="font-mono text-[11px] tracking-[0.08em] text-foreground-subtle uppercase">
-              Radius
-            </p>
-            <div className="flex gap-1">
-              {RADII.map((item) => {
-                const active = item.id === radius.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setRadius(item)}
-                    className={`shrink-0 bg-panel-3 px-2 py-1.5 font-mono text-[11px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 active:translate-y-px ${active ? "text-foreground" : "text-foreground-muted"}`}
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
+        <div className="grid grid-cols-[auto_1fr] gap-3">
+          <div className="min-w-[104px] flex flex-col gap-2">
             <p className="font-mono text-[11px] tracking-[0.08em] text-foreground-subtle uppercase">
               Scheme
             </p>
-            <div className="flex gap-1">
+            <div className="grid grid-cols-2 gap-1">
               {SCHEMES.map((item) => {
                 const active = item === scheme;
                 return (
@@ -153,13 +112,55 @@ export function ThemesBody({ delay }: DemoBodyProps) {
                     type="button"
                     aria-pressed={active}
                     onClick={() => setScheme(item)}
-                    className={`bg-panel-3 px-2 py-1.5 font-mono text-[11px] capitalize outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 active:translate-y-px ${active ? "text-foreground" : "text-foreground-muted"}`}
+                    className={`border px-2 py-1.5 font-mono text-[11px] capitalize outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 active:translate-y-px ${active ? "border-foreground bg-foreground text-background" : "border-panel-edge bg-panel-3 text-foreground-muted"}`}
                   >
                     {item}
                   </button>
                 );
               })}
             </div>
+          </div>
+          <div className="min-w-0 flex flex-col gap-2">
+            <p className="font-mono text-[11px] tracking-[0.08em] text-foreground-subtle uppercase">
+              Accent
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {ACCENTS.map((item) => {
+                const active = item.id === accent.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-label={item.label}
+                    aria-pressed={active}
+                    onClick={() => setAccent(item)}
+                    className={`size-7 border outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 active:translate-y-px ${active ? "border-foreground" : "border-panel-edge"}`}
+                    style={{ background: item.color }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="min-w-0 flex flex-col gap-2">
+          <p className="font-mono text-[11px] tracking-[0.08em] text-foreground-subtle uppercase">
+            Radius
+          </p>
+          <div className="grid grid-cols-4 gap-1">
+            {RADII.map((item) => {
+              const active = item.id === radius.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setRadius(item)}
+                  className={`min-w-0 bg-panel-3 px-2 py-1.5 font-mono text-[11px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 active:translate-y-px ${active ? "text-foreground" : "text-foreground-muted"}`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

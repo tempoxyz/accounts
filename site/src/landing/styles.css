@@ -115,6 +115,7 @@
   --panel-edge: #2e2e2e;
   --panel-deep: #101010;
   --panel-border: #222222;
+  --message-bg: #232323;
 
   /* Tier 3 — code + syntax */
   --code-bg: #0a0a0a;
@@ -256,6 +257,7 @@
   --panel-edge: #d4d4d4;
   --panel-deep: #f9f9f9;
   --panel-border: rgba(0, 0, 0, 0.1);
+  --message-bg: #eeeeee;
 
   /* Tier 3 — code + syntax (GitHub-light flavoured) */
   --code-bg: #f6f8fa;
@@ -327,6 +329,7 @@
   --color-panel-edge: var(--panel-edge);
   --color-panel-deep: var(--panel-deep);
   --color-panel-border: var(--panel-border);
+  --color-message-bg: var(--message-bg);
 
   /* Tier 3 code + syntax → text-code / text-syn-red / ... */
   --color-code: var(--code-fg);

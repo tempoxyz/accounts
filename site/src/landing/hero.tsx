@@ -140,7 +140,7 @@ function TopNav({
         style={navStaggerStyles[0]}
         href="/"
         aria-label="Tempo"
-        className="grid size-12 place-items-center bg-background text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
+        className="grid size-12 place-items-center bg-background text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-transform active:translate-y-px"
       >
         <TempoLogo width={20} height={21} />
       </a>
@@ -152,7 +152,7 @@ function TopNav({
         >
           <a
             href="https://docs.tempo.xyz/accounts"
-            className="flex items-center gap-2 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-75"
+            className="flex items-center gap-2 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90"
           >
             <DocsIcon />
             DOCS
@@ -165,7 +165,7 @@ function TopNav({
         >
           <a
             href="https://github.com/tempoxyz/accounts"
-            className="flex items-center gap-2 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-75"
+            className="flex items-center gap-2 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90"
           >
             <GithubIcon />
             GITHUB

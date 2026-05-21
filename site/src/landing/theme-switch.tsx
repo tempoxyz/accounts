@@ -57,7 +57,7 @@ export function ThemeSwitch({ className }: { className?: string }) {
       onClick={() => setTheme(next)}
       aria-label={`Switch to ${next} mode`}
       title={`Switch to ${next} mode`}
-      className={`grid size-7 place-items-center text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-75 ${className ?? ""}`}
+      className={`grid size-7 place-items-center text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90 ${className ?? ""}`}
     >
       {resolved === "light" ? <SunIcon /> : <MoonIcon />}
     </button>
