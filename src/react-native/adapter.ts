@@ -226,10 +226,11 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       account?: Adapter.authorizeAccessKey.ReturnType['rootAddress'] | undefined
       authorizeAccessKey: Adapter.authorizeAccessKey.Parameters | undefined
       method: 'wallet_authorizeAccessKey' | 'wallet_connect'
+      personalSign?: Adapter.loadAccounts.Parameters['personalSign'] | undefined
       showDeposit?: Adapter.createAccount.Parameters['showDeposit'] | undefined
     }) {
       const { host, redirectUri, open = defaultOpen } = options
-      const { account, authorizeAccessKey, method, showDeposit } = request
+      const { account, authorizeAccessKey, method, personalSign, showDeposit } = request
 
       const managedKey =
         authorizeAccessKey && !authorizeAccessKey.publicKey && !authorizeAccessKey.address
@@ -261,6 +262,7 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
         ...(authorizeAccessKey?.limits
           ? { limits: authorizeAccessKey.limits.map((l) => ({ ...l, limit: String(l.limit) })) }
           : {}),
+        ...(personalSign ? { personalSign } : {}),
         pubKey: publicKey,
         ...(showDeposit !== undefined ? { showDeposit } : {}),
         state,
@@ -283,6 +285,8 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       if (!keyAuthorization.signature)
         throw new Error('Key authorization in callback is missing a signature.')
       const signed = keyAuthorization as KeyAuthorization.Signed
+      const signature = params.get('signature') as Hex.Hex | null
+      const personalSignMessage = params.get('personalSignMessage')
 
       if (managedKey)
         await saveManagedKey(accountAddress as core_Address.Address, managedKey, signed)
@@ -290,6 +294,8 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       return {
         accountAddress: accountAddress as core_Address.Address,
         keyAuthorization: signed,
+        ...(personalSignMessage ? { personalSign: { message: personalSignMessage } } : {}),
+        ...(signature ? { signature } : {}),
       }
     }
 
@@ -324,6 +330,7 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
           const result = await authorize({
             authorizeAccessKey: parameters?.authorizeAccessKey,
             method: 'wallet_connect',
+            ...(parameters?.personalSign ? { personalSign: parameters.personalSign } : {}),
             ...(parameters?.showDeposit !== undefined
               ? { showDeposit: parameters.showDeposit }
               : {}),
@@ -337,6 +344,8 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
               },
             ],
             keyAuthorization: KeyAuthorization.toRpc(result.keyAuthorization),
+            ...(result.personalSign ? { personalSign: result.personalSign } : {}),
+            ...(result.signature ? { signature: result.signature } : {}),
           }
         },
         async loadAccounts(parameters) {
@@ -348,6 +357,7 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
           const result = await authorize({
             authorizeAccessKey: parameters?.authorizeAccessKey,
             method: 'wallet_connect',
+            ...(parameters?.personalSign ? { personalSign: parameters.personalSign } : {}),
             ...(parameters?.showDeposit !== undefined
               ? { showDeposit: parameters.showDeposit }
               : {}),
@@ -361,6 +371,8 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
               },
             ],
             keyAuthorization: KeyAuthorization.toRpc(result.keyAuthorization),
+            ...(result.personalSign ? { personalSign: result.personalSign } : {}),
+            ...(result.signature ? { signature: result.signature } : {}),
           }
         },
         async revokeAccessKey() {
@@ -508,19 +520,19 @@ function buildAuthUrl(
     expiry?: number | undefined
     keyType?: string | undefined
     limits?: readonly { token: string; limit: string }[] | undefined
+    personalSign?: { message: string } | undefined
     pubKey: Hex.Hex
     showDeposit?: Adapter.createAccount.Parameters['showDeposit'] | undefined
     state: string
   },
 ): string {
-  // TODO: use the new host
-  // const url = new URL('/remote/auth/mobile', host)
-  const url = new URL('/mobile-auth', host)
+  const url = new URL('/remote/auth/mobile', host)
   url.searchParams.set('pubKey', params.pubKey)
   if (params.keyType) url.searchParams.set('keyType', params.keyType)
   url.searchParams.set('chainId', String(params.chainId))
   if (typeof params.expiry !== 'undefined') url.searchParams.set('expiry', String(params.expiry))
   if (params.limits) url.searchParams.set('limits', JSON.stringify(params.limits))
+  if (params.personalSign) url.searchParams.set('personalSign', JSON.stringify(params.personalSign))
   if (params.showDeposit === true) url.searchParams.set('showDeposit', 'true')
   else if (params.showDeposit)
     url.searchParams.set('showDeposit', JSON.stringify(params.showDeposit))
