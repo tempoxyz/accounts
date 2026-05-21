@@ -1,6 +1,8 @@
 auditConfig:
   ignoreGhsas:
     - GHSA-rmmr-r34h-pfm5 # affected versions have been removed from npm.
+    - GHSA-w5hq-g745-h8pq # transitive Expo xcode uuid usage; no direct runtime exposure.
+    - GHSA-qjx8-664m-686j # transitive Privy js-cookie usage in playground.
 
 allowBuilds:
   cloudflared: true

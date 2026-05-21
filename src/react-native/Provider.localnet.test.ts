@@ -229,7 +229,7 @@ describe('create', () => {
     })
 
     expect(new URL(browser.urls()[0]!).searchParams.get('personalSign')).toMatchInlineSnapshot(
-      `"{\\"message\\":\\"hello\\"}"`,
+      `"{"message":"hello"}"`,
     )
     expect(result.accounts[0]!.capabilities.personalSign).toEqual({ message: 'hello' })
     expect(result.accounts[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
