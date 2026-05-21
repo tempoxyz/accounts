@@ -29,7 +29,7 @@ catalog:
   '@types/react-dom': ^19.2.3
   '@vitejs/devtools': ^0.1.15
   '@vitejs/plugin-react': ^5.2.0
-  '@wagmi/core': ^3.4.12
+  '@wagmi/core': ^3.4.11
   hono: ^4.12.18
   mppx: ^0.6.27
   ox: ~0.14.18
