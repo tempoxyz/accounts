@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { InteractiveQr } from "../../sections/InteractiveQr";
 import { shorten } from "../sdk";
-import { bodyAnimation } from "./shared";
+import { useBodyAnimation } from "./shared";
 
 /**
  * Pre-connect placeholder address. The Tempo wallet exposes a single
@@ -22,6 +22,7 @@ export function ReceiveBody({
   address: `0x${string}`;
   delay: number;
 }) {
+  const body = useBodyAnimation(delay);
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -49,8 +50,9 @@ export function ReceiveBody({
 
   return (
     <div
+      ref={body.ref}
       className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6"
-      style={bodyAnimation(delay)}
+      style={body.style}
     >
       <div className="flex flex-col gap-1.5">
         <p className="text-[13px] text-foreground-muted">Receive into</p>

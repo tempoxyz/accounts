@@ -1,24 +1,11 @@
 "use client";
 
 import { stagger, waapi, type WAAPIAnimation } from "animejs";
-import {
-  type CSSProperties,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { springs } from "./animation";
 import AsciiBackground from "./ascii-bg";
 import { defaultAuthorizeAccessKey, isTrustedHost } from "./demo/sdk";
-import {
-  AgentCopyIcon,
-  CopyIcon,
-  DocsIcon,
-  GithubIcon,
-  TempoLogo,
-} from "./icons";
-import { springs } from "./animation";
+import { AgentCopyIcon, CopyIcon, DocsIcon, GithubIcon, TempoLogo } from "./icons";
 import { useTempoSession } from "./sections/useTempoSession";
 import { ThemeSwitch } from "./theme-switch";
 
@@ -28,18 +15,48 @@ type Adapter = "tempoAuth" | "webAuth" | "privy" | "turnkey";
 const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
 const PM_ROTATE_MS = 1800;
 const HERO_ENTRANCE_STAGGER_MS = 28;
+const HERO_NAV_DELAY_MS = 120;
 const heroEntranceInitialStyle = {
   opacity: 0,
   translate: "0 10px",
   willChange: "opacity, translate",
 } satisfies CSSProperties;
+const heroNavInitialStyle = {
+  opacity: 0,
+  translate: "0 -46px",
+  willChange: "opacity, translate",
+} satisfies CSSProperties;
 
-const installCommand: Record<PackageManager, { prefix: string; pkg: string }> =
-  {
-    npm: { prefix: "npm i", pkg: "accounts" },
-    pnpm: { prefix: "pnpm add", pkg: "accounts" },
-    bun: { prefix: "bun add", pkg: "accounts" },
-  };
+type HeroNavFall = {
+  translate: string;
+  delay: number;
+};
+
+const HERO_NAV_DEFAULT_FALL: HeroNavFall = {
+  translate: "0 -46px",
+  delay: 0,
+};
+
+const HERO_NAV_FALLS: readonly HeroNavFall[] = [
+  { translate: "0 -12px", delay: 60 },
+  { translate: "0 -12px", delay: 0 },
+  { translate: "0 -12px", delay: 120 },
+  { translate: "0 -12px", delay: 180 },
+];
+
+function heroNavStyle(fall: HeroNavFall | undefined) {
+  if (!fall) fall = HERO_NAV_DEFAULT_FALL;
+  return {
+    ...heroNavInitialStyle,
+    translate: fall.translate,
+  } satisfies CSSProperties;
+}
+
+const installCommand: Record<PackageManager, { prefix: string; pkg: string }> = {
+  npm: { prefix: "npm i", pkg: "accounts" },
+  pnpm: { prefix: "pnpm add", pkg: "accounts" },
+  bun: { prefix: "bun add", pkg: "accounts" },
+};
 
 const PACKAGE_MANAGERS: PackageManager[] = ["npm", "pnpm", "bun"];
 
@@ -112,15 +129,15 @@ function useCopy() {
 }
 
 function TopNav({
-  staggerStyle,
+  navStaggerStyles,
 }: {
-  staggerStyle: CSSProperties | undefined;
+  navStaggerStyles: readonly (CSSProperties | undefined)[];
 }) {
   return (
     <nav className="flex items-center justify-between px-6 py-6">
       <a
-        data-hero-stagger
-        style={staggerStyle}
+        data-hero-nav-stagger
+        style={navStaggerStyles[0]}
         href="/"
         aria-label="Tempo"
         className="grid size-12 place-items-center bg-background text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
@@ -129,8 +146,8 @@ function TopNav({
       </a>
       <div className="flex items-center gap-7 px-3">
         <span
-          data-hero-stagger
-          style={staggerStyle}
+          data-hero-nav-stagger
+          style={navStaggerStyles[1]}
           className="inline-flex"
         >
           <a
@@ -142,8 +159,8 @@ function TopNav({
           </a>
         </span>
         <span
-          data-hero-stagger
-          style={staggerStyle}
+          data-hero-nav-stagger
+          style={navStaggerStyles[2]}
           className="inline-flex"
         >
           <a
@@ -154,7 +171,7 @@ function TopNav({
             GITHUB
           </a>
         </span>
-        <span data-hero-stagger style={staggerStyle} className="inline-flex">
+        <span data-hero-nav-stagger style={navStaggerStyles[3]} className="inline-flex">
           <ThemeSwitch />
         </span>
       </div>
@@ -171,6 +188,9 @@ function HeroIntro({
   const [pmItems, setPmItems] = useState(() => [{ key: 0, index: 0 }]);
   const [pmPaused, setPmPaused] = useState(false);
   const [pmManual, setPmManual] = useState(false);
+  const pmTimer = useRef<number | null>(null);
+  const pmPausedRef = useRef(false);
+  const pmManualRef = useRef(false);
   const pmIndexRef = useRef(0);
   const pmKey = useRef(1);
   const activePmKey = useRef(0);
@@ -187,6 +207,12 @@ function HeroIntro({
   const cmd = installCommand[pm];
   const fullCommand = `${cmd.prefix} ${cmd.pkg}`;
 
+  const clearPmTimer = useCallback(() => {
+    if (pmTimer.current === null) return;
+    window.clearTimeout(pmTimer.current);
+    pmTimer.current = null;
+  }, []);
+
   const advancePm = useCallback(() => {
     const index = (pmIndexRef.current + 1) % PACKAGE_MANAGERS.length;
     const key = pmKey.current++;
@@ -196,16 +222,57 @@ function HeroIntro({
     setPmItems((items) => [...items, { key, index }]);
   }, []);
 
+  const schedulePmRotation = useCallback(() => {
+    clearPmTimer();
+    if (pmManualRef.current || pmPausedRef.current || document.hidden) return;
+    pmTimer.current = window.setTimeout(() => {
+      pmTimer.current = null;
+      if (pmManualRef.current || pmPausedRef.current || document.hidden) return;
+      advancePm();
+      schedulePmRotation();
+    }, PM_ROTATE_MS);
+  }, [advancePm, clearPmTimer]);
+
+  const setPmPausedValue = (paused: boolean) => {
+    pmPausedRef.current = paused;
+    setPmPaused(paused);
+    if (paused) clearPmTimer();
+  };
+
   const nextPm = () => {
+    pmManualRef.current = true;
     setPmManual(true);
+    clearPmTimer();
     advancePm();
   };
 
   useEffect(() => {
-    if (pmManual || pmPaused) return;
-    const timer = window.setInterval(advancePm, PM_ROTATE_MS);
-    return () => window.clearInterval(timer);
-  }, [advancePm, pmManual, pmPaused]);
+    pmManualRef.current = pmManual;
+    pmPausedRef.current = pmPaused;
+    schedulePmRotation();
+  }, [pmManual, pmPaused, schedulePmRotation]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      schedulePmRotation();
+    };
+    const onBlur = () => {
+      clearPmTimer();
+    };
+    const onFocus = () => {
+      schedulePmRotation();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    schedulePmRotation();
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      clearPmTimer();
+    };
+  }, [clearPmTimer, schedulePmRotation]);
 
   useLayoutEffect(() => {
     const prefix = prefixRef.current;
@@ -265,17 +332,16 @@ function HeroIntro({
   useEffect(
     () => () => {
       prefixWidthAnimation.current?.cancel();
-      for (const animation of prefixAnimations.current.values())
+      for (const animation of prefixAnimations.current.values()) {
         animation.cancel();
+      }
       prefixAnimations.current.clear();
     },
     [],
   );
 
   return (
-    <div
-      className="mx-auto flex w-full max-w-[720px] flex-col items-center gap-9 px-6 pt-12 pb-20 sm:pt-[60px]"
-    >
+    <div className="mx-auto flex w-full max-w-[720px] flex-col items-center gap-9 px-6 pt-12 pb-20 sm:pt-[60px]">
       <div className="flex flex-col items-center gap-2 text-center">
         <h1
           data-hero-stagger
@@ -289,8 +355,7 @@ function HeroIntro({
           style={staggerStyle}
           className="max-w-lg text-[16px] text-foreground-muted sm:text-xl"
         >
-          The fastest way to build stablecoin-powered apps, wallets, and agentic
-          workflows.
+          The fastest way to build stablecoin-powered apps, wallets, and agentic workflows.
         </p>
       </div>
 
@@ -301,14 +366,15 @@ function HeroIntro({
       >
         <div
           className="flex w-full items-center justify-between bg-panel-1 px-4 py-3"
-          onPointerEnter={() => setPmPaused(true)}
-          onPointerLeave={() => setPmPaused(false)}
-          onFocus={() => setPmPaused(true)}
+          onPointerEnter={() => setPmPausedValue(true)}
+          onPointerLeave={() => setPmPausedValue(false)}
+          onFocus={() => setPmPausedValue(true)}
           onBlur={(event) => {
             const next = event.relatedTarget;
-            if (next instanceof Node && event.currentTarget.contains(next))
+            if (next instanceof Node && event.currentTarget.contains(next)) {
               return;
-            setPmPaused(false);
+            }
+            setPmPausedValue(false);
           }}
         >
           <div className="flex items-baseline font-mono text-[16px]">
@@ -336,9 +402,7 @@ function HeroIntro({
                       if (el) prefixItemRefs.current.set(item.key, el);
                       else prefixItemRefs.current.delete(item.key);
                     }}
-                    aria-hidden={
-                      item.key === activePmKey.current ? undefined : true
-                    }
+                    aria-hidden={item.key === activePmKey.current ? undefined : true}
                     className="absolute top-0 left-0 text-left text-foreground-subtle"
                     style={{
                       willChange: "transform, opacity",
@@ -355,28 +419,28 @@ function HeroIntro({
             type="button"
             onClick={() => copyInstall(fullCommand)}
             aria-label={copiedInstall ? "Copied" : `Copy ${fullCommand}`}
-            className="grid size-[18px] place-items-center text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-75"
+            className="grid size-[18px] place-items-center text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90"
           >
-            {copiedInstall ? (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 18 18"
-                fill="none"
-                aria-hidden
-                className="text-foreground"
-              >
-                <path
-                  d="M3.75 9.5L7.25 13L14.25 5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            ) : (
-              <CopyIcon className="text-foreground" />
-            )}
+            {copiedInstall
+              ? (
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 18 18"
+                  fill="none"
+                  aria-hidden
+                  className="text-foreground"
+                >
+                  <path
+                    d="M3.75 9.5L7.25 13L14.25 5"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )
+              : <CopyIcon className="text-foreground" />}
           </button>
         </div>
       </div>
@@ -388,6 +452,8 @@ function HeroIntro({
       >
         <a
           href="https://docs.tempo.xyz/accounts"
+          target="_blank"
+          rel="noreferrer"
           className="flex items-center gap-1.5 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90"
         >
           View docs
@@ -421,7 +487,9 @@ function HeroIntro({
           </button>
           <span
             aria-live="polite"
-            className={`text-[12px] text-foreground-subtle transition-opacity duration-150 ${copiedAgent ? "opacity-100" : "opacity-0"}`}
+            className={`text-[12px] text-foreground-subtle transition-opacity duration-150 ${
+              copiedAgent ? "opacity-100" : "opacity-0"
+            }`}
           >
             copied
           </span>
@@ -548,12 +616,14 @@ function AdapterTabs({
       <span className="flex items-center pr-1 font-mono text-[10px] tracking-[0.18em] text-foreground-subtle uppercase">
         Adapter
       </span>
-      {/*
+      {
+        /*
         Inactive pills get the dimmer bg from the row container itself
         (`bg-panel-0`). The active pill's brighter bg + border come
         from a single floating <span> that slides between positions —
         buttons are transparent so the slide reads through them.
-      */}
+      */
+      }
       <div ref={tabsRef} className="relative flex items-center bg-panel-0">
         <span
           aria-hidden
@@ -575,7 +645,9 @@ function AdapterTabs({
               type="button"
               data-adapter={t.id}
               onClick={() => setAdapter(t.id)}
-              className={`relative z-10 flex items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "text-foreground" : "text-foreground-muted"}`}
+              className={`relative z-10 flex items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[color] duration-150 ${
+                active ? "text-foreground" : "text-foreground-muted"
+              }`}
             >
               {t.label}
             </button>
@@ -609,12 +681,11 @@ function BalancesCard({
     ETH: "var(--brand-eth)",
   };
 
-  const cta =
-    status === "running"
-      ? "Opening Tempo…"
-      : connected && address
-        ? shorten(address)
-        : "Sign in";
+  const cta = status === "running"
+    ? "Opening Tempo…"
+    : connected && address
+    ? shorten(address)
+    : "Sign in";
 
   return (
     <div className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6">
@@ -637,26 +708,26 @@ function BalancesCard({
               className="flex items-center justify-between py-1"
             >
               <div className="flex items-center gap-2">
-                {connected ? (
-                  <span
-                    aria-hidden
-                    className="grid size-[20px] shrink-0 place-items-center rounded-full text-[9px] font-semibold text-white"
-                    style={{ background: ringColors[b.sym] }}
-                  >
-                    {b.sym.slice(0, 1)}
-                  </span>
-                ) : (
-                  <span
-                    aria-hidden
-                    className="block size-[20px] shrink-0 rounded-full bg-panel-5"
-                    style={{
-                      animation: `pulseDot 1600ms ease-in-out ${i * 120}ms infinite`,
-                    }}
-                  />
-                )}
-                {connected ? (
-                  <span className="text-[13px] text-foreground">{b.sym}</span>
-                ) : (
+                {connected
+                  ? (
+                    <span
+                      aria-hidden
+                      className="grid size-[20px] shrink-0 place-items-center rounded-full text-[9px] font-semibold text-white"
+                      style={{ background: ringColors[b.sym] }}
+                    >
+                      {b.sym.slice(0, 1)}
+                    </span>
+                  )
+                  : (
+                    <span
+                      aria-hidden
+                      className="block size-[20px] shrink-0 rounded-full bg-panel-5"
+                      style={{
+                        animation: `pulseDot 1600ms ease-in-out ${i * 120}ms infinite`,
+                      }}
+                    />
+                  )}
+                {connected ? <span className="text-[13px] text-foreground">{b.sym}</span> : (
                   <span
                     aria-hidden
                     className="block h-3 w-14 bg-panel-5"
@@ -666,19 +737,21 @@ function BalancesCard({
                   />
                 )}
               </div>
-              {connected ? (
-                <span className="font-mono text-[13px] tabular-nums text-foreground">
-                  {b.value}
-                </span>
-              ) : (
-                <span
-                  aria-hidden
-                  className="block h-3 w-[46px] bg-panel-5"
-                  style={{
-                    animation: `pulseDot 1600ms ease-in-out ${i * 120 + 160}ms infinite`,
-                  }}
-                />
-              )}
+              {connected
+                ? (
+                  <span className="font-mono text-[13px] tabular-nums text-foreground">
+                    {b.value}
+                  </span>
+                )
+                : (
+                  <span
+                    aria-hidden
+                    className="block h-3 w-[46px] bg-panel-5"
+                    style={{
+                      animation: `pulseDot 1600ms ease-in-out ${i * 120 + 160}ms infinite`,
+                    }}
+                  />
+                )}
             </div>
           ))}
         </div>
@@ -690,13 +763,15 @@ function BalancesCard({
         disabled={status === "running"}
         className="flex h-11 w-full items-center justify-center gap-2 bg-cta px-4 text-[14px] text-cta-fg outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 disabled:cursor-progress disabled:opacity-80"
       >
-        {status === "running" ? (
-          <span
-            aria-hidden
-            className="size-1.5 shrink-0 rounded-full bg-cta-fg"
-            style={{ animation: "pulseDot 900ms ease-in-out infinite" }}
-          />
-        ) : null}
+        {status === "running"
+          ? (
+            <span
+              aria-hidden
+              className="size-1.5 shrink-0 rounded-full bg-cta-fg"
+              style={{ animation: "pulseDot 900ms ease-in-out infinite" }}
+            />
+          )
+          : null}
         <span>{cta}</span>
       </button>
     </div>
@@ -724,12 +799,15 @@ function DemoSplit() {
         method: "register",
         name: "Accounts SDK",
       };
-      if (isTrustedHost())
+      if (isTrustedHost()) {
         capabilities.authorizeAccessKey = defaultAuthorizeAccessKey();
-      const result = (await provider.request({
-        method: "wallet_connect",
-        params: [{ capabilities } as Record<string, unknown>],
-      } as Parameters<typeof provider.request>[0])) as {
+      }
+      const result = (await provider.request(
+        {
+          method: "wallet_connect",
+          params: [{ capabilities } as Record<string, unknown>],
+        } as Parameters<typeof provider.request>[0],
+      )) as {
         accounts?: ReadonlyArray<{ address: `0x${string}` }>;
       };
       const account = result?.accounts?.[0];
@@ -754,8 +832,7 @@ function DemoSplit() {
           className="max-w-[520px] text-[16px] text-foreground-muted sm:text-[20px]"
           style={{ animation: `fadeUp 600ms ${easeOut} 80ms both` }}
         >
-          Accounts SDK is provider-agnostic. Bring your own wallet. Keep the
-          same SDK.
+          Accounts SDK is provider-agnostic. Bring your own wallet. Keep the same SDK.
         </p>
       </div>
       <div
@@ -800,7 +877,7 @@ function DemoSplit() {
   );
 }
 
-export default function Hero() {
+export default function Hero({ children }: { children?: ReactNode }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [staggerReady, setStaggerReady] = useState(false);
 
@@ -809,7 +886,10 @@ export default function Hero() {
     if (!root) return;
 
     const items = root.querySelectorAll<HTMLElement>("[data-hero-stagger]");
-    if (items.length === 0) return;
+    const navItems = root.querySelectorAll<HTMLElement>(
+      "[data-hero-nav-stagger]",
+    );
+    if (items.length === 0 && navItems.length === 0) return;
 
     const reduced = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
@@ -819,31 +899,62 @@ export default function Hero() {
       return;
     }
 
-    let disposed = false;
-    const animation = waapi.animate(items, {
-      opacity: [0, 1],
-      translate: ["0 10px", "0 0"],
-      delay: stagger(HERO_ENTRANCE_STAGGER_MS),
-      ease: springs.entrance,
-    });
+    const animations: WAAPIAnimation[] = [];
+    if (items.length > 0) {
+      animations.push(
+        waapi.animate(items, {
+          opacity: [0, 1],
+          translate: ["0 10px", "0 0"],
+          delay: stagger(HERO_ENTRANCE_STAGGER_MS),
+          ease: springs.entrance,
+        }),
+      );
+    }
+    if (navItems.length > 0) {
+      const start = items.length * HERO_ENTRANCE_STAGGER_MS + HERO_NAV_DELAY_MS;
+      navItems.forEach((item, i) => {
+        const fall = HERO_NAV_FALLS[i] ?? HERO_NAV_DEFAULT_FALL;
+        animations.push(
+          waapi.animate(item, {
+            opacity: [0, 1],
+            translate: [fall.translate, "0 0"],
+            delay: start + fall.delay,
+            ease: springs.navEntrance,
+          }),
+        );
+      });
+    }
 
-    void animation.then(() => {
+    let disposed = false;
+    void Promise.all(
+      animations.map((animation) => animation.then(() => undefined)),
+    ).then(() => {
       if (disposed) return;
       setStaggerReady(true);
     });
 
     return () => {
       disposed = true;
-      animation.cancel();
+      for (const animation of animations) animation.cancel();
     };
   }, []);
 
   const staggerStyle = staggerReady ? undefined : heroEntranceInitialStyle;
+  const navStaggerStyles = staggerReady
+    ? []
+    : HERO_NAV_FALLS.map((fall) => heroNavStyle(fall));
 
   return (
     <div ref={rootRef}>
-      <TopNav staggerStyle={staggerStyle} />
+      <TopNav navStaggerStyles={navStaggerStyles} />
       <HeroIntro staggerStyle={staggerStyle} />
+      {children
+        ? (
+          <div data-hero-stagger style={staggerStyle}>
+            {children}
+          </div>
+        )
+        : null}
     </div>
   );
 }

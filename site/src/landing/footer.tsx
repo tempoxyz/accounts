@@ -73,7 +73,7 @@ export default function Footer() {
               e.stopPropagation();
               setRevealed(false);
             }}
-            className="absolute top-3 left-6 z-10 flex h-7 w-7 items-center justify-center rounded-md border border-border bg-foreground/[0.04] font-mono text-[14px] leading-none text-foreground-muted backdrop-blur-sm transition-colors duration-150 hover:border-border-strong hover:bg-foreground/[0.08] hover:text-foreground sm:left-9"
+            className="absolute top-3 left-6 z-10 flex h-7 w-7 items-center justify-center rounded-md border border-border bg-foreground/[0.04] font-mono text-[14px] leading-none text-foreground-muted backdrop-blur-sm transition-[background-color,border-color,color] duration-150 hover:border-border-strong hover:bg-foreground/[0.08] hover:text-foreground sm:left-9"
           >
             ×
           </button>
@@ -91,7 +91,7 @@ export default function Footer() {
             href="https://tempo.xyz"
             target="_blank"
             rel="noreferrer"
-            className="text-foreground-muted underline-offset-4 transition-colors duration-150 hover:text-foreground hover:underline"
+            className="text-foreground-muted underline-offset-4 transition-[background-color,border-color,color] duration-150 hover:text-foreground hover:underline"
           >
             Tempo
           </a>

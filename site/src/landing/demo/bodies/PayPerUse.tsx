@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { waapi, type WAAPIAnimation } from "animejs";
+import { useLayoutEffect, useRef } from "react";
+import { springs } from "../../animation";
 import type { DemoBodyProps } from "../types";
-import { PrimaryButton, bodyAnimation } from "./shared";
+import { PrimaryButton, useBodyAnimation } from "./shared";
 
-const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
+const BAR_DELAY_MS = 240;
 
 export function PayPerUseBody({
   status,
@@ -15,14 +17,28 @@ export function PayPerUseBody({
   const calls = 1247;
   const cap = 5000;
   const pct = Math.min(100, (calls / cap) * 100);
+  const body = useBodyAnimation(delay);
+  const fillRef = useRef<HTMLDivElement>(null);
 
-  // Fill from 0 → pct once the card has faded in. Re-arms on remount
-  // (e.g. when the user navigates back to this demo).
-  const [filled, setFilled] = useState(false);
-  useEffect(() => {
-    const id = setTimeout(() => setFilled(true), delay + 80);
-    return () => clearTimeout(id);
-  }, [delay]);
+  useLayoutEffect(() => {
+    const el = fillRef.current;
+    if (!el) return;
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      el.style.transform = `scaleX(${pct / 100})`;
+      return;
+    }
+
+    const animation: WAAPIAnimation = waapi.animate(el, {
+      scaleX: [0, pct / 100],
+      delay: delay + BAR_DELAY_MS,
+      ease: springs.progress,
+    });
+
+    return () => {
+      animation.cancel();
+    };
+  }, [delay, pct]);
 
   const buttonLabel =
     status === "running"
@@ -33,8 +49,9 @@ export function PayPerUseBody({
 
   return (
     <div
+      ref={body.ref}
       className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6"
-      style={bodyAnimation(delay)}
+      style={body.style}
     >
       <div className="flex items-end justify-between">
         <div className="flex flex-col gap-1">
@@ -47,13 +64,11 @@ export function PayPerUseBody({
         <p className="font-mono text-[12px] text-foreground-muted">$0.012 / call</p>
       </div>
 
-      <div className="h-1 w-full bg-panel-4">
+      <div className="h-1 w-full overflow-hidden bg-panel-4">
         <div
-          className="h-full bg-foreground"
-          style={{
-            width: `${filled ? pct : 0}%`,
-            transition: `width 1100ms ${easeOut}`,
-          }}
+          ref={fillRef}
+          className="h-full w-full origin-left bg-foreground"
+          style={{ transform: "scaleX(0)" }}
         />
       </div>
 

@@ -1,11 +1,59 @@
 "use client";
 
+import { waapi, type WAAPIAnimation } from "animejs";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { springs } from "../../animation";
 import type { Status } from "../types";
 
-const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
+const bodyInitialStyle = {
+  opacity: 0,
+  translate: "0 12px",
+  transformOrigin: "top left",
+  willChange: "opacity, translate",
+} satisfies CSSProperties;
 
-export function bodyAnimation(delay: number) {
-  return { animation: `fadeUp 540ms ${easeOut} ${delay}ms both` };
+export function useBodyAnimation(delay: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    setReady(false);
+    if (!el) return;
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setReady(true);
+      return;
+    }
+
+    let disposed = false;
+    const animation: WAAPIAnimation = waapi.animate(el, {
+      opacity: [0, 1],
+      translate: ["0 12px", "0 0"],
+      delay,
+      ease: springs.entrance,
+    });
+
+    void animation.then(() => {
+      if (disposed) return;
+      setReady(true);
+    });
+
+    return () => {
+      disposed = true;
+      animation.cancel();
+    };
+  }, [delay]);
+
+  return {
+    ref,
+    style: ready ? undefined : bodyInitialStyle,
+  };
 }
 
 export function PrimaryButton({

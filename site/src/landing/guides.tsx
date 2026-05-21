@@ -44,28 +44,40 @@ type Guide = {
 
 const GUIDES: readonly Guide[] = [
   {
-    title: "Create & Use Accounts",
-    href: "https://docs.tempo.xyz/guide/use-accounts",
+    title: "Getting Started",
+    href: "/docs",
   },
   {
-    title: "Make Payments",
-    href: "https://docs.tempo.xyz/guide/payments",
+    title: "Authentication",
+    href: "/docs/guides/connect-accounts",
   },
   {
-    title: "Sponsor Fees",
-    href: "https://docs.tempo.xyz/guide/payments/sponsor-user-fees",
+    title: "Deposits",
+    href: "/docs/guides/deposits",
   },
   {
-    title: "Issue Stablecoins",
-    href: "https://docs.tempo.xyz/guide/issuance",
+    title: "Transfers",
+    href: "/docs/guides/transfers",
   },
   {
-    title: "Exchange Stablecoins",
-    href: "https://docs.tempo.xyz/guide/stablecoin-dex",
+    title: "Spend Permissions",
+    href: "/docs/guides/spend-permissions",
   },
   {
-    title: "View all docs",
-    href: "https://docs.tempo.xyz/accounts",
+    title: "Subscriptions",
+    href: "/docs/guides/subscriptions",
+  },
+  {
+    title: "Fee Sponsorship",
+    href: "/docs/guides/fee-sponsorship",
+  },
+  {
+    title: "Exchange Currencies",
+    href: "/docs/guides/swaps",
+  },
+  {
+    title: "Themes",
+    href: "/docs/guides/theming",
   },
 ];
 
@@ -107,8 +119,6 @@ export default function Guides() {
           <a
             key={g.title}
             href={g.href}
-            target="_blank"
-            rel="noreferrer"
             className="relative flex min-h-[200px] flex-col justify-end gap-3 overflow-hidden p-6 text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,transform] duration-150 hover:bg-foreground/[0.025] active:translate-y-px active:bg-foreground/[0.045] sm:min-h-[260px] sm:p-9"
             style={cardDashStyle}
           >

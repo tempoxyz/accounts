@@ -467,7 +467,7 @@ function ThemeSwitcher({
             key={p}
             type="button"
             onClick={() => onChange(p)}
-            className={`flex items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
+            className={`relative flex items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
           >
             {p}
           </button>
@@ -552,7 +552,7 @@ function CustomThemeToolbar({
                 type="button"
                 onClick={() => onChange({ ...theme, radius: r.id })}
                 aria-pressed={active}
-                className={`flex items-center justify-center border px-2 py-1 font-mono text-[12px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
+                className={`relative flex items-center justify-center border px-2 py-1 font-mono text-[12px] outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
               >
                 {r.label}
               </button>
@@ -577,7 +577,7 @@ function CustomThemeToolbar({
                 type="button"
                 onClick={() => onChange({ ...theme, scheme: s })}
                 aria-pressed={active}
-                className={`flex items-center justify-center border px-2 py-1 font-mono text-[12px] capitalize outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
+                className={`relative flex items-center justify-center border px-2 py-1 font-mono text-[12px] capitalize outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
               >
                 {s}
               </button>

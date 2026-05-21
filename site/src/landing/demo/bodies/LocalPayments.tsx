@@ -1,7 +1,7 @@
 "use client";
 
 import type { DemoBodyProps } from "../types";
-import { PrimaryButton, bodyAnimation } from "./shared";
+import { PrimaryButton, useBodyAnimation } from "./shared";
 
 /** Preset deposit amounts (USD), surfaced as selectable chips in the body. */
 export const DEPOSIT_AMOUNTS = [
@@ -27,6 +27,7 @@ export function LocalPaymentsBody({
   onSelectAmount: (id: DepositAmountId) => void;
   methodLabel: string;
 }) {
+  const body = useBodyAnimation(delay);
   const selected =
     DEPOSIT_AMOUNTS.find((a) => a.id === selectedAmountId) ??
     DEPOSIT_AMOUNTS[0];
@@ -40,8 +41,9 @@ export function LocalPaymentsBody({
 
   return (
     <div
+      ref={body.ref}
       className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6"
-      style={bodyAnimation(delay)}
+      style={body.style}
     >
       <div className="flex flex-col gap-1">
         <p className="text-[13px] text-foreground-muted">Available balance</p>
@@ -60,7 +62,7 @@ export function LocalPaymentsBody({
                 key={a.id}
                 type="button"
                 onClick={() => onSelectAmount(a.id)}
-                className={`flex items-center justify-center border py-2.5 text-left outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 ${active ? "border-panel-edge bg-panel-4" : "border-transparent bg-panel-3"}`}
+                className={`relative flex items-center justify-center border py-2.5 text-left outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 ${active ? "border-panel-edge bg-panel-4" : "border-transparent bg-panel-3"}`}
               >
                 <span
                   className={`font-mono text-[14px] tabular-nums ${active ? "text-foreground" : "text-foreground-muted"}`}

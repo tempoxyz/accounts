@@ -1,7 +1,7 @@
 "use client";
 
 import type { DemoBodyProps } from "../types";
-import { PrimaryButton, bodyAnimation } from "./shared";
+import { PrimaryButton, useBodyAnimation } from "./shared";
 
 export function SubscribeBody({
   status,
@@ -9,6 +9,7 @@ export function SubscribeBody({
   onAction,
   delay,
 }: DemoBodyProps) {
+  const body = useBodyAnimation(delay);
   const buttonLabel =
     status === "running"
       ? "Setting up…"
@@ -18,8 +19,9 @@ export function SubscribeBody({
 
   return (
     <div
+      ref={body.ref}
       className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6"
-      style={bodyAnimation(delay)}
+      style={body.style}
     >
       <div className="flex flex-col gap-1">
         <p className="text-[13px] text-foreground-muted">Pro Plan</p>

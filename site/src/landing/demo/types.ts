@@ -9,7 +9,9 @@ export type DemoKind =
   | "Pay Once"
   | "Pay Per Use"
   | "Subscribe"
-  | "Swap Currencies";
+  | "Fee Sponsorship"
+  | "Swap Currencies"
+  | "Themes";
 
 export type Status = "idle" | "running" | "done";
 
@@ -18,6 +20,16 @@ export type AccountsProvider = ReturnType<typeof Provider.create>;
 export type DemoResult = {
   /** Short human-readable result line shown in the body's `done` state. */
   summary?: string;
+};
+
+/** Guide metadata attached to one landing demo step. */
+export type DemoGuide = {
+  /** Guide keyword shown in the demo stepper. */
+  label: string;
+  /** Local docs route for the guide. */
+  href: string;
+  /** Prompt copied for agent-assisted implementation. */
+  prompt: string;
 };
 
 export type DemoBodyProps = {
@@ -37,6 +49,8 @@ export type DemoBodyProps = {
 
 export type DemoDef = {
   url: string;
+  /** Guide metadata shown around the active demo step. */
+  guide: DemoGuide;
   prelude?: string[];
   Body: React.ComponentType<DemoBodyProps>;
   /**

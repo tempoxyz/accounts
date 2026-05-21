@@ -1,10 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { stagger, waapi, type WAAPIAnimation } from "animejs";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { springs } from "../../animation";
 import { LockIcon, TempoLogo } from "../../icons";
+import { DEMOS, DEMO_STEPS } from "../config";
 import type {
   Adapter,
   DemoDef,
+  DemoGuide,
   DemoKind,
   DemoResult,
   Status,
@@ -12,14 +23,14 @@ import type {
 import { shorten } from "../sdk";
 import { ChatBubble } from "./ChatBubble";
 
-const DEMO_STEPS: readonly DemoKind[] = [
-  "Log In",
-  "Add Funds",
-  "Pay Once",
-  "Pay Per Use",
-  "Subscribe",
-  "Swap Currencies",
-];
+const MESSAGE_STAGGER_MS = 70;
+const MESSAGE_BODY_GAP_MS = 180;
+const INITIAL_LOG_IN_DELAY_MS = 260;
+const messageInitialStyle: CSSProperties = {
+  opacity: 0,
+  translate: "0 12px",
+  willChange: "opacity, translate",
+};
 
 function ChevronRight() {
   return (
@@ -64,6 +75,128 @@ function ChevronDown({ open }: { open: boolean }) {
   );
 }
 
+function DemoGuideCallout({
+  guide,
+  delay,
+}: {
+  guide: DemoGuide;
+  delay: number;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [ready, setReady] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setCopied(false);
+    if (!copyTimer.current) return;
+    clearTimeout(copyTimer.current);
+    copyTimer.current = null;
+  }, [guide.prompt]);
+
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    },
+    [],
+  );
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(guide.prompt);
+      setCopied(true);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => {
+        setCopied(false);
+        copyTimer.current = null;
+      }, 1400);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    setReady(false);
+    if (!root) return;
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setReady(true);
+      return;
+    }
+
+    let disposed = false;
+    const animation: WAAPIAnimation = waapi.animate(root, {
+      opacity: [0, 1],
+      translate: ["0 12px", "0 0"],
+      delay,
+      ease: springs.entrance,
+    });
+
+    void animation.then(() => {
+      if (disposed) return;
+      setReady(true);
+    });
+
+    return () => {
+      disposed = true;
+      animation.cancel();
+    };
+  }, [delay, guide.prompt]);
+
+  return (
+    <div
+      ref={rootRef}
+      className="flex max-w-full flex-col items-start gap-2 self-start bg-panel-2 px-3 py-2"
+      style={ready ? undefined : messageInitialStyle}
+    >
+      <p className="text-[14px] text-foreground sm:text-[16px]">
+        Want to add this to your app?
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <a
+          href={guide.href}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-[12px] text-foreground-muted outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[color,transform] hover:text-foreground active:translate-y-px active:text-foreground"
+        >
+          Learn more
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 12 12"
+            fill="none"
+            aria-hidden
+          >
+            <path
+              d="M3 9L9 3M9 3H4.5M9 3V7.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </a>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={copy}
+            className="bg-panel-3 px-3 py-1.5 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,transform] hover:bg-panel-4 active:translate-y-px active:bg-panel-4"
+          >
+            Copy prompt
+          </button>
+          <span
+            aria-live="polite"
+            className={`text-[12px] text-foreground-subtle transition-opacity duration-150 ${copied ? "opacity-100" : "opacity-0"}`}
+          >
+            copied
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export type ConnectedSession = {
   address: `0x${string}`;
   balanceDisplay: string;
@@ -94,10 +227,87 @@ export function BrowserMockup({
 }) {
   const Body = def.Body;
   const preludeCount = def.prelude?.length ?? 0;
-  const bodyDelay = useMemo(() => 120 + preludeCount * 220, [preludeCount]);
+  const demoDelayRef = useRef({
+    demo,
+    delay: demo === "Log In" ? INITIAL_LOG_IN_DELAY_MS : 0,
+  });
+  if (demoDelayRef.current.demo !== demo) {
+    demoDelayRef.current = { demo, delay: 0 };
+  }
+  const initialDelay = demoDelayRef.current.delay;
+  const bodyDelay = useMemo(
+    () =>
+      preludeCount === 0
+        ? initialDelay + 120
+        : initialDelay +
+          (preludeCount - 1) * MESSAGE_STAGGER_MS +
+          MESSAGE_BODY_GAP_MS,
+    [initialDelay, preludeCount],
+  );
+  const guideDelay = bodyDelay + MESSAGE_BODY_GAP_MS;
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const pressedDemoRef = useRef<DemoKind | null>(null);
+  const [animatedMessagesDemo, setAnimatedMessagesDemo] =
+    useState<DemoKind | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const activeIndex = DEMO_STEPS.indexOf(demo);
   const activeStep = String(activeIndex + 1).padStart(2, "0");
+  const activeLabel = def.guide.label;
+  const messageStyle =
+    animatedMessagesDemo === demo ? undefined : messageInitialStyle;
+  const changeDemo = (d: DemoKind) => {
+    onChangeDemo(d);
+    setMobileNavOpen(false);
+  };
+  const pressDemo = (d: DemoKind) => {
+    if (pressedDemoRef.current === d) return;
+    pressedDemoRef.current = d;
+    changeDemo(d);
+  };
+  const clickDemo = (d: DemoKind) => {
+    if (pressedDemoRef.current === d) {
+      pressedDemoRef.current = null;
+      return;
+    }
+    changeDemo(d);
+  };
+
+  useLayoutEffect(() => {
+    const root = messagesRef.current;
+    if (!root) {
+      setAnimatedMessagesDemo(demo);
+      return;
+    }
+
+    const items = root.querySelectorAll<HTMLElement>("[data-demo-message]");
+    if (items.length === 0) {
+      setAnimatedMessagesDemo(demo);
+      return;
+    }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setAnimatedMessagesDemo(demo);
+      return;
+    }
+
+    let disposed = false;
+    const animation: WAAPIAnimation = waapi.animate(items, {
+      opacity: [0, 1],
+      translate: ["0 12px", "0 0"],
+      delay: stagger(MESSAGE_STAGGER_MS, { start: initialDelay }),
+      ease: springs.entrance,
+    });
+
+    void animation.then(() => {
+      if (disposed) return;
+      setAnimatedMessagesDemo(demo);
+    });
+
+    return () => {
+      disposed = true;
+      animation.cancel();
+    };
+  }, [demo, initialDelay, preludeCount]);
 
   return (
     <div className="relative z-10 mx-auto w-full max-w-[1089px] border border-panel-3 bg-background/75 backdrop-blur-sm">
@@ -127,7 +337,7 @@ export function BrowserMockup({
             <button
               type="button"
               onClick={onDisconnect}
-              className="text-[11px] text-foreground-muted outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 hover:text-foreground"
+              className="text-[11px] text-foreground-muted outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[color] duration-150 hover:text-foreground"
             >
               Disconnect
             </button>
@@ -158,7 +368,7 @@ export function BrowserMockup({
               >
                 {activeStep}
               </span>
-              <span className="text-[15px]">{demo}</span>
+              <span className="text-[15px]">{activeLabel}</span>
             </div>
             <ChevronDown open={mobileNavOpen} />
           </button>
@@ -172,15 +382,21 @@ export function BrowserMockup({
               {DEMO_STEPS.map((d, i) => {
                 const active = d === demo;
                 const step = String(i + 1).padStart(2, "0");
+                const label = DEMOS[d].guide.label;
                 return (
                   <button
                     key={d}
                     type="button"
-                    onClick={() => {
-                      onChangeDemo(d);
-                      setMobileNavOpen(false);
+                    onPointerDown={(event) => {
+                      if (event.pointerType === "mouse" && event.button !== 0) return;
+                      pressDemo(d);
                     }}
-                    className={`flex items-center justify-between gap-3 border-b border-panel-border px-5 py-3.5 text-left outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 last:border-b-0 ${active ? "bg-foreground/[0.04] text-foreground" : "text-foreground-muted"}`}
+                    onMouseDown={(event) => {
+                      if (event.button !== 0) return;
+                      pressDemo(d);
+                    }}
+                    onClick={() => clickDemo(d)}
+                    className={`relative flex items-center justify-between gap-3 border-b border-panel-border px-5 py-3.5 text-left outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 last:border-b-0 ${active ? "bg-foreground/[0.04] text-foreground" : "text-foreground-muted"}`}
                   >
                     <div className="flex items-baseline gap-3">
                       <span
@@ -189,7 +405,7 @@ export function BrowserMockup({
                       >
                         {step}
                       </span>
-                      <span className="text-[15px]">{d}</span>
+                      <span className="text-[15px]">{label}</span>
                     </div>
                   </button>
                 );
@@ -203,12 +419,21 @@ export function BrowserMockup({
           {DEMO_STEPS.map((d, i) => {
             const active = d === demo;
             const step = String(i + 1).padStart(2, "0");
+            const label = DEMOS[d].guide.label;
             return (
               <button
                 key={d}
                 type="button"
-                onClick={() => onChangeDemo(d)}
-                className={`group flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-colors duration-150 last:border-b-0 ${active ? "bg-background text-foreground" : "text-foreground-muted"}`}
+                onPointerDown={(event) => {
+                  if (event.pointerType === "mouse" && event.button !== 0) return;
+                  pressDemo(d);
+                }}
+                onMouseDown={(event) => {
+                  if (event.button !== 0) return;
+                  pressDemo(d);
+                }}
+                onClick={() => clickDemo(d)}
+                className={`group relative flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 last:border-b-0 ${active ? "bg-background text-foreground" : "text-foreground-muted"}`}
               >
                 <div className="flex min-w-0 items-baseline gap-3">
                   <span
@@ -217,7 +442,7 @@ export function BrowserMockup({
                   >
                     {step}
                   </span>
-                  <span className="truncate text-[15px] sm:text-[16px]">{d}</span>
+                  <span className="truncate text-[15px] sm:text-[16px]">{label}</span>
                 </div>
                 <span
                   aria-hidden
@@ -236,17 +461,16 @@ export function BrowserMockup({
               <div
                 aria-hidden
                 className="grid aspect-square h-9 shrink-0 place-items-center bg-background text-foreground"
-                style={{ animation: `fadeUp 480ms cubic-bezier(0.23, 1, 0.32, 1) 120ms both` }}
               >
                 <TempoLogo width={14} height={15} />
               </div>
               <div className="flex w-full min-w-0 flex-col items-start gap-4">
-                <div className="flex w-full min-w-0 flex-col items-start gap-2">
+                <div ref={messagesRef} className="flex w-full min-w-0 flex-col items-start gap-2">
                   {def.prelude.map((m, i) => (
                     <ChatBubble
                       key={`${demo}-bubble-${i}`}
                       text={m}
-                      delay={120 + i * 220}
+                      style={messageStyle}
                     />
                   ))}
                 </div>
@@ -260,19 +484,31 @@ export function BrowserMockup({
                   adapter={adapter}
                   connectedBalance={connected?.balanceDisplay ?? null}
                 />
+                <DemoGuideCallout guide={def.guide} delay={guideDelay} />
               </div>
             </div>
           ) : (
-            <Body
-              key={`${demo}-body`}
-              status={status}
-              result={result}
-              lastVariant={lastVariant}
-              onAction={onAction}
-              delay={bodyDelay}
-              adapter={adapter}
-              connectedBalance={connected?.balanceDisplay ?? null}
-            />
+            <div className="flex w-full min-w-0 items-start gap-3">
+              <div
+                aria-hidden
+                className="grid aspect-square h-9 shrink-0 place-items-center bg-background text-foreground"
+              >
+                <TempoLogo width={14} height={15} />
+              </div>
+              <div className="flex w-full min-w-0 flex-col items-start gap-4">
+                <Body
+                  key={`${demo}-body`}
+                  status={status}
+                  result={result}
+                  lastVariant={lastVariant}
+                  onAction={onAction}
+                  delay={bodyDelay}
+                  adapter={adapter}
+                  connectedBalance={connected?.balanceDisplay ?? null}
+                />
+                <DemoGuideCallout guide={def.guide} delay={guideDelay} />
+              </div>
+            </div>
           )}
         </div>
       </div>
