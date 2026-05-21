@@ -22,8 +22,8 @@ const BASE_RADIUS = 1;
 /** Per-dot pseudo-random brightness variance (0 = uniform, 1 = full range). */
 const JITTER = 0.2;
 
-/** Temporary: keep the motion code below, but render a static dot field. */
-const ENABLE_ANIMATION = false;
+/** Ambient-only dot-field motion. Pointer/hover reactions stay disabled. */
+const ENABLE_ANIMATION = true;
 
 /** Ambient breathing amplitude as a fraction of base alpha. 0 = static. */
 const BREATH_AMPLITUDE = 10;
