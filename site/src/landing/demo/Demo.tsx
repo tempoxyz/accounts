@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import AsciiBackground from "../ascii-bg";
 import { useTheme } from "../useTheme";
 import { BrowserMockup } from "./components/BrowserMockup";
-import { GridBackdrop } from "./components/GridBackdrop";
 import { DEMOS, DEMO_STEPS } from "./config";
 import { createProvider, shorten } from "./sdk";
 import type {
@@ -31,8 +29,73 @@ type Connected = {
 
 const AUTO_ADVANCE_DELAY_MS = 1200;
 
+/** Max scale boost as the demo box travels through the viewport. */
+const SCROLL_SCALE_BOOST = 0.2;
+/** Max translateY (px, upward) applied at full progress. */
+const SCROLL_LIFT_PX = 60;
+
 export default function Demo() {
   const [adapter] = useState<Adapter>("tempoAuth");
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduced) return;
+
+    let visible = false;
+    let raf = 0;
+
+    const update = () => {
+      raf = 0;
+      const rect = el.getBoundingClientRect();
+      const vh = window.innerHeight;
+      // Progress: 0 when the box's top is at the bottom of the viewport
+      // (just entering), 1 when its bottom has scrolled past the top
+      // (about to leave). Clamped both ends.
+      const range = vh + rect.height;
+      const traveled = vh - rect.top;
+      const p = Math.max(0, Math.min(1, traveled / range));
+      const scale = 1 + SCROLL_SCALE_BOOST * p;
+      const lift = -SCROLL_LIFT_PX * p;
+      el.style.transform = `translate3d(0, ${lift}px, 0) scale(${scale})`;
+    };
+
+    const schedule = () => {
+      if (!visible || raf) return;
+      raf = requestAnimationFrame(update);
+    };
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        visible = entry?.isIntersecting ?? false;
+        if (visible) schedule();
+      },
+      { rootMargin: "100px" },
+    );
+    io.observe(el);
+
+    el.style.transformOrigin = "center";
+    el.style.willChange = "transform";
+    update();
+
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      io.disconnect();
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      el.style.transform = "";
+      el.style.willChange = "";
+      el.style.transformOrigin = "";
+    };
+  }, []);
+
   const [demo, setDemo] = useState<DemoKind>("Log In");
   const [status, setStatus] = useState<Status>("idle");
   const [result, setResult] = useState<DemoResult | null>(null);
@@ -322,14 +385,8 @@ export default function Demo() {
   const def = DEMOS[demo];
 
   return (
-    <section className="relative px-6 pt-2 pb-16 sm:pt-4 sm:pb-[100px]">
-      <div className="relative">
-        <div className="pointer-events-none absolute -inset-x-6 inset-y-0 flex items-center justify-center">
-          <div className="pointer-events-auto relative h-full max-h-[588px] w-full overflow-hidden bg-panel-deep">
-            <AsciiBackground />
-          </div>
-        </div>
-        <GridBackdrop />
+    <section className="relative px-6 pt-2 pb-32 sm:pt-4 sm:pb-[200px]">
+      <div ref={boxRef} className="relative">
         <BrowserMockup
           demo={demo}
           def={def}
@@ -343,10 +400,6 @@ export default function Demo() {
           onDisconnect={onDisconnect}
         />
       </div>
-
-      <p className="mt-6 text-center text-[11px] text-foreground-subtle">
-        Payment demos sign real mainnet transactions for $0.01.
-      </p>
     </section>
   );
 }

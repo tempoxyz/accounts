@@ -4,7 +4,6 @@ import { OnRampBody } from "./bodies/OnRamp";
 import { PayOnceBody } from "./bodies/PayOnce";
 import { PayPerUseBody } from "./bodies/PayPerUse";
 import { SubscribeBody } from "./bodies/Subscribe";
-import { ThemesBody } from "./bodies/Themes";
 import { TradeBody } from "./bodies/Trade";
 import {
   defaultAuthorizeAccessKey,
@@ -23,7 +22,6 @@ export const DEMO_STEPS = [
   "Subscribe",
   "Fee Sponsorship",
   "Swap Currencies",
-  "Themes",
 ] as const satisfies readonly DemoKind[];
 
 /**
@@ -231,24 +229,6 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         ],
       } as Parameters<typeof provider.request>[0]);
       return { summary: "Swap submitted" };
-    },
-  },
-
-  Themes: {
-    url: "wisselbank.xyz",
-    guide: {
-      label: "Themes",
-      href: "/docs/guides/theming",
-      prompt:
-        "Referencing accounts.tempo.xyz/docs/guides/theming, theme Tempo Wallet prompts to match my app with the Accounts SDK.",
-    },
-    prelude: [
-      "Pick the style that feels like your app",
-      "Tempo Wallet will follow your accent, radius, and color scheme",
-    ],
-    Body: ThemesBody,
-    async run() {
-      return { summary: "Theme configured" };
     },
   },
 };

@@ -341,14 +341,14 @@ function HeroIntro({
   );
 
   return (
-    <div className="mx-auto flex w-full max-w-[720px] flex-col items-center gap-9 px-6 pt-12 pb-20 sm:pt-[60px]">
+    <div className="mx-auto flex w-full max-w-[720px] flex-col items-center gap-9 px-6 pt-24 pb-60 sm:pt-[160px]">
       <div className="flex flex-col items-center gap-2 text-center">
         <h1
           data-hero-stagger
           style={staggerStyle}
           className="text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-5xl sm:whitespace-nowrap"
         >
-          Accounts SDK
+          The Accounts SDK
         </h1>
         <p
           data-hero-stagger
@@ -946,8 +946,18 @@ export default function Hero({ children }: { children?: ReactNode }) {
 
   return (
     <div ref={rootRef}>
-      <TopNav navStaggerStyles={navStaggerStyles} />
-      <HeroIntro staggerStyle={staggerStyle} />
+      <div className="relative">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-50"
+        >
+          <AsciiBackground />
+        </div>
+        <div className="relative">
+          <TopNav navStaggerStyles={navStaggerStyles} />
+          <HeroIntro staggerStyle={staggerStyle} />
+        </div>
+      </div>
       {children
         ? (
           <div data-hero-stagger style={staggerStyle}>

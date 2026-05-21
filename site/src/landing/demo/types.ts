@@ -10,8 +10,7 @@ export type DemoKind =
   | "Pay Per Use"
   | "Subscribe"
   | "Fee Sponsorship"
-  | "Swap Currencies"
-  | "Themes";
+  | "Swap Currencies";
 
 export type Status = "idle" | "running" | "done";
 

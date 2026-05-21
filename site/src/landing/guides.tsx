@@ -103,15 +103,11 @@ function ArrowUpRight() {
 export default function Guides() {
   return (
     <section
-      className="px-6 pt-12 sm:pt-[55px]"
+      className="px-6 pt-[100px]"
       style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
     >
-      <h2 className="text-[24px] leading-tight text-foreground sm:text-[24px]">
-        Guides
-      </h2>
-
       <div
-        className="-mx-6 mt-5 grid grid-cols-1 sm:mt-12 sm:grid-cols-2 lg:grid-cols-3"
+        className="-mx-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
         style={frameDashStyle}
       >
         {GUIDES.map((g) => (

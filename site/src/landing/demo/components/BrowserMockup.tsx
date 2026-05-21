@@ -20,7 +20,7 @@ import type {
   DemoResult,
   Status,
 } from "../types";
-import { shorten } from "../sdk";
+import { NETWORK, shorten } from "../sdk";
 import { ChatBubble } from "./ChatBubble";
 
 const MESSAGE_STAGGER_MS = 70;
@@ -93,9 +93,13 @@ function DemoGuideCallout({
     }
   };
 
+  // Entrance animation runs once on mount — switching demos shouldn't
+  // re-fade the callout, so we intentionally omit `delay`/`guide.prompt`
+  // from the dep list. `delay` is captured by closure from the first
+  // render, which is fine for a one-shot fade-in.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   useLayoutEffect(() => {
     const root = rootRef.current;
-    setReady(false);
     if (!root) return;
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -120,56 +124,46 @@ function DemoGuideCallout({
       disposed = true;
       animation.cancel();
     };
-  }, [delay, guide.prompt]);
+  }, []);
 
   return (
     <div
       ref={rootRef}
-      className="flex max-w-full flex-col items-start gap-2 self-start bg-panel-2 px-3 py-2"
+      className="-mx-4 mt-auto flex items-center justify-between gap-4 px-4 py-4 sm:-mx-[27px] sm:px-[27px]"
       style={ready ? undefined : messageInitialStyle}
     >
-      <p className="text-[14px] text-foreground sm:text-[16px]">
-        Want to add this to your app?
-      </p>
-      <div className="flex flex-wrap items-center gap-3">
-        <a
-          href={guide.href}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-[12px] text-foreground-muted outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[color,transform] hover:text-foreground active:translate-y-px active:text-foreground"
+      <a
+        href={guide.href}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 text-[13px] text-foreground-muted outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[color,transform] hover:text-foreground active:translate-y-px active:text-foreground"
+      >
+        Add {guide.label.toLowerCase()} to your app
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 12 12"
+          fill="none"
+          aria-hidden
         >
-          Learn more
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 12 12"
-            fill="none"
-            aria-hidden
-          >
-            <path
-              d="M3 9L9 3M9 3H4.5M9 3V7.5"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </a>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={copy}
-            className="bg-panel-3 px-3 py-1.5 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,transform] hover:bg-panel-4 active:translate-y-px active:bg-panel-4"
-          >
-            Copy prompt
-          </button>
-          <span
-            aria-live="polite"
-            className={`text-[12px] text-foreground-subtle transition-opacity duration-150 ${copied ? "opacity-100" : "opacity-0"}`}
-          >
-            copied
-          </span>
-        </div>
+          <path
+            d="M3 9L9 3M9 3H4.5M9 3V7.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </a>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={copy}
+          aria-live="polite"
+          className={`bg-panel-3 px-3 py-1.5 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,transform,color] duration-150 hover:bg-panel-4 active:translate-y-px active:bg-panel-4 ${copied ? "text-accent-live" : ""}`}
+        >
+          {copied ? "Copied" : "Copy prompt"}
+        </button>
       </div>
     </div>
   );
@@ -308,30 +302,36 @@ export function BrowserMockup({
             {def.url}
           </p>
         </div>
-        {connected ? (
-          <div className="flex shrink-0 items-center gap-2">
-            <span aria-hidden className="size-1.5 rounded-full bg-accent-live" />
-            <span className="font-mono text-[11px] text-foreground">
-              {shorten(connected.address)}
-            </span>
-            {connected.balanceDisplay ? (
-              <>
-                <span className="hidden text-[11px] text-foreground-subtle sm:inline">·</span>
-                <span className="hidden font-mono text-[11px] text-foreground sm:inline">
-                  {connected.balanceDisplay}
-                </span>
-              </>
-            ) : null}
-            <span className="text-[11px] text-foreground-subtle">·</span>
-            <button
-              type="button"
-              onClick={onDisconnect}
-              className="text-[11px] text-foreground-muted outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[color] duration-150 hover:text-foreground"
-            >
-              Disconnect
-            </button>
-          </div>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          {connected ? (
+            <div className="flex items-center gap-2 font-mono text-[12px] sm:text-[14px]">
+              <span aria-hidden className="size-1.5 rounded-full bg-accent-live" />
+              <span className="text-foreground">
+                {shorten(connected.address)}
+              </span>
+              {connected.balanceDisplay ? (
+                <>
+                  <span className="hidden text-foreground-subtle sm:inline">·</span>
+                  <span className="hidden text-foreground sm:inline">
+                    {connected.balanceDisplay}
+                  </span>
+                </>
+              ) : null}
+              <span className="text-foreground-subtle">·</span>
+              <button
+                type="button"
+                onClick={onDisconnect}
+                className="text-foreground-muted outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[color] duration-150 hover:text-foreground"
+              >
+                Disconnect
+              </button>
+              <span className="text-foreground-subtle">·</span>
+            </div>
+          ) : null}
+          <span className="rounded-[2px] bg-panel-3 px-2 py-0.5 font-mono text-[12px] whitespace-nowrap text-foreground-muted sm:text-[14px]">
+            {NETWORK}
+          </span>
+        </div>
       </div>
 
       {/* Body — split:
@@ -423,7 +423,7 @@ export function BrowserMockup({
           })}
         </nav>
 
-        <div className="flex min-h-[420px] flex-col px-4 pt-3 pb-8 sm:min-h-[510px] sm:px-[27px] sm:pt-[15px] sm:pb-12">
+        <div className="flex min-h-[420px] flex-col px-4 pt-3 pb-0 sm:min-h-[510px] sm:px-[27px] sm:pt-[15px]">
           {def.prelude && def.prelude.length > 0 ? (
             <div className="flex w-full min-w-0 items-start gap-3">
               <div
@@ -452,7 +452,6 @@ export function BrowserMockup({
                   adapter={adapter}
                   connectedBalance={connected?.balanceDisplay ?? null}
                 />
-                <DemoGuideCallout guide={def.guide} delay={guideDelay} />
               </div>
             </div>
           ) : (
@@ -474,10 +473,10 @@ export function BrowserMockup({
                   adapter={adapter}
                   connectedBalance={connected?.balanceDisplay ?? null}
                 />
-                <DemoGuideCallout guide={def.guide} delay={guideDelay} />
               </div>
             </div>
           )}
+          <DemoGuideCallout guide={def.guide} delay={guideDelay} />
         </div>
       </div>
     </div>

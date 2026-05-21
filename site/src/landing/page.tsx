@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import Customize from "./customize";
 import Demo from "./demo/Demo";
 import Footer from "./footer";
 import Guides from "./guides";
@@ -13,13 +14,12 @@ export default function Home() {
   return (
     <main ref={rootRef} className="accounts-landing relative w-full">
       <ThemeProvider target={rootRef}>
-        <div className="dash-y mx-auto w-full max-w-[1245px]">
+        <div className="mx-auto w-full max-w-[1245px]">
           <Hero>
             <Demo />
           </Hero>
-          <div className="dash-t">
-            <Guides />
-          </div>
+          <Customize />
+          <Guides />
           <div className="dash-t">
             <Footer />
           </div>

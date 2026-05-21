@@ -1,5 +1,13 @@
 import { Dialog, Provider, Storage, tempoWallet, webAuthn } from "accounts";
+import { tempo } from "viem/chains";
 import type { Adapter, AccountsProvider } from "./types";
+
+/** Chain the landing demos run against. Swap to `tempoModerato` for testnet. */
+export const CHAIN = tempo;
+/** Network label shown in the demo's URL bar — derived from `CHAIN.testnet`. */
+export const NETWORK: "mainnet" | "testnet" = CHAIN.testnet
+  ? "testnet"
+  : "mainnet";
 
 /** All on-chain demo CTAs sign for $0.01 — the merchant display copy is just storytelling. */
 export const DEMO_AMOUNT_USD = "0.01";
