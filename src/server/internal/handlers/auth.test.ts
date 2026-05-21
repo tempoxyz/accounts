@@ -15,6 +15,12 @@ const otherAccount = privateKeyToAccount(
 )
 
 describe('challenge', () => {
+  test('error: requires pinned origin or domain', () => {
+    expect(() => auth()).toThrowErrorMatchingInlineSnapshot(
+      `[Error: \`auth()\` requires \`origin\` or \`domain\` to pin SIWE domain binding.]`,
+    )
+  })
+
   test('returns challenge message with chainId, nonce, zero-address placeholder', async () => {
     const { app } = setup()
 
@@ -689,7 +695,7 @@ describe('getSession', () => {
 
 describe('store: atomic `take` preferred, non-atomic fallback', () => {
   test('Kv.memory() (has `take`) is accepted', () => {
-    expect(() => auth({ store: Kv.memory() })).not.toThrow()
+    expect(() => auth({ domain: 'wallet.example', store: Kv.memory() })).not.toThrow()
   })
 
   test('store without `take` falls back to non-atomic get + delete', async () => {
@@ -726,8 +732,7 @@ describe('store: atomic `take` preferred, non-atomic fallback', () => {
 
 describe('origin / trustProxy', () => {
   test('default: ignores `x-forwarded-host` and `x-forwarded-proto`', async () => {
-    // No domain pin — relies on host header. trustProxy defaults to false.
-    const handler = auth()
+    const handler = auth({ domain: 'real.example' })
     const app = new Hono()
     app.route('/', handler)
 
@@ -747,7 +752,7 @@ describe('origin / trustProxy', () => {
   })
 
   test('trustProxy: true → honors `x-forwarded-host` and `x-forwarded-proto`', async () => {
-    const handler = auth({ trustProxy: true })
+    const handler = auth({ domain: 'app.example', trustProxy: true })
     const app = new Hono()
     app.route('/', handler)
 
@@ -795,6 +800,40 @@ describe('origin / trustProxy', () => {
     expect(() => auth({ origin: 'not-a-url' })).toThrowErrorMatchingInlineSnapshot(
       `[Error: \`auth({ origin })\` must be a valid absolute URL. Got: not-a-url]`,
     )
+  })
+
+  test('default trustProxy: true on Cloudflare Workers runtime', async () => {
+    // Spoof the Cloudflare Workers runtime marker.
+    const originalNavigator = globalThis.navigator
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { userAgent: 'Cloudflare-Workers' },
+      configurable: true,
+    })
+    try {
+      const handler = auth({ domain: 'app.example' })
+      const app = new Hono()
+      app.route('/', handler)
+
+      const res = await app.request('/challenge', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          host: 'internal.example',
+          'x-forwarded-host': 'app.example',
+          'x-forwarded-proto': 'https',
+        },
+        body: JSON.stringify({ chainId: 1 }),
+      })
+      const body = (await res.json()) as { message: string }
+      const parsed = parseSiweMessage(body.message)
+      expect(parsed.domain).toBe('app.example')
+      expect(parsed.uri).toBe('https://app.example')
+    } finally {
+      Object.defineProperty(globalThis, 'navigator', {
+        value: originalNavigator,
+        configurable: true,
+      })
+    }
   })
 })
 

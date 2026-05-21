@@ -1,8 +1,10 @@
+import { FeeSponsorshipBody } from "./bodies/FeeSponsorship";
 import { LogInBody } from "./bodies/LogIn";
 import { OnRampBody } from "./bodies/OnRamp";
 import { PayOnceBody } from "./bodies/PayOnce";
 import { PayPerUseBody } from "./bodies/PayPerUse";
 import { SubscribeBody } from "./bodies/Subscribe";
+import { ThemesBody } from "./bodies/Themes";
 import { TradeBody } from "./bodies/Trade";
 import {
   defaultAuthorizeAccessKey,
@@ -12,6 +14,18 @@ import {
 } from "./sdk";
 import type { DemoDef, DemoKind } from "./types";
 
+/** Ordered list of landing demo steps. */
+export const DEMO_STEPS = [
+  "Log In",
+  "Add Funds",
+  "Pay Once",
+  "Pay Per Use",
+  "Subscribe",
+  "Fee Sponsorship",
+  "Swap Currencies",
+  "Themes",
+] as const satisfies readonly DemoKind[];
+
 /**
  * Mainnet demos. All on-chain actions sign for $0.01 — display copy
  * (Pro Plan / $240, $24.99/mo, 100 USDC swap, etc.) is just storytelling.
@@ -19,6 +33,12 @@ import type { DemoDef, DemoKind } from "./types";
 export const DEMOS: Record<DemoKind, DemoDef> = {
   "Log In": {
     url: "wisselbank.xyz",
+    guide: {
+      label: "Authentication",
+      href: "/docs/guides/connect-accounts",
+      prompt:
+        "Referencing accounts.tempo.xyz/docs/guides/connect-accounts, add account sign-in to my app with the Accounts SDK.",
+    },
     prelude: [
       "Looks like you're new here",
       "We'll set up an account with a passkey on your device",
@@ -61,6 +81,12 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Add Funds": {
     url: "wisselbank.xyz",
+    guide: {
+      label: "Deposits",
+      href: "/docs/guides/deposits",
+      prompt:
+        "Referencing accounts.tempo.xyz/docs/guides/deposits, add deposits to my app with the Accounts SDK.",
+    },
     prelude: ["Top up your account"],
     Body: OnRampBody,
     async run(provider) {
@@ -77,6 +103,12 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Pay Once": {
     url: "wisselbank.xyz",
+    guide: {
+      label: "Transfers",
+      href: "/docs/guides/transfers",
+      prompt:
+        "Referencing accounts.tempo.xyz/docs/guides/transfers, add one-time transfers to my app with the Accounts SDK.",
+    },
     prelude: [
       "We are processing your request to upgrade your dev account",
       "Fetching plans....",
@@ -106,6 +138,12 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Pay Per Use": {
     url: "wisselbank.xyz",
+    guide: {
+      label: "Spend Permissions",
+      href: "/docs/guides/spend-permissions",
+      prompt:
+        "Referencing accounts.tempo.xyz/docs/guides/spend-permissions, add spend permissions for per-use payments to my app with the Accounts SDK.",
+    },
     prelude: ["Authorizing per-call payment for this session"],
     Body: PayPerUseBody,
     async run(provider) {
@@ -126,6 +164,12 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   Subscribe: {
     url: "wisselbank.xyz",
+    guide: {
+      label: "Subscriptions",
+      href: "/docs/guides/subscriptions",
+      prompt:
+        "Referencing accounts.tempo.xyz/docs/guides/subscriptions, add subscriptions to my app with the Accounts SDK.",
+    },
     prelude: ["Setting up monthly billing"],
     Body: SubscribeBody,
     async run(provider) {
@@ -146,8 +190,32 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     },
   },
 
+  "Fee Sponsorship": {
+    url: "wisselbank.xyz",
+    guide: {
+      label: "Fee Sponsorship",
+      href: "/docs/guides/fee-sponsorship",
+      prompt:
+        "Referencing accounts.tempo.xyz/docs/guides/fee-sponsorship, add fee sponsorship to my app with the Accounts SDK.",
+    },
+    prelude: [
+      "Checking sponsorship policy",
+      "Approved actions can use your app's fee payer",
+    ],
+    Body: FeeSponsorshipBody,
+    async run() {
+      return { summary: "Sponsorship policy ready" };
+    },
+  },
+
   "Swap Currencies": {
     url: "wisselbank.xyz",
+    guide: {
+      label: "Exchange Currencies",
+      href: "/docs/guides/swaps",
+      prompt:
+        "Referencing accounts.tempo.xyz/docs/guides/swaps, add currency exchange to my app with the Accounts SDK.",
+    },
     prelude: ["Fetching best route"],
     Body: TradeBody,
     async run(provider) {
@@ -163,6 +231,24 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         ],
       } as Parameters<typeof provider.request>[0]);
       return { summary: "Swap submitted" };
+    },
+  },
+
+  Themes: {
+    url: "wisselbank.xyz",
+    guide: {
+      label: "Themes",
+      href: "/docs/guides/theming",
+      prompt:
+        "Referencing accounts.tempo.xyz/docs/guides/theming, theme Tempo Wallet prompts to match my app with the Accounts SDK.",
+    },
+    prelude: [
+      "Pick the style that feels like your app",
+      "Tempo Wallet will follow your accent, radius, and color scheme",
+    ],
+    Body: ThemesBody,
+    async run() {
+      return { summary: "Theme configured" };
     },
   },
 };

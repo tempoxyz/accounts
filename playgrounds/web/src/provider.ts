@@ -1,12 +1,13 @@
+import Privy, { LocalStorage as PrivyLocalStorage } from '@privy-io/js-sdk-core'
 import { TurnkeyClient, generateWalletAccountsFromAddressFormat } from '@turnkey/core'
 import type { CreateSubOrgParams } from '@turnkey/core'
-import type { TurnkeyClientMethods } from '@turnkey/core'
 import {
   type Dialog as DialogNs,
   WebAuthnCeremony,
   dialog,
   Dialog,
   local,
+  privy,
   Provider,
   turnkey,
   webAuthn,
@@ -15,17 +16,21 @@ import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
+import { requestPrivyEmailOtp } from './privyOtpStore.js'
 import { requestTurnkeyEmailOtp, type TurnkeyEmailOtpClient } from './turnkeyOtpStore.js'
 
-export type AdapterType = 'secp256k1' | 'webAuthn' | 'turnkey' | 'tempoWallet' | 'dialogRefImpl'
+export type AdapterType =
+  | 'secp256k1'
+  | 'webAuthn'
+  | 'turnkey'
+  | 'privy'
+  | 'tempoWallet'
+  | 'dialogRefImpl'
 export type Env = 'mainnet' | 'testnet' | 'devnet'
 export type DialogMode = 'iframe' | 'popup'
+export type MppMode = 'push' | 'pull'
 export type ProviderValue = ReturnType<typeof Provider.create>
-type TurnkeyPlaygroundClient = turnkey.Client &
-  TurnkeyEmailOtpClient & {
-    createWallet: TurnkeyClientMethods['createWallet']
-  }
-const turnkeyEthereumAddressFormat = 'ADDRESS_FORMAT_ETHEREUM'
+type TurnkeyPlaygroundClient = turnkey.Client & TurnkeyEmailOtpClient
 
 export const env: Env = (() => {
   const param = new URLSearchParams(window.location.search).get('env')
@@ -68,9 +73,19 @@ export const host =
   new URLSearchParams(window.location.search).get('host') ?? import.meta.env.VITE_WALLET_HOST
 
 export let dialogMode: DialogMode = 'iframe'
+export let mppMode: MppMode = 'push'
 export let theme: DialogNs.Theme | undefined
 export let provider: ProviderValue = createProvider('tempoWallet')
 let turnkeyClient: TurnkeyClient | undefined
+let privyClient: Privy | undefined
+let privyIframeReady: Promise<void> | undefined
+
+function mpp() {
+  return {
+    maxDeposit: '0.05',
+    mode: mppMode,
+  } as const
+}
 
 export function createProvider(adapterType: AdapterType): ProviderValue {
   if (adapterType === 'tempoWallet')
@@ -80,7 +95,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         host,
         theme,
       }),
-      mpp: true,
+      mpp: mpp(),
       testnet,
     })
 
@@ -91,7 +106,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         host: import.meta.env.VITE_REF_DIALOG_HOST,
         theme,
       }),
-      mpp: true,
+      mpp: mpp(),
       testnet,
     })
 
@@ -99,7 +114,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     const ceremony = WebAuthnCeremony.server({ url: '/webauthn' })
     return Provider.create({
       adapter: webAuthn({ ceremony }),
-      mpp: true,
+      mpp: mpp(),
       testnet,
     })
   }
@@ -109,24 +124,33 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: turnkey({
         client,
-        async createAccount({ client, parameters }) {
-          const client_ = client as TurnkeyPlaygroundClient
-          await requestTurnkeyEmailOtp({
-            client: client_,
-            createSubOrgParams: createTurnkeySubOrgParams(parameters.name),
-            mode: 'register',
-          })
-          const account = (await getOrCreateEthereumAccounts(client_))[0]
-          return account
-        },
         async loadAccounts({ client }) {
-          const client_ = client as TurnkeyPlaygroundClient
           await requestTurnkeyEmailOtp({
-            client: client_,
-            createSubOrgParams: createTurnkeySubOrgParams(),
-            mode: 'login',
+            client,
+            createSubOrgParams: {
+              customWallet: {
+                walletName: 'Tempo Playground',
+                walletAccounts: generateWalletAccountsFromAddressFormat({
+                  addresses: ['ADDRESS_FORMAT_ETHEREUM'],
+                }),
+              },
+            } satisfies CreateSubOrgParams,
           })
-          return await getOrCreateEthereumAccounts(client_)
+        },
+      }),
+      mpp: mpp(),
+      testnet,
+    })
+  }
+
+  if (adapterType === 'privy') {
+    const client = getPrivyClient()
+    return Provider.create({
+      adapter: privy({
+        client,
+        async loadAccounts({ client }) {
+          if (!(await client.getAccessToken().catch(() => null)))
+            await requestPrivyEmailOtp({ client: client.auth })
         },
       }),
       mpp: true,
@@ -145,7 +169,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         return { accounts: [newAccount] }
       },
     }),
-    mpp: true,
+    mpp: mpp(),
     testnet,
   })
 }
@@ -157,6 +181,12 @@ export function switchAdapter(adapterType: AdapterType) {
 
 export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 'tempoWallet') {
   dialogMode = mode
+  Mppx.restore()
+  provider = createProvider(adapterType)
+}
+
+export function switchMppMode(mode: MppMode, adapterType: AdapterType = 'tempoWallet') {
+  mppMode = mode
   Mppx.restore()
   provider = createProvider(adapterType)
 }
@@ -174,37 +204,57 @@ function getTurnkeyAdapterClient() {
   return turnkeyClient as TurnkeyPlaygroundClient
 }
 
-function createTurnkeySubOrgParams(name?: string | undefined) {
-  return {
-    ...(name ? { userName: name } : {}),
-    customWallet: {
-      walletName: 'Tempo Playground',
-      walletAccounts: generateWalletAccountsFromAddressFormat({
-        addresses: [turnkeyEthereumAddressFormat],
-      }),
-    },
-  } satisfies CreateSubOrgParams
+function getPrivyClient() {
+  const appId = import.meta.env.VITE_PRIVY_APP_ID
+  if (!appId) throw new Error('VITE_PRIVY_APP_ID is required for the Privy adapter.')
+
+  if (!privyClient) {
+    const inner = new Privy({
+      appId,
+      ...(import.meta.env.VITE_PRIVY_CLIENT_ID
+        ? { clientId: import.meta.env.VITE_PRIVY_CLIENT_ID }
+        : {}),
+      storage: new PrivyLocalStorage(),
+    })
+    mountPrivyEmbeddedWalletIframe(inner)
+    // Wrap `embeddedWallet.getEthereumProvider` so the adapter's internal
+    // `loadEthereumWallets` waits for the secure-context iframe to be ready
+    // before requesting providers.
+    const originalGetEthereumProvider = inner.embeddedWallet.getEthereumProvider.bind(
+      inner.embeddedWallet,
+    )
+    inner.embeddedWallet.getEthereumProvider = (async (params) => {
+      await privyIframeReady
+      return await originalGetEthereumProvider(params)
+    }) as typeof inner.embeddedWallet.getEthereumProvider
+    privyClient = inner
+  }
+
+  return privyClient
 }
 
-async function getEthereumAccounts(client: TurnkeyPlaygroundClient) {
-  return (await client.fetchWallets())
-    .flatMap((wallet) => wallet.accounts)
-    .filter((account) => account.addressFormat === turnkeyEthereumAddressFormat)
-}
+/** Mount the Privy secure-context iframe per https://docs.privy.io/recipes/core-js. */
+function mountPrivyEmbeddedWalletIframe(client: Privy) {
+  const iframe = document.createElement('iframe')
+  iframe.src = client.embeddedWallet.getURL()
+  iframe.title = 'Privy embedded wallet'
+  iframe.style.display = 'none'
 
-async function getOrCreateEthereumAccounts(client: TurnkeyPlaygroundClient) {
-  const existing = await getEthereumAccounts(client)
-  if (existing.length > 0) return existing
-
-  await client.createWallet({
-    walletName: 'Tempo Playground',
-    accounts: [turnkeyEthereumAddressFormat],
+  privyIframeReady = new Promise<void>((resolve) => {
+    iframe.addEventListener('load', () => resolve())
   })
 
-  const created = await getEthereumAccounts(client)
-  if (created.length > 0) return created
+  document.body.appendChild(iframe)
 
-  throw new Error('No Turnkey Ethereum account found after creating a wallet.')
+  client.setMessagePoster(
+    iframe.contentWindow as unknown as Parameters<Privy['setMessagePoster']>[0],
+  )
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== iframe.contentWindow) return
+    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+    client.embeddedWallet.onMessage(data)
+  })
 }
 
 export function switchTheme(

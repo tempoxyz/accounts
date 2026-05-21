@@ -3,53 +3,117 @@ title: Theming
 description: Match embedded account surfaces to your product.
 ---
 
+import { Cards, Card } from 'vocs'
+import { ConnectAccount } from '../../../components/ConnectAccount'
+import { Demo, DemoReset } from '../../../components/Demo'
+import * as Steps from '../../../components/Steps'
+
 # Theming
 
-Configure the appearance of embedded account surfaces without changing the signing adapter contract.
+Theming lets you tune Tempo Wallet's embedded account prompts without changing your signing adapter or account flow.
+
+Use it when your app already uses Tempo Wallet and you want the prompt to match your product's accent color, corner radius, and light or dark mode. These options apply to hosted Tempo Wallet surfaces opened by the `dialog` or `tempoWallet` adapter. App-owned buttons, forms, and custom adapter screens still use your own design system.
 
 ## Demo
 
-Target workspace: `examples/theming/`.
+By the end of this guide you'll configure a Uniswap-style Tempo Wallet prompt. Try the sign-in button below: it uses a hot pink accent and pill-shaped radius.
 
-:::warning[Stub]
-This page needs product design input before implementation. The first pass should identify which surfaces are themeable and which are owned by hosted wallet infrastructure.
-:::
+<Demo
+  title="Uniswap-style Sign In"
+  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/basic"
+  headerAction={<DemoReset />}
+  className="flex flex-col gap-3"
+  wagmiConfig="theming"
+>
+  <Steps.Step
+    label="Create an account, or use an existing one."
+    action={<ConnectAccount />}
+  />
+</Demo>
 
 ## Walkthrough
 
 ::::steps
 
-### Install the SDK
+### Connect an Account
 
-```bash
-pnpm add accounts
+Follow the [Connect Accounts](/docs/guides/connect-accounts) guide to set up Wagmi with the Tempo Wallet adapter and let the user sign in. Theming is configured on the same connector, so you do not need to change your app components.
+
+### Choose Theme Values
+
+Pick the values that should travel with the hosted prompt.
+
+| Option | Values | Purpose |
+| --- | --- | --- |
+| `accent` | `'neutral'`, `'blue'`, `'red'`, `'amber'`, `'green'`, `'purple'`, or any CSS color value | Colors primary actions and emphasis states. |
+| `radius` | `'none'`, `'small'`, `'medium'`, `'large'`, or `'full'` | Controls the corner radius used inside the prompt. |
+| `scheme` | `'light'` or `'dark'` | Sets the prompt's color scheme. Omit it to follow the user's operating system setting. |
+
+### Configure Tempo Wallet
+
+Pass `theme` to `tempoWallet`. The SDK sends these values to the embedded iframe or popup whenever Tempo Wallet opens.
+
+```tsx twoslash [src/config.ts]
+// @noErrors
+import { createConfig, http } from 'wagmi'
+import { tempo } from 'wagmi/chains'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  chains: [tempo],
+  connectors: [
+    tempoWallet({
+      theme: { // [!code focus]
+        accent: '#ff007a', // [!code focus]
+        radius: 'full', // [!code focus]
+      }, // [!code focus]
+    }),
+  ],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+  },
+})
 ```
 
-### Configure the Provider
+### Use the Same Sign In Flow
 
-Choose the adapter whose surfaces need theming.
+Your sign-in button stays the same. When `connect` opens Tempo Wallet, the prompt uses the theme from your connector configuration.
 
-### Connect the user's account
+```tsx twoslash [src/Connect.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
 
-Open the embedded surface in the target browser contexts.
+export function Connect() {
+  const connect = useConnect()
+  const [connector] = useConnectors()
 
-### Submit the request
-
-Apply the supported theme options.
-
-### Verify the result
-
-Compare the embedded dialog, popup, and mobile behavior.
+  return (
+    <button
+      disabled={connect.isPending}
+      onClick={() => connect.connect({ connector })}
+    >
+      {connect.isPending ? 'Check prompt...' : 'Sign in'}
+    </button>
+  )
+}
+```
 
 ::::
 
-## Notes / Gotchas
-
-- Hosted wallet surfaces may intentionally limit theming to preserve trust and security cues.
-- Domain-bound and custom adapters may own more of the UI surface directly.
-
 ## Next Steps
 
-- [Tempo Wallet adapter](/docs/adapters/tempo-wallet)
-- [Dialog reference](/docs/api/dialogs)
-- [Deploying to Production](/docs/production)
+<Cards>
+  <Card
+    description="Wire up the Tempo Wallet adapter and let users sign in from your app."
+    icon="lucide:link"
+    to="/docs/guides/connect-accounts"
+    title="Connect Accounts"
+  />
+  <Card
+    description="Use Tempo Wallet as the hosted adapter for account creation and signing."
+    icon="lucide:wallet"
+    to="/docs/adapters/tempo-wallet"
+    title="Tempo Wallet Adapter"
+  />
+</Cards>

@@ -1,0 +1,156 @@
+---
+title: Privy Adapter
+description: Use Privy embedded wallets as the account signing adapter.
+---
+
+import { Cards, Card } from 'vocs'
+
+# Privy Adapter
+
+The Privy adapter is for apps that want Privy to own authentication, session state, and embedded wallet state while plugging into Tempo account features. Your app runs the login or sign-up ceremony; the adapter handles silent reconnect, wallet loading, and provider signing.
+
+Use it when you want:
+
+- Privy to own app authentication and embedded wallets.
+- Your app to keep its own login or sign-up experience.
+- Tempo account features without asking app code to construct wallet provider handles.
+
+## Usage
+
+The `loadAccounts` callback should run Privy auth only. After the callback completes, the adapter loads embedded Ethereum wallets from the Privy client. If `createAccount` is omitted, registration also uses `loadAccounts`.
+
+:::code-group
+
+```ts [provider.ts]
+import { Provider, privy } from 'accounts'
+
+import { createPrivyClient } from './privy-client.js'
+import { signInWithPrivyEmail } from './privy-email.js'
+
+const client = createPrivyClient({
+  appId: import.meta.env.VITE_PRIVY_APP_ID,
+  clientId: import.meta.env.VITE_PRIVY_CLIENT_ID,
+})
+
+export const provider = Provider.create({
+  adapter: privy({
+    client,
+    loadAccounts: async ({ client }) => {
+      if (!(await client.getAccessToken().catch(() => null)))
+        await signInWithPrivyEmail(client.auth)
+    },
+  }),
+})
+```
+
+```ts [privy-client.ts]
+import Privy, { LocalStorage as PrivyLocalStorage } from '@privy-io/js-sdk-core'
+
+export function createPrivyClient(options: {
+  appId: string
+  clientId?: string | undefined
+}) {
+  const client = new Privy({
+    appId: options.appId,
+    ...(options.clientId ? { clientId: options.clientId } : {}),
+    storage: new PrivyLocalStorage(),
+  })
+
+  const ready = mountPrivyEmbeddedWalletIframe(client)
+  const getEthereumProvider = client.embeddedWallet.getEthereumProvider.bind(
+    client.embeddedWallet,
+  )
+
+  client.embeddedWallet.getEthereumProvider = (async (parameters) => {
+    await ready
+    return await getEthereumProvider(parameters)
+  }) as typeof client.embeddedWallet.getEthereumProvider
+
+  return client
+}
+
+function mountPrivyEmbeddedWalletIframe(client: Privy) {
+  const iframe = document.createElement('iframe')
+  iframe.src = client.embeddedWallet.getURL()
+  iframe.title = 'Privy embedded wallet'
+  iframe.style.display = 'none'
+
+  const ready = new Promise<void>((resolve) => {
+    iframe.addEventListener('load', () => resolve(), { once: true })
+  })
+
+  document.body.appendChild(iframe)
+
+  client.setMessagePoster(
+    iframe.contentWindow as unknown as Parameters<Privy['setMessagePoster']>[0],
+  )
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== iframe.contentWindow) return
+    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+    client.embeddedWallet.onMessage(data)
+  })
+
+  return ready
+}
+```
+
+```ts [privy-email.ts]
+import type Privy from '@privy-io/js-sdk-core'
+
+export async function signInWithPrivyEmail(client: Privy['auth']) {
+  const email = window.prompt('Email')
+  if (!email) throw new Error('Email is required.')
+
+  await client.email.sendCode(email)
+
+  const code = window.prompt('Verification code')
+  if (!code) throw new Error('Verification code is required.')
+
+  await client.email.loginWithCode(
+    email,
+    code,
+    'login-or-sign-up',
+    { embedded: { ethereum: { createOnLogin: 'users-without-wallets' } } },
+  )
+}
+```
+
+:::
+
+:::info[Why the iframe setup is required]
+Privy Core JS requires apps to mount the embedded wallet secure-context iframe and wire bidirectional message passing before embedded wallet provider requests can work. See Privy's [secure context setup](https://docs.privy.io/recipes/core-js#3-connect-to-the-secure-context).
+:::
+
+:::info
+`signInWithPrivyEmail` is intentionally small so the example is runnable. Replace it with your app's real Privy UI, OAuth flow, or account recovery flow while keeping the adapter callbacks the same: run auth only, then let the adapter load wallets from Privy.
+:::
+
+## Account Selection
+
+By default, all embedded Ethereum wallets on the Privy user are connected. Return addresses from `createAccount` or `loadAccounts` only when you want to select or order the accounts exposed through the provider.
+
+```ts
+const provider = Provider.create({
+  adapter: privy({
+    client,
+    loadAccounts: async ({ client }) => {
+      await signInWithPrivyEmail(client.auth)
+      return [selectedAddress]
+    },
+  }),
+})
+```
+
+The first returned address is active by default. Do not return `{ address, provider }` objects from these callbacks.
+
+## Next Steps
+
+<Cards>
+  <Card
+    description="Full API reference for the privy adapter, including client and account loading hooks."
+    icon="lucide:book"
+    to="/docs/api/privy"
+    title="privy reference"
+  />
+</Cards>

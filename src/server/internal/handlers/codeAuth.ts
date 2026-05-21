@@ -1,6 +1,6 @@
 import type { Chain, Client, Transport } from 'viem'
 import { createClient, http } from 'viem'
-import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
+import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 import * as z from 'zod/mini'
 
 import * as CliAuth from '../../CliAuth.js'

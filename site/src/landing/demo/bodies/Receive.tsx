@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { InteractiveQr } from "../../sections/InteractiveQr";
 import { shorten } from "../sdk";
-import { bodyAnimation } from "./shared";
+import { useBodyAnimation } from "./shared";
 
 /**
  * Pre-connect placeholder address. The Tempo wallet exposes a single
@@ -22,6 +22,7 @@ export function ReceiveBody({
   address: `0x${string}`;
   delay: number;
 }) {
+  const body = useBodyAnimation(delay);
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -49,8 +50,9 @@ export function ReceiveBody({
 
   return (
     <div
+      ref={body.ref}
       className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6"
-      style={bodyAnimation(delay)}
+      style={body.style}
     >
       <div className="flex flex-col gap-1.5">
         <p className="text-[13px] text-foreground-muted">Receive into</p>
@@ -71,7 +73,7 @@ export function ReceiveBody({
       <button
         type="button"
         onClick={onCopy}
-        className="flex h-11 w-full items-center justify-center bg-cta px-4 text-[14px] text-cta-fg outline-none transition-opacity hover:opacity-90 focus-visible:opacity-90"
+        className="flex h-11 w-full items-center justify-center bg-cta px-4 text-[14px] text-cta-fg outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90"
       >
         {copied ? "Copied" : "Copy address"}
       </button>

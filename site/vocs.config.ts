@@ -19,10 +19,6 @@ const config: Config = defineConfig({
   cacheDir: '.vocs/cache',
   checkDeadlinks: 'warn',
   description: 'Tempo Accounts SDK documentation',
-  iconUrl: {
-    dark: '/favicon-dark.svg',
-    light: '/favicon-light.svg',
-  },
   editLink: {
     link: 'https://github.com/tempoxyz/accounts/edit/main/site/src/pages/:path',
     text: 'Suggest changes to this page',
@@ -57,13 +53,13 @@ const config: Config = defineConfig({
         items: [
           { text: 'Connect Accounts', link: '/docs/guides/connect-accounts' },
           { text: 'Authentication', link: '/docs/guides/authentication' },
-          { text: 'Payments', link: '/docs/guides/payments' },
+          { text: 'Transfers', link: '/docs/guides/transfers' },
           { text: 'Spend Permissions', link: '/docs/guides/spend-permissions' },
           { text: 'Subscriptions', link: '/docs/guides/subscriptions' },
           { text: 'Fee Sponsorship', link: '/docs/guides/fee-sponsorship' },
+          { text: 'Deposits', link: '/docs/guides/deposits' },
+          { text: 'Swaps', link: '/docs/guides/swaps' },
           { text: 'Theming', link: '/docs/guides/theming' },
-          { text: 'Machine Payments (MPP)', link: '/docs/guides/machine-payments' },
-          { text: 'React Native', link: '/docs/guides/react-native' },
           { text: 'CLI', link: '/docs/guides/cli' },
         ],
       },
@@ -72,24 +68,11 @@ const config: Config = defineConfig({
         items: [
           { text: 'Overview', link: '/docs/adapters' },
           { text: 'Tempo Wallet', link: '/docs/adapters/tempo-wallet' },
-          { text: 'WebAuthn', link: '/docs/adapters/webauthn' },
+          { text: 'WebAuthn (Passkeys)', link: '/docs/adapters/webauthn' },
+          { text: 'Turnkey', link: '/docs/adapters/turnkey' },
+          { text: 'Privy', link: '/docs/adapters/privy' },
+          { text: 'Private Key', link: '/docs/adapters/private-key' },
           { text: 'Custom', link: '/docs/adapters/custom' },
-        ],
-      },
-      {
-        text: 'Enterprise',
-        items: [
-          {
-            text: 'Bring Your Auth',
-            items: [
-              { text: 'Overview', link: '/docs/enterprise/bring-your-auth' },
-              { text: 'Privy', link: '/docs/enterprise/bring-your-auth/privy' },
-              { text: 'AWS KMS', link: '/docs/enterprise/bring-your-auth/aws-kms' },
-              { text: 'Turnkey', link: '/docs/enterprise/bring-your-auth/turnkey' },
-              { text: 'Custom', link: '/docs/enterprise/bring-your-auth/custom' },
-            ],
-          },
-          { text: 'Hosted Universal Wallets', link: '/docs/enterprise/hosted-universal-wallets' },
         ],
       },
       {
@@ -102,6 +85,7 @@ const config: Config = defineConfig({
               { text: 'Overview', link: '/docs/api/adapters' },
               { text: 'dialog', link: '/docs/api/dialog' },
               { text: 'local', link: '/docs/api/local' },
+              { text: 'privy', link: '/docs/api/privy' },
               { text: 'secp256k1', link: '/docs/api/secp256k1' },
               { text: 'turnkey', link: '/docs/api/turnkey' },
               { text: 'webAuthn', link: '/docs/api/webAuthn' },
@@ -230,6 +214,8 @@ const config: Config = defineConfig({
       },
     ],
   },
+  iconUrl: { light: '/tempo-light.svg', dark: '/tempo-dark.svg' },
+  logoUrl: { light: '/lockup-light.svg', dark: '/lockup-dark.svg' },
   socials: [
     {
       icon: 'github',

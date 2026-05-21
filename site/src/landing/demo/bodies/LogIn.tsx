@@ -1,7 +1,7 @@
 "use client";
 
 import type { DemoBodyProps } from "../types";
-import { PrimaryButton, bodyAnimation } from "./shared";
+import { PrimaryButton, useBodyAnimation } from "./shared";
 
 export function LogInBody({
   status,
@@ -10,6 +10,7 @@ export function LogInBody({
   delay,
   adapter,
 }: DemoBodyProps) {
+  const body = useBodyAnimation(delay);
   const idleCta =
     adapter === "webAuth"
       ? "Continue with passkey"
@@ -38,8 +39,9 @@ export function LogInBody({
 
   return (
     <div
+      ref={body.ref}
       className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6"
-      style={bodyAnimation(delay)}
+      style={body.style}
     >
       <div className="flex flex-col gap-1.5">
         <p className="text-[18px] text-foreground">Sign in to your account</p>

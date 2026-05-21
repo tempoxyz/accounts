@@ -17,6 +17,16 @@ export type Kv = {
   /** Delete a value by key. */
   delete: (key: string) => Promise<void>
   /**
+   * Atomic create-if-absent. Returns `true` when the value was written,
+   * `false` when a non-expired value already exists.
+   *
+   * Optional. Backends with a linearizable create primitive should
+   * implement this so consumers can atomically reject duplicates.
+   * Consumers may fall back to `get` then `set` when strict atomicity is
+   * not required.
+   */
+  create?: (key: string, value: unknown, options?: set.Options | undefined) => Promise<boolean>
+  /**
    * Atomic read-and-delete. Returns the value if present, `undefined` if
    * missing or expired. Across concurrent callers, exactly one observer
    * receives a non-`undefined` return for a given key, and the key is
@@ -51,11 +61,10 @@ export function from<kv extends Kv>(kv: kv): kv {
  * Cloudflare KV's minimum TTL is 60 seconds; the platform enforces its own
  * minimum independent of what's passed here.
  *
- * **Not safe for one-time-consume semantics.** Cloudflare KV is eventually
- * consistent across data centers — concurrent read+delete races can let
- * the same key be "consumed" twice. `take` is intentionally NOT
- * implemented. Use a Durable Object (or another linearizable backend)
- * for the SIWE challenge nonce store.
+ * **Not safe for one-time-consume or unique-key semantics.**
+ * Cloudflare KV is eventually consistent across data centers, so `take`
+ * and `create` are intentionally NOT implemented. Use a Durable Object
+ * (or another linearizable backend) for the SIWE challenge nonce store.
  */
 export function cloudflare(kv: cloudflare.Parameters): Kv {
   return from({
@@ -84,10 +93,11 @@ export declare namespace cloudflare {
 
 /**
  * Adapt a Cloudflare Durable Object namespace into a `Kv` with atomic
- * `take`. Unlike `Kv.cloudflare`, a Durable Object's storage is
- * single-actor and linearizable — `take` (read+delete) is guaranteed
- * atomic across concurrent callers, which makes this the recommended
- * backend for SIWE challenge nonce storage on Cloudflare Workers.
+ * `take` and `create`. Unlike `Kv.cloudflare`, a Durable Object's
+ * storage is single-actor and linearizable, so `take` (read+delete) and
+ * `create` (create-if-absent) are guaranteed atomic across concurrent
+ * callers. This makes it the recommended backend for SIWE challenge
+ * nonce storage on Cloudflare Workers.
  *
  * Pair with `Kv.NonceStorage` (or your own DO class implementing the
  * same fetch protocol).
@@ -147,6 +157,12 @@ export function durableObject(
     async set(key, value, options) {
       await rpc('set', key, { value, ttl: options?.ttl })
     },
+    async create(key, value, options) {
+      const { created } = (await rpc('create', key, { value, ttl: options?.ttl })) as {
+        created: boolean
+      }
+      return created
+    },
     async delete(key) {
       await rpc('delete', key)
     },
@@ -161,10 +177,16 @@ export declare namespace durableObject {
   /**
    * Minimal shape of a Cloudflare Durable Object namespace binding.
    * Compatible with `DurableObjectNamespace` from `@cloudflare/workers-types`.
+   *
+   * `get`'s parameter is typed as `any` (rather than `unknown`) so the
+   * stricter `(id: DurableObjectId) => ...` signature on Cloudflare's
+   * `DurableObjectNamespace` is structurally assignable here without an
+   * intermediate cast on the caller.
    */
   type Namespace = {
     idFromName: (name: string) => unknown
-    get: (id: unknown) => { fetch: (input: string, init?: unknown) => Promise<Response> }
+    // biome-ignore lint/suspicious/noExplicitAny: contravariant id parameter — see JSDoc above.
+    get: (id: any) => { fetch: (input: string, init?: unknown) => Promise<Response> }
   }
   type Options = {
     /**
@@ -222,6 +244,17 @@ export class NonceStorage {
       await this.state.storage.put(key, entry)
       return Response.json({})
     }
+    if (op === 'create') {
+      const current = await this.state.storage.get<NonceStorage.Entry>(key)
+      if (current && !isExpired(current)) return Response.json({ created: false })
+
+      const body = (await request.json()) as { value: unknown; ttl?: number }
+      const entry: NonceStorage.Entry = body.ttl
+        ? { value: body.value, expiresAt: Date.now() + body.ttl * 1000 }
+        : { value: body.value }
+      await this.state.storage.put(key, entry)
+      return Response.json({ created: true })
+    }
     if (op === 'delete') {
       await this.state.storage.delete(key)
       return Response.json({})
@@ -273,6 +306,13 @@ export function memory(options: memory.Options = {}): Kv {
     async set(key, value, options) {
       const expiresAt = options?.ttl ? now() + options.ttl * 1000 : undefined
       store.set(key, expiresAt !== undefined ? { value, expiresAt } : { value })
+    },
+    async create(key, value, options) {
+      const entry = store.get(key)
+      if (entry && !isExpired(entry)) return false
+      const expiresAt = options?.ttl ? now() + options.ttl * 1000 : undefined
+      store.set(key, expiresAt !== undefined ? { value, expiresAt } : { value })
+      return true
     },
     // Atomic in-process: the synchronous `Map.get` + `Map.delete` runs
     // in a single microtask, so concurrent `take(key)` callers (within

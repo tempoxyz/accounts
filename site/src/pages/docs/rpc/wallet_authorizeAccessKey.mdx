@@ -5,7 +5,7 @@ description: Authorize an access key for delegated transaction signing.
 
 # `wallet_authorizeAccessKey`
 
-Authorizes an access key with an expiry and optional spending limits for delegated transaction signing.
+Authorizes an access key with an expiry, spending limits, and optional call scopes for delegated transaction signing.
 
 ## Request
 
@@ -47,6 +47,8 @@ type Request = {
   }]
 }
 ```
+
+Tempo Wallet-hosted approval pages require at least one `limits` entry and one `scopes` entry. Use the `address` field on each scope for the target contract; malformed scope entries are rejected before approval.
 
 ## Response
 
@@ -91,6 +93,9 @@ const result = await provider.request({
     expiry: Expiry.days(1),
     limits: [
       { token: '0x20c0000000000000000000000000000000000001', limit: '0x5F5E100' },
+    ],
+    scopes: [
+      { address: '0x20c0000000000000000000000000000000000001' },
     ],
   }],
 })

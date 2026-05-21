@@ -15,6 +15,7 @@
       "/relay",
       "/fortune",
       "/zero-dollar-auth",
+      "/mpp/*",
     ],
   },
 }

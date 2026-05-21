@@ -11,12 +11,12 @@ import {
   http as viem_http,
 } from 'viem'
 import { type Address, english, generateMnemonic, type JsonRpcAccount } from 'viem/accounts'
-import { tempoDevnet, tempoLocalnet, tempoModerato } from 'viem/chains'
 import {
   // biome-ignore lint/correctness/noUnusedImports: This is needed to ensure TypeScript can reference viem/tempo types portably
   type z_TokenId as _,
   Account,
 } from 'viem/tempo'
+import { tempoDevnet, tempoLocalnet, tempoModerato } from 'viem/tempo/chains'
 
 export const id =
   (typeof process !== 'undefined' &&

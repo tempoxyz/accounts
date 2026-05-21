@@ -1,5 +1,128 @@
 # accounts
 
+## 0.14.1
+
+### Patch Changes
+
+- 62705cb: Added an `on` filter to the `wallet_connect` `showDeposit` capability to direct if the deposit screen should be shown on login or register.
+
+## 0.14.0
+
+### Minor Changes
+
+- feb1ab6: **Breaking:** Updated Tempo chain imports to use scoped chain entrypoints. Bump your Viem version to `>=2.50.4`.
+
+### Patch Changes
+
+- 7aeec48: Fixed access key authorization to reject requests that require external key material when none is provided.
+- 78778cb: Added a Privy adapter for connecting and signing with app-provided Privy embedded wallet accounts.
+- e15757f: Added a `showDeposit` capability to `wallet_connect`.
+
+## 0.13.0
+
+### Minor Changes
+
+- 0666744: **Breaking:** Changed `Handler.auth()` to require callers to provide `origin` or `domain`, so SIWE challenge and verify flows pinned domain binding instead of deriving it from request `Host` headers.
+- f652ff2: **Breaking:** Updated `wallet_deposit` params to use `amount` and `token` and removed `value`.
+
+  ```diff
+  provider.request({
+    method: 'wallet_deposit',
+  - params: [{ value: '25' }],
+  + params: [{ amount: '25', token: 'pathUSD' }],
+  })
+  ```
+
+### Patch Changes
+
+- ab516b7: Fixed WebAuthn credential storage to bind credentials to their registered user id and use atomic duplicate rejection when the configured `Kv` supports it.
+- 4029a37: Fixed dialog auth capability handling to forward returned auth tokens through wallet connection account results.
+- bdd6b39: Rejected unsafe app-provided external fee-payer URLs unless relay config explicitly allowed unsafe URLs.
+- c64d825: Fixed `wallet_connect` auth handling to allow derived or forwarded auth endpoints without dropping the SIWE signature.
+- dd5d399: Fixed access-key authorization lifecycle handling so pending authorizations stayed attached until publication was known.
+
+## 0.12.2
+
+### Patch Changes
+
+- 22153c8: Added access-key publication status helpers and matched scoped key policies locally without crashing on malformed scope data.
+- c97987d: Documented chain-qualified relay routes and showed the MPP example server sponsoring pull-mode charge transactions.
+- 652ae1a: Added error details to `wallet_sendCalls` failures so viem push-mode fallbacks preserved the original provider error.
+- 91b5699: Passed MPP session options from `Provider.create({ mpp })` through to mppx so clients could configure session deposits.
+- 8c4b343: Kept pending access-key authorization through fill and signing-only flows so first-use MPP charges and activation gas estimates could publish the key.
+- 20cf1d2: Preserved wallet-host RPC error codes when dialog requests failed so validation errors were no longer reported as user rejection.
+
+## 0.12.1
+
+### Patch Changes
+
+- 2f2f85e: Removed `signature` from `authorizeAccessKey.Parameters`.
+- e91311f: Defaulted `feeToken` to chain settlement token in Path A. Protected resolved token from `fill()` null-clobber. Fixed sponsored transactions reverting with insufficient FeeAMM liquidity.
+
+## 0.12.0
+
+### Minor Changes
+
+- 91711b3: Changed the default value of `mpp` on `Provider.create` to `true`. Machine Payment Protocol (mppx) support is now enabled by default -- pass `mpp: false` to opt out.
+- 5c46dd4: **Breaking:** Renamed `wallet_send` to `wallet_transfer`. The method now defaults to "read-only" mode.
+
+  For previous behavior, pass `editable: true` to open the editable flow.
+
+  ```diff
+  provider.request({
+  - method: 'wallet_send',
+  - params: [{ token: '0x...' }],
+  + method: 'wallet_transfer',
+  + params: [{ editable: true, token: '0x...' }],
+  })
+  ```
+
+### Patch Changes
+
+- d545edf: Carried `keyType` through on non-signable json-rpc accounts so the viem/tempo transaction formatter can derive the correct `keyType`/`keyData` placeholder bytes during `eth_fillTransaction` gas estimation (notably for WebAuthn EOAs).
+- 59046a4: Made `keyAuthorization.address` optional in the RPC schema. RPC nodes return prepared transactions with only `keyId` (the access key address), so requiring `address` rejected valid `eth_signTransaction` payloads when MPP signed via an access key.
+- 5a15e7d: Relaxed the `id` parameter on `Kv.durableObject.Namespace.get` from `unknown` to `any` so Cloudflare's `DurableObjectNamespace<T>` is structurally assignable without an intermediate cast at the call site.
+- 6d6cc9e: Skipped the `mppx` `globalThis.fetch` polyfill on runtimes where `fetch` is read-only (e.g. Cloudflare Workers). Added `mpp.polyfill` option for explicit control; defaults to auto-detect via the property descriptor.
+- d545edf: Fixed `local` and `turnkey` adapters dropping `publicKey` when preparing key authorizations, which caused the wallet to sign authorizations for a freshly-generated address instead of the caller-supplied one.
+- 63c9d5c: Removed console warning from expected signing paths in dialog adapter.
+- f0757a4: Simplified loadAccounts and createAccount in turnkey adapter.
+- 9d20725: Issued a `Handler.webAuthn` session on successful registration (matching `/login`), revoked it via `wallet_disconnect` in the WebAuthn adapter, and surfaced a consistent base64url-encoded `userId` across `/register` and `/login`.
+- 5a15e7d: Defaulted `Handler.auth({ trustProxy })` to `true` on Cloudflare Workers and appended a `trustProxy` / `origin` hint to "domain mismatch" / "uri mismatch" errors raised from `wallet_connect`.
+
+## 0.11.0
+
+### Minor Changes
+
+- 0a73f2c: Renamed the `wallet_send` `value` parameter to `amount`.
+
+  ```diff
+   await provider.request({
+     method: 'wallet_send',
+     params: [{
+       to: '0x...',
+       token: '0x20c0000000000000000000000000000000000001',
+  -    value: '1.5',
+  +    amount: '1.5',
+     }],
+   })
+  ```
+
+### Patch Changes
+
+- 43b8700: Fixed access keys selection to include chain.
+- b4a08ef: Fixed access key selection in the dialog adapter by forwarding calls.
+- b4a08ef: Added console logging in the dialog adapter's access key fallback path.
+- 0a73f2c: Added an optional `memo` parameter to `wallet_send` that the wallet attaches to TIP-20 transfers and rejects with `InvalidParamsError` for non-TIP-20 tokens.
+- 0a73f2c: Widened the `wallet_send` `token` parameter to accept a curated tokenlist symbol (case-insensitive, e.g. `"pathUsd"`) in addition to a contract address.
+
+## 0.10.7
+
+### Patch Changes
+
+- 7cb2162: Exposed the `Adapter` namespace from the package root so consumers can author custom adapters with `Adapter.define`.
+- 195d6e8: Fixed scoped access key selection to only match keys whose scopes covered the current transaction calls.
+- 70814cd: Made `turnkey` `createAccount` optional and default registration requests to `loadAccounts`.
+
 ## 0.10.6
 
 ### Patch Changes

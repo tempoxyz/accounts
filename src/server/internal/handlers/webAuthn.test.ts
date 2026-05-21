@@ -67,6 +67,26 @@ describe('POST /register', () => {
   })
 })
 
+describe('kv', () => {
+  test('store without atomic create is accepted', () => {
+    const kv: Kv.Kv = {
+      async get() {
+        return undefined
+      },
+      async set() {},
+      async delete() {},
+    }
+
+    expect(() =>
+      webAuthn({
+        kv,
+        origin: 'http://localhost',
+        rpId: 'localhost',
+      }),
+    ).not.toThrow()
+  })
+})
+
 describe('POST /login', () => {
   test('error: unknown credential → 400', async () => {
     const response = await fetch(`${server.url}/login`, {

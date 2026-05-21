@@ -1,7 +1,7 @@
 "use client";
 
 import type { DemoBodyProps } from "../types";
-import { PrimaryButton, bodyAnimation } from "./shared";
+import { PrimaryButton, useBodyAnimation } from "./shared";
 
 function SwapArrow() {
   return (
@@ -53,6 +53,7 @@ export function TradeBody({
   onAction,
   delay,
 }: DemoBodyProps) {
+  const body = useBodyAnimation(delay);
   const buttonLabel =
     status === "running"
       ? "Opening Tempo…"
@@ -62,8 +63,9 @@ export function TradeBody({
 
   return (
     <div
+      ref={body.ref}
       className="flex w-full max-w-[420px] flex-col gap-3 bg-panel-2 p-6"
-      style={bodyAnimation(delay)}
+      style={body.style}
     >
       <TokenRow label="From" amount="100" token="USDC" />
       <div className="flex items-center justify-center py-2 text-foreground-muted">

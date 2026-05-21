@@ -17,10 +17,10 @@ import { Kv } from 'accounts/server'
 // In-memory (for development/testing).
 const kv = Kv.memory()
 
-// Cloudflare Workers KV (eventually consistent — no atomic `take`).
+// Cloudflare Workers KV (eventually consistent — no atomic `take` or `create`).
 const kv = Kv.cloudflare(env.MY_KV_NAMESPACE)
 
-// Cloudflare Durable Object (linearizable — atomic `take` available).
+// Cloudflare Durable Object (linearizable — atomic `take` and `create` available).
 const kv = Kv.durableObject(env.NONCE_DO)
 ```
 
@@ -48,13 +48,13 @@ type memory.Options = {
 
 Creates a key-value store backed by a Cloudflare Workers KV namespace (or compatible binding). Uses the underlying store's native `expirationTtl` for TTL — Cloudflare KV's minimum TTL is 60 seconds, enforced by the platform independent of what's passed here.
 
-**Not safe for one-time-consume semantics.** Cloudflare KV is eventually consistent across data centers — concurrent read+delete races can let the same key be "consumed" twice. The optional [`take`](#take-key-optional) method is intentionally NOT implemented. Use [`Kv.durableObject`](#kv-durableobject-namespace-options) (or another linearizable backend) for the SIWE challenge nonce store.
+**Not safe for one-time-consume or unique-key semantics.** Cloudflare KV is eventually consistent across data centers — concurrent read+delete races can let the same key be "consumed" twice, and concurrent create-if-absent checks can race. The optional [`take`](#take-key-optional) and [`create`](#create-key-value-options-optional) methods are intentionally NOT implemented. Use [`Kv.durableObject`](#kv-durableobject-namespace-options) (or another linearizable backend) when strict atomicity is required.
 
 - **namespace** — Cloudflare KV namespace binding.
 
 ### Kv.durableObject(namespace, options?)
 
-Adapts a Cloudflare Durable Object namespace into a `Kv` with atomic [`take`](#take-key-optional). Unlike `Kv.cloudflare`, a Durable Object's storage is single-actor and linearizable — `take` (read+delete) is guaranteed atomic across concurrent callers, which makes this the recommended backend for SIWE challenge nonce storage on Cloudflare Workers.
+Adapts a Cloudflare Durable Object namespace into a `Kv` with atomic [`take`](#take-key-optional) and [`create`](#create-key-value-options-optional). Unlike `Kv.cloudflare`, a Durable Object's storage is single-actor and linearizable — `take` (read+delete) and `create` (create-if-absent) are guaranteed atomic across concurrent callers, which makes this the recommended backend for SIWE challenge nonce storage on Cloudflare Workers.
 
 Pair with [`NonceStorage`](#noncestorage) (or your own DO class implementing the same fetch protocol).
 
@@ -163,6 +163,10 @@ type Kv = {
   /** Delete a value by key. */
   delete: (key: string) => Promise<void>
   /**
+   * Atomic create-if-absent. Optional — see below.
+   */
+  create?: (key: string, value: unknown, options?: set.Options) => Promise<boolean>
+  /**
    * Atomic read-and-delete. Optional — see below.
    */
   take?: <value = unknown>(key: string) => Promise<value | undefined>
@@ -174,14 +178,26 @@ type set.Options = {
 }
 ```
 
+### `create(key, value, options?)` (optional)
+
+Atomic create-if-absent. Returns `true` when the value was written, or `false` when a non-expired value already exists.
+
+Backends with a linearizable create primitive should implement this so consumers can reject duplicates atomically. Consumers may fall back to `get` then `set` when strict atomicity is not required.
+
+| Adapter            | `create` implemented?                                                        |
+| ------------------ | ---------------------------------------------------------------------------- |
+| `Kv.memory`        | ✅ atomic in-process                                                         |
+| `Kv.durableObject` | ✅ linearizable                                                              |
+| `Kv.cloudflare`    | ❌ (eventually consistent — see [`Kv.cloudflare`](#kv-cloudflare-namespace)) |
+
 ### `take(key)` (optional)
 
 Atomic read-and-delete. Returns the value if present, `undefined` if missing or expired. Across concurrent callers, exactly one observer receives a non-`undefined` return for a given key, and the key is removed exactly once.
 
 Required for one-time-consume semantics (e.g. SIWE challenge nonces). Backends without a linearizable read+delete primitive (e.g. eventually-consistent stores like Cloudflare KV) should leave this undefined; the consuming handler will refuse to accept the store at construction time and fall back to a different backend (e.g. a Durable Object).
 
-| Adapter            | `take` implemented? |
-| ------------------ | ------------------- |
-| `Kv.memory`        | ✅ atomic in-process |
-| `Kv.durableObject` | ✅ linearizable      |
+| Adapter            | `take` implemented?                                                          |
+| ------------------ | ---------------------------------------------------------------------------- |
+| `Kv.memory`        | ✅ atomic in-process                                                         |
+| `Kv.durableObject` | ✅ linearizable                                                              |
 | `Kv.cloudflare`    | ❌ (eventually consistent — see [`Kv.cloudflare`](#kv-cloudflare-namespace)) |

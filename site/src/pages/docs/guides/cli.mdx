@@ -1,51 +1,255 @@
 ---
 title: CLI
-description: Authorize and use accounts from command-line tools.
+description: Authorize and use Tempo accounts from command-line tools.
 ---
+
+import { Cards, Card } from 'vocs'
 
 # CLI
 
-Authorize a local CLI to use an account, poll for approval, and store credentials for future commands.
+Build a command-line tool that asks a user to approve a scoped access key in the browser, then signs future commands locally from the terminal.
 
-## Demo
+The CLI provider uses a device-code flow. The command creates an access-key request, opens a Tempo Wallet approval page, polls until the user approves it, and stores the signed key in a local keyring. After that, matching transfers or paid API calls can run without reopening the browser until the key expires.
 
-Example workspace: `examples/cli/`.
+## Example
+
+By the end of this guide, you will have a CLI that connects an account, authorizes a one-day pathUSD permission, sends a $1 transfer, and fetches a paid API endpoint.
+
+Run the example from the repo:
+
+```bash
+pnpm -F cli-example start
+```
+
+The runnable source lives in [`examples/cli`](https://github.com/tempoxyz/accounts/tree/main/examples/cli).
 
 ## Walkthrough
 
 ::::steps
 
-### Install the SDK
+### Install Dependencies
 
-```bash
-pnpm add accounts viem
+Install `accounts` together with Viem. The example uses [`incur`](https://github.com/wevm/incur) for the command wrapper and `ox` for hex helpers, but you can swap in your own CLI framework.
+
+:::code-group
+
+```bash [npm]
+npm i accounts viem ox incur
 ```
 
-### Configure the CLI
+```bash [pnpm]
+pnpm i accounts viem ox incur
+```
 
-Create the CLI auth provider and point it at the auth server for the environment.
+```bash [bun]
+bun i accounts viem ox incur
+```
 
-### Connect the user's account
+:::
 
-Print the authorization URL and poll for the device-code result.
+### Create the CLI Provider
 
-### Submit the request
+Create a [`Provider`](/docs/cli/provider) from `accounts/cli`. The example opts into testnet defaults. Machine Payment Protocol support is enabled by default, so ordinary `fetch` calls can answer `402 Payment Required` challenges.
 
-Use the authorized local key to make the CLI request.
+```ts twoslash [cli.ts]
+import { Provider } from 'accounts/cli'
 
-### Verify the result
+const provider = Provider.create({
+  testnet: true,
+})
+```
 
-Confirm the stored account and run a command that requires authorization.
+### Set Up Incur
+
+Set up [`incur`](https://github.com/wevm/incur) with a `my-cli connect` command. The command body can start small; the next step adds the account authorization.
+
+```ts twoslash [cli.ts]
+import { Cli } from 'incur'
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  testnet: true,
+})
+
+const cli = Cli.create('my-cli')
+
+cli.command('connect', {
+  description: 'Connect a Tempo account',
+  async run() {
+    const client = provider.getClient()
+
+    // ...
+  },
+})
+
+cli.serve()
+```
+
+### Authorize an Access Key
+
+Call `connect` with `capabilities.authorizeAccessKey` inside the `connect` command. The CLI adapter requires this capability during `wallet_connect`, because it needs a signed local key before it can keep working after the browser approval closes.
+
+The policy below matches the example: the user approves up to 100 pathUSD for one day, and only for the two token calls the CLI intends to make.
+
+```ts twoslash [cli.ts]
+// @noErrors
+import { Expiry } from 'accounts'
+import { Hex } from 'ox'
+import { parseUnits } from 'viem'
+import { connect } from 'viem/experimental/erc7846'
+
+const pathUsd = '0x20c0000000000000000000000000000000000000'
+
+cli.command('connect', {
+  description: 'Connect a Tempo account',
+  async run() {
+    const client = provider.getClient()
+
+    return connect(client, {
+      capabilities: {
+        authorizeAccessKey: {
+          expiry: Expiry.days(1),
+          limits: [
+            {
+              limit: Hex.fromNumber(parseUnits('100', 6)),
+              token: pathUsd,
+            },
+          ],
+          scopes: [
+            { address: pathUsd, selector: 'transfer(address,uint256)' },
+            { address: pathUsd, selector: 'transferWithMemo(address,uint256,bytes32)' },
+          ],
+        },
+      },
+    })
+  },
+})
+```
+
+When this runs, the provider creates a device code, opens the approval URL, and polls the code-auth service until Tempo Wallet returns the signed key authorization.
+
+### Submit a Transfer
+
+Read the active account from the provider, then submit a transfer that fits the approved policy. The local managed key signs the request, and the key authorization is included with the transaction.
+
+```ts twoslash [cli.ts]
+// @noErrors
+import { parseUnits } from 'viem'
+import { Actions } from 'viem/tempo'
+
+cli.command('send', {
+  description: 'Send 1 pathUSD to the connected account',
+  async run() {
+    const account = provider.getAccount()
+    const client = provider.getClient()
+
+    return Actions.token.transferSync(client, {
+      account,
+      amount: parseUnits('1', 6),
+      to: account.address,
+      token: pathUsd,
+    })
+  },
+})
+```
+
+### Fetch a Paid API
+
+The provider installs a payment-aware `fetch` wrapper in Node.js by default. If an endpoint responds with an MPP charge, the CLI signs the payment locally and retries the request.
+
+```ts twoslash [cli.ts]
+cli.command('ping', {
+  description: 'Fetch a paid endpoint',
+  async run() {
+    const response = await fetch('https://mpp.dev/api/ping/paid')
+    const data = await response.text()
+
+    return {
+      ping: data,
+    }
+  },
+})
+```
 
 ::::
 
-## Notes / Gotchas
+## Best Practices
 
-- Device codes stay raw in protocol and should only be hyphenated for human display.
-- Keep spinner text short and print long URLs as static log lines.
+### Scope Every Key
+
+Always pair `limits` with `scopes`. Limits define how much the key can spend, while scopes define which calls it can make. Start narrow and ask the user to approve a new key when the command needs a broader policy.
+
+```ts twoslash [cli.ts]
+import { Expiry } from 'accounts'
+import { Hex } from 'ox'
+import { parseUnits } from 'viem'
+
+const pathUsd = '0x20c0000000000000000000000000000000000000'
+
+const authorizeAccessKey = {
+  expiry: Expiry.days(1),
+  limits: [
+    {
+      limit: Hex.fromNumber(parseUnits('100', 6)),
+      token: pathUsd,
+    },
+  ],
+  scopes: [
+    { address: pathUsd, selector: 'transfer(address,uint256)' },
+  ],
+}
+```
+
+### Use App-Specific Keyrings
+
+Set `keysPath` for production CLIs so managed keys are isolated by app, environment, and account. The default keyring is convenient for local experiments, but a named config path makes support and revocation easier.
+
+```ts twoslash [cli.ts]
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  keysPath: '~/.config/example/tempo-keys.toml',
+})
+```
+
+### Use a Durable Code Store
+
+If you host your own CLI approval flow, back [`Handler.codeAuth`](/docs/server/handler.codeAuth) with durable storage. A memory store is fine for local development, but production device codes should survive process restarts while they are pending.
+
+```ts twoslash [server.ts]
+// @noErrors
+import { CliAuth, Handler } from 'accounts/server'
+
+const handler = Handler.codeAuth({
+  store: CliAuth.Store.kv(env.KV),
+})
+```
 
 ## Next Steps
 
-- [Authentication](/docs/guides/authentication)
-- [Spend Permissions](/docs/guides/spend-permissions)
-- [Server reference](/docs/server)
+<Cards>
+  <Card
+    description="Review every option accepted by the CLI provider, including host, keysPath, mpp, and poll timing."
+    icon="lucide:terminal"
+    to="/docs/cli/provider"
+    title="CLI Provider"
+  />
+  <Card
+    description="Mount the server-side device-code handler for custom CLI approval flows."
+    icon="lucide:server"
+    to="/docs/server/handler.codeAuth"
+    title="Handler.codeAuth"
+  />
+  <Card
+    description="Design bounded access-key policies with limits, scopes, recipients, and expiries."
+    icon="lucide:shield-check"
+    to="/docs/guides/spend-permissions"
+    title="Spend Permissions"
+  />
+  <Card
+    description="Send stablecoin transfers from a connected account, initiated by the user or by your server."
+    icon="lucide:send"
+    to="/docs/guides/transfers"
+    title="Transfers"
+  />
+</Cards>

@@ -17,17 +17,28 @@ This method is only supported by adapters that opt in to the `send` action (typi
 type Request = {
   method: 'wallet_send'
   params?: [{
+    /** Human-readable amount to pre-fill (e.g. `"1.5"`). */
+    amount?: string
     /**
      * Fee payer override. `false` disables the wallet's default fee
      * payer, a URL string points at a custom fee payer service.
      */
     feePayer?: boolean | string
+    /**
+     * UTF-8 memo (max 32 bytes) to attach to the transfer. The wallet
+     * rejects the request if the selected token does not support
+     * memos (non-TIP-20).
+     */
+    memo?: string
     /** Recipient address to pre-fill. */
     to?: `0x${string}`
-    /** Token contract address to pre-fill. Omit to let the user choose. */
-    token?: `0x${string}`
-    /** Human-readable amount to pre-fill (e.g. `"1.5"`). */
-    value?: string
+    /**
+     * Token to pre-fill, accepted as either a contract address or a
+     * curated tokenlist symbol (case-insensitive, e.g. `"pathUsd"`).
+     * Symbols are resolved against the curated tokenlist on the
+     * active chain. Omit to let the user choose.
+     */
+    token?: `0x${string}` | string
   }]
 }
 ```
@@ -49,9 +60,10 @@ type Response = {
 const { receipt } = await provider.request({
   method: 'wallet_send',
   params: [{
+    amount: '1.5',
+    memo: 'invoice #4821',
     to: '0x...',
-    token: '0x20c0000000000000000000000000000000000001',
-    value: '1.5',
+    token: 'pathUsd',
   }],
 })
 ```

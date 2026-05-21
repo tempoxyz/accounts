@@ -1,3 +1,4 @@
+import { tempo as mppx_tempo } from 'mppx/client'
 import { Hex, Json } from 'ox'
 import {
   type ComponentProps,
@@ -8,22 +9,26 @@ import {
   useState,
 } from 'react'
 import { Button as RegenButton } from 'regen-ui'
-import { parseUnits } from 'viem'
+import { formatUnits, parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
-import { tempo, tempoDevnet, tempoModerato } from 'viem/chains'
 import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
+import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 
+import { PrivyEmailOtp } from './PrivyEmailOtp.js'
 import {
   type AdapterType,
   type DialogMode,
+  type MppMode,
   dialogMode,
   provider,
   switchAdapter,
   switchDialogMode,
+  switchMppMode,
   switchTheme,
   theme,
   env,
+  mppMode,
   testnet,
   tokens,
 } from './provider.js'
@@ -60,6 +65,7 @@ export function App() {
 
   return (
     <div className="playground min-h-dvh bg-background text-foreground" data-regen-radius="small">
+      <PrivyEmailOtp />
       <TurnkeyEmailOtp />
       <div className="playground-layout">
         <aside className="playground-rail">
@@ -109,7 +115,7 @@ export function App() {
 
           <PlaygroundSection id="transactions" title="Transactions">
             <Transactions />
-            <WalletSend />
+            <WalletTransfer />
             <WalletSwap />
             <WalletDepositZone />
             <WalletWithdrawZone />
@@ -134,8 +140,7 @@ export function App() {
           </PlaygroundSection>
 
           <PlaygroundSection id="mpp" title="MPP">
-            <Fortune />
-            <MppZeroDollarAuth />
+            <MppPlayground adapterType={adapterType} rerender={() => rerender((n) => n + 1)} />
           </PlaygroundSection>
 
           <PlaygroundSection id="auth" title="Server Authentication">
@@ -180,6 +185,7 @@ function ConfigPanel(props: {
             <option value="tempoWallet">tempoWallet</option>
             <option value="dialogRefImpl">dialogRefImpl</option>
             <option value="turnkey">turnkey</option>
+            <option value="privy">privy</option>
             <option value="webAuthn">webAuthn</option>
             <option value="secp256k1">secp256k1</option>
           </select>
@@ -326,30 +332,42 @@ function WalletDeposit() {
           execute(() =>
             provider.request({
               method: 'wallet_deposit',
-              params: [{ value: '50' }],
+              params: [{ amount: '25' }],
             }),
           )
         }
       >
-        Deposit ($50)
+        Deposit $25
       </Button>
       <Button
         onClick={() =>
           execute(() =>
             provider.request({
               method: 'wallet_deposit',
-              params: [{ displayName: 'DoorDash' }],
+              params: [{ amount: '200' }],
             }),
           )
         }
       >
-        Deposit (displayName: DoorDash)
+        Deposit $200
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_deposit',
+              params: [{ amount: '25', token: 'pathusd' }],
+            }),
+          )
+        }
+      >
+        Deposit $25 pathUSD
       </Button>
     </Method>
   )
 }
 
-function WalletSend() {
+function WalletTransfer() {
   const [result, error, execute] = useRequest()
   const [feePayerMode, setFeePayerMode] = useState<'wallet' | 'playground' | 'disabled'>('wallet')
 
@@ -360,14 +378,14 @@ function WalletSend() {
   })()
 
   return (
-    <Method method="wallet_send" result={result} error={error}>
+    <Method method="wallet_transfer" result={result} error={error}>
       <fieldset style={{ marginBottom: 8, border: 'none', padding: 0 }}>
         <legend>Fee Payer</legend>
         {(['wallet', 'playground', 'disabled'] as const).map((mode) => (
           <label key={mode} style={{ marginRight: 12 }}>
             <input
               type="radio"
-              name="walletSendFeePayerMode"
+              name="WalletTransferFeePayerMode"
               value={mode}
               checked={feePayerMode === mode}
               onChange={() => setFeePayerMode(mode)}
@@ -376,12 +394,82 @@ function WalletSend() {
           </label>
         ))}
       </fieldset>
+
+      <h5 style={{ flexBasis: '100%', fontSize: 11, margin: '8px 0 4px', width: '100%' }}>
+        Read-only
+      </h5>
       <Button
         onClick={() =>
           execute(() =>
             provider.request({
-              method: 'wallet_send',
-              params: [{ ...feePayerParam }],
+              method: 'wallet_transfer',
+              params: [
+                {
+                  amount: '1',
+                  to: '0x0000000000000000000000000000000000000001',
+                  token: tokens.pathUSD,
+                  ...feePayerParam,
+                },
+              ],
+            }),
+          )
+        }
+      >
+        Send $1 pathUSD
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_transfer',
+              params: [
+                {
+                  amount: '1',
+                  to: '0x0000000000000000000000000000000000000001',
+                  // Resolved against the wallet's curated tokenlist
+                  // (case-insensitive). `pathusd` is also accepted.
+                  token: 'pathUSD',
+                  ...feePayerParam,
+                },
+              ],
+            }),
+          )
+        }
+      >
+        Send $1 pathUSD (symbol)
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_transfer',
+              params: [
+                {
+                  amount: '1',
+                  // UTF-8 memo (max 32 bytes). Wallet rejects with
+                  // InvalidParamsError if the token is not TIP-20.
+                  memo: 'invoice #4821',
+                  to: '0x0000000000000000000000000000000000000001',
+                  token: 'pathUSD',
+                  ...feePayerParam,
+                },
+              ],
+            }),
+          )
+        }
+      >
+        Send $1 with memo
+      </Button>
+
+      <h5 style={{ flexBasis: '100%', fontSize: 11, margin: '8px 0 4px', width: '100%' }}>
+        Editable
+      </h5>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_transfer',
+              params: [{ editable: true, ...feePayerParam }],
             }),
           )
         }
@@ -392,24 +480,25 @@ function WalletSend() {
         onClick={() =>
           execute(() =>
             provider.request({
-              method: 'wallet_send',
-              params: [{ token: tokens.pathUSD, ...feePayerParam }],
+              method: 'wallet_transfer',
+              params: [{ editable: true, token: tokens.pathUSD, ...feePayerParam }],
             }),
           )
         }
       >
-        Send (PathUSD)
+        Send pathUSD
       </Button>
       <Button
         onClick={() =>
           execute(() =>
             provider.request({
-              method: 'wallet_send',
+              method: 'wallet_transfer',
               params: [
                 {
+                  amount: '1',
+                  editable: true,
                   to: '0x0000000000000000000000000000000000000001',
                   token: tokens.pathUSD,
-                  value: '1',
                   ...feePayerParam,
                 },
               ],
@@ -417,7 +506,53 @@ function WalletSend() {
           )
         }
       >
-        Send ($1 PathUSD)
+        Send $1 pathUSD
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_transfer',
+              params: [
+                {
+                  amount: '1',
+                  editable: true,
+                  // Resolved against the wallet's curated tokenlist
+                  // (case-insensitive). `pathusd` is also accepted.
+                  token: 'pathUSD',
+                  to: '0x0000000000000000000000000000000000000001',
+                  ...feePayerParam,
+                },
+              ],
+            }),
+          )
+        }
+      >
+        Send $1 pathUSD (symbol)
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_transfer',
+              params: [
+                {
+                  amount: '1',
+                  editable: true,
+                  // 32-byte UTF-8 memo attached to the TIP-20 transfer.
+                  // The wallet rejects with `InvalidParamsError` if the
+                  // selected token is not TIP-20.
+                  memo: 'invoice #4821',
+                  to: '0x0000000000000000000000000000000000000001',
+                  token: 'pathUSD',
+                  ...feePayerParam,
+                },
+              ],
+            }),
+          )
+        }
+      >
+        Send $1 with memo
       </Button>
     </Method>
   )
@@ -606,6 +741,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
   const [limits, setLimits] = useState<LimitInput[]>([{ token: '', amount: '100', period: '' }])
   const [scopeSelector, setScopeSelector] = useState('transfer(address,uint256)')
   const [authEnabled, setAuthEnabled] = useState(false)
+  const [showDepositEnabled, setShowDepositEnabled] = useState(false)
   const turnkey = adapterType === 'turnkey'
 
   // Once the tokenlist resolves, hydrate any unselected limit row with the first token.
@@ -657,6 +793,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
     // Server Authentication: the SDK absolutizes relative URLs against
     // the dapp's origin before forwarding to the wallet host.
     const auth = authEnabled ? '/auth' : undefined
+    const showDeposit = showDepositEnabled ? buildShowDeposit(form) : undefined
 
     const capabilities =
       method === 'register'
@@ -666,11 +803,13 @@ function WalletConnect(props: { adapterType: AdapterType }) {
             ...(digest ? { digest } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
             ...(auth ? { auth } : {}),
+            ...(showDeposit ? { showDeposit } : {}),
           } as const)
         : {
             ...(digest ? { digest } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
             ...(auth ? { auth } : {}),
+            ...(showDeposit ? { showDeposit } : {}),
           }
 
     execute(() =>
@@ -833,6 +972,45 @@ function WalletConnect(props: { adapterType: AdapterType }) {
             </label>
           </legend>
         </fieldset>
+        <fieldset style={{ marginBottom: 8 }}>
+          <legend>
+            <label>
+              <input
+                checked={showDepositEnabled}
+                onChange={(e) => setShowDepositEnabled(e.target.checked)}
+                type="checkbox"
+              />{' '}
+              Show Deposit
+            </label>
+          </legend>
+          {showDepositEnabled && (
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 12,
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                }}
+              >
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span>Amount</span>
+                  <input name="showDepositAmount" placeholder="50" />
+                </label>
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span>Token</span>
+                  <select name="showDepositToken" defaultValue="">
+                    <option value="" />
+                    {tokenlist.map((t) => (
+                      <option key={t.address} value={t.address}>
+                        {t.symbol}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+          )}
+        </fieldset>
         <Button type="submit" value="login">
           Login
         </Button>
@@ -842,6 +1020,22 @@ function WalletConnect(props: { adapterType: AdapterType }) {
       </form>
     </Method>
   )
+}
+
+function buildShowDeposit(form: FormData):
+  | true
+  | {
+      amount?: string | undefined
+      token?: string | undefined
+    } {
+  const amount = String(form.get('showDepositAmount') ?? '').trim()
+  const token = String(form.get('showDepositToken') ?? '').trim()
+  const showDeposit = {
+    ...(amount ? { amount } : {}),
+    ...(token ? { token } : {}),
+  }
+  if (Object.keys(showDeposit).length === 0) return true
+  return showDeposit
 }
 
 function EthRequestAccounts() {
@@ -1850,26 +2044,630 @@ function WalletRevokeAccessKey() {
   )
 }
 
-function Fortune() {
-  const [result, error, execute] = useRequest()
+type MppScenarioResult = {
+  balanceAfter?: unknown
+  balanceBefore?: unknown
+  body: unknown
+  elapsedMs: number
+  events?: readonly MppSseEvent[] | undefined
+  headers: Record<string, string | null>
+  inspection?: unknown
+  label: string
+  ok: boolean
+  receipt?: unknown
+  status: number
+  url: string
+}
+
+type MppSseEvent = { data: unknown; event: string }
+type MppSessionState = {
+  lastAction?: string | undefined
+  remaining?: string | undefined
+  spent?: string | undefined
+  status: 'active' | 'closed' | 'idle' | 'open'
+}
+type MppSubscriptionState = {
+  status: 'active' | 'canceled' | 'missing' | 'renewal due'
+}
+
+function MppPlayground(props: { adapterType: AdapterType; rerender: () => void }) {
+  const { adapterType, rerender } = props
+  const [mode, setMode] = useState<MppMode>(mppMode)
+
+  async function applyMode(next: MppMode) {
+    if (next === mode) return
+    switchMppMode(next, adapterType)
+    setMode(next)
+    rerender()
+    await provider.request({ method: 'eth_accounts' }).catch(() => undefined)
+  }
+
   return (
-    <Method method="fetch /fortune" result={result} error={error}>
-      <Button onClick={() => execute(() => fetch('/fortune').then((r) => r.json()))}>
-        Get Fortune (0.01 pathUSD)
-      </Button>
-    </Method>
+    <>
+      <MppOneTimeCharges applyMode={applyMode} />
+      <MppSessions adapterType={adapterType} mode={mode} />
+      <MppSubscriptions />
+    </>
   )
 }
 
-function MppZeroDollarAuth() {
-  const [result, error, execute] = useRequest()
+function MppOneTimeCharges(props: { applyMode: (mode: MppMode) => Promise<void> }) {
+  const { applyMode } = props
+  const request = useMppRequest()
+
+  async function run(label: string, path: string) {
+    await request.execute(label, () => runMppRequest(label, path))
+  }
+
+  async function runPaid(next: MppMode) {
+    await applyMode(next)
+    await run(`Paid ${next}`, '/mpp/charge/paid')
+  }
+
   return (
-    <Method method="fetch /zero-dollar-auth" result={result} error={error}>
-      <Button onClick={() => execute(() => fetch('/zero-dollar-auth').then((r) => r.json()))}>
-        Zero-Dollar Auth
+    <MppPanel
+      title="One-Time Charges"
+      pending={request.pending}
+      result={request.result}
+      error={request.error}
+    >
+      <Button disabled={request.pending} onClick={() => run('Free proof', '/mpp/charge/free')}>
+        Free Proof
       </Button>
-    </Method>
+      <Button disabled={request.pending} onClick={() => runPaid('push')}>
+        Paid Push
+      </Button>
+      <Button disabled={request.pending} onClick={() => runPaid('pull')}>
+        Paid Pull
+      </Button>
+    </MppPanel>
   )
+}
+
+function MppSessions(props: { adapterType: AdapterType; mode: MppMode }) {
+  const { adapterType, mode } = props
+  const request = useMppRequest()
+  const [manager, setManager] = useState(() => createMppSessionManager())
+  const [session, setSession] = useState<MppSessionState>({ status: 'idle' })
+
+  useEffect(() => {
+    setManager(createMppSessionManager())
+    setSession({ status: 'idle' })
+  }, [adapterType, mode])
+
+  async function run(label: string, fn: () => Promise<MppScenarioResult>, action?: string) {
+    const result = await request.execute(label, fn)
+    if (result) setSession(readMppSessionState(result, action))
+  }
+
+  async function reset() {
+    setManager(createMppSessionManager())
+    setSession({ status: 'idle' })
+    await request.execute('Reset local session', () => runMppLocalResult('Reset local session'))
+  }
+
+  return (
+    <MppPanel
+      title="Sessions"
+      pending={request.pending}
+      result={request.result}
+      error={request.error}
+    >
+      <MppSummary>{formatMppSessionSummary(session)}</MppSummary>
+      <Button
+        disabled={request.pending || session.status === 'closed'}
+        onClick={() =>
+          run(
+            'Start session',
+            () =>
+              runMppManagedRequest('Start session', '/mpp/session/content', () =>
+                manager.fetch('/mpp/session/content'),
+              ),
+            'open',
+          )
+        }
+      >
+        Start Session
+      </Button>
+      <Button
+        disabled={request.pending || session.status === 'idle' || session.status === 'closed'}
+        onClick={() =>
+          run(
+            'Pay another',
+            () =>
+              runMppManagedRequest('Pay another', '/mpp/session/content', () =>
+                manager.fetch('/mpp/session/content'),
+              ),
+            'voucher',
+          )
+        }
+      >
+        Pay Another
+      </Button>
+      <Button
+        disabled={request.pending || session.status === 'closed'}
+        onClick={() =>
+          run('Stream chunks', () => runMppManagedSse('Stream chunks', manager), 'voucher')
+        }
+      >
+        Stream Chunks
+      </Button>
+      <Button
+        disabled={request.pending || session.status === 'idle' || session.status === 'closed'}
+        onClick={() =>
+          run('Close session', () => runMppSessionClose('Close session', manager), 'close')
+        }
+      >
+        Close Session
+      </Button>
+      <Button disabled={request.pending} onClick={reset}>
+        Reset Local Session
+      </Button>
+    </MppPanel>
+  )
+}
+
+function MppSubscriptions() {
+  const request = useMppRequest()
+  const [subscription, setSubscription] = useState<MppSubscriptionState>({ status: 'missing' })
+
+  useEffect(() => {
+    void refresh()
+  }, [])
+
+  async function refresh() {
+    const state = await getSubscriptionState()
+    setSubscription(readMppSubscriptionState(state))
+    return state
+  }
+
+  async function run(label: string, path: string) {
+    await request.execute(label, async () => {
+      const result = await runMppRequest(label, path)
+      const state = await refresh()
+      return {
+        ...result,
+        body: {
+          response: result.body,
+          state,
+        },
+      }
+    })
+  }
+
+  return (
+    <MppPanel
+      title="Subscriptions"
+      pending={request.pending}
+      result={request.result}
+      error={request.error}
+    >
+      <MppSummary>{formatMppSubscriptionSummary(subscription)}</MppSummary>
+      <Button
+        disabled={request.pending}
+        onClick={() => run('Activate subscription', '/mpp/subscription/news')}
+      >
+        Activate
+      </Button>
+      <Button disabled={request.pending} onClick={() => run('Access', '/mpp/subscription/news')}>
+        Access
+      </Button>
+      <Button
+        disabled={request.pending}
+        onClick={() => run('Make renewal due', '/mpp/subscription/force-renewal')}
+      >
+        Make Renewal Due
+      </Button>
+      <Button
+        disabled={request.pending}
+        onClick={() => run('Access / renew', '/mpp/subscription/news')}
+      >
+        Access / Renew
+      </Button>
+      <Button
+        disabled={request.pending}
+        onClick={() => run('Cancel subscription', '/mpp/subscription/cancel')}
+      >
+        Cancel
+      </Button>
+      <Button
+        disabled={request.pending}
+        onClick={() => run('Refresh state', '/mpp/subscription/state')}
+      >
+        Refresh
+      </Button>
+    </MppPanel>
+  )
+}
+
+function useMppRequest() {
+  const [result, setResult] = useState<MppScenarioResult>()
+  const [error, setError] = useState<Error>()
+  const [pending, setPending] = useState(false)
+
+  async function execute(label: string, fn: () => Promise<MppScenarioResult>) {
+    setPending(true)
+    setError(undefined)
+    try {
+      const next = await fn()
+      setResult(next)
+      return next
+    } catch (e) {
+      setResult(undefined)
+      setError(e instanceof Error ? e : new Error(`${label}: ${String(e)}`))
+      return undefined
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return { error, execute, pending, result } as const
+}
+
+function MppPanel(props: {
+  children: ReactNode
+  error?: Error | undefined
+  pending: boolean
+  result?: MppScenarioResult | undefined
+  title: string
+}) {
+  const { children, error, pending, result, title } = props
+  const display = pending ? { status: 'pending' } : result ? summarizeMppResult(result) : undefined
+  return (
+    <article className="method-panel">
+      <header className="method-header">
+        <h3>{title}</h3>
+      </header>
+      <div className="method-body">{children}</div>
+      {error && <pre className="method-error">{`${error.name}: ${error.message}`}</pre>}
+      {display !== undefined && (
+        <pre className="method-result">{Json.stringify(display, null, 2)}</pre>
+      )}
+    </article>
+  )
+}
+
+function MppSummary(props: { children: ReactNode }) {
+  return <p className="w-full text-sm text-foreground-secondary">{props.children}</p>
+}
+
+function createMppSessionManager() {
+  return mppx_tempo.session({
+    getClient(options: { chainId?: number | undefined } = {}) {
+      const client = provider.getClient({ chainId: options.chainId })
+      const account = provider.getAccount()
+      return Object.assign(client, { account })
+    },
+    maxDeposit: '0.05',
+  })
+}
+
+async function runMppRequest(
+  label: string,
+  path: string,
+  init: RequestInit | undefined = undefined,
+): Promise<MppScenarioResult> {
+  const balanceBefore = await getPathUsdBalance()
+  const started = performance.now()
+  const response = await fetch(path, init)
+  const elapsedMs = Math.round(performance.now() - started)
+  const body = await readResponseBody(response)
+  const receipt = decodePaymentReceipt(response.headers.get('Payment-Receipt'))
+  const inspection = await readInspection(receipt)
+  const balanceAfter = await getPathUsdBalance()
+  return {
+    balanceAfter,
+    balanceBefore,
+    body,
+    elapsedMs,
+    headers: readPaymentHeaders(response),
+    inspection,
+    label,
+    ok: response.ok,
+    receipt,
+    status: response.status,
+    url: path,
+  }
+}
+
+async function runMppManagedRequest(
+  label: string,
+  path: string,
+  fetcher: () => Promise<Response & { receipt?: unknown | null | undefined }>,
+): Promise<MppScenarioResult> {
+  const balanceBefore = await getPathUsdBalance()
+  const started = performance.now()
+  const response = await fetcher()
+  const elapsedMs = Math.round(performance.now() - started)
+  const body = await readResponseBody(response)
+  const receipt = response.receipt ?? decodePaymentReceipt(response.headers.get('Payment-Receipt'))
+  const inspection = await readInspection(receipt)
+  const balanceAfter = await getPathUsdBalance()
+  return {
+    balanceAfter,
+    balanceBefore,
+    body,
+    elapsedMs,
+    headers: readPaymentHeaders(response),
+    inspection,
+    label,
+    ok: response.ok,
+    receipt,
+    status: response.status,
+    url: path,
+  }
+}
+
+async function runMppManagedSse(
+  label: string,
+  manager: ReturnType<typeof createMppSessionManager>,
+): Promise<MppScenarioResult> {
+  const receipts: unknown[] = []
+  const chunks: string[] = []
+  const balanceBefore = await getPathUsdBalance()
+  const started = performance.now()
+  const stream = await manager.sse('/mpp/session/stream', {
+    onReceipt(receipt) {
+      receipts.push(receipt)
+    },
+  })
+
+  for await (const chunk of stream) chunks.push(chunk)
+
+  const elapsedMs = Math.round(performance.now() - started)
+  const receipt = receipts.at(-1)
+  const inspection = await readInspection(receipt)
+  return {
+    balanceAfter: await getPathUsdBalance(),
+    balanceBefore,
+    body: { chunks },
+    elapsedMs,
+    events: [
+      ...chunks.map((chunk) => ({ data: chunk, event: 'message' })),
+      ...receipts.map((item) => ({ data: item, event: 'payment-receipt' })),
+    ],
+    headers: {},
+    inspection,
+    label,
+    ok: true,
+    receipt,
+    status: 200,
+    url: '/mpp/session/stream',
+  }
+}
+
+async function runMppSessionClose(
+  label: string,
+  manager: ReturnType<typeof createMppSessionManager>,
+): Promise<MppScenarioResult> {
+  const balanceBefore = await getPathUsdBalance()
+  const started = performance.now()
+  const receipt = await manager.close()
+  const elapsedMs = Math.round(performance.now() - started)
+  const inspection = await readInspection(receipt)
+  return {
+    balanceAfter: await getPathUsdBalance(),
+    balanceBefore,
+    body: receipt ? { closed: true } : { closed: false },
+    elapsedMs,
+    headers: {},
+    inspection,
+    label,
+    ok: true,
+    receipt,
+    status: receipt ? 204 : 200,
+    url: '/mpp/session/content',
+  }
+}
+
+async function runMppLocalResult(label: string): Promise<MppScenarioResult> {
+  const balance = await getPathUsdBalance()
+  return {
+    balanceAfter: balance,
+    balanceBefore: balance,
+    body: { reset: true },
+    elapsedMs: 0,
+    headers: {},
+    label,
+    ok: true,
+    status: 200,
+    url: 'local',
+  }
+}
+
+async function getPathUsdBalance() {
+  try {
+    const accounts = await provider.request({ method: 'eth_accounts' })
+    const account = accounts[0]
+    if (!account) return null
+    const balances = await provider.request({
+      method: 'wallet_getBalances',
+      params: [{ account, tokens: [tokens.pathUSD] }],
+    })
+    return balances[0] ?? null
+  } catch {
+    return null
+  }
+}
+
+async function readResponseBody(response: Response) {
+  const text = await response.text()
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+function readPaymentHeaders(response: Response) {
+  return {
+    'content-type': response.headers.get('content-type'),
+    'payment-receipt': response.headers.get('Payment-Receipt'),
+    'www-authenticate': response.headers.get('WWW-Authenticate'),
+  }
+}
+
+function summarizeMppResult(result: MppScenarioResult) {
+  return {
+    balance: {
+      after: result.balanceAfter ?? null,
+      before: result.balanceBefore ?? null,
+    },
+    body: result.body,
+    elapsedMs: result.elapsedMs,
+    headers: {
+      'content-type': result.headers['content-type'],
+      'www-authenticate': result.headers['www-authenticate'],
+    },
+    ...(result.events ? { events: result.events } : {}),
+    ...(result.inspection ? { inspection: result.inspection } : {}),
+    label: result.label,
+    ok: result.ok,
+    ...(result.receipt ? { receipt: result.receipt } : {}),
+    status: result.status,
+    url: result.url,
+  }
+}
+
+function readMppSessionState(result: MppScenarioResult, actionFallback?: string | undefined) {
+  const receipt = isRecord(result.receipt) ? result.receipt : undefined
+  const action = readMppCredentialAction(result) ?? actionFallback
+  if (!receipt)
+    return {
+      ...(action ? { lastAction: action } : {}),
+      status: action === 'close' ? 'closed' : 'idle',
+    } satisfies MppSessionState
+
+  const acceptedCumulative = stringValue(receipt.acceptedCumulative)
+  const spent = stringValue(receipt.spent)
+  return {
+    ...(action ? { lastAction: action } : {}),
+    remaining: subtractMppAmounts(acceptedCumulative, spent),
+    spent,
+    status: action === 'close' ? 'closed' : action === 'open' ? 'open' : 'active',
+  } satisfies MppSessionState
+}
+
+function readMppCredentialAction(result: MppScenarioResult) {
+  if (!isRecord(result.inspection)) return undefined
+  const credential = result.inspection.credential
+  if (!isRecord(credential)) return undefined
+  return stringValue(credential.action)
+}
+
+async function getSubscriptionState() {
+  const response = await fetch('/mpp/subscription/state')
+  if (!response.ok)
+    return {
+      body: await readResponseBody(response),
+      status: response.status,
+    }
+  return response.json()
+}
+
+function readMppSubscriptionState(value: unknown) {
+  if (!isRecord(value) || value.status === 'missing')
+    return { status: 'missing' } satisfies MppSubscriptionState
+
+  const billingAnchor = stringValue(value.billingAnchor)
+  const canceledAt = stringValue(value.canceledAt)
+  const lastChargedPeriod =
+    typeof value.lastChargedPeriod === 'string' || typeof value.lastChargedPeriod === 'number'
+      ? value.lastChargedPeriod
+      : undefined
+  const status = (() => {
+    if (canceledAt) return 'canceled'
+    if (isSubscriptionRenewalDue(billingAnchor, lastChargedPeriod)) return 'renewal due'
+    return 'active'
+  })()
+
+  return {
+    status,
+  } satisfies MppSubscriptionState
+}
+
+function formatMppSessionSummary(session: MppSessionState) {
+  if (session.status === 'idle') return 'No local session yet.'
+  const parts = [`Session ${session.status}`]
+  if (session.lastAction) parts.push(`last ${session.lastAction}`)
+  if (session.spent) parts.push(`${formatMppAmount(session.spent)} spent`)
+  if (session.remaining) parts.push(`${formatMppAmount(session.remaining)} left`)
+  return parts.join(' · ')
+}
+
+function formatMppSubscriptionSummary(subscription: MppSubscriptionState) {
+  if (subscription.status === 'missing') return 'No subscription stored.'
+  return `Subscription ${subscription.status}.`
+}
+
+function isSubscriptionRenewalDue(
+  billingAnchor: string | undefined,
+  lastChargedPeriod: string | number | undefined,
+) {
+  if (!billingAnchor) return false
+  if (Number(lastChargedPeriod) > 0) return false
+  const time = Date.parse(billingAnchor)
+  return Number.isFinite(time) && Date.now() - time >= 86_400_000
+}
+
+function formatMppAmount(value: string | undefined) {
+  if (!value) return 'none'
+  try {
+    return `${formatUnits(BigInt(value), 6)} pathUSD`
+  } catch {
+    return value
+  }
+}
+
+function subtractMppAmounts(left: string | undefined, right: string | undefined) {
+  if (!left || !right) return undefined
+  try {
+    const value = BigInt(left) - BigInt(right)
+    return value > 0n ? value.toString() : '0'
+  } catch {
+    return undefined
+  }
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' ? value : undefined
+}
+
+function decodePaymentReceipt(header: string | null) {
+  if (!header) return undefined
+  try {
+    return JSON.parse(decodeBase64Url(header))
+  } catch {
+    return { raw: header }
+  }
+}
+
+function decodeBase64Url(value: string) {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+  return atob(padded)
+}
+
+async function readInspection(receipt: unknown) {
+  const reference = receiptReference(receipt)
+  if (!reference) return undefined
+  const response = await fetch(`/mpp/inspect?reference=${encodeURIComponent(reference)}`)
+  if (!response.ok) return undefined
+  return response.json()
+}
+
+function receiptReference(receipt: unknown) {
+  if (!isRecord(receipt)) return undefined
+  for (const key of ['reference', 'subscriptionId', 'channelId'] as const) {
+    const value = receipt[key]
+    if (typeof value === 'string') return value
+  }
+  return undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 function Authenticate() {

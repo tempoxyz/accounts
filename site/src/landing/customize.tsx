@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { waapi, type WAAPIAnimation } from "animejs";
+import { useEffect, useRef, useState } from "react";
+import { springs } from "./animation";
 import { useTheme } from "./useTheme";
 
 const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
@@ -174,7 +176,6 @@ function paletteFor(
 function Skeleton({
   className,
   bg,
-  delay = 0,
 }: {
   className?: string;
   bg: string;
@@ -186,7 +187,7 @@ function Skeleton({
       className={`block ${className ?? ""}`}
       style={{
         background: bg,
-        animation: `pulseDot 1600ms ease-in-out ${delay}ms infinite`,
+        opacity: 0.82,
       }}
     />
   );
@@ -203,6 +204,7 @@ function CardShell({
 }) {
   return (
     <div
+      data-customize-card
       className="flex h-[384px] shrink-0 flex-col justify-between p-[12.7px]"
       style={{
         width,
@@ -228,7 +230,7 @@ function Cta({
   return (
     <button
       type="button"
-      className={`grid h-9 place-items-center text-[11.336px] tracking-[0.1134px] outline-none transition-opacity hover:opacity-90 focus-visible:opacity-90 ${full ? "w-full" : "w-[313px] self-center"}`}
+      className={`grid h-9 place-items-center text-[11.336px] tracking-[0.1134px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 ${full ? "w-full" : "w-[313px] self-center"}`}
       style={{
         background: palette.buttonBg,
         color: palette.buttonText,
@@ -465,7 +467,7 @@ function ThemeSwitcher({
             key={p}
             type="button"
             onClick={() => onChange(p)}
-            className={`flex items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none transition-colors duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
+            className={`relative flex items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
           >
             {p}
           </button>
@@ -504,7 +506,7 @@ function CustomThemeToolbar({
                 onClick={() => onChange({ ...theme, accent: a.color })}
                 aria-label={a.label}
                 aria-pressed={active}
-                className="grid size-5 place-items-center rounded-full outline-none transition-transform hover:scale-110 focus-visible:scale-110"
+                className="grid size-5 place-items-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-transform hover:scale-110"
                 style={{
                   background: a.color,
                   boxShadow: active
@@ -550,7 +552,7 @@ function CustomThemeToolbar({
                 type="button"
                 onClick={() => onChange({ ...theme, radius: r.id })}
                 aria-pressed={active}
-                className={`flex items-center justify-center border px-2 py-1 font-mono text-[12px] outline-none transition-colors duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
+                className={`relative flex items-center justify-center border px-2 py-1 font-mono text-[12px] outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
               >
                 {r.label}
               </button>
@@ -575,7 +577,7 @@ function CustomThemeToolbar({
                 type="button"
                 onClick={() => onChange({ ...theme, scheme: s })}
                 aria-pressed={active}
-                className={`flex items-center justify-center border px-2 py-1 font-mono text-[12px] capitalize outline-none transition-colors duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
+                className={`relative flex items-center justify-center border px-2 py-1 font-mono text-[12px] capitalize outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 ${active ? "border-panel-edge bg-panel-3 text-foreground" : "border-transparent bg-transparent text-foreground-muted"}`}
               >
                 {s}
               </button>
@@ -589,6 +591,10 @@ function CustomThemeToolbar({
 
 export default function Customize() {
   const [theme, setTheme] = useState<ThemePreset>("Default");
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const marqueeRef = useRef<HTMLDivElement | null>(null);
+  const marqueeAnimationRef = useRef<WAAPIAnimation | null>(null);
+  const cardAnimationRef = useRef<WAAPIAnimation | null>(null);
   // The Custom preset seeds its initial `scheme` from the landing page's
   // resolved theme so opening the section in site light mode previews
   // the SDK's light scheme by default. After the first paint the user
@@ -602,6 +608,60 @@ export default function Customize() {
     scheme: resolved,
   }));
 
+  useEffect(() => {
+    const el = marqueeRef.current;
+    if (!el) return;
+
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    const start = () => {
+      marqueeAnimationRef.current?.cancel();
+      marqueeAnimationRef.current = null;
+
+      if (media.matches) {
+        el.style.transform = "translate3d(0, 0, 0)";
+        return;
+      }
+
+      marqueeAnimationRef.current = waapi.animate(el, {
+        transform: ["translate3d(0, 0, 0)", "translate3d(-50%, 0, 0)"],
+        duration: 50_000,
+        ease: "linear",
+        loop: true,
+      });
+    };
+
+    start();
+    media.addEventListener("change", start);
+    return () => {
+      media.removeEventListener("change", start);
+      marqueeAnimationRef.current?.cancel();
+      marqueeAnimationRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section || window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+      return;
+
+    cardAnimationRef.current?.cancel();
+    cardAnimationRef.current = waapi.animate(
+      [...section.querySelectorAll<HTMLElement>("[data-customize-card]")],
+      {
+        opacity: [0.72, 1],
+        translateY: [10, 0],
+        delay: (_target, index) => (index % 5) * 22,
+        ease: springs.gentle,
+      },
+    );
+
+    return () => {
+      cardAnimationRef.current?.cancel();
+      cardAnimationRef.current = null;
+    };
+  }, [theme]);
+
   const cards = (
     <>
       <OrderPizzaCard palette={paletteFor(theme, "orderPizza", custom)} />
@@ -614,6 +674,7 @@ export default function Customize() {
 
   return (
     <section
+      ref={sectionRef}
       className="px-6 pt-[100px] pb-[120px]"
       style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
     >
@@ -647,18 +708,13 @@ export default function Customize() {
 
       <div className="group mt-14 -mx-6 overflow-hidden">
         <div
-          className="flex w-max items-center"
-          style={{
-            animation: "marquee 50s linear infinite",
-            animationPlayState: "running",
+          ref={marqueeRef}
+          className="flex w-max items-center will-change-transform"
+          onMouseEnter={() => {
+            marqueeAnimationRef.current?.pause();
           }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.animationPlayState =
-              "paused";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.animationPlayState =
-              "running";
+          onMouseLeave={() => {
+            marqueeAnimationRef.current?.resume();
           }}
         >
           {[0, 1].map((copy) => (

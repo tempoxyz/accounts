@@ -1,7 +1,7 @@
 import { hc } from 'hono/client'
 import type { ExtractSchema } from 'hono/types'
 import { http, type Chain, type Transport } from 'viem'
-import { tempo, tempoModerato } from 'viem/chains'
+import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { describe, expectTypeOf, test } from 'vp/test'
 
 import * as CliAuth from './CliAuth.js'

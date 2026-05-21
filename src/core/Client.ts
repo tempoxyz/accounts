@@ -7,8 +7,8 @@ import {
   http,
   type Transport,
 } from 'viem'
-import type { tempo } from 'viem/chains'
 import { Transaction } from 'viem/tempo'
+import type { tempo } from 'viem/tempo/chains'
 
 import type * as Store from './Store.js'
 

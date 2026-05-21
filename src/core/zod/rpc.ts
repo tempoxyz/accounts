@@ -46,7 +46,7 @@ export const signatureEnvelope = z.custom<SignatureEnvelope.SignatureEnvelopeRpc
 export const keyType = z.union([z.literal('secp256k1'), z.literal('p256'), z.literal('webAuthn')])
 
 export const keyAuthorization = z.object({
-  address: u.address(),
+  address: z.optional(u.address()),
   chainId: u.bigint(),
   expiry: z.union([u.number(), z.null(), z.undefined()]),
   keyId: u.address(),
@@ -393,19 +393,21 @@ export namespace wallet_authorizeAccessKey_strict {
     expiry: z.number(),
     keyType: z.optional(keyType),
     limits: z.readonly(
-      z.array(z.object({ token: u.address(), limit: u.bigint(), period: z.optional(z.number()) })),
+      z
+        .array(z.object({ token: u.address(), limit: u.bigint(), period: z.optional(z.number()) }))
+        .check(z.minLength(1)),
     ),
     publicKey: z.optional(u.hex()),
-    scopes: z.optional(
-      z.readonly(
-        z.array(
+    scopes: z.readonly(
+      z
+        .array(
           z.object({
             address: u.address(),
             selector: z.optional(z.union([u.hex(), z.string()])),
             recipients: z.optional(z.readonly(z.array(u.address()))),
           }),
-        ),
-      ),
+        )
+        .check(z.minLength(1)),
     ),
   })
 }
@@ -424,6 +426,33 @@ export namespace wallet_revokeAccessKey {
 
 export namespace wallet_connect {
   export const authorizeAccessKey = z.optional(wallet_authorizeAccessKey.parameters)
+
+  /**
+   * Shows an optional funding prompt after `wallet_connect` succeeds.
+   *
+   * `true` prompts after both registration and login. Object form pre-fills
+   * deposit UI hints and can scope the prompt to a specific connect method
+   * with `on`. The deposit chain comes from the surrounding `wallet_connect`
+   * chain context.
+   */
+  export const showDeposit = z.optional(
+    z.union([
+      z.boolean(),
+      z.object({
+        /** Human-readable amount to pre-fill (e.g. `"50"`). */
+        amount: z.optional(z.string()),
+        /** Display name shown in the deposit UI (e.g. the app name). */
+        displayName: z.optional(z.string()),
+        /** Connect method that should show the deposit prompt. Defaults to both methods. */
+        on: z.optional(z.union([z.literal('login'), z.literal('register')])),
+        /**
+         * Token to pre-fill, accepted as either a contract address or a
+         * supported deposit token symbol (case-insensitive, e.g. `"USDC"`).
+         */
+        token: z.optional(z.union([u.address(), z.string()])),
+      }),
+    ]),
+  )
 
   /**
    * SIWE round-trip configuration. Bare string is shorthand for `{ url }`.
@@ -482,6 +511,7 @@ export namespace wallet_connect {
           method: z.literal('register'),
           name: z.optional(z.string()),
           personalSign,
+          showDeposit,
           userId: z.optional(z.string()),
         }),
         z.object({
@@ -492,6 +522,7 @@ export namespace wallet_connect {
           method: z.optional(z.literal('login')),
           personalSign,
           selectAccount: z.optional(z.boolean()),
+          showDeposit,
         }),
       ]),
     ),
@@ -556,6 +587,7 @@ export namespace wallet_connect_strict {
   const authorizeAccessKey = z.optional(wallet_authorizeAccessKey_strict.parameters)
   const auth = wallet_connect.auth
   const personalSign = wallet_connect.personalSign
+  const showDeposit = wallet_connect.showDeposit
 
   export const parameters = z.object({
     capabilities: z.optional(
@@ -567,6 +599,7 @@ export namespace wallet_connect_strict {
           method: z.literal('register'),
           name: z.optional(z.string()),
           personalSign,
+          showDeposit,
           userId: z.optional(z.string()),
         }),
         z.object({
@@ -577,6 +610,7 @@ export namespace wallet_connect_strict {
           method: z.optional(z.literal('login')),
           personalSign,
           selectAccount: z.optional(z.boolean()),
+          showDeposit,
         }),
       ]),
     ),
@@ -612,24 +646,86 @@ export namespace wallet_getCallsStatus {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
-export namespace wallet_send {
-  /** Parameters object for `wallet_send`. */
-  export const parameters = z.object({
-    /**
-     * Fee payer override. `false` to disable the wallet's default fee
-     * payer, a URL string to use a custom fee payer service.
-     */
-    feePayer: z.optional(z.union([z.boolean(), z.string()])),
-    /** Recipient address to pre-fill. */
-    to: z.optional(u.address()),
-    /** Token contract address to pre-fill. Omit to let the user choose. */
-    token: z.optional(u.address()),
-    /** Human-readable amount to pre-fill (e.g. "1.5"). */
-    value: z.optional(z.string()),
-  })
+export namespace wallet_transfer {
+  /**
+   * Parameters for `wallet_transfer`.
+   *
+   * Discriminated on `editable`:
+   *
+   * - omitted or `false` (default): Read-only. `amount` is a
+   *   human-readable string (e.g. `"1.5"`), `to` and `token` are
+   *   required, no editable UI is shown. Uses an access key when one
+   *   matches (signs without UI), otherwise falls back to a confirm
+   *   dialog the user has to approve.
+   * - `true`: Editable. Wallet shows a UI with optional fields
+   *   pre-filled; the user confirms or edits before signing.
+   */
+  export const parameters = z.discriminatedUnion('editable', [
+    z.object({
+      /** Human-readable amount to transfer (e.g. `"1.5"`). */
+      amount: z.string(),
+      /** Chain id. Defaults to the active chain. */
+      chainId: z.optional(u.number()),
+      /** Skip the editable wallet UI (Read-only mode). @default false */
+      editable: z.optional(z.literal(false)),
+      /**
+       * Fee payer override. `false` to disable the wallet's default fee
+       * payer, a URL string to use a custom fee payer service.
+       */
+      feePayer: z.optional(z.union([z.boolean(), z.string()])),
+      /**
+       * Address to transfer tokens from. Defaults to the active account.
+       * When set to a different address, the call uses `transferFrom` and
+       * requires the active account to have an allowance from `from`.
+       */
+      from: z.optional(u.address()),
+      /**
+       * UTF-8 memo to attach to the transfer (max 32 bytes when encoded
+       * as UTF-8). Sent via `transferWithMemo` / `transferFromWithMemo`.
+       */
+      memo: z.optional(z.string()),
+      /** Recipient address. */
+      to: u.address(),
+      /**
+       * Token to transfer, accepted as either a contract address or a
+       * curated tokenlist symbol (case-insensitive, e.g. `"pathUsd"`).
+       * Symbols are resolved against the curated tokenlist on the active
+       * chain.
+       */
+      token: z.union([u.address(), z.string()]),
+    }),
+    z.object({
+      /** Human-readable amount to pre-fill (e.g. `"1.5"`). */
+      amount: z.optional(z.string()),
+      /** Chain id. Defaults to the active chain. */
+      chainId: z.optional(u.number()),
+      /** Show the wallet UI for the user to confirm or edit. */
+      editable: z.literal(true),
+      /**
+       * Fee payer override. `false` to disable the wallet's default fee
+       * payer, a URL string to use a custom fee payer service.
+       */
+      feePayer: z.optional(z.union([z.boolean(), z.string()])),
+      /**
+       * UTF-8 memo (max 32 bytes) to attach to the transfer. Wallet
+       * rejects the request if the selected token does not support
+       * memos (non-TIP-20).
+       */
+      memo: z.optional(z.string()),
+      /** Recipient address to pre-fill. */
+      to: z.optional(u.address()),
+      /**
+       * Token to pre-fill, accepted as either a contract address or a
+       * curated tokenlist symbol (case-insensitive, e.g. `"pathUsd"`).
+       * Symbols are resolved against the curated tokenlist on the active
+       * chain. Omit to let the user choose.
+       */
+      token: z.optional(z.union([u.address(), z.string()])),
+    }),
+  ])
 
   export const schema = Schema.defineItem({
-    method: z.literal('wallet_send'),
+    method: z.literal('wallet_transfer'),
     params: z.optional(z.readonly(z.tuple([parameters]))),
     returns: z.object({
       /** Chain id the send is to. */
@@ -682,16 +778,23 @@ export namespace wallet_switchEthereumChain {
 export namespace wallet_deposit {
   export const schema = Schema.defineItem({
     method: z.literal('wallet_deposit'),
-    params: z.readonly(
-      z.tuple([
-        z.object({
-          address: z.optional(u.address()),
-          chainId: z.optional(u.number()),
-          displayName: z.optional(z.string()),
-          token: z.optional(u.address()),
-          value: z.optional(z.string()),
-        }),
-      ]),
+    params: z.optional(
+      z.readonly(
+        z.tuple([
+          z.object({
+            address: z.optional(u.address()),
+            /** Human-readable amount to pre-fill (e.g. `"50"`). */
+            amount: z.optional(z.string()),
+            chainId: z.optional(u.number()),
+            displayName: z.optional(z.string()),
+            /**
+             * Token to pre-fill, accepted as either a contract address or a
+             * supported deposit token symbol (case-insensitive, e.g. `"USDC"`).
+             */
+            token: z.optional(z.union([u.address(), z.string()])),
+          }),
+        ]),
+      ),
     ),
     returns: z.optional(
       z.object({

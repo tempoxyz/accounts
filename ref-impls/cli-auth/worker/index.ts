@@ -1,6 +1,6 @@
 import { CliAuth, Handler } from 'accounts/server'
 import type { Hex } from 'ox'
-import { tempoModerato } from 'viem/chains'
+import { tempoModerato } from 'viem/tempo/chains'
 
 import { approve } from './approve.js'
 import { store } from './deps.js'

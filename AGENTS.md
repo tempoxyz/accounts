@@ -24,6 +24,7 @@
 - **No dynamic imports** — use static `import` declarations. No `await import(...)` or `import(...)` expressions.
 - **`as never` over `as any`** — when a type assertion is unavoidable, use `as never` instead of `as any`.
 - **Destructure when accessing multiple properties** — prefer `const { a, b } = options` over repeated `options.a`, `options.b`.
+- **Keep hook results grouped** — when consuming a hook that returns a related bundle (e.g. `useMutation`, Wagmi/React Query hooks, `Steps.use()`), assign the whole result to a single noun and access fields via `.`. Prefer `const send = Hooks.wallet.useSend(); send.mutate(...); send.isPending` over `const { mutate: send, isPending } = Hooks.wallet.useSend()`. The grouping keeps the call site self-documenting and avoids inventing per-hook aliases.
 - **Read from `options.x` when normalizing a single field** — when transforming exactly one option into a local of the same name, read it directly from `options` instead of destructuring + renaming. Avoids `_resolved` / `_normalized` / `_x` suffixes for what's really just a normalized version of the same field. For example: `const mpp = (() => { if (!options.mpp) return undefined; ... })()` instead of pulling `mpp` out of `options` and inventing a second name for the result.
 - **`core_` prefix for import aliases** — when aliasing an import to avoid conflicts, use `core_<name>` (e.g. `import { local as core_local }`), not arbitrary camelCase.
 - **`Hex.fromNumber` over `toString(16)`** — use `Hex.fromNumber(n)` from `ox` instead of `` `0x${n.toString(16)}` `` for number-to-hex conversion.
@@ -41,12 +42,22 @@
 ## Documentation Conventions
 
 - **JSDoc on all exports** — every exported function, type, and constant gets a JSDoc comment. Type properties get JSDoc too. Namespace types (e.g. `declare namespace create { type Options }`) get JSDoc too. Doc-driven development: write the JSDoc before or alongside the implementation, not after.
+- **No `--` in site docs** — site docs (`site/src/pages/**`) must not use `--` (two ASCII hyphens) as punctuation. Use an em dash (`—`) instead. The global `--`-over-em-dash rule still applies to PR titles/bodies, changesets, commit messages, and code comments — site documentation is the only exception.
+- **No crypto jargon in site docs** — site docs (`site/src/pages/**`) must not use crypto/blockchain jargon when a plainer word exists. Examples: prefer "feeless" over "gasless", "transaction fee" over "gas fee", "account" over "wallet" when referring to user identity, "sign in" over "connect wallet" in user-facing copy, "app" over "dapp". Reach for the term a non-crypto reader would already understand.
+
+## Site Styling Conventions
+
+- **Use Tailwind utilities, not arbitrary `var()` values** — never write `bg-[var(--background-color-surface)]` or `border-[var(--vocs-border-color-primary)]`. Use the corresponding Tailwind utility class. Both vocs and regen-ui register their tokens via `@theme`, so every token has a generated utility.
+- **No `vocs:` prefix in our app code** — vocs uses a `vocs:` prefix internally for its own components, but our `_root.css` re-imports vocs's theme tokens at the **root** `@theme` layer (via `_vocs.generated.css`), so vocs tokens are available as plain unprefixed utilities in our code: `bg-primary`, `bg-surface`, `border-primary`, `text-primary`/`text-secondary`/`text-muted`, `bg-info-tint`, `text-info`, `border-info-tint`, etc. Writing `vocs:bg-info-tint` will silently no-op because Tailwind has no `vocs:` prefix registered for our own source files.
+- **Regen-ui tokens are also unprefixed** — regen tokens are imported into the root `@theme` and are available as plain Tailwind utilities: `bg-pane`, `bg-secondary`, `border-border`, `text-foreground`, `text-foreground-secondary`, etc. Where regen and vocs both define a token of the same name (e.g. `--background-color-primary`), vocs wins because it is imported last.
+- **Arbitrary values only when no token exists** — if a value isn't covered by a token (e.g. a custom `color-mix(...)` blend, a one-off pixel size), inline it with `[...]` syntax, but prefer utility classes wherever possible.
 
 ## Protocol Conventions
 
 - **CLI auth device codes are raw in protocol** — store, return, and query device codes as raw 8-character values (for example `ABCDEFGH`). Only apply hyphen formatting (`ABCD-EFGH`) when rendering for humans.
 - **Keep CLI protocol looseness scoped** — if the CLI bootstrap/device-code flow needs a more permissive request shape than the shared SDK RPC contract, keep that looseness in the CLI/server-specific surface (for example `src/server/CliAuth.ts` and CLI adapter handling). Do not widen `src/core/zod/rpc.ts` or shared `wallet_authorizeAccessKey` semantics unless the change is explicitly intended SDK-wide.
 - **Preserve WebAuthn signature-envelope magic when verifying RPC payloads** — `SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(signature))` must pass `{ magic: true }` for `webAuthn` signatures, but not for secp256k1/p256 signatures. `viem/tempo` uses the magic suffix to route stateless verification through `SignatureEnvelope.verify(...)`.
+- **Access keys are chain-scoped** — store and select locally managed access keys by the `chainId` from their signed key authorization. Do not use an access key authorized on one chain for another chain; fall back to root signing or reauthorization instead.
 
 ## Type Conventions
 
@@ -63,9 +74,11 @@
 
 ## Testing Conventions
 
+- **Use `pnpm test` for tests** -- run tests through `pnpm test`, not `vp test` directly.
 - **Inline snapshots over direct assertions** — prefer `toMatchInlineSnapshot()` over `.toBe()`, `.toEqual()`, etc. for return values. Use `toThrowErrorMatchingInlineSnapshot()` for error assertions. Never use try/catch + `expect.unreachable()` for error tests.
 - **Snapshot whole objects, omit nondeterministic properties** — destructure out nondeterministic fields (e.g. `blockHash`, `gasUsed`, timestamps) and snapshot the rest, rather than cherry-picking individual fields to assert.
 - **Unit and type tests as you go** — write unit tests and `.test-d.ts` type tests alongside implementation for each module. Save high-level integration tests (with and without browser) for the end.
+- **Mark localnet tests explicitly** — tests that touch RPC/localnet should use the `*.localnet.test.ts` suffix so only those files inherit `test/setup.ts`; pure `*.test.ts` files run in the no-setup `lib/pure` project.
 
 ## Git Conventions
 

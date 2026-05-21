@@ -1,0 +1,150 @@
+import { formatUnits, stringify, type Address } from 'viem'
+import {
+  useChains,
+  useConnect,
+  useConnection,
+  useConnectors,
+  useDisconnect,
+  useSwitchChain,
+} from 'wagmi'
+import { Hooks } from 'wagmi/tempo'
+
+const pathUsd = '0x20c0000000000000000000000000000000000000' as const
+
+export default function App() {
+  const { address, chainId, status } = useConnection()
+  return (
+    <div>
+      <h1>Fee Payer Example</h1>
+
+      <h2>Connection</h2>
+      <pre>
+        {stringify({ address: address ?? null, chainId: chainId ?? null, status }, null, 2)}
+      </pre>
+
+      <h2>Connect</h2>
+      <Connect />
+
+      {status === 'connected' && (
+        <>
+          <h2>Switch Chain</h2>
+          <SwitchChain />
+
+          <h2>Balance</h2>
+          <Balance />
+
+          <h2>Send Transfer</h2>
+          <SendTransfer />
+        </>
+      )}
+    </div>
+  )
+}
+
+function Connect() {
+  const { mutate: connect, status, error } = useConnect()
+  const { mutate: disconnect } = useDisconnect()
+  const { address } = useConnection()
+  const connectors = useConnectors()
+  const connector = connectors[0]
+
+  if (!connector) return null
+
+  return (
+    <div>
+      {address ? (
+        <button type="button" onClick={() => disconnect()}>
+          Disconnect
+        </button>
+      ) : (
+        <button type="button" onClick={() => connect({ connector })}>
+          Login
+        </button>
+      )}
+      <div>{status}</div>
+      {error && <pre style={{ color: 'red' }}>{error.message}</pre>}
+    </div>
+  )
+}
+
+function SwitchChain() {
+  const { chainId } = useConnection()
+  const chains = useChains()
+  const { mutate: switchChain } = useSwitchChain()
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      {chains.map((chain) => (
+        <button
+          key={chain.id}
+          type="button"
+          disabled={chain.id === chainId}
+          onClick={() => switchChain({ chainId: chain.id })}
+        >
+          {chain.name}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function Balance() {
+  const { address } = useConnection()
+  const { data, isLoading } = Hooks.token.useGetBalance({
+    account: address,
+    token: pathUsd,
+    query: { refetchInterval: 1_000 },
+  })
+  return (
+    <div>{isLoading ? 'Loading...' : data !== undefined ? formatUnits(data, 6) : '—'} pathUsd</div>
+  )
+}
+
+function SendTransfer() {
+  const transfer = Hooks.wallet.useTransfer()
+  return (
+    <div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          const form = new FormData(e.currentTarget)
+          transfer.mutate({
+            amount: (form.get('amount') as string) || '0',
+            to: form.get('to') as Address,
+            token: pathUsd,
+          })
+        }}
+        style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+      >
+        <input
+          name="to"
+          defaultValue="0x0000000000000000000000000000000000000001"
+          placeholder="To (0x...)"
+          style={{ flex: 1, fontFamily: 'monospace' }}
+        />
+        <input name="amount" defaultValue="1" placeholder="Amount" style={{ width: 80 }} />
+        <button type="submit" disabled={transfer.isPending}>
+          Send
+        </button>
+      </form>
+      {transfer.error && (
+        <pre style={{ color: 'red' }}>{`${transfer.error.name}: ${transfer.error.message}`}</pre>
+      )}
+      {transfer.data !== undefined && (
+        <>
+          <p>
+            ✅ Transaction success!{' '}
+            {transfer.data.receipt.feePayer && (
+              <>
+                Fees paid by: <code>{transfer.data.receipt.feePayer}</code>
+              </>
+            )}
+          </p>
+          <details>
+            <summary>Receipt</summary>
+            <pre>{stringify(transfer.data.receipt, null, 2)}</pre>
+          </details>
+        </>
+      )}
+    </div>
+  )
+}

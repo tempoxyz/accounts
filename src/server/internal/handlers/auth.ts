@@ -2,8 +2,8 @@ import { Hex } from 'ox'
 import type { Address, Transport } from 'viem'
 import { createClient, http, zeroAddress } from 'viem'
 import { verifyMessage } from 'viem/actions'
-import { tempo } from 'viem/chains'
 import { createSiweMessage, generateSiweNonce, parseSiweMessage } from 'viem/siwe'
+import { tempo } from 'viem/tempo/chains'
 import * as z from 'zod/mini'
 
 import * as u from '../../../core/zod/utils.js'
@@ -126,13 +126,20 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     session = true,
     store = Kv.memory(),
     transport = http(),
-    trustProxy = false,
+    // Cloudflare Workers always run behind Cloudflare's edge proxy, which
+    // sets `x-forwarded-proto`/`x-forwarded-host`. Default `trustProxy` to
+    // `true` there so deployments work out of the box. Other runtimes keep
+    // the secure default of `false` (operator must opt in).
+    trustProxy = isCloudflareWorkers(),
     ttl: {
       challenge: challengeTtl = defaults.ttl.challenge,
       session: sessionTtl = defaults.ttl.session,
     } = {},
     ...rest
   } = options
+
+  if (!origin_option && !domain)
+    throw new Error('`auth()` requires `origin` or `domain` to pin SIWE domain binding.')
 
   async function take(key: string): Promise<ChallengePayload | undefined> {
     if (store.take) return store.take<ChallengePayload>(key)
@@ -409,7 +416,7 @@ export declare namespace auth {
      * `false`, forwarded headers are ignored to prevent spoofing on
      * deployments that expose the origin server directly. Ignored when
      * `origin` is set.
-     * @default false
+     * @default `true` on Cloudflare Workers (always edge-fronted), `false` elsewhere.
      */
     trustProxy?: boolean | undefined
     /** TTLs in seconds. */
@@ -461,4 +468,16 @@ function resolveOrigin(
     protocol: reqUrl.protocol,
     host: headers.get('host') || reqUrl.host,
   }
+}
+
+/**
+ * Detects whether we're executing inside the Cloudflare Workers runtime,
+ * which is always edge-fronted and forwards `x-forwarded-*` headers from
+ * Cloudflare's proxy. Used to flip the default `trustProxy` to `true`.
+ */
+function isCloudflareWorkers(): boolean {
+  return (
+    typeof globalThis.navigator !== 'undefined' &&
+    globalThis.navigator.userAgent === 'Cloudflare-Workers'
+  )
 }

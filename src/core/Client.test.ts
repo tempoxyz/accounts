@@ -1,5 +1,5 @@
 import { custom, http } from 'viem'
-import { tempo, tempoModerato } from 'viem/chains'
+import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 
 import { secp256k1 } from '../../test/adapters.js'

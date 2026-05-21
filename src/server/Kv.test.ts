@@ -47,6 +47,36 @@ describe('memory', () => {
     expect(await kv.get('a')).toMatchInlineSnapshot(`"v2"`)
   })
 
+  test('create: writes only when key is absent', async () => {
+    const kv = Kv.memory()
+
+    expect(await kv.create!('a', 'v1')).toMatchInlineSnapshot(`true`)
+    expect(await kv.create!('a', 'v2')).toMatchInlineSnapshot(`false`)
+    expect(await kv.get('a')).toMatchInlineSnapshot(`"v1"`)
+  })
+
+  test('create: replaces expired entries', async () => {
+    let now = 1_000_000
+    const kv = Kv.memory({ now: () => now })
+
+    await kv.set('a', 'v1', { ttl: 1 })
+    now += 2_000
+    expect(await kv.create!('a', 'v2')).toMatchInlineSnapshot(`true`)
+    expect(await kv.get('a')).toMatchInlineSnapshot(`"v2"`)
+  })
+
+  test('create: concurrent callers — only one writes', async () => {
+    const kv = Kv.memory()
+
+    const results = await Promise.all([kv.create!('a', 'v1'), kv.create!('a', 'v2')])
+    expect(results.filter(Boolean)).toMatchInlineSnapshot(`
+      [
+        true,
+      ]
+    `)
+    expect(await kv.get('a')).toMatchInlineSnapshot(`"v1"`)
+  })
+
   test('take: returns the value and removes the entry', async () => {
     const kv = Kv.memory()
 
@@ -163,6 +193,18 @@ describe('durableObject + NonceStorage', () => {
     `)
   })
 
+  test('create: concurrent callers — only one wins', async () => {
+    const kv = Kv.durableObject(fakeDurableObject())
+
+    const results = await Promise.all([kv.create!('a', 'v1'), kv.create!('a', 'v2')])
+    expect(results.filter(Boolean)).toMatchInlineSnapshot(`
+      [
+        true,
+      ]
+    `)
+    expect(await kv.get('a')).toMatchInlineSnapshot(`"v1"`)
+  })
+
   test('take: missing key returns undefined', async () => {
     const kv = Kv.durableObject(fakeDurableObject())
     expect(await kv.take!('missing')).toMatchInlineSnapshot(`undefined`)
@@ -224,6 +266,15 @@ describe('cloudflare', () => {
       delete: async () => {},
     })
     expect(kv.take).toBeUndefined()
+  })
+
+  test('create: NOT implemented (CF KV is not linearizable)', () => {
+    const kv = Kv.cloudflare({
+      get: async () => null,
+      put: async () => {},
+      delete: async () => {},
+    })
+    expect(kv.create).toBeUndefined()
   })
 
   test('ttl: passes expirationTtl seconds to underlying put', async () => {
