@@ -50,7 +50,7 @@ export function LogInBody({
 
       <PrimaryButton
         label={connected ? "Signed in" : idleCta}
-        status={connected ? "idle" : status}
+        status="idle"
         disabled={connected}
         onClick={onAction}
         className="h-11 w-full"
