@@ -1,3 +1,4 @@
+import { tempoModerato } from "viem/tempo/chains";
 import { FeeSponsorshipBody } from "./bodies/FeeSponsorship";
 import { LogInBody } from "./bodies/LogIn";
 import { OnRampBody } from "./bodies/OnRamp";
@@ -7,6 +8,8 @@ import { SubscribeBody } from "./bodies/Subscribe";
 import { TradeBody } from "./bodies/Trade";
 import { connectWallet, DEMO_AMOUNT_USD, shorten } from "./sdk";
 import type { DemoDef, DemoKind } from "./types";
+
+const PURCHASE_AMOUNT_USD = "240";
 
 /** Ordered list of landing demo steps. */
 export const DEMO_STEPS = [
@@ -20,14 +23,13 @@ export const DEMO_STEPS = [
 ] as const satisfies readonly DemoKind[];
 
 /**
- * All on-chain actions sign for $0.01 — display copy (Pro Plan / $240,
- * $24.99/mo, 100 USDC swap, etc.) is just storytelling.
+ * Most on-chain actions sign for $0.01 — larger display copy is storytelling.
+ * Pay Once intentionally prefills $240 so the wallet matches the checkout.
  */
 export const DEMOS: Record<DemoKind, DemoDef> = {
   "Log In": {
     url: "wisselbank.xyz",
     network: "mainnet",
-    autoAdvance: false,
     guide: {
       label: "Authentication",
       href: "/docs/guides/connect-accounts",
@@ -57,7 +59,6 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
   "Add Funds": {
     url: "wisselbank.xyz",
     network: "mainnet",
-    autoAdvance: false,
     guide: {
       label: "Deposits",
       href: "/docs/guides/deposits",
@@ -70,11 +71,13 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       // wallet_deposit opens the wallet's native Deposit dialog
       // ($20/$50/$100/Other, Apple Pay, Deposit crypto, etc.).
       // Pre-fill with $0.01 so the demo amount stays consistent.
-      await provider.request({
+      void provider.request({
         method: "wallet_deposit",
         params: [{ amount: DEMO_AMOUNT_USD }],
-      } as Parameters<typeof provider.request>[0]);
-      return { summary: "Deposit dialog opened" };
+      } as Parameters<typeof provider.request>[0]).catch((error) => {
+        console.warn("[demo] deposit flow closed", error);
+      });
+      return {};
     },
   },
 
@@ -96,8 +99,8 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     async run(provider) {
       // `wallet_transfer` opens the wallet UI so the user can confirm
       // the transfer (editable: true). Self-transfer: pay the user's
-      // own address with $0.01 so the demo signs a real on-chain tx
-      // without burning anyone's money.
+      // own address so the demo signs a real on-chain tx without
+      // sending funds to a third party.
       const accounts = (await provider.request({
         method: "eth_accounts",
       })) as readonly `0x${string}`[];
@@ -109,7 +112,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
           {
             editable: true,
             to: self,
-            amount: DEMO_AMOUNT_USD,
+            amount: PURCHASE_AMOUNT_USD,
             token: "pathUsd",
           },
         ],
@@ -117,7 +120,13 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         | { receipt?: { transactionHash?: `0x${string}` } }
         | undefined;
       const tx = result?.receipt?.transactionHash;
-      return { summary: tx ? `tx ${shorten(tx)}` : "Sent" };
+      return {
+        summary: tx ? "Payment sent ·" : "Payment sent",
+        href: tx
+          ? `${tempoModerato.blockExplorers.default.url}/tx/${tx}`
+          : undefined,
+        hrefLabel: tx ? `tx ${shorten(tx)}` : undefined,
+      };
     },
   },
 

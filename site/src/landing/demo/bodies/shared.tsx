@@ -61,18 +61,20 @@ export function PrimaryButton({
   status,
   onClick,
   className = "",
+  disabled = false,
 }: {
   label: string;
   status: Status;
   onClick: () => void;
   className?: string;
+  disabled?: boolean | undefined;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={status === "running"}
-      className={`flex h-10 items-center justify-center gap-2 bg-accent px-4 outline-none hover:bg-accent-hover active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 disabled:opacity-80 ${className}`}
+      disabled={status === "running" || disabled}
+      className={`flex h-10 items-center justify-center gap-2 bg-accent px-4 outline-none enabled:hover:bg-accent-hover enabled:active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-80 ${className}`}
     >
       {status === "running" ? (
         <span

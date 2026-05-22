@@ -6,12 +6,8 @@ import { FundingOverlay, PrimaryButton, useBodyAnimation } from "./shared";
 export function PayOnceBody(props: DemoBodyProps) {
   const { status, result, onAction, delay } = props;
   const body = useBodyAnimation(delay);
-  const buttonLabel =
-    status === "running"
-      ? "Opening Tempo…"
-      : status === "done"
-        ? "Payment sent"
-        : "Complete purchase";
+  const done = status === "done";
+  const buttonLabel = done ? "Payment sent" : "Complete purchase";
 
   return (
     <div
@@ -27,12 +23,27 @@ export function PayOnceBody(props: DemoBodyProps) {
       </div>
       <PrimaryButton
         label={buttonLabel}
-        status={status}
+        status={done ? "idle" : status}
+        disabled={done}
         onClick={onAction}
         className="mt-2 h-11 w-full"
       />
       {result?.summary ? (
-        <p className="font-mono text-[10px] text-foreground-subtle">{result.summary}</p>
+        result.href && result.hrefLabel ? (
+          <p className="font-mono text-[10px] text-foreground-subtle">
+            {result.summary}{" "}
+            <a
+              href={result.href}
+              target="_blank"
+              rel="noreferrer"
+              className="outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
+            >
+              {result.hrefLabel}
+            </a>
+          </p>
+        ) : (
+          <p className="font-mono text-[10px] text-foreground-subtle">{result.summary}</p>
+        )
       ) : null}
       <FundingOverlay {...props} />
     </div>

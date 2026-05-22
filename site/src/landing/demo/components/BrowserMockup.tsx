@@ -11,8 +11,10 @@ import {
 } from "react";
 import { springs } from "../../animation";
 import { LockIcon, TempoLogo } from "../../icons";
+import { useBodyAnimation } from "../bodies/shared";
 import { DEMOS, DEMO_STEPS } from "../config";
 import type {
+  AccountStatus,
   Adapter,
   DemoDef,
   DemoGuide,
@@ -170,6 +172,35 @@ function DemoGuideCallout({
   );
 }
 
+function NextDemoMessage({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  const body = useBodyAnimation(0);
+
+  return (
+    <div
+      ref={body.ref}
+      className="flex max-w-full flex-col items-start gap-2 bg-panel-2 px-3 py-2"
+      style={body.style}
+    >
+      <p className="text-[14px] break-words text-foreground sm:text-[16px] sm:whitespace-nowrap">
+        Ready for the next example?
+      </p>
+      <button
+        type="button"
+        onClick={onClick}
+        className="bg-accent px-3 py-1.5 text-[13px] text-on-accent outline-none hover:bg-accent-hover active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
+      >
+        {label}
+      </button>
+    </div>
+  );
+}
+
 export type ConnectedSession = {
   address: `0x${string}`;
   balanceDisplay: string;
@@ -186,6 +217,7 @@ export function BrowserMockup({
   adapter,
   lastVariant,
   connected,
+  accountStatus,
   onAction,
   onSetupConnect,
   onSetupFund,
@@ -201,6 +233,7 @@ export function BrowserMockup({
   adapter: Adapter;
   lastVariant: string | null;
   connected: ConnectedSession | null;
+  accountStatus: AccountStatus;
   onAction: (variant?: string) => void;
   onSetupConnect: () => void;
   onSetupFund: () => void;
@@ -243,6 +276,12 @@ export function BrowserMockup({
   const nextStep = nextIndex >= 0 ? String(nextIndex + 1).padStart(2, "0") : "";
   const previousLabel = previousDemo ? DEMOS[previousDemo].guide.label : "";
   const nextLabel = nextDemo ? DEMOS[nextDemo].guide.label : "";
+  const nextCtaLabel =
+    activeIndex === DEMO_STEPS.length - 1
+      ? "Restart examples"
+      : nextLabel
+        ? `Go to ${nextLabel}`
+        : "Next example";
   const messageStyle =
     animatedMessagesDemo === demo ? undefined : messageInitialStyle;
   const networkBadgeClass =
@@ -250,7 +289,9 @@ export function BrowserMockup({
       ? "bg-network-testnet-bg text-network-testnet"
       : "bg-panel-3 text-foreground-muted";
   const needsFunding =
-    def.network === "testnet" && (!connected || connected.balance <= 0n);
+    def.network === "testnet" &&
+    accountStatus !== "checking" &&
+    (!connected || connected.balance <= 0n);
   const changeDemo = (d: DemoKind) => {
     onChangeDemo(d);
     if (!window.matchMedia("(min-width: 640px)").matches)
@@ -323,31 +364,40 @@ export function BrowserMockup({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          {connected ? (
-            <div className="flex items-center gap-2 font-mono text-[12px] sm:text-[14px]">
-              <span aria-hidden className="size-1.5 rounded-full bg-accent-live" />
-              <span className="text-foreground">
-                {shorten(connected.address)}
+          <div className="flex min-w-[148px] items-center justify-end gap-2 font-mono text-[12px] sm:min-w-[260px] sm:text-[14px]">
+            <span
+              aria-hidden
+              className={`size-1.5 rounded-full ${connected ? "bg-accent-live" : "bg-foreground-subtle"}`}
+            />
+            {connected ? (
+              <>
+                <span className="text-foreground">
+                  {shorten(connected.address)}
+                </span>
+                {connected.balanceDisplay ? (
+                  <>
+                    <span className="hidden text-foreground-subtle sm:inline">·</span>
+                    <span className="hidden text-foreground sm:inline">
+                      {connected.balanceDisplay}
+                    </span>
+                  </>
+                ) : null}
+                <span className="text-foreground-subtle">·</span>
+                <button
+                  type="button"
+                  onClick={onDisconnect}
+                  className="text-foreground-muted outline-none hover:text-foreground active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
+                >
+                  Disconnect
+                </button>
+                <span className="text-foreground-subtle">·</span>
+              </>
+            ) : (
+              <span className="text-foreground-muted">
+                {accountStatus === "checking" ? "Checking…" : "Not connected"}
               </span>
-              {connected.balanceDisplay ? (
-                <>
-                  <span className="hidden text-foreground-subtle sm:inline">·</span>
-                  <span className="hidden text-foreground sm:inline">
-                    {connected.balanceDisplay}
-                  </span>
-                </>
-              ) : null}
-              <span className="text-foreground-subtle">·</span>
-              <button
-                type="button"
-                onClick={onDisconnect}
-                className="text-foreground-muted outline-none hover:text-foreground active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
-              >
-                Disconnect
-              </button>
-              <span className="text-foreground-subtle">·</span>
-            </div>
-          ) : null}
+            )}
+          </div>
           <span
             className={`rounded-[2px] px-2 py-0.5 font-mono text-[12px] whitespace-nowrap sm:text-[14px] ${networkBadgeClass}`}
           >
@@ -423,7 +473,7 @@ export function BrowserMockup({
                   pressDemo(d);
                 }}
                 onClick={() => clickDemo(d)}
-                className={`group relative flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none hover:bg-surface-hover active:bg-surface-active active:text-foreground focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 last:border-b-0 ${active ? "bg-background text-foreground" : "text-foreground-muted"}`}
+                className={`group relative flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none hover:bg-[color-mix(in_oklab,var(--panel-2)_55%,transparent)] focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 last:border-b-0 ${active ? "bg-background text-foreground" : "text-foreground-muted"}`}
               >
                 <div className="flex min-w-0 items-baseline gap-3">
                   <span
@@ -472,6 +522,7 @@ export function BrowserMockup({
                 lastVariant={lastVariant}
                 onAction={onAction}
                 onNextDemo={goNextDemo}
+                nextCtaLabel={nextCtaLabel}
                 setupStatus={setupStatus}
                 setupError={setupError}
                 needsFunding={needsFunding}
@@ -481,6 +532,13 @@ export function BrowserMockup({
                 adapter={adapter}
                 connectedBalance={connected?.balanceDisplay ?? null}
               />
+              {status === "done" ? (
+                <NextDemoMessage
+                  key={`${demo}-next-message`}
+                  label={nextCtaLabel}
+                  onClick={goNextDemo}
+                />
+              ) : null}
             </div>
           </div>
           <DemoGuideCallout guide={def.guide} delay={guideDelay} />

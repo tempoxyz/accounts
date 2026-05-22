@@ -50,12 +50,7 @@ function TokenRow({
 export function TradeBody(props: DemoBodyProps) {
   const { status, result, onAction, delay } = props;
   const body = useBodyAnimation(delay);
-  const buttonLabel =
-    status === "running"
-      ? "Opening Tempo…"
-      : status === "done"
-        ? "Exchanged"
-        : "Exchange";
+  const buttonLabel = status === "done" ? "Exchanged" : "Exchange";
 
   return (
     <div

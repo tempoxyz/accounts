@@ -32,10 +32,7 @@ export function LocalPaymentsBody({
     DEPOSIT_AMOUNTS.find((a) => a.id === selectedAmountId) ??
     DEPOSIT_AMOUNTS[0];
 
-  const buttonLabel =
-    status === "running"
-      ? "Opening deposit…"
-      : `Add ${selected.label} with ${methodLabel}`;
+  const buttonLabel = `Add ${selected.label} with ${methodLabel}`;
 
   return (
     <div

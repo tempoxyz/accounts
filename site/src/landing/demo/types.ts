@@ -14,6 +14,9 @@ export type DemoKind =
 
 export type Status = "idle" | "running" | "done";
 
+/** Current account lookup state for the active demo network. */
+export type AccountStatus = "checking" | "disconnected" | "connected";
+
 /** Status for the testnet setup controls. Kept separate from demo action state. */
 export type SetupStatus = "idle" | "connecting" | "funding";
 
@@ -25,6 +28,10 @@ export type DemoNetwork = "mainnet" | "testnet";
 export type DemoResult = {
   /** Short human-readable result line shown in the body's `done` state. */
   summary?: string;
+  /** Optional destination for the result line, such as an explorer receipt URL. */
+  href?: string | undefined;
+  /** Optional text for the linked portion of the result line. */
+  hrefLabel?: string | undefined;
 };
 
 /** Guide metadata attached to one landing demo step. */
@@ -44,6 +51,8 @@ export type DemoBodyProps = {
   onAction: (variant?: string) => void;
   /** Moves to the next landing demo step. */
   onNextDemo: () => void;
+  /** Label for the explicit next-step CTA after a demo completes. */
+  nextCtaLabel?: string | undefined;
   /** Status for setup actions that are separate from the demo action. */
   setupStatus: SetupStatus;
   /** Setup error shown in the funding overlay. */
@@ -68,8 +77,6 @@ export type DemoDef = {
   url: string;
   /** Network used by this demo step. */
   network: DemoNetwork;
-  /** Whether the demo should move to the next step after a successful action. */
-  autoAdvance?: boolean | undefined;
   /** Guide metadata shown around the active demo step. */
   guide: DemoGuide;
   prelude?: string[];
