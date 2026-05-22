@@ -62,7 +62,7 @@ export function LocalPaymentsBody({
                 key={a.id}
                 type="button"
                 onClick={() => onSelectAmount(a.id)}
-                className={`relative flex items-center justify-center border py-2.5 text-left outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 ${active ? "border-panel-edge bg-panel-4" : "border-transparent bg-panel-3"}`}
+                className={`relative flex items-center justify-center border py-2.5 text-left outline-none hover:bg-secondary-hover active:bg-secondary-active focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 ${active ? "border-panel-edge bg-secondary-hover" : "border-transparent bg-secondary"}`}
               >
                 <span
                   className={`font-mono text-[14px] tabular-nums ${active ? "text-foreground" : "text-foreground-muted"}`}

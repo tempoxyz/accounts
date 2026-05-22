@@ -94,6 +94,8 @@
   --background: #0a0a0a;
   --surface: #131313;
   --surface-2: #1a1a1a;
+  --surface-hover: light-dark(oklch(94% 0 0), oklch(25% 0 0));
+  --surface-active: light-dark(oklch(88% 0 0), oklch(31% 0 0));
   --foreground: #f5f5f5;
   --foreground-rgb: 245, 245, 245;
   --foreground-muted: rgba(245, 245, 245, 0.6);
@@ -115,6 +117,15 @@
   --panel-edge: #2e2e2e;
   --panel-deep: #101010;
   --panel-border: #222222;
+  --secondary: var(--panel-3);
+  --secondary-hover: light-dark(
+    oklch(from var(--secondary) calc(l - 0.035) c h),
+    oklch(from var(--secondary) calc(l + 0.045) c h)
+  );
+  --secondary-active: light-dark(
+    oklch(from var(--secondary) calc(l - 0.075) c h),
+    oklch(from var(--secondary) calc(l + 0.085) c h)
+  );
 
   /* Tier 3 — code + syntax */
   --code-bg: #0a0a0a;
@@ -130,11 +141,23 @@
 
   /* Tier 4 — CTA / SVG ink / accent */
   --cta: #ffffff;
+  --cta-hover: oklch(
+    from var(--cta)
+      calc(l + (clamp(0, (0.6 - l) * 999, 1) * 0.075) - (clamp(0, (l - 0.6) * 999, 1) * 0.06))
+      calc(c * 0.98) h
+  );
+  --cta-active: oklch(
+    from var(--cta)
+      calc(l + (clamp(0, (0.6 - l) * 999, 1) * 0.13) - (clamp(0, (l - 0.6) * 999, 1) * 0.12))
+      calc(c * 0.96) h
+  );
   --cta-fg: #181818;
   --fill-0: #ffffff;
   --stroke-0: #ffffff;
   --footer-glow: rgba(0, 0, 0, 0.85);
   --accent-live: #22c55e;
+  --network-testnet: #fbbf24;
+  --network-testnet-bg: rgba(251, 191, 36, 0.11);
 
   /* Tier 5 — brand token rings (theme-invariant) */
   --brand-usdc: #2775ca;
@@ -238,6 +261,8 @@
   --background: #ffffff;
   --surface: #f8f8f8;
   --surface-2: #f0f0f0;
+  --surface-hover: light-dark(oklch(94% 0 0), oklch(25% 0 0));
+  --surface-active: light-dark(oklch(88% 0 0), oklch(31% 0 0));
   --foreground: #0a0a0a;
   --foreground-rgb: 10, 10, 10;
   --foreground-muted: rgba(10, 10, 10, 0.62);
@@ -256,6 +281,15 @@
   --panel-edge: #d4d4d4;
   --panel-deep: #f9f9f9;
   --panel-border: rgba(0, 0, 0, 0.1);
+  --secondary: var(--panel-3);
+  --secondary-hover: light-dark(
+    oklch(from var(--secondary) calc(l - 0.035) c h),
+    oklch(from var(--secondary) calc(l + 0.045) c h)
+  );
+  --secondary-active: light-dark(
+    oklch(from var(--secondary) calc(l - 0.075) c h),
+    oklch(from var(--secondary) calc(l + 0.085) c h)
+  );
 
   /* Tier 3 — code + syntax (GitHub-light flavoured) */
   --code-bg: #f6f8fa;
@@ -271,11 +305,23 @@
 
   /* Tier 4 — CTA / SVG ink / accent */
   --cta: #0a0a0a;
+  --cta-hover: oklch(
+    from var(--cta)
+      calc(l + (clamp(0, (0.6 - l) * 999, 1) * 0.075) - (clamp(0, (l - 0.6) * 999, 1) * 0.06))
+      calc(c * 0.98) h
+  );
+  --cta-active: oklch(
+    from var(--cta)
+      calc(l + (clamp(0, (0.6 - l) * 999, 1) * 0.13) - (clamp(0, (l - 0.6) * 999, 1) * 0.12))
+      calc(c * 0.96) h
+  );
   --cta-fg: #ffffff;
   --fill-0: #0a0a0a;
   --stroke-0: #0a0a0a;
   --footer-glow: rgba(255, 255, 255, 0.85);
   --accent-live: #16a34a;
+  --network-testnet: #b45309;
+  --network-testnet-bg: rgba(180, 83, 9, 0.08);
 
   /* Tier 6 — soften the preview-card outlines in light mode. The
    * #2e2e2e value was designed for dark mode where it sits as a faint
@@ -311,6 +357,8 @@
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-foreground: var(--foreground);
@@ -327,6 +375,9 @@
   --color-panel-edge: var(--panel-edge);
   --color-panel-deep: var(--panel-deep);
   --color-panel-border: var(--panel-border);
+  --color-secondary: var(--secondary);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-active: var(--secondary-active);
 
   /* Tier 3 code + syntax → text-code / text-syn-red / ... */
   --color-code: var(--code-fg);
@@ -340,8 +391,16 @@
 
   /* Tier 4 → bg-cta / text-cta-fg / bg-accent-live */
   --color-cta: var(--cta);
+  --color-cta-hover: var(--cta-hover);
+  --color-cta-active: var(--cta-active);
   --color-cta-fg: var(--cta-fg);
+  --color-accent: var(--cta);
+  --color-accent-hover: var(--cta-hover);
+  --color-accent-active: var(--cta-active);
+  --color-on-accent: var(--cta-fg);
   --color-accent-live: var(--accent-live);
+  --color-network-testnet: var(--network-testnet);
+  --color-network-testnet-bg: var(--network-testnet-bg);
 
   /* Fonts + easing */
   --font-sans: var(--font-pilat);

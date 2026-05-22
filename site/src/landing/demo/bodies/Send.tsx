@@ -78,7 +78,7 @@ export function SendBody({
                 key={d.id}
                 type="button"
                 onClick={() => onSelect(d.id)}
-                className={`flex items-center justify-between gap-3 border px-3 py-2.5 text-left outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 ${active ? "border-panel-edge bg-panel-4" : "border-transparent bg-panel-3"}`}
+                className={`flex items-center justify-between gap-3 border px-3 py-2.5 text-left outline-none hover:bg-secondary-hover active:bg-secondary-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 ${active ? "border-panel-edge bg-secondary-hover" : "border-transparent bg-secondary"}`}
               >
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <span className="text-[13px] text-foreground">{d.label}</span>

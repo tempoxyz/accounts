@@ -136,7 +136,7 @@ function DemoGuideCallout({
         href={guide.href}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex items-center gap-1 text-[13px] text-foreground-muted outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[color,transform] hover:text-foreground active:translate-y-px active:text-foreground"
+        className="inline-flex items-center gap-1 text-[13px] text-foreground-muted outline-none hover:text-foreground active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
       >
         Add {guide.label.toLowerCase()} to your app
         <svg
@@ -160,7 +160,7 @@ function DemoGuideCallout({
           type="button"
           onClick={copy}
           aria-live="polite"
-          className={`bg-panel-3 px-3 py-1.5 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,transform,color] duration-150 hover:bg-panel-4 active:translate-y-px active:bg-panel-4 ${copied ? "text-accent-live" : ""}`}
+          className={`bg-secondary px-3 py-1.5 text-[12px] text-foreground outline-none hover:bg-secondary-hover active:bg-secondary-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 ${copied ? "text-accent-live" : ""}`}
         >
           {copied ? "Copied" : "Copy prompt"}
         </button>
@@ -237,7 +237,8 @@ export function BrowserMockup({
     animatedMessagesDemo === demo ? undefined : messageInitialStyle;
   const changeDemo = (d: DemoKind) => {
     onChangeDemo(d);
-    rootRef.current?.scrollIntoView({ block: "start", inline: "nearest" });
+    if (!window.matchMedia("(min-width: 640px)").matches)
+      rootRef.current?.scrollIntoView({ block: "start", inline: "nearest" });
   };
   const pressDemo = (d: DemoKind) => {
     if (pressedDemoRef.current === d) return;
@@ -321,7 +322,7 @@ export function BrowserMockup({
               <button
                 type="button"
                 onClick={onDisconnect}
-                className="text-foreground-muted outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[color] duration-150 hover:text-foreground"
+                className="text-foreground-muted outline-none hover:text-foreground active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
               >
                 Disconnect
               </button>
@@ -347,7 +348,7 @@ export function BrowserMockup({
             onClick={() => {
               if (previousDemo) changeDemo(previousDemo);
             }}
-            className="flex min-h-14 items-center justify-start gap-3 px-4 text-left text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,color] duration-150 active:bg-foreground/[0.045] active:text-foreground"
+            className="flex min-h-14 items-center justify-start gap-3 px-4 text-left text-foreground outline-none hover:bg-surface-hover active:bg-surface-active active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
           >
             <span aria-hidden className="rotate-180">
               <ChevronRight />
@@ -368,7 +369,7 @@ export function BrowserMockup({
             onClick={() => {
               if (nextDemo) changeDemo(nextDemo);
             }}
-            className="flex min-h-14 items-center justify-end gap-3 border-l border-panel-border px-4 text-right text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,color] duration-150 active:bg-foreground/[0.045] active:text-foreground"
+            className="flex min-h-14 items-center justify-end gap-3 border-l border-panel-border px-4 text-right text-foreground outline-none hover:bg-surface-hover active:bg-surface-active active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
           >
             <span className="min-w-0">
               <span className="block font-mono text-[10px] tracking-[0.08em] text-foreground-subtle">
@@ -401,7 +402,7 @@ export function BrowserMockup({
                   pressDemo(d);
                 }}
                 onClick={() => clickDemo(d)}
-                className={`group relative flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 last:border-b-0 ${active ? "bg-background text-foreground" : "text-foreground-muted"}`}
+                className={`group relative flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none hover:bg-surface-hover active:bg-surface-active active:text-foreground focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 last:border-b-0 ${active ? "bg-background text-foreground" : "text-foreground-muted"}`}
               >
                 <div className="flex min-w-0 items-baseline gap-3">
                   <span
@@ -414,7 +415,7 @@ export function BrowserMockup({
                 </div>
                 <span
                   aria-hidden
-                  className="opacity-60 transition-opacity duration-150 group-hover:opacity-100"
+                  className="opacity-60 group-hover:opacity-100"
                 >
                   <ChevronRight />
                 </span>
