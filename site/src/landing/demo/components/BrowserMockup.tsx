@@ -11,6 +11,7 @@ import {
 } from "react";
 import { springs } from "../../animation";
 import { LockIcon, TempoLogo } from "../../icons";
+import { useBodyAnimation } from "../bodies/shared";
 import { DEMOS, DEMO_STEPS } from "../config";
 import type {
   Adapter,
@@ -169,6 +170,35 @@ function DemoGuideCallout({
   );
 }
 
+function NextDemoMessage({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  const body = useBodyAnimation(0);
+
+  return (
+    <div
+      ref={body.ref}
+      className="flex max-w-full flex-col items-start gap-2 bg-panel-2 px-3 py-2"
+      style={body.style}
+    >
+      <p className="text-[14px] break-words text-foreground sm:text-[16px] sm:whitespace-nowrap">
+        Ready for the next example?
+      </p>
+      <button
+        type="button"
+        onClick={onClick}
+        className="bg-accent px-3 py-1.5 text-[13px] text-on-accent outline-none hover:bg-accent-hover active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
+      >
+        {label}
+      </button>
+    </div>
+  );
+}
+
 export type ConnectedSession = {
   address: `0x${string}`;
   balanceDisplay: string;
@@ -233,11 +263,21 @@ export function BrowserMockup({
   const nextStep = nextIndex >= 0 ? String(nextIndex + 1).padStart(2, "0") : "";
   const previousLabel = previousDemo ? DEMOS[previousDemo].guide.label : "";
   const nextLabel = nextDemo ? DEMOS[nextDemo].guide.label : "";
+  const nextCtaLabel =
+    activeIndex === DEMO_STEPS.length - 1
+      ? "Restart demos"
+      : nextLabel
+        ? `Go to ${nextLabel}`
+        : "Next demo";
   const messageStyle =
     animatedMessagesDemo === demo ? undefined : messageInitialStyle;
   const changeDemo = (d: DemoKind) => {
     onChangeDemo(d);
-    rootRef.current?.scrollIntoView({ block: "start", inline: "nearest" });
+    if (!window.matchMedia("(min-width: 640px)").matches)
+      rootRef.current?.scrollIntoView({ block: "start", inline: "nearest" });
+  };
+  const goNextDemo = () => {
+    if (nextDemo) changeDemo(nextDemo);
   };
   const pressDemo = (d: DemoKind) => {
     if (pressedDemoRef.current === d) return;
@@ -452,6 +492,13 @@ export function BrowserMockup({
                   adapter={adapter}
                   connectedBalance={connected?.balanceDisplay ?? null}
                 />
+                {status === "done" ? (
+                  <NextDemoMessage
+                    key={`${demo}-next-message`}
+                    label={nextCtaLabel}
+                    onClick={goNextDemo}
+                  />
+                ) : null}
               </div>
             </div>
           ) : (
@@ -473,6 +520,13 @@ export function BrowserMockup({
                   adapter={adapter}
                   connectedBalance={connected?.balanceDisplay ?? null}
                 />
+                {status === "done" ? (
+                  <NextDemoMessage
+                    key={`${demo}-next-message`}
+                    label={nextCtaLabel}
+                    onClick={goNextDemo}
+                  />
+                ) : null}
               </div>
             </div>
           )}

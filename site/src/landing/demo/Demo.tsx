@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { springs } from "../animation";
 import { useTheme } from "../useTheme";
 import { BrowserMockup } from "./components/BrowserMockup";
-import { DEMOS, DEMO_STEPS } from "./config";
+import { DEMOS } from "./config";
 import { createProvider, shorten } from "./sdk";
 import type {
   AccountsProvider,
@@ -28,8 +28,6 @@ type Connected = {
   address: `0x${string}`;
   balanceDisplay: string;
 };
-
-const AUTO_ADVANCE_DELAY_MS = 1200;
 
 /** Scale when the demo box first enters from the bottom of the viewport. */
 const SCROLL_START_SCALE = 0.92;
@@ -80,34 +78,15 @@ export default function Demo() {
   const providerAdapterRef = useRef<Adapter | null>(null);
   const providerSchemeRef = useRef<"light" | "dark" | null>(null);
   const activeDemoRef = useRef<DemoKind>("Log In");
-  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { resolved } = useTheme();
 
   activeDemoRef.current = demo;
 
-  const clearAdvanceTimer = () => {
-    if (!advanceTimer.current) return;
-    clearTimeout(advanceTimer.current);
-    advanceTimer.current = null;
-  };
-
   const selectDemo = (next: DemoKind) => {
-    clearAdvanceTimer();
     setDemo(next);
     setStatus("idle");
     setResult(null);
     setLastVariant(null);
-  };
-
-  const scheduleNextDemo = (current: DemoKind) => {
-    const i = DEMO_STEPS.indexOf(current);
-    const next = DEMO_STEPS[i + 1];
-    if (!next) return;
-    clearAdvanceTimer();
-    advanceTimer.current = setTimeout(() => {
-      advanceTimer.current = null;
-      selectDemo(next);
-    }, AUTO_ADVANCE_DELAY_MS);
   };
 
   const refreshBalance = async (
@@ -140,7 +119,6 @@ export default function Demo() {
   };
 
   const onDisconnect = async () => {
-    clearAdvanceTimer();
     try {
       const provider = providerRef.current;
       if (provider) {
@@ -187,13 +165,6 @@ export default function Demo() {
       providerSchemeRef.current = resolved;
     }
   }, [resolved]);
-
-  useEffect(
-    () => () => {
-      if (advanceTimer.current) clearTimeout(advanceTimer.current);
-    },
-    [],
-  );
 
   // On mount: hydrate from persisted storage. If we already have a
   // connected account from a previous session, reflect "done" state so
@@ -257,7 +228,6 @@ export default function Demo() {
 
   const onAction = async (variant?: string) => {
     if (status === "running") return;
-    clearAdvanceTimer();
     setStatus("running");
     setLastVariant(variant ?? null);
     const provider = ensureProvider(adapter);
@@ -347,7 +317,6 @@ export default function Demo() {
       } catch {
         // ignore
       }
-      if (activeDemoRef.current === demo) scheduleNextDemo(demo);
     } catch (e) {
       if (pollHandle) clearInterval(pollHandle);
       if (activeDemoRef.current !== demo) return;
