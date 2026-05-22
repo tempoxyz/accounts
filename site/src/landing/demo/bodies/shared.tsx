@@ -129,7 +129,7 @@ export function FundingOverlay({
             type="button"
             onClick={onSetupFund}
             disabled={busy}
-            className="h-8 bg-accent px-2.5 font-mono text-[11px] text-on-accent outline-none hover:bg-accent-hover active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-80"
+            className="h-8 bg-accent px-2.5 font-mono text-[11px] text-on-accent outline-none enabled:hover:bg-accent-hover enabled:active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-80"
           >
             {fundLabel}
           </button>
@@ -138,7 +138,7 @@ export function FundingOverlay({
             type="button"
             onClick={onSetupConnect}
             disabled={busy}
-            className="h-8 bg-accent px-2.5 font-mono text-[11px] text-on-accent outline-none hover:bg-accent-hover active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-80"
+            className="h-8 bg-accent px-2.5 font-mono text-[11px] text-on-accent outline-none enabled:hover:bg-accent-hover enabled:active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-80"
           >
             {connectLabel}
           </button>

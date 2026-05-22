@@ -39,6 +39,7 @@ type Connected = {
   balance: bigint;
 };
 
+const ACTION_TIMEOUT_MS = 20_000;
 const DEPOSIT_BALANCE_ATTEMPTS = 40;
 const DEPOSIT_BALANCE_INTERVAL_MS = 1500;
 const FUNDING_BALANCE_ATTEMPTS = 20;
@@ -50,6 +51,30 @@ const SCROLL_START_SCALE = 0.92;
 const SCROLL_LIFT_PX = 60;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const rejectPendingRequests = (provider: AccountsProvider | null) => {
+  provider?.store.setState((state) => ({
+    ...state,
+    requestQueue: state.requestQueue.map((queued) =>
+      queued.status === "pending"
+        ? {
+            request: queued.request,
+            error: { code: 4001, message: "Demo changed." },
+            status: "error" as const,
+          }
+        : queued,
+    ),
+  }));
+};
+
+const cancelPendingRequests = (provider: AccountsProvider | null) => {
+  rejectPendingRequests(provider);
+};
+
+const timeout = (ms: number) =>
+  new Promise<{ __timeout: true }>((resolve) => {
+    setTimeout(() => resolve({ __timeout: true }), ms);
+  });
 
 const formatUsd = (balance: bigint) =>
   new Intl.NumberFormat("en-US", {
@@ -126,6 +151,7 @@ export default function Demo() {
   statusRef.current = status;
 
   const selectDemo = (next: DemoKind) => {
+    cancelPendingRequests(providerRef.current);
     depositWatchRef.current += 1;
     if (DEMOS[next].network !== DEMOS[demo].network) {
       setConnected(null);
@@ -172,6 +198,7 @@ export default function Demo() {
   };
 
   const onDisconnect = async () => {
+    cancelPendingRequests(providerRef.current);
     depositWatchRef.current += 1;
     try {
       const provider = providerRef.current;
@@ -309,6 +336,7 @@ export default function Demo() {
     const def = DEMOS[demo];
     const provider = ensureProvider(adapter, def.network);
     await ensureNetwork(provider, def.network);
+    if (nonBlockingDeposit) cancelPendingRequests(provider);
     let depositBaseline = connected?.balance ?? 0n;
     let depositBaselineAddress = connected?.address ?? null;
 
@@ -413,9 +441,11 @@ export default function Demo() {
 
     try {
       const sdkPromise = runPromise.then((v) => ({ __sdk: v }) as const);
-      const winner = await (pollPromise
-        ? Promise.race([sdkPromise, pollPromise])
-        : sdkPromise);
+      const winner = await Promise.race(
+        pollPromise
+          ? [sdkPromise, pollPromise, timeout(ACTION_TIMEOUT_MS)]
+          : [sdkPromise, timeout(ACTION_TIMEOUT_MS)],
+      );
       if (pollHandle) clearInterval(pollHandle);
       if (activeDemoRef.current !== demo) return;
 
@@ -425,7 +455,7 @@ export default function Demo() {
       } else if ("__polled" in winner) {
         nextResult = { summary: `Signed in · ${shorten(winner.__polled)}` };
       } else {
-        // poll timed out without auth completing
+        if ("__timeout" in winner) cancelPendingRequests(provider);
         console.warn("[demo] action timed out without resolution");
         setStatus("idle");
         setResult(null);
@@ -452,6 +482,7 @@ export default function Demo() {
       setStatus("done");
     } catch (e) {
       if (pollHandle) clearInterval(pollHandle);
+      cancelPendingRequests(provider);
       if (activeDemoRef.current !== demo) return;
       console.warn("[demo] run failed", e);
       setStatus("idle");
@@ -468,7 +499,15 @@ export default function Demo() {
     try {
       const provider = ensureProvider(adapter, network);
       await ensureNetwork(provider, network);
-      const addr = await connectWallet(provider);
+      const connectedAddr = await Promise.race([
+        connectWallet(provider).then((addr) => ({ addr })),
+        timeout(ACTION_TIMEOUT_MS),
+      ]);
+      if ("__timeout" in connectedAddr) {
+        cancelPendingRequests(provider);
+        throw new Error("Connect timed out.");
+      }
+      const addr = connectedAddr.addr;
       if (addr) {
         await refreshBalance(provider, addr, network);
         if (DEMOS[activeDemoRef.current].network === network)
@@ -477,6 +516,7 @@ export default function Demo() {
         setAccountStatus("disconnected");
       }
     } catch (e) {
+      cancelPendingRequests(providerRef.current);
       console.warn("[demo] testnet connect failed", e);
       if (!connected) setAccountStatus("disconnected");
       setSetupError("Could not connect. Try again.");
