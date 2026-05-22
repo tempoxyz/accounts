@@ -1,5 +1,11 @@
 # accounts
 
+## 0.14.4
+
+### Patch Changes
+
+- 8afc239: Fix React Native auth token handling and mobile auth URL encoding.
+
 ## 0.14.3
 
 ### Patch Changes
