@@ -1,5 +1,12 @@
 # accounts
 
+## 0.14.3
+
+### Patch Changes
+
+- 801e18a: Simplified Privy account loading and fixed stale wallet cache handling after failed account selection.
+- f176676: Point React Native mobile authentication at the remote manager route.
+
 ## 0.14.2
 
 ### Patch Changes
