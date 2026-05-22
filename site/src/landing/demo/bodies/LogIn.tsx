@@ -17,12 +17,6 @@ export function LogInBody({
       : adapter === "privy"
         ? "Continue with Privy"
         : "Continue with Tempo";
-  const runningCta =
-    adapter === "webAuth"
-      ? "Awaiting passkey…"
-      : adapter === "privy"
-        ? "Opening Privy…"
-        : "Opening Tempo…";
   const description =
     adapter === "webAuth"
       ? "Sign in with an on-device passkey — no popup, no third-party host."
@@ -30,12 +24,8 @@ export function LogInBody({
         ? "Sign in via Privy. The SDK manages access keys after authentication."
         : "Continue with your Tempo wallet — passkeys and access keys handled by the SDK.";
 
-  const ctaLabel =
-    status === "running"
-      ? runningCta
-      : status === "done"
-        ? result?.summary ?? "Signed in"
-        : idleCta;
+  const connected = status === "done" && Boolean(result?.summary);
+  const accountLabel = connected ? result?.summary : "Not connected";
 
   return (
     <div
@@ -48,16 +38,23 @@ export function LogInBody({
         <p className="text-[13px] text-foreground-muted">{description}</p>
       </div>
 
+      <div className="flex min-h-8 items-center gap-2 bg-panel-3 px-3 py-2">
+        <span
+          aria-hidden
+          className={`size-1.5 shrink-0 rounded-full ${connected ? "bg-accent-live" : "bg-foreground-subtle"}`}
+        />
+        <p className="truncate font-mono text-[12px] text-foreground-muted">
+          {accountLabel}
+        </p>
+      </div>
+
       <PrimaryButton
-        label={ctaLabel}
-        status={status}
+        label={connected ? "Signed in" : idleCta}
+        status="idle"
+        disabled={connected}
         onClick={onAction}
         className="h-11 w-full"
       />
-
-      {status === "done" && result?.summary ? (
-        <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
-      ) : null}
     </div>
   );
 }
