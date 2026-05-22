@@ -69,7 +69,7 @@ export function ScrollableTabs<T extends string>({
                 type="button"
                 data-tab={t}
                 onClick={() => onChange(t)}
-                className={`relative flex shrink-0 items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
+                className={`relative flex shrink-0 items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none hover:bg-secondary-hover active:bg-secondary-active active:text-foreground focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 ${active ? "border-panel-edge bg-secondary-hover text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
                 style={{ scrollSnapAlign: "center" }}
               >
                 {t}

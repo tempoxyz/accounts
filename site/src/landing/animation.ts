@@ -7,4 +7,5 @@ export const springs = {
   entrance: spring({ stiffness: 220, damping: 26, mass: 1 }),
   navEntrance: spring({ stiffness: 440, damping: 28, mass: 1 }),
   progress: spring({ stiffness: 220, damping: 24, mass: 1 }),
+  scroll: spring({ stiffness: 10, damping: 200, mass: 1 }),
 } as const;

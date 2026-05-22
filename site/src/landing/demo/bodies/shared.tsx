@@ -61,27 +61,29 @@ export function PrimaryButton({
   status,
   onClick,
   className = "",
+  disabled = false,
 }: {
   label: string;
   status: Status;
   onClick: () => void;
   className?: string;
+  disabled?: boolean | undefined;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={status === "running"}
-      className={`flex h-10 items-center justify-center gap-2 bg-cta px-4 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 disabled:opacity-80 ${className}`}
+      disabled={status === "running" || disabled}
+      className={`flex h-10 items-center justify-center gap-2 bg-accent px-4 outline-none enabled:hover:bg-accent-hover enabled:active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-80 ${className}`}
     >
       {status === "running" ? (
         <span
           aria-hidden
-          className="size-1.5 shrink-0 rounded-full bg-cta-fg"
+          className="size-1.5 shrink-0 rounded-full bg-on-accent"
           style={{ animation: "pulseDot 900ms ease-in-out infinite" }}
         />
       ) : null}
-      <span className="text-[14px] text-cta-fg">{label}</span>
+      <span className="text-[14px] text-on-accent">{label}</span>
     </button>
   );
 }
@@ -104,7 +106,7 @@ export function SecondaryButton({
       type="button"
       onClick={onClick}
       disabled={status === "running"}
-      className={`flex h-10 items-center justify-center gap-2 bg-panel-3 px-4 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 disabled:opacity-80 ${className}`}
+      className={`flex h-10 items-center justify-center gap-2 bg-secondary px-4 outline-none enabled:hover:bg-secondary-hover enabled:active:bg-secondary-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-80 ${className}`}
     >
       {prefix}
       <span className="text-[14px] text-foreground">{label}</span>

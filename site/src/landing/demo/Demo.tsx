@@ -1,6 +1,8 @@
 "use client";
 
+import { animate, onScroll } from "animejs";
 import { useEffect, useRef, useState } from "react";
+import { springs } from "../animation";
 import { useTheme } from "../useTheme";
 import { BrowserMockup } from "./components/BrowserMockup";
 import { DEMOS, DEMO_STEPS } from "./config";
@@ -29,8 +31,8 @@ type Connected = {
 
 const AUTO_ADVANCE_DELAY_MS = 1200;
 
-/** Max scale boost as the demo box travels through the viewport. */
-const SCROLL_SCALE_BOOST = 0.2;
+/** Scale when the demo box first enters from the bottom of the viewport. */
+const SCROLL_START_SCALE = 0.92;
 /** Max translateY (px, upward) applied at full progress. */
 const SCROLL_LIFT_PX = 60;
 
@@ -46,51 +48,24 @@ export default function Demo() {
     ).matches;
     if (reduced) return;
 
-    let visible = false;
-    let raf = 0;
-
-    const update = () => {
-      raf = 0;
-      const rect = el.getBoundingClientRect();
-      const vh = window.innerHeight;
-      // Progress: 0 when the box's top is at the bottom of the viewport
-      // (just entering), 1 when its bottom has scrolled past the top
-      // (about to leave). Clamped both ends.
-      const range = vh + rect.height;
-      const traveled = vh - rect.top;
-      const p = Math.max(0, Math.min(1, traveled / range));
-      const scale = 1 + SCROLL_SCALE_BOOST * p;
-      const lift = -SCROLL_LIFT_PX * p;
-      el.style.transform = `translate3d(0, ${lift}px, 0) scale(${scale})`;
-    };
-
-    const schedule = () => {
-      if (!visible || raf) return;
-      raf = requestAnimationFrame(update);
-    };
-
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        visible = entry?.isIntersecting ?? false;
-        if (visible) schedule();
-      },
-      { rootMargin: "100px" },
-    );
-    io.observe(el);
-
     el.style.transformOrigin = "center";
     el.style.willChange = "transform";
-    update();
-
-    window.addEventListener("scroll", schedule, { passive: true });
-    window.addEventListener("resize", schedule);
+    const animation = animate(el, {
+      scale: [SCROLL_START_SCALE, 1],
+      y: [0, -SCROLL_LIFT_PX],
+      ease: springs.scroll,
+      autoplay: onScroll({
+        target: el,
+        // 0 when the box enters from the viewport bottom; 1 after it has
+        // crossed 80% of the viewport, then clamp at full size.
+        enter: "end start",
+        leave: "20% start",
+        sync: true,
+      }),
+    });
 
     return () => {
-      if (raf) cancelAnimationFrame(raf);
-      io.disconnect();
-      window.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", schedule);
-      el.style.transform = "";
+      animation.revert();
       el.style.willChange = "";
       el.style.transformOrigin = "";
     };

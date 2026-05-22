@@ -73,7 +73,7 @@ export function ReceiveBody({
       <button
         type="button"
         onClick={onCopy}
-        className="flex h-11 w-full items-center justify-center bg-cta px-4 text-[14px] text-cta-fg outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90"
+        className="flex h-11 w-full items-center justify-center bg-accent px-4 text-[14px] text-on-accent outline-none hover:bg-accent-hover active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
       >
         {copied ? "Copied" : "Copy address"}
       </button>

@@ -66,6 +66,10 @@ export function ThemesBody({ delay }: DemoBodyProps) {
         className="flex flex-col gap-4 p-4"
         style={{
           "--theme-accent": accent.color,
+          "--theme-accent-hover":
+            "oklch(from var(--theme-accent) calc(l + (clamp(0, (0.6 - l) * 999, 1) * 0.075) - (clamp(0, (l - 0.6) * 999, 1) * 0.06)) calc(c * 0.98) h)",
+          "--theme-accent-active":
+            "oklch(from var(--theme-accent) calc(l + (clamp(0, (0.6 - l) * 999, 1) * 0.13) - (clamp(0, (l - 0.6) * 999, 1) * 0.12)) calc(c * 0.96) h)",
           "--theme-on-accent":
             "oklch(from var(--theme-accent) clamp(0, (0.6 - l) * 999, 1) 0 0)",
           background: preview.bg,
@@ -94,9 +98,8 @@ export function ThemesBody({ delay }: DemoBodyProps) {
         </div>
         <button
           type="button"
-          className="h-11 w-full px-5 text-[14px] text-white outline-none"
+          className="h-11 w-full bg-[var(--theme-accent)] px-5 text-[14px] text-white outline-none hover:bg-[var(--theme-accent-hover)] active:bg-[var(--theme-accent-active)]"
           style={{
-            background: "var(--theme-accent)",
             borderRadius: radius.value,
             color: "var(--theme-on-accent)",
           }}
@@ -121,7 +124,7 @@ export function ThemesBody({ delay }: DemoBodyProps) {
                     aria-pressed={active}
                     onPointerDown={() => setScheme(item)}
                     onKeyDown={(event) => activateOnKey(event, () => setScheme(item))}
-                    className={`px-2 py-1.5 font-mono text-[11px] capitalize outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 ${active ? "bg-panel-4 text-foreground" : "bg-panel-3 text-foreground-muted"}`}
+                    className={`px-2 py-1.5 font-mono text-[11px] capitalize outline-none hover:bg-secondary-hover active:bg-secondary-active active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 ${active ? "bg-secondary-hover text-foreground" : "bg-secondary text-foreground-muted"}`}
                   >
                     {item}
                   </button>
@@ -147,7 +150,7 @@ export function ThemesBody({ delay }: DemoBodyProps) {
                     aria-pressed={active}
                     onPointerDown={() => setAccent(item)}
                     onKeyDown={(event) => activateOnKey(event, () => setAccent(item))}
-                    className="relative size-7 border border-[color-mix(in_oklab,var(--foreground)_14%,transparent)] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
+                    className="relative size-7 border border-[color-mix(in_oklab,var(--foreground)_14%,transparent)] outline-none active:border-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
                     style={{ background: item.color }}
                   >
                     <span
@@ -174,7 +177,7 @@ export function ThemesBody({ delay }: DemoBodyProps) {
                   aria-pressed={active}
                   onPointerDown={() => setRadius(item)}
                   onKeyDown={(event) => activateOnKey(event, () => setRadius(item))}
-                  className={`min-w-0 px-2 py-1.5 font-mono text-[11px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 ${active ? "bg-panel-4 text-foreground" : "bg-panel-3 text-foreground-muted"}`}
+                  className={`min-w-0 px-2 py-1.5 font-mono text-[11px] outline-none hover:bg-secondary-hover active:bg-secondary-active active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 ${active ? "bg-secondary-hover text-foreground" : "bg-secondary text-foreground-muted"}`}
                 >
                   {item.label}
                 </button>
