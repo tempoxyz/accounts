@@ -53,6 +53,13 @@ export type Instance = {
           request: EncodedRequest<Rpc.wallet_deposit.Encoded>,
         ) => Promise<deposit.ReturnType>)
       | undefined
+    /** Get wallet capabilities for the requested account and chains. */
+    getCapabilities?:
+      | ((
+          params: getCapabilities.Parameters,
+          request: EncodedRequest<Rpc.wallet_getCapabilities.Encoded>,
+        ) => Promise<getCapabilities.ReturnType>)
+      | undefined
     /** Open the zone-deposit flow. */
     depositZone?:
       | ((
@@ -175,6 +182,14 @@ export declare namespace getClient {
     /** Fee payer service URL, or `false` to opt out of fee payers for this transaction if set globally. */
     feePayer?: string | false | undefined
   }
+}
+
+/** Parameters and return type for the `wallet_getCapabilities` action. */
+export declare namespace getCapabilities {
+  /** Decoded `wallet_getCapabilities` params. */
+  type Parameters = Rpc.wallet_getCapabilities.Decoded['params']
+  /** Encoded `wallet_getCapabilities` return value. */
+  type ReturnType = Rpc.wallet_getCapabilities.Encoded['returns']
 }
 
 export declare namespace createAccount {

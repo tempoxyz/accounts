@@ -519,6 +519,9 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                   case 'wallet_getCapabilities': {
                     const decoded = request._decoded.params
+                    if (actions.getCapabilities)
+                      return await actions.getCapabilities(decoded, request)
+
                     const address = decoded?.[0]
                     const chainIds = decoded?.[1]
 

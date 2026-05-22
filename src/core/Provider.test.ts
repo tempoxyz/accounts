@@ -1341,6 +1341,74 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const result = await provider.request({ method: 'wallet_getCapabilities' })
       expect(result[Hex.fromNumber(tempo.id)]!.feePayer).toBeUndefined()
     })
+
+    test('behavior: delegates to adapter getCapabilities when available', async () => {
+      const calls: unknown[] = []
+      const provider = Provider.create({
+        adapter: Adapter.define({ name: 'Capabilities Test' }, (parameters) => {
+          const instance = adapter()(parameters)
+          return {
+            ...instance,
+            actions: {
+              ...instance.actions,
+              async getCapabilities(params, request) {
+                calls.push({ params, request })
+                return {
+                  '0x1': {
+                    atomic: { status: 'ready' },
+                  },
+                }
+              },
+            },
+          }
+        }),
+      })
+
+      const result = await provider.request({
+        method: 'wallet_getCapabilities',
+        params: ['0x0000000000000000000000000000000000000001', ['0x1']],
+      })
+
+      expect(result).toMatchInlineSnapshot(`
+        {
+          "0x1": {
+            "atomic": {
+              "status": "ready",
+            },
+          },
+        }
+      `)
+      expect(calls).toMatchInlineSnapshot(`
+        [
+          {
+            "params": [
+              "0x0000000000000000000000000000000000000001",
+              [
+                "0x1",
+              ],
+            ],
+            "request": {
+              "_decoded": {
+                "method": "wallet_getCapabilities",
+                "params": [
+                  "0x0000000000000000000000000000000000000001",
+                  [
+                    "0x1",
+                  ],
+                ],
+              },
+              "method": "wallet_getCapabilities",
+              "params": [
+                "0x0000000000000000000000000000000000000001",
+                [
+                  "0x1",
+                ],
+              ],
+            },
+          },
+        ]
+      `)
+    })
   })
 
   describe('wallet_getBalances', () => {

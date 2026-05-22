@@ -199,4 +199,52 @@ describe('dialog', () => {
       }
     `)
   })
+
+  test('behavior: getCapabilities forwards to the dialog', async () => {
+    const storage = Storage.memory()
+    const store = Store.create({ chainId: tempoLocalnet.id, storage })
+    const adapter = dialog({ dialog: Dialog.noop() })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store,
+    })
+
+    const promise = adapter.actions.getCapabilities!(undefined, {
+      method: 'wallet_getCapabilities',
+      params: undefined,
+    })
+
+    await vi.waitFor(() => {
+      if (!store.getState().requestQueue[0]) throw new Error('request not queued')
+    })
+
+    const queued = store.getState().requestQueue[0]!
+    store.setState({
+      requestQueue: [
+        {
+          request: queued.request,
+          result: {
+            '0x1': {
+              atomic: { status: 'supported' },
+            },
+          },
+          status: 'success',
+        },
+      ],
+    })
+
+    await expect(promise).resolves.toMatchInlineSnapshot(`
+      {
+        "0x1": {
+          "atomic": {
+            "status": "supported",
+          },
+        },
+      }
+    `)
+    expect(queued.request.method).toMatchInlineSnapshot(`"wallet_getCapabilities"`)
+  })
 })

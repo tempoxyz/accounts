@@ -384,7 +384,9 @@ export function iframe(): Dialog {
           )
           fallback!.syncRequests(requests)
         } else {
-          const requiresConfirm = requests.some((x) => x.status === 'pending')
+          const requiresConfirm = requests.some(
+            (x) => x.status === 'pending' && requiresDialog(x.request),
+          )
           if (!open && requiresConfirm) this.open()
           messenger.send('rpc-requests', {
             account: getAccount(store!),
@@ -611,6 +613,11 @@ function getAccount(store: Store.Store): { address: string } | undefined {
   const account = accounts[activeAccount]
   if (!account) return undefined
   return { address: account.address }
+}
+
+/** Returns whether the request needs visible wallet UI. */
+function requiresDialog(request: Store.QueuedRequest['request']) {
+  return request.method !== 'wallet_getCapabilities'
 }
 
 /**
