@@ -39,6 +39,8 @@ function setup() {
       if (options?.signable) throw new ox_Provider.UnauthorizedError({ message: 'No signer.' })
       return { address, type: 'json-rpc' } as never
     },
+    createWalletClient: (() => ({})) as never,
+
     getClient: () => ({}) as never,
     storage,
     store,
@@ -85,6 +87,8 @@ describe('dialog', () => {
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
       },
+      createWalletClient: (() => ({})) as never,
+
       getClient: () =>
         ({
           chain: { id: tempoLocalnet.id },
@@ -141,6 +145,8 @@ describe('dialog', () => {
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
       },
+      createWalletClient: (() => ({})) as never,
+
       getClient: () => ({}) as never,
       storage,
       store,
@@ -210,6 +216,8 @@ describe('dialog', () => {
         lookups.push(options)
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
       },
+      createWalletClient: (() => ({})) as never,
+
       getClient: () => ({}) as never,
       storage,
       store,
@@ -270,6 +278,8 @@ describe('dialog', () => {
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
       },
+      createWalletClient: (() => ({})) as never,
+
       getClient: () => ({}) as never,
       storage,
       store,
@@ -465,6 +475,8 @@ describe('dialog', () => {
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
       },
+      createWalletClient: (() => ({})) as never,
+
       getClient: () => ({}) as never,
       storage,
       store,

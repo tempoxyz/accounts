@@ -1,7 +1,15 @@
 import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
-import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
+import {
+  http,
+  parseUnits,
+  type Account as viem_Account,
+  type Chain,
+  type Client as ViemClient,
+  type Transport,
+  type WalletClient,
+} from 'viem'
 import type { JsonRpcAccount } from 'viem/accounts'
 import { parseSiweMessage } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
@@ -37,6 +45,13 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
       chainId?: number | undefined
       feePayer?: string | undefined
     }): ViemClient<Transport, typeof tempo>
+    /** Returns a viem Wallet Client for the given account and chain ID. */
+    createWalletClient(options: {
+      account: viem_Account
+      chainId?: number | undefined
+      feePayer?: string | false | undefined
+      transport?: Transport | undefined
+    }): WalletClient<Transport, typeof tempo, viem_Account>
     /** Reactive state store. */
     store: Store.Store
   }
@@ -128,7 +143,24 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
   }
 
+  function createWalletClient(options: Adapter.createWalletClient.Options) {
+    const { account, chainId, feePayer, transport } = options
+    return Client.createWalletClient(chainId, {
+      account,
+      chains,
+      feePayer: (() => {
+        if (feePayer === false) return false
+        if (feePayer) return { url: feePayer, precedence: feePayerConfig?.precedence }
+        return undefined
+      })(),
+      store,
+      ...(transport ? { transport } : {}),
+      transports,
+    })
+  }
+
   const instance = adapter({
+    createWalletClient,
     getAccount,
     getClient,
     ...(mpp ? { mpp } : {}),
@@ -1052,6 +1084,23 @@ export function create(options: create.Options = {}): create.ReturnType {
           feePayer,
           provider: providerRef,
           store,
+          transports,
+        })
+      },
+      createWalletClient(options: {
+        account: viem_Account
+        chainId?: number | undefined
+        feePayer?: string | false | undefined
+        transport?: Transport | undefined
+      }) {
+        const { account, chainId, feePayer, transport } = options
+        return Client.createWalletClient(chainId, {
+          account,
+          chains,
+          feePayer,
+          provider: providerRef,
+          store,
+          ...(transport ? { transport } : {}),
           transports,
         })
       },

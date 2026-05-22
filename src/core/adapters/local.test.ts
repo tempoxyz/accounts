@@ -306,6 +306,8 @@ function setup(overrides: Partial<local.Options> = {}) {
     ...overrides,
   })({
     getAccount: (options) => Account.find({ ...options, signable: true, store }),
+    createWalletClient: (() => ({})) as never,
+
     getClient: () => getClient({ chain: tempoLocalnet }) as never,
     storage,
     store,

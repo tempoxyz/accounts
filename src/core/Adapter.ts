@@ -1,6 +1,6 @@
 import type { tempo as mppx_tempo } from 'mppx/client'
 import type { KeyAuthorization } from 'ox/tempo'
-import type { Client, Hex, Transport } from 'viem'
+import type { Account as viem_Account, Client, Hex, Transport, WalletClient } from 'viem'
 import type { Address } from 'viem/accounts'
 import type { tempo } from 'viem/tempo/chains'
 
@@ -155,6 +155,10 @@ export declare namespace SetupFn {
     getAccount: Account.Find
     /** Get the viem client for a given chain ID. Defaults to the active chain. */
     getClient: (options?: getClient.Options | undefined) => Client<Transport, typeof tempo>
+    /** Create a viem wallet client bound to an account. */
+    createWalletClient: (
+      options: createWalletClient.Options,
+    ) => WalletClient<Transport, typeof tempo, viem_Account>
     /** MPP client configuration when MPP support is enabled. */
     mpp?: mpp.Options | undefined
     /** Routes an RPC request through the owning provider. Present in Provider-managed adapters. */
@@ -186,6 +190,15 @@ export declare namespace getClient {
     chainId?: number | undefined
     /** Fee payer service URL, or `false` to opt out of fee payers for this transaction if set globally. */
     feePayer?: string | false | undefined
+  }
+}
+
+export declare namespace createWalletClient {
+  type Options = getClient.Options & {
+    /** Account to bind to the wallet client. */
+    account: viem_Account
+    /** Optional transport override for provider-backed JSON-RPC accounts. */
+    transport?: Transport | undefined
   }
 }
 

@@ -30,8 +30,16 @@ export function local(options: local.Options): Adapter.Adapter {
   const { createAccount, icon, loadAccounts, name, rdns } = options
 
   return Adapter.define({ icon, name, rdns }, (config) => {
-    const { getAccount, getClient, store } = config
+    const { createWalletClient, getAccount, getClient, store } = config
     const mpp = config.mpp
+    const authorize = mpp
+      ? MppAuthorization.create({
+          createWalletClient,
+          getClient,
+          mpp,
+          store,
+        })
+      : undefined
 
     async function prepareTransaction(parameters: Adapter.signTransaction.Parameters) {
       const { feePayer, ...rest } = parameters
@@ -99,24 +107,12 @@ export function local(options: local.Options): Adapter.Adapter {
 
     return {
       actions: {
-        ...(mpp
+        ...(authorize
           ? {
               async authorizeMpp(parameters) {
-                return await MppAuthorization.authorize({
-                  accounts: {
-                    getRootAccount: async (address) => getAccount({ address, signable: true }),
-                    getAccessKeyAccount: async ({ accessKey, chainId, root }) =>
-                      AccessKey.getSigner({
-                        accessKey,
-                        account: root,
-                        chainId,
-                        store,
-                      }),
-                  },
-                  mpp,
-                  getClient,
+                return await authorize({
+                  getRootAccount: async (address) => getAccount({ address, signable: true }),
                   parameters,
-                  store,
                 })
               },
             }

@@ -72,8 +72,16 @@ export function turnkey<const client extends turnkey.Client>(
   const { icon, name = 'Turnkey', rdns = 'com.turnkey', sessionSkewMs = 10_000 } = options
 
   return Adapter.define({ icon, name, rdns }, (config) => {
-    const { getClient, store } = config
+    const { createWalletClient, getClient, store } = config
     const mpp = config.mpp
+    const authorize = mpp
+      ? MppAuthorization.create({
+          createWalletClient,
+          getClient,
+          mpp,
+          store,
+        })
+      : undefined
 
     let turnkeyClient_promise: Promise<client> | undefined
     let expiry_timeout: ReturnType<typeof setTimeout> | undefined
@@ -328,24 +336,12 @@ export function turnkey<const client extends turnkey.Client>(
         if (expiry_timeout) clearTimeout(expiry_timeout)
       },
       actions: {
-        ...(mpp
+        ...(authorize
           ? {
               async authorizeMpp(parameters) {
-                return await MppAuthorization.authorize({
-                  accounts: {
-                    getRootAccount: async (address) => await getTurnkeyAccount(address),
-                    getAccessKeyAccount: async ({ accessKey, chainId, root }) =>
-                      AccessKey.getSigner({
-                        accessKey,
-                        account: root,
-                        chainId,
-                        store,
-                      }),
-                  },
-                  mpp,
-                  getClient,
+                return await authorize({
+                  getRootAccount: async (address) => await getTurnkeyAccount(address),
                   parameters,
-                  store,
                 })
               },
             }

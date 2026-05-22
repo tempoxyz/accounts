@@ -1,11 +1,14 @@
 import { type Provider as ox_Provider } from 'ox'
 import {
+  type Account,
   type Chain,
   createClient,
+  createWalletClient as viem_createWalletClient,
   type Client,
   type EIP1193RequestFn,
   http,
   type Transport,
+  type WalletClient,
 } from 'viem'
 import { Transaction } from 'viem/tempo'
 import type { tempo } from 'viem/tempo/chains'
@@ -20,7 +23,7 @@ export function fromChainId(
   chainId: number | undefined,
   options: fromChainId.Options,
 ): Client<Transport, typeof tempo> {
-  const { chains, feePayer: feePayerOption, provider, store, transports } = options
+  const { feePayer: feePayerOption, provider, store, transports } = options
   const feePayerUrl = (() => {
     if (feePayerOption === false) return undefined
     if (typeof feePayerOption === 'string') return normalizeFeePayerUrl(feePayerOption)
@@ -51,12 +54,11 @@ export function fromChainId(
   })()
   let client = cache.get(key)
   if (!client) {
-    const chain = chains.find((c) => c.id === id) ?? chains[0]!
-    const base = transports?.[id] ?? http()
-    const transport_base = provider ? providerTransport(provider, base) : base
-    const transport = feePayerUrl
-      ? feePayerTransport(transport_base, feePayerUrl, precedence)
-      : transport_base
+    const { chain, transport } = getClientParameters(id, {
+      ...options,
+      feePayerUrl,
+      precedence,
+    })
     client = createClient({ chain, transport, pollingInterval: 1000 })
     cache.set(key, client)
   }
@@ -85,6 +87,63 @@ export declare namespace fromChainId {
     /** Per-chain transports keyed by chain ID. When omitted, defaults to `http()` (uses the chain's default RPC URL). */
     transports?: Record<number, Transport> | undefined
   }
+}
+
+/** Creates a viem Wallet Client for a given account and chain ID. */
+export function createWalletClient(
+  chainId: number | undefined,
+  options: createWalletClient.Options,
+): WalletClient<Transport, typeof tempo, Account> {
+  const id = chainId ?? options.store.getState().chainId
+  const feePayerUrl = (() => {
+    const option = options.feePayer
+    if (option === false) return undefined
+    if (typeof option === 'string') return normalizeFeePayerUrl(option)
+    if (option?.url) return normalizeFeePayerUrl(option.url)
+    return undefined
+  })()
+  const precedence = (() => {
+    const option = options.feePayer
+    if (typeof option === 'object' && option !== null) return option.precedence ?? 'fee-payer-first'
+    return 'fee-payer-first'
+  })()
+  const { chain, transport } = getClientParameters(id, {
+    ...options,
+    feePayerUrl,
+    precedence,
+  })
+  return viem_createWalletClient({
+    account: options.account,
+    chain,
+    transport: options.transport ?? transport,
+  }) as never
+}
+
+export declare namespace createWalletClient {
+  type Options = fromChainId.Options & {
+    /** Account bound to the wallet client. */
+    account: Account
+    /** Optional transport override for JSON-RPC accounts backed by wallet providers. */
+    transport?: Transport | undefined
+  }
+}
+
+function getClientParameters(
+  id: number,
+  options: fromChainId.Options & {
+    feePayerUrl?: string | undefined
+    precedence: 'fee-payer-first' | 'user-first'
+  },
+) {
+  const { chains, feePayer, feePayerUrl, precedence, provider, transports } = options
+  const chain = chains.find((c) => c.id === id) ?? chains[0]!
+  const base = transports?.[id] ?? http()
+  const transport_base = provider ? providerTransport(provider, base) : base
+  const transport =
+    feePayer !== false && feePayerUrl
+      ? feePayerTransport(transport_base, feePayerUrl, precedence)
+      : transport_base
+  return { chain, transport }
 }
 
 /**

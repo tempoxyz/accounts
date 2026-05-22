@@ -514,6 +514,8 @@ function setup(options: setup.Options = {}) {
     getAccount: (() => {
       throw new Error('not implemented')
     }) as never,
+    createWalletClient: (() => ({})) as never,
+
     getClient: (() => ({
       chain: { id: 1 },
       sendTransaction: async (parameters: unknown) => {
