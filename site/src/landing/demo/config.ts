@@ -91,11 +91,13 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       // wallet_deposit opens the wallet's native Deposit dialog
       // ($20/$50/$100/Other, Apple Pay, Deposit crypto, etc.).
       // Pre-fill with $0.01 so the demo amount stays consistent.
-      await provider.request({
+      void provider.request({
         method: "wallet_deposit",
         params: [{ amount: DEMO_AMOUNT_USD }],
-      } as Parameters<typeof provider.request>[0]);
-      return { summary: "Deposit dialog opened" };
+      } as Parameters<typeof provider.request>[0]).catch((error) => {
+        console.warn("[demo] deposit flow closed", error);
+      });
+      return {};
     },
   },
 

@@ -11,12 +11,6 @@ export function OnRampBody({
   connectedBalance,
 }: DemoBodyProps) {
   const body = useBodyAnimation(delay);
-  const buttonLabel =
-    status === "running"
-      ? "Opening deposit…"
-      : status === "done"
-        ? "Funds received"
-        : "Deposit funds";
 
   return (
     <div
@@ -36,7 +30,7 @@ export function OnRampBody({
         <span className="font-mono text-foreground">wallet_deposit</span>.
       </p>
       <PrimaryButton
-        label={buttonLabel}
+        label="Deposit funds"
         status={status}
         onClick={onAction}
         className="h-11 w-full"

@@ -27,12 +27,36 @@ import type {
 type Connected = {
   address: `0x${string}`;
   balanceDisplay: string;
+  balance: bigint;
 };
+
+const DEPOSIT_BALANCE_ATTEMPTS = 40;
+const DEPOSIT_BALANCE_INTERVAL_MS = 1500;
 
 /** Scale when the demo box first enters from the bottom of the viewport. */
 const SCROLL_START_SCALE = 0.92;
 /** Max translateY (px, upward) applied at full progress. */
 const SCROLL_LIFT_PX = 60;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const formatUsd = (balance: bigint) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Number(balance) / 1_000_000);
+
+const parseBalance = (balance: unknown) => {
+  if (typeof balance === "bigint") return balance;
+  if (typeof balance === "string") {
+    try {
+      return BigInt(balance);
+    } catch {
+      return 0n;
+    }
+  }
+  return 0n;
+};
 
 export default function Demo() {
   const [adapter] = useState<Adapter>("tempoAuth");
@@ -78,11 +102,13 @@ export default function Demo() {
   const providerAdapterRef = useRef<Adapter | null>(null);
   const providerSchemeRef = useRef<"light" | "dark" | null>(null);
   const activeDemoRef = useRef<DemoKind>("Log In");
+  const depositWatchRef = useRef(0);
   const { resolved } = useTheme();
 
   activeDemoRef.current = demo;
 
   const selectDemo = (next: DemoKind) => {
+    depositWatchRef.current += 1;
     setDemo(next);
     setStatus("idle");
     setResult(null);
@@ -103,22 +129,29 @@ export default function Demo() {
         method: "wallet_getBalances",
         params: [{ account: address, tokens: [PATH_USD] }],
       } as Parameters<typeof provider.request>[0])) as ReadonlyArray<{
-        display: string;
-        symbol: string;
+        balance?: `0x${string}` | bigint | undefined;
+        display?: string | undefined;
       }>;
-      console.info("[demo] wallet_getBalances", { account: address, balances });
-      // SDK's `display` is already pre-formatted with `$` via Intl.NumberFormat
-      // — don't prepend a second one.
       const native = balances?.[0];
-      const display = native?.display ?? "$0.00";
-      setConnected({ address, balanceDisplay: display });
+      const balance = parseBalance(native?.balance);
+      console.info("[demo] pathUSD balance", { account: address, balance });
+      const next = {
+        address,
+        balanceDisplay: native?.display ?? formatUsd(balance),
+        balance,
+      };
+      setConnected(next);
+      return next;
     } catch (e) {
-      console.warn("[demo] wallet_getBalances failed", e);
-      setConnected({ address, balanceDisplay: "$0.00" });
+      console.warn("[demo] pathUSD balance failed", e);
+      const next = { address, balanceDisplay: "$0.00", balance: 0n };
+      setConnected(next);
+      return next;
     }
   };
 
   const onDisconnect = async () => {
+    depositWatchRef.current += 1;
     try {
       const provider = providerRef.current;
       if (provider) {
@@ -228,7 +261,8 @@ export default function Demo() {
 
   const onAction = async (variant?: string) => {
     if (status === "running") return;
-    setStatus("running");
+    const nonBlockingDeposit = demo === "Add Funds";
+    setStatus(nonBlockingDeposit ? "idle" : "running");
     setLastVariant(variant ?? null);
     const provider = ensureProvider(adapter);
     const def = DEMOS[demo];
@@ -244,6 +278,8 @@ export default function Demo() {
       }
     })();
 
+    let depositBaseline = connected?.balance ?? 0n;
+    let depositBaselineAddress = connected?.address ?? null;
     const ctx = {
       adapter,
       // privy hooks intentionally omitted — see header comment.
@@ -252,6 +288,23 @@ export default function Demo() {
       provider,
       variant === undefined ? ctx : { ...ctx, variant },
     );
+
+    if (nonBlockingDeposit) {
+      try {
+        const accounts = (await provider.request({
+          method: "eth_accounts",
+        })) as readonly `0x${string}`[];
+        const addr = accounts?.[0];
+        if (addr) {
+          const current = await refreshBalance(provider, addr);
+          depositBaseline = current.balance;
+          depositBaselineAddress = addr;
+        }
+      } catch {
+        // The deposit dialog can still connect an account; the balance
+        // watcher below treats a new positive balance as the completion.
+      }
+    }
 
     // Active poll: alongside the SDK promise, poll eth_accounts every 1.5s.
     // The SDK's wallet_connect promise occasionally hangs after the iframe
@@ -284,6 +337,41 @@ export default function Demo() {
     });
 
     try {
+      if (nonBlockingDeposit) {
+        await runPromise;
+        if (pollHandle) clearInterval(pollHandle);
+        if (activeDemoRef.current !== demo) return;
+        setResult(null);
+        const watch = depositWatchRef.current + 1;
+        depositWatchRef.current = watch;
+        void (async () => {
+          for (let i = 0; i < DEPOSIT_BALANCE_ATTEMPTS; i += 1) {
+            await sleep(DEPOSIT_BALANCE_INTERVAL_MS);
+            if (depositWatchRef.current !== watch) return;
+            if (activeDemoRef.current !== "Add Funds") return;
+            try {
+              const accounts = (await provider.request({
+                method: "eth_accounts",
+              })) as readonly `0x${string}`[];
+              const addr = accounts?.[0] ?? depositBaselineAddress;
+              if (!addr) continue;
+              const next = await refreshBalance(provider, addr);
+              if (activeDemoRef.current !== "Add Funds") return;
+              if (next.balance > depositBaseline) {
+                setResult({
+                  summary: `Balance updated · ${next.balanceDisplay}`,
+                });
+                setStatus("done");
+                return;
+              }
+            } catch {
+              // Balance may lag the deposit path; keep polling.
+            }
+          }
+        })();
+        return;
+      }
+
       const winner = await Promise.race([
         runPromise.then((v) => ({ __sdk: v }) as const),
         pollPromise,
