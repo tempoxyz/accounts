@@ -93,7 +93,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       // Pre-fill with $0.01 so the demo amount stays consistent.
       await provider.request({
         method: "wallet_deposit",
-        params: [{ value: DEMO_AMOUNT_USD }],
+        params: [{ amount: DEMO_AMOUNT_USD }],
       } as Parameters<typeof provider.request>[0]);
       return { summary: "Deposit dialog opened" };
     },
@@ -114,18 +114,25 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     ],
     Body: PayOnceBody,
     async run(provider) {
-      // `wallet_send` is the Tempo-native helper (Revm rejects native
-      // value transfers via `wallet_sendCalls`). Self-transfer: pay the
-      // user's own address with $0.01 so the demo signs a real on-chain
-      // tx without burning anyone's money.
+      // `wallet_transfer` opens the wallet UI so the user can confirm
+      // the transfer (editable: true). Self-transfer: pay the user's
+      // own address with $0.01 so the demo signs a real on-chain tx
+      // without burning anyone's money.
       const accounts = (await provider.request({
         method: "eth_accounts",
       })) as readonly `0x${string}`[];
       const self = accounts?.[0];
       if (!self) throw new Error("No account connected.");
       const result = (await provider.request({
-        method: "wallet_send",
-        params: [{ to: self, value: DEMO_AMOUNT_USD }],
+        method: "wallet_transfer",
+        params: [
+          {
+            editable: true,
+            to: self,
+            amount: DEMO_AMOUNT_USD,
+            token: "pathUsd",
+          },
+        ],
       } as Parameters<typeof provider.request>[0])) as
         | { receipt?: { transactionHash?: `0x${string}` } }
         | undefined;
@@ -153,8 +160,15 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       const self = accounts?.[0];
       if (!self) throw new Error("No account connected.");
       await provider.request({
-        method: "wallet_send",
-        params: [{ to: self, value: DEMO_AMOUNT_USD }],
+        method: "wallet_transfer",
+        params: [
+          {
+            editable: true,
+            to: self,
+            amount: DEMO_AMOUNT_USD,
+            token: "pathUsd",
+          },
+        ],
       } as Parameters<typeof provider.request>[0]);
       return { summary: "Authorized · settles per call" };
     },
@@ -171,8 +185,8 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     prelude: ["Setting up monthly billing"],
     Body: SubscribeBody,
     async run(provider) {
-      // V1: first charge via `wallet_send` self-transfer. The access key
-      // authorized at sign-in (when on *.tempo.xyz) lets subsequent
+      // V1: first charge via `wallet_transfer` self-transfer. The access
+      // key authorized at sign-in (when on *.tempo.xyz) lets subsequent
       // renewals charge silently within its limits.
       // TODO: swap to MPP-session capability when exposed.
       const accounts = (await provider.request({
@@ -181,8 +195,15 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       const self = accounts?.[0];
       if (!self) throw new Error("No account connected.");
       await provider.request({
-        method: "wallet_send",
-        params: [{ to: self, value: DEMO_AMOUNT_USD }],
+        method: "wallet_transfer",
+        params: [
+          {
+            editable: true,
+            to: self,
+            amount: DEMO_AMOUNT_USD,
+            token: "pathUsd",
+          },
+        ],
       } as Parameters<typeof provider.request>[0]);
       return { summary: "Subscribed · auto-renews monthly" };
     },
@@ -217,13 +238,14 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     prelude: ["Fetching best route"],
     Body: TradeBody,
     async run(provider) {
-      // Open the wallet's swap UI — user picks tokens. Pre-fill $0.01.
+      // Open the wallet's swap UI — user picks tokens. Pre-fill $0.01
+      // as the exact sell amount.
       await provider.request({
         method: "wallet_swap",
         params: [
           {
             amount: DEMO_AMOUNT_USD,
-            type: "exactIn",
+            type: "sell",
             slippage: 0.005,
           },
         ],
