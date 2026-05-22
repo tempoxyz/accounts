@@ -12,11 +12,7 @@ export function OnRampBody({
 }: DemoBodyProps) {
   const body = useBodyAnimation(delay);
   const buttonLabel =
-    status === "running"
-      ? "Opening deposit…"
-      : status === "done"
-        ? "Funds received"
-        : "Deposit funds";
+    status === "running" ? "Opening deposit…" : "Deposit funds";
 
   return (
     <div

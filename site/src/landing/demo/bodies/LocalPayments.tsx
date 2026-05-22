@@ -35,9 +35,7 @@ export function LocalPaymentsBody({
   const buttonLabel =
     status === "running"
       ? "Opening deposit…"
-      : status === "done"
-        ? "Funds received"
-        : `Add ${selected.label} with ${methodLabel}`;
+      : `Add ${selected.label} with ${methodLabel}`;
 
   return (
     <div

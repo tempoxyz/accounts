@@ -7,6 +7,7 @@ export function LogInBody({
   status,
   result,
   onAction,
+  onNextDemo,
   delay,
   adapter,
 }: DemoBodyProps) {
@@ -30,12 +31,7 @@ export function LogInBody({
         ? "Sign in via Privy. The SDK manages access keys after authentication."
         : "Continue with your Tempo wallet — passkeys and access keys handled by the SDK.";
 
-  const ctaLabel =
-    status === "running"
-      ? runningCta
-      : status === "done"
-        ? result?.summary ?? "Signed in"
-        : idleCta;
+  const ctaLabel = status === "running" ? runningCta : idleCta;
 
   return (
     <div
@@ -48,16 +44,29 @@ export function LogInBody({
         <p className="text-[13px] text-foreground-muted">{description}</p>
       </div>
 
-      <PrimaryButton
-        label={ctaLabel}
-        status={status}
-        onClick={onAction}
-        className="h-11 w-full"
-      />
-
       {status === "done" && result?.summary ? (
-        <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
-      ) : null}
+        <>
+          <div className="flex items-center gap-2 bg-panel-3 px-3 py-2">
+            <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-accent-live" />
+            <p className="truncate font-mono text-[12px] text-foreground-muted">
+              {result.summary}
+            </p>
+          </div>
+          <PrimaryButton
+            label="Next demo"
+            status="idle"
+            onClick={onNextDemo}
+            className="h-11 w-full"
+          />
+        </>
+      ) : (
+        <PrimaryButton
+          label={ctaLabel}
+          status={status}
+          onClick={onAction}
+          className="h-11 w-full"
+        />
+      )}
     </div>
   );
 }

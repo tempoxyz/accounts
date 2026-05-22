@@ -1,14 +1,10 @@
 "use client";
 
 import type { DemoBodyProps } from "../types";
-import { PrimaryButton, useBodyAnimation } from "./shared";
+import { FundingOverlay, PrimaryButton, useBodyAnimation } from "./shared";
 
-export function PayOnceBody({
-  status,
-  result,
-  onAction,
-  delay,
-}: DemoBodyProps) {
+export function PayOnceBody(props: DemoBodyProps) {
+  const { status, result, onAction, delay } = props;
   const body = useBodyAnimation(delay);
   const buttonLabel =
     status === "running"
@@ -20,7 +16,7 @@ export function PayOnceBody({
   return (
     <div
       ref={body.ref}
-      className="flex w-full max-w-[366px] flex-col gap-4 bg-panel-2 p-6"
+      className="relative flex w-full max-w-[366px] flex-col gap-4 overflow-hidden bg-panel-2 p-6"
       style={body.style}
     >
       <div className="flex flex-col gap-1">
@@ -38,6 +34,7 @@ export function PayOnceBody({
       {result?.summary ? (
         <p className="font-mono text-[10px] text-foreground-subtle">{result.summary}</p>
       ) : null}
+      <FundingOverlay {...props} />
     </div>
   );
 }

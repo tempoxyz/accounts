@@ -18,9 +18,10 @@ import type {
   DemoGuide,
   DemoKind,
   DemoResult,
+  SetupStatus,
   Status,
 } from "../types";
-import { NETWORK, shorten } from "../sdk";
+import { shorten } from "../sdk";
 import { ChatBubble } from "./ChatBubble";
 
 const MESSAGE_STAGGER_MS = 70;
@@ -172,28 +173,37 @@ function DemoGuideCallout({
 export type ConnectedSession = {
   address: `0x${string}`;
   balanceDisplay: string;
+  balance: bigint;
 };
 
 export function BrowserMockup({
   demo,
   def,
   status,
+  setupStatus,
+  setupError,
   result,
   adapter,
   lastVariant,
   connected,
   onAction,
+  onSetupConnect,
+  onSetupFund,
   onChangeDemo,
   onDisconnect,
 }: {
   demo: DemoKind;
   def: DemoDef;
   status: Status;
+  setupStatus: SetupStatus;
+  setupError: string | null;
   result: DemoResult | null;
   adapter: Adapter;
   lastVariant: string | null;
   connected: ConnectedSession | null;
   onAction: (variant?: string) => void;
+  onSetupConnect: () => void;
+  onSetupFund: () => void;
   onChangeDemo: (d: DemoKind) => void;
   onDisconnect: () => void;
 }) {
@@ -235,10 +245,19 @@ export function BrowserMockup({
   const nextLabel = nextDemo ? DEMOS[nextDemo].guide.label : "";
   const messageStyle =
     animatedMessagesDemo === demo ? undefined : messageInitialStyle;
+  const networkBadgeClass =
+    def.network === "testnet"
+      ? "bg-network-testnet-bg text-network-testnet"
+      : "bg-panel-3 text-foreground-muted";
+  const needsFunding =
+    def.network === "testnet" && (!connected || connected.balance <= 0n);
   const changeDemo = (d: DemoKind) => {
     onChangeDemo(d);
     if (!window.matchMedia("(min-width: 640px)").matches)
       rootRef.current?.scrollIntoView({ block: "start", inline: "nearest" });
+  };
+  const goNextDemo = () => {
+    if (nextDemo) changeDemo(nextDemo);
   };
   const pressDemo = (d: DemoKind) => {
     if (pressedDemoRef.current === d) return;
@@ -329,8 +348,10 @@ export function BrowserMockup({
               <span className="text-foreground-subtle">·</span>
             </div>
           ) : null}
-          <span className="rounded-[2px] bg-panel-3 px-2 py-0.5 font-mono text-[12px] whitespace-nowrap text-foreground-muted sm:text-[14px]">
-            {NETWORK}
+          <span
+            className={`rounded-[2px] px-2 py-0.5 font-mono text-[12px] whitespace-nowrap sm:text-[14px] ${networkBadgeClass}`}
+          >
+            {def.network}
           </span>
         </div>
       </div>
@@ -425,17 +446,17 @@ export function BrowserMockup({
         </nav>
 
         <div className="flex min-h-[420px] flex-col px-4 pt-3 pb-0 sm:min-h-[510px] sm:px-[27px] sm:pt-[15px]">
-          {def.prelude && def.prelude.length > 0 ? (
-            <div className="flex w-full min-w-0 items-start gap-3">
-              <div
-                aria-hidden
-                className="grid aspect-square h-9 shrink-0 place-items-center bg-background text-foreground"
-              >
-                <TempoLogo width={14} height={15} />
-              </div>
-              <div className="flex w-full min-w-0 flex-col items-start gap-4">
+          <div className="flex w-full min-w-0 items-start gap-3">
+            <div
+              aria-hidden
+              className="grid aspect-square h-9 shrink-0 place-items-center bg-background text-foreground"
+            >
+              <TempoLogo width={14} height={15} />
+            </div>
+            <div className="flex w-full min-w-0 flex-col items-start gap-4">
+              {preludeCount > 0 ? (
                 <div ref={messagesRef} className="flex w-full min-w-0 flex-col items-start gap-2">
-                  {def.prelude.map((m, i) => (
+                  {def.prelude?.map((m, i) => (
                     <ChatBubble
                       key={`${demo}-bubble-${i}`}
                       text={m}
@@ -443,40 +464,25 @@ export function BrowserMockup({
                     />
                   ))}
                 </div>
-                <Body
-                  key={`${demo}-body`}
-                  status={status}
-                  result={result}
-                  lastVariant={lastVariant}
-                  onAction={onAction}
-                  delay={bodyDelay}
-                  adapter={adapter}
-                  connectedBalance={connected?.balanceDisplay ?? null}
-                />
-              </div>
+              ) : null}
+              <Body
+                key={`${demo}-body`}
+                status={status}
+                result={result}
+                lastVariant={lastVariant}
+                onAction={onAction}
+                onNextDemo={goNextDemo}
+                setupStatus={setupStatus}
+                setupError={setupError}
+                needsFunding={needsFunding}
+                onSetupConnect={onSetupConnect}
+                onSetupFund={onSetupFund}
+                delay={bodyDelay}
+                adapter={adapter}
+                connectedBalance={connected?.balanceDisplay ?? null}
+              />
             </div>
-          ) : (
-            <div className="flex w-full min-w-0 items-start gap-3">
-              <div
-                aria-hidden
-                className="grid aspect-square h-9 shrink-0 place-items-center bg-background text-foreground"
-              >
-                <TempoLogo width={14} height={15} />
-              </div>
-              <div className="flex w-full min-w-0 flex-col items-start gap-4">
-                <Body
-                  key={`${demo}-body`}
-                  status={status}
-                  result={result}
-                  lastVariant={lastVariant}
-                  onAction={onAction}
-                  delay={bodyDelay}
-                  adapter={adapter}
-                  connectedBalance={connected?.balanceDisplay ?? null}
-                />
-              </div>
-            </div>
-          )}
+          </div>
           <DemoGuideCallout guide={def.guide} delay={guideDelay} />
         </div>
       </div>

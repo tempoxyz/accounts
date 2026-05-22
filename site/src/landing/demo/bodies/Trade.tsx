@@ -1,7 +1,7 @@
 "use client";
 
 import type { DemoBodyProps } from "../types";
-import { PrimaryButton, useBodyAnimation } from "./shared";
+import { FundingOverlay, PrimaryButton, useBodyAnimation } from "./shared";
 
 function SwapArrow() {
   return (
@@ -47,12 +47,8 @@ function TokenRow({
   );
 }
 
-export function TradeBody({
-  status,
-  result,
-  onAction,
-  delay,
-}: DemoBodyProps) {
+export function TradeBody(props: DemoBodyProps) {
+  const { status, result, onAction, delay } = props;
   const body = useBodyAnimation(delay);
   const buttonLabel =
     status === "running"
@@ -64,7 +60,7 @@ export function TradeBody({
   return (
     <div
       ref={body.ref}
-      className="flex w-full max-w-[420px] flex-col gap-3 bg-panel-2 p-6"
+      className="relative flex w-full max-w-[420px] flex-col gap-3 overflow-hidden bg-panel-2 p-6"
       style={body.style}
     >
       <TokenRow label="From" amount="100" token="USDC" />
@@ -82,6 +78,7 @@ export function TradeBody({
       {result?.summary ? (
         <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
       ) : null}
+      <FundingOverlay {...props} />
     </div>
   );
 }

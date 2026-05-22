@@ -5,12 +5,7 @@ import { PayOnceBody } from "./bodies/PayOnce";
 import { PayPerUseBody } from "./bodies/PayPerUse";
 import { SubscribeBody } from "./bodies/Subscribe";
 import { TradeBody } from "./bodies/Trade";
-import {
-  defaultAuthorizeAccessKey,
-  DEMO_AMOUNT_USD,
-  isTrustedHost,
-  shorten,
-} from "./sdk";
+import { connectWallet, DEMO_AMOUNT_USD, shorten } from "./sdk";
 import type { DemoDef, DemoKind } from "./types";
 
 /** Ordered list of landing demo steps. */
@@ -25,12 +20,14 @@ export const DEMO_STEPS = [
 ] as const satisfies readonly DemoKind[];
 
 /**
- * Mainnet demos. All on-chain actions sign for $0.01 — display copy
- * (Pro Plan / $240, $24.99/mo, 100 USDC swap, etc.) is just storytelling.
+ * All on-chain actions sign for $0.01 — display copy (Pro Plan / $240,
+ * $24.99/mo, 100 USDC swap, etc.) is just storytelling.
  */
 export const DEMOS: Record<DemoKind, DemoDef> = {
   "Log In": {
     url: "wisselbank.xyz",
+    network: "mainnet",
+    autoAdvance: false,
     guide: {
       label: "Authentication",
       href: "/docs/guides/connect-accounts",
@@ -50,35 +47,17 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         const addr = ctx.privy.user?.wallet?.address;
         return { summary: addr ? `Signed in · ${shorten(addr)}` : "Signed in" };
       }
-      // Lazy access-key co-signing — only when we're on a *.tempo.xyz
-      // host. The wallet's validator bypasses the "must include scopes"
-      // check for same-registrable-domain callers, so just `limits` is
-      // accepted there. From localhost / other origins the same payload
-      // would either be rejected (missing scopes) or silently break
-      // subsequent transactions, so we skip it and fall back to per-tx
-      // confirmation prompts.
-      const capabilities: Record<string, unknown> = {
-        method: "register",
-        name: "Accounts SDK",
-      };
-      if (isTrustedHost()) {
-        capabilities.authorizeAccessKey = defaultAuthorizeAccessKey();
-      }
-      const result = (await provider.request({
-        method: "wallet_connect",
-        params: [{ capabilities } as Record<string, unknown>],
-      })) as { accounts?: ReadonlyArray<{ address: `0x${string}` }> };
-      const account = result?.accounts?.[0];
+      const address = await connectWallet(provider);
       return {
-        summary: account
-          ? `Signed in · ${shorten(account.address)}`
-          : "Signed in",
+        summary: address ? `Signed in · ${shorten(address)}` : "Signed in",
       };
     },
   },
 
   "Add Funds": {
     url: "wisselbank.xyz",
+    network: "mainnet",
+    autoAdvance: false,
     guide: {
       label: "Deposits",
       href: "/docs/guides/deposits",
@@ -101,6 +80,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Pay Once": {
     url: "wisselbank.xyz",
+    network: "testnet",
     guide: {
       label: "Transfers",
       href: "/docs/guides/transfers",
@@ -143,6 +123,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Pay Per Use": {
     url: "wisselbank.xyz",
+    network: "testnet",
     guide: {
       label: "Spend Permissions",
       href: "/docs/guides/spend-permissions",
@@ -152,8 +133,8 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     prelude: ["Authorizing per-call payment for this session"],
     Body: PayPerUseBody,
     async run(provider) {
-      // TODO: wire MPP capability when the SDK exposes per-call / streaming
-      // options. For now: self-transfer like Pay Once.
+      // TODO: wire the MPP session flow from the spend-permissions example.
+      // For now: self-transfer like Pay Once.
       const accounts = (await provider.request({
         method: "eth_accounts",
       })) as readonly `0x${string}`[];
@@ -176,6 +157,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   Subscribe: {
     url: "wisselbank.xyz",
+    network: "testnet",
     guide: {
       label: "Subscriptions",
       href: "/docs/guides/subscriptions",
@@ -188,7 +170,8 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       // V1: first charge via `wallet_transfer` self-transfer. The access
       // key authorized at sign-in (when on *.tempo.xyz) lets subsequent
       // renewals charge silently within its limits.
-      // TODO: swap to MPP-session capability when exposed.
+      // TODO: swap to the MPP subscription flow when the landing demo has a
+      // server-backed variant.
       const accounts = (await provider.request({
         method: "eth_accounts",
       })) as readonly `0x${string}`[];
@@ -211,6 +194,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Fee Sponsorship": {
     url: "wisselbank.xyz",
+    network: "testnet",
     guide: {
       label: "Fee Sponsorship",
       href: "/docs/guides/fee-sponsorship",
@@ -229,6 +213,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Swap Currencies": {
     url: "wisselbank.xyz",
+    network: "testnet",
     guide: {
       label: "Exchange Currencies",
       href: "/docs/guides/swaps",

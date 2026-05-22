@@ -4,16 +4,12 @@ import { waapi, type WAAPIAnimation } from "animejs";
 import { useLayoutEffect, useRef } from "react";
 import { springs } from "../../animation";
 import type { DemoBodyProps } from "../types";
-import { PrimaryButton, useBodyAnimation } from "./shared";
+import { FundingOverlay, PrimaryButton, useBodyAnimation } from "./shared";
 
 const BAR_DELAY_MS = 240;
 
-export function PayPerUseBody({
-  status,
-  result,
-  onAction,
-  delay,
-}: DemoBodyProps) {
+export function PayPerUseBody(props: DemoBodyProps) {
+  const { status, result, onAction, delay } = props;
   const calls = 1247;
   const cap = 5000;
   const pct = Math.min(100, (calls / cap) * 100);
@@ -50,7 +46,7 @@ export function PayPerUseBody({
   return (
     <div
       ref={body.ref}
-      className="flex w-full max-w-[420px] flex-col gap-5 bg-panel-2 p-6"
+      className="relative flex w-full max-w-[420px] flex-col gap-5 overflow-hidden bg-panel-2 p-6"
       style={body.style}
     >
       <div className="flex items-end justify-between">
@@ -86,6 +82,7 @@ export function PayPerUseBody({
       {result?.summary ? (
         <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
       ) : null}
+      <FundingOverlay {...props} />
     </div>
   );
 }

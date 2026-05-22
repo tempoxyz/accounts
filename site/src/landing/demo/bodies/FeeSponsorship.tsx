@@ -1,15 +1,16 @@
 "use client";
 
 import type { DemoBodyProps } from "../types";
-import { useBodyAnimation } from "./shared";
+import { FundingOverlay, useBodyAnimation } from "./shared";
 
-export function FeeSponsorshipBody({ delay }: DemoBodyProps) {
+export function FeeSponsorshipBody(props: DemoBodyProps) {
+  const { delay } = props;
   const body = useBodyAnimation(delay);
 
   return (
     <div
       ref={body.ref}
-      className="flex w-full max-w-[420px] flex-col gap-4 bg-panel-2 p-6"
+      className="relative flex w-full max-w-[420px] flex-col gap-4 overflow-hidden bg-panel-2 p-6"
       style={body.style}
     >
       <div className="flex items-start justify-between gap-4">
@@ -34,6 +35,7 @@ export function FeeSponsorshipBody({ delay }: DemoBodyProps) {
           <span className="font-mono text-[12px] text-foreground">network fee</span>
         </div>
       </div>
+      <FundingOverlay {...props} />
     </div>
   );
 }
