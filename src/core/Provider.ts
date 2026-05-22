@@ -1056,7 +1056,19 @@ export function create(options: create.Options = {}): create.ReturnType {
       return Object.assign(client, {
         account: {
           address: account.address,
-          type: 'json-rpc' as const,
+          async signTransaction(request: unknown) {
+            return (await provider.request({
+              method: 'eth_signTransaction',
+              params: [request],
+            } as never)) as Hex.Hex
+          },
+          async signTypedData(parameters: { message?: unknown }) {
+            return (await provider.request({
+              method: 'eth_signTypedData_v4',
+              params: [account.address, Json.stringify(parameters.message)],
+            } as never)) as Hex.Hex
+          },
+          type: 'local' as const,
         },
       })
     }

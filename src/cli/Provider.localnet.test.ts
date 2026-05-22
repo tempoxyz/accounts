@@ -1,6 +1,8 @@
 import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Fetch } from 'mppx/client'
+import { Mppx as ServerMppx, tempo } from 'mppx/server'
 import { Address, Hex, PublicKey } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { type Address as ViemAddress, parseUnits } from 'viem'
@@ -148,7 +150,69 @@ const transferCall = Actions.token.transfer.call({
   amount: parseUnits('1', 6),
 })
 
+const payment = ServerMppx.create({
+  methods: [
+    tempo({
+      account: accounts[3]!,
+      currency: Addresses.pathUsd,
+      getClient: () => getClient(),
+    }),
+  ],
+  realm: 'accounts-cli-test',
+  secretKey: 'test-secret-key',
+})
+
 describe('Provider.create', () => {
+  test('default: MPP pull payments attach pending access key authorization', async () => {
+    const handler = createHandler()
+    const authServer = await createServer(handler.listener)
+    const mppServer = await createServer(async (req, res) => {
+      const result = await ServerMppx.toNodeListener(
+        payment.charge({
+          amount: '1',
+        }),
+      )(req, res)
+      if (result.status === 402) return
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true }))
+    })
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        host: `${authServer.url}/cli-auth`,
+        mpp: true,
+        open: async (url) => {
+          const code = new URL(url).searchParams.get('code')!
+          await fetch(`${authServer.url}/cli-auth`, {
+            body: JSON.stringify(await authorize(code)),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          })
+        },
+      })
+
+      const result = await provider.request(connectRequest())
+      const address = result.accounts[0]!.address
+      await fund(address)
+
+      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
+
+      const res = await fetch(`${mppServer.url}/fortune`)
+      expect(res.status).toBe(200)
+
+      const key = provider.store.getState().accessKeys[0]!
+      expect(await provider.getAccessKeyStatus({ accessKey: key.address })).toMatchInlineSnapshot(
+        `"published"`,
+      )
+      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
+    } finally {
+      Fetch.restore()
+      await authServer.closeAsync()
+      await mppServer.closeAsync()
+    }
+  })
+
   test('default: bootstraps wallet_connect through the device-code flow', async () => {
     const handler = createHandler()
     const server = await createServer(handler.listener)
