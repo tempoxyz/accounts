@@ -1,3 +1,4 @@
+import { tempoModerato } from "viem/chains";
 import { FeeSponsorshipBody } from "./bodies/FeeSponsorship";
 import { LogInBody } from "./bodies/LogIn";
 import { OnRampBody } from "./bodies/OnRamp";
@@ -5,13 +6,10 @@ import { PayOnceBody } from "./bodies/PayOnce";
 import { PayPerUseBody } from "./bodies/PayPerUse";
 import { SubscribeBody } from "./bodies/Subscribe";
 import { TradeBody } from "./bodies/Trade";
-import {
-  defaultAuthorizeAccessKey,
-  DEMO_AMOUNT_USD,
-  isTrustedHost,
-  shorten,
-} from "./sdk";
+import { connectWallet, DEMO_AMOUNT_USD, shorten } from "./sdk";
 import type { DemoDef, DemoKind } from "./types";
+
+const PURCHASE_AMOUNT_USD = "240";
 
 /** Ordered list of landing demo steps. */
 export const DEMO_STEPS = [
@@ -25,12 +23,13 @@ export const DEMO_STEPS = [
 ] as const satisfies readonly DemoKind[];
 
 /**
- * Mainnet demos. All on-chain actions sign for $0.01 — display copy
- * (Pro Plan / $240, $24.99/mo, 100 USDC swap, etc.) is just storytelling.
+ * Most on-chain actions sign for $0.01 — larger display copy is storytelling.
+ * Pay Once intentionally prefills $240 so the wallet matches the checkout.
  */
 export const DEMOS: Record<DemoKind, DemoDef> = {
   "Log In": {
     url: "wisselbank.xyz",
+    network: "mainnet",
     guide: {
       label: "Authentication",
       href: "/docs/guides/connect-accounts",
@@ -50,35 +49,16 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         const addr = ctx.privy.user?.wallet?.address;
         return { summary: addr ? `Signed in · ${shorten(addr)}` : "Signed in" };
       }
-      // Lazy access-key co-signing — only when we're on a *.tempo.xyz
-      // host. The wallet's validator bypasses the "must include scopes"
-      // check for same-registrable-domain callers, so just `limits` is
-      // accepted there. From localhost / other origins the same payload
-      // would either be rejected (missing scopes) or silently break
-      // subsequent transactions, so we skip it and fall back to per-tx
-      // confirmation prompts.
-      const capabilities: Record<string, unknown> = {
-        method: "register",
-        name: "Accounts SDK",
-      };
-      if (isTrustedHost()) {
-        capabilities.authorizeAccessKey = defaultAuthorizeAccessKey();
-      }
-      const result = (await provider.request({
-        method: "wallet_connect",
-        params: [{ capabilities } as Record<string, unknown>],
-      })) as { accounts?: ReadonlyArray<{ address: `0x${string}` }> };
-      const account = result?.accounts?.[0];
+      const address = await connectWallet(provider);
       return {
-        summary: account
-          ? `Signed in · ${shorten(account.address)}`
-          : "Signed in",
+        summary: address ? `Signed in · ${shorten(address)}` : "Signed in",
       };
     },
   },
 
   "Add Funds": {
     url: "wisselbank.xyz",
+    network: "mainnet",
     guide: {
       label: "Deposits",
       href: "/docs/guides/deposits",
@@ -103,6 +83,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Pay Once": {
     url: "wisselbank.xyz",
+    network: "testnet",
     guide: {
       label: "Transfers",
       href: "/docs/guides/transfers",
@@ -118,8 +99,8 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     async run(provider) {
       // `wallet_transfer` opens the wallet UI so the user can confirm
       // the transfer (editable: true). Self-transfer: pay the user's
-      // own address with $0.01 so the demo signs a real on-chain tx
-      // without burning anyone's money.
+      // own address so the demo signs a real on-chain tx without
+      // sending funds to a third party.
       const accounts = (await provider.request({
         method: "eth_accounts",
       })) as readonly `0x${string}`[];
@@ -131,7 +112,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
           {
             editable: true,
             to: self,
-            amount: DEMO_AMOUNT_USD,
+            amount: PURCHASE_AMOUNT_USD,
             token: "pathUsd",
           },
         ],
@@ -139,12 +120,19 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         | { receipt?: { transactionHash?: `0x${string}` } }
         | undefined;
       const tx = result?.receipt?.transactionHash;
-      return { summary: tx ? `tx ${shorten(tx)}` : "Sent" };
+      return {
+        summary: tx ? "Payment sent ·" : "Payment sent",
+        href: tx
+          ? `${tempoModerato.blockExplorers.default.url}/tx/${tx}`
+          : undefined,
+        hrefLabel: tx ? `tx ${shorten(tx)}` : undefined,
+      };
     },
   },
 
   "Pay Per Use": {
     url: "wisselbank.xyz",
+    network: "mainnet",
     guide: {
       label: "Spend Permissions",
       href: "/docs/guides/spend-permissions",
@@ -178,6 +166,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   Subscribe: {
     url: "wisselbank.xyz",
+    network: "mainnet",
     guide: {
       label: "Subscriptions",
       href: "/docs/guides/subscriptions",
@@ -213,6 +202,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Fee Sponsorship": {
     url: "wisselbank.xyz",
+    network: "mainnet",
     guide: {
       label: "Fee Sponsorship",
       href: "/docs/guides/fee-sponsorship",
@@ -231,6 +221,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Swap Currencies": {
     url: "wisselbank.xyz",
+    network: "mainnet",
     guide: {
       label: "Exchange Currencies",
       href: "/docs/guides/swaps",

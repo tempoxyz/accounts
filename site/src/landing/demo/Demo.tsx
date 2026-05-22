@@ -6,12 +6,21 @@ import { springs } from "../animation";
 import { useTheme } from "../useTheme";
 import { BrowserMockup } from "./components/BrowserMockup";
 import { DEMOS } from "./config";
-import { createProvider, shorten } from "./sdk";
+import {
+  connectWallet,
+  createProvider,
+  ensureNetwork,
+  PATH_USD,
+  shorten,
+} from "./sdk";
 import type {
+  AccountStatus,
   AccountsProvider,
   Adapter,
   DemoKind,
+  DemoNetwork,
   DemoResult,
+  SetupStatus,
   Status,
 } from "./types";
 
@@ -30,8 +39,11 @@ type Connected = {
   balance: bigint;
 };
 
+const ACTION_TIMEOUT_MS = 20_000;
 const DEPOSIT_BALANCE_ATTEMPTS = 40;
 const DEPOSIT_BALANCE_INTERVAL_MS = 1500;
+const FUNDING_BALANCE_ATTEMPTS = 20;
+const FUNDING_BALANCE_INTERVAL_MS = 1500;
 
 /** Scale when the demo box first enters from the bottom of the viewport. */
 const SCROLL_START_SCALE = 0.92;
@@ -39,6 +51,30 @@ const SCROLL_START_SCALE = 0.92;
 const SCROLL_LIFT_PX = 60;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const rejectPendingRequests = (provider: AccountsProvider | null) => {
+  provider?.store.setState((state) => ({
+    ...state,
+    requestQueue: state.requestQueue.map((queued) =>
+      queued.status === "pending"
+        ? {
+            request: queued.request,
+            error: { code: 4001, message: "Demo changed." },
+            status: "error" as const,
+          }
+        : queued,
+    ),
+  }));
+};
+
+const cancelPendingRequests = (provider: AccountsProvider | null) => {
+  rejectPendingRequests(provider);
+};
+
+const timeout = (ms: number) =>
+  new Promise<{ __timeout: true }>((resolve) => {
+    setTimeout(() => resolve({ __timeout: true }), ms);
+  });
 
 const formatUsd = (balance: bigint) =>
   new Intl.NumberFormat("en-US", {
@@ -56,6 +92,37 @@ const parseBalance = (balance: unknown) => {
     }
   }
   return 0n;
+};
+
+const providerCache: {
+  adapter: Adapter | null;
+  network: DemoNetwork | null;
+  provider: AccountsProvider | null;
+  scheme: "light" | "dark" | null;
+} = {
+  adapter: null,
+  network: null,
+  provider: null,
+  scheme: null,
+};
+
+const getProvider = (
+  adapter: Adapter,
+  network: DemoNetwork,
+  scheme: "light" | "dark",
+) => {
+  if (
+    !providerCache.provider ||
+    providerCache.adapter !== adapter ||
+    providerCache.network !== network ||
+    providerCache.scheme !== scheme
+  ) {
+    providerCache.provider = createProvider(adapter, scheme, network);
+    providerCache.adapter = adapter;
+    providerCache.network = network;
+    providerCache.scheme = scheme;
+  }
+  return providerCache.provider;
 };
 
 export default function Demo() {
@@ -95,22 +162,36 @@ export default function Demo() {
 
   const [demo, setDemo] = useState<DemoKind>("Log In");
   const [status, setStatus] = useState<Status>("idle");
+  const [setupStatus, setSetupStatus] = useState<SetupStatus>("idle");
+  const [setupError, setSetupError] = useState<string | null>(null);
   const [result, setResult] = useState<DemoResult | null>(null);
   const [lastVariant, setLastVariant] = useState<string | null>(null);
   const [connected, setConnected] = useState<Connected | null>(null);
-  const providerRef = useRef<AccountsProvider | null>(null);
-  const providerAdapterRef = useRef<Adapter | null>(null);
-  const providerSchemeRef = useRef<"light" | "dark" | null>(null);
+  const [accountStatus, setAccountStatus] =
+    useState<AccountStatus>("checking");
   const activeDemoRef = useRef<DemoKind>("Log In");
+  const statusRef = useRef<Status>("idle");
   const depositWatchRef = useRef(0);
   const { resolved } = useTheme();
 
   activeDemoRef.current = demo;
+  statusRef.current = status;
+
+  const cancelCurrentRequests = () => {
+    cancelPendingRequests(providerCache.provider);
+  };
 
   const selectDemo = (next: DemoKind) => {
+    cancelCurrentRequests();
     depositWatchRef.current += 1;
+    if (DEMOS[next].network !== DEMOS[demo].network) {
+      setConnected(null);
+      setAccountStatus("checking");
+    }
     setDemo(next);
     setStatus("idle");
+    setSetupStatus("idle");
+    setSetupError(null);
     setResult(null);
     setLastVariant(null);
   };
@@ -118,13 +199,10 @@ export default function Demo() {
   const refreshBalance = async (
     provider: AccountsProvider,
     address: `0x${string}`,
+    network: DemoNetwork = DEMOS[activeDemoRef.current].network,
   ) => {
-    // Tempo's path-USD aggregate token (TokenId 0). The SDK is expected to
-    // return the user's USD-equivalent balance through this canonical token.
-    // If the SDK returns 0 here while the wallet UI shows funds, that's an
-    // SDK-level issue (separate from this demo).
-    const PATH_USD = "0x20c0000000000000000000000000000000000000" as const;
     try {
+      await ensureNetwork(provider, network);
       const balances = (await provider.request({
         method: "wallet_getBalances",
         params: [{ account: address, tokens: [PATH_USD] }],
@@ -140,20 +218,21 @@ export default function Demo() {
         balanceDisplay: native?.display ?? formatUsd(balance),
         balance,
       };
-      setConnected(next);
+      if (DEMOS[activeDemoRef.current].network === network) setConnected(next);
       return next;
     } catch (e) {
       console.warn("[demo] pathUSD balance failed", e);
       const next = { address, balanceDisplay: "$0.00", balance: 0n };
-      setConnected(next);
+      if (DEMOS[activeDemoRef.current].network === network) setConnected(next);
       return next;
     }
   };
 
   const onDisconnect = async () => {
+    cancelCurrentRequests();
     depositWatchRef.current += 1;
     try {
-      const provider = providerRef.current;
+      const provider = providerCache.provider;
       if (provider) {
         await provider.request({ method: "wallet_disconnect" } as Parameters<
           typeof provider.request
@@ -163,96 +242,84 @@ export default function Demo() {
       // ignore — clear local state regardless so the UI doesn't lock up.
     }
     setConnected(null);
+    setAccountStatus("disconnected");
     setStatus("idle");
+    setSetupStatus("idle");
+    setSetupError(null);
     setResult(null);
     setLastVariant(null);
   };
 
-  // Recreate the provider when EITHER the adapter or the resolved
+  // Recreate the provider when the adapter, active network, or resolved
   // landing theme changes. Tempo's dialog adapter dedupes by host, so
   // re-running `createProvider` just `syncTheme`s the cached iframe —
   // no flicker, no session loss.
-  const ensureProvider = (next: Adapter) => {
-    if (
-      !providerRef.current ||
-      providerAdapterRef.current !== next ||
-      providerSchemeRef.current !== resolved
-    ) {
-      providerRef.current = createProvider(next, resolved);
-      providerAdapterRef.current = next;
-      providerSchemeRef.current = resolved;
-    }
-    return providerRef.current;
-  };
+  const ensureProvider = (next: Adapter, network: DemoNetwork) =>
+    getProvider(next, network, resolved);
 
   useEffect(() => {
     if (
-      providerRef.current &&
-      providerAdapterRef.current &&
-      providerSchemeRef.current !== resolved
+      providerCache.provider &&
+      providerCache.adapter &&
+      providerCache.network &&
+      providerCache.scheme !== resolved
     ) {
-      providerRef.current = createProvider(
-        providerAdapterRef.current,
+      providerCache.provider = createProvider(
+        providerCache.adapter,
         resolved,
+        providerCache.network,
       );
-      providerSchemeRef.current = resolved;
+      providerCache.scheme = resolved;
     }
   }, [resolved]);
 
-  // On mount: hydrate from persisted storage. If we already have a
-  // connected account from a previous session, reflect "done" state so
-  // the user doesn't see "Sign in" after a refresh of an authed app.
+  // Hydrate the active network from persisted storage. Only the Log In demo
+  // gets a "Signed in" result line; other demos should stay idle and simply
+  // show the account state in the browser chrome.
   useEffect(() => {
     let cancelled = false;
+    const currentDemo = demo;
+    const network = DEMOS[currentDemo].network;
     const hydrate = async () => {
       try {
-        const provider = ensureProvider(adapter);
+        const provider = ensureProvider(adapter, network);
+        await ensureNetwork(provider, network);
         // Small delay so zustand persist middleware finishes hydrating.
         await new Promise((r) => setTimeout(r, 150));
         const accounts = (await provider.request({
           method: "eth_accounts",
         })) as readonly `0x${string}`[];
-        if (cancelled) return;
+        if (cancelled || activeDemoRef.current !== currentDemo) return;
         const addr = accounts?.[0];
         if (addr) {
-          setResult({ summary: `Signed in · ${shorten(addr)}` });
-          setStatus("done");
-          setLastVariant(null);
-          await refreshBalance(provider, addr);
+          await refreshBalance(provider, addr, network);
+          if (cancelled || activeDemoRef.current !== currentDemo) return;
+          setAccountStatus("connected");
+          if (currentDemo === "Log In" && statusRef.current !== "running") {
+            setResult({ summary: `Signed in · ${shorten(addr)}` });
+            setStatus("done");
+            setLastVariant(null);
+          }
         } else {
-          setConnected(null);
+          if (DEMOS[activeDemoRef.current].network === network) {
+            setConnected(null);
+            setAccountStatus("disconnected");
+          }
         }
       } catch {
-        if (!cancelled) setConnected(null);
+        if (!cancelled && DEMOS[activeDemoRef.current].network === network) {
+          setConnected(null);
+          setAccountStatus("disconnected");
+        }
       }
     };
     void hydrate();
     return () => {
       cancelled = true;
     };
-    // Re-run when adapter changes — different adapter means a fresh session.
-  }, [adapter]);
-
-  // Suppress the React-19 dev-overlay SecurityError that fires when
-  // `logComponentRender` walks props that touch the wallet iframe's
-  // cross-origin contentWindow. It's a dev-only artifact; functionality
-  // is unaffected. Strips noise so the user can keep clicking through demos.
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const onError = (e: ErrorEvent) => {
-      const msg = e.message ?? e.error?.message ?? "";
-      if (
-        typeof msg === "string" &&
-        msg.includes("Blocked a frame") &&
-        msg.includes("cross-origin")
-      ) {
-        e.stopImmediatePropagation();
-        e.preventDefault();
-      }
-    };
-    window.addEventListener("error", onError, true);
-    return () => window.removeEventListener("error", onError, true);
-  }, []);
+    // Re-run when the demo/network or adapter changes — different adapter
+    // means a fresh session, different network means a separate wallet state.
+  }, [adapter, demo]);
 
   const handleDemo = (next: DemoKind) => {
     if (next === demo) return;
@@ -264,82 +331,44 @@ export default function Demo() {
     const nonBlockingDeposit = demo === "Add Funds";
     setStatus(nonBlockingDeposit ? "idle" : "running");
     setLastVariant(variant ?? null);
-    const provider = ensureProvider(adapter);
-    const def = DEMOS[demo];
-
-    // Capture the connected address BEFORE the action so we can detect a
-    // change-of-state (newly connected, or balance moved) without false
-    // positives from the existing session.
-    const beforeAccount = (() => {
-      try {
-        return connected?.address ?? null;
-      } catch {
-        return null;
-      }
-    })();
-
+    let pollHandle: ReturnType<typeof setInterval> | undefined;
     let depositBaseline = connected?.balance ?? 0n;
     let depositBaselineAddress = connected?.address ?? null;
-    const ctx = {
-      adapter,
-      // privy hooks intentionally omitted — see header comment.
-    };
-    const runPromise = def.run(
-      provider,
-      variant === undefined ? ctx : { ...ctx, variant },
-    );
 
-    if (nonBlockingDeposit) {
-      try {
-        const accounts = (await provider.request({
-          method: "eth_accounts",
-        })) as readonly `0x${string}`[];
-        const addr = accounts?.[0];
-        if (addr) {
-          const current = await refreshBalance(provider, addr);
-          depositBaseline = current.balance;
-          depositBaselineAddress = addr;
-        }
-      } catch {
-        // The deposit dialog can still connect an account; the balance
-        // watcher below treats a new positive balance as the completion.
-      }
-    }
-
-    // Active poll: alongside the SDK promise, poll eth_accounts every 1.5s.
-    // The SDK's wallet_connect promise occasionally hangs after the iframe
-    // completes auth — polling lets us short-circuit as soon as the wallet
-    // persists the address. For non-connect actions (payments, swaps)
-    // we ignore the poll resolution and let the SDK promise win.
-    const POLL_INTERVAL_MS = 1500;
-    const POLL_TIMEOUT_MS = 60_000;
-    const isConnectLike = variant === undefined; // sign-in / on-ramp / etc.
-    let pollHandle: ReturnType<typeof setInterval> | undefined;
-    const pollPromise = new Promise<
-      { __polled: `0x${string}` } | { __pollTimeout: true }
-    >((resolve) => {
-      const startedAt = Date.now();
-      pollHandle = setInterval(async () => {
+    try {
+      const def = DEMOS[demo];
+      const provider = ensureProvider(adapter, def.network);
+      await ensureNetwork(provider, def.network);
+      if (nonBlockingDeposit) cancelPendingRequests(provider);
+      if (nonBlockingDeposit) {
         try {
           const accounts = (await provider.request({
             method: "eth_accounts",
           })) as readonly `0x${string}`[];
-          const next = accounts?.[0];
-          if (next && (!isConnectLike || next !== beforeAccount)) {
-            resolve({ __polled: next });
-          } else if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-            resolve({ __pollTimeout: true });
+          const addr = accounts?.[0];
+          if (addr) {
+            const current = await refreshBalance(provider, addr, def.network);
+            depositBaseline = current.balance;
+            depositBaselineAddress = addr;
+            setAccountStatus("connected");
           }
         } catch {
-          // transient — keep polling
+          // The deposit dialog can still connect an account; the balance
+          // watcher below treats a new positive balance as the completion.
         }
-      }, POLL_INTERVAL_MS);
-    });
+      }
 
-    try {
+      const ctx = {
+        adapter,
+        // privy hooks intentionally omitted — see header comment.
+      };
+      const runPromise = def.run(
+        provider,
+        variant === undefined ? ctx : { ...ctx, variant },
+      );
+
       if (nonBlockingDeposit) {
         await runPromise;
-        if (pollHandle) clearInterval(pollHandle);
         if (activeDemoRef.current !== demo) return;
         setResult(null);
         const watch = depositWatchRef.current + 1;
@@ -355,12 +384,11 @@ export default function Demo() {
               })) as readonly `0x${string}`[];
               const addr = accounts?.[0] ?? depositBaselineAddress;
               if (!addr) continue;
-              const next = await refreshBalance(provider, addr);
+              const next = await refreshBalance(provider, addr, def.network);
               if (activeDemoRef.current !== "Add Funds") return;
+              setAccountStatus("connected");
               if (next.balance > depositBaseline) {
-                setResult({
-                  summary: `Balance updated · ${next.balanceDisplay}`,
-                });
+                setResult({ summary: `Balance updated · ${next.balanceDisplay}` });
                 setStatus("done");
                 return;
               }
@@ -372,22 +400,46 @@ export default function Demo() {
         return;
       }
 
-      const winner = await Promise.race([
-        runPromise.then((v) => ({ __sdk: v }) as const),
-        pollPromise,
-      ]);
+      // Active poll: only for Log In. The SDK's wallet_connect promise
+      // occasionally hangs after the iframe completes auth — polling lets us
+      // short-circuit as soon as the wallet persists an address. Other demos
+      // must let their SDK request win, otherwise an existing account can make
+      // a deposit/payment action incorrectly render "Signed in".
+      const POLL_INTERVAL_MS = 500;
+      const shouldPollAccounts = demo === "Log In";
+      const pollPromise = shouldPollAccounts
+        ? new Promise<{ __polled: `0x${string}` }>((resolve) => {
+            pollHandle = setInterval(async () => {
+              try {
+                const accounts = (await provider.request({
+                  method: "eth_accounts",
+                })) as readonly `0x${string}`[];
+                const next = accounts?.[0];
+                if (next) resolve({ __polled: next });
+              } catch {
+                // transient — keep polling
+              }
+            }, POLL_INTERVAL_MS);
+          })
+        : null;
+
+      const sdkPromise = runPromise.then((v) => ({ __sdk: v }) as const);
+      const winner = await Promise.race(
+        pollPromise
+          ? [sdkPromise, pollPromise, timeout(ACTION_TIMEOUT_MS)]
+          : [sdkPromise, timeout(ACTION_TIMEOUT_MS)],
+      );
       if (pollHandle) clearInterval(pollHandle);
       if (activeDemoRef.current !== demo) return;
 
+      let nextResult: DemoResult;
       if ("__sdk" in winner) {
-        setResult(winner.__sdk);
-        setStatus("done");
+        nextResult = winner.__sdk;
       } else if ("__polled" in winner) {
-        setResult({ summary: `Signed in · ${shorten(winner.__polled)}` });
-        setStatus("done");
+        nextResult = { summary: `Signed in · ${shorten(winner.__polled)}` };
       } else {
-        // poll timed out without auth completing
         console.warn("[demo] action timed out without resolution");
+        cancelPendingRequests(provider);
         setStatus("idle");
         setResult(null);
         return;
@@ -400,17 +452,112 @@ export default function Demo() {
         })) as readonly `0x${string}`[];
         const addr = accounts?.[0];
         if (addr) {
-          await refreshBalance(provider, addr);
+          await refreshBalance(provider, addr, def.network);
+          if (activeDemoRef.current === demo) setAccountStatus("connected");
+        } else if (DEMOS[activeDemoRef.current].network === def.network) {
+          setAccountStatus("disconnected");
         }
       } catch {
         // ignore
       }
+      if (activeDemoRef.current !== demo) return;
+      setResult(nextResult);
+      setStatus("done");
     } catch (e) {
       if (pollHandle) clearInterval(pollHandle);
       if (activeDemoRef.current !== demo) return;
       console.warn("[demo] run failed", e);
+      cancelPendingRequests(providerCache.provider);
       setStatus("idle");
       setResult(null);
+    }
+  };
+
+  const onSetupConnect = async () => {
+    if (setupStatus !== "idle") return;
+    const network = DEMOS[demo].network;
+    if (network !== "testnet") return;
+    setSetupError(null);
+    setSetupStatus("connecting");
+    try {
+      const provider = ensureProvider(adapter, network);
+      await ensureNetwork(provider, network);
+      const connectedAddr = await Promise.race([
+        connectWallet(provider).then((addr) => ({ addr })),
+        timeout(ACTION_TIMEOUT_MS),
+      ]);
+      if ("__timeout" in connectedAddr) {
+        cancelPendingRequests(provider);
+        throw new Error("Connect timed out.");
+      }
+      const addr = connectedAddr.addr;
+      if (addr) {
+        await refreshBalance(provider, addr, network);
+        if (DEMOS[activeDemoRef.current].network === network)
+          setAccountStatus("connected");
+      } else {
+        setAccountStatus("disconnected");
+      }
+    } catch (e) {
+      cancelPendingRequests(providerCache.provider);
+      console.warn("[demo] testnet connect failed", e);
+      if (!connected) setAccountStatus("disconnected");
+      setSetupError("Could not connect. Try again.");
+    } finally {
+      setSetupStatus("idle");
+    }
+  };
+
+  const onSetupFund = async () => {
+    if (setupStatus !== "idle") return;
+    const network = DEMOS[demo].network;
+    if (network !== "testnet") return;
+    setSetupError(null);
+    setSetupStatus("funding");
+    try {
+      const provider = ensureProvider(adapter, network);
+      await ensureNetwork(provider, network);
+      let accounts = (await provider.request({
+        method: "eth_accounts",
+      })) as readonly `0x${string}`[];
+      let addr = accounts?.[0] ?? connected?.address ?? null;
+      if (!addr) {
+        const connectedAddr = await connectWallet(provider);
+        accounts = (await provider.request({
+          method: "eth_accounts",
+        })) as readonly `0x${string}`[];
+        addr = accounts?.[0] ?? connectedAddr;
+      }
+      if (!addr) {
+        setAccountStatus("disconnected");
+        setSetupError("Connect first, then request funds.");
+        return;
+      }
+      await provider.request({
+        method: "tempo_fundAddress",
+        params: [addr],
+      } as Parameters<typeof provider.request>[0]);
+      let next = await refreshBalance(provider, addr, network);
+      for (
+        let i = 0;
+        i < FUNDING_BALANCE_ATTEMPTS && next.balance <= 0n;
+        i += 1
+      ) {
+        await sleep(FUNDING_BALANCE_INTERVAL_MS);
+        next = await refreshBalance(provider, addr, network);
+      }
+      if (next.balance <= 0n)
+        console.warn("[demo] faucet completed but balance stayed zero", {
+          account: addr,
+        });
+      if (DEMOS[activeDemoRef.current].network === network)
+        setAccountStatus("connected");
+      if (next.balance <= 0n) setSetupError("Funds requested. Balance is still updating.");
+    } catch (e) {
+      console.warn("[demo] testnet funding failed", e);
+      setSetupError("Could not request funds. Try again.");
+    } finally {
+      setSetupStatus("idle");
     }
   };
 
@@ -423,11 +570,16 @@ export default function Demo() {
           demo={demo}
           def={def}
           status={status}
+          setupStatus={setupStatus}
+          setupError={setupError}
           result={result}
           adapter={adapter}
           lastVariant={lastVariant}
           connected={connected}
+          accountStatus={accountStatus}
           onAction={onAction}
+          onSetupConnect={onSetupConnect}
+          onSetupFund={onSetupFund}
           onChangeDemo={handleDemo}
           onDisconnect={onDisconnect}
         />

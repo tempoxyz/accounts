@@ -1,13 +1,7 @@
-import { Dialog, Provider, Storage, tempoWallet, webAuthn } from "accounts";
-import { tempo } from "viem/chains";
-import type { Adapter, AccountsProvider } from "./types";
-
-/** Chain the landing demos run against. Swap to `tempoModerato` for testnet. */
-export const CHAIN = tempo;
-/** Network label shown in the demo's URL bar — derived from `CHAIN.testnet`. */
-export const NETWORK: "mainnet" | "testnet" = CHAIN.testnet
-  ? "testnet"
-  : "mainnet";
+import { Provider, Storage, tempoWallet, webAuthn } from "accounts";
+import { Hex } from "ox";
+import { tempo, tempoModerato } from "viem/tempo/chains";
+import type { Adapter, AccountsProvider, DemoNetwork } from "./types";
 
 /** All on-chain demo CTAs sign for $0.01 — the merchant display copy is just storytelling. */
 export const DEMO_AMOUNT_USD = "0.01";
@@ -65,34 +59,84 @@ export type DialogScheme = "light" | "dark";
 
 export function buildAdapter(adapter: Adapter, scheme: DialogScheme = "dark") {
   if (adapter === "webAuth") return webAuthn();
-  // tempoAuth + privy share the dialog adapter under the hood.
-  // Dev: use popup — iframe mode trips React 19's logComponentRender
-  // cross-origin SecurityError that disrupts the dev overlay.
-  // Production: keep iframe (SDK default) for the embedded look.
-  const isDev = import.meta.env.DEV;
   return tempoWallet({
     name: "Accounts SDK",
     theme: { radius: "large", scheme },
-    ...(isDev ? { dialog: Dialog.popup() } : {}),
   });
+}
+
+/** Returns the Tempo chain used by a landing demo network. */
+export function chainForNetwork(network: DemoNetwork) {
+  if (network === "testnet") return tempoModerato;
+  return tempo;
+}
+
+function storageKeyForNetwork(network: DemoNetwork) {
+  return `${STORAGE_KEY}-${network}`;
+}
+
+/** Switches the provider to the chain backing the requested demo network. */
+export async function ensureNetwork(
+  provider: AccountsProvider,
+  network: DemoNetwork,
+) {
+  const chain = chainForNetwork(network);
+  const current = (await provider.request({
+    method: "eth_chainId",
+  } as Parameters<typeof provider.request>[0])) as number | `0x${string}`;
+  const currentId =
+    typeof current === "number" ? current : Hex.toNumber(current);
+  if (currentId === chain.id) return;
+  await provider.request({
+    method: "wallet_switchEthereumChain",
+    params: [{ chainId: Hex.fromNumber(chain.id) }],
+  } as Parameters<typeof provider.request>[0]);
+}
+
+/** Opens the wallet sign-in flow and returns the connected account address. */
+export async function connectWallet(provider: AccountsProvider) {
+  // Lazy access-key co-signing — only when we're on a *.tempo.xyz
+  // host. The wallet's validator bypasses the "must include scopes"
+  // check for same-registrable-domain callers, so just `limits` is
+  // accepted there. From localhost / other origins the same payload
+  // would either be rejected (missing scopes) or silently break
+  // subsequent transactions, so we skip it and fall back to per-tx
+  // confirmation prompts.
+  const capabilities: Record<string, unknown> = {
+    method: "register",
+    name: "Accounts SDK",
+  };
+  if (isTrustedHost()) {
+    capabilities.authorizeAccessKey = defaultAuthorizeAccessKey();
+  }
+  const result = (await provider.request({
+    method: "wallet_connect",
+    params: [{ capabilities } as Record<string, unknown>],
+  })) as { accounts?: ReadonlyArray<{ address: `0x${string}` }> };
+  return result?.accounts?.[0]?.address ?? null;
 }
 
 export function createProvider(
   adapter: Adapter,
   scheme: DialogScheme = "dark",
+  network: DemoNetwork = "mainnet",
 ): AccountsProvider {
   // Storage pattern lifted from wallet-next/src/lib/config.ts:
   // cookie + localStorage is synchronous (no async hydration delay) and
   // is what the wallet itself uses. `key` namespaces everything to this
   // demo so multiple Tempo apps on the same domain don't collide.
+  const key = storageKeyForNetwork(network);
+  const chain = chainForNetwork(network);
   const storage = Storage.combine(
-    Storage.cookie({ key: STORAGE_KEY }),
-    Storage.localStorage({ key: STORAGE_KEY }),
+    Storage.cookie({ key }),
+    Storage.localStorage({ key }),
   );
   return Provider.create({
     adapter: buildAdapter(adapter, scheme),
+    chains: [chain],
     persistCredentials: true,
     storage,
+    testnet: network === "testnet",
   });
 }
 
