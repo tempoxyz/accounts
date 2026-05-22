@@ -7,7 +7,6 @@ import Footer from "./footer";
 import Guides from "./guides";
 import Hero from "./hero";
 import { ThemeProvider } from "./useTheme";
-import "./styles.css";
 
 export default function Home() {
   const rootRef = useRef<HTMLElement>(null);
