@@ -15,6 +15,7 @@ import { Account as TempoAccount, Actions } from 'viem/tempo'
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
+import * as MppAuthorization from '../internal/MppAuthorization.js'
 import * as Store from '../Store.js'
 
 const turnkeySessionErrorCodes = new Set([
@@ -70,7 +71,10 @@ export function turnkey<const client extends turnkey.Client>(
 ): Adapter.Adapter {
   const { icon, name = 'Turnkey', rdns = 'com.turnkey', sessionSkewMs = 10_000 } = options
 
-  return Adapter.define({ icon, name, rdns }, ({ getClient, store }) => {
+  return Adapter.define({ icon, name, rdns }, (config) => {
+    const { getClient, store } = config
+    const mpp = config.mpp
+
     let turnkeyClient_promise: Promise<client> | undefined
     let expiry_timeout: ReturnType<typeof setTimeout> | undefined
     let restore_promise: Promise<void> | undefined
@@ -324,6 +328,28 @@ export function turnkey<const client extends turnkey.Client>(
         if (expiry_timeout) clearTimeout(expiry_timeout)
       },
       actions: {
+        ...(mpp
+          ? {
+              async authorizeMpp(parameters) {
+                return await MppAuthorization.authorize({
+                  accounts: {
+                    getRootAccount: async (address) => await getTurnkeyAccount(address),
+                    getAccessKeyAccount: async ({ accessKey, chainId, root }) =>
+                      AccessKey.getSigner({
+                        accessKey,
+                        account: root,
+                        chainId,
+                        store,
+                      }),
+                  },
+                  mpp,
+                  getClient,
+                  parameters,
+                  store,
+                })
+              },
+            }
+          : {}),
         async createAccount(parameters) {
           const { authorizeAccessKey, personalSign } = parameters
           if (personalSign && parameters.digest)

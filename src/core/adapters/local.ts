@@ -8,6 +8,7 @@ import * as AccessKey from '../AccessKey.js'
 import * as Account from '../Account.js'
 import * as Adapter from '../Adapter.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
+import * as MppAuthorization from '../internal/MppAuthorization.js'
 
 /**
  * Creates a local adapter where the app manages keys and signing in-process.
@@ -28,7 +29,10 @@ import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 export function local(options: local.Options): Adapter.Adapter {
   const { createAccount, icon, loadAccounts, name, rdns } = options
 
-  return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
+  return Adapter.define({ icon, name, rdns }, (config) => {
+    const { getAccount, getClient, store } = config
+    const mpp = config.mpp
+
     async function prepareTransaction(parameters: Adapter.signTransaction.Parameters) {
       const { feePayer, ...rest } = parameters
       const client = getClient({
@@ -95,6 +99,28 @@ export function local(options: local.Options): Adapter.Adapter {
 
     return {
       actions: {
+        ...(mpp
+          ? {
+              async authorizeMpp(parameters) {
+                return await MppAuthorization.authorize({
+                  accounts: {
+                    getRootAccount: async (address) => getAccount({ address, signable: true }),
+                    getAccessKeyAccount: async ({ accessKey, chainId, root }) =>
+                      AccessKey.getSigner({
+                        accessKey,
+                        account: root,
+                        chainId,
+                        store,
+                      }),
+                  },
+                  mpp,
+                  getClient,
+                  parameters,
+                  store,
+                })
+              },
+            }
+          : {}),
         async createAccount(parameters) {
           if (!createAccount)
             throw new ox_Provider.UnsupportedMethodError({

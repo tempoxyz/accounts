@@ -3,6 +3,103 @@ import * as z from 'zod/mini'
 
 import * as Rpc from './rpc.js'
 
+describe('mpp_authorize.parameters', () => {
+  test('accepts challenge-only requests', () => {
+    expect(
+      z.parse(Rpc.mpp_authorize.parameters, {
+        challenges: [
+          'Payment id="1", realm="example.test", method="tempo", intent="charge", request="e30"',
+        ],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "challenges": [
+          "Payment id="1", realm="example.test", method="tempo", intent="charge", request="e30"",
+        ],
+      }
+    `)
+  })
+
+  test('accepts manual session requests', () => {
+    expect(
+      z.parse(Rpc.mpp_authorize.parameters, {
+        challenges: [
+          'Payment id="1", realm="example.test", method="tempo", intent="session", request="e30"',
+        ],
+        session: {
+          action: 'voucher',
+          authorizedSigner: '0x0000000000000000000000000000000000000001',
+          channelId: '0x1234',
+          cumulativeAmount: '2500000',
+        },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "challenges": [
+          "Payment id="1", realm="example.test", method="tempo", intent="session", request="e30"",
+        ],
+        "session": {
+          "action": "voucher",
+          "authorizedSigner": "0x0000000000000000000000000000000000000001",
+          "channelId": "0x1234",
+          "cumulativeAmount": "2500000",
+        },
+      }
+    `)
+  })
+
+  test('rejects empty challenges', () => {
+    expect(() =>
+      z.parse(Rpc.mpp_authorize.parameters, {
+        challenges: [],
+      }),
+    ).toThrowErrorMatchingInlineSnapshot(`
+      [$ZodError: [
+        {
+          "origin": "array",
+          "code": "too_small",
+          "minimum": 1,
+          "inclusive": true,
+          "path": [
+            "challenges"
+          ],
+          "message": "Invalid input"
+        }
+      ]]
+    `)
+  })
+
+  test('rejects non-decimal cumulative amount', () => {
+    expect(() =>
+      z.parse(Rpc.mpp_authorize.parameters, {
+        challenges: [
+          'Payment id="1", realm="example.test", method="tempo", intent="session", request="e30"',
+        ],
+        session: {
+          action: 'close',
+          authorizedSigner: '0x0000000000000000000000000000000000000001',
+          channelId: '0x1234',
+          cumulativeAmount: '0x1234',
+        },
+      }),
+    ).toThrowErrorMatchingInlineSnapshot(`
+      [$ZodError: [
+        {
+          "origin": "string",
+          "code": "invalid_format",
+          "format": "regex",
+          "pattern": "/^\\\\d+$/",
+          "path": [
+            "session",
+            "cumulativeAmount"
+          ],
+          "message": "Invalid input"
+        }
+      ]]
+    `)
+  })
+})
+
 describe('wallet_connect.capabilities.request: auth', () => {
   test('accepts string shorthand', () => {
     expect(

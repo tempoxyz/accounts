@@ -17,6 +17,7 @@ import { Actions, Transaction as TempoTransaction } from 'viem/tempo'
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
+import * as MppAuthorization from '../internal/MppAuthorization.js'
 import * as Store from '../Store.js'
 
 const privySessionErrorCodes = new Set([
@@ -76,7 +77,10 @@ export function privy<const client extends privy.Client>(
 ): Adapter.Adapter {
   const { icon, name = 'Privy', rdns = 'io.privy' } = options
 
-  return Adapter.define({ icon, name, rdns }, ({ getClient, store }) => {
+  return Adapter.define({ icon, name, rdns }, (config) => {
+    const { getClient, store } = config
+    const mpp = config.mpp
+
     let privyClient_promise: Promise<client> | undefined
     let restore_promise: Promise<void> | undefined
     let walletAccounts: readonly privy.EmbeddedWallet[] = []
@@ -407,6 +411,35 @@ export function privy<const client extends privy.Client>(
       )
     }
 
+    async function getMppAccount(options: { address?: Address | undefined } = {}) {
+      const account = await accountForSigning(options.address)
+      const account_tempo = {
+        address: core_Address.from(account.address),
+        source: 'privy',
+        sign: async (parameters: { hash: Hex.Hex }) =>
+          await signPayload({
+            payload: parameters.hash,
+            walletAccount: account,
+          }),
+        signMessage: async (parameters: Parameters<LocalAccount['signMessage']>[0]) =>
+          await signPayload({
+            payload: hashMessage(parameters.message),
+            walletAccount: account,
+          }),
+        signTransaction: async (request: Parameters<LocalAccount['signTransaction']>[0]) =>
+          await signPreparedTransaction(account, request),
+        signTypedData: async (parameters: unknown) =>
+          await signPayload({
+            payload: hashTypedData(parameters as never),
+            walletAccount: account,
+          }),
+        type: 'local',
+      } satisfies Omit<LocalAccount<'privy'>, 'publicKey' | 'signTypedData'> & {
+        signTypedData: (parameters: unknown) => Promise<Hex.Hex>
+      }
+      return account_tempo as LocalAccount<'privy'>
+    }
+
     async function prepareTransaction(parameters: Adapter.signTransaction.Parameters) {
       const viemClient = getClient({
         chainId: parameters.chainId,
@@ -511,6 +544,28 @@ export function privy<const client extends privy.Client>(
     return {
       cleanup() {},
       actions: {
+        ...(mpp
+          ? {
+              async authorizeMpp(parameters) {
+                return await MppAuthorization.authorize({
+                  accounts: {
+                    getRootAccount: async (address) => await getMppAccount({ address }),
+                    getAccessKeyAccount: async ({ accessKey, chainId, root }) =>
+                      AccessKey.getSigner({
+                        accessKey,
+                        account: root,
+                        chainId,
+                        store,
+                      }),
+                  },
+                  mpp,
+                  getClient,
+                  parameters,
+                  store,
+                })
+              },
+            }
+          : {}),
         async createAccount(parameters) {
           const { authorizeAccessKey, personalSign } = parameters
           if (personalSign && parameters.digest)

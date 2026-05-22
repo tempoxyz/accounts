@@ -108,3 +108,4 @@
 - **CLI auth example URL inputs** — the example CLI flow is expected to support both `--url` and `AUTH_URL`-based defaults, and should avoid hardcoded personal hostnames in source.
 - **Test RPC port selection should auto-fallback** — localnet test setup should start from `VITE_RPC_PORT` (or `8545`) and select the next available port to avoid `EADDRINUSE` collisions.
 - **Turnkey adapter stays structurally typed** — avoid importing `@turnkey/core` directly from the root SDK adapter so non-Turnkey consumers do not inherit a hard dependency; accept an app-provided client with the minimal client shape instead.
+- **Cloudflare/Vite empty POSTs can look body-bearing** — in the web playground Worker, empty POST session-management calls may be classified as content requests. Use HEAD for MPP session voucher/close management calls when the request should return 204 + `Payment-Receipt` instead of serving a content stream.

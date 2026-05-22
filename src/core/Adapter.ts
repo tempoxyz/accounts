@@ -1,3 +1,4 @@
+import type { tempo as mppx_tempo } from 'mppx/client'
 import type { KeyAuthorization } from 'ox/tempo'
 import type { Client, Hex, Transport } from 'viem'
 import type { Address } from 'viem/accounts'
@@ -34,6 +35,13 @@ export type Meta = {
 export type Instance = {
   /** Adapter actions dispatched by the provider's `request()` method. */
   actions: {
+    /** Authorize Machine Payment Protocol challenges. */
+    authorizeMpp?:
+      | ((
+          params: authorizeMpp.Parameters,
+          request: EncodedRequest<Rpc.mpp_authorize.Encoded>,
+        ) => Promise<authorizeMpp.ReturnType>)
+      | undefined
     /** Grant an access key for the active account. */
     authorizeAccessKey?:
       | ((
@@ -147,6 +155,10 @@ export declare namespace SetupFn {
     getAccount: Account.Find
     /** Get the viem client for a given chain ID. Defaults to the active chain. */
     getClient: (options?: getClient.Options | undefined) => Client<Transport, typeof tempo>
+    /** MPP client configuration when MPP support is enabled. */
+    mpp?: mpp.Options | undefined
+    /** Routes an RPC request through the owning provider. Present in Provider-managed adapters. */
+    request?: ((request: { method: string; params?: unknown }) => Promise<unknown>) | undefined
     /** Storage adapter used by the provider. */
     storage: Storage.Storage
     /** Reactive state store. */
@@ -174,6 +186,13 @@ export declare namespace getClient {
     chainId?: number | undefined
     /** Fee payer service URL, or `false` to opt out of fee payers for this transaction if set globally. */
     feePayer?: string | false | undefined
+  }
+}
+
+export declare namespace mpp {
+  type Options = Omit<mppx_tempo.Parameters, 'account' | 'getClient'> & {
+    /** Whether to polyfill `globalThis.fetch` with the payment-aware wrapper. */
+    polyfill?: boolean | undefined
   }
 }
 
@@ -335,6 +354,11 @@ export declare namespace authorizeAccessKey {
     keyAuthorization: KeyAuthorization.Rpc
     rootAddress: Address
   }
+}
+
+export declare namespace authorizeMpp {
+  type Parameters = ActionRequest<typeof Rpc.mpp_authorize.schema>
+  type ReturnType = Rpc.mpp_authorize.Encoded['returns']
 }
 
 export declare namespace revokeAccessKey {

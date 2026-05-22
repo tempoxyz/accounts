@@ -101,6 +101,16 @@ export function create(options: create.Options = {}): create.ReturnType {
   // Lazy reference — assigned after the provider is created so the client
   // transport can route provider methods (wallet_connect, etc.) through it.
   let providerRef: ox_Provider.Provider | undefined
+  let payments:
+    | {
+        createCredential(response: Response, context?: unknown): Promise<string>
+      }
+    | undefined
+  const mpp = (() => {
+    if (options.mpp === false) return undefined
+    if (typeof options.mpp === 'object') return options.mpp
+    return {}
+  })()
 
   function getClient(
     options: { chainId?: number | undefined; feePayer?: string | false | undefined } = {},
@@ -118,7 +128,17 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
   }
 
-  const instance = adapter({ getAccount, getClient, storage, store })
+  const instance = adapter({
+    getAccount,
+    getClient,
+    ...(mpp ? { mpp } : {}),
+    async request(request) {
+      if (!providerRef) throw new ox_Provider.DisconnectedError({ message: 'Provider not ready.' })
+      return await providerRef.request(request as never)
+    },
+    storage,
+    store,
+  })
   const { actions } = instance
 
   const emitter = ox_Provider.createEmitter()
@@ -534,6 +554,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         accessKeys: { status: 'supported' }
                         atomic: { status: 'supported' }
                         feePayer?: { status: 'supported' } | undefined
+                        mpp?: { status: 'supported' } | undefined
                       }
                     > = {}
                     for (const chain of filtered)
@@ -541,8 +562,25 @@ export function create(options: create.Options = {}): create.ReturnType {
                         accessKeys: { status: 'supported' },
                         atomic: { status: 'supported' },
                         ...(feePayerConfig ? { feePayer: { status: 'supported' } } : {}),
+                        ...(payments && actions.authorizeMpp
+                          ? { mpp: { status: 'supported' } }
+                          : {}),
                       }
                     return result as Rpc.wallet_getCapabilities.Encoded['returns']
+                  }
+
+                  case 'mpp_authorize': {
+                    assertConnected()
+                    if (!payments || !actions.authorizeMpp)
+                      throw new ox_Provider.UnsupportedMethodError({
+                        message: '`mpp` not enabled.',
+                      })
+
+                    const [decoded] = request._decoded.params
+                    return await actions.authorizeMpp(decoded, {
+                      method: 'mpp_authorize',
+                      params: request.params,
+                    })
                   }
 
                   case 'wallet_connect': {
@@ -1039,11 +1077,6 @@ export function create(options: create.Options = {}): create.ReturnType {
     }
   }
 
-  const mpp = (() => {
-    if (options.mpp === false) return undefined
-    if (typeof options.mpp === 'object') return options.mpp
-    return {}
-  })()
   if (mpp) {
     const { mode = 'push', polyfill: polyfill_option, ...methodOptions } = mpp
     // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
@@ -1060,7 +1093,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         },
       })
     }
-    Mppx.create({
+    payments = Mppx.create({
       methods: [
         mppx_tempo({ ...methodOptions, getClient, mode }),
         mppx_tempo.subscription({ getClient }),

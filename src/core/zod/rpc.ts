@@ -339,8 +339,44 @@ export namespace wallet_getCapabilities {
             status: z.union([z.literal('supported'), z.literal('unsupported')]),
           }),
         ),
+        mpp: z.optional(
+          z.object({
+            status: z.union([z.literal('supported'), z.literal('unsupported')]),
+          }),
+        ),
       }),
     ),
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
+export namespace mpp_authorize {
+  export const parameters = z.object({
+    /** Raw `WWW-Authenticate` Payment challenge values. */
+    challenges: z.readonly(z.array(z.string()).check(z.minLength(1))),
+    /** Existing session parameters for voucher or close credentials. */
+    session: z.optional(
+      z.object({
+        /** Session action to authorize. */
+        action: z.union([z.literal('voucher'), z.literal('close')]),
+        /** Authorized signer for the session channel. */
+        authorizedSigner: u.address(),
+        /** Existing session channel id. */
+        channelId: u.hex(),
+        /** Raw cumulative amount in token base units. */
+        cumulativeAmount: z.string().check(z.regex(/^\d+$/)),
+      }),
+    ),
+  })
+
+  export const schema = Schema.defineItem({
+    method: z.literal('mpp_authorize'),
+    params: z.readonly(z.tuple([parameters])),
+    returns: z.object({
+      /** Complete HTTP Authorization header value. */
+      authorization: z.string(),
+    }),
   })
   export type Encoded = Schema.Encoded<typeof schema>
   export type Decoded = Schema.Decoded<typeof schema>

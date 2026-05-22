@@ -59,12 +59,14 @@ export const addresses = {
   alphaUsd: '0x20c0000000000000000000000000000000000001',
 } as const
 
-export const chain = (() => {
+type TempoTestChain = typeof tempoLocalnet | typeof tempoModerato
+
+export const chain: TempoTestChain = (() => {
   if (nodeEnv === 'testnet') return tempoModerato
   return defineChain({
     ...tempoLocalnet,
     rpcUrls: { default: { http: [rpcUrl] } },
-  })
+  }) as typeof tempoLocalnet
 })()
 
 export const chainId = (() => {
@@ -79,7 +81,7 @@ export const fetchOptions = {
   },
 } as const
 
-export const http = (url = rpcUrl) =>
+export const http = (url = rpcUrl): Transport =>
   viem_http(url, {
     ...debugOptions({
       rpcUrl: url,

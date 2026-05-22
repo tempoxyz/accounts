@@ -1275,32 +1275,41 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const result = await provider.request({ method: 'wallet_getCapabilities' })
       expect(result).toMatchInlineSnapshot(`
-      	{
-      	  "0x1079": {
-      	    "accessKeys": {
-      	      "status": "supported",
-      	    },
-      	    "atomic": {
-      	      "status": "supported",
-      	    },
-      	  },
-      	  "0x7a56": {
-      	    "accessKeys": {
-      	      "status": "supported",
-      	    },
-      	    "atomic": {
-      	      "status": "supported",
-      	    },
-      	  },
-      	  "0xa5bf": {
-      	    "accessKeys": {
-      	      "status": "supported",
-      	    },
-      	    "atomic": {
-      	      "status": "supported",
-      	    },
-      	  },
-      	}
+        {
+          "0x1079": {
+            "accessKeys": {
+              "status": "supported",
+            },
+            "atomic": {
+              "status": "supported",
+            },
+            "mpp": {
+              "status": "supported",
+            },
+          },
+          "0x7a56": {
+            "accessKeys": {
+              "status": "supported",
+            },
+            "atomic": {
+              "status": "supported",
+            },
+            "mpp": {
+              "status": "supported",
+            },
+          },
+          "0xa5bf": {
+            "accessKeys": {
+              "status": "supported",
+            },
+            "atomic": {
+              "status": "supported",
+            },
+            "mpp": {
+              "status": "supported",
+            },
+          },
+        }
       `)
     })
 
@@ -1320,6 +1329,9 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
               "status": "supported",
             },
             "atomic": {
+              "status": "supported",
+            },
+            "mpp": {
               "status": "supported",
             },
           },
@@ -1382,6 +1394,13 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       const result = await provider.request({ method: 'wallet_getCapabilities' })
       expect(result[Hex.fromNumber(tempo.id)]!.feePayer).toBeUndefined()
+    })
+
+    test('behavior: excludes mpp when disabled', async () => {
+      const provider = Provider.create({ adapter: adapter(), mpp: false })
+
+      const result = await provider.request({ method: 'wallet_getCapabilities' })
+      expect(result[Hex.fromNumber(tempo.id)]!.mpp).toBeUndefined()
     })
   })
 

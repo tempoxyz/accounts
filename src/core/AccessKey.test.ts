@@ -177,6 +177,72 @@ describe('add', () => {
   })
 })
 
+describe('getSigner', () => {
+  test('default: hydrates locally signable access key material', async () => {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    const keyAuthorization = createKeyAuthorization(accessKey.accessKeyAddress)
+
+    addAuthorization({
+      address: rootAddress,
+      keyAuthorization,
+      keyPair,
+      state: 'signed',
+      store,
+    })
+
+    const signer = AccessKey.getSigner({
+      account: rootAddress,
+      accessKey: accessKey.accessKeyAddress,
+      chainId: 1,
+      store,
+    })
+
+    expect({
+      accessKeyMatches: signer?.accessKeyAddress === accessKey.accessKeyAddress,
+      found: Boolean(signer),
+      rootMatches: signer?.address === rootAddress,
+    }).toMatchInlineSnapshot(`
+      {
+        "accessKeyMatches": true,
+        "found": true,
+        "rootMatches": true,
+      }
+    `)
+  })
+
+  test('behavior: removes expired access keys', async () => {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    const keyAuthorization = createKeyAuthorization(accessKey.accessKeyAddress, { expiry: 1 })
+
+    addAuthorization({
+      address: rootAddress,
+      keyAuthorization,
+      keyPair,
+      state: 'signed',
+      store,
+    })
+
+    const signer = AccessKey.getSigner({
+      account: rootAddress,
+      accessKey: accessKey.accessKeyAddress,
+      chainId: 1,
+      now: 2,
+      store,
+    })
+
+    expect({ remaining: store.getState().accessKeys.length, signer }).toMatchInlineSnapshot(`
+      {
+        "remaining": 0,
+        "signer": undefined,
+      }
+    `)
+  })
+})
+
 describe('markPublished', () => {
   test('default: clears key authorization from access key', async () => {
     const store = createStore()

@@ -9,6 +9,7 @@ import {
   local,
   privy,
   Provider,
+  Storage,
   turnkey,
   webAuthn,
 } from 'accounts'
@@ -75,10 +76,14 @@ export const host =
 export let dialogMode: DialogMode = 'iframe'
 export let mppMode: MppMode = 'push'
 export let theme: DialogNs.Theme | undefined
+const mppxFetchWrapper = Symbol.for('mppx.fetch.wrapper')
+restoreMppx()
 export let provider: ProviderValue = createProvider('tempoWallet')
 let turnkeyClient: TurnkeyClient | undefined
 let privyClient: Privy | undefined
 let privyIframeReady: Promise<void> | undefined
+let secp256k1Account: ReturnType<typeof Account.fromSecp256k1> | undefined
+type ProviderState = ReturnType<ProviderValue['store']['getState']>
 
 function mpp() {
   return {
@@ -158,37 +163,56 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     })
   }
 
-  const privateKey = generatePrivateKey()
-  const account = Account.fromSecp256k1(privateKey)
+  const account = getSecp256k1Account()
   return Provider.create({
     adapter: local({
       loadAccounts: async () => ({ accounts: [account] }),
       createAccount: async () => {
         const key = generatePrivateKey()
         const newAccount = Account.fromSecp256k1(key)
+        secp256k1Account = newAccount
         return { accounts: [newAccount] }
       },
     }),
     mpp: mpp(),
+    storage: Storage.memory(),
     testnet,
   })
 }
 
+function getSecp256k1Account() {
+  secp256k1Account ??= Account.fromSecp256k1(generatePrivateKey())
+  return secp256k1Account
+}
+
 export function switchAdapter(adapterType: AdapterType) {
-  Mppx.restore()
+  restoreMppx()
   provider = createProvider(adapterType)
 }
 
 export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 'tempoWallet') {
   dialogMode = mode
-  Mppx.restore()
+  restoreMppx()
   provider = createProvider(adapterType)
 }
 
 export function switchMppMode(mode: MppMode, adapterType: AdapterType = 'tempoWallet') {
+  const state = provider.store.getState()
   mppMode = mode
-  Mppx.restore()
+  restoreMppx()
   provider = createProvider(adapterType)
+  restoreProviderState(state)
+}
+
+function restoreProviderState(state: ProviderState) {
+  provider.store.setState({
+    accessKeys: state.accessKeys,
+    accounts: state.accounts,
+    activeAccount: state.activeAccount,
+    ...(state.auth ? { auth: state.auth } : {}),
+    chainId: state.chainId,
+    requestQueue: [],
+  })
 }
 
 function getTurnkeyAdapterClient() {
@@ -262,6 +286,16 @@ export function switchTheme(
   adapterType: AdapterType = 'tempoWallet',
 ) {
   theme = next
-  Mppx.restore()
+  restoreMppx()
   provider = createProvider(adapterType)
+}
+
+function restoreMppx() {
+  Mppx.restore()
+  let current = globalThis.fetch as typeof globalThis.fetch &
+    Record<symbol, typeof globalThis.fetch | undefined>
+  while (current[mppxFetchWrapper])
+    current = current[mppxFetchWrapper] as typeof globalThis.fetch &
+      Record<symbol, typeof globalThis.fetch | undefined>
+  globalThis.fetch = current
 }

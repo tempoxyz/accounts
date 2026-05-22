@@ -138,6 +138,37 @@ describe('Encoded', () => {
     )
   })
 
+  test('wallet_getCapabilities: mpp', () => {
+    expectTypeOf<Rpc.wallet_getCapabilities.Encoded['returns']>().toMatchTypeOf<
+      Record<
+        Hex,
+        {
+          mpp?: { status: 'supported' | 'unsupported' } | undefined
+        }
+      >
+    >()
+  })
+
+  test('mpp_authorize', () => {
+    expectTypeOf<Rpc.mpp_authorize.Encoded>().toMatchTypeOf<{
+      method: 'mpp_authorize'
+      params: readonly [
+        {
+          challenges: readonly string[]
+          session?:
+            | {
+                action: 'voucher' | 'close'
+                authorizedSigner: Hex
+                channelId: Hex
+                cumulativeAmount: string
+              }
+            | undefined
+        },
+      ]
+      returns: { authorization: string }
+    }>()
+  })
+
   test('wallet_disconnect', () => {
     expectTypeOf<Rpc.wallet_disconnect.Encoded>().toEqualTypeOf<{
       method: 'wallet_disconnect'
@@ -237,7 +268,7 @@ describe('Ox', () => {
 describe('Viem', () => {
   test('is a tuple of all provider methods', () => {
     expectTypeOf<Schema.Viem[0]['Method']>().toEqualTypeOf<'eth_accounts'>()
-    expectTypeOf<Schema.Viem[21]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
+    expectTypeOf<Schema.Viem[22]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
   })
 })
 
@@ -257,6 +288,7 @@ describe('Request', () => {
       | 'wallet_disconnect'
       | 'wallet_getCallsStatus'
       | 'wallet_getCapabilities'
+      | 'mpp_authorize'
       | 'wallet_sendCalls'
       | 'wallet_switchEthereumChain'
       | 'wallet_authorizeAccessKey'

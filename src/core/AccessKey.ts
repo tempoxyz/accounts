@@ -346,6 +346,38 @@ export async function select(options: SelectQuery): Promise<Selection | undefine
   }
 }
 
+/** Returns a locally signable access key account by address. */
+export function getSigner(options: getSigner.Options): getSigner.ReturnType {
+  const { accessKey, account, chainId, store } = options
+  const now = options.now ?? Date.now() / 1000
+  const record = list({ accessKey, account, chainId, store })[0]
+  if (!record) return undefined
+  if (isExpired(record.expiry, now)) {
+    remove({ accessKey, account, chainId, store })
+    return undefined
+  }
+  return hydrate(record)
+}
+
+export declare namespace getSigner {
+  /** Options for {@link getSigner}. */
+  type Options = {
+    /** Root account address that owns the access key. */
+    account: Address.Address
+    /** Access key address to hydrate. */
+    accessKey: Address.Address
+    /** Chain ID the access key must be authorized on. */
+    chainId: number
+    /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
+    now?: number | undefined
+    /** Reactive state store. */
+    store: Store.Store
+  }
+
+  /** Locally signable access key account, if the key material is available. */
+  type ReturnType = TempoAccount.AccessKeyAccount | undefined
+}
+
 /** Adds a signed access key authorization. */
 export function add(options: add.Options): add.ReturnType {
   const { account, authorization, keyPair, privateKey, store } = options

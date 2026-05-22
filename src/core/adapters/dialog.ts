@@ -1,11 +1,14 @@
 import { Address, Provider as ox_Provider, RpcRequest as ox_RpcRequest, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
+import { createWalletClient, custom } from 'viem'
+import { toAccount } from 'viem/accounts'
 import { z } from 'zod/mini'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
+import * as MppAuthorization from '../internal/MppAuthorization.js'
 import * as Schema from '../Schema.js'
 import type * as Store from '../Store.js'
 import * as Rpc from '../zod/rpc.js'
@@ -42,7 +45,9 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       'due to lack of WebAuthn passkey support in non-secure contexts.',
     )
 
-  return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
+  return Adapter.define({ icon, name, rdns }, (config) => {
+    const { getAccount, getClient, store } = config
+    const mpp = config.mpp
     const listeners = new Set<(requestQueue: readonly Store.QueuedRequest[]) => void>()
     const requestStore = ox_RpcRequest.createStore()
 
@@ -105,6 +110,21 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       },
       { schema: Schema.ox },
     )
+
+    function getDialogAccount(address: Address.Address) {
+      const account = toAccount(address)
+      return {
+        account,
+        getClient: (options) => {
+          const client = getClient(options)
+          return createWalletClient({
+            account,
+            chain: client.chain,
+            transport: custom(provider as never),
+          }) as never
+        },
+      } satisfies MppAuthorization.authorize.Account
+    }
 
     /**
      * Prepares a local key pair when `authorizeAccessKey` is requested without
@@ -175,6 +195,28 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       },
       forwardsAuth: true,
       actions: {
+        ...(mpp
+          ? {
+              async authorizeMpp(parameters) {
+                return await MppAuthorization.authorize({
+                  accounts: {
+                    getRootAccount: async (address) => getDialogAccount(address),
+                    getAccessKeyAccount: async ({ accessKey, chainId, root }) =>
+                      AccessKey.getSigner({
+                        accessKey,
+                        account: root,
+                        chainId,
+                        store,
+                      }),
+                  },
+                  mpp,
+                  getClient,
+                  parameters,
+                  store,
+                })
+              },
+            }
+          : {}),
         async createAccount(parameters, request) {
           const accessKey = await generateAccessKey(parameters.authorizeAccessKey)
 

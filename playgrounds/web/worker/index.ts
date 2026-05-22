@@ -148,11 +148,12 @@ export default {
       return charge(request, { amount: '0', description: 'Free proof' })
 
     if (url.pathname === '/mpp/charge/paid')
-      return charge(request, { amount: '0.01', description: 'Paid fortune' })
+      return charge(request, { amount: '0.01', description: 'Paid fortune', feePayer: false })
 
     if (url.pathname === '/mpp/session/content') {
       const result = await payment.tempo.session({
         amount: '0.01',
+        feePayer: false,
         suggestedDeposit: '0.03',
         unitType: 'request',
       })(request)
@@ -167,6 +168,7 @@ export default {
     if (url.pathname === '/mpp/session/stream') {
       const result = await payment.tempo.session({
         amount: '0.005',
+        feePayer: false,
         suggestedDeposit: '0.05',
         unitType: 'chunk',
       })(request)
