@@ -331,13 +331,14 @@ export function noop(): Remote {
  *
  * Parses against the `Schema.Request` discriminated union, checks the
  * method matches, and enforces strict parameter schemas (e.g. required
- * `limits`). On failure, rejects all pending requests via the messenger
- * and re-throws so the router can handle the error boundary.
+ * `limits`) unless `strict` is false. On failure, rejects all pending
+ * requests via the messenger and re-throws so the router can handle the
+ * error boundary.
  */
 export function validateSearch<const method extends Schema.Request['method']>(
   remote: Remote,
   search: Record<string, unknown>,
-  parameters: { method: method },
+  parameters: validateSearch.Options<method>,
 ): validateSearch.ReturnType<method> {
   const { method } = parameters
   try {
@@ -350,13 +351,14 @@ export function validateSearch<const method extends Schema.Request['method']>(
       throw new RpcResponse.InvalidParamsError({
         message: `Method mismatch: expected "${method}" but got "${result.data.method}".`,
       })
-    const strict = Rpc.strictParameters[method as keyof typeof Rpc.strictParameters]
+    const strict = parameters.strict ?? true
+    const schema_strict = Rpc.strictParameters[method as keyof typeof Rpc.strictParameters]
     const params = (search.params as readonly unknown[] | undefined)?.[0]
-    if (strict && params !== undefined) {
-      const strictResult = strict.safeParse(params)
-      if (!strictResult.success)
+    if (strict && schema_strict && params !== undefined) {
+      const result_strict = schema_strict.safeParse(params)
+      if (!result_strict.success)
         throw new RpcResponse.InvalidParamsError({
-          message: formatZodErrors(method, strictResult.error),
+          message: formatZodErrors(method, result_strict.error),
         })
     }
     return {
@@ -372,6 +374,13 @@ export function validateSearch<const method extends Schema.Request['method']>(
 }
 
 export declare namespace validateSearch {
+  type Options<method extends Schema.Request['method']> = {
+    /** Expected RPC method for this route. */
+    method: method
+    /** Whether to apply strict parameter policy validation. */
+    strict?: boolean | undefined
+  }
+
   type ReturnType<method extends Schema.Request['method']> = Extract<
     Schema.Request,
     { method: method }

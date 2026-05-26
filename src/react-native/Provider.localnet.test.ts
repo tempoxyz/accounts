@@ -79,6 +79,12 @@ function createOpen(options: { mismatchFirstCall?: boolean | undefined } = {}) {
       const callbackUrl = new URL(callback)
       callbackUrl.searchParams.set('accountAddress', root.address)
       callbackUrl.searchParams.set('keyAuthorization', KeyAuthorization.serialize(keyAuthorization))
+      const personalSign = authUrl.searchParams.get('personalSign')
+      if (personalSign) {
+        const { message } = JSON.parse(personalSign) as { message: string }
+        callbackUrl.searchParams.set('personalSignMessage', message)
+        callbackUrl.searchParams.set('signature', await root.signMessage({ message }))
+      }
       callbackUrl.searchParams.set('state', state)
       return callbackUrl.toString()
     },
@@ -134,6 +140,7 @@ describe('create', () => {
       params: [{ capabilities: { method: 'register', showDeposit: true } }],
     })
 
+    expect(new URL(browser.urls()[0]!).pathname).toMatchInlineSnapshot(`"/remote/auth/mobile"`)
     expect(new URL(browser.urls()[0]!).searchParams.get('showDeposit')).toMatchInlineSnapshot(
       `"true"`,
     )
@@ -201,5 +208,30 @@ describe('create', () => {
         "token": "USDC",
       }
     `)
+  })
+
+  test('behavior: forwards personalSign to the mobile auth URL and returns signature', async () => {
+    const browser = createOpen()
+    const provider = Provider.create({
+      authorizeAccessKey: () => ({
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }),
+      chains: [chain],
+      host: 'https://wallet-next.tempo.xyz',
+      open: browser.open,
+      redirectUri: 'accounts-playground://auth',
+      secureStorage: Storage.memory(),
+    })
+
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login', personalSign: { message: 'hello' } } }],
+    })
+
+    expect(new URL(browser.urls()[0]!).searchParams.get('personalSign')).toMatchInlineSnapshot(
+      `"{"message":"hello"}"`,
+    )
+    expect(result.accounts[0]!.capabilities.personalSign).toEqual({ message: 'hello' })
+    expect(result.accounts[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
   })
 })
