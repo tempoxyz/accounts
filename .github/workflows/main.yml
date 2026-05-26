@@ -5,24 +5,28 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
+
+permissions: {} # each job defines the minimum permissions it needs
 
 jobs:
   verify:
     name: Verify
     permissions:
-      contents: read
+      contents: read # to clone repository contents in the reusable workflow
     uses: ./.github/workflows/verify.yml
     secrets:
       VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}
 
-  changesets:
-    name: Changesets
+  version:
+    name: Version
     needs: verify
+    outputs:
+      hasChangesets: ${{ steps.changesets.outputs.hasChangesets }}
     permissions:
-      contents: write
-      id-token: write
-      pull-requests: write
+      contents: write # to create release commits through changesets/action
+      issues: write # to post issue comments through changesets/action
+      pull-requests: write # to create or update the release pull request
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -34,15 +38,45 @@ jobs:
 
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies
+        with:
+          skip-cache: 'true' # avoid cache poisoning attacks
 
-      - name: PR or publish
+      - name: Create or update release pull request
         id: changesets
         uses: changesets/action@63a615b9cd06ba9a3e6d13796c7fbcb080a60a0b # 06245a4e0a36c064a573d4150030f5ec548e4fcc
         with:
           commitMode: github-api
           title: 'chore: version packages'
           commit: 'chore: version packages'
-          publish: pnpm changeset:publish
           version: pnpm changeset:version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    name: Publish
+    if: needs.version.outputs.hasChangesets == 'false'
+    needs: version
+    permissions:
+      contents: write # to create releases and tags through changesets/action
+      id-token: write # to use npm trusted publishing through OIDC
+    runs-on: ubuntu-latest
+    environment: npm
+    timeout-minutes: 5
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # 11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
+        with:
+          skip-cache: 'true' # avoid cache poisoning attacks
+
+      - name: Publish to npm
+        uses: changesets/action@63a615b9cd06ba9a3e6d13796c7fbcb080a60a0b # 06245a4e0a36c064a573d4150030f5ec548e4fcc
+        with:
+          publish: pnpm changeset:publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
