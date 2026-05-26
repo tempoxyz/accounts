@@ -19,7 +19,7 @@ export const PATH_USD =
 
 const ONE_DAY = 24 * 60 * 60;
 const FIVE_USD = 5_000_000n;
-const PUBLIC_FEE_PAYER_RELAY = "https://accounts.tempo.xyz/relay";
+const PUBLIC_TESTNET_FEE_PAYER = "https://sponsor.moderato.tempo.xyz";
 export const SPEND_PERMISSION_LIMIT_USD = "1.00";
 export const SPEND_PERMISSION_PAYMENT_COUNT = 5;
 export const SPEND_PERMISSION_RECIPIENT =
@@ -71,7 +71,7 @@ function mppForProfile(profile: DemoProviderProfile) {
 }
 
 function feePayerForProfile(profile: DemoProviderProfile) {
-  if (profile === "feeSponsorship") return PUBLIC_FEE_PAYER_RELAY;
+  if (profile === "feeSponsorship") return PUBLIC_TESTNET_FEE_PAYER;
   return undefined;
 }
 
