@@ -33,6 +33,8 @@ const SUBSCRIPTION_PERIOD_MS = SUBSCRIPTION_PERIOD_SECONDS * 1000;
 const FEE_SPONSORSHIP_AMOUNT_USD = "1.00";
 const FEE_SPONSORSHIP_RECIPIENT =
   "0x0000000000000000000000000000000000000001" as const;
+const SWAP_AMOUNT_USD = "1";
+const ALPHA_USD = "0x20c0000000000000000000000000000000000001" as const;
 
 function currentChainId(provider: AccountsProvider) {
   const state = provider.store.getState() as unknown as {
@@ -81,6 +83,10 @@ type SponsoredTransactionReceipt = TransactionReceipt & {
 };
 
 type WalletTransferResult = {
+  receipt: TransactionReceipt;
+};
+
+type WalletSwapResult = {
   receipt: TransactionReceipt;
 };
 
@@ -679,22 +685,30 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       prompt:
         "Referencing accounts.tempo.xyz/docs/guides/swaps, add currency exchange to my app with the Accounts SDK.",
     },
-    prelude: ["Fetching best route"],
+    prelude: ["Fetching best route", "Preparing a pathUSD to alphaUSD quote"],
     Body: TradeBody,
     async run(provider) {
-      // Open the wallet's swap UI — user picks tokens. Pre-fill $0.01
-      // as the exact sell amount.
-      await provider.request({
+      await requireConnectedAccount(provider);
+      const result = (await provider.request({
         method: "wallet_swap",
         params: [
           {
-            amount: DEMO_AMOUNT_USD,
-            type: "sell",
+            amount: SWAP_AMOUNT_USD,
+            pairToken: ALPHA_USD,
             slippage: 0.005,
+            token: PATH_USD,
+            type: "sell",
           },
         ],
-      } as Parameters<typeof provider.request>[0]);
-      return { summary: "Swap submitted" };
+      } as Parameters<typeof provider.request>[0])) as WalletSwapResult;
+      const tx = result.receipt.transactionHash;
+      return {
+        summary: tx ? "Exchange submitted ·" : "Exchange submitted",
+        href: tx
+          ? `${tempoModerato.blockExplorers.default.url}/tx/${tx}`
+          : undefined,
+        hrefLabel: tx ? `tx ${shorten(tx)}` : undefined,
+      };
     },
   },
 };
