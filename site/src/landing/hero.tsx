@@ -140,7 +140,7 @@ function TopNav({
         style={navStaggerStyles[0]}
         href="/"
         aria-label="Tempo"
-        className="grid size-12 place-items-center bg-background text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-transform active:translate-y-px"
+        className="grid size-12 place-items-center bg-background text-foreground outline-none active:translate-y-px focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
       >
         <TempoLogo width={20} height={21} />
       </a>
