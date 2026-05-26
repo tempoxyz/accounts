@@ -7,7 +7,7 @@ export type DemoKind =
   | "Log In"
   | "Add Funds"
   | "Pay Once"
-  | "Pay Per Use"
+  | "Spend Permissions"
   | "Subscribe"
   | "Fee Sponsorship"
   | "Swap Currencies";
@@ -25,13 +25,44 @@ export type AccountsProvider = ReturnType<typeof Provider.create>;
 /** Network used by a landing demo step. */
 export type DemoNetwork = "mainnet" | "testnet";
 
+/** Provider capability profile needed by a landing demo step. */
+export type DemoProviderProfile = "standard" | "spendPermission";
+
 export type DemoResult = {
   /** Short human-readable result line shown in the body's `done` state. */
   summary?: string;
+  /** Whether the demo is complete and should show the next-step CTA. */
+  complete?: boolean | undefined;
   /** Optional destination for the result line, such as an explorer receipt URL. */
   href?: string | undefined;
   /** Optional text for the linked portion of the result line. */
   hrefLabel?: string | undefined;
+  /** Optional progress value for multi-step demo bodies. */
+  progressValue?: number | undefined;
+  /** Optional progress maximum for multi-step demo bodies. */
+  progressMax?: number | undefined;
+  /** Permission status for demos that authorize a spend permission. */
+  permissionState?: "active" | "removed" | undefined;
+  /** Unix timestamp when the authorized permission expires. */
+  permissionExpiresAt?: number | undefined;
+  /** Optional human-readable permission limit. */
+  permissionLimit?: string | undefined;
+  /** Human-readable amount used from the permission. */
+  permissionSpent?: string | undefined;
+  /** Raw pathUSD units used from the permission. */
+  permissionSpentUnits?: string | undefined;
+  /** Human-readable amount remaining in the permission. */
+  permissionRemaining?: string | undefined;
+  /** Optional authorized access key address. */
+  permissionAddress?: `0x${string}` | undefined;
+  /** Transaction links produced by the demo. */
+  transactions?:
+    | readonly {
+        hash: `0x${string}`;
+        href: string;
+        label: string;
+      }[]
+    | undefined;
 };
 
 /** Guide metadata attached to one landing demo step. */
@@ -77,6 +108,8 @@ export type DemoDef = {
   url: string;
   /** Network used by this demo step. */
   network: DemoNetwork;
+  /** Provider capabilities needed by this demo step. */
+  providerProfile: DemoProviderProfile;
   /** Guide metadata shown around the active demo step. */
   guide: DemoGuide;
   prelude?: string[];
@@ -92,6 +125,8 @@ export type RunContext = {
   adapter: Adapter;
   /** Variant string passed by the body's `onAction(...)` call. Used by demos with multiple CTAs (e.g., Read vs Write). */
   variant?: string;
+  /** Previous result for demos that append state across repeated actions. */
+  previousResult?: DemoResult | null | undefined;
   /** Privy hooks routed through (only relevant when adapter === "privy"). */
   privy?: {
     login: () => Promise<void>;
