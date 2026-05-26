@@ -185,6 +185,43 @@ describe('validateSearch', () => {
     expect(remote.rejectAll).toHaveBeenCalledOnce()
   })
 
+  test('strict false: validates wallet_connect with authorizeAccessKey missing policy', () => {
+    const remote = createMockRemote()
+    const result = Remote.validateSearch(
+      remote,
+      {
+        method: 'wallet_connect',
+        id: 6,
+        jsonrpc: '2.0',
+        params: [
+          {
+            capabilities: {
+              method: 'register',
+              authorizeAccessKey: { expiry: 100 },
+            },
+          },
+        ],
+      },
+      { method: 'wallet_connect', strict: false },
+    )
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "authorizeAccessKey": {
+                "expiry": 100,
+              },
+              "method": "register",
+            },
+          },
+        ],
+      }
+    `)
+    expect(remote.rejectAll).not.toHaveBeenCalled()
+  })
+
   test('strict: passes wallet_connect without authorizeAccessKey', () => {
     const remote = createMockRemote()
     const result = Remote.validateSearch(
@@ -220,6 +257,31 @@ describe('validateSearch', () => {
   - scopes: Invalid input]`,
     )
     expect(remote.rejectAll).toHaveBeenCalledOnce()
+  })
+
+  test('strict false: validates wallet_authorizeAccessKey without policy', () => {
+    const remote = createMockRemote()
+    const result = Remote.validateSearch(
+      remote,
+      {
+        method: 'wallet_authorizeAccessKey',
+        id: 8,
+        jsonrpc: '2.0',
+        params: [{ expiry: 100 }],
+      },
+      { method: 'wallet_authorizeAccessKey', strict: false },
+    )
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_authorizeAccessKey",
+        "params": [
+          {
+            "expiry": 100,
+          },
+        ],
+      }
+    `)
+    expect(remote.rejectAll).not.toHaveBeenCalled()
   })
 
   test('strict: rejects wallet_authorizeAccessKey with malformed scope', () => {

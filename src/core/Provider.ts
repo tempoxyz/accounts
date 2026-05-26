@@ -1226,16 +1226,14 @@ function isFetchWritable(): boolean {
  * `fetch(..., { credentials: 'include' })`:
  *
  * - **Browser**: `document.cookie` exists → uses the browser cookie jar.
- * - **React Native**: `navigator.product === 'ReactNative'` → uses the
- *   native cookie store.
- * - **Node / CLI**: neither — `credentials: 'include'` is a no-op.
+ * - **React Native / Node / CLI**: neither — `credentials: 'include'` is not
+ *   enough for the SDK to surface a bearer token to the caller.
  *
  * False negatives are possible (Node with `tough-cookie` shimmed in); the
  * caller can always force token mode via `auth: { returnToken: true }`.
  */
 function hasCookieJar(): boolean {
   if (typeof document !== 'undefined' && typeof document.cookie === 'string') return true
-  if (typeof navigator !== 'undefined' && navigator.product === 'ReactNative') return true
   return false
 }
 
@@ -1411,8 +1409,8 @@ async function verifyAuthMessage(
   body: { address: Address.Address; message: string; signature: Hex.Hex },
 ): Promise<{ token?: string }> {
   const url = typeof auth === 'object' ? auth.verify! : resolveAuthEndpoint(auth, 'verify')
-  // Auto-request the token in environments without a cookie jar (Node
-  // CLI). Browser / React Native let the cookie do the work; explicit
+  // Auto-request the token in environments without a cookie jar (React
+  // Native / Node / CLI). Browser lets the cookie do the work; explicit
   // `returnToken: true` always wins.
   const explicitReturnToken = typeof auth === 'object' && auth.returnToken === true
   const returnToken = explicitReturnToken || !hasCookieJar()
