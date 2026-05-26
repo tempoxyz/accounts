@@ -20,6 +20,7 @@ import {
   SPEND_PERMISSION_PAYMENT_COUNT,
   SPEND_PERMISSION_RECIPIENT,
   SPEND_PERMISSION_VALID_SECONDS,
+  spendPermissionAuthorizeAccessKey,
 } from "./sdk";
 import type { AccountsProvider, DemoDef, DemoKind, DemoResult } from "./types";
 
@@ -187,6 +188,7 @@ function spendPermissionResult(options: {
 
 export async function connectSpendPermission(provider: AccountsProvider) {
   const result = await connectWalletResult(provider, {
+    authorizeAccessKey: spendPermissionAuthorizeAccessKey(),
     authorizeDefaultAccessKey: false,
   });
   const account = result.accounts?.[0];
@@ -369,8 +371,6 @@ export const DEMO_STEPS = [
 export const DEMOS: Record<DemoKind, DemoDef> = {
   "Log In": {
     url: "wisselbank.xyz",
-    network: "mainnet",
-    providerProfile: "standard",
     guide: {
       label: "Authentication",
       href: "/docs/guides/connect-accounts",
@@ -399,8 +399,6 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Add Funds": {
     url: "wisselbank.xyz",
-    network: "mainnet",
-    providerProfile: "standard",
     guide: {
       label: "Deposits",
       href: "/docs/guides/deposits",
@@ -425,8 +423,6 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Pay Once": {
     url: "wisselbank.xyz",
-    network: "testnet",
-    providerProfile: "standard",
     guide: {
       label: "Transfers",
       href: "/docs/guides/transfers",
@@ -475,8 +471,6 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Spend Permissions": {
     url: "wisselbank.xyz",
-    network: "testnet",
-    providerProfile: "spendPermission",
     guide: {
       label: "Spend Permissions",
       href: "/docs/guides/spend-permissions",
@@ -569,8 +563,6 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   Subscribe: {
     url: "wisselbank.xyz",
-    network: "testnet",
-    providerProfile: "standard",
     guide: {
       label: "Subscriptions",
       href: "/docs/guides/subscriptions",
@@ -647,8 +639,6 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Fee Sponsorship": {
     url: "wisselbank.xyz",
-    network: "testnet",
-    providerProfile: "feeSponsorship",
     guide: {
       label: "Fee Sponsorship",
       href: "/docs/guides/fee-sponsorship",
@@ -677,8 +667,6 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
 
   "Swap Currencies": {
     url: "wisselbank.xyz",
-    network: "testnet",
-    providerProfile: "standard",
     guide: {
       label: "Exchange Currencies",
       href: "/docs/guides/swaps",

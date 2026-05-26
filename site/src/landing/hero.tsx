@@ -4,7 +4,7 @@ import { stagger, waapi, type WAAPIAnimation } from "animejs";
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { springs } from "./animation";
 import AsciiBackground from "./ascii-bg";
-import { defaultAuthorizeAccessKey, isTrustedHost } from "./demo/sdk";
+import { connectWallet } from "./demo/sdk";
 import { AgentCopyIcon, CopyIcon, DocsIcon, GithubIcon, TempoLogo } from "./icons";
 import { useTempoSession } from "./sections/useTempoSession";
 import { ThemeSwitch } from "./theme-switch";
@@ -781,8 +781,7 @@ function BalancesCard({
 // The hero's BalancesCard now leans on the shared `useTempoSession`, so
 // signing in here carries across every section on the page (and vice
 // versa). The adapter tab is illustrative for the code panel only —
-// `buildAdapter` in `demo/sdk.ts` already routes non-webAuth adapters
-// through the Tempo dialog for the actual sign-in flow.
+// the shared landing demo Wagmi config handles the actual sign-in flow.
 
 function DemoSplit() {
   const [adapter, setAdapter] = useState<Adapter>("tempoAuth");
@@ -795,26 +794,9 @@ function DemoSplit() {
 
   const signIn = () => {
     void run(async (provider) => {
-      const capabilities: Record<string, unknown> = {
-        method: "register",
-        name: "Accounts SDK",
-      };
-      if (isTrustedHost()) {
-        capabilities.authorizeAccessKey = defaultAuthorizeAccessKey();
-      }
-      const result = (await provider.request(
-        {
-          method: "wallet_connect",
-          params: [{ capabilities } as Record<string, unknown>],
-        } as Parameters<typeof provider.request>[0],
-      )) as {
-        accounts?: ReadonlyArray<{ address: `0x${string}` }>;
-      };
-      const account = result?.accounts?.[0];
+      const address = await connectWallet(provider);
       return {
-        summary: account
-          ? `Signed in · ${shorten(account.address)}`
-          : "Signed in",
+        summary: address ? `Signed in · ${shorten(address)}` : "Signed in",
       };
     });
   };

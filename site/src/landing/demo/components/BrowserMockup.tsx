@@ -284,12 +284,9 @@ export function BrowserMockup({
         : "Next example";
   const messageStyle =
     animatedMessagesDemo === demo ? undefined : messageInitialStyle;
-  const networkBadgeClass =
-    def.network === "testnet"
-      ? "bg-network-testnet-bg text-network-testnet"
-      : "bg-panel-3 text-foreground-muted";
   const needsFunding =
-    def.network === "testnet" &&
+    demo !== "Log In" &&
+    demo !== "Add Funds" &&
     accountStatus !== "checking" &&
     (!connected || connected.balance <= 0n);
   const changeDemo = (d: DemoKind) => {
@@ -398,11 +395,6 @@ export function BrowserMockup({
               </span>
             )}
           </div>
-          <span
-            className={`rounded-[2px] px-2 py-0.5 font-mono text-[12px] whitespace-nowrap sm:text-[14px] ${networkBadgeClass}`}
-          >
-            {def.network}
-          </span>
         </div>
       </div>
 

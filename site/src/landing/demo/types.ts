@@ -14,22 +14,13 @@ export type DemoKind =
 
 export type Status = "idle" | "running" | "done";
 
-/** Current account lookup state for the active demo network. */
+/** Current account lookup state for the shared demo session. */
 export type AccountStatus = "checking" | "disconnected" | "connected";
 
-/** Status for the testnet setup controls. Kept separate from demo action state. */
+/** Status for the setup controls. Kept separate from demo action state. */
 export type SetupStatus = "idle" | "connecting" | "funding";
 
 export type AccountsProvider = ReturnType<typeof Provider.create>;
-
-/** Network used by a landing demo step. */
-export type DemoNetwork = "mainnet" | "testnet";
-
-/** Provider capability profile needed by a landing demo step. */
-export type DemoProviderProfile =
-  | "standard"
-  | "spendPermission"
-  | "feeSponsorship";
 
 export type DemoResult = {
   /** Short human-readable result line shown in the body's `done` state. */
@@ -120,9 +111,9 @@ export type DemoBodyProps = {
   setupError: string | null;
   /** Whether this demo should block on account funding before its main action. */
   needsFunding: boolean;
-  /** Connects the account used by the current demo network. */
+  /** Connects the account used by the demo. */
   onSetupConnect: () => void;
-  /** Adds funds for the current demo network. */
+  /** Adds funds for the demo account. */
   onSetupFund: () => void;
   /** The variant string passed to the most recent `onAction` call, or null. */
   lastVariant: string | null;
@@ -136,10 +127,6 @@ export type DemoBodyProps = {
 
 export type DemoDef = {
   url: string;
-  /** Network used by this demo step. */
-  network: DemoNetwork;
-  /** Provider capabilities needed by this demo step. */
-  providerProfile: DemoProviderProfile;
   /** Guide metadata shown around the active demo step. */
   guide: DemoGuide;
   prelude?: readonly DemoPreludeMessage[] | undefined;

@@ -2,11 +2,7 @@
 
 import { useState } from "react";
 import { LogInBody } from "../demo/bodies/LogIn";
-import {
-  defaultAuthorizeAccessKey,
-  isTrustedHost,
-  shorten,
-} from "../demo/sdk";
+import { connectWallet, shorten } from "../demo/sdk";
 import { SectionFrame } from "./SectionFrame";
 import { TogglePills } from "./TogglePills";
 import { useTempoSession } from "./useTempoSession";
@@ -33,23 +29,9 @@ export default function Accounts() {
 
   const onSignIn = () => {
     void run(async (provider) => {
-      const capabilities: Record<string, unknown> = {
-        method: "register",
-        name: "Accounts SDK",
-      };
-      if (isTrustedHost())
-        capabilities.authorizeAccessKey = defaultAuthorizeAccessKey();
-      const r = (await provider.request({
-        method: "wallet_connect",
-        params: [{ capabilities } as Record<string, unknown>],
-      } as Parameters<typeof provider.request>[0])) as {
-        accounts?: ReadonlyArray<{ address: `0x${string}` }>;
-      };
-      const account = r?.accounts?.[0];
+      const address = await connectWallet(provider);
       return {
-        summary: account
-          ? `Signed in · ${shorten(account.address)}`
-          : "Signed in",
+        summary: address ? `Signed in · ${shorten(address)}` : "Signed in",
       };
     });
   };

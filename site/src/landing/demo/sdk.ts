@@ -1,13 +1,9 @@
-import { Provider, Storage, tempoWallet, webAuthn } from "accounts";
-import { Hex } from "ox";
 import { parseUnits } from "viem";
-import { tempo, tempoModerato } from "viem/tempo/chains";
-import type {
-  Adapter,
-  AccountsProvider,
-  DemoNetwork,
-  DemoProviderProfile,
-} from "./types";
+import { type Config, createConfig, createStorage, http } from "wagmi";
+import { tempo, tempoModerato } from "wagmi/chains";
+import { tempoWallet } from "wagmi/tempo";
+import { Storage } from "accounts";
+import type { AccountsProvider } from "./types";
 
 /** All on-chain demo CTAs sign for $0.01 — the merchant display copy is just storytelling. */
 export const DEMO_AMOUNT_USD = "0.01";
@@ -25,6 +21,13 @@ export const SPEND_PERMISSION_PAYMENT_COUNT = 5;
 export const SPEND_PERMISSION_RECIPIENT =
   "0x0000000000000000000000000000000000000001" as const;
 export const SPEND_PERMISSION_VALID_SECONDS = ONE_DAY;
+const accountsStorage = Storage.combine(
+  Storage.cookie({ key: STORAGE_KEY }),
+  Storage.localStorage({ key: STORAGE_KEY }),
+);
+const wagmiStorage = createStorage({
+  storage: typeof window === "undefined" ? undefined : window.localStorage,
+});
 
 /**
  * True when our origin shares the wallet's registrable domain (`tempo.xyz`).
@@ -65,16 +68,6 @@ export function defaultAuthorizeAccessKey() {
   } as const;
 }
 
-function mppForProfile(profile: DemoProviderProfile) {
-  if (profile === "spendPermission") return false;
-  return undefined;
-}
-
-function feePayerForProfile(profile: DemoProviderProfile) {
-  if (profile === "feeSponsorship") return PUBLIC_TESTNET_FEE_PAYER;
-  return undefined;
-}
-
 export function spendPermissionAuthorizeAccessKey() {
   return {
     expiry: Math.floor(Date.now() / 1000) + SPEND_PERMISSION_VALID_SECONDS,
@@ -93,45 +86,53 @@ export function spendPermissionAuthorizeAccessKey() {
   } as const;
 }
 
-/** Resolved colour-scheme to apply to the Tempo wallet dialog. Mirrors
- * the landing page's `data-theme` so the popup opens light/dark to match
- * the surrounding page. */
-export type DialogScheme = "light" | "dark";
+type AuthorizeAccessKey =
+  | ReturnType<typeof defaultAuthorizeAccessKey>
+  | ReturnType<typeof spendPermissionAuthorizeAccessKey>;
 
-export function buildAdapter(adapter: Adapter, scheme: DialogScheme = "dark") {
-  if (adapter === "webAuth") return webAuthn();
-  return tempoWallet({
+export const landingDemoWagmiConfig: Config = createConfig({
+  chains: [tempoModerato, tempo],
+  connectors: [
+    tempoWallet({
+      feePayer: PUBLIC_TESTNET_FEE_PAYER,
+      persistCredentials: true,
+      storage: accountsStorage,
+      testnet: true,
+      theme: { radius: "none" },
+      name: "Accounts SDK",
+    }),
+  ],
+  multiInjectedProviderDiscovery: false,
+  storage: wagmiStorage,
+  transports: {
+    [tempoModerato.id]: http(),
+    [tempo.id]: http(),
+  },
+});
+
+export async function getDemoProvider() {
+  const connector = landingDemoWagmiConfig.connectors[0];
+  if (!connector) throw new Error("Missing Tempo Wallet connector.");
+  return (await connector.getProvider()) as AccountsProvider;
+}
+
+export function connectCapabilities(options: {
+  authorizeAccessKey?: AuthorizeAccessKey | undefined;
+  authorizeDefaultAccessKey?: boolean | undefined;
+} = {}) {
+  const capabilities: Record<string, unknown> = {
+    method: "register",
     name: "Accounts SDK",
-    theme: { radius: "none", scheme },
-  });
-}
-
-/** Returns the Tempo chain used by a landing demo network. */
-export function chainForNetwork(network: DemoNetwork) {
-  if (network === "testnet") return tempoModerato;
-  return tempo;
-}
-
-function storageKeyForNetwork(network: DemoNetwork) {
-  return `${STORAGE_KEY}-${network}`;
-}
-
-/** Switches the provider to the chain backing the requested demo network. */
-export async function ensureNetwork(
-  provider: AccountsProvider,
-  network: DemoNetwork,
-) {
-  const chain = chainForNetwork(network);
-  const current = (await provider.request({
-    method: "eth_chainId",
-  } as Parameters<typeof provider.request>[0])) as number | `0x${string}`;
-  const currentId =
-    typeof current === "number" ? current : Hex.toNumber(current);
-  if (currentId === chain.id) return;
-  await provider.request({
-    method: "wallet_switchEthereumChain",
-    params: [{ chainId: Hex.fromNumber(chain.id) }],
-  } as Parameters<typeof provider.request>[0]);
+  };
+  if (options.authorizeAccessKey) {
+    capabilities.authorizeAccessKey = options.authorizeAccessKey;
+  } else if (
+    options.authorizeDefaultAccessKey !== false &&
+    isTrustedHost()
+  ) {
+    capabilities.authorizeAccessKey = defaultAuthorizeAccessKey();
+  }
+  return capabilities;
 }
 
 type WalletConnectResult = {
@@ -150,7 +151,10 @@ type WalletConnectResult = {
 /** Opens the wallet sign-in flow and returns the raw wallet_connect result. */
 export async function connectWalletResult(
   provider: AccountsProvider,
-  options: { authorizeDefaultAccessKey?: boolean | undefined } = {},
+  options: {
+    authorizeAccessKey?: AuthorizeAccessKey | undefined;
+    authorizeDefaultAccessKey?: boolean | undefined;
+  } = {},
 ) {
   // Lazy access-key co-signing — only when we're on a *.tempo.xyz
   // host. The wallet's validator bypasses the "must include scopes"
@@ -159,60 +163,25 @@ export async function connectWalletResult(
   // would either be rejected (missing scopes) or silently break
   // subsequent transactions, so we skip it and fall back to per-tx
   // confirmation prompts.
-  const capabilities: Record<string, unknown> = {
-    method: "register",
-    name: "Accounts SDK",
-  };
-  if (options.authorizeDefaultAccessKey !== false && isTrustedHost()) {
-    capabilities.authorizeAccessKey = defaultAuthorizeAccessKey();
-  }
   return (await provider.request({
     method: "wallet_connect",
-    params: [{ capabilities } as Record<string, unknown>],
+    params: [{ capabilities: connectCapabilities(options) } as Record<
+      string,
+      unknown
+    >],
   })) as WalletConnectResult;
 }
 
 /** Opens the wallet sign-in flow and returns the connected account address. */
 export async function connectWallet(
   provider: AccountsProvider,
-  options: { authorizeDefaultAccessKey?: boolean | undefined } = {},
+  options: {
+    authorizeAccessKey?: AuthorizeAccessKey | undefined;
+    authorizeDefaultAccessKey?: boolean | undefined;
+  } = {},
 ) {
   const result = await connectWalletResult(provider, options);
   return result?.accounts?.[0]?.address ?? null;
-}
-
-export function createProvider(
-  adapter: Adapter,
-  scheme: DialogScheme = "dark",
-  network: DemoNetwork = "mainnet",
-  profile: DemoProviderProfile = "standard",
-): AccountsProvider {
-  // Storage pattern lifted from wallet-next/src/lib/config.ts:
-  // cookie + localStorage is synchronous (no async hydration delay) and
-  // is what the wallet itself uses. `key` namespaces everything to this
-  // demo so multiple Tempo apps on the same domain don't collide.
-  const key = storageKeyForNetwork(network);
-  const chain = chainForNetwork(network);
-  const feePayer = feePayerForProfile(profile);
-  const mpp = mppForProfile(profile);
-  const authorizeAccessKey =
-    profile === "spendPermission"
-      ? spendPermissionAuthorizeAccessKey
-      : undefined;
-  const storage = Storage.combine(
-    Storage.cookie({ key }),
-    Storage.localStorage({ key }),
-  );
-  return Provider.create({
-    adapter: buildAdapter(adapter, scheme),
-    chains: [chain],
-    ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
-    ...(feePayer ? { feePayer } : {}),
-    ...(typeof mpp !== "undefined" ? { mpp } : {}),
-    persistCredentials: true,
-    storage,
-    testnet: network === "testnet",
-  });
 }
 
 export function shorten(addr: string) {

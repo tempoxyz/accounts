@@ -1,26 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  PATH_USD,
-  createProvider,
-  shorten,
-} from "../demo/sdk";
+import { getDemoProvider, PATH_USD, shorten } from "../demo/sdk";
 import type {
   AccountsProvider,
   DemoResult,
   Status,
 } from "../demo/types";
-import { useTheme } from "../useTheme";
 
 /**
  * Shared session state for landing sections. Mirrors the lifecycle in
- * `Demo.tsx` / `DemoSplit`'s `BalancesCard`: lazy-creates a `tempoAuth`
- * provider, hydrates from persisted cookie/localStorage on mount, then
+ * `Demo.tsx` / `DemoSplit`'s `BalancesCard`: lazy-reads the shared
+ * Tempo Wallet connector provider, hydrates from persisted storage, then
  * exposes a `run(fn)` helper that wraps an SDK call with status +
- * result + balance refresh. Storage is namespaced to `tempo-accounts-
- * demo` (see `createProvider`), so all three sections plus `DemoSplit`
- * and the browser-mockup `Demo` share one signed-in session.
+ * result + balance refresh. The shared storage namespace keeps all three
+ * sections plus `DemoSplit` and the browser-mockup `Demo` on one session.
  */
 export function useTempoSession() {
   const [status, setStatus] = useState<Status>("idle");
@@ -28,28 +22,11 @@ export function useTempoSession() {
   const [balanceDisplay, setBalanceDisplay] = useState<string | null>(null);
   const [result, setResult] = useState<DemoResult | null>(null);
   const providerRef = useRef<AccountsProvider | null>(null);
-  const providerSchemeRef = useRef<"light" | "dark" | null>(null);
-  const { resolved } = useTheme();
 
-  // Recreate the provider when the resolved landing theme flips so the
-  // wallet dialog opens in matching light/dark. The dialog adapter
-  // dedupes by host, so this just calls `syncTheme` on the cached
-  // iframe — no full reload, and storage (cookies + localStorage) is
-  // shared so the signed-in session carries over.
-  const getProvider = () => {
-    if (!providerRef.current || providerSchemeRef.current !== resolved) {
-      providerRef.current = createProvider("tempoAuth", resolved);
-      providerSchemeRef.current = resolved;
-    }
+  const getProvider = async () => {
+    providerRef.current ??= await getDemoProvider();
     return providerRef.current;
   };
-
-  useEffect(() => {
-    if (providerRef.current && providerSchemeRef.current !== resolved) {
-      providerRef.current = createProvider("tempoAuth", resolved);
-      providerSchemeRef.current = resolved;
-    }
-  }, [resolved]);
 
   const refreshBalance = async (
     p: AccountsProvider,
@@ -72,7 +49,7 @@ export function useTempoSession() {
     let cancelled = false;
     (async () => {
       try {
-        const p = getProvider();
+        const p = await getProvider();
         const accounts = (await p.request({
           method: "eth_accounts",
         })) as readonly `0x${string}`[];
@@ -101,7 +78,7 @@ export function useTempoSession() {
     if (status === "running") return;
     setStatus("running");
     try {
-      const p = getProvider();
+      const p = await getProvider();
       const r = await fn(p);
       setResult(r);
       setStatus("done");
