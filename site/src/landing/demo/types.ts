@@ -26,7 +26,10 @@ export type AccountsProvider = ReturnType<typeof Provider.create>;
 export type DemoNetwork = "mainnet" | "testnet";
 
 /** Provider capability profile needed by a landing demo step. */
-export type DemoProviderProfile = "standard" | "spendPermission";
+export type DemoProviderProfile =
+  | "standard"
+  | "spendPermission"
+  | "feeSponsorship";
 
 export type DemoResult = {
   /** Short human-readable result line shown in the body's `done` state. */
@@ -77,6 +80,10 @@ export type DemoResult = {
         label: string;
       }[]
     | undefined;
+  /** Address that paid fees for a sponsored transaction. */
+  feePayer?: `0x${string}` | string | undefined;
+  /** Human-readable fee paid by the sponsor. */
+  sponsoredFee?: string | undefined;
 };
 
 /** Guide metadata attached to one landing demo step. */

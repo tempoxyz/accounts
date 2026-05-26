@@ -30,6 +30,9 @@ const DEMO_AMOUNT_UNITS = parseUnits(DEMO_AMOUNT_USD, PATH_USD_DECIMALS);
 const SPEND_PERMISSION_LIMIT_UNITS = parseUnits(SPEND_PERMISSION_LIMIT_USD, 6);
 const SUBSCRIPTION_PERIOD_SECONDS = 10;
 const SUBSCRIPTION_PERIOD_MS = SUBSCRIPTION_PERIOD_SECONDS * 1000;
+const FEE_SPONSORSHIP_AMOUNT_USD = "1.00";
+const FEE_SPONSORSHIP_RECIPIENT =
+  "0x0000000000000000000000000000000000000001" as const;
 
 function currentChainId(provider: AccountsProvider) {
   const state = provider.store.getState() as unknown as {
@@ -68,8 +71,17 @@ type SpendPermissionRecord = {
 
 type TransactionReceipt = {
   effectiveGasPrice?: bigint | number | string | undefined;
+  feePayer?: `0x${string}` | string | undefined;
   gasUsed?: bigint | number | string | undefined;
   transactionHash?: `0x${string}` | undefined;
+};
+
+type SponsoredTransactionReceipt = TransactionReceipt & {
+  sponsoredFee?: string | undefined;
+};
+
+type WalletTransferResult = {
+  receipt: TransactionReceipt;
 };
 
 type SubscriptionCollectResponse = {
@@ -121,8 +133,19 @@ function receiptFeeUnits(receipt: TransactionReceipt) {
   );
 }
 
+function receiptFeeDisplay(receipt: TransactionReceipt) {
+  const units = receiptFeeUnits(receipt);
+  if (units <= 0n) return undefined;
+  return formatFeeUnits(units);
+}
+
 function formatUsdUnits(units: bigint) {
   return `$${Number(formatUnits(units, PATH_USD_DECIMALS)).toFixed(2)}`;
+}
+
+function formatFeeUnits(units: bigint) {
+  const value = Number(formatUnits(units, PATH_USD_DECIMALS));
+  return `$${value.toFixed(units < 10_000n ? 6 : 2)}`;
 }
 
 function spendPermissionBudget(spentUnits = 0n) {
@@ -296,6 +319,29 @@ function readCollectResponse(body: unknown): SubscriptionCollectResponse {
     receipt,
     renewed: data.renewed,
     subscriptionId: data.subscriptionId,
+  };
+}
+
+async function sendSponsoredTransfer(
+  provider: AccountsProvider,
+): Promise<SponsoredTransactionReceipt> {
+  await connectedAddress(provider);
+  const result = (await provider.request({
+    method: "wallet_transfer",
+    params: [
+      {
+        amount: FEE_SPONSORSHIP_AMOUNT_USD,
+        to: FEE_SPONSORSHIP_RECIPIENT,
+        token: PATH_USD,
+      },
+    ],
+  } as Parameters<typeof provider.request>[0])) as WalletTransferResult;
+  const receipt = result.receipt;
+  if (!receipt.feePayer) throw new Error("Fee sponsorship was not applied.");
+  const sponsoredFee = receiptFeeDisplay(receipt);
+  return {
+    ...receipt,
+    ...(sponsoredFee ? { sponsoredFee } : {}),
   };
 }
 
@@ -596,7 +642,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
   "Fee Sponsorship": {
     url: "wisselbank.xyz",
     network: "testnet",
-    providerProfile: "standard",
+    providerProfile: "feeSponsorship",
     guide: {
       label: "Fee Sponsorship",
       href: "/docs/guides/fee-sponsorship",
@@ -608,8 +654,18 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       "Approved actions can use your app's fee payer",
     ],
     Body: FeeSponsorshipBody,
-    async run() {
-      return { summary: "Sponsorship policy ready" };
+    async run(provider) {
+      const receipt = await sendSponsoredTransfer(provider);
+      const tx = receipt.transactionHash;
+      return {
+        summary: "Sponsored transfer sent",
+        feePayer: receipt.feePayer,
+        sponsoredFee: receipt.sponsoredFee,
+        href: tx
+          ? `${tempoModerato.blockExplorers.default.url}/tx/${tx}`
+          : undefined,
+        hrefLabel: tx ? `tx ${shorten(tx)}` : undefined,
+      };
     },
   },
 

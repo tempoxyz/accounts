@@ -69,6 +69,11 @@ function mppForProfile(profile: DemoProviderProfile) {
   return undefined;
 }
 
+function feePayerForProfile(profile: DemoProviderProfile) {
+  if (profile === "feeSponsorship") return "/relay";
+  return undefined;
+}
+
 export function spendPermissionAuthorizeAccessKey() {
   return {
     expiry: Math.floor(Date.now() / 1000) + SPEND_PERMISSION_VALID_SECONDS,
@@ -187,6 +192,7 @@ export function createProvider(
   // demo so multiple Tempo apps on the same domain don't collide.
   const key = storageKeyForNetwork(network);
   const chain = chainForNetwork(network);
+  const feePayer = feePayerForProfile(profile);
   const mpp = mppForProfile(profile);
   const authorizeAccessKey =
     profile === "spendPermission"
@@ -200,6 +206,7 @@ export function createProvider(
     adapter: buildAdapter(adapter, scheme),
     chains: [chain],
     ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
+    ...(feePayer ? { feePayer } : {}),
     ...(typeof mpp !== "undefined" ? { mpp } : {}),
     persistCredentials: true,
     storage,

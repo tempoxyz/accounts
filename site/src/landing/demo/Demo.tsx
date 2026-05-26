@@ -519,7 +519,7 @@ export default function Demo() {
         (profile === "spendPermission"
           ? connectSpendPermission(provider)
           : connectWallet(provider, {
-              authorizeDefaultAccessKey: true,
+              authorizeDefaultAccessKey: profile !== "feeSponsorship",
             }).then((addr) => ({ address: addr, result: null }))
         ).then(({ address, result }) => ({ addr: address, result })),
         timeout(ACTION_TIMEOUT_MS),
@@ -576,7 +576,7 @@ export default function Demo() {
             ? await connectSpendPermission(provider)
             : {
                 address: await connectWallet(provider, {
-                  authorizeDefaultAccessKey: true,
+                  authorizeDefaultAccessKey: profile !== "feeSponsorship",
                 }),
                 result: null,
               };
