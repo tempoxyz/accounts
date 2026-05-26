@@ -473,7 +473,7 @@ export function BrowserMockup({
                   pressDemo(d);
                 }}
                 onClick={() => clickDemo(d)}
-                className={`group relative flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none hover:bg-[color-mix(in_oklab,var(--panel-2)_55%,transparent)] focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 last:border-b-0 ${active ? "bg-background text-foreground" : "text-foreground-muted"}`}
+                className={`group relative flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none hover:bg-surface-hover active:bg-surface-active active:text-foreground focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 last:border-b-0 ${active ? "bg-background text-foreground" : "text-foreground-muted"}`}
               >
                 <div className="flex min-w-0 items-baseline gap-3">
                   <span
