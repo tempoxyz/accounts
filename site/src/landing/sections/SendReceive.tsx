@@ -22,6 +22,8 @@ const MODES = [
 
 type ModeId = (typeof MODES)[number]["id"];
 
+const noop = () => undefined;
+
 export default function SendReceive() {
   const [mode, setMode] = useState<ModeId>("send");
   const [destId, setDestId] = useState<DestinationId>(DESTINATIONS[0].id);
@@ -102,6 +104,12 @@ export default function SendReceive() {
             connectedBalance={balanceDisplay}
             selectedId={destId}
             onSelect={setDestId}
+            onNextDemo={noop}
+            setupStatus="idle"
+            setupError={null}
+            needsFunding={false}
+            onSetupConnect={noop}
+            onSetupFund={noop}
           />
         ) : (
           <ReceiveBody address={receiveAddress} delay={120} />

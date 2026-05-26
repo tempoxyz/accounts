@@ -19,6 +19,8 @@ const METHODS = [
 
 type MethodId = (typeof METHODS)[number]["id"];
 
+const noop = () => undefined;
+
 const INFO: Record<MethodId, { title: string; description: string }> = {
   "apple-pay": {
     title: "Apple Pay",
@@ -111,6 +113,12 @@ export default function LocalPayments() {
           selectedAmountId={amountId}
           onSelectAmount={setAmountId}
           methodLabel={INFO[method].title}
+          onNextDemo={noop}
+          setupStatus="idle"
+          setupError={null}
+          needsFunding={false}
+          onSetupConnect={noop}
+          onSetupFund={noop}
         />
       }
     />

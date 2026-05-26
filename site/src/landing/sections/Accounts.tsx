@@ -19,6 +19,8 @@ const LIFECYCLE = [
 
 type LifecycleId = (typeof LIFECYCLE)[number]["id"];
 
+const noop = () => undefined;
+
 export default function Accounts() {
   const [action, setAction] = useState<LifecycleId>("connect");
   const { status, address, result, run } = useTempoSession();
@@ -100,6 +102,12 @@ export default function Accounts() {
           adapter="tempoAuth"
           lastVariant={null}
           connectedBalance={null}
+          onNextDemo={noop}
+          setupStatus="idle"
+          setupError={null}
+          needsFunding={false}
+          onSetupConnect={noop}
+          onSetupFund={noop}
         />
       }
     />
