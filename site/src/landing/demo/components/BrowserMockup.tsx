@@ -532,7 +532,7 @@ export function BrowserMockup({
                 adapter={adapter}
                 connectedBalance={connected?.balanceDisplay ?? null}
               />
-              {status === "done" ? (
+              {status === "done" && result?.complete !== false ? (
                 <NextDemoMessage
                   key={`${demo}-next-message`}
                   label={nextCtaLabel}

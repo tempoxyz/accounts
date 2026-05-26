@@ -133,7 +133,7 @@ function spendPermissionResult(options: {
   permissionAddress?: `0x${string}` | undefined;
 } = {}): DemoResult {
   return {
-    summary: `Permission approved · $${SPEND_PERMISSION_LIMIT_USD} cap`,
+    summary: `Access key authorized · $${SPEND_PERMISSION_LIMIT_USD} cap`,
     complete: false,
     permissionAddress: options.permissionAddress,
     permissionExpiresAt:
@@ -363,8 +363,8 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         "Referencing accounts.tempo.xyz/docs/guides/spend-permissions, add spend permissions for per-use payments to my app with the Accounts SDK.",
     },
     prelude: [
-      "Approve a bounded spend permission once",
-      "Matching payments can run without another prompt",
+      "Authorize a scoped access key once",
+      "Matching transfers use that key without another prompt",
     ],
     Body: SpendPermissionsBody,
     async run(provider, ctx) {
@@ -394,7 +394,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
             ],
           } as Parameters<typeof provider.request>[0]);
         return {
-          summary: "Permission removed",
+          summary: "Access key revoked",
           complete: false,
           permissionState: "removed",
           progressMax: SPEND_PERMISSION_PAYMENT_COUNT,
@@ -430,10 +430,6 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         DEMO_AMOUNT_UNITS +
         receiptFeeUnits(receipt);
       return {
-        summary:
-          payments === 1
-            ? `Payment sent · $${DEMO_AMOUNT_USD} used`
-            : `${payments} payments sent · $${(Number(DEMO_AMOUNT_USD) * payments).toFixed(2)} used`,
         complete:
           payments >= SPEND_PERMISSION_PAYMENT_COUNT ? undefined : false,
         permissionAddress: permission?.address,

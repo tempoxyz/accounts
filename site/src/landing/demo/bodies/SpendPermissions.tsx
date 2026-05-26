@@ -11,8 +11,6 @@ import {
   useBodyAnimation,
 } from "./shared";
 
-const BAR_DELAY_MS = 240;
-
 export function SpendPermissionsBody(props: DemoBodyProps) {
   const { status, result, lastVariant, onAction, delay } = props;
   const used = result?.progressValue ?? 0;
@@ -49,24 +47,23 @@ export function SpendPermissionsBody(props: DemoBodyProps) {
 
     const animation: WAAPIAnimation = waapi.animate(el, {
       scaleX: [previousPct / 100, pct / 100],
-      delay: delay + BAR_DELAY_MS,
       ease: springs.progress,
     });
 
     return () => {
       animation.cancel();
     };
-  }, [delay, pct]);
+  }, [pct]);
 
   const buttonLabel = (() => {
     if (status === "running")
       return lastVariant?.startsWith("spend") || lastVariant === "again"
         ? "Sending…"
         : "Authorizing…";
-    if (canSend) return "Send next approved payment";
-    if (done) return "Permission used";
-    if (removedPermission) return "Authorize again";
-    return "Sign in and authorize";
+    if (canSend) return "Send approved payment";
+    if (done) return "Limit reached";
+    if (removedPermission) return "Authorize access key again";
+    return "Sign in and authorize key";
   })();
 
   return (
@@ -77,7 +74,9 @@ export function SpendPermissionsBody(props: DemoBodyProps) {
     >
       <div className="flex items-end justify-between">
         <div className="flex flex-col gap-1">
-          <p className="text-[13px] text-foreground-muted">Approved payments</p>
+          <p className="text-[13px] text-foreground-muted">
+            Access-key payments
+          </p>
           <p className="font-mono text-[28px] tabular-nums text-foreground">
             {used.toLocaleString()}
             <span className="text-foreground-subtle">
@@ -98,7 +97,7 @@ export function SpendPermissionsBody(props: DemoBodyProps) {
       </div>
 
       <p className="text-[13px] text-foreground-muted">
-        Approve a scoped access key once. Matching payments can run without
+        Authorize a scoped access key once. Matching payments can run without
         another prompt until the cap or expiry is reached.
       </p>
 
@@ -141,7 +140,7 @@ export function SpendPermissionsBody(props: DemoBodyProps) {
           label={
             status === "running" && lastVariant === "revoke"
               ? "Removing…"
-              : "Remove permission"
+              : "Revoke access key"
           }
           status={status === "running" ? "running" : "idle"}
           onClick={() => onAction("revoke")}
