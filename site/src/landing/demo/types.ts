@@ -63,6 +63,20 @@ export type DemoResult = {
         label: string;
       }[]
     | undefined;
+  /** Status for demos that activate and renew a subscription. */
+  subscriptionState?: "active" | "current" | "collected" | undefined;
+  /** Server-issued subscription identifier. */
+  subscriptionId?: string | undefined;
+  /** Millisecond timestamp when the next renewal can be collected. */
+  subscriptionNextCollectAt?: number | undefined;
+  /** Payment receipts produced by a subscription demo. */
+  subscriptionReceipts?:
+    | readonly {
+        reference: string;
+        href?: string | undefined;
+        label: string;
+      }[]
+    | undefined;
 };
 
 /** Guide metadata attached to one landing demo step. */
@@ -74,6 +88,15 @@ export type DemoGuide = {
   /** Prompt copied for agent-assisted implementation. */
   prompt: string;
 };
+
+export type DemoPreludeMessage =
+  | string
+  | {
+      before: string;
+      label: string;
+      href: string;
+      after?: string | undefined;
+    };
 
 export type DemoBodyProps = {
   status: Status;
@@ -112,7 +135,7 @@ export type DemoDef = {
   providerProfile: DemoProviderProfile;
   /** Guide metadata shown around the active demo step. */
   guide: DemoGuide;
-  prelude?: string[];
+  prelude?: readonly DemoPreludeMessage[] | undefined;
   Body: React.ComponentType<DemoBodyProps>;
   /**
    * Performs the SDK call. Receives a callable provider; resolves with an

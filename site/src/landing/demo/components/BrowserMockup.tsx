@@ -509,7 +509,7 @@ export function BrowserMockup({
                   {def.prelude?.map((m, i) => (
                     <ChatBubble
                       key={`${demo}-bubble-${i}`}
-                      text={m}
+                      message={m}
                       style={messageStyle}
                     />
                   ))}

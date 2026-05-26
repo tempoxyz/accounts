@@ -1,3 +1,4 @@
+import { Receipt } from "mppx";
 import { Hex } from "ox";
 import { formatUnits, parseUnits } from "viem";
 import { Actions } from "viem/tempo";
@@ -27,6 +28,8 @@ const TRANSFER_SELECTOR = "0xa9059cbb";
 const PATH_USD_DECIMALS = 6;
 const DEMO_AMOUNT_UNITS = parseUnits(DEMO_AMOUNT_USD, PATH_USD_DECIMALS);
 const SPEND_PERMISSION_LIMIT_UNITS = parseUnits(SPEND_PERMISSION_LIMIT_USD, 6);
+const SUBSCRIPTION_PERIOD_SECONDS = 10;
+const SUBSCRIPTION_PERIOD_MS = SUBSCRIPTION_PERIOD_SECONDS * 1000;
 
 function currentChainId(provider: AccountsProvider) {
   const state = provider.store.getState() as unknown as {
@@ -67,6 +70,12 @@ type TransactionReceipt = {
   effectiveGasPrice?: bigint | number | string | undefined;
   gasUsed?: bigint | number | string | undefined;
   transactionHash?: `0x${string}` | undefined;
+};
+
+type SubscriptionCollectResponse = {
+  receipt: Receipt.Receipt | null;
+  renewed: boolean;
+  subscriptionId: string;
 };
 
 function readPermissionExpiry(value: unknown) {
@@ -228,6 +237,66 @@ function readSpendPaymentCount(variant: string | undefined) {
   const value = Number(variant.slice("spend:".length));
   if (!Number.isInteger(value)) return 1;
   return Math.min(Math.max(value, 1), SPEND_PERMISSION_PAYMENT_COUNT);
+}
+
+async function requireConnectedAccount(provider: AccountsProvider) {
+  const accounts = (await provider.request({
+    method: "eth_accounts",
+  })) as readonly `0x${string}`[];
+  const account = accounts?.[0];
+  if (!account) throw new Error("No account connected.");
+  return account;
+}
+
+function responseBodyText(body: unknown) {
+  if (typeof body === "string") return body;
+  try {
+    return JSON.stringify(body);
+  } catch {
+    return String(body);
+  }
+}
+
+function subscriptionNextCollectAt(receipt: Receipt.Receipt) {
+  const timestamp = Date.parse(receipt.timestamp);
+  if (!Number.isFinite(timestamp)) return Date.now() + SUBSCRIPTION_PERIOD_MS;
+  return timestamp + SUBSCRIPTION_PERIOD_MS;
+}
+
+function subscriptionReceipt(label: string, receipt: Receipt.Receipt) {
+  const reference = receipt.reference;
+  return {
+    reference,
+    label: `${label} · ${shorten(reference)}`,
+    ...(reference.startsWith("0x")
+      ? { href: `${tempoModerato.blockExplorers.default.url}/tx/${reference}` }
+      : {}),
+  };
+}
+
+function readCollectResponse(body: unknown): SubscriptionCollectResponse {
+  if (!body || typeof body !== "object")
+    throw new Error("Invalid subscription collection response.");
+  const data = body as {
+    receipt?: unknown;
+    renewed?: unknown;
+    subscriptionId?: unknown;
+  };
+  if (typeof data.subscriptionId !== "string")
+    throw new Error("Missing subscription id.");
+  if (typeof data.renewed !== "boolean")
+    throw new Error("Missing renewal status.");
+  const receipt =
+    data.receipt === null || data.receipt === undefined
+      ? null
+      : Receipt.Schema.parse(data.receipt);
+  if (data.renewed && !receipt?.subscriptionId)
+    throw new Error("Missing renewal receipt.");
+  return {
+    receipt,
+    renewed: data.renewed,
+    subscriptionId: data.subscriptionId,
+  };
 }
 
 /** Ordered list of landing demo steps. */
@@ -456,31 +525,71 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       prompt:
         "Referencing accounts.tempo.xyz/docs/guides/subscriptions, add subscriptions to my app with the Accounts SDK.",
     },
-    prelude: ["Setting up monthly billing"],
+    prelude: [
+      "Checking subscription status",
+      {
+        before: "Your server will request a recurring payment authorization via ",
+        label: "MPP",
+        href: "https://mpp.dev",
+      },
+    ],
     Body: SubscribeBody,
-    async run(provider) {
-      // V1: first charge via `wallet_transfer` self-transfer. The access
-      // key authorized at sign-in (when on *.tempo.xyz) lets subsequent
-      // renewals charge silently within its limits.
-      // TODO: swap to the MPP subscription flow when the landing demo has a
-      // server-backed variant.
-      const accounts = (await provider.request({
-        method: "eth_accounts",
-      })) as readonly `0x${string}`[];
-      const self = accounts?.[0];
-      if (!self) throw new Error("No account connected.");
-      await provider.request({
-        method: "wallet_transfer",
-        params: [
-          {
-            editable: true,
-            to: self,
-            amount: DEMO_AMOUNT_USD,
-            token: "pathUsd",
-          },
-        ],
-      } as Parameters<typeof provider.request>[0]);
-      return { summary: "Subscribed · auto-renews monthly" };
+    async run(provider, ctx) {
+      const account = await requireConnectedAccount(provider);
+
+      if (ctx.variant === "collect") {
+        const subscriptionId = ctx.previousResult?.subscriptionId;
+        if (!subscriptionId) throw new Error("Subscribe before collecting.");
+        const res = await fetch("/__subscriptions/collect", {
+          body: JSON.stringify({ subscriptionId }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        });
+        const body = (await res.json().catch(() => null)) as unknown;
+        if (!res.ok)
+          throw new Error(`${res.status}: ${responseBodyText(body)}`);
+        const collection = readCollectResponse(body);
+        if (!collection.renewed)
+          return {
+            summary: "Subscription already current",
+            complete: false,
+            subscriptionId: collection.subscriptionId,
+            subscriptionNextCollectAt: Date.now() + SUBSCRIPTION_PERIOD_MS,
+            subscriptionReceipts: ctx.previousResult?.subscriptionReceipts,
+            subscriptionState: "current",
+          };
+
+        const receipt = collection.receipt;
+        if (!receipt) throw new Error("Missing renewal receipt.");
+        return {
+          summary: "Renewal collected",
+          subscriptionId: collection.subscriptionId,
+          subscriptionNextCollectAt: subscriptionNextCollectAt(receipt),
+          subscriptionReceipts: [
+            ...(ctx.previousResult?.subscriptionReceipts ?? []),
+            subscriptionReceipt("Renewal", receipt),
+          ],
+          subscriptionState: "collected",
+        };
+      }
+
+      const res = await fetch("/api/articles", {
+        headers: { "X-Subscriber": account },
+      });
+      const body = (await res.json().catch(() => null)) as unknown;
+      if (!res.ok) throw new Error(`${res.status}: ${responseBodyText(body)}`);
+      const header = res.headers.get("Payment-Receipt");
+      const receipt = header ? Receipt.deserialize(header) : undefined;
+      if (!receipt?.subscriptionId)
+        throw new Error("Missing subscription receipt.");
+      return {
+        summary: "Subscription active",
+        complete: false,
+        subscriptionId: receipt.subscriptionId,
+        subscriptionNextCollectAt: subscriptionNextCollectAt(receipt),
+        subscriptionReceipts: [subscriptionReceipt("Activation", receipt)],
+        subscriptionState: "active",
+      };
     },
   },
 

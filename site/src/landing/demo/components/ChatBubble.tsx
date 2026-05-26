@@ -1,12 +1,13 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import type { DemoPreludeMessage } from "../types";
 
 export function ChatBubble({
-  text,
+  message,
   style,
 }: {
-  text: string;
+  message: DemoPreludeMessage;
   style?: CSSProperties | undefined;
 }) {
   return (
@@ -16,7 +17,22 @@ export function ChatBubble({
       style={style}
     >
       <p className="text-[14px] break-words text-foreground sm:text-[16px] sm:whitespace-nowrap">
-        {text}
+        {typeof message === "string" ? (
+          message
+        ) : (
+          <>
+            {message.before}
+            <a
+              href={message.href}
+              target="_blank"
+              rel="noreferrer"
+              className="underline decoration-foreground-subtle underline-offset-3 outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
+            >
+              {message.label}
+            </a>
+            {message.after}
+          </>
+        )}
       </p>
     </div>
   );
