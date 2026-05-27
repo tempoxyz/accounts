@@ -2,7 +2,6 @@
 
 import { waapi, type WAAPIAnimation } from "animejs";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Link } from "vocs";
 import { springs } from "./animation";
 import AsciiBackground from "./ascii-bg";
 import { AgentCopyIcon, CopyIcon, DocsIcon, GithubIcon, TempoLogo } from "./icons";
@@ -73,13 +72,13 @@ function TopNav() {
       </a>
       <div className="flex items-center gap-7 px-3">
         <span className="inline-flex">
-          <Link
-            to="/docs"
+          <a
+            href="/docs"
             className="flex items-center gap-2 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90"
           >
             <DocsIcon />
             DOCS
-          </Link>
+          </a>
         </span>
         <span className="inline-flex">
           <a
@@ -355,8 +354,8 @@ function HeroIntro() {
       </div>
 
       <div className="mt-[-14px] flex items-center gap-5">
-        <Link
-          to="/docs"
+        <a
+          href="/docs"
           className="flex items-center gap-1.5 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90"
         >
           View docs
@@ -375,7 +374,7 @@ function HeroIntro() {
               strokeLinejoin="round"
             />
           </svg>
-        </Link>
+        </a>
         <span aria-hidden className="text-[12px] text-foreground-subtle">
           |
         </span>

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --import tsx scripts/copy-vocs-theme.ts && NODE_OPTIONS='--import tsx' vite",
-    "build": "node --import tsx scripts/copy-vocs-theme.ts && vite build",
+    "build": "node --import tsx scripts/copy-vocs-theme.ts && vite build && node --import tsx scripts/optimize-static-html.ts",
     "preview": "vite preview",
     "sync:vocs": "node --import tsx scripts/copy-vocs-theme.ts"
   },

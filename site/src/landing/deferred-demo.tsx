@@ -1,6 +1,6 @@
 "use client";
 
-import { type ComponentType, useEffect, useState } from "react";
+import { type ComponentType, useCallback, useEffect, useState } from "react";
 
 type DemoModule = {
   default: ComponentType;
@@ -49,25 +49,22 @@ function DemoPlaceholder() {
 export default function DeferredDemo() {
   const [Demo, setDemo] = useState<ComponentType | null>(null);
 
+  const load = useCallback(() => {
+    void import("./demo/Demo").then((mod: DemoModule) => {
+      setDemo(() => mod.default);
+    });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     let loaded = false;
     let timeoutHandle: number | undefined;
-    const intentEvents = [
-      "pointerdown",
-      "pointermove",
-      "keydown",
-      "touchstart",
-      "wheel",
-      "scroll",
-    ] as const;
 
     function cleanup() {
-      for (const event of intentEvents) window.removeEventListener(event, load);
       if (timeoutHandle !== undefined) window.clearTimeout(timeoutHandle);
     }
 
-    function load() {
+    function loadAfterIdle() {
       if (loaded) return;
       loaded = true;
       cleanup();
@@ -76,10 +73,7 @@ export default function DeferredDemo() {
       });
     }
 
-    for (const event of intentEvents) {
-      window.addEventListener(event, load, { passive: true, once: true });
-    }
-    timeoutHandle = window.setTimeout(load, 5000);
+    timeoutHandle = window.setTimeout(loadAfterIdle, 8000);
 
     return () => {
       cancelled = true;
@@ -87,5 +81,11 @@ export default function DeferredDemo() {
     };
   }, []);
 
-  return Demo ? <Demo /> : <DemoPlaceholder />;
+  return Demo ? (
+    <Demo />
+  ) : (
+    <div onPointerDown={load}>
+      <DemoPlaceholder />
+    </div>
+  );
 }
