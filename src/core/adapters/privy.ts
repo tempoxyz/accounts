@@ -2,11 +2,12 @@ import { Address as core_Address, Hex, Provider as ox_Provider, Secp256k1, Signa
 import { SignatureEnvelope } from 'ox/tempo'
 import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
 import type { Address, LocalAccount } from 'viem/accounts'
-import { prepareTransactionRequest, sendTransaction as viem_sendTransaction } from 'viem/actions'
+import { prepareTransactionRequest } from 'viem/actions'
 import { Actions, Transaction as TempoTransaction } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
+import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as Store from '../Store.js'
 
 const privySessionErrorCodes = new Set([
@@ -412,21 +413,53 @@ export function privy<const client extends privy.Client>(
       }
     }
 
-    function getTransactionContext(parameters: Adapter.signTransaction.Parameters) {
-      const { feePayer, ...rest } = parameters
-      const client = getClient({
+    async function prepareTransaction(parameters: Adapter.signTransaction.Parameters) {
+      const viemClient = getClient({
         chainId: parameters.chainId,
         feePayer: parameters.feePayer === true ? undefined : parameters.feePayer,
       })
+
       const state = store.getState()
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      const transaction = address
+        ? await AccessKeyTransaction.create({
+            address,
+            calls: parameters.calls,
+            chainId: parameters.chainId ?? state.chainId,
+            client: viemClient,
+            store,
+          })
+        : undefined
+      if (transaction) {
+        const { feePayer, ...rest } = parameters
+        try {
+          return await transaction.prepare({
+            ...rest,
+            ...(feePayer ? { feePayer: true } : {}),
+          })
+        } catch {}
+      }
+
+      async function sign() {
+        return await signTransaction(parameters)
+      }
+
       return {
-        address,
-        chainId: parameters.chainId ?? state.chainId,
-        client,
-        request: {
-          ...rest,
-          ...(feePayer ? { feePayer: true as const } : {}),
+        request: undefined as never,
+        sign,
+        async send() {
+          const signed = await sign()
+          return await viemClient.request({
+            method: 'eth_sendRawTransaction' as never,
+            params: [signed],
+          })
+        },
+        async sendSync() {
+          const signed = await sign()
+          return await viemClient.request({
+            method: 'eth_sendRawTransactionSync' as never,
+            params: [signed],
+          })
         },
       }
     }
@@ -567,24 +600,7 @@ export function privy<const client extends privy.Client>(
           })
         },
         async signTransaction(parameters) {
-          const { address, chainId, client, request } = getTransactionContext(parameters)
-          if (address) {
-            const account = await AccessKey.select({
-              account: address,
-              calls: parameters.calls,
-              chainId,
-              store,
-            })
-            if (account) {
-              const prepared = await prepareTransactionRequest(client, {
-                account,
-                ...request,
-                type: 'tempo',
-              } as never)
-              return await account.signTransaction(prepared as never)
-            }
-          }
-          return await signTransaction(parameters)
+          return await (await prepareTransaction(parameters)).sign()
         },
         async signTypedData(parameters) {
           const typedData = JSON.parse(parameters.data) as {
@@ -600,54 +616,10 @@ export function privy<const client extends privy.Client>(
           })
         },
         async sendTransaction(parameters) {
-          const { address, chainId, client, request } = getTransactionContext(parameters)
-          if (address) {
-            const account = await AccessKey.select({
-              account: address,
-              calls: parameters.calls,
-              chainId,
-              store,
-            })
-            if (account)
-              return await viem_sendTransaction(client, {
-                account,
-                ...request,
-                type: 'tempo',
-              } as never)
-          }
-          const signed = await signTransaction(parameters)
-          return await client.request({
-            method: 'eth_sendRawTransaction' as never,
-            params: [signed],
-          })
+          return await (await prepareTransaction(parameters)).send()
         },
         async sendTransactionSync(parameters) {
-          const { address, chainId, client, request } = getTransactionContext(parameters)
-          if (address) {
-            const account = await AccessKey.select({
-              account: address,
-              calls: parameters.calls,
-              chainId,
-              store,
-            })
-            if (account) {
-              const prepared = await prepareTransactionRequest(client, {
-                account,
-                ...request,
-                type: 'tempo',
-              } as never)
-              const signed = await account.signTransaction(prepared as never)
-              return await client.request({
-                method: 'eth_sendRawTransactionSync' as never,
-                params: [signed],
-              })
-            }
-          }
-          const signed = await signTransaction(parameters)
-          return await client.request({
-            method: 'eth_sendRawTransactionSync' as never,
-            params: [signed],
-          })
+          return await (await prepareTransaction(parameters)).sendSync()
         },
         async disconnect() {
           try {

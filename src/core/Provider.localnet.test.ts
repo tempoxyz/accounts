@@ -1813,7 +1813,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
     })
 
-    test('exceeding access key limits rejects on access key path', async () => {
+    test('exceeding access key limits falls back to root account', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
@@ -1829,13 +1829,13 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         ],
       })
 
-      // Transfer 1 PUSD — exceeds access key limit, and should not fall back.
-      await expect(
-        provider.request({
-          method: 'eth_sendTransactionSync',
-          params: [{ calls: [transferCall] }],
-        }),
-      ).rejects.toThrowError()
+      // Transfer 1 PUSD — exceeds access key limit, falls back to root account.
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      expect(receipt.status).toBe('0x1')
+      expect(receipt.from.toLowerCase()).toBe(address.toLowerCase())
     })
 
     test('behavior: access key is preserved after recoverable key-auth error', async () => {
@@ -1856,14 +1856,12 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       expect(provider.store.getState().accessKeys).toHaveLength(1)
 
-      // Transfer exceeds limit. The access-key path should reject without removing
-      // the still-valid access key.
-      await expect(
-        provider.request({
-          method: 'eth_sendTransactionSync',
-          params: [{ calls: [transferCall] }],
-        }),
-      ).rejects.toThrowError()
+      // Transfer exceeds limit — key-auth error — access key should fall back
+      // to the root account without removing the still-valid access key.
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
 
       expect(provider.store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
     })

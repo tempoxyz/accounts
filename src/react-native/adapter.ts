@@ -8,11 +8,11 @@ import {
   RpcResponse,
 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { prepareTransactionRequest, sendTransaction as viem_sendTransaction } from 'viem/actions'
 import { Actions, Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 
 import * as AccessKey from '../core/AccessKey.js'
 import * as Adapter from '../core/Adapter.js'
+import * as AccessKeyTransaction from '../core/internal/AccessKeyTransaction.js'
 import type * as Storage from '../core/Storage.js'
 
 /**
@@ -189,18 +189,32 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       return result.keyAuthorization
     }
 
-    async function getManagedTransaction(
-      parameters: Adapter.signTransaction.Parameters,
-      options: { client: ReturnType<typeof getClient> },
+    async function prepareManagedTransaction(
+      client: ReturnType<typeof getClient>,
+      parameters: AccessKeyTransaction.create.PrepareParameters,
+      options: {
+        calls?: AccessKeyTransaction.create.Options['calls'] | undefined
+        chainId?: number | undefined
+      } = {},
     ) {
-      const { client } = options
       const state = store.getState()
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
       if (!address) throw new core_Provider.DisconnectedError({ message: 'No active account.' })
       const managedKey = await loadManagedKey(address)
       if (managedKey && !(await isManagedKeyAuthorized(address, managedKey)))
         await reauthorizeManagedKey(address, managedKey)
-      return { address, chainId: parameters.chainId ?? state.chainId, client }
+      const transaction = await AccessKeyTransaction.create({
+        address,
+        calls: options.calls,
+        chainId: options.chainId ?? state.chainId,
+        client,
+        store,
+      })
+      if (!transaction)
+        throw new core_Provider.UnauthorizedError({
+          message: `Account "${address}" cannot sign with an access key.`,
+        })
+      return await transaction.prepare(parameters)
     }
 
     async function loadManagedAccount(address: Adapter.signPersonalMessage.Parameters['address']) {
@@ -367,49 +381,34 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
         async sendTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const transaction = await getManagedTransaction(parameters, { client })
-          const account = await AccessKey.select({
-            account: transaction.address,
-            calls: parameters.calls,
-            chainId: transaction.chainId,
-            store,
-          })
-          if (!account)
-            throw new core_Provider.UnauthorizedError({
-              message: `Account "${transaction.address}" cannot sign with an access key.`,
-            })
-          return await viem_sendTransaction(client, {
-            account,
-            ...rest,
-            ...(feePayer ? { feePayer: true } : {}),
-            type: 'tempo',
-          } as never)
+          const prepared = await prepareManagedTransaction(
+            client,
+            {
+              ...rest,
+              ...(feePayer ? { feePayer: true } : {}),
+            },
+            {
+              calls: parameters.calls as AccessKeyTransaction.create.Options['calls'],
+              chainId: parameters.chainId,
+            },
+          )
+          return await prepared.send()
         },
         async sendTransactionSync(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const transaction = await getManagedTransaction(parameters, { client })
-          const account = await AccessKey.select({
-            account: transaction.address,
-            calls: parameters.calls,
-            chainId: transaction.chainId,
-            store,
-          })
-          if (!account)
-            throw new core_Provider.UnauthorizedError({
-              message: `Account "${transaction.address}" cannot sign with an access key.`,
-            })
-          const prepared = await prepareTransactionRequest(client, {
-            account,
-            ...rest,
-            ...(feePayer ? { feePayer: true } : {}),
-            type: 'tempo',
-          } as never)
-          const signed = await account.signTransaction(prepared as never)
-          return await client.request({
-            method: 'eth_sendRawTransactionSync' as never,
-            params: [signed],
-          })
+          const prepared = await prepareManagedTransaction(
+            client,
+            {
+              ...rest,
+              ...(feePayer ? { feePayer: true } : {}),
+            },
+            {
+              calls: parameters.calls as AccessKeyTransaction.create.Options['calls'],
+              chainId: parameters.chainId,
+            },
+          )
+          return await prepared.sendSync()
         },
         async signPersonalMessage({ address, data }) {
           const account = await loadManagedAccount(address)
@@ -418,24 +417,18 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
         async signTransaction(parameters) {
           const { feePayer, ...rest } = parameters
           const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const transaction = await getManagedTransaction(parameters, { client })
-          const account = await AccessKey.select({
-            account: transaction.address,
-            calls: parameters.calls,
-            chainId: transaction.chainId,
-            store,
-          })
-          if (!account)
-            throw new core_Provider.UnauthorizedError({
-              message: `Account "${transaction.address}" cannot sign with an access key.`,
-            })
-          const prepared = await prepareTransactionRequest(client, {
-            account,
-            ...rest,
-            ...(feePayer ? { feePayer: true } : {}),
-            type: 'tempo',
-          } as never)
-          return await account.signTransaction(prepared as never)
+          const prepared = await prepareManagedTransaction(
+            client,
+            {
+              ...rest,
+              ...(feePayer ? { feePayer: true } : {}),
+            },
+            {
+              calls: parameters.calls as AccessKeyTransaction.create.Options['calls'],
+              chainId: parameters.chainId,
+            },
+          )
+          return await prepared.sign()
         },
         async signTypedData({ address, data }) {
           const account = await loadManagedAccount(address)

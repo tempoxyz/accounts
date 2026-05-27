@@ -294,7 +294,22 @@ export async function getStatus(options: StatusQuery): Promise<Status> {
 export async function select(
   options: SelectQuery,
 ): Promise<TempoAccount.AccessKeyAccount | undefined> {
-  return await selectRecord(options)
+  const { account, calls, chainId, store } = options
+  const now = options.now ?? Date.now() / 1000
+  const records = list({ account, chainId, store })
+
+  for (const record of records) {
+    if (!scopesMatch(record, { calls })) continue
+    if (isExpired(record.expiry, now)) {
+      remove({ accessKey: record.address, account: record.access, chainId: record.chainId, store })
+      continue
+    }
+
+    const account_accessKey = hydrate(record, store)
+    if (!account_accessKey) continue
+
+    return account_accessKey
+  }
 }
 
 function createKeyAuthorizationManager(store: Store.Store): KeyAuthorizationManager {
@@ -327,25 +342,6 @@ function createKeyAuthorizationManager(store: Store.Store): KeyAuthorizationMana
       },
     },
   })
-}
-
-async function selectRecord(options: SelectQuery): Promise<ManagedAccount | undefined> {
-  const { account, calls, chainId, store } = options
-  const now = options.now ?? Date.now() / 1000
-  const records = list({ account, chainId, store })
-
-  for (const record of records) {
-    if (!scopesMatch(record, { calls })) continue
-    if (isExpired(record.expiry, now)) {
-      remove({ accessKey: record.address, account: record.access, chainId: record.chainId, store })
-      continue
-    }
-
-    const account_accessKey = hydrate(record, store)
-    if (!account_accessKey) continue
-
-    return account_accessKey
-  }
 }
 
 /** Adds a signed access key authorization. */

@@ -9,11 +9,12 @@ import {
 } from 'ox'
 import { hashMessage, hashTypedData, isAddressEqual } from 'viem'
 import type { Address } from 'viem/accounts'
-import { prepareTransactionRequest, sendTransaction as viem_sendTransaction } from 'viem/actions'
+import { prepareTransactionRequest } from 'viem/actions'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
+import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as Store from '../Store.js'
 
 const turnkeySessionErrorCodes = new Set([
@@ -458,22 +459,23 @@ export function turnkey<const client extends turnkey.Client>(
           })
           const state = store.getState()
           const address = parameters.from ?? state.accounts[state.activeAccount]?.address
-          if (address) {
-            const account = await AccessKey.select({
-              account: address,
-              calls: parameters.calls,
-              chainId: parameters.chainId ?? state.chainId,
-              store,
-            })
-            if (account) {
-              const prepared = await prepareTransactionRequest(viemClient, {
-                account,
+          const transaction = address
+            ? await AccessKeyTransaction.create({
+                address,
+                calls: parameters.calls,
+                chainId: parameters.chainId ?? state.chainId,
+                client: viemClient,
+                store,
+              })
+            : undefined
+          if (transaction) {
+            try {
+              const prepared = await transaction.prepare({
                 ...rest,
                 ...(feePayer ? { feePayer: true } : {}),
-                type: 'tempo',
-              } as never)
-              return await account.signTransaction(prepared as never)
-            }
+              })
+              return await prepared.sign()
+            } catch {}
           }
           return await signTransaction(parameters)
         },
@@ -498,20 +500,23 @@ export function turnkey<const client extends turnkey.Client>(
           })
           const state = store.getState()
           const address = parameters.from ?? state.accounts[state.activeAccount]?.address
-          if (address) {
-            const account = await AccessKey.select({
-              account: address,
-              calls: parameters.calls,
-              chainId: parameters.chainId ?? state.chainId,
-              store,
-            })
-            if (account)
-              return await viem_sendTransaction(viemClient, {
-                account,
+          const transaction = address
+            ? await AccessKeyTransaction.create({
+                address,
+                calls: parameters.calls,
+                chainId: parameters.chainId ?? state.chainId,
+                client: viemClient,
+                store,
+              })
+            : undefined
+          if (transaction) {
+            try {
+              const prepared = await transaction.prepare({
                 ...rest,
                 ...(feePayer ? { feePayer: true } : {}),
-                type: 'tempo',
-              } as never)
+              })
+              return await prepared.send()
+            } catch {}
           }
           const signed = await signTransaction(parameters)
           return await viemClient.request({
@@ -527,26 +532,23 @@ export function turnkey<const client extends turnkey.Client>(
           })
           const state = store.getState()
           const address = parameters.from ?? state.accounts[state.activeAccount]?.address
-          if (address) {
-            const account = await AccessKey.select({
-              account: address,
-              calls: parameters.calls,
-              chainId: parameters.chainId ?? state.chainId,
-              store,
-            })
-            if (account) {
-              const prepared = await prepareTransactionRequest(viemClient, {
-                account,
+          const transaction = address
+            ? await AccessKeyTransaction.create({
+                address,
+                calls: parameters.calls,
+                chainId: parameters.chainId ?? state.chainId,
+                client: viemClient,
+                store,
+              })
+            : undefined
+          if (transaction) {
+            try {
+              const prepared = await transaction.prepare({
                 ...rest,
                 ...(feePayer ? { feePayer: true } : {}),
-                type: 'tempo',
-              } as never)
-              const signed = await account.signTransaction(prepared as never)
-              return await viemClient.request({
-                method: 'eth_sendRawTransactionSync' as never,
-                params: [signed],
               })
-            }
+              return await prepared.sendSync()
+            } catch {}
           }
           const signed = await signTransaction(parameters)
           return await viemClient.request({

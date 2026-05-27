@@ -3,7 +3,6 @@ import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
 import type { JsonRpcAccount } from 'viem/accounts'
-import { prepareTransactionRequest } from 'viem/actions'
 import { parseSiweMessage } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
@@ -14,6 +13,7 @@ import * as Account from './Account.js'
 import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
+import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Schema from './Schema.js'
 import * as Storage from './Storage.js'
@@ -306,24 +306,24 @@ export function create(options: create.Options = {}): create.ReturnType {
                                 },
                               ]
                             : undefined)
-                        const account = await AccessKey.select({
-                          account: address,
+                        const transaction = await AccessKeyTransaction.create({
+                          address,
                           calls,
                           chainId: parameters.chainId ?? state.chainId,
+                          client,
                           store,
                         })
-                        if (account) {
-                          const request = await prepareTransactionRequest(client, {
-                            account,
-                            ...parameters,
-                            chainId: parameters.chainId ?? state.chainId,
-                            from: parameters.from ?? address,
-                            ...(feePayer ? { feePayer: true } : {}),
-                            parameters: [],
-                            type: 'tempo',
-                          } as never)
-                          return await fill(request as never)
-                        }
+                        if (transaction)
+                          try {
+                            return await transaction.fill({
+                              ...parameters,
+                              chainId: parameters.chainId ?? state.chainId,
+                              from: parameters.from ?? address,
+                              ...(feePayer ? { feePayer: true } : {}),
+                            })
+                          } catch {
+                            return await fill(parameters)
+                          }
                       }
                     }
 
