@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import Customize from "./customize";
-import Demo from "./demo/Demo";
+import DeferredDemo from "./deferred-demo";
 import Footer from "./footer";
 import Guides from "./guides";
 import Hero from "./hero";
@@ -15,7 +15,7 @@ export default function Home() {
       <ThemeProvider target={rootRef}>
         <div className="mx-auto w-full max-w-[1245px]">
           <Hero>
-            <Demo />
+            <DeferredDemo />
           </Hero>
           <Customize />
           <Guides />

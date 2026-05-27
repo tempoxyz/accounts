@@ -28,6 +28,7 @@ const config: Config = defineConfig({
       McpSource.github({ repo: 'wevm/ox' }),
     ],
   },
+  renderStrategy: 'partial-static',
   rootDir: '.',
   sidebar: {
     '/': [

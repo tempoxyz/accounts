@@ -4,7 +4,7 @@ import { animate, onScroll } from "animejs";
 import { useEffect, useRef, useState } from "react";
 import { springs } from "../animation";
 import { BrowserMockup } from "./components/BrowserMockup";
-import { activeSpendPermissionResult, DEMOS } from "./config";
+import { DEMOS } from "./config";
 import {
   connectWallet,
   getDemoProvider,
@@ -49,9 +49,6 @@ const SCROLL_START_SCALE = 0.92;
 const SCROLL_LIFT_PX = 60;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const balanceChainIdForDemo = (demo: DemoKind) =>
-  demo === "Add Funds" ? TEMPO_MAINNET_CHAIN_ID : undefined;
 
 const rejectPendingRequests = (provider: AccountsProvider | null) => {
   provider?.store.setState((state) => ({
@@ -138,14 +135,12 @@ export default function Demo() {
   const [lastVariant, setLastVariant] = useState<string | null>(null);
   const [connected, setConnected] = useState<Connected | null>(null);
   const [accountStatus, setAccountStatus] =
-    useState<AccountStatus>("checking");
+    useState<AccountStatus>("disconnected");
   const providerRef = useRef<AccountsProvider | null>(null);
   const activeDemoRef = useRef<DemoKind>("Log In");
-  const statusRef = useRef<Status>("idle");
   const depositWatchRef = useRef(0);
 
   activeDemoRef.current = demo;
-  statusRef.current = status;
 
   const selectDemo = (next: DemoKind) => {
     cancelPendingRequests(providerRef.current);
@@ -218,64 +213,6 @@ export default function Demo() {
     providerRef.current ??= await getDemoProvider();
     return providerRef.current;
   };
-
-  // Hydrate the connector's persisted session. Only the Log In demo gets a
-  // "Signed in" result line; other demos stay idle and show account state in
-  // the browser chrome.
-  useEffect(() => {
-    let cancelled = false;
-    const currentDemo = demo;
-    const hydrate = async () => {
-      try {
-        const provider = await getProvider();
-        // Small delay so zustand persist middleware finishes hydrating.
-        await new Promise((r) => setTimeout(r, 150));
-        const accounts = (await provider.request({
-          method: "eth_accounts",
-        })) as readonly `0x${string}`[];
-        if (cancelled || activeDemoRef.current !== currentDemo) return;
-        const addr = accounts?.[0];
-        if (addr) {
-          await refreshBalance(provider, addr, {
-            chainId: balanceChainIdForDemo(currentDemo),
-          });
-          if (cancelled || activeDemoRef.current !== currentDemo) return;
-          setAccountStatus("connected");
-          if (currentDemo === "Log In" && statusRef.current !== "running") {
-            setResult({ summary: `Signed in · ${shorten(addr)}` });
-            setStatus("done");
-            setLastVariant(null);
-          }
-          if (
-            currentDemo === "Spend Permissions" &&
-            statusRef.current !== "running"
-          ) {
-            const permissionResult = activeSpendPermissionResult(
-              provider,
-              addr,
-            );
-            if (permissionResult) {
-              setResult(permissionResult);
-              setStatus("done");
-              setLastVariant(null);
-            }
-          }
-        } else {
-          setConnected(null);
-          setAccountStatus("disconnected");
-        }
-      } catch {
-        if (!cancelled) {
-          setConnected(null);
-          setAccountStatus("disconnected");
-        }
-      }
-    };
-    void hydrate();
-    return () => {
-      cancelled = true;
-    };
-  }, [demo]);
 
   // Suppress the React-19 dev-overlay SecurityError that fires when
   // `logComponentRender` walks props that touch the wallet iframe's
