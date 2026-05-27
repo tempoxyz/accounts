@@ -60,6 +60,7 @@ minimumReleaseAgeExclude:
   - ox
   - regen-ui
   - secretlint
+  - vocs
   - viem
   - vite-plus
   - wagmi
@@ -122,4 +123,4 @@ trustPolicyExclude:
   - undici-types@6.19.8
 
 patchedDependencies:
-  vocs@0.0.0: patches/vocs@0.0.0.patch
+  vocs@2.0.0: patches/vocs@2.0.0.patch

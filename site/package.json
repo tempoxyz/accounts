@@ -28,9 +28,9 @@
     "tsx": "catalog:",
     "viem": "catalog:",
     "vite": "catalog:",
-    "vocs": "https://pkg.pr.new/wevm/vocs@dc18ab3",
+    "vocs": "2.0.0",
     "wagmi": "catalog:",
-    "waku": "1.0.0-alpha.10"
+    "waku": "1.0.0-beta.0"
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.93",

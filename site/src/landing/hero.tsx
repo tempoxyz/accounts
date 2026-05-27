@@ -2,6 +2,7 @@
 
 import { stagger, waapi, type WAAPIAnimation } from "animejs";
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Link } from "vocs";
 import { springs } from "./animation";
 import AsciiBackground from "./ascii-bg";
 import { connectWallet } from "./demo/sdk";
@@ -150,13 +151,13 @@ function TopNav({
           style={navStaggerStyles[1]}
           className="inline-flex"
         >
-          <a
-            href="https://docs.tempo.xyz/accounts"
+          <Link
+            to="/docs"
             className="flex items-center gap-2 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90"
           >
             <DocsIcon />
             DOCS
-          </a>
+          </Link>
         </span>
         <span
           data-hero-nav-stagger
@@ -450,10 +451,8 @@ function HeroIntro({
         style={staggerStyle}
         className="mt-[-14px] flex items-center gap-5"
       >
-        <a
-          href="https://docs.tempo.xyz/accounts"
-          target="_blank"
-          rel="noreferrer"
+        <Link
+          to="/docs"
           className="flex items-center gap-1.5 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90"
         >
           View docs
@@ -472,7 +471,7 @@ function HeroIntro({
               strokeLinejoin="round"
             />
           </svg>
-        </a>
+        </Link>
         <span aria-hidden className="text-[12px] text-foreground-subtle">
           |
         </span>
