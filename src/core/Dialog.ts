@@ -81,8 +81,8 @@ export function isSafari(): boolean {
   return ua.includes('safari') && !ua.includes('chrome')
 }
 
-/** Cached iframe singleton keyed by host and theme, reused across matching setup calls. */
-let cached: { instance: Instance; key: string } | undefined
+/** Cached iframe singleton — keyed by host, reused across setup calls. */
+let cached: { host: string; instance: Instance } | undefined
 
 /** Mutable refs swapped on re-entry so the singleton always uses the latest caller's state. */
 let store: Store.Store | undefined
@@ -96,10 +96,9 @@ export function iframe(): Dialog {
 
   return define({ name: 'iframe' }, (parameters) => {
     const { host } = parameters
-    const key = getCacheKey(parameters)
 
-    // Reuse existing iframe if host and theme match, and swap the store/fallback refs.
-    if (cached && cached.key === key) {
+    // Reuse existing iframe if the host matches — just swap the store/fallback refs.
+    if (cached && cached.host === host) {
       const oldStore = store
       store = parameters.store
 
@@ -113,7 +112,7 @@ export function iframe(): Dialog {
       return cached.instance
     }
 
-    // Different host or theme: tear down old iframe and create fresh.
+    // Different host — tear down old iframe and create fresh.
     cached?.instance.destroy()
 
     store = parameters.store
@@ -400,19 +399,8 @@ export function iframe(): Dialog {
       },
     }
 
-    cached = { instance, key }
+    cached = { host, instance }
     return instance
-  })
-}
-
-function getCacheKey(parameters: SetupFn.Parameters) {
-  return JSON.stringify({
-    host: parameters.host,
-    theme: {
-      accent: parameters.theme?.accent ?? null,
-      radius: parameters.theme?.radius ?? null,
-      scheme: parameters.theme?.scheme ?? null,
-    },
   })
 }
 

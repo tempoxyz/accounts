@@ -7,7 +7,7 @@ description: Embed the Tempo Wallet auth UI in an iframe dialog element.
 
 Creates an iframe dialog that embeds the auth app in a `<dialog>` element. This is the default on most browsers in secure (HTTPS) contexts.
 
-The instance is a **host-and-theme-keyed singleton** — calling `Dialog.iframe()` repeatedly with the same `host` and theme returns the cached instance and swaps in the latest store rather than re-mounting the iframe. Switching to a different host or theme tears down the previous iframe and creates a fresh one.
+The instance is a **host-keyed singleton** — calling `Dialog.iframe()` repeatedly with the same `host` returns the cached instance and swaps in the latest store/theme rather than re-mounting the iframe. Switching to a different host tears down the previous iframe and creates a fresh one.
 
 Visual appearance is configured via [`Dialog.Theme`](/docs/api/dialogs#dialogtheme), passed through the [`dialog`](/docs/api/dialog) adapter.
 
