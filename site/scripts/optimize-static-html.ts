@@ -76,7 +76,7 @@ function deferHydration(html: string) {
     /import\("([^"]+\.js)"\)/,
     (_match, src: string) => {
       const serializedSrc = JSON.stringify(src)
-      return `(function(){var s=${serializedSrc};var loaded=false;function load(){if(loaded)return;loaded=true;import(s)}function idle(){setTimeout(load,500)}window.addEventListener('pointerdown',load,{once:true,passive:true});window.addEventListener('keydown',load,{once:true});if(document.readyState==='complete')idle();else window.addEventListener('load',idle,{once:true})})()`
+      return `(function(){var s=${serializedSrc};var loaded=false;function load(){if(loaded)return;loaded=true;import(s)}function idle(){setTimeout(load,1000)}window.addEventListener('pointerdown',load,{once:true,passive:true});window.addEventListener('keydown',load,{once:true});if(document.readyState==='complete')idle();else window.addEventListener('load',idle,{once:true})})()`
     },
   )
 }

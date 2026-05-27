@@ -58,26 +58,19 @@ export default function DeferredDemo() {
   useEffect(() => {
     let cancelled = false;
     let loaded = false;
-    let timeoutHandle: number | undefined;
 
-    function cleanup() {
-      if (timeoutHandle !== undefined) window.clearTimeout(timeoutHandle);
-    }
-
-    function loadAfterIdle() {
+    function loadDemo() {
       if (loaded) return;
       loaded = true;
-      cleanup();
       void import("./demo/Demo").then((mod: DemoModule) => {
         if (!cancelled) setDemo(() => mod.default);
       });
     }
 
-    timeoutHandle = window.setTimeout(loadAfterIdle, 0);
+    loadDemo();
 
     return () => {
       cancelled = true;
-      cleanup();
     };
   }, []);
 

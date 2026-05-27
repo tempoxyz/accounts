@@ -125,4 +125,4 @@ trustPolicyExclude:
   - undici-types@6.19.8
 
 patchedDependencies:
-  vocs@2.0.0: patches/vocs@2.0.0.patch
+  vocs@2.0.1: patches/vocs@2.0.1.patch

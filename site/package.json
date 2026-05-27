@@ -28,7 +28,7 @@
     "tsx": "catalog:",
     "viem": "catalog:",
     "vite": "catalog:",
-    "vocs": "2.0.0",
+    "vocs": "2.0.1",
     "wagmi": "catalog:",
     "waku": "1.0.0-beta.0"
   },
