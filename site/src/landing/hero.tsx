@@ -84,24 +84,8 @@ const adapterInfo: Record<Adapter, { title: string; description: string }> = {
   },
 };
 
-const agentInstructions = `Install the Tempo Accounts SDK:
-
-  npm i accounts
-
-Then create a wagmi config with the tempoWallet connector:
-
-  import { createConfig, http } from 'wagmi'
-  import { tempo } from 'wagmi/chains'
-  import { tempoWallet } from 'wagmi/connectors'
-
-  export const config = createConfig({
-    chains: [tempo],
-    connectors: [tempoWallet()],
-    transports: { [tempo.id]: http() },
-  })
-
-Docs: https://tempo.xyz/docs/accounts-sdk
-`;
+const agentInstructions =
+  "Read accounts.tempo.xyz/docs and integrate Tempo accounts into my application";
 
 function shorten(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
