@@ -75,8 +75,6 @@ function TopNav() {
         <span className="inline-flex">
           <Link
             to="/docs"
-            unstable_prefetchOnEnter={false}
-            unstable_prefetchOnView={false}
             className="flex items-center gap-2 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90"
           >
             <DocsIcon />
@@ -359,8 +357,6 @@ function HeroIntro() {
       <div className="mt-[-14px] flex items-center gap-5">
         <Link
           to="/docs"
-          unstable_prefetchOnEnter={false}
-          unstable_prefetchOnView={false}
           className="flex items-center gap-1.5 text-[12px] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-75 active:translate-y-px active:opacity-90"
         >
           View docs
