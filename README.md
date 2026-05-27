@@ -6,10 +6,10 @@
   </picture>
 </p>
 
-<p align="center"><b>Tempo Accounts SDK for Apps and Wallets building on Tempo.</b></p>
+<p align="center"><b>Tempo Accounts SDK for apps and wallets building stablecoin experiences on Tempo.</b></p>
 
 <p align="center">
-  <a href="#quick-prompt">Quick Prompt</a> · <a href="#install">Install</a> · <a href="#documentation">Documentation</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a> · <a href="#license">License</a>
+  <a href="https://accounts.tempo.xyz">Website</a> · <a href="https://accounts.tempo.xyz/docs">Docs</a> · <a href="#install">Install</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a>
 </p>
 
 ---
@@ -19,7 +19,7 @@
 Prompt your agent:
 
 ```
-Read docs.tempo.xyz/accounts and integrate Tempo Wallet into my application
+Read accounts.tempo.xyz/docs and integrate Tempo Wallet into my application
 ```
 
 ## Install
@@ -38,7 +38,7 @@ bun i accounts
 
 ## Documentation
 
-For documentation and guides, visit [docs.tempo.xyz/accounts](https://docs.tempo.xyz/accounts).
+Start at [accounts.tempo.xyz](https://accounts.tempo.xyz) for the product overview, live demos, and integration guides. The documentation lives at [accounts.tempo.xyz/docs](https://accounts.tempo.xyz/docs).
 
 ## Getting Help
 
@@ -103,7 +103,7 @@ Set `VITE_BASE_URL` to the production docs origin when using a custom domain.
 
 ### Reference Implementations
 
-The `ref-impls/` directory contains reference implementations for building on the Account SDK:
+The `ref-impls/` directory contains reference implementations for building with Tempo Accounts SDK:
 
 | Directory             | Description                                                                                                                                                                              |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
