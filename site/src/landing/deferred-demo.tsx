@@ -73,7 +73,7 @@ export default function DeferredDemo() {
       });
     }
 
-    timeoutHandle = window.setTimeout(loadAfterIdle, 8000);
+    timeoutHandle = window.setTimeout(loadAfterIdle, 1200);
 
     return () => {
       cancelled = true;
