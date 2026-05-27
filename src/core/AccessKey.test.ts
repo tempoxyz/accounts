@@ -1,13 +1,12 @@
 import { Hex, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { BaseError, encodeErrorResult, encodeFunctionResult } from 'viem'
-import { prepareTransactionRequest } from 'viem/actions'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
-import { tempoLocalnet } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 
 import { accounts } from '../../test/config.js'
 import * as AccessKey from './AccessKey.js'
+import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import * as Store from './Store.js'
 
 function createStore() {
@@ -73,43 +72,6 @@ function createMissingClient() {
   }
 }
 
-async function fillWithAccessKey(options: {
-  address: Hex.Hex
-  calls?: readonly { data?: Hex.Hex | undefined; to?: Hex.Hex | undefined }[] | undefined
-  chainId: number
-  client: { request: (request: unknown) => Promise<unknown> }
-  parameters: Record<string, unknown>
-  store: Store.Store
-}) {
-  const { address, calls, chainId, client, parameters, store } = options
-  const account = await AccessKey.select({
-    account: address,
-    calls,
-    chainId,
-    store,
-  })
-  if (!account) return undefined
-  const request = await prepareTransactionRequest(
-    client as never,
-    {
-      account,
-      ...parameters,
-      parameters: [],
-      type: 'tempo',
-    } as never,
-  )
-  return await client.request({
-    method: 'eth_fillTransaction',
-    params: [request],
-  })
-}
-
-function getStored(account: TempoAccount.AccessKeyAccount, store: Store.Store) {
-  return store
-    .getState()
-    .accessKeys.find((key) => key.address.toLowerCase() === account.accessKeyAddress.toLowerCase())
-}
-
 function addAuthorization(options: {
   address: `0x${string}`
   keyAuthorization: KeyAuthorization.Signed
@@ -127,7 +89,7 @@ function addAuthorization(options: {
   })
 }
 
-function clearStoredAuthorization(options: {
+function removeStoredAuthorization(options: {
   accessKey: `0x${string}`
   address?: `0x${string}` | undefined
   chainId?: number | undefined
@@ -181,81 +143,6 @@ describe('add', () => {
   })
 })
 
-describe('stored key authorization', () => {
-  test('default: clears key authorization from access key', async () => {
-    const store = createStore()
-    const keyPair = await WebCryptoP256.createKeyPair()
-    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
-    const keyAuthorization = createKeyAuthorization(accessKey.accessKeyAddress)
-
-    addAuthorization({
-      address: rootAddress,
-      keyAuthorization,
-      store,
-    })
-    expect(getStored(accessKey, store)?.keyAuthorization).toBeDefined()
-
-    clearStoredAuthorization({ accessKey: accessKey.accessKeyAddress, store })
-
-    expect(getStored(accessKey, store)?.keyAuthorization).toBeUndefined()
-  })
-
-  test('behavior: only clears the matching account and chain', async () => {
-    const store = createStore()
-    const keyPair = await WebCryptoP256.createKeyPair()
-    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
-    const keyAuthorization = createKeyAuthorization(accessKey.accessKeyAddress)
-    const keyAuthorization_chain = createKeyAuthorization(accessKey.accessKeyAddress, {
-      chainId: 2n,
-    })
-    const keyAuthorization_account = createKeyAuthorization(accessKey.accessKeyAddress)
-
-    addAuthorization({
-      address: rootAddress,
-      keyAuthorization,
-      store,
-    })
-    addAuthorization({
-      address: rootAddress,
-      keyAuthorization: keyAuthorization_chain,
-      store,
-    })
-    addAuthorization({
-      address: accounts[1]!.address,
-      keyAuthorization: keyAuthorization_account,
-      store,
-    })
-
-    clearStoredAuthorization({ accessKey: accessKey.accessKeyAddress, store })
-
-    expect(
-      store.getState().accessKeys.map((key) => ({
-        access: key.access,
-        chainId: key.chainId,
-        keyAuthorization: !!key.keyAuthorization,
-      })),
-    ).toMatchInlineSnapshot(`
-      [
-        {
-          "access": "${accounts[1]!.address}",
-          "chainId": 1,
-          "keyAuthorization": true,
-        },
-        {
-          "access": "${rootAddress}",
-          "chainId": 2,
-          "keyAuthorization": true,
-        },
-        {
-          "access": "${rootAddress}",
-          "chainId": 1,
-          "keyAuthorization": false,
-        },
-      ]
-    `)
-  })
-})
-
 describe('create invalidation', () => {
   async function setup(options: { other?: boolean | undefined } = {}) {
     const store = createStore()
@@ -282,21 +169,18 @@ describe('create invalidation', () => {
 
   test('behavior: preserves access key for stale-key errors', async () => {
     const { account_other, store } = await setup({ other: true })
+    const transaction = await AccessKeyTransaction.create({
+      address: rootAddress,
+      chainId: 1,
+      client: {
+        request: async () => {
+          throw createRevert('KeyNotFound')
+        },
+      } as never,
+      store,
+    })
 
-    await expect(
-      fillWithAccessKey({
-        address: rootAddress,
-        chainId: 1,
-        client: {
-          chain: tempoLocalnet,
-          request: async () => {
-            throw createRevert('KeyNotFound')
-          },
-        } as never,
-        parameters: { chainId: 1, from: rootAddress },
-        store,
-      }),
-    ).rejects.toThrowError()
+    await expect(transaction?.fill({ chainId: 1, from: rootAddress })).rejects.toThrowError()
     expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`2`)
     expect(
       store.getState().accessKeys.some((key) => key.address === account_other.accessKeyAddress),
@@ -305,41 +189,35 @@ describe('create invalidation', () => {
 
   test('behavior: preserves access key for recoverable execution errors', async () => {
     const { store } = await setup()
+    const transaction = await AccessKeyTransaction.create({
+      address: rootAddress,
+      chainId: 1,
+      client: {
+        request: async () => {
+          throw createRevert('SpendingLimitExceeded')
+        },
+      } as never,
+      store,
+    })
 
-    await expect(
-      fillWithAccessKey({
-        address: rootAddress,
-        chainId: 1,
-        client: {
-          chain: tempoLocalnet,
-          request: async () => {
-            throw createRevert('SpendingLimitExceeded')
-          },
-        } as never,
-        parameters: { chainId: 1, from: rootAddress },
-        store,
-      }),
-    ).rejects.toThrowError()
+    await expect(transaction?.fill({ chainId: 1, from: rootAddress })).rejects.toThrowError()
     expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
   })
 
   test('behavior: preserves access key for unknown errors', async () => {
     const { store } = await setup()
+    const transaction = await AccessKeyTransaction.create({
+      address: rootAddress,
+      chainId: 1,
+      client: {
+        request: async () => {
+          throw new Error('network failed')
+        },
+      } as never,
+      store,
+    })
 
-    await expect(
-      fillWithAccessKey({
-        address: rootAddress,
-        chainId: 1,
-        client: {
-          chain: tempoLocalnet,
-          request: async () => {
-            throw new Error('network failed')
-          },
-        } as never,
-        parameters: { chainId: 1, from: rootAddress },
-        store,
-      }),
-    ).rejects.toThrowError()
+    await expect(transaction?.fill({ chainId: 1, from: rootAddress })).rejects.toThrowError()
     expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
   })
 })
@@ -737,7 +615,7 @@ describe('getStatus', () => {
       keyPair,
       store,
     })
-    clearStoredAuthorization({ accessKey: accessKey.accessKeyAddress, store })
+    removeStoredAuthorization({ accessKey: accessKey.accessKeyAddress, store })
 
     const result = await AccessKey.getStatus({
       account: rootAddress,

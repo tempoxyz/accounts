@@ -1070,14 +1070,12 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         (transaction as { keyAuthorization?: { address?: string | undefined } }).keyAuthorization
           ?.address,
       ).toBe(accessKey.address)
-      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
 
       const receipt = await provider.request({
         method: 'eth_sendRawTransactionSync',
         params: [signed],
       })
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
-      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
     })
 
     test('error: throws when not connected', async () => {
@@ -2001,9 +1999,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         params: [{ from: address, ...fillTx }],
       })
       expect(result.tx.gas).toBeDefined()
-      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
-
-      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
+      expect((result.tx as { keyAuthorization?: unknown }).keyAuthorization).toBeDefined()
     })
 
     test('behavior: fills stored keyAuthorization with the active account when from is omitted', async () => {
@@ -2021,7 +2017,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         params: [fillTx],
       })
       expect(result.tx.gas).toBeDefined()
-      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
+      expect((result.tx as { keyAuthorization?: unknown }).keyAuthorization).toBeDefined()
     })
 
     test('behavior: removes stale access key and retries on error', async () => {

@@ -3,8 +3,8 @@ import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { tempoLocalnet } from 'viem/tempo/chains'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
-import * as AccessKey from '../AccessKey.js'
 import * as Dialog from '../Dialog.js'
+import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { dialog } from './dialog.js'
@@ -63,17 +63,23 @@ describe('dialog', () => {
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
     const clientRequests: unknown[] = []
     const signRequests: unknown[] = []
-    vi.spyOn(AccessKey, 'select').mockImplementation(async () => {
-      return {
-        accessKeyAddress: '0x0000000000000000000000000000000000000002',
-        address,
-        signTransaction: async (request: unknown) => {
+    vi.spyOn(AccessKeyTransaction, 'create').mockResolvedValue({
+      fill: async () => ({ capabilities: { sponsored: false }, tx: {} }),
+      prepare: async (request) => ({
+        request: request as never,
+        send: async () => {
+          signRequests.push(request)
+          clientRequests.push({ method: 'eth_sendRawTransaction', params: ['0xsigned'] })
+          return '0xtransaction'
+        },
+        sendSync: async () => {
+          throw new Error('unexpected sendSync')
+        },
+        sign: async () => {
           signRequests.push(request)
           return '0xsigned'
         },
-        source: 'accessKey',
-        type: 'local',
-      } as never
+      }),
     })
     const adapter = dialog({ dialog: Dialog.noop() })({
       getAccount: () => {
@@ -197,7 +203,6 @@ describe('dialog', () => {
   test('behavior: sendTransaction falls through when no access key is selected', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
-    vi.spyOn(AccessKey, 'select').mockResolvedValue(undefined)
     const lookups: unknown[] = []
     const adapter = dialog({ dialog: Dialog.noop() })({
       getAccount: (options) => {
@@ -454,7 +459,6 @@ describe('dialog', () => {
   test('error: wallet validation errors keep their RPC code', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
-    vi.spyOn(AccessKey, 'select').mockResolvedValue(undefined)
     const adapter = dialog({ dialog: Dialog.noop() })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
