@@ -5,7 +5,7 @@ description: Connect enterprise auth and signing systems to Tempo accounts.
 
 # Bring Your Auth
 
-Bring your own authentication and signing infrastructure, then expose it to app code through an Accounts SDK adapter.
+Bring your own authentication and signing infrastructure, then expose it to app code through a Tempo Accounts SDK adapter.
 
 This path is for teams that already have user identity, compliance, custody, or signing requirements that should remain outside Tempo Wallet.
 
@@ -23,7 +23,7 @@ This path is for teams that already have user identity, compliance, custody, or 
 ```mermaid
 flowchart LR
     App["App"]
-    SDK["Accounts SDK"]
+    SDK["Tempo Accounts SDK"]
     Adapter["Custom adapter"]
     Auth["Auth/session system"]
     Signer["Signer infrastructure"]

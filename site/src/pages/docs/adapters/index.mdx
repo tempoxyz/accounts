@@ -1,6 +1,6 @@
 ---
 title: Adapters
-description: Choose the signing adapter for your Accounts SDK integration.
+description: Choose the signing adapter for your Tempo Accounts SDK integration.
 ---
 
 import { Cards, Card } from 'vocs'
@@ -9,7 +9,7 @@ import { Cards, Card } from 'vocs'
 
 ## Overview
 
-Adapters decide where keys live, who runs authentication, and how account requests are approved. Your app talks to the Accounts SDK through one provider surface while the adapter handles signing.
+Adapters decide where keys live, who runs authentication, and how account requests are approved. Your app talks to the Tempo Accounts SDK through one provider surface while the adapter handles signing.
 
 | Adapter                                     | Who owns auth       | Best for                                                                            |
 | ------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------- |
@@ -23,7 +23,7 @@ Adapters decide where keys live, who runs authentication, and how account reques
 ```mermaid
 sequenceDiagram
     participant App
-    participant SDK as Accounts SDK
+    participant SDK as Tempo Accounts SDK
     participant Adapter
     participant Signer
 

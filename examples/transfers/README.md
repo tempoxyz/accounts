@@ -1,6 +1,6 @@
 # Transfers Example
 
-Two ways to transfer from a Tempo account using the Accounts SDK:
+Two ways to transfer from a Tempo account using the Tempo Accounts SDK:
 
 | Category                       | Mechanism                       | What it does                                                                                                   |
 | ------------------------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -36,7 +36,7 @@ See `src/App.tsx` for the client-side implementation.
 ### Server-initiated transfers
 
 `GET /api/transfer` responds with HTTP `402 Payment Required` and a challenge
-describing the amount, currency, and recipient. The Accounts SDK automatically
+describing the amount, currency, and recipient. The Tempo Accounts SDK automatically
 intercepts the 402 response, signs and broadcasts a pathUSD transfer with the
 connected account, and retries the original request with the credential
 attached — no extra client-side wiring required.

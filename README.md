@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-<p align="center"><b>Accounts SDK for Apps and Wallets building on Tempo.</b></p>
+<p align="center"><b>Tempo Accounts SDK for Apps and Wallets building on Tempo.</b></p>
 
 <p align="center">
   <a href="#quick-prompt">Quick Prompt</a> · <a href="#install">Install</a> · <a href="#documentation">Documentation</a> · <a href="#examples">Examples</a> · <a href="#development">Development</a> · <a href="#license">License</a>
@@ -42,7 +42,7 @@ For documentation and guides, visit [docs.tempo.xyz/accounts](https://docs.tempo
 
 ## Getting Help
 
-Have questions or building something cool with the Accounts SDK?
+Have questions or building something cool with the Tempo Accounts SDK?
 
 Join the Telegram group to chat with the team and other devs: [@mpp_devs](https://t.me/mpp_devs)
 

@@ -1,11 +1,11 @@
 # MPP Example
 
 Demonstrates [Machine Payment Protocol (MPP)](https://mpp.dev) integration with
-the Accounts SDK. The browser auto-pays HTTP `402 Payment Required` challenges
+the Tempo Accounts SDK. The browser auto-pays HTTP `402 Payment Required` challenges
 served by a [Hono](https://hono.dev/) server using the
 [`mppx/hono`](https://github.com/wevm/mppx) middleware.
 
-MPP support is enabled by default on the Accounts SDK provider — no extra
+MPP support is enabled by default on the Tempo Accounts SDK provider — no extra
 client-side configuration is required.
 
 ## Intents

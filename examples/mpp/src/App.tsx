@@ -12,8 +12,8 @@ export default function App() {
     <div>
       <h1>MPP Example</h1>
       <p>
-        Demonstrates the Accounts SDK auto-paying HTTP <code>402 Payment Required</code> responses
-        served by a Hono server using <code>mppx/hono</code> middleware.
+        Demonstrates the Tempo Accounts SDK auto-paying HTTP <code>402 Payment Required</code>{' '}
+        responses served by a Hono server using <code>mppx/hono</code> middleware.
       </p>
 
       <h2>Connection</h2>

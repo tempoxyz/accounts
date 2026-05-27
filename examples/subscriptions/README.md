@@ -26,7 +26,7 @@ some pathUSD, then click **GET /api/articles** to subscribe.
 `GET /api/articles` is gated by `mppx.subscription({})` from the
 [`mppx/hono`](https://github.com/wevm/mppx) middleware. The first request
 responds with a `402 Payment Required` challenge describing the subscription
-plan (amount, currency, recipient, period, expiry). The Accounts SDK
+plan (amount, currency, recipient, period, expiry). The Tempo Accounts SDK
 automatically:
 
 1. Asks the wallet to authorize a recurring access key bound to the plan via

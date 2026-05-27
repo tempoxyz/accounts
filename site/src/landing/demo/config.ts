@@ -401,7 +401,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       label: "Authentication",
       href: "/docs/guides/connect-accounts",
       prompt:
-        "Referencing accounts.tempo.xyz/docs/guides/connect-accounts, add account sign-in to my app with the Accounts SDK.",
+        "Referencing accounts.tempo.xyz/docs/guides/connect-accounts, add account sign-in to my app with the Tempo Accounts SDK.",
     },
     prelude: [
       "Looks like you're new here",
@@ -429,7 +429,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       label: "Deposits",
       href: "/docs/guides/deposits",
       prompt:
-        "Referencing accounts.tempo.xyz/docs/guides/deposits, add deposits to my app with the Accounts SDK.",
+        "Referencing accounts.tempo.xyz/docs/guides/deposits, add deposits to my app with the Tempo Accounts SDK.",
     },
     prelude: ["Top up your account"],
     Body: OnRampBody,
@@ -456,7 +456,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       label: "Transfers",
       href: "/docs/guides/transfers",
       prompt:
-        "Referencing accounts.tempo.xyz/docs/guides/transfers, add one-time transfers to my app with the Accounts SDK.",
+        "Referencing accounts.tempo.xyz/docs/guides/transfers, add one-time transfers to my app with the Tempo Accounts SDK.",
     },
     prelude: [
       "We are processing your request to upgrade your dev account",
@@ -504,7 +504,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       label: "Spend Permissions",
       href: "/docs/guides/spend-permissions",
       prompt:
-        "Referencing accounts.tempo.xyz/docs/guides/spend-permissions, add spend permissions for per-use payments to my app with the Accounts SDK.",
+        "Referencing accounts.tempo.xyz/docs/guides/spend-permissions, add spend permissions for per-use payments to my app with the Tempo Accounts SDK.",
     },
     prelude: [
       "Authorize a scoped access key once",
@@ -600,7 +600,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       label: "Subscriptions",
       href: "/docs/guides/subscriptions",
       prompt:
-        "Referencing accounts.tempo.xyz/docs/guides/subscriptions, add subscriptions to my app with the Accounts SDK.",
+        "Referencing accounts.tempo.xyz/docs/guides/subscriptions, add subscriptions to my app with the Tempo Accounts SDK.",
     },
     prelude: [
       "Checking subscription status",
@@ -688,7 +688,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       label: "Fee Sponsorship",
       href: "/docs/guides/fee-sponsorship",
       prompt:
-        "Referencing accounts.tempo.xyz/docs/guides/fee-sponsorship, add fee sponsorship to my app with the Accounts SDK.",
+        "Referencing accounts.tempo.xyz/docs/guides/fee-sponsorship, add fee sponsorship to my app with the Tempo Accounts SDK.",
     },
     prelude: [
       "Checking sponsorship policy",
@@ -716,7 +716,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       label: "Exchange Currencies",
       href: "/docs/guides/swaps",
       prompt:
-        "Referencing accounts.tempo.xyz/docs/guides/swaps, add currency exchange to my app with the Accounts SDK.",
+        "Referencing accounts.tempo.xyz/docs/guides/swaps, add currency exchange to my app with the Tempo Accounts SDK.",
     },
     prelude: ["Fetching best route", "Preparing a pathUSD to alphaUSD quote"],
     Body: TradeBody,

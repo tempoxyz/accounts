@@ -12,7 +12,7 @@ import * as Steps from '../../../components/Steps'
 
 # Subscriptions
 
-Subscriptions let your server charge a recurring amount after the user approves the plan once. The first request returns an HTTP `402 Payment Required` challenge, and the Accounts SDK fulfills it from the connected account.
+Subscriptions let your server charge a recurring amount after the user approves the plan once. The first request returns an HTTP `402 Payment Required` challenge, and the Tempo Accounts SDK fulfills it from the connected account.
 
 After activation, your server can serve requests during the current billing period without asking for another confirmation. When the next period is due, a worker, cron job, or request handler can collect the next payment.
 
@@ -134,7 +134,7 @@ For local testing, set `periodCount: 10` and `periodUnit: 'dev_second'`. Product
 
 ### Call the Route from the Client
 
-Use `fetch` normally. The Accounts SDK handles the `402`, asks the user to approve the subscription, and retries the request with the signed credential.
+Use `fetch` normally. The Tempo Accounts SDK handles the `402`, asks the user to approve the subscription, and retries the request with the signed credential.
 
 ```tsx twoslash [Articles.tsx]
 // @noErrors

@@ -93,7 +93,7 @@ export const landingDemoWagmiConfig: Config = createConfig({
       storage: accountsStorage,
       testnet: true,
       theme: { radius: "none" },
-      name: "Accounts SDK",
+      name: "Tempo Accounts SDK",
     }),
   ],
   multiInjectedProviderDiscovery: false,

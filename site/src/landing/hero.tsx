@@ -75,12 +75,12 @@ const adapterInfo: Record<Adapter, { title: string; description: string }> = {
   privy: {
     title: "Privy Adapter",
     description:
-      "Bring your own auth: route sign-in through Privy's embedded wallets while keeping the Accounts SDK's wagmi-compatible surface. Falls back to the Tempo dialog when Privy is unavailable.",
+      "Bring your own auth: route sign-in through Privy's embedded wallets while keeping the Tempo Accounts SDK's wagmi-compatible surface. Falls back to the Tempo dialog when Privy is unavailable.",
   },
   turnkey: {
     title: "Turnkey Adapter",
     description:
-      "Bring your own signing infrastructure: delegate key management and approvals to Turnkey while the Accounts SDK exposes the same wagmi-compatible surface to your app.",
+      "Bring your own signing infrastructure: delegate key management and approvals to Turnkey while the Tempo Accounts SDK exposes the same wagmi-compatible surface to your app.",
   },
 };
 
@@ -349,7 +349,7 @@ function HeroIntro({
           style={staggerStyle}
           className="text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-5xl sm:whitespace-nowrap"
         >
-          The Accounts SDK
+          Tempo Accounts SDK
         </h1>
         <p
           data-hero-stagger
@@ -813,7 +813,7 @@ function DemoSplit() {
           className="max-w-[520px] text-[16px] text-foreground-muted sm:text-[20px]"
           style={{ animation: `fadeUp 600ms ${easeOut} 80ms both` }}
         >
-          Accounts SDK is provider-agnostic. Bring your own wallet. Keep the same SDK.
+          Tempo Accounts SDK is provider-agnostic. Bring your own wallet. Keep the same SDK.
         </p>
       </div>
       <div

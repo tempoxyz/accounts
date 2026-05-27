@@ -683,7 +683,7 @@ export default function Customize() {
           Customize to <br className="sm:hidden" /> match your app
         </h2>
         <p className="max-w-[600px] text-[16px] text-foreground-muted sm:text-[18px]">
-          The Accounts SDK ships with full control on customizability to allow
+          Tempo Accounts SDK ships with full control on customizability to allow
           you to design embed like your native styles.
         </p>
         <div className="mt-5">

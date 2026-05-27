@@ -32,7 +32,7 @@ const config: Config = defineConfig({
   sidebar: {
     '/': [
       {
-        text: 'Accounts SDK',
+        text: 'Tempo Accounts SDK',
         items: [
           { text: 'Getting Started', link: '/docs' },
           { text: 'Deploying to Production', link: '/docs/production' },
@@ -214,8 +214,8 @@ const config: Config = defineConfig({
       link: 'https://github.com/tempoxyz/accounts',
     },
   ],
-  title: 'Accounts SDK',
-  titleTemplate: '%s | Accounts SDK',
+  title: 'Tempo Accounts SDK',
+  titleTemplate: '%s | Tempo Accounts SDK',
   topNav: [
     { text: 'Docs', link: '/docs' },
     { text: 'Examples', link: 'https://github.com/tempoxyz/accounts/tree/main/examples' },

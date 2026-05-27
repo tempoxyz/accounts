@@ -10,7 +10,7 @@ const privateKey =
 const relay = Handler.relay({
   feePayer: {
     account: privateKeyToAccount(privateKey as `0x${string}`),
-    name: 'Accounts SDK Demo',
+    name: 'Tempo Accounts SDK Demo',
     url: 'https://accounts.tempo.xyz',
     validate: (request) => {
       const calls = request.calls

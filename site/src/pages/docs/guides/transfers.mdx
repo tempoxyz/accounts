@@ -17,7 +17,7 @@ Send stablecoin transfers from a connected Tempo account using the [Tempo Accoun
 There are two common ways to move value out of a connected account:
 
 - **User-initiated transfers**: your UI calls `wallet_transfer` and the connected account signs and broadcasts a stablecoin transfer.
-- **Server-initiated transfers**: your server responds with HTTP `402 Payment Required` using the [Machine Payments Protocol (MPP)](https://mpp.dev) [charge method](https://mpp.dev/payment-methods/tempo/charge), describing the amount, currency, and recipient. The Accounts SDK auto-fulfills the challenge from the connected account and retries the request, so your client code stays a plain `fetch`.
+- **Server-initiated transfers**: your server responds with HTTP `402 Payment Required` using the [Machine Payments Protocol (MPP)](https://mpp.dev) [charge method](https://mpp.dev/payment-methods/tempo/charge), describing the amount, currency, and recipient. The Tempo Accounts SDK auto-fulfills the challenge from the connected account and retries the request, so your client code stays a plain `fetch`.
 
 <Tabs stateKey="transfer-mode">
 
@@ -241,7 +241,7 @@ export default app
 
 ### Call It from the Client
 
-No extra client code is required. Use `fetch` (or any HTTP client) the same way you would for any other endpoint. The Accounts SDK transparently handles the `402`, signs a transfer with the connected account, and replays the request.
+No extra client code is required. Use `fetch` (or any HTTP client) the same way you would for any other endpoint. The Tempo Accounts SDK transparently handles the `402`, signs a transfer with the connected account, and replays the request.
 
 ```tsx twoslash [Charge.tsx]
 // @noErrors
