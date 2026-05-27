@@ -44,7 +44,7 @@ export default defineConfig(({ command }) => {
   return {
     ...(dev ? { define: disableUserTiming } : {}),
     optimizeDeps: {
-      include: ['mermaid'],
+      include: ['mermaid', 'vocs > @codesandbox/sandpack-react > anser'],
       ...(dev
         ? {
             esbuildOptions: {

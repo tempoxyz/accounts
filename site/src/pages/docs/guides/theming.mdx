@@ -4,32 +4,12 @@ description: Match embedded account surfaces to your product.
 ---
 
 import { Cards, Card } from 'vocs'
-import { ConnectAccount } from '../../../components/ConnectAccount'
-import { Demo, DemoReset } from '../../../components/Demo'
-import * as Steps from '../../../components/Steps'
 
 # Theming
 
 Theming lets you tune Tempo Wallet's embedded account prompts without changing your signing adapter or account flow.
 
 Use it when your app already uses Tempo Wallet and you want the prompt to match your product's accent color, corner radius, and light or dark mode. These options apply to hosted Tempo Wallet surfaces opened by the `dialog` or `tempoWallet` adapter. App-owned buttons, forms, and custom adapter screens still use your own design system.
-
-## Demo
-
-By the end of this guide you'll configure a Uniswap-style Tempo Wallet prompt. Try the sign-in button below: it uses a hot pink accent and pill-shaped radius.
-
-<Demo
-  title="Uniswap-style Sign In"
-  githubUrl="https://github.com/tempoxyz/accounts/tree/main/examples/basic"
-  headerAction={<DemoReset />}
-  className="flex flex-col gap-3"
-  wagmiConfig="theming"
->
-  <Steps.Step
-    label="Create an account, or use an existing one."
-    action={<ConnectAccount />}
-  />
-</Demo>
 
 ## Walkthrough
 
@@ -43,11 +23,11 @@ Follow the [Connect Accounts](/docs/guides/connect-accounts) guide to set up Wag
 
 Pick the values that should travel with the hosted prompt.
 
-| Option | Values | Purpose |
-| --- | --- | --- |
-| `accent` | `'neutral'`, `'blue'`, `'red'`, `'amber'`, `'green'`, `'purple'`, or any CSS color value | Colors primary actions and emphasis states. |
-| `radius` | `'none'`, `'small'`, `'medium'`, `'large'`, or `'full'` | Controls the corner radius used inside the prompt. |
-| `scheme` | `'light'` or `'dark'` | Sets the prompt's color scheme. Omit it to follow the user's operating system setting. |
+| Option   | Values                                                                                   | Purpose                                                                                |
+| -------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `accent` | `'neutral'`, `'blue'`, `'red'`, `'amber'`, `'green'`, `'purple'`, or any CSS color value | Colors primary actions and emphasis states.                                            |
+| `radius` | `'none'`, `'small'`, `'medium'`, `'large'`, or `'full'`                                  | Controls the corner radius used inside the prompt.                                     |
+| `scheme` | `'light'` or `'dark'`                                                                    | Sets the prompt's color scheme. Omit it to follow the user's operating system setting. |
 
 ### Configure Tempo Wallet
 
