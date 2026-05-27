@@ -8,7 +8,7 @@ import {
   type CSSProperties,
 } from "react";
 import { springs } from "../../animation";
-import type { SetupStatus, Status } from "../types";
+import type { Status } from "../types";
 
 const bodyInitialStyle = {
   opacity: 0,
@@ -85,66 +85,6 @@ export function PrimaryButton({
       ) : null}
       <span className="text-[14px] text-on-accent">{label}</span>
     </button>
-  );
-}
-
-export function FundingOverlay({
-  connectedBalance,
-  needsFunding,
-  onSetupConnect,
-  onSetupFund,
-  setupError,
-  setupStatus,
-}: {
-  connectedBalance: string | null;
-  needsFunding: boolean;
-  onSetupConnect: () => void;
-  onSetupFund: () => void;
-  setupError: string | null;
-  setupStatus: SetupStatus;
-}) {
-  if (!needsFunding) return null;
-
-  const busy = setupStatus !== "idle";
-  const connected = connectedBalance !== null;
-  const connectLabel = setupStatus === "connecting" ? "Connecting…" : "Connect";
-  const fundLabel = setupStatus === "funding" ? "Requesting…" : "Request funds";
-
-  return (
-    <div className="absolute inset-0 z-10 flex flex-col justify-center gap-4 bg-panel-2/95 p-6 backdrop-blur-sm">
-      <div className="flex flex-col gap-1">
-        <p className="text-[16px] text-foreground">Add funds to continue</p>
-        <p className="text-[13px] text-foreground-muted">
-          {connected
-            ? `Current balance is ${connectedBalance}.`
-            : "Connect, then request faucet funds to try this demo."}
-        </p>
-        {setupError ? (
-          <p className="text-[12px] text-danger">{setupError}</p>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {connected ? (
-          <button
-            type="button"
-            onClick={onSetupFund}
-            disabled={busy}
-            className="h-8 bg-accent px-2.5 font-mono text-[11px] text-on-accent outline-none enabled:hover:bg-accent-hover enabled:active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-80"
-          >
-            {fundLabel}
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onSetupConnect}
-            disabled={busy}
-            className="h-8 bg-accent px-2.5 font-mono text-[11px] text-on-accent outline-none enabled:hover:bg-accent-hover enabled:active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-80"
-          >
-            {connectLabel}
-          </button>
-        )}
-      </div>
-    </div>
   );
 }
 

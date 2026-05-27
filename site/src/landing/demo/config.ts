@@ -404,9 +404,9 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         "Referencing accounts.tempo.xyz/docs/guides/connect-accounts, add account sign-in to my app with the Tempo Accounts SDK.",
     },
     prelude: [
-      "Looks like you're new here",
-      "We'll set up an account with a passkey on your device",
-      "No password, no seed phrase",
+      "Welcome to Wisselbank",
+      "Create a stablecoin account with a passkey",
+      "No password, seed phrase, or extension needed",
     ],
     Body: LogInBody,
     async run(provider, ctx) {
@@ -431,7 +431,10 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       prompt:
         "Referencing accounts.tempo.xyz/docs/guides/deposits, add deposits to my app with the Tempo Accounts SDK.",
     },
-    prelude: ["Top up your account"],
+    prelude: [
+      "Add money to your Tempo account",
+      "Choose a deposit method in the wallet",
+    ],
     Body: OnRampBody,
     async run(provider) {
       // wallet_deposit opens the wallet's native Deposit dialog
@@ -453,15 +456,15 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
   "Pay Once": {
     url: "wisselbank.xyz",
     guide: {
-      label: "Transfers",
+      label: "Transfer",
       href: "/docs/guides/transfers",
       prompt:
-        "Referencing accounts.tempo.xyz/docs/guides/transfers, add one-time transfers to my app with the Tempo Accounts SDK.",
+        "Referencing accounts.tempo.xyz/docs/guides/transfers, add transfers to my app with the Tempo Accounts SDK.",
     },
     prelude: [
-      "We are processing your request to upgrade your dev account",
-      "Fetching plans....",
-      "Plan found",
+      "Start a transfer",
+      "Checking recipient details",
+      "Ready to send",
     ],
     Body: PayOnceBody,
     async run(provider) {
@@ -489,7 +492,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         | undefined;
       const tx = result?.receipt?.transactionHash;
       return {
-        summary: tx ? "Payment sent ·" : "Payment sent",
+        summary: tx ? "Transfer sent ·" : "Transfer sent",
         href: tx
           ? `${tempoModerato.blockExplorers.default.url}/tx/${tx}`
           : undefined,
@@ -507,8 +510,8 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         "Referencing accounts.tempo.xyz/docs/guides/spend-permissions, add spend permissions for per-use payments to my app with the Tempo Accounts SDK.",
     },
     prelude: [
-      "Authorize a scoped access key once",
-      "Matching transfers use that key without another prompt",
+      "Approve a payment rule once",
+      "Let Wisselbank make matching micro-payments",
     ],
     Body: SpendPermissionsBody,
     async run(provider, ctx) {
@@ -603,9 +606,9 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         "Referencing accounts.tempo.xyz/docs/guides/subscriptions, add subscriptions to my app with the Tempo Accounts SDK.",
     },
     prelude: [
-      "Checking subscription status",
+      "Check membership status",
       {
-        before: "Your server will request a recurring payment authorization via ",
+        before: "Approve recurring access with ",
         label: "MPP",
         href: "https://mpp.dev",
       },
@@ -691,8 +694,8 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         "Referencing accounts.tempo.xyz/docs/guides/fee-sponsorship, add fee sponsorship to my app with the Tempo Accounts SDK.",
     },
     prelude: [
-      "Checking sponsorship policy",
-      "Approved actions can use your app's fee payer",
+      "Check fee policy",
+      "Wisselbank covers the network fee",
     ],
     Body: FeeSponsorshipBody,
     async run(provider) {
@@ -718,7 +721,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       prompt:
         "Referencing accounts.tempo.xyz/docs/guides/swaps, add currency exchange to my app with the Tempo Accounts SDK.",
     },
-    prelude: ["Fetching best route", "Preparing a pathUSD to alphaUSD quote"],
+    prelude: ["Find the best stablecoin route", "Quote pathUSD to alphaUSD"],
     Body: TradeBody,
     async run(provider) {
       await requireConnectedAccount(provider);

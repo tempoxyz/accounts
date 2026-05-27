@@ -23,7 +23,7 @@ export function LogInBody({
       ? "Sign in with an on-device passkey — no popup, no third-party host."
       : adapter === "privy"
         ? "Sign in via Privy. The SDK manages access keys after authentication."
-        : "Continue with your Tempo wallet — passkeys and access keys handled by the SDK.";
+        : "Use a passkey to create or sign in to a stablecoin account.";
 
   const connected = status === "done" && Boolean(result?.summary);
   const accountLabel = connected ? result?.summary : "Not connected";
@@ -35,7 +35,7 @@ export function LogInBody({
       style={body.style}
     >
       <div className="flex flex-col gap-1.5">
-        <p className="text-[18px] text-foreground">Sign in to your account</p>
+        <p className="text-[18px] text-foreground">Create your Tempo account</p>
         <p className="text-[13px] text-foreground-muted">{description}</p>
       </div>
 

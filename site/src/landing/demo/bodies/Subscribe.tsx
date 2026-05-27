@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { shorten } from "../sdk";
 import type { DemoBodyProps } from "../types";
-import { FundingOverlay, PrimaryButton, useBodyAnimation } from "./shared";
+import { PrimaryButton, useBodyAnimation } from "./shared";
 
 export function SubscribeBody(props: DemoBodyProps) {
   const { status, result, onAction, lastVariant, delay } = props;
@@ -26,11 +26,11 @@ export function SubscribeBody(props: DemoBodyProps) {
     secondsUntilCollect > 0;
   const canCollect = Boolean(subscriptionId) && !cancelled && !waiting;
   const buttonLabel = (() => {
-    if (status === "running" && lastVariant === "cancel") return "Cancelling…";
-    if (status === "running" && !subscriptionId) return "Subscribing…";
+    if (status === "running" && lastVariant === "cancel") return "Cancelling...";
+    if (status === "running" && !subscriptionId) return "Subscribing...";
     if (cancelled) return "Subscription cancelled";
     if (subscriptionId) return "Cancel subscription";
-    return "Subscribe";
+    return "Start subscription";
   })();
 
   useEffect(() => {
@@ -67,8 +67,8 @@ export function SubscribeBody(props: DemoBodyProps) {
       </div>
 
       <p className="text-[12px] text-foreground-muted">
-        The server gates access with an MPP subscription and collects the next
-        period automatically from the approved plan.
+        Approve once. Wisselbank can collect each period automatically while
+        the subscription stays active.
       </p>
 
       {subscriptionId ? (
@@ -137,7 +137,6 @@ export function SubscribeBody(props: DemoBodyProps) {
           </div>
         </div>
       ) : null}
-      <FundingOverlay {...props} />
     </div>
   );
 }

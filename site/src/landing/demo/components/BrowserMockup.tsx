@@ -11,7 +11,7 @@ import {
 } from "react";
 import { springs } from "../../animation";
 import { LockIcon, TempoLogo } from "../../icons";
-import { useBodyAnimation } from "../bodies/shared";
+import { PrimaryButton, useBodyAnimation } from "../bodies/shared";
 import { DEMOS, DEMO_STEPS } from "../config";
 import type {
   AccountStatus,
@@ -20,7 +20,6 @@ import type {
   DemoGuide,
   DemoKind,
   DemoResult,
-  SetupStatus,
   Status,
 } from "../types";
 import { shorten } from "../sdk";
@@ -201,6 +200,50 @@ function NextDemoMessage({
   );
 }
 
+function SignInGate({
+  accountStatus,
+  delay,
+  onSignIn,
+  signInStatus,
+}: {
+  accountStatus: AccountStatus;
+  delay: number;
+  onSignIn: () => void;
+  signInStatus: Status;
+}) {
+  const body = useBodyAnimation(delay);
+  const checking = accountStatus === "checking";
+  const status = checking ? "running" : signInStatus;
+  const label =
+    accountStatus === "checking"
+      ? "Checking..."
+      : signInStatus === "running"
+        ? "Signing in..."
+        : "Sign in";
+
+  return (
+    <div
+      ref={body.ref}
+      className="flex w-full max-w-[366px] flex-col gap-4 bg-panel-2 p-6"
+      style={body.style}
+    >
+      <div className="flex flex-col gap-1">
+        <p className="text-[16px] text-foreground">Sign in to continue</p>
+        <p className="text-[13px] text-foreground-muted">
+          Connect your Tempo account to try this example.
+        </p>
+      </div>
+      <PrimaryButton
+        label={label}
+        status={status}
+        disabled={checking}
+        onClick={onSignIn}
+        className="h-11 w-full"
+      />
+    </div>
+  );
+}
+
 export type ConnectedSession = {
   address: `0x${string}`;
   balanceDisplay: string;
@@ -211,32 +254,28 @@ export function BrowserMockup({
   demo,
   def,
   status,
-  setupStatus,
-  setupError,
+  signInStatus,
   result,
   adapter,
   lastVariant,
   connected,
   accountStatus,
   onAction,
-  onSetupConnect,
-  onSetupFund,
+  onSignIn,
   onChangeDemo,
   onDisconnect,
 }: {
   demo: DemoKind;
   def: DemoDef;
   status: Status;
-  setupStatus: SetupStatus;
-  setupError: string | null;
+  signInStatus: Status;
   result: DemoResult | null;
   adapter: Adapter;
   lastVariant: string | null;
   connected: ConnectedSession | null;
   accountStatus: AccountStatus;
   onAction: (variant?: string) => void;
-  onSetupConnect: () => void;
-  onSetupFund: () => void;
+  onSignIn: () => void;
   onChangeDemo: (d: DemoKind) => void;
   onDisconnect: () => void;
 }) {
@@ -284,11 +323,7 @@ export function BrowserMockup({
         : "Next example";
   const messageStyle =
     animatedMessagesDemo === demo ? undefined : messageInitialStyle;
-  const needsFunding =
-    demo !== "Log In" &&
-    demo !== "Add Funds" &&
-    accountStatus !== "checking" &&
-    (!connected || connected.balance <= 0n);
+  const needsSignIn = demo !== "Log In" && !connected;
   const changeDemo = (d: DemoKind) => {
     onChangeDemo(d);
     if (!window.matchMedia("(min-width: 640px)").matches)
@@ -506,24 +541,29 @@ export function BrowserMockup({
                   ))}
                 </div>
               ) : null}
-              <Body
-                key={`${demo}-body`}
-                status={status}
-                result={result}
-                lastVariant={lastVariant}
-                onAction={onAction}
-                onNextDemo={goNextDemo}
-                nextCtaLabel={nextCtaLabel}
-                setupStatus={setupStatus}
-                setupError={setupError}
-                needsFunding={needsFunding}
-                onSetupConnect={onSetupConnect}
-                onSetupFund={onSetupFund}
-                onDisconnect={onDisconnect}
-                delay={bodyDelay}
-                adapter={adapter}
-                connectedBalance={connected?.balanceDisplay ?? null}
-              />
+              {needsSignIn ? (
+                <SignInGate
+                  key={`${demo}-sign-in`}
+                  accountStatus={accountStatus}
+                  delay={bodyDelay}
+                  onSignIn={onSignIn}
+                  signInStatus={signInStatus}
+                />
+              ) : (
+                <Body
+                  key={`${demo}-body`}
+                  status={status}
+                  result={result}
+                  lastVariant={lastVariant}
+                  onAction={onAction}
+                  onNextDemo={goNextDemo}
+                  nextCtaLabel={nextCtaLabel}
+                  onDisconnect={onDisconnect}
+                  delay={bodyDelay}
+                  adapter={adapter}
+                  connectedBalance={connected?.balanceDisplay ?? null}
+                />
+              )}
               {status === "done" && result?.complete !== false ? (
                 <NextDemoMessage
                   key={`${demo}-next-message`}

@@ -105,11 +105,6 @@ export default function SendReceive() {
             selectedId={destId}
             onSelect={setDestId}
             onNextDemo={noop}
-            setupStatus="idle"
-            setupError={null}
-            needsFunding={false}
-            onSetupConnect={noop}
-            onSetupFund={noop}
           />
         ) : (
           <ReceiveBody address={receiveAddress} delay={120} />

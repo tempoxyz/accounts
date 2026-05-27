@@ -84,6 +84,21 @@ type AuthorizeAccessKey =
   | ReturnType<typeof defaultAuthorizeAccessKey>
   | ReturnType<typeof spendPermissionAuthorizeAccessKey>;
 
+type ShowDeposit =
+  | boolean
+  | {
+      amount?: string | undefined;
+      displayName?: string | undefined;
+      on?: "login" | "register" | undefined;
+      token?: `0x${string}` | string | undefined;
+    };
+
+type ConnectWalletOptions = {
+  authorizeAccessKey?: AuthorizeAccessKey | undefined;
+  authorizeDefaultAccessKey?: boolean | undefined;
+  showDeposit?: ShowDeposit | undefined;
+};
+
 export const landingDemoWagmiConfig: Config = createConfig({
   chains: [tempoModerato, tempo],
   connectors: [
@@ -113,12 +128,16 @@ export async function getDemoProvider() {
 export function connectCapabilities(options: {
   authorizeAccessKey?: AuthorizeAccessKey | undefined;
   authorizeDefaultAccessKey?: boolean | undefined;
+  showDeposit?: ShowDeposit | undefined;
 } = {}) {
   const capabilities: Record<string, unknown> = {};
   if (options.authorizeAccessKey) {
     capabilities.authorizeAccessKey = options.authorizeAccessKey;
   } else if (options.authorizeDefaultAccessKey !== false) {
     capabilities.authorizeAccessKey = defaultAuthorizeAccessKey();
+  }
+  if (options.showDeposit !== undefined) {
+    capabilities.showDeposit = options.showDeposit;
   }
   return capabilities;
 }
@@ -139,10 +158,7 @@ type WalletConnectResult = {
 /** Opens the wallet sign-in flow and returns the raw wallet_connect result. */
 export async function connectWalletResult(
   provider: AccountsProvider,
-  options: {
-    authorizeAccessKey?: AuthorizeAccessKey | undefined;
-    authorizeDefaultAccessKey?: boolean | undefined;
-  } = {},
+  options: ConnectWalletOptions = {},
 ) {
   // Lazy access-key co-signing: every normal connect grants a scoped
   // session key unless the caller supplies a specialized permission.
@@ -158,10 +174,7 @@ export async function connectWalletResult(
 /** Opens the wallet sign-in flow and returns the connected account address. */
 export async function connectWallet(
   provider: AccountsProvider,
-  options: {
-    authorizeAccessKey?: AuthorizeAccessKey | undefined;
-    authorizeDefaultAccessKey?: boolean | undefined;
-  } = {},
+  options: ConnectWalletOptions = {},
 ) {
   const result = await connectWalletResult(provider, options);
   return result?.accounts?.[0]?.address ?? null;

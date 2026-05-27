@@ -25,12 +25,11 @@ export function OnRampBody({
         </p>
       </div>
       <p className="text-[13px] text-foreground-muted">
-        The wallet renders the full deposit UI (cards, Apple Pay, crypto, X
-        verification) — your app just calls{" "}
-        <span className="font-mono text-foreground">wallet_deposit</span>.
+        Open the wallet deposit flow with cards, Apple Pay, crypto, and X
+        verification.
       </p>
       <PrimaryButton
-        label="Deposit funds"
+        label="Add funds"
         status={status}
         onClick={onAction}
         className="h-11 w-full"

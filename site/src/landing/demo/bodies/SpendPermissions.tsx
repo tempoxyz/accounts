@@ -5,7 +5,6 @@ import { useLayoutEffect, useRef } from "react";
 import { springs } from "../../animation";
 import type { DemoBodyProps } from "../types";
 import {
-  FundingOverlay,
   PrimaryButton,
   SecondaryButton,
   useBodyAnimation,
@@ -58,12 +57,12 @@ export function SpendPermissionsBody(props: DemoBodyProps) {
   const buttonLabel = (() => {
     if (status === "running")
       return lastVariant?.startsWith("spend") || lastVariant === "again"
-        ? "Paying…"
-        : "Authorizing…";
+        ? "Paying..."
+        : "Approving...";
     if (canSend) return "Pay $0.01";
     if (done) return "Limit reached";
-    if (removedPermission) return "Authorize access key again";
-    return "Sign in and authorize key";
+    if (removedPermission) return "Approve rule again";
+    return "Approve spending rule";
   })();
 
   return (
@@ -75,7 +74,7 @@ export function SpendPermissionsBody(props: DemoBodyProps) {
       <div className="flex items-end justify-between">
         <div className="flex flex-col gap-1">
           <p className="text-[13px] text-foreground-muted">
-            Access-key payments
+            Micro-payments
           </p>
           <p className="font-mono text-[28px] tabular-nums text-foreground">
             {used.toLocaleString()}
@@ -97,8 +96,8 @@ export function SpendPermissionsBody(props: DemoBodyProps) {
       </div>
 
       <p className="text-[13px] text-foreground-muted">
-        Authorize a scoped access key once. Matching payments can run without
-        another prompt until the cap or expiry is reached.
+        Set a spending limit once. Matching payments can run in the background
+        until the limit or expiry is reached.
       </p>
 
       {activePermission ? (
@@ -139,8 +138,8 @@ export function SpendPermissionsBody(props: DemoBodyProps) {
         <SecondaryButton
           label={
             status === "running" && lastVariant === "revoke"
-              ? "Removing…"
-              : "Revoke access key"
+              ? "Removing..."
+              : "Revoke rule"
           }
           status={status === "running" ? "running" : "idle"}
           onClick={() => onAction("revoke")}
@@ -170,7 +169,6 @@ export function SpendPermissionsBody(props: DemoBodyProps) {
           </div>
         </div>
       ) : null}
-      <FundingOverlay {...props} />
     </div>
   );
 }

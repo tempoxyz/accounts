@@ -2,7 +2,7 @@
 
 import { shorten } from "../sdk";
 import type { DemoBodyProps } from "../types";
-import { FundingOverlay, PrimaryButton, useBodyAnimation } from "./shared";
+import { PrimaryButton, useBodyAnimation } from "./shared";
 
 export function FeeSponsorshipBody(props: DemoBodyProps) {
   const { delay, onAction, result, status } = props;
@@ -10,10 +10,10 @@ export function FeeSponsorshipBody(props: DemoBodyProps) {
   const done = status === "done";
   const buttonLabel =
     status === "running"
-      ? "Sending…"
+      ? "Sending..."
       : done
         ? "Sponsored transfer sent"
-        : "Send sponsored transfer";
+        : "Send without fees";
 
   return (
     <div
@@ -23,7 +23,7 @@ export function FeeSponsorshipBody(props: DemoBodyProps) {
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
-          <p className="text-[13px] text-foreground-muted">Sponsored Transfer</p>
+          <p className="text-[13px] text-foreground-muted">No-fee transfer</p>
           <p className="font-mono text-[28px] leading-none text-foreground">
             $1.00
           </p>
@@ -35,11 +35,11 @@ export function FeeSponsorshipBody(props: DemoBodyProps) {
 
       <div className="grid gap-2">
         <div className="flex items-center justify-between bg-panel-3 px-4 py-3">
-          <span className="text-[12px] text-foreground-muted">User sends</span>
+          <span className="text-[12px] text-foreground-muted">You send</span>
           <span className="font-mono text-[12px] text-foreground">$1.00</span>
         </div>
         <div className="flex items-center justify-between bg-panel-3 px-4 py-3">
-          <span className="text-[12px] text-foreground-muted">App covers</span>
+          <span className="text-[12px] text-foreground-muted">Wisselbank covers</span>
           <span className="font-mono text-[12px] text-foreground">
             {result?.sponsoredFee ?? "network fee"}
           </span>
@@ -82,7 +82,6 @@ export function FeeSponsorshipBody(props: DemoBodyProps) {
           </p>
         )
       ) : null}
-      <FundingOverlay {...props} />
     </div>
   );
 }

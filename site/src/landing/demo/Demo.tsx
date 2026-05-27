@@ -18,7 +18,6 @@ import type {
   Adapter,
   DemoKind,
   DemoResult,
-  SetupStatus,
   Status,
 } from "./types";
 
@@ -40,8 +39,6 @@ type Connected = {
 const ACTION_TIMEOUT_MS = 20_000;
 const DEPOSIT_BALANCE_ATTEMPTS = 40;
 const DEPOSIT_BALANCE_INTERVAL_MS = 1500;
-const FUNDING_BALANCE_ATTEMPTS = 20;
-const FUNDING_BALANCE_INTERVAL_MS = 1500;
 
 /** Scale when the demo box first enters from the bottom of the viewport. */
 const SCROLL_START_SCALE = 0.92;
@@ -132,8 +129,7 @@ export default function Demo() {
 
   const [demo, setDemo] = useState<DemoKind>("Log In");
   const [status, setStatus] = useState<Status>("idle");
-  const [setupStatus, setSetupStatus] = useState<SetupStatus>("idle");
-  const [setupError, setSetupError] = useState<string | null>(null);
+  const [signInStatus, setSignInStatus] = useState<Status>("idle");
   const [result, setResult] = useState<DemoResult | null>(null);
   const [lastVariant, setLastVariant] = useState<string | null>(null);
   const [connected, setConnected] = useState<Connected | null>(null);
@@ -152,8 +148,7 @@ export default function Demo() {
     depositWatchRef.current += 1;
     setDemo(next);
     setStatus("idle");
-    setSetupStatus("idle");
-    setSetupError(null);
+    setSignInStatus("idle");
     setResult(null);
     setLastVariant(null);
   };
@@ -208,8 +203,7 @@ export default function Demo() {
     setConnected(null);
     setAccountStatus("disconnected");
     setStatus("idle");
-    setSetupStatus("idle");
-    setSetupError(null);
+    setSignInStatus("idle");
     setResult(null);
     setLastVariant(null);
   };
@@ -301,6 +295,25 @@ export default function Demo() {
   const handleDemo = (next: DemoKind) => {
     if (next === demo) return;
     selectDemo(next);
+  };
+
+  const onSignIn = async () => {
+    if (signInStatus === "running") return;
+    setSignInStatus("running");
+    try {
+      const provider = await getProvider();
+      const address = await connectWallet(provider);
+      if (!address) return;
+      await refreshBalance(provider, address, {
+        chainId: balanceChainIdForDemo(activeDemoRef.current),
+      });
+      setAccountStatus("connected");
+    } catch {
+      cancelPendingRequests(providerRef.current);
+      if (!connected) setAccountStatus("disconnected");
+    } finally {
+      setSignInStatus("idle");
+    }
   };
 
   const onAction = async (variant?: string) => {
@@ -468,81 +481,6 @@ export default function Demo() {
     }
   };
 
-  const onSetupConnect = async () => {
-    if (setupStatus !== "idle") return;
-    setSetupError(null);
-    setSetupStatus("connecting");
-    try {
-      const provider = await getProvider();
-      const connectedAddr = await Promise.race([
-        connectWallet(provider).then((addr) => ({ addr })),
-        timeout(ACTION_TIMEOUT_MS),
-      ]);
-      if ("__timeout" in connectedAddr) {
-        cancelPendingRequests(provider);
-        throw new Error("Connect timed out.");
-      }
-      const addr = connectedAddr.addr;
-      if (addr) {
-        await refreshBalance(provider, addr);
-        setAccountStatus("connected");
-      } else {
-        setAccountStatus("disconnected");
-      }
-    } catch {
-      cancelPendingRequests(providerRef.current);
-      if (!connected) setAccountStatus("disconnected");
-      setSetupError("Could not connect. Try again.");
-    } finally {
-      setSetupStatus("idle");
-    }
-  };
-
-  const onSetupFund = async () => {
-    if (setupStatus !== "idle") return;
-    setSetupError(null);
-    setSetupStatus("funding");
-    try {
-      const provider = await getProvider();
-      let accounts = (await provider.request({
-        method: "eth_accounts",
-      })) as readonly `0x${string}`[];
-      let addr = accounts?.[0] ?? connected?.address ?? null;
-      if (!addr) {
-        const connectedAddr = await connectWallet(provider);
-        accounts = (await provider.request({
-          method: "eth_accounts",
-        })) as readonly `0x${string}`[];
-        addr = accounts?.[0] ?? connectedAddr;
-      }
-      if (!addr) {
-        setAccountStatus("disconnected");
-        setSetupError("Connect first, then request funds.");
-        return;
-      }
-      await provider.request({
-        method: "tempo_fundAddress",
-        params: [addr],
-      } as Parameters<typeof provider.request>[0]);
-      let next = await refreshBalance(provider, addr);
-      for (
-        let i = 0;
-        i < FUNDING_BALANCE_ATTEMPTS && next.balance <= 0n;
-        i += 1
-      ) {
-        await sleep(FUNDING_BALANCE_INTERVAL_MS);
-        next = await refreshBalance(provider, addr);
-      }
-      setAccountStatus("connected");
-      if (next.balance <= 0n)
-        setSetupError("Funds requested. Balance is still updating.");
-    } catch {
-      setSetupError("Could not request funds. Try again.");
-    } finally {
-      setSetupStatus("idle");
-    }
-  };
-
   const def = DEMOS[demo];
 
   return (
@@ -552,16 +490,14 @@ export default function Demo() {
           demo={demo}
           def={def}
           status={status}
-          setupStatus={setupStatus}
-          setupError={setupError}
+          signInStatus={signInStatus}
           result={result}
           adapter={adapter}
           lastVariant={lastVariant}
           connected={connected}
           accountStatus={accountStatus}
           onAction={onAction}
-          onSetupConnect={onSetupConnect}
-          onSetupFund={onSetupFund}
+          onSignIn={onSignIn}
           onChangeDemo={handleDemo}
           onDisconnect={onDisconnect}
         />

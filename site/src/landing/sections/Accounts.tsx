@@ -85,11 +85,6 @@ export default function Accounts() {
           lastVariant={null}
           connectedBalance={null}
           onNextDemo={noop}
-          setupStatus="idle"
-          setupError={null}
-          needsFunding={false}
-          onSetupConnect={noop}
-          onSetupFund={noop}
         />
       }
     />

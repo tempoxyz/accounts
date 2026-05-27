@@ -114,11 +114,6 @@ export default function LocalPayments() {
           onSelectAmount={setAmountId}
           methodLabel={INFO[method].title}
           onNextDemo={noop}
-          setupStatus="idle"
-          setupError={null}
-          needsFunding={false}
-          onSetupConnect={noop}
-          onSetupFund={noop}
         />
       }
     />

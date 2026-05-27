@@ -1,13 +1,13 @@
 "use client";
 
 import type { DemoBodyProps } from "../types";
-import { FundingOverlay, PrimaryButton, useBodyAnimation } from "./shared";
+import { PrimaryButton, useBodyAnimation } from "./shared";
 
 export function PayOnceBody(props: DemoBodyProps) {
   const { status, result, onAction, delay } = props;
   const body = useBodyAnimation(delay);
   const done = status === "done";
-  const buttonLabel = done ? "Payment sent" : "Complete purchase";
+  const buttonLabel = done ? "Transfer sent" : "Send transfer";
 
   return (
     <div
@@ -16,10 +16,24 @@ export function PayOnceBody(props: DemoBodyProps) {
       style={body.style}
     >
       <div className="flex flex-col gap-1">
-        <p className="text-[13px] text-foreground-muted">Pro Plan</p>
+        <p className="text-[13px] text-foreground-muted">Transfer</p>
         <p className="font-mono text-[32px] leading-none text-foreground sm:text-[36px]">
           $240
         </p>
+      </div>
+      <div className="grid gap-2">
+        <div className="flex items-center justify-between bg-panel-3 px-4 py-3">
+          <span className="text-[12px] text-foreground-muted">Recipient</span>
+          <span className="font-mono text-[12px] text-foreground">
+            Main account
+          </span>
+        </div>
+        <div className="flex items-center justify-between bg-panel-3 px-4 py-3">
+          <span className="text-[12px] text-foreground-muted">Memo</span>
+          <span className="font-mono text-[12px] text-foreground">
+            Monthly transfer
+          </span>
+        </div>
       </div>
       <PrimaryButton
         label={buttonLabel}
@@ -45,7 +59,6 @@ export function PayOnceBody(props: DemoBodyProps) {
           <p className="font-mono text-[10px] text-foreground-subtle">{result.summary}</p>
         )
       ) : null}
-      <FundingOverlay {...props} />
     </div>
   );
 }

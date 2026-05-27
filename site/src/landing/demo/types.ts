@@ -17,9 +17,6 @@ export type Status = "idle" | "running" | "done";
 /** Current account lookup state for the shared demo session. */
 export type AccountStatus = "checking" | "disconnected" | "connected";
 
-/** Status for the setup controls. Kept separate from demo action state. */
-export type SetupStatus = "idle" | "connecting" | "funding";
-
 export type AccountsProvider = ReturnType<typeof Provider.create>;
 
 export type DemoResult = {
@@ -110,16 +107,6 @@ export type DemoBodyProps = {
   onNextDemo: () => void;
   /** Label for the explicit next-step CTA after a demo completes. */
   nextCtaLabel?: string | undefined;
-  /** Status for setup actions that are separate from the demo action. */
-  setupStatus: SetupStatus;
-  /** Setup error shown in the funding overlay. */
-  setupError: string | null;
-  /** Whether this demo should block on account funding before its main action. */
-  needsFunding: boolean;
-  /** Connects the account used by the demo. */
-  onSetupConnect: () => void;
-  /** Adds funds for the demo account. */
-  onSetupFund: () => void;
   /** Disconnects the current account. */
   onDisconnect?: (() => void) | undefined;
   /** The variant string passed to the most recent `onAction` call, or null. */
