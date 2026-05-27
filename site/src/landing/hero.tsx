@@ -341,7 +341,7 @@ function HeroIntro({
   );
 
   return (
-    <div className="mx-auto flex w-full max-w-[720px] flex-col items-center gap-9 px-6 pt-24 pb-60 sm:pt-[160px]">
+    <div className="mx-auto flex w-full max-w-[720px] flex-col items-center gap-9 px-6 pt-24 pb-44 sm:pt-[160px]">
       <div className="flex flex-col items-center gap-2 text-center">
         <h1
           data-hero-stagger

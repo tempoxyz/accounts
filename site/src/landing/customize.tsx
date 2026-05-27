@@ -675,7 +675,7 @@ export default function Customize() {
   return (
     <section
       ref={sectionRef}
-      className="px-6 pt-[100px] pb-32 sm:pb-[200px]"
+      className="px-6 pt-12 pb-20 sm:pt-14 sm:pb-28"
       style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
     >
       <div className="flex flex-col items-center gap-3 text-center">

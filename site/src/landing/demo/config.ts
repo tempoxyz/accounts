@@ -21,6 +21,7 @@ import {
   SPEND_PERMISSION_RECIPIENT,
   SPEND_PERMISSION_VALID_SECONDS,
   spendPermissionAuthorizeAccessKey,
+  TEMPO_MAINNET_CHAIN_ID,
 } from "./sdk";
 import type { AccountsProvider, DemoDef, DemoKind, DemoResult } from "./types";
 
@@ -48,10 +49,7 @@ async function connectedAddress(provider: Parameters<DemoDef["run"]>[0]) {
   const accounts = (await provider.request({
     method: "eth_accounts",
   })) as readonly `0x${string}`[];
-  return (
-    accounts?.[0] ??
-    (await connectWallet(provider, { authorizeDefaultAccessKey: false }))
-  );
+  return accounts?.[0] ?? (await connectWallet(provider));
 }
 
 type SpendPermissionRecord = {
@@ -155,11 +153,16 @@ function formatFeeUnits(units: bigint) {
   return `$${value.toFixed(units < 10_000n ? 6 : 2)}`;
 }
 
-function spendPermissionBudget(spentUnits = 0n) {
+function spendPermissionBudget(options: {
+  limitUnits?: bigint | undefined;
+  spentUnits?: bigint | undefined;
+} = {}) {
+  const limitUnits = options.limitUnits ?? SPEND_PERMISSION_LIMIT_UNITS;
+  const spentUnits = options.spentUnits ?? 0n;
   const remaining =
-    spentUnits >= SPEND_PERMISSION_LIMIT_UNITS
+    spentUnits >= limitUnits
       ? 0n
-      : SPEND_PERMISSION_LIMIT_UNITS - spentUnits;
+      : limitUnits - spentUnits;
   return {
     permissionRemaining: formatUsdUnits(remaining),
     permissionSpent: formatUsdUnits(spentUnits),
@@ -170,16 +173,19 @@ function spendPermissionBudget(spentUnits = 0n) {
 function spendPermissionResult(options: {
   expiresAt?: number | undefined;
   permissionAddress?: `0x${string}` | undefined;
+  permissionLimitUnits?: bigint | undefined;
 } = {}): DemoResult {
+  const limitUnits = options.permissionLimitUnits ?? SPEND_PERMISSION_LIMIT_UNITS;
+  const permissionLimit = formatUsdUnits(limitUnits);
   return {
-    summary: `Access key authorized · $${SPEND_PERMISSION_LIMIT_USD} cap`,
+    summary: `Access key authorized · ${permissionLimit} cap`,
     complete: false,
     permissionAddress: options.permissionAddress,
     permissionExpiresAt:
       options.expiresAt ??
       Math.floor(Date.now() / 1000) + SPEND_PERMISSION_VALID_SECONDS,
-    permissionLimit: `$${SPEND_PERMISSION_LIMIT_USD}`,
-    ...spendPermissionBudget(),
+    permissionLimit,
+    ...spendPermissionBudget({ limitUnits }),
     permissionState: "active",
     progressMax: SPEND_PERMISSION_PAYMENT_COUNT,
     progressValue: 0,
@@ -189,7 +195,6 @@ function spendPermissionResult(options: {
 export async function connectSpendPermission(provider: AccountsProvider) {
   const result = await connectWalletResult(provider, {
     authorizeAccessKey: spendPermissionAuthorizeAccessKey(),
-    authorizeDefaultAccessKey: false,
   });
   const account = result.accounts?.[0];
   const key = account?.capabilities?.keyAuthorization;
@@ -203,6 +208,27 @@ export async function connectSpendPermission(provider: AccountsProvider) {
       permissionAddress: permission?.address ?? key?.address ?? key?.keyId,
     }),
   };
+}
+
+/** Returns active access-key payment state for a connected account. */
+export function activeSpendPermissionResult(
+  provider: AccountsProvider,
+  account: `0x${string}`,
+) {
+  const permission = findSpendPermission(provider, account);
+  if (!permission) return null;
+  return spendPermissionResult({
+    expiresAt: permission.expiry,
+    permissionAddress: permission.address,
+    permissionLimitUnits: spendPermissionLimitUnits(permission),
+  });
+}
+
+function spendPermissionLimitUnits(permission: SpendPermissionRecord) {
+  const limit = permission.limits?.find(
+    (limit) => limit.token.toLowerCase() === PATH_USD.toLowerCase(),
+  );
+  return limit ? readTokenLimit(limit.limit) : SPEND_PERMISSION_LIMIT_UNITS;
 }
 
 function findSpendPermission(
@@ -356,12 +382,12 @@ async function sendSponsoredTransfer(
 /** Ordered list of landing demo steps. */
 export const DEMO_STEPS = [
   "Log In",
-  "Add Funds",
   "Pay Once",
   "Spend Permissions",
   "Subscribe",
   "Fee Sponsorship",
   "Swap Currencies",
+  "Add Funds",
 ] as const satisfies readonly DemoKind[];
 
 /**
@@ -413,10 +439,13 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       // Pre-fill with $0.01 so the demo amount stays consistent.
       void provider.request({
         method: "wallet_deposit",
-        params: [{ amount: DEMO_AMOUNT_USD }],
-      } as Parameters<typeof provider.request>[0]).catch((error) => {
-        console.warn("[demo] deposit flow closed", error);
-      });
+        params: [
+          {
+            amount: DEMO_AMOUNT_USD,
+            chainId: TEMPO_MAINNET_CHAIN_ID,
+          },
+        ],
+      } as Parameters<typeof provider.request>[0]).catch(() => undefined);
       return {};
     },
   },
@@ -483,16 +512,6 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     ],
     Body: SpendPermissionsBody,
     async run(provider, ctx) {
-      if (
-        !ctx.variant?.startsWith("spend") &&
-        ctx.variant !== "again" &&
-        ctx.variant !== "revoke"
-      ) {
-        const { address, result } = await connectSpendPermission(provider);
-        if (!address) throw new Error("No account connected.");
-        return result;
-      }
-
       let account = await connectedAddress(provider);
       if (!account) throw new Error("No account connected.");
 
@@ -518,12 +537,22 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
       }
 
       let permission = findSpendPermission(provider, account);
+      if (
+        !permission &&
+        !ctx.variant?.startsWith("spend") &&
+        ctx.variant !== "again"
+      ) {
+        const connected = await connectSpendPermission(provider);
+        if (!connected.address) throw new Error("No account connected.");
+        return connected.result;
+      }
       if (!permission) {
         const connected = await connectSpendPermission(provider);
         if (!connected.address) throw new Error("No account connected.");
         account = connected.address;
         permission = findSpendPermission(provider, account);
       }
+      if (!permission) throw new Error("No access key authorized.");
 
       const receipt = await sendApprovedPayment(provider, account);
       const payments = readSpendPaymentCount(ctx.variant);
@@ -544,6 +573,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         readUnits(ctx.previousResult?.permissionSpentUnits) +
         DEMO_AMOUNT_UNITS +
         receiptFeeUnits(receipt);
+      const permissionLimitUnits = spendPermissionLimitUnits(permission);
       return {
         complete:
           payments >= SPEND_PERMISSION_PAYMENT_COUNT ? undefined : false,
@@ -551,8 +581,11 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         permissionExpiresAt:
           permission?.expiry ??
           Math.floor(Date.now() / 1000) + SPEND_PERMISSION_VALID_SECONDS,
-        permissionLimit: `$${SPEND_PERMISSION_LIMIT_USD}`,
-        ...spendPermissionBudget(spentUnits),
+        permissionLimit: formatUsdUnits(permissionLimitUnits),
+        ...spendPermissionBudget({
+          limitUnits: permissionLimitUnits,
+          spentUnits,
+        }),
         permissionState: "active",
         progressMax: SPEND_PERMISSION_PAYMENT_COUNT,
         progressValue: payments,
@@ -580,6 +613,18 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
     Body: SubscribeBody,
     async run(provider, ctx) {
       const account = await requireConnectedAccount(provider);
+
+      if (ctx.variant === "cancel") {
+        const subscriptionId = ctx.previousResult?.subscriptionId;
+        if (!subscriptionId) throw new Error("Subscribe before cancelling.");
+        return {
+          summary: "Subscription cancelled",
+          complete: false,
+          subscriptionId,
+          subscriptionReceipts: ctx.previousResult?.subscriptionReceipts,
+          subscriptionState: "cancelled",
+        };
+      }
 
       if (ctx.variant === "collect") {
         const subscriptionId = ctx.previousResult?.subscriptionId;
@@ -613,7 +658,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
             ...(ctx.previousResult?.subscriptionReceipts ?? []),
             subscriptionReceipt("Renewal", receipt),
           ],
-          subscriptionState: "collected",
+          subscriptionState: "active",
         };
       }
 

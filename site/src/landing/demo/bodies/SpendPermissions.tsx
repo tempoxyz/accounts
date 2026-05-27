@@ -58,9 +58,9 @@ export function SpendPermissionsBody(props: DemoBodyProps) {
   const buttonLabel = (() => {
     if (status === "running")
       return lastVariant?.startsWith("spend") || lastVariant === "again"
-        ? "Sending…"
+        ? "Paying…"
         : "Authorizing…";
-    if (canSend) return "Send approved payment";
+    if (canSend) return "Pay $0.01";
     if (done) return "Limit reached";
     if (removedPermission) return "Authorize access key again";
     return "Sign in and authorize key";

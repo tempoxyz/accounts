@@ -387,7 +387,6 @@ export function BrowserMockup({
                 >
                   Disconnect
                 </button>
-                <span className="text-foreground-subtle">·</span>
               </>
             ) : (
               <span className="text-foreground-muted">
@@ -520,6 +519,7 @@ export function BrowserMockup({
                 needsFunding={needsFunding}
                 onSetupConnect={onSetupConnect}
                 onSetupFund={onSetupFund}
+                onDisconnect={onDisconnect}
                 delay={bodyDelay}
                 adapter={adapter}
                 connectedBalance={connected?.balanceDisplay ?? null}

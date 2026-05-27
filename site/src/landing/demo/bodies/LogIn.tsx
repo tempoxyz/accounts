@@ -7,6 +7,7 @@ export function LogInBody({
   status,
   result,
   onAction,
+  onDisconnect,
   delay,
   adapter,
 }: DemoBodyProps) {
@@ -48,13 +49,23 @@ export function LogInBody({
         </p>
       </div>
 
-      <PrimaryButton
-        label={connected ? "Signed in" : idleCta}
-        status="idle"
-        disabled={connected}
-        onClick={onAction}
-        className="h-11 w-full"
-      />
+      {connected ? (
+        <button
+          type="button"
+          onClick={onDisconnect}
+          disabled={!onDisconnect}
+          className="flex h-11 w-full items-center justify-center bg-panel-3 px-4 text-[14px] text-foreground-muted outline-none active:bg-surface-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
+        >
+          Log out
+        </button>
+      ) : (
+        <PrimaryButton
+          label={idleCta}
+          status="idle"
+          onClick={onAction}
+          className="h-11 w-full"
+        />
+      )}
     </div>
   );
 }

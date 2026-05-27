@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { shorten } from "../sdk";
 import type { DemoBodyProps } from "../types";
 import { FundingOverlay, PrimaryButton, useBodyAnimation } from "./shared";
@@ -9,9 +9,11 @@ export function SubscribeBody(props: DemoBodyProps) {
   const { status, result, onAction, lastVariant, delay } = props;
   const body = useBodyAnimation(delay);
   const [now, setNow] = useState(() => Date.now());
+  const autoCollectAtRef = useRef<number | undefined>(undefined);
   const subscriptionId = result?.subscriptionId;
   const receipts = result?.subscriptionReceipts ?? [];
-  const collected = result?.subscriptionState === "collected";
+  const cancelled = result?.subscriptionState === "cancelled";
+  const charging = status === "running" && lastVariant === "collect";
   const nextCollectAt = result?.subscriptionNextCollectAt;
   const secondsUntilCollect =
     nextCollectAt === undefined
@@ -19,24 +21,37 @@ export function SubscribeBody(props: DemoBodyProps) {
       : Math.max(0, Math.ceil((nextCollectAt - now) / 1000));
   const waiting =
     Boolean(subscriptionId) &&
-    !collected &&
+    !cancelled &&
     secondsUntilCollect !== undefined &&
     secondsUntilCollect > 0;
-  const canCollect = Boolean(subscriptionId) && !collected && !waiting;
+  const canCollect = Boolean(subscriptionId) && !cancelled && !waiting;
   const buttonLabel = (() => {
-    if (status === "running")
-      return lastVariant === "collect" ? "Collecting…" : "Subscribing…";
-    if (collected) return "Renewal collected";
-    if (waiting) return `Collect renewal in ${secondsUntilCollect}s`;
-    if (canCollect) return "Collect renewal";
+    if (status === "running" && lastVariant === "cancel") return "Cancelling…";
+    if (status === "running" && !subscriptionId) return "Subscribing…";
+    if (cancelled) return "Subscription cancelled";
+    if (subscriptionId) return "Cancel subscription";
     return "Subscribe";
   })();
 
   useEffect(() => {
-    if (!subscriptionId || collected) return;
+    if (!subscriptionId) return;
     const interval = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(interval);
-  }, [collected, subscriptionId]);
+  }, [subscriptionId]);
+
+  useEffect(() => {
+    autoCollectAtRef.current = undefined;
+  }, [subscriptionId]);
+
+  useEffect(() => {
+    if (!subscriptionId || cancelled || !canCollect || status === "running")
+      return;
+    if (nextCollectAt === undefined) return;
+    if (autoCollectAtRef.current === nextCollectAt) return;
+    autoCollectAtRef.current = nextCollectAt;
+    const timeout = window.setTimeout(() => onAction("collect"), 250);
+    return () => window.clearTimeout(timeout);
+  }, [cancelled, canCollect, nextCollectAt, onAction, status, subscriptionId]);
 
   return (
     <div
@@ -53,7 +68,7 @@ export function SubscribeBody(props: DemoBodyProps) {
 
       <p className="text-[12px] text-foreground-muted">
         The server gates access with an MPP subscription and collects the next
-        period from the approved plan.
+        period automatically from the approved plan.
       </p>
 
       {subscriptionId ? (
@@ -66,9 +81,11 @@ export function SubscribeBody(props: DemoBodyProps) {
             {shorten(subscriptionId)}
           </p>
           <p className="text-right font-mono text-[12px] text-foreground">
-            {collected
-              ? "Collected"
-              : secondsUntilCollect === undefined
+            {cancelled
+              ? "Cancelled"
+              : charging
+                ? "Charging..."
+                : secondsUntilCollect === undefined
                 ? "Pending"
                 : secondsUntilCollect > 0
                   ? `${secondsUntilCollect}s`
@@ -79,13 +96,19 @@ export function SubscribeBody(props: DemoBodyProps) {
 
       <PrimaryButton
         label={buttonLabel}
-        status={status === "running" ? "running" : "idle"}
-        disabled={collected || waiting}
-        onClick={() => onAction(subscriptionId ? "collect" : "subscribe")}
+        status={status === "running" && !charging ? "running" : "idle"}
+        disabled={cancelled || charging}
+        onClick={() =>
+          onAction(
+            subscriptionId ? (waiting ? "cancel" : "collect") : "subscribe",
+          )
+        }
         className="h-11 w-full"
       />
       {result?.summary ? (
-        <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
+        <p className="font-mono text-[12px] text-foreground-muted">
+          {result.summary}
+        </p>
       ) : null}
       {receipts.length > 0 ? (
         <div className="flex flex-col gap-1">

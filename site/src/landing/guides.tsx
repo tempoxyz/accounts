@@ -52,10 +52,6 @@ const GUIDES: readonly Guide[] = [
     href: "/docs/guides/connect-accounts",
   },
   {
-    title: "Deposits",
-    href: "/docs/guides/deposits",
-  },
-  {
     title: "Transfers",
     href: "/docs/guides/transfers",
   },
@@ -74,6 +70,10 @@ const GUIDES: readonly Guide[] = [
   {
     title: "Exchange Currencies",
     href: "/docs/guides/swaps",
+  },
+  {
+    title: "Deposits",
+    href: "/docs/guides/deposits",
   },
   {
     title: "Themes",
@@ -103,9 +103,18 @@ function ArrowUpRight() {
 export default function Guides() {
   return (
     <section
-      className="px-6 pt-[100px]"
+      className="px-6 pt-16 sm:pt-20"
       style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
     >
+      <div className="mx-auto mb-14 flex max-w-[620px] flex-col items-center gap-3 text-center">
+        <h2 className="text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-[40px]">
+          Guides
+        </h2>
+        <p className="text-[16px] text-foreground-muted sm:text-[18px]">
+          Learn the core SDK flows, from authentication and deposits to
+          transfers, subscriptions, exchange, and theming.
+        </p>
+      </div>
       <div
         className="-mx-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
         style={frameDashStyle}
@@ -125,6 +134,11 @@ export default function Guides() {
             </span>
           </a>
         ))}
+        <div
+          aria-hidden
+          className="relative hidden min-h-[260px] overflow-hidden sm:block lg:hidden"
+          style={cardDashStyle}
+        />
       </div>
     </section>
   );

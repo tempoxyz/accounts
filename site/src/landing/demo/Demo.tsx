@@ -4,12 +4,13 @@ import { animate, onScroll } from "animejs";
 import { useEffect, useRef, useState } from "react";
 import { springs } from "../animation";
 import { BrowserMockup } from "./components/BrowserMockup";
-import { DEMOS } from "./config";
+import { activeSpendPermissionResult, DEMOS } from "./config";
 import {
   connectWallet,
   getDemoProvider,
   PATH_USD,
   shorten,
+  TEMPO_MAINNET_CHAIN_ID,
 } from "./sdk";
 import type {
   AccountStatus,
@@ -48,6 +49,9 @@ const SCROLL_START_SCALE = 0.92;
 const SCROLL_LIFT_PX = 60;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const balanceChainIdForDemo = (demo: DemoKind) =>
+  demo === "Add Funds" ? TEMPO_MAINNET_CHAIN_ID : undefined;
 
 const rejectPendingRequests = (provider: AccountsProvider | null) => {
   provider?.store.setState((state) => ({
@@ -157,18 +161,23 @@ export default function Demo() {
   const refreshBalance = async (
     provider: AccountsProvider,
     address: `0x${string}`,
+    options: { chainId?: number | undefined } = {},
   ) => {
     try {
+      const params = {
+        account: address,
+        tokens: [PATH_USD],
+        ...(options.chainId === undefined ? {} : { chainId: options.chainId }),
+      };
       const balances = (await provider.request({
         method: "wallet_getBalances",
-        params: [{ account: address, tokens: [PATH_USD] }],
+        params: [params],
       } as Parameters<typeof provider.request>[0])) as ReadonlyArray<{
         balance?: `0x${string}` | bigint | undefined;
         display?: string | undefined;
       }>;
       const native = balances?.[0];
       const balance = parseBalance(native?.balance);
-      console.info("[demo] pathUSD balance", { account: address, balance });
       const next = {
         address,
         balanceDisplay: native?.display ?? formatUsd(balance),
@@ -176,8 +185,7 @@ export default function Demo() {
       };
       setConnected(next);
       return next;
-    } catch (e) {
-      console.warn("[demo] pathUSD balance failed", e);
+    } catch {
       const next = { address, balanceDisplay: "$0.00", balance: 0n };
       setConnected(next);
       return next;
@@ -228,13 +236,29 @@ export default function Demo() {
         if (cancelled || activeDemoRef.current !== currentDemo) return;
         const addr = accounts?.[0];
         if (addr) {
-          await refreshBalance(provider, addr);
+          await refreshBalance(provider, addr, {
+            chainId: balanceChainIdForDemo(currentDemo),
+          });
           if (cancelled || activeDemoRef.current !== currentDemo) return;
           setAccountStatus("connected");
           if (currentDemo === "Log In" && statusRef.current !== "running") {
             setResult({ summary: `Signed in · ${shorten(addr)}` });
             setStatus("done");
             setLastVariant(null);
+          }
+          if (
+            currentDemo === "Spend Permissions" &&
+            statusRef.current !== "running"
+          ) {
+            const permissionResult = activeSpendPermissionResult(
+              provider,
+              addr,
+            );
+            if (permissionResult) {
+              setResult(permissionResult);
+              setStatus("done");
+              setLastVariant(null);
+            }
           }
         } else {
           setConnected(null);
@@ -297,7 +321,9 @@ export default function Demo() {
         })) as readonly `0x${string}`[];
         const addr = accounts?.[0];
         if (addr) {
-          const current = await refreshBalance(provider, addr);
+          const current = await refreshBalance(provider, addr, {
+            chainId: TEMPO_MAINNET_CHAIN_ID,
+          });
           depositBaseline = current.balance;
           depositBaselineAddress = addr;
           setAccountStatus("connected");
@@ -336,7 +362,9 @@ export default function Demo() {
               })) as readonly `0x${string}`[];
               const addr = accounts?.[0] ?? depositBaselineAddress;
               if (!addr) continue;
-              const next = await refreshBalance(provider, addr);
+              const next = await refreshBalance(provider, addr, {
+                chainId: TEMPO_MAINNET_CHAIN_ID,
+              });
               if (activeDemoRef.current !== "Add Funds") return;
               setAccountStatus("connected");
               if (next.balance > depositBaseline) {
@@ -351,9 +379,8 @@ export default function Demo() {
             }
           }
         })();
-      } catch (e) {
+      } catch {
         if (activeDemoRef.current !== demo) return;
-        console.warn("[demo] run failed", e);
         setStatus("idle");
         setResult(null);
       }
@@ -409,7 +436,6 @@ export default function Demo() {
         nextResult = { summary: `Signed in · ${shorten(winner.__polled)}` };
       } else {
         if ("__timeout" in winner) cancelPendingRequests(provider);
-        console.warn("[demo] action timed out without resolution");
         setStatus("idle");
         setResult(null);
         return;
@@ -433,11 +459,10 @@ export default function Demo() {
       if (activeDemoRef.current !== demo) return;
       setResult(nextResult);
       setStatus("done");
-    } catch (e) {
+    } catch {
       if (pollHandle) clearInterval(pollHandle);
       cancelPendingRequests(provider);
       if (activeDemoRef.current !== demo) return;
-      console.warn("[demo] run failed", e);
       setStatus("idle");
       setResult(null);
     }
@@ -464,9 +489,8 @@ export default function Demo() {
       } else {
         setAccountStatus("disconnected");
       }
-    } catch (e) {
+    } catch {
       cancelPendingRequests(providerRef.current);
-      console.warn("[demo] connect failed", e);
       if (!connected) setAccountStatus("disconnected");
       setSetupError("Could not connect. Try again.");
     } finally {
@@ -509,15 +533,10 @@ export default function Demo() {
         await sleep(FUNDING_BALANCE_INTERVAL_MS);
         next = await refreshBalance(provider, addr);
       }
-      if (next.balance <= 0n)
-        console.warn("[demo] faucet completed but balance stayed zero", {
-          account: addr,
-        });
       setAccountStatus("connected");
       if (next.balance <= 0n)
         setSetupError("Funds requested. Balance is still updating.");
-    } catch (e) {
-      console.warn("[demo] funding failed", e);
+    } catch {
       setSetupError("Could not request funds. Try again.");
     } finally {
       setSetupStatus("idle");
@@ -527,7 +546,7 @@ export default function Demo() {
   const def = DEMOS[demo];
 
   return (
-    <section className="relative px-6 pt-2 pb-32 sm:pt-4 sm:pb-[200px]">
+    <section className="relative px-6 pt-2 pb-12 sm:pt-4 sm:pb-20">
       <div ref={boxRef} className="relative">
         <BrowserMockup
           demo={demo}

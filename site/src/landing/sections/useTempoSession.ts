@@ -94,8 +94,7 @@ export function useTempoSession() {
       } catch {
         // ignore — keep prior balance/address.
       }
-    } catch (e) {
-      console.warn("[section] run failed", e);
+    } catch {
       setStatus("idle");
       setResult(null);
     }

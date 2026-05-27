@@ -12,6 +12,8 @@ export const STORAGE_KEY = "tempo-accounts-demo";
 /** Tempo path-USD aggregate token (TokenId 0). */
 export const PATH_USD =
   "0x20c0000000000000000000000000000000000000" as const;
+/** Tempo mainnet chain ID, used by demos that intentionally target production funds. */
+export const TEMPO_MAINNET_CHAIN_ID = tempo.id;
 
 const ONE_DAY = 24 * 60 * 60;
 const FIVE_USD = 5_000_000n;
@@ -30,19 +32,6 @@ const wagmiStorage = createStorage({
 });
 
 /**
- * True when our origin shares the wallet's registrable domain (`tempo.xyz`).
- * The wallet's authorizeAccessKey validator bypasses the "must include
- * scopes" check for same-domain callers — so `*.tempo.xyz` can co-sign
- * a session key with just `limits`. Localhost and other origins must
- * either include `scopes` or skip authorizeAccessKey entirely.
- */
-export function isTrustedHost() {
-  if (typeof window === "undefined") return false;
-  const host = window.location.hostname;
-  return host === "tempo.xyz" || host.endsWith(".tempo.xyz");
-}
-
-/**
  * Default `authorizeAccessKey` payload for `wallet_connect`. Mirrors
  * wallet-next's "lazy access key" pattern: at sign-in we co-sign a
  * scoped session key so subsequent demo transactions (Pay Once, Trade,
@@ -51,9 +40,8 @@ export function isTrustedHost() {
  * - `expiry`: 24h from now.
  * - `limits`: $5 ceiling on path-USD over a 1h window — generous enough
  *   for repeated $0.01 demo clicks, tight enough to be safe.
- *
- * Only valid when called from a same-registrable-domain origin (see
- * `isTrustedHost`). Cross-origin callers must also provide `scopes`.
+ * - `scopes`: path-USD transfers only, required by the wallet from
+ *   localhost and other cross-origin callers.
  */
 export function defaultAuthorizeAccessKey() {
   return {
@@ -63,6 +51,12 @@ export function defaultAuthorizeAccessKey() {
         token: PATH_USD,
         limit: FIVE_USD,
         period: 3600,
+      },
+    ],
+    scopes: [
+      {
+        address: PATH_USD,
+        selector: "transfer(address,uint256)",
       },
     ],
   } as const;
@@ -120,16 +114,10 @@ export function connectCapabilities(options: {
   authorizeAccessKey?: AuthorizeAccessKey | undefined;
   authorizeDefaultAccessKey?: boolean | undefined;
 } = {}) {
-  const capabilities: Record<string, unknown> = {
-    method: "register",
-    name: "Accounts SDK",
-  };
+  const capabilities: Record<string, unknown> = {};
   if (options.authorizeAccessKey) {
     capabilities.authorizeAccessKey = options.authorizeAccessKey;
-  } else if (
-    options.authorizeDefaultAccessKey !== false &&
-    isTrustedHost()
-  ) {
+  } else if (options.authorizeDefaultAccessKey !== false) {
     capabilities.authorizeAccessKey = defaultAuthorizeAccessKey();
   }
   return capabilities;
@@ -156,13 +144,8 @@ export async function connectWalletResult(
     authorizeDefaultAccessKey?: boolean | undefined;
   } = {},
 ) {
-  // Lazy access-key co-signing — only when we're on a *.tempo.xyz
-  // host. The wallet's validator bypasses the "must include scopes"
-  // check for same-registrable-domain callers, so just `limits` is
-  // accepted there. From localhost / other origins the same payload
-  // would either be rejected (missing scopes) or silently break
-  // subsequent transactions, so we skip it and fall back to per-tx
-  // confirmation prompts.
+  // Lazy access-key co-signing: every normal connect grants a scoped
+  // session key unless the caller supplies a specialized permission.
   return (await provider.request({
     method: "wallet_connect",
     params: [{ capabilities: connectCapabilities(options) } as Record<

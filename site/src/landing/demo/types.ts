@@ -58,7 +58,12 @@ export type DemoResult = {
       }[]
     | undefined;
   /** Status for demos that activate and renew a subscription. */
-  subscriptionState?: "active" | "current" | "collected" | undefined;
+  subscriptionState?:
+    | "active"
+    | "current"
+    | "collected"
+    | "cancelled"
+    | undefined;
   /** Server-issued subscription identifier. */
   subscriptionId?: string | undefined;
   /** Millisecond timestamp when the next renewal can be collected. */
@@ -115,6 +120,8 @@ export type DemoBodyProps = {
   onSetupConnect: () => void;
   /** Adds funds for the demo account. */
   onSetupFund: () => void;
+  /** Disconnects the current account. */
+  onDisconnect?: (() => void) | undefined;
   /** The variant string passed to the most recent `onAction` call, or null. */
   lastVariant: string | null;
   /** Entrance delay (ms) — set so the body fades up after the prelude. */
