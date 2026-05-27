@@ -3,6 +3,7 @@ import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
 import type { JsonRpcAccount } from 'viem/accounts'
+import { prepareTransactionRequest } from 'viem/actions'
 import { parseSiweMessage } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
@@ -13,7 +14,6 @@ import * as Account from './Account.js'
 import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
-import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Schema from './Schema.js'
 import * as Storage from './Storage.js'
@@ -280,18 +280,17 @@ export function create(options: create.Options = {}): create.ReturnType {
                         ...(feePayer ? { feePayer: true } : {}),
                       }
                       const formatter = client.chain?.formatters?.transactionRequest
-                      const formatted =
-                        formatter && !fillRequest.keyAuthorization
-                          ? formatter.format({ ...fillRequest } as never, 'fillTransaction')
-                          : fillRequest
+                      const formatted = formatter
+                        ? formatter.format({ ...fillRequest } as never, 'fillTransaction')
+                        : fillRequest
                       return client.request({
                         method: 'eth_fillTransaction',
                         params: [formatted as never],
                       })
                     }
 
-                    // Inject pending keyAuthorization so the node accounts for
-                    // key authorization gas during estimation.
+                    // Route through the managed access-key account so viem can
+                    // attach stored key authorizations during fill.
                     if (!parameters.keyAuthorization) {
                       const state = store.getState()
                       const address =
@@ -307,24 +306,24 @@ export function create(options: create.Options = {}): create.ReturnType {
                                 },
                               ]
                             : undefined)
-                        const transaction = await AccessKeyTransaction.create({
-                          address,
+                        const account = await AccessKey.select({
+                          account: address,
                           calls,
                           chainId: parameters.chainId ?? state.chainId,
-                          client,
                           store,
                         })
-                        if (transaction)
-                          try {
-                            return await transaction.fill({
-                              ...parameters,
-                              chainId: parameters.chainId ?? state.chainId,
-                              from: parameters.from ?? address,
-                              ...(feePayer ? { feePayer: true } : {}),
-                            })
-                          } catch {
-                            return await fill(parameters)
-                          }
+                        if (account) {
+                          const request = await prepareTransactionRequest(client, {
+                            account,
+                            ...parameters,
+                            chainId: parameters.chainId ?? state.chainId,
+                            from: parameters.from ?? address,
+                            ...(feePayer ? { feePayer: true } : {}),
+                            parameters: [],
+                            type: 'tempo',
+                          } as never)
+                          return await fill(request as never)
+                        }
                       }
                     }
 

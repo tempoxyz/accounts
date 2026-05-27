@@ -19,14 +19,13 @@ export type ExecutionError = OneOf<
 export type Rpc = UnionOmit<ExecutionError, 'args'>
 
 /** Human-readable messages keyed by ABI error name. */
-export const messages: Record<AbiErrorName, string> = {
+export const messages: Partial<Record<string, string>> = {
   AddressAlreadyHasValidator: 'This address already has a validator.',
   AddressNotReserved: 'Address is not reserved.',
   AddressReserved: 'Address is reserved.',
   AlreadyInitialized: 'Already initialized.',
   BelowMinimumOrderSize: 'Order size is below the minimum allowed ({0}).',
   CallNotAllowed: 'This call is not allowed.',
-  CannotChangeWithPendingFees: 'Cannot change while fees are pending.',
   CannotChangeWithinBlock: 'Cannot change within the same block.',
   ContractPaused: 'Contract is paused.',
   DivisionByZero: 'Division by zero.',
@@ -45,7 +44,6 @@ export const messages: Record<AbiErrorName, string> = {
   InsufficientOutput:
     'The output amount is below the slippage minimum — try increasing slippage tolerance.',
   InsufficientReserves: 'Insufficient reserves.',
-  InternalError: 'Internal error.',
   InvalidAmount: 'Invalid amount.',
   InvalidBaseToken: 'This token is not a valid base token for the requested pair.',
   InvalidCallScope: 'Invalid call scope.',

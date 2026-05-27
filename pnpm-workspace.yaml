@@ -32,14 +32,14 @@ catalog:
   '@wagmi/core': ^3.4.12
   hono: ^4.12.18
   mppx: ^0.6.27
-  ox: ~0.14.18
+  ox: 0.14.25
   prool: ~0.2.4
   react: ^19.2.5
   react-dom: ^19.2.5
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: ^2.50.4
+  viem: file:/private/tmp/viem-2.51.1.tgz
   vite: ^8.0.5
   vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
@@ -72,13 +72,13 @@ overrides:
   accounts: 'workspace:*'
   '@sinclair/typebox': '^0.34.0'
   'brace-expansion@>=5.0.0 <5.0.6': '5.0.6'
-  viem: 'catalog:'
+  viem: file:/private/tmp/viem-2.51.1.tgz
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
   'js-cookie@<=3.0.5': '3.0.7'
   js-yaml@^3: '3.14.2'
   mermaid: '^11.14.1'
-  ox: '~0.14.18'
+  ox: 0.14.25
   postcss: '8.5.14'
   protobufjs: '7.5.8'
   '@protobufjs/utf8': '1.1.1'

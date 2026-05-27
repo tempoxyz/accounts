@@ -11,7 +11,7 @@ import {
   verifyTypedData,
   waitForTransactionReceipt,
 } from 'viem/actions'
-import { Account as TempoAccount, Actions, Addresses } from 'viem/tempo'
+import { Account as TempoAccount, Actions, Addresses, Transaction } from 'viem/tempo'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 
@@ -1047,7 +1047,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       `)
     })
 
-    test('behavior: signing keeps pending access key retryable', async () => {
+    test('behavior: signing attaches stored keyAuthorization', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
@@ -1056,7 +1056,8 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         method: 'wallet_authorizeAccessKey',
         params: [{ expiry: Expiry.days(1) }],
       })
-      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
+      const accessKey = provider.store.getState().accessKeys[0]!
+      expect(accessKey.keyAuthorization).toBeDefined()
 
       const signed = await provider.request({
         method: 'eth_signTransaction',
@@ -1064,14 +1065,19 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       })
 
       expect(signed).toMatch(/^0x/)
+      const transaction = Transaction.deserialize(signed as `0x${string}`)
+      expect(
+        (transaction as { keyAuthorization?: { address?: string | undefined } }).keyAuthorization
+          ?.address,
+      ).toBe(accessKey.address)
       expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
 
       const receipt = await provider.request({
-        method: 'eth_sendTransactionSync',
-        params: [{ calls: [transferCall] }],
+        method: 'eth_sendRawTransactionSync',
+        params: [signed],
       })
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
-      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
+      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
     })
 
     test('error: throws when not connected', async () => {
@@ -1807,7 +1813,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
     })
 
-    test('exceeding access key limits falls back to root account', async () => {
+    test('exceeding access key limits rejects on access key path', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
@@ -1823,13 +1829,13 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         ],
       })
 
-      // Transfer 1 PUSD — exceeds access key limit, falls back to root account.
-      const receipt = await provider.request({
-        method: 'eth_sendTransactionSync',
-        params: [{ calls: [transferCall] }],
-      })
-      expect(receipt.status).toBe('0x1')
-      expect(receipt.from.toLowerCase()).toBe(address.toLowerCase())
+      // Transfer 1 PUSD — exceeds access key limit, and should not fall back.
+      await expect(
+        provider.request({
+          method: 'eth_sendTransactionSync',
+          params: [{ calls: [transferCall] }],
+        }),
+      ).rejects.toThrowError()
     })
 
     test('behavior: access key is preserved after recoverable key-auth error', async () => {
@@ -1850,12 +1856,14 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       expect(provider.store.getState().accessKeys).toHaveLength(1)
 
-      // Transfer exceeds limit — key-auth error — access key should fall back
-      // to the root account without removing the still-valid access key.
-      await provider.request({
-        method: 'eth_sendTransactionSync',
-        params: [{ calls: [transferCall] }],
-      })
+      // Transfer exceeds limit. The access-key path should reject without removing
+      // the still-valid access key.
+      await expect(
+        provider.request({
+          method: 'eth_sendTransactionSync',
+          params: [{ calls: [transferCall] }],
+        }),
+      ).rejects.toThrowError()
 
       expect(provider.store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
     })
@@ -1976,7 +1984,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(result.tx.to).toBeDefined()
     })
 
-    test('behavior: injects pending keyAuthorization for access key accounts', async () => {
+    test('behavior: fills stored keyAuthorization for access key accounts', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
@@ -1997,15 +2005,10 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(result.tx.gas).toBeDefined()
       expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
 
-      const receipt = await provider.request({
-        method: 'eth_sendTransactionSync',
-        params: [{ from: address, ...fillTx, gas: result.tx.gas as Hex.Hex }],
-      })
-      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
-      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
+      expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
     })
 
-    test('behavior: fills pending keyAuthorization with the active account when from is omitted', async () => {
+    test('behavior: fills stored keyAuthorization with the active account when from is omitted', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
@@ -2048,7 +2051,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         params: [{ address, accessKeyAddress }],
       })
 
-      // Re-add a fake pending keyAuthorization to simulate stale local state.
+      // Re-add a fake keyAuthorization to simulate stale local state.
       provider.store.setState({
         accessKeys: provider.store.getState().accessKeys.map((k) => ({
           ...k,

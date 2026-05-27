@@ -1,7 +1,11 @@
 import { AbiFunction, Address, Hex, PublicKey, RpcResponse, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { BaseError, type Client, type Transport } from 'viem'
-import { Account as TempoAccount, Actions } from 'viem/tempo'
+import {
+  Account as TempoAccount,
+  Actions,
+  KeyAuthorizationManager as TempoKeyAuthorizationManager,
+} from 'viem/tempo'
 
 import type { OneOf } from '../internal/types.js'
 import * as ExecutionError from './ExecutionError.js'
@@ -10,7 +14,7 @@ import type * as Store from './Store.js'
 const status = {
   /** No matching usable access key was found. */
   missing: 'missing',
-  /** A matching key exists locally and still needs its first transaction to publish the authorization. */
+  /** A matching key has a stored authorization that has not been observed on-chain yet. */
   pending: 'pending',
   /** A matching key exists on-chain and can be used. */
   published: 'published',
@@ -32,10 +36,8 @@ export type AccessKey = {
   chainId: number
   /** Unix timestamp when the access key expires. */
   expiry?: number | undefined
-  /** Signed key authorization to attach until the key is observed on-chain. */
+  /** Signed key authorization managed by viem until the key is observed on-chain. */
   keyAuthorization?: KeyAuthorization.Signed | undefined
-  /** Whether the key authorization is pending confirmation on-chain. */
-  keyAuthorizationPending?: boolean | undefined
   /** Key type. */
   keyType: 'secp256k1' | 'p256' | 'webAuthn' | 'webCrypto'
   /** TIP-20 spending limits for the access key. */
@@ -94,15 +96,12 @@ type SelectQuery = {
   calls?: readonly Call[] | undefined
   /** Chain ID the access key must be authorized on. */
   chainId: number
-  /** Client used to verify publication state on-chain. */
-  client: Client<Transport>
   /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
   now?: number | undefined
   /** Reactive state store. */
   store: Store.Store
 }
 
-/** Access key record identity. */
 type Key = {
   /** Root account address. */
   account: Address.Address
@@ -125,17 +124,9 @@ type ListQuery = {
   store: Store.Store
 }
 
-/** Selected access key for an intent. */
-type Selection = {
-  /** Hydrated locally-signable access key account. */
-  account: TempoAccount.AccessKeyAccount
-  /** Access key address. */
-  accessKey: Address.Address
-  /** Pending key authorization to attach, if the key is not yet known published. */
-  authorization?: KeyAuthorization.Signed | undefined
-  /** Stored access key record. */
-  record: AccessKey
-}
+type ManagedAccount = TempoAccount.AccessKeyAccount
+
+type KeyAuthorizationManager = TempoKeyAuthorizationManager.KeyAuthorizationManager
 
 /** Generates a P256 key pair and access key account. */
 export async function generate(options: generate.Options = {}): Promise<generate.ReturnType> {
@@ -278,23 +269,19 @@ export async function getStatus(options: StatusQuery): Promise<Status> {
   if (local) {
     if (isExpired(local.expiry, now)) return status.expired
     if (local.keyAuthorization) {
-      if (local.keyAuthorizationPending) {
-        const publicationStatus = await getPublishedStatus(client, {
+      const publicationStatus = await getPublishedStatus(client, {
+        accessKey: local.address,
+        account,
+        now,
+      }).catch(() => status.pending)
+      if (publicationStatus === status.published)
+        clearAuthorization({
           accessKey: local.address,
           account,
-          now,
-        }).catch(() => status.pending)
-        if (publicationStatus === status.published) {
-          markPublished({
-            accessKey: local.address,
-            account,
-            chainId,
-            store,
-          })
-          return status.published
-        }
-      }
-      return status.pending
+          chainId,
+          store,
+        })
+      return publicationStatus === status.published ? status.published : status.pending
     }
     return await getPublishedStatus(client, { accessKey: local.address, account, now })
   }
@@ -303,9 +290,47 @@ export async function getStatus(options: StatusQuery): Promise<Status> {
   return status.missing
 }
 
-/** Selects a locally-signable access key for an intent. */
-export async function select(options: SelectQuery): Promise<Selection | undefined> {
-  const { account, calls, chainId, client, store } = options
+/** Selects a locally-signable access key account for an intent. */
+export async function select(
+  options: SelectQuery,
+): Promise<TempoAccount.AccessKeyAccount | undefined> {
+  return await selectRecord(options)
+}
+
+function createKeyAuthorizationManager(store: Store.Store): KeyAuthorizationManager {
+  return TempoKeyAuthorizationManager.from({
+    source: {
+      get(key) {
+        return list({
+          account: key.address,
+          accessKey: key.accessKey,
+          chainId: key.chainId,
+          store,
+        })[0]?.keyAuthorization
+      },
+      remove(key) {
+        clearAuthorization({
+          account: key.address,
+          accessKey: key.accessKey,
+          chainId: key.chainId,
+          store,
+        })
+      },
+      set(key, keyAuthorization) {
+        patch({
+          account: key.address,
+          accessKey: key.accessKey,
+          chainId: key.chainId,
+          patch: { keyAuthorization },
+          store,
+        })
+      },
+    },
+  })
+}
+
+async function selectRecord(options: SelectQuery): Promise<ManagedAccount | undefined> {
+  const { account, calls, chainId, store } = options
   const now = options.now ?? Date.now() / 1000
   const records = list({ account, chainId, store })
 
@@ -316,33 +341,10 @@ export async function select(options: SelectQuery): Promise<Selection | undefine
       continue
     }
 
-    const account_accessKey = hydrate(record)
+    const account_accessKey = hydrate(record, store)
     if (!account_accessKey) continue
 
-    let authorization = record.keyAuthorization
-    if (authorization && record.keyAuthorizationPending) {
-      const publicationStatus = await getPublishedStatus(client, {
-        accessKey: record.address,
-        account: record.access,
-        now: Date.now() / 1000,
-      }).catch(() => status.pending)
-      if (publicationStatus === status.published) {
-        markPublished({
-          accessKey: record.address,
-          account: record.access,
-          chainId: record.chainId,
-          store,
-        })
-        authorization = undefined
-      }
-    }
-
-    return {
-      account: account_accessKey,
-      accessKey: record.address,
-      ...(authorization ? { authorization } : {}),
-      record,
-    }
+    return account_accessKey
   }
 }
 
@@ -397,34 +399,26 @@ export declare namespace add {
   type ReturnType = AccessKey
 }
 
-/** Marks a key authorization as pending confirmation on-chain. */
-export function markPending(options: Key): void {
-  const { store, ...key } = options
-  const record = list({ ...key, store })[0]
-  if (!record?.keyAuthorization) return
-  patch({
-    ...key,
-    patch: { keyAuthorizationPending: true },
-    store,
-  })
-}
-
-/** Marks an access key as published on-chain and clears its pending authorization. */
-export function markPublished(options: Key): void {
+function clearAuthorization(options: Key): void {
   const { store, ...key } = options
   patch({
     ...key,
-    patch: { keyAuthorization: undefined, keyAuthorizationPending: undefined },
+    patch: { keyAuthorization: undefined },
     store,
   })
 }
 
 /** Removes an access key record. */
-export function remove(options: Key): void {
+export function remove(options: remove.Options): void {
   const { store, ...key } = options
   store.setState((state) => ({
     accessKeys: state.accessKeys.filter((record) => !matches(record, key)),
   }))
+}
+
+export declare namespace remove {
+  /** Options for {@link remove}. */
+  type Options = Key
 }
 
 /** Returns whether an error means an access key is already unavailable on-chain. */
@@ -498,20 +492,24 @@ function isScope(scope: unknown): scope is NonNullable<AccessKey['scopes']>[numb
   return true
 }
 
-function hydrate(accessKey: AccessKey): TempoAccount.AccessKeyAccount | undefined {
+function hydrate(accessKey: AccessKey, store: Store.Store): ManagedAccount | undefined {
+  const keyAuthorizationManager = createKeyAuthorizationManager(store)
   if ('keyPair' in accessKey && accessKey.keyPair)
     return TempoAccount.fromWebCryptoP256(accessKey.keyPair, {
       access: accessKey.access,
+      keyAuthorizationManager,
     }) as TempoAccount.AccessKeyAccount
   if ('privateKey' in accessKey && accessKey.privateKey) {
     switch (accessKey.keyType) {
       case 'secp256k1':
         return TempoAccount.fromSecp256k1(accessKey.privateKey, {
           access: accessKey.access,
+          keyAuthorizationManager,
         }) as TempoAccount.AccessKeyAccount
       case 'p256':
         return TempoAccount.fromP256(accessKey.privateKey, {
           access: accessKey.access,
+          keyAuthorizationManager,
         }) as TempoAccount.AccessKeyAccount
     }
   }

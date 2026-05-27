@@ -1,11 +1,11 @@
 import { Address, Provider as ox_Provider, RpcRequest as ox_RpcRequest, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
+import { prepareTransactionRequest, sendTransaction as viem_sendTransaction } from 'viem/actions'
 import { z } from 'zod/mini'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
-import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as Schema from '../Schema.js'
 import type * as Store from '../Store.js'
 import * as Rpc from '../zod/rpc.js'
@@ -267,25 +267,24 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               return undefined
             })(),
           })
-          const transaction =
-            parameters.from && typeof parameters.chainId !== 'undefined'
-              ? await AccessKeyTransaction.create({
-                  address: parameters.from,
-                  calls: parameters.calls,
-                  chainId: parameters.chainId,
-                  client,
-                  store,
-                })
-              : undefined
-          if (transaction) {
-            try {
-              const prepared = await transaction.prepare({
-                ...rest,
-                ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-              })
-              return await prepared.sign()
-            } catch (error) {
-              console.warn('[accounts] access key sign failed, falling through to dialog:', error)
+          if (parameters.from && typeof parameters.chainId !== 'undefined') {
+            const account = await AccessKey.select({
+              account: parameters.from,
+              calls: parameters.calls,
+              chainId: parameters.chainId,
+              store,
+            })
+            if (account) {
+              const signed = await (async () => {
+                const prepared = await prepareTransactionRequest(client, {
+                  account,
+                  ...rest,
+                  ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
+                  type: 'tempo',
+                } as never)
+                return await account.signTransaction(prepared as never)
+              })()
+              return signed
             }
           }
           return await provider.request({
@@ -308,26 +307,20 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               return undefined
             })(),
           })
-          const transaction =
-            parameters.from && typeof parameters.chainId !== 'undefined'
-              ? await AccessKeyTransaction.create({
-                  address: parameters.from,
-                  calls: parameters.calls,
-                  chainId: parameters.chainId,
-                  client,
-                  store,
-                })
-              : undefined
-          if (transaction) {
-            try {
-              const prepared = await transaction.prepare({
+          if (parameters.from && typeof parameters.chainId !== 'undefined') {
+            const account = await AccessKey.select({
+              account: parameters.from,
+              calls: parameters.calls,
+              chainId: parameters.chainId,
+              store,
+            })
+            if (account)
+              return await viem_sendTransaction(client, {
+                account,
                 ...rest,
                 ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-              })
-              return await prepared.send()
-            } catch (error) {
-              console.warn('[accounts] access key sign failed, falling through to dialog:', error)
-            }
+                type: 'tempo',
+              } as never)
           }
           return await provider.request({
             ...request,
@@ -345,25 +338,26 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
               return undefined
             })(),
           })
-          const transaction =
-            parameters.from && typeof parameters.chainId !== 'undefined'
-              ? await AccessKeyTransaction.create({
-                  address: parameters.from,
-                  calls: parameters.calls,
-                  chainId: parameters.chainId,
-                  client,
-                  store,
-                })
-              : undefined
-          if (transaction) {
-            try {
-              const prepared = await transaction.prepare({
+          if (parameters.from && typeof parameters.chainId !== 'undefined') {
+            const account = await AccessKey.select({
+              account: parameters.from,
+              calls: parameters.calls,
+              chainId: parameters.chainId,
+              store,
+            })
+            if (account) {
+              const prepared = await prepareTransactionRequest(client, {
+                account,
                 ...rest,
                 ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
+                type: 'tempo',
+              } as never)
+              const signed = await account.signTransaction(prepared as never)
+              const receipt = await client.request({
+                method: 'eth_sendRawTransactionSync' as never,
+                params: [signed],
               })
-              return await prepared.sendSync()
-            } catch (error) {
-              console.warn('[accounts] access key sign failed, falling through to dialog:', error)
+              return receipt
             }
           }
           return await provider.request({

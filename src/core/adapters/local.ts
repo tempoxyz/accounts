@@ -1,13 +1,12 @@
 import { Provider as ox_Provider } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { hashMessage } from 'viem'
-import { prepareTransactionRequest } from 'viem/actions'
+import { prepareTransactionRequest, sendTransaction as viem_sendTransaction } from 'viem/actions'
 import { Actions } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Account from '../Account.js'
 import * as Adapter from '../Adapter.js'
-import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 
 /**
  * Creates a local adapter where the app manages keys and signing in-process.
@@ -29,7 +28,7 @@ export function local(options: local.Options): Adapter.Adapter {
   const { createAccount, icon, loadAccounts, name, rdns } = options
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
-    async function prepareTransaction(parameters: Adapter.signTransaction.Parameters) {
+    function getTransactionContext(parameters: Adapter.signTransaction.Parameters) {
       const { feePayer, ...rest } = parameters
       const client = getClient({
         chainId: parameters.chainId,
@@ -45,21 +44,11 @@ export function local(options: local.Options): Adapter.Adapter {
       }
       const state = store.getState()
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
-      const transaction = address
-        ? await AccessKeyTransaction.create({
-            address,
-            calls: parameters.calls,
-            chainId: parameters.chainId ?? state.chainId,
-            client,
-            store,
-          })
-        : undefined
-      if (transaction) {
-        try {
-          return await transaction.prepare(request)
-        } catch {}
-      }
+      return { address, chainId: parameters.chainId ?? state.chainId, client, request }
+    }
 
+    async function signRootTransaction(parameters: Adapter.signTransaction.Parameters) {
+      const { client, request } = getTransactionContext(parameters)
       const account = getAccount({
         address: parameters.from,
         signable: true,
@@ -70,27 +59,7 @@ export function local(options: local.Options): Adapter.Adapter {
         keyAuthorization: undefined,
         type: 'tempo',
       })
-      async function sign() {
-        return await account.signTransaction(prepared as never)
-      }
-      return {
-        request: prepared,
-        sign,
-        async send() {
-          const signed = await sign()
-          return (await client.request({
-            method: 'eth_sendRawTransaction' as never,
-            params: [signed],
-          })) as Adapter.sendTransaction.ReturnType
-        },
-        async sendSync() {
-          const signed = await sign()
-          return (await client.request({
-            method: 'eth_sendRawTransactionSync' as never,
-            params: [signed],
-          })) as Adapter.sendTransactionSync.ReturnType
-        },
-      }
+      return await account.signTransaction(prepared as never)
     }
 
     return {
@@ -264,8 +233,25 @@ export function local(options: local.Options): Adapter.Adapter {
           return await account.signMessage({ message: { raw: data } })
         },
         async signTransaction(parameters) {
-          const prepared = await prepareTransaction(parameters)
-          return await prepared.sign()
+          const context = getTransactionContext(parameters)
+          const { address, chainId, client, request } = context
+          if (address) {
+            const account = await AccessKey.select({
+              account: address,
+              calls: request.calls,
+              chainId,
+              store,
+            })
+            if (account) {
+              const prepared = await prepareTransactionRequest(client, {
+                account,
+                ...request,
+                type: 'tempo',
+              } as never)
+              return await account.signTransaction(prepared as never)
+            }
+          }
+          return await signRootTransaction(parameters)
         },
         async signTypedData({ data, address }) {
           const account = getAccount({ address, signable: true })
@@ -278,12 +264,56 @@ export function local(options: local.Options): Adapter.Adapter {
           return await account.signTypedData(parsed)
         },
         async sendTransaction(parameters) {
-          const prepared = await prepareTransaction(parameters)
-          return await prepared.send()
+          const context = getTransactionContext(parameters)
+          const { address, chainId, client, request } = context
+          if (address) {
+            const account = await AccessKey.select({
+              account: address,
+              calls: request.calls,
+              chainId,
+              store,
+            })
+            if (account)
+              return (await viem_sendTransaction(client, {
+                account,
+                ...request,
+                type: 'tempo',
+              } as never)) as Adapter.sendTransaction.ReturnType
+          }
+          const signed = await signRootTransaction(parameters)
+          return (await client.request({
+            method: 'eth_sendRawTransaction' as never,
+            params: [signed],
+          })) as Adapter.sendTransaction.ReturnType
         },
         async sendTransactionSync(parameters) {
-          const prepared = await prepareTransaction(parameters)
-          return await prepared.sendSync()
+          const context = getTransactionContext(parameters)
+          const { address, chainId, client, request } = context
+          if (address) {
+            const account = await AccessKey.select({
+              account: address,
+              calls: request.calls,
+              chainId,
+              store,
+            })
+            if (account) {
+              const prepared = await prepareTransactionRequest(client, {
+                account,
+                ...request,
+                type: 'tempo',
+              } as never)
+              const signed = await account.signTransaction(prepared as never)
+              return (await client.request({
+                method: 'eth_sendRawTransactionSync' as never,
+                params: [signed],
+              })) as Adapter.sendTransactionSync.ReturnType
+            }
+          }
+          const signed = await signRootTransaction(parameters)
+          return (await client.request({
+            method: 'eth_sendRawTransactionSync' as never,
+            params: [signed],
+          })) as Adapter.sendTransactionSync.ReturnType
         },
       },
     }
