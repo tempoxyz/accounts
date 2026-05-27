@@ -402,9 +402,7 @@
   --color-network-testnet: var(--network-testnet);
   --color-network-testnet-bg: var(--network-testnet-bg);
 
-  /* Fonts + easing */
-  --font-sans: var(--font-pilat);
-  --font-mono: var(--font-geist-mono);
+  /* Motion */
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
 }
@@ -425,6 +423,9 @@
 }
 
 .accounts-landing {
+  --font-sans: var(--font-pilat);
+  --font-mono: var(--font-geist-mono);
+
   background: var(--background);
   color: var(--foreground);
   color-scheme: dark;
