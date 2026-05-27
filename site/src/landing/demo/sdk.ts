@@ -14,6 +14,8 @@ export const PATH_USD =
   "0x20c0000000000000000000000000000000000000" as const;
 /** Tempo mainnet chain ID, used by demos that intentionally target production funds. */
 export const TEMPO_MAINNET_CHAIN_ID = tempo.id;
+/** Tempo Moderato chain ID, used by demos that rely on the public testnet sponsor. */
+export const TEMPO_MODERATO_CHAIN_ID = tempoModerato.id;
 
 const ONE_DAY = 24 * 60 * 60;
 const FIVE_USD = 5_000_000n;
@@ -96,6 +98,7 @@ type ShowDeposit =
 type ConnectWalletOptions = {
   authorizeAccessKey?: AuthorizeAccessKey | undefined;
   authorizeDefaultAccessKey?: boolean | undefined;
+  chainId?: number | undefined;
   showDeposit?: ShowDeposit | undefined;
 };
 
@@ -164,10 +167,12 @@ export async function connectWalletResult(
   // session key unless the caller supplies a specialized permission.
   return (await provider.request({
     method: "wallet_connect",
-    params: [{ capabilities: connectCapabilities(options) } as Record<
-      string,
-      unknown
-    >],
+    params: [
+      {
+        capabilities: connectCapabilities(options),
+        chainId: options.chainId ?? TEMPO_MODERATO_CHAIN_ID,
+      } as Record<string, unknown>,
+    ],
   })) as WalletConnectResult;
 }
 

@@ -22,6 +22,7 @@ import {
   SPEND_PERMISSION_VALID_SECONDS,
   spendPermissionAuthorizeAccessKey,
   TEMPO_MAINNET_CHAIN_ID,
+  TEMPO_MODERATO_CHAIN_ID,
 } from "./sdk";
 import type { AccountsProvider, DemoDef, DemoKind, DemoResult } from "./types";
 
@@ -37,13 +38,6 @@ const FEE_SPONSORSHIP_RECIPIENT =
   "0x0000000000000000000000000000000000000001" as const;
 const SWAP_AMOUNT_USD = "1";
 const ALPHA_USD = "0x20c0000000000000000000000000000000000001" as const;
-
-function currentChainId(provider: AccountsProvider) {
-  const state = provider.store.getState() as unknown as {
-    chainId?: number | undefined;
-  };
-  return state.chainId ?? tempoModerato.id;
-}
 
 async function connectedAddress(provider: Parameters<DemoDef["run"]>[0]) {
   const accounts = (await provider.request({
@@ -195,6 +189,7 @@ function spendPermissionResult(options: {
 export async function connectSpendPermission(provider: AccountsProvider) {
   const result = await connectWalletResult(provider, {
     authorizeAccessKey: spendPermissionAuthorizeAccessKey(),
+    chainId: TEMPO_MODERATO_CHAIN_ID,
   });
   const account = result.accounts?.[0];
   const key = account?.capabilities?.keyAuthorization;
@@ -235,13 +230,12 @@ function findSpendPermission(
   provider: AccountsProvider,
   account: `0x${string}`,
 ) {
-  const chainId = currentChainId(provider);
   const state = provider.store.getState() as unknown as {
     accessKeys?: readonly SpendPermissionRecord[] | undefined;
   };
   return state.accessKeys?.find((key) => {
     if (key.access.toLowerCase() !== account.toLowerCase()) return false;
-    if (key.chainId !== chainId) return false;
+    if (key.chainId !== TEMPO_MODERATO_CHAIN_ID) return false;
     if (
       !key.limits?.some(
         (limit) =>
@@ -280,7 +274,7 @@ async function sendApprovedPayment(
     params: [
       {
         calls: [call],
-        chainId: currentChainId(provider),
+        chainId: TEMPO_MODERATO_CHAIN_ID,
         feeToken: PATH_USD,
         from: account,
       },
@@ -365,6 +359,7 @@ async function sendSponsoredTransfer(
     params: [
       {
         amount: FEE_SPONSORSHIP_AMOUNT_USD,
+        chainId: TEMPO_MODERATO_CHAIN_ID,
         to: FEE_SPONSORSHIP_RECIPIENT,
         token: PATH_USD,
       },
@@ -482,6 +477,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         params: [
           {
             editable: true,
+            chainId: TEMPO_MODERATO_CHAIN_ID,
             to: self,
             amount: PURCHASE_AMOUNT_USD,
             token: "pathUsd",
@@ -730,6 +726,7 @@ export const DEMOS: Record<DemoKind, DemoDef> = {
         params: [
           {
             amount: SWAP_AMOUNT_USD,
+            chainId: TEMPO_MODERATO_CHAIN_ID,
             pairToken: ALPHA_USD,
             slippage: 0.005,
             token: PATH_USD,

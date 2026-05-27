@@ -11,6 +11,7 @@ import {
   PATH_USD,
   shorten,
   TEMPO_MAINNET_CHAIN_ID,
+  TEMPO_MODERATO_CHAIN_ID,
 } from "./sdk";
 import type {
   AccountStatus,
@@ -48,7 +49,7 @@ const SCROLL_LIFT_PX = 60;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const balanceChainIdForDemo = (demo: DemoKind) =>
-  demo === "Add Funds" ? TEMPO_MAINNET_CHAIN_ID : undefined;
+  demo === "Add Funds" ? TEMPO_MAINNET_CHAIN_ID : TEMPO_MODERATO_CHAIN_ID;
 
 const rejectPendingRequests = (provider: AccountsProvider | null) => {
   provider?.store.setState((state) => ({
@@ -461,7 +462,9 @@ export default function Demo() {
         })) as readonly `0x${string}`[];
         const addr = accounts?.[0];
         if (addr) {
-          await refreshBalance(provider, addr);
+          await refreshBalance(provider, addr, {
+            chainId: balanceChainIdForDemo(activeDemoRef.current),
+          });
           if (activeDemoRef.current === demo) setAccountStatus("connected");
         } else {
           setAccountStatus("disconnected");
