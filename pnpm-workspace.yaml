@@ -60,6 +60,7 @@ minimumReleaseAgeExclude:
   - ox
   - regen-ui
   - secretlint
+  - tmp
   - vocs
   - viem
   - vite-plus
@@ -87,6 +88,7 @@ overrides:
   react: 'catalog:'
   react-dom: 'catalog:'
   tar: '7.5.15'
+  'tmp@<0.2.6': '0.2.6'
   'uuid@<11.1.1': '11.1.1'
   vite-plus: 'catalog:'
   vp: 'catalog:'
