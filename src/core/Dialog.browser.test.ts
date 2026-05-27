@@ -6,15 +6,21 @@ import * as Store from './Store.js'
 
 const host = 'https://wallet-next.tempo.xyz/remote'
 
-function setup() {
+function setup(options: setup.Options = {}) {
   const store = Store.create({
     chainId: 1,
     storage: Storage.memory({ key: 'dialog-test' }),
   })
   const dialog = Dialog.iframe()
-  const handle = dialog({ host, store })
+  const handle = dialog({ host, store, theme: options.theme })
   lastHandle = handle
   return { handle, store }
+}
+
+declare namespace setup {
+  type Options = {
+    theme?: Dialog.Theme | undefined
+  }
 }
 
 let lastHandle: Dialog.Instance | undefined
@@ -43,6 +49,19 @@ describe('Dialog.iframe', () => {
     expect(b).toBe(c)
     const dialogs = document.querySelectorAll('dialog[data-tempo-wallet]')
     expect(dialogs.length).toBe(1)
+  })
+
+  test('behavior: different themes use isolated iframes', () => {
+    const { handle: a } = setup({ theme: { accent: '#ff007a', radius: 'full' } })
+    const iframe_a = document.querySelector('dialog[data-tempo-wallet] iframe') as HTMLIFrameElement
+
+    const { handle: b } = setup({ theme: { radius: 'none' } })
+    const iframe_b = document.querySelector('dialog[data-tempo-wallet] iframe') as HTMLIFrameElement
+
+    expect(a === b).toMatchInlineSnapshot(`false`)
+    expect(iframe_a.isConnected).toMatchInlineSnapshot(`false`)
+    expect(new URL(iframe_b.src).searchParams.get('radius')).toMatchInlineSnapshot(`"none"`)
+    expect(new URL(iframe_b.src).searchParams.has('accent')).toMatchInlineSnapshot(`false`)
   })
 
   test('behavior: iframe has correct sandbox attributes', () => {
