@@ -30,7 +30,7 @@ export function local(options: local.Options): Adapter.Adapter {
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
     async function prepareTransaction(parameters: Adapter.signTransaction.Parameters) {
-      const { feePayer, ...rest } = parameters
+      const { feePayer, keyAuthorization, ...rest } = parameters
       const client = getClient({
         chainId: parameters.chainId,
         feePayer: (() => {
@@ -45,15 +45,16 @@ export function local(options: local.Options): Adapter.Adapter {
       }
       const state = store.getState()
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
-      const transaction = address
-        ? await AccessKeyTransaction.create({
-            address,
-            calls: parameters.calls,
-            chainId: parameters.chainId ?? state.chainId,
-            client,
-            store,
-          })
-        : undefined
+      const transaction =
+        address && !keyAuthorization
+          ? await AccessKeyTransaction.create({
+              address,
+              calls: parameters.calls,
+              chainId: parameters.chainId ?? state.chainId,
+              client,
+              store,
+            })
+          : undefined
       if (transaction) {
         try {
           return await transaction.prepare(request)
@@ -67,7 +68,9 @@ export function local(options: local.Options): Adapter.Adapter {
       const prepared = await prepareTransactionRequest(client, {
         account,
         ...request,
-        keyAuthorization: undefined,
+        ...(keyAuthorization
+          ? { keyAuthorization: normalizeKeyAuthorization(keyAuthorization) }
+          : {}),
         type: 'tempo',
       })
       async function sign() {
@@ -288,6 +291,19 @@ export function local(options: local.Options): Adapter.Adapter {
       },
     }
   })
+}
+
+function normalizeKeyAuthorization(
+  authorization: NonNullable<Adapter.signTransaction.Parameters['keyAuthorization']>,
+) {
+  return KeyAuthorization.from({
+    address: authorization.keyId,
+    chainId: authorization.chainId,
+    ...(authorization.expiry != null ? { expiry: authorization.expiry } : {}),
+    ...(authorization.limits ? { limits: authorization.limits } : {}),
+    signature: SignatureEnvelope.fromRpc(authorization.signature),
+    type: authorization.keyType,
+  } as never)
 }
 
 export declare namespace local {
