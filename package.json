@@ -31,9 +31,9 @@
     }
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^0.6.0",
+    "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.31.0",
-    "@remix-run/route-pattern": "^0.20.0",
+    "@remix-run/route-pattern": "^0.21.1",
     "@types/express": "^5.0.6",
     "@types/http-proxy": "^1.17.17",
     "@types/node": "catalog:",
@@ -57,7 +57,7 @@
     "viem": "catalog:",
     "vp": "catalog:",
     "wagmi": "catalog:",
-    "zile": "^0.0.25"
+    "zile": "^0.0.26"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm check"
