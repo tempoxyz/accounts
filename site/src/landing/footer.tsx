@@ -79,23 +79,24 @@ export default function Footer() {
           </button>
         </div>
       ) : (
-        <span
-          className="relative z-10 px-6 sm:px-9"
+        <button
+          type="button"
+          aria-label="Open game"
+          onClick={() => setRevealed(true)}
+          className="relative z-10 px-6 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[opacity,transform] hover:opacity-80 active:translate-y-px sm:px-9"
           style={{
-            textShadow:
-              "0 0 12px var(--footer-glow), 0 0 24px var(--footer-glow)",
+            filter:
+              "drop-shadow(0 0 12px var(--footer-glow)) drop-shadow(0 0 24px var(--footer-glow))",
           }}
         >
-          Powered by{" "}
-          <a
-            href="https://tempo.xyz"
-            target="_blank"
-            rel="noreferrer"
-            className="text-foreground-muted underline-offset-4 transition-[background-color,border-color,color] duration-150 hover:text-foreground hover:underline"
-          >
-            Tempo
-          </a>
-        </span>
+          <img
+            src="/mine-salt.svg"
+            alt="Mine Salt"
+            width={170}
+            height={30}
+            className="h-6 w-auto"
+          />
+        </button>
       )}
     </footer>
   );
