@@ -274,14 +274,7 @@ describe('behavior: with feePayer', () => {
       account: userAccount.address,
       calls: [transferCall()],
     })
-    const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
-    const envelope = TxEnvelopeTempo.deserialize(serialized)
-    const signature = await userAccount.sign({
-      hash: TxEnvelopeTempo.getSignPayload(envelope),
-    })
-    const signed = TxEnvelopeTempo.serialize(envelope, {
-      signature: SignatureEnvelope.from(signature),
-    })
+    const signed = await userAccount.signTransaction(transaction as never)
     const receipt = (await getClient().request({
       method: 'eth_sendRawTransactionSync' as never,
       params: [signed],
@@ -373,14 +366,7 @@ describe('behavior: with feePayer.feeToken', () => {
     })
     expect(transaction.feeToken?.toLowerCase()).toBe(sponsorFeeToken)
 
-    const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
-    const envelope = TxEnvelopeTempo.deserialize(serialized)
-    const signature = await userAccount.sign({
-      hash: TxEnvelopeTempo.getSignPayload(envelope),
-    })
-    const signed = TxEnvelopeTempo.serialize(envelope, {
-      signature: SignatureEnvelope.from(signature),
-    })
+    const signed = await userAccount.signTransaction(transaction as never)
     const receipt = (await getClient().request({
       method: 'eth_sendRawTransactionSync' as never,
       params: [signed],
@@ -461,14 +447,7 @@ describe('behavior: with app-provided feePayer URL', () => {
       calls: [transferCall()],
       feePayer: appServer.url as never,
     })
-    const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
-    const envelope = TxEnvelopeTempo.deserialize(serialized)
-    const signature = await userAccount.sign({
-      hash: TxEnvelopeTempo.getSignPayload(envelope),
-    })
-    const signed = TxEnvelopeTempo.serialize(envelope, {
-      signature: SignatureEnvelope.from(signature),
-    })
+    const signed = await userAccount.signTransaction(transaction as never)
     const receipt = (await getClient().request({
       method: 'eth_sendRawTransactionSync' as never,
       params: [signed],
@@ -1316,14 +1295,7 @@ describe('behavior: conditional sponsoring', () => {
     })
     expect(transaction.feePayerSignature).toBeDefined()
 
-    const serialized = (await Transaction.serialize(transaction as never)) as `0x76${string}`
-    const envelope = TxEnvelopeTempo.deserialize(serialized)
-    const signature = await userAccount.sign({
-      hash: TxEnvelopeTempo.getSignPayload(envelope),
-    })
-    const signed = TxEnvelopeTempo.serialize(envelope, {
-      signature: SignatureEnvelope.from(signature),
-    })
+    const signed = await userAccount.signTransaction(transaction as never)
     const receipt = (await getClient().request({
       method: 'eth_sendRawTransactionSync' as never,
       params: [signed],
