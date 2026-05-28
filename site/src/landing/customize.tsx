@@ -595,18 +595,23 @@ export default function Customize() {
   const marqueeRef = useRef<HTMLDivElement | null>(null);
   const marqueeAnimationRef = useRef<WAAPIAnimation | null>(null);
   const cardAnimationRef = useRef<WAAPIAnimation | null>(null);
-  // The Custom preset seeds its initial `scheme` from the landing page's
-  // resolved theme so opening the section in site light mode previews
-  // the SDK's light scheme by default. After the first paint the user
-  // owns the value — the Custom toolbar's Light/Dark toggle still works
-  // exactly as before. (Using a lazy `useState` initialiser so we don't
-  // re-seed when the user later flips the site theme.)
+  // The Custom preset's `scheme` tracks the global site theme: it seeds
+  // from the resolved theme on first paint and re-syncs whenever the user
+  // flips the page's light/dark switch, so the preview always matches the
+  // surrounding page. The toolbar's own Light/Dark toggle still lets the
+  // user override it until the next global flip.
   const { resolved } = useTheme();
   const [custom, setCustom] = useState<CustomTheme>(() => ({
     accent: "#3b82f6",
     radius: "medium",
     scheme: resolved,
   }));
+
+  useEffect(() => {
+    setCustom((prev) =>
+      prev.scheme === resolved ? prev : { ...prev, scheme: resolved },
+    );
+  }, [resolved]);
 
   useEffect(() => {
     const el = marqueeRef.current;
