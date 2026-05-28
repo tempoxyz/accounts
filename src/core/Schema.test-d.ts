@@ -123,6 +123,25 @@ describe('Encoded', () => {
     expectTypeOf<ShowDepositObject>().not.toHaveProperty('chainId')
   })
 
+  test('wallet_authorizeAccessKey: showDeposit', () => {
+    type Parameters = NonNullable<Rpc.wallet_authorizeAccessKey.Decoded['params']>[number]
+    type ShowDeposit = Parameters['showDeposit']
+    type ShowDepositObject = Exclude<Exclude<ShowDeposit, boolean | undefined>, undefined>
+
+    expectTypeOf<ShowDeposit>().toMatchTypeOf<
+      | boolean
+      | {
+          amount?: string | undefined
+          displayName?: string | undefined
+          token?: string | undefined
+        }
+      | undefined
+    >()
+    expectTypeOf<ShowDepositObject>().not.toHaveProperty('address')
+    expectTypeOf<ShowDepositObject>().not.toHaveProperty('chainId')
+    expectTypeOf<ShowDepositObject>().not.toHaveProperty('on')
+  })
+
   test('wallet_connect: returns', () => {
     expectTypeOf<Rpc.wallet_connect.Encoded['returns']>().toHaveProperty('accounts')
     expectTypeOf<

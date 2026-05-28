@@ -386,6 +386,49 @@ describe('dialog', () => {
     expect('keyPair' in store.getState().accessKeys[0]!).toMatchInlineSnapshot(`true`)
   })
 
+  test('behavior: authorizeAccessKey forwards showDeposit', async () => {
+    const { adapter, store } = setup()
+    const expiry = 123
+    const showDeposit = { amount: '50', token: 'USDC' }
+    const promise = adapter.actions.authorizeAccessKey!(
+      { expiry, showDeposit },
+      { method: 'wallet_authorizeAccessKey', params: [{ expiry, showDeposit }] },
+    )
+
+    const queued = await takeRequest(store)
+    const request = queued.request as {
+      params: [
+        {
+          expiry: number
+          keyType: 'p256'
+          publicKey: Hex.Hex
+          showDeposit: typeof showDeposit
+        },
+      ]
+    }
+    const params = request.params[0]
+    store.setState({
+      requestQueue: [
+        {
+          request: queued.request,
+          result: {
+            keyAuthorization: createKeyAuthorization(params),
+            rootAddress: address,
+          },
+          status: 'success',
+        },
+      ],
+    })
+
+    await expect(promise).resolves.toMatchObject({ rootAddress: address })
+    expect(params.showDeposit).toMatchInlineSnapshot(`
+      {
+        "amount": "50",
+        "token": "USDC",
+      }
+    `)
+  })
+
   test('behavior: authorizeAccessKey generates a p256 key when requested', async () => {
     const { adapter, store } = setup()
     const expiry = 123

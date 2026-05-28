@@ -210,6 +210,38 @@ describe('create', () => {
     `)
   })
 
+  test('behavior: forwards showDeposit params to the mobile auth URL for wallet_authorizeAccessKey', async () => {
+    const browser = createOpen()
+    const provider = Provider.create({
+      chains: [chain],
+      host: 'https://wallet-next.tempo.xyz',
+      open: browser.open,
+      redirectUri: 'accounts-playground://auth',
+      secureStorage: Storage.memory(),
+    })
+
+    await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [
+        {
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          showDeposit: {
+            amount: '25',
+            token: 'USDC',
+          },
+        },
+      ],
+    })
+
+    expect(JSON.parse(new URL(browser.urls()[0]!).searchParams.get('showDeposit')!))
+      .toMatchInlineSnapshot(`
+      {
+        "amount": "25",
+        "token": "USDC",
+      }
+    `)
+  })
+
   test('behavior: forwards personalSign to the mobile auth URL and returns signature', async () => {
     const browser = createOpen()
     const provider = Provider.create({

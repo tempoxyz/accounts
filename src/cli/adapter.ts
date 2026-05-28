@@ -258,6 +258,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
             ...(account ? { account } : {}),
             authorizeAccessKey: parameters,
             method: 'wallet_authorizeAccessKey',
+            ...(parameters.showDeposit !== undefined
+              ? { showDeposit: parameters.showDeposit }
+              : {}),
           })
 
           if (!account)

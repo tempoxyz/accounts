@@ -303,6 +303,50 @@ describe('Provider.create', () => {
     }
   })
 
+  test('behavior: forwards showDeposit through wallet_authorizeAccessKey device-code requests', async () => {
+    const handler = createHandler()
+    const server = await createServer(handler.listener)
+    const pendingShowDeposit: z.output<typeof CliAuth.pendingResponse>['showDeposit'][] = []
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (url) => {
+          const code = new URL(url).searchParams.get('code')!
+          const response = await fetch(`${server.url}/cli-auth/pending/${code}`)
+          const pending = z.decode(CliAuth.pendingResponse, (await response.json()) as never)
+          pendingShowDeposit.push(pending.showDeposit)
+          await fetch(`${server.url}/cli-auth`, {
+            body: JSON.stringify(await authorizePending(server.url, code)),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          })
+        },
+        host: `${server.url}/cli-auth`,
+      })
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [
+          {
+            expiry,
+            keyType: accessKey.keyType,
+            publicKey: accessKey.publicKey,
+            showDeposit: true,
+          },
+        ],
+      })
+
+      expect(pendingShowDeposit).toMatchInlineSnapshot(`
+        [
+          true,
+        ]
+      `)
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
   test('behavior: browser-open failures surface the URL and code', async () => {
     const handler = createHandler()
     const server = await createServer(handler.listener)

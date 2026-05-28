@@ -310,6 +310,82 @@ describe('wallet_connect.capabilities.request: showDeposit', () => {
   })
 })
 
+describe('wallet_authorizeAccessKey.parameters: showDeposit', () => {
+  test('accepts true', () => {
+    expect(
+      z.parse(Rpc.wallet_authorizeAccessKey.parameters, {
+        expiry: 123,
+        showDeposit: true,
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "expiry": 123,
+        "showDeposit": true,
+      }
+    `)
+  })
+
+  test('accepts deposit parameters', () => {
+    expect(
+      z.parse(Rpc.wallet_authorizeAccessKey.parameters, {
+        expiry: 123,
+        showDeposit: {
+          amount: '50',
+          displayName: 'DoorDash',
+          token: 'USDC',
+        },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "expiry": 123,
+        "showDeposit": {
+          "amount": "50",
+          "displayName": "DoorDash",
+          "token": "USDC",
+        },
+      }
+    `)
+  })
+
+  test('rejects invalid deposit parameters', () => {
+    expect(() =>
+      z.parse(Rpc.wallet_authorizeAccessKey.parameters, {
+        expiry: 123,
+        showDeposit: { amount: 50 },
+      }),
+    ).toThrow()
+  })
+})
+
+describe('wallet_authorizeAccessKey_strict.parameters: showDeposit', () => {
+  test('accepts showDeposit with required access-key policy', () => {
+    expect(
+      z.parse(Rpc.wallet_authorizeAccessKey_strict.parameters, {
+        expiry: 123,
+        limits: [{ limit: 1n, token: '0x0000000000000000000000000000000000000001' }],
+        scopes: [{ address: '0x0000000000000000000000000000000000000001' }],
+        showDeposit: true,
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "expiry": 123,
+        "limits": [
+          {
+            "limit": 1n,
+            "token": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "scopes": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "showDeposit": true,
+      }
+    `)
+  })
+})
+
 describe('wallet_connect_strict.parameters: auth', () => {
   test('accepts string shorthand', () => {
     expect(

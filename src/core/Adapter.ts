@@ -308,6 +308,10 @@ export declare namespace signTypedData {
 }
 
 export declare namespace authorizeAccessKey {
+  type ShowDeposit = NonNullable<
+    Rpc.wallet_authorizeAccessKey.Decoded['params']
+  >[number]['showDeposit']
+
   type Parameters = {
     /** Access key address. Alternative to `publicKey` when the caller already knows the derived address. */
     address?: Address | undefined
@@ -329,6 +333,8 @@ export declare namespace authorizeAccessKey {
           recipients?: readonly Address[] | undefined
         }[]
       | undefined
+    /** Show the deposit flow after the access-key authorization succeeds. */
+    showDeposit?: ShowDeposit | undefined
   }
 
   type ReturnType = {
