@@ -115,6 +115,134 @@
   font-weight: 500;
 }
 
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-Thin.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-ThinItalic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 100;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-ExtraLight.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 200;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-ExtraLightItalic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 200;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-Light.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 300;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-LightItalic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 300;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-Regular.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-Italic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-Medium.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 500;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-MediumItalic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 500;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-SemiBold.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 600;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-SemiBoldItalic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 600;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-Bold.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 700;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-BoldItalic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 700;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-ExtraBold.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 800;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-ExtraBoldItalic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 800;
+}
+
 /* ─── Landing page colour catalogue ──────────────────────────────────────
  *
  * Every hex used anywhere on the marketing landing page lives in this file.
@@ -298,7 +426,7 @@
   /* Fonts + motion */
   --font-pilat: "Pilat", Arial, Helvetica, sans-serif;
   --font-hbset: "HBSet", "Pilat", Arial, Helvetica, sans-serif;
-  --font-geist-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-jetbrains-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
 /* The same overrides apply when the bootstrap script (vocs.config.ts) has
@@ -477,7 +605,7 @@
 
 .accounts-landing {
   --font-sans: var(--font-pilat);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-jetbrains-mono);
 
   background: var(--background);
   color: var(--foreground);
