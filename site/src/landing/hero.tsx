@@ -331,14 +331,14 @@ function HeroIntro({
         <h1
           data-hero-stagger
           style={staggerStyle}
-          className="text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-5xl sm:whitespace-nowrap"
+          className="text-halo text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-5xl sm:whitespace-nowrap"
         >
           Tempo Accounts SDK
         </h1>
         <p
           data-hero-stagger
           style={staggerStyle}
-          className="max-w-lg text-[16px] text-foreground-muted sm:text-xl"
+          className="text-halo max-w-lg text-[16px] text-foreground-muted sm:text-xl"
         >
           The fastest way to build stablecoin-powered apps, wallets, and agentic workflows.
         </p>
@@ -433,7 +433,7 @@ function HeroIntro({
       <div
         data-hero-stagger
         style={staggerStyle}
-        className="mt-[-14px] flex items-center gap-5"
+        className="text-halo mt-[-14px] flex items-center gap-5"
       >
         <Link
           to="/docs"
@@ -459,7 +459,7 @@ function HeroIntro({
         <span aria-hidden className="text-[12px] text-foreground-subtle">
           |
         </span>
-        <div className="flex items-center gap-2">
+        <div className="relative flex items-center">
           <button
             type="button"
             onClick={() => copyAgent(agentInstructions)}
@@ -470,7 +470,7 @@ function HeroIntro({
           </button>
           <span
             aria-live="polite"
-            className={`text-[12px] text-foreground-subtle transition-opacity duration-150 ${
+            className={`pointer-events-none absolute top-1/2 left-full ml-2 -translate-y-1/2 text-[12px] text-foreground-subtle transition-opacity duration-150 ${
               copiedAgent ? "opacity-100" : "opacity-0"
             }`}
           >

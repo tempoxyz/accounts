@@ -347,7 +347,7 @@
   --game-over-sub: #525252;
 
   /* Tier 8 — ascii-bg / InteractiveQr dot field */
-  --canvas-dot-rgb: 80, 80, 80;
+  --canvas-dot-rgb: 200, 200, 200;
   --canvas-dot-alpha-base: 0.1;
   --canvas-dot-alpha-hover: 0.18;
 }
@@ -460,6 +460,18 @@
 
 .accounts-landing .scrollbar-hide {
   scrollbar-width: none;
+}
+
+/* Soft "knockout" halo of the page background, painted around glyphs so
+ * text sits cleanly on top of the ASCII pattern without needing a hard
+ * background rectangle behind it. Stack four shadows so the fill stays
+ * opaque through the blur. */
+.accounts-landing .text-halo {
+  text-shadow:
+    0 0 6px var(--background),
+    0 0 6px var(--background),
+    0 0 6px var(--background),
+    0 0 12px var(--background);
 }
 
 @keyframes fadeUp {
