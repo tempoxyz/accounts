@@ -107,7 +107,7 @@ export default function Guides() {
       style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
     >
       <div className="mx-auto mb-14 flex max-w-[620px] flex-col items-center gap-3 text-center">
-        <h2 className="text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-[40px]">
+        <h2 className="font-display text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-[40px]">
           Guides
         </h2>
         <p className="text-[16px] text-foreground-muted sm:text-[18px]">

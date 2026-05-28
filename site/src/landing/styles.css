@@ -67,6 +67,54 @@
   font-weight: 900;
 }
 
+@font-face {
+  font-family: "HBSet";
+  src: url("/fonts/Hbset/HBSetv0.96-Light.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 300;
+}
+
+@font-face {
+  font-family: "HBSet";
+  src: url("/fonts/Hbset/HBSetv0.96-LightItalic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 300;
+}
+
+@font-face {
+  font-family: "HBSet";
+  src: url("/fonts/Hbset/HBSetv0.96-Regular2.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "HBSet";
+  src: url("/fonts/Hbset/HBSetv0.96-Regular2Italic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "HBSet";
+  src: url("/fonts/Hbset/HBSetv0.96-Medium.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 500;
+}
+
+@font-face {
+  font-family: "HBSet";
+  src: url("/fonts/Hbset/HBSetv0.96-MediumItalic.woff2") format("woff2");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 500;
+}
+
 /* ─── Landing page colour catalogue ──────────────────────────────────────
  *
  * Every hex used anywhere on the marketing landing page lives in this file.
@@ -249,6 +297,7 @@
 
   /* Fonts + motion */
   --font-pilat: "Pilat", Arial, Helvetica, sans-serif;
+  --font-hbset: "HBSet", "Pilat", Arial, Helvetica, sans-serif;
   --font-geist-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
@@ -401,6 +450,10 @@
   --color-accent-live: var(--accent-live);
   --color-network-testnet: var(--network-testnet);
   --color-network-testnet-bg: var(--network-testnet-bg);
+
+  /* Display font (HBSet) — reserved for the brand wordmark / hero
+   * heading only. Body copy stays on the sans (Pilat) family. */
+  --font-display: var(--font-hbset);
 
   /* Motion */
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
