@@ -1873,6 +1873,7 @@ function WalletAuthorizeAccessKey() {
   const [result, error, execute] = useRequest()
   const tokenlist = useTokenlist()
   const [limits, setLimits] = useState<LimitInput[]>([{ token: '', amount: '100', period: '' }])
+  const [showDepositEnabled, setShowDepositEnabled] = useState(false)
 
   // Once the tokenlist resolves, hydrate any unselected limit row with the first token.
   useEffect(() => {
@@ -1915,6 +1916,7 @@ function WalletAuthorizeAccessKey() {
             }))
           if (scopeSelector && filledLimits[0])
             params.scopes = [{ address: filledLimits[0].token, selector: scopeSelector }]
+          if (showDepositEnabled) params.showDeposit = true
 
           execute(() =>
             provider.request({
@@ -2003,6 +2005,18 @@ function WalletAuthorizeAccessKey() {
             ))}
           </select>
         </div>
+        <fieldset style={{ marginBottom: 8 }}>
+          <legend>
+            <label>
+              <input
+                checked={showDepositEnabled}
+                onChange={(e) => setShowDepositEnabled(e.target.checked)}
+                type="checkbox"
+              />{' '}
+              Show Deposit
+            </label>
+          </legend>
+        </fieldset>
         <Button type="submit">Authorize</Button>
       </form>
     </Method>
