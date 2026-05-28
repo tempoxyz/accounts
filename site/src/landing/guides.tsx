@@ -110,7 +110,7 @@ export default function Guides() {
         <h2 className="font-display text-[32px] leading-[1.1] tracking-[-0.03em] text-foreground sm:text-[40px]">
           Guides
         </h2>
-        <p className="text-[16px] text-foreground-muted sm:text-[18px]">
+        <p className="text-[18px] text-foreground-muted">
           Learn the core SDK flows, from authentication and deposits to
           transfers, subscriptions, exchange, and theming.
         </p>
@@ -129,7 +129,7 @@ export default function Guides() {
             <span className="relative z-10 order-2 inline-flex text-foreground-muted sm:order-none sm:text-foreground">
               <ArrowUpRight />
             </span>
-            <span className="relative z-10 min-w-0 text-[16px] leading-tight sm:text-[24px]">
+            <span className="relative z-10 min-w-0 text-[18px] leading-tight">
               {g.title}
             </span>
           </a>

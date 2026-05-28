@@ -60,7 +60,7 @@ export function SubscribeBody(props: DemoBodyProps) {
       style={body.style}
     >
       <div className="flex flex-col gap-1">
-        <p className="text-[13px] text-foreground-muted">Pro Plan</p>
+        <p className="text-[14px] text-foreground-muted">Pro Plan</p>
         <p className="font-mono text-[28px] tabular-nums text-foreground">
           $0.01<span className="text-foreground-subtle">/10s</span>
         </p>
@@ -73,8 +73,8 @@ export function SubscribeBody(props: DemoBodyProps) {
 
       {subscriptionId ? (
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-panel-3 px-3 py-2">
-          <p className="text-[11px] text-foreground-muted">Subscription</p>
-          <p className="text-right text-[11px] text-foreground-muted">
+          <p className="text-[12px] text-foreground-muted">Subscription</p>
+          <p className="text-right text-[12px] text-foreground-muted">
             Next collection
           </p>
           <p className="truncate font-mono text-[12px] text-foreground">
@@ -112,7 +112,7 @@ export function SubscribeBody(props: DemoBodyProps) {
       ) : null}
       {receipts.length > 0 ? (
         <div className="flex flex-col gap-1">
-          <p className="text-[11px] text-foreground-muted">Receipts</p>
+          <p className="text-[12px] text-foreground-muted">Receipts</p>
           <div className="flex flex-col gap-1">
             {receipts.map((receipt) =>
               receipt.href ? (
@@ -121,14 +121,14 @@ export function SubscribeBody(props: DemoBodyProps) {
                   href={receipt.href}
                   target="_blank"
                   rel="noreferrer"
-                  className="truncate font-mono text-[11px] text-foreground-subtle outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
+                  className="truncate font-mono text-[12px] text-foreground-subtle outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
                 >
                   {receipt.label}
                 </a>
               ) : (
                 <span
                   key={`${receipt.label}-${receipt.reference}`}
-                  className="truncate font-mono text-[11px] text-foreground-subtle"
+                  className="truncate font-mono text-[12px] text-foreground-subtle"
                 >
                   {receipt.label}
                 </span>

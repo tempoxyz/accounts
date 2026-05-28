@@ -23,12 +23,12 @@ export function FeeSponsorshipBody(props: DemoBodyProps) {
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
-          <p className="text-[13px] text-foreground-muted">No-fee transfer</p>
+          <p className="text-[14px] text-foreground-muted">No-fee transfer</p>
           <p className="font-mono text-[28px] leading-none text-foreground">
             $1.00
           </p>
         </div>
-        <span className="bg-panel-4 px-2 py-1 font-mono text-[11px] text-foreground-muted">
+        <span className="bg-panel-4 px-2 py-1 font-mono text-[12px] text-foreground-muted">
           {done ? "sponsored" : "approved"}
         </span>
       </div>
@@ -65,7 +65,7 @@ export function FeeSponsorshipBody(props: DemoBodyProps) {
       />
       {result?.summary ? (
         result.href && result.hrefLabel ? (
-          <p className="font-mono text-[10px] text-foreground-subtle">
+          <p className="font-mono text-[12px] text-foreground-subtle">
             {result.summary}{" "}
             <a
               href={result.href}
@@ -77,7 +77,7 @@ export function FeeSponsorshipBody(props: DemoBodyProps) {
             </a>
           </p>
         ) : (
-          <p className="font-mono text-[10px] text-foreground-subtle">
+          <p className="font-mono text-[12px] text-foreground-subtle">
             {result.summary}
           </p>
         )

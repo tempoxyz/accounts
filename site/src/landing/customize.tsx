@@ -230,7 +230,7 @@ function Cta({
   return (
     <button
       type="button"
-      className={`grid h-9 place-items-center text-[11.336px] tracking-[0.1134px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 ${full ? "w-full" : "w-[313px] self-center"}`}
+      className={`grid h-9 place-items-center text-[12px] tracking-[0.1134px] outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-opacity hover:opacity-90 ${full ? "w-full" : "w-[313px] self-center"}`}
       style={{
         background: palette.buttonBg,
         color: palette.buttonText,
@@ -249,13 +249,13 @@ function OrderPizzaCard({ palette }: { palette: Palette }) {
       <div className="flex flex-col">
         <div className="flex items-center justify-between pb-3">
           <p
-            className="text-[11.336px] tracking-[0.1134px]"
+            className="text-[12px] tracking-[0.1134px]"
             style={{ color: palette.headerColor }}
           >
             Order Pizza
           </p>
           <p
-            className="text-[9.919px] tracking-[0.0992px]"
+            className="text-[12px] tracking-[0.0992px]"
             style={{ color: palette.metaColor }}
           >
             View order
@@ -302,13 +302,13 @@ function BalancesCard({ palette }: { palette: Palette }) {
       <div className="flex flex-col">
         <div className="flex items-center justify-between pb-3">
           <p
-            className="text-[11.336px] tracking-[0.1134px]"
+            className="text-[12px] tracking-[0.1134px]"
             style={{ color: palette.headerColor }}
           >
             Balances
           </p>
           <p
-            className="text-[9.919px] tracking-[0.0992px]"
+            className="text-[12px] tracking-[0.0992px]"
             style={{ color: palette.metaColor }}
           >
             View all
@@ -349,13 +349,13 @@ function ClearInvoiceCard({ palette }: { palette: Palette }) {
       <div className="flex flex-col">
         <div className="flex items-start justify-between pb-3">
           <p
-            className="text-[11.336px] tracking-[0.1134px]"
+            className="text-[12px] tracking-[0.1134px]"
             style={{ color: palette.headerColor }}
           >
             Clear Invoice
           </p>
           <p
-            className="text-[9.919px] tracking-[0.0992px]"
+            className="text-[12px] tracking-[0.0992px]"
             style={{ color: palette.metaColor }}
           >
             Paytrie Inc
@@ -410,7 +410,7 @@ function ReloadCard({ palette }: { palette: Palette }) {
             Reload Card
           </p>
           <p
-            className="text-[9.919px] tracking-[0.0992px]"
+            className="text-[12px] tracking-[0.0992px]"
             style={{ color: palette.metaColor }}
           >
             View all
@@ -467,7 +467,7 @@ function ThemeSwitcher({
             key={p}
             type="button"
             onClick={() => onChange(p)}
-            className={`relative flex items-center justify-center border px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
+            className={`relative flex items-center justify-center border px-2.5 py-1.5 font-mono text-[16px] outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[background-color,border-color,color] duration-150 ${active ? "border-panel-edge bg-panel-1 text-foreground" : "border-transparent bg-panel-0 text-foreground-muted"}`}
           >
             {p}
           </button>
@@ -493,7 +493,7 @@ function CustomThemeToolbar({
     <div className="flex w-full max-w-[920px] flex-col gap-3 border border-panel-edge bg-panel-0 px-5 py-4 sm:flex-row sm:flex-nowrap sm:items-center sm:justify-center sm:gap-x-6">
       {/* Accent */}
       <div className="flex items-center gap-2.5">
-        <span className="font-mono text-[10px] tracking-[0.18em] text-foreground-subtle uppercase">
+        <span className="font-mono text-[12px] tracking-[0.18em] text-foreground-subtle uppercase">
           Accent
         </span>
         <div className="flex items-center gap-1.5">
@@ -540,7 +540,7 @@ function CustomThemeToolbar({
 
       {/* Radius */}
       <div className="flex items-center gap-2.5">
-        <span className="font-mono text-[10px] tracking-[0.18em] text-foreground-subtle uppercase">
+        <span className="font-mono text-[12px] tracking-[0.18em] text-foreground-subtle uppercase">
           Radius
         </span>
         <div className="flex items-center gap-1">
@@ -565,7 +565,7 @@ function CustomThemeToolbar({
 
       {/* Scheme */}
       <div className="flex items-center gap-2.5">
-        <span className="font-mono text-[10px] tracking-[0.18em] text-foreground-subtle uppercase">
+        <span className="font-mono text-[12px] tracking-[0.18em] text-foreground-subtle uppercase">
           Scheme
         </span>
         <div className="flex items-center gap-1">
@@ -687,7 +687,7 @@ export default function Customize() {
         <h2 className="font-display text-[32px] leading-[1.1] tracking-[-0.03em] text-foreground sm:text-[40px]">
           Customize to <br className="sm:hidden" /> match your app
         </h2>
-        <p className="max-w-[600px] text-[16px] text-foreground-muted sm:text-[18px]">
+        <p className="max-w-[600px] text-[18px] text-foreground-muted">
           Tempo Accounts SDK ships with full control on customizability to allow
           you to design embed like your native styles.
         </p>

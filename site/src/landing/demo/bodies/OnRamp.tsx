@@ -19,12 +19,12 @@ export function OnRampBody({
       style={body.style}
     >
       <div className="flex flex-col gap-1">
-        <p className="text-[13px] text-foreground-muted">Available balance</p>
+        <p className="text-[14px] text-foreground-muted">Available balance</p>
         <p className="font-mono text-[28px] tabular-nums text-foreground">
           {connectedBalance ?? "$0.00"}
         </p>
       </div>
-      <p className="text-[13px] text-foreground-muted">
+      <p className="text-[14px] text-foreground-muted">
         Open the wallet deposit flow with cards, Apple Pay, crypto, and X
         verification.
       </p>

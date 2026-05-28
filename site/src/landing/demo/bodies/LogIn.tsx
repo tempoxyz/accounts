@@ -36,7 +36,7 @@ export function LogInBody({
     >
       <div className="flex flex-col gap-1.5">
         <p className="text-[18px] text-foreground">Create your Tempo account</p>
-        <p className="text-[13px] text-foreground-muted">{description}</p>
+        <p className="text-[14px] text-foreground-muted">{description}</p>
       </div>
 
       <div className="flex min-h-8 items-center gap-2 bg-panel-3 px-3 py-2">

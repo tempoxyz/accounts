@@ -36,10 +36,10 @@ function TokenRow({
     <div className="flex flex-col gap-2 bg-panel-3 px-4 py-3 sm:px-5 sm:py-4">
       <p className="text-[12px] text-foreground-muted">{label}</p>
       <div className="flex items-baseline justify-between gap-2.5">
-        <p className="font-mono text-[20px] leading-none tabular-nums text-foreground sm:text-[24px]">
+        <p className="font-mono text-[28px] leading-none tabular-nums text-foreground">
           {amount}
         </p>
-        <span className="bg-panel-4 px-2 py-0.5 font-mono text-[11px] tracking-wide text-foreground-muted">
+        <span className="bg-panel-4 px-2 py-0.5 font-mono text-[12px] tracking-wide text-foreground-muted">
           {token}
         </span>
       </div>
@@ -92,7 +92,7 @@ export function TradeBody(props: DemoBodyProps) {
       />
       {result?.summary ? (
         result.href && result.hrefLabel ? (
-          <p className="font-mono text-[10px] text-foreground-subtle">
+          <p className="font-mono text-[12px] text-foreground-subtle">
             {result.summary}{" "}
             <a
               href={result.href}
@@ -104,7 +104,7 @@ export function TradeBody(props: DemoBodyProps) {
             </a>
           </p>
         ) : (
-          <p className="font-mono text-[10px] text-foreground-subtle">
+          <p className="font-mono text-[12px] text-foreground-subtle">
             {result.summary}
           </p>
         )

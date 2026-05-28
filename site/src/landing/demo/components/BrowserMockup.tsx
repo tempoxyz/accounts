@@ -138,7 +138,7 @@ function DemoGuideCallout({
         href={guide.href}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex items-center gap-1 text-[13px] text-foreground-muted outline-none hover:text-foreground active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
+        className="inline-flex items-center gap-1 text-[14px] text-foreground-muted outline-none hover:text-foreground active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
       >
         Add {guide.label.toLowerCase()} to your app
         <svg
@@ -186,13 +186,13 @@ function NextDemoMessage({
       className="flex max-w-full flex-col items-start gap-2 bg-panel-2 px-3 py-2"
       style={body.style}
     >
-      <p className="text-[14px] break-words text-foreground sm:text-[16px] sm:whitespace-nowrap">
+      <p className="text-[14px] break-words text-foreground sm:whitespace-nowrap">
         Ready for the next example?
       </p>
       <button
         type="button"
         onClick={onClick}
-        className="bg-accent px-3 py-1.5 text-[13px] text-on-accent outline-none hover:bg-accent-hover active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
+        className="bg-accent px-3 py-1.5 text-[14px] text-on-accent outline-none hover:bg-accent-hover active:bg-accent-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
       >
         {label}
       </button>
@@ -228,8 +228,8 @@ function SignInGate({
       style={body.style}
     >
       <div className="flex flex-col gap-1">
-        <p className="text-[16px] text-foreground">Sign in to continue</p>
-        <p className="text-[13px] text-foreground-muted">
+        <p className="text-[18px] text-foreground">Sign in to continue</p>
+        <p className="text-[14px] text-foreground-muted">
           Connect your Tempo account to try this example.
         </p>
       </div>
@@ -391,12 +391,12 @@ export function BrowserMockup({
       <div className="m-3 mb-0 flex flex-wrap items-center justify-between gap-2 bg-panel-deep p-3 sm:m-[27px] sm:gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <LockIcon width={12} height={15} className="shrink-0 text-accent-live" />
-          <p className="truncate font-mono text-[12px] whitespace-nowrap text-foreground sm:text-[14px]">
+          <p className="truncate font-mono text-[12px] whitespace-nowrap text-foreground">
             {def.url}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <div className="flex min-w-[148px] items-center justify-end gap-2 font-mono text-[12px] sm:min-w-[260px] sm:text-[14px]">
+          <div className="flex min-w-[148px] items-center justify-end gap-2 font-mono text-[12px] sm:min-w-[260px]">
             <span
               aria-hidden
               className={`size-1.5 rounded-full ${connected ? "bg-accent-live" : "bg-foreground-subtle"}`}
@@ -451,10 +451,10 @@ export function BrowserMockup({
               <ChevronRight />
             </span>
             <span className="min-w-0">
-              <span className="block font-mono text-[10px] tracking-[0.08em] text-foreground-subtle">
+              <span className="block font-mono text-[12px] tracking-[0.08em] text-foreground-subtle">
                 {previousStep}
               </span>
-              <span className="block truncate text-[13px] text-foreground-muted">
+              <span className="block truncate text-[14px] text-foreground-muted">
                 {previousLabel}
               </span>
             </span>
@@ -469,10 +469,10 @@ export function BrowserMockup({
             className="flex min-h-14 items-center justify-end gap-3 border-l border-panel-border px-4 text-right text-foreground outline-none hover:bg-surface-hover active:bg-surface-active active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
           >
             <span className="min-w-0">
-              <span className="block font-mono text-[10px] tracking-[0.08em] text-foreground-subtle">
+              <span className="block font-mono text-[12px] tracking-[0.08em] text-foreground-subtle">
                 {nextStep}
               </span>
-              <span className="block truncate text-[13px] text-foreground-muted">
+              <span className="block truncate text-[14px] text-foreground-muted">
                 {nextLabel}
               </span>
             </span>
@@ -504,11 +504,11 @@ export function BrowserMockup({
                 <div className="flex min-w-0 items-baseline gap-3">
                   <span
                     aria-hidden
-                    className={`font-mono text-[11px] tracking-[0.05em] ${active ? "text-foreground-muted" : "text-foreground-subtle"}`}
+                    className={`font-mono text-[12px] tracking-[0.05em] ${active ? "text-foreground-muted" : "text-foreground-subtle"}`}
                   >
                     {step}
                   </span>
-                  <span className="truncate text-[15px] sm:text-[16px]">{label}</span>
+                  <span className="truncate text-[14px]">{label}</span>
                 </div>
                 <span
                   aria-hidden

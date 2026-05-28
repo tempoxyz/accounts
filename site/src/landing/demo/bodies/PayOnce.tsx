@@ -16,8 +16,8 @@ export function PayOnceBody(props: DemoBodyProps) {
       style={body.style}
     >
       <div className="flex flex-col gap-1">
-        <p className="text-[13px] text-foreground-muted">Transfer</p>
-        <p className="font-mono text-[32px] leading-none text-foreground sm:text-[36px]">
+        <p className="text-[14px] text-foreground-muted">Transfer</p>
+        <p className="font-mono text-[36px] leading-none text-foreground">
           $240
         </p>
       </div>
@@ -44,7 +44,7 @@ export function PayOnceBody(props: DemoBodyProps) {
       />
       {result?.summary ? (
         result.href && result.hrefLabel ? (
-          <p className="font-mono text-[10px] text-foreground-subtle">
+          <p className="font-mono text-[12px] text-foreground-subtle">
             {result.summary}{" "}
             <a
               href={result.href}
@@ -56,7 +56,7 @@ export function PayOnceBody(props: DemoBodyProps) {
             </a>
           </p>
         ) : (
-          <p className="font-mono text-[10px] text-foreground-subtle">{result.summary}</p>
+          <p className="font-mono text-[12px] text-foreground-subtle">{result.summary}</p>
         )
       ) : null}
     </div>
