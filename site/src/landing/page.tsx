@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef } from "react";
 import Customize from "./customize";
 import Demo from "./demo/Demo";
 import Footer from "./footer";
@@ -9,10 +8,9 @@ import Hero from "./hero";
 import { ThemeProvider } from "./useTheme";
 
 export default function Home() {
-  const rootRef = useRef<HTMLElement>(null);
   return (
-    <main ref={rootRef} className="accounts-landing relative w-full">
-      <ThemeProvider target={rootRef}>
+    <main className="accounts-landing relative w-full">
+      <ThemeProvider>
         <div className="mx-auto w-full max-w-[1245px]">
           <Hero>
             <Demo />

@@ -252,7 +252,8 @@
  *
  * Edit colours below to retheme the page in one place. Dark mode is the
  * default (under `:root`); the light overrides live under
- * `.accounts-landing[data-theme="light"]`.
+ * `html[style*="color-scheme: light"] .accounts-landing` (keyed off the
+ * `color-scheme` vocs writes on <html>).
  *
  * Tiers:
  *   1 — semantic chrome (background / foreground / borders / dash)
@@ -429,11 +430,12 @@
   --font-jetbrains-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
-/* The same overrides apply when the bootstrap script (vocs.config.ts) has
- * tagged the html root before React has hydrated `data-theme` onto the
- * <main>. This avoids a flash-of-dark on first paint in light mode. */
-.accounts-landing[data-theme="light"],
-:root[data-accounts-landing-theme="light"] .accounts-landing {
+/* Light-mode overrides key off the `color-scheme` that vocs writes onto
+ * <html> (via its own blocking head script) before React hydrates, so the
+ * landing tokens flip in lockstep with the rest of the page and there is no
+ * flash-of-dark on first paint. We piggyback on vocs's single theme source
+ * of truth instead of maintaining a parallel `data-theme` attribute. */
+html[style*="color-scheme: light"] .accounts-landing {
   /* Tier 1 — chrome */
   --background: #ffffff;
   --surface: #f8f8f8;
@@ -609,26 +611,13 @@
 
   background: var(--background);
   color: var(--foreground);
-  color-scheme: dark;
+  /* Inherit the `color-scheme` vocs sets on <html> so form controls,
+   * scrollbars, etc. track the page theme. The token catalogue above is
+   * dark by default and flips via the `html[style*="color-scheme: light"]`
+   * override. */
   font-family: var(--font-pilat), Arial, Helvetica, sans-serif;
   font-weight: 350;
   -webkit-font-smoothing: antialiased;
-}
-
-.accounts-landing[data-theme="light"],
-:root[data-accounts-landing-theme="light"] .accounts-landing {
-  color-scheme: light;
-}
-
-.accounts-landing[data-theme-transitions="disabled"],
-.accounts-landing[data-theme-transitions="disabled"] *,
-.accounts-landing[data-theme-transitions="disabled"] *::before,
-.accounts-landing[data-theme-transitions="disabled"] *::after,
-:root[data-accounts-landing-transitions="disabled"] .accounts-landing,
-:root[data-accounts-landing-transitions="disabled"] .accounts-landing *,
-:root[data-accounts-landing-transitions="disabled"] .accounts-landing *::before,
-:root[data-accounts-landing-transitions="disabled"] .accounts-landing *::after {
-  transition: none !important;
 }
 
 .accounts-landing button:not(:disabled) {
