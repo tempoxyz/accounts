@@ -19,9 +19,7 @@ export default function Home() {
           </Hero>
           <Customize />
           <Guides />
-          <div className="dash-t">
-            <Footer />
-          </div>
+          <Footer />
         </div>
       </ThemeProvider>
     </main>

@@ -590,7 +590,7 @@ function CustomThemeToolbar({
 }
 
 export default function Customize() {
-  const [theme, setTheme] = useState<ThemePreset>("Default");
+  const [theme, setTheme] = useState<ThemePreset>("Custom");
   const sectionRef = useRef<HTMLElement | null>(null);
   const marqueeRef = useRef<HTMLDivElement | null>(null);
   const marqueeAnimationRef = useRef<WAAPIAnimation | null>(null);
@@ -679,7 +679,7 @@ export default function Customize() {
       style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
     >
       <div className="flex flex-col items-center gap-3 text-center">
-        <h2 className="text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-[40px]">
+        <h2 className="font-display text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-[40px]">
           Customize to <br className="sm:hidden" /> match your app
         </h2>
         <p className="max-w-[600px] text-[16px] text-foreground-muted sm:text-[18px]">
