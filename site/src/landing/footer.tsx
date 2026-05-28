@@ -90,11 +90,11 @@ export default function Footer() {
           }}
         >
           <img
-            src="/mine-salt.svg"
-            alt="Mine Salt"
-            width={170}
-            height={30}
-            className="h-6 w-auto"
+            src="/play.svg"
+            alt="Play"
+            width={74}
+            height={28}
+            className="h-7 w-auto"
           />
         </button>
       )}
