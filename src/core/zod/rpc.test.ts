@@ -1,7 +1,136 @@
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
 import * as Rpc from './rpc.js'
+
+const account = '0x0000000000000000000000000000000000000001'
+const accessKey = '0x0000000000000000000000000000000000000002'
+const token = '0x20c0000000000000000000000000000000000001'
+const recipient = '0x0000000000000000000000000000000000000003'
+const contract = '0x0000000000000000000000000000000000000004'
+
+describe('transactionRequest.keyAuthorization', () => {
+  test('decodes rpc key authorizations into ox key authorizations', () => {
+    const authorization = KeyAuthorization.from(
+      {
+        address: accessKey,
+        chainId: 1n,
+        expiry: 123,
+        limits: [{ token, limit: 100n, period: 60 }],
+        scopes: [
+          { address: contract },
+          { address: token, selector: 'transfer(address,uint256)', recipients: [recipient] },
+        ],
+        type: 'p256',
+      },
+      { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
+    )
+    const rpc = KeyAuthorization.toRpc(authorization)
+
+    expect(
+      z.decode(Rpc.transactionRequest, {
+        from: account,
+        keyAuthorization: { ...rpc, address: rpc.keyId },
+      }).keyAuthorization,
+    ).toMatchInlineSnapshot(`
+      {
+        "address": "0x0000000000000000000000000000000000000002",
+        "chainId": 1n,
+        "expiry": 123,
+        "limits": [
+          {
+            "limit": 100n,
+            "period": 60,
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+        "scopes": [
+          {
+            "address": "0x0000000000000000000000000000000000000004",
+          },
+          {
+            "address": "0x20c0000000000000000000000000000000000001",
+            "recipients": [
+              "0x0000000000000000000000000000000000000003",
+            ],
+            "selector": "0xa9059cbb",
+          },
+        ],
+        "signature": {
+          "signature": {
+            "r": 0n,
+            "s": 0n,
+            "yParity": 0,
+          },
+          "type": "secp256k1",
+        },
+        "type": "p256",
+      }
+    `)
+  })
+
+  test('encodes ox key authorizations into rpc key authorizations', () => {
+    const authorization = KeyAuthorization.from(
+      {
+        address: accessKey,
+        chainId: 1n,
+        expiry: 123,
+        limits: [{ token, limit: 100n, period: 60 }],
+        scopes: [
+          { address: contract },
+          { address: token, selector: 'transfer(address,uint256)', recipients: [recipient] },
+        ],
+        type: 'p256',
+      },
+      { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
+    )
+
+    expect(
+      z.encode(Rpc.transactionRequest, {
+        from: account,
+        keyAuthorization: authorization,
+      }).keyAuthorization,
+    ).toMatchInlineSnapshot(`
+      {
+        "address": "0x0000000000000000000000000000000000000002",
+        "allowedCalls": [
+          {
+            "target": "0x0000000000000000000000000000000000000004",
+          },
+          {
+            "selectorRules": [
+              {
+                "recipients": [
+                  "0x0000000000000000000000000000000000000003",
+                ],
+                "selector": "0xa9059cbb",
+              },
+            ],
+            "target": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+        "chainId": "0x1",
+        "expiry": "0x7b",
+        "keyId": "0x0000000000000000000000000000000000000002",
+        "keyType": "p256",
+        "limits": [
+          {
+            "limit": "0x64",
+            "period": "0x3c",
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+        "signature": {
+          "r": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "s": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "type": "secp256k1",
+          "yParity": "0x0",
+        },
+      }
+    `)
+  })
+})
 
 describe('wallet_connect.capabilities.request: auth', () => {
   test('accepts string shorthand', () => {
