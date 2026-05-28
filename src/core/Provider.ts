@@ -280,18 +280,12 @@ export function create(options: create.Options = {}): create.ReturnType {
                         ...(feePayer ? { feePayer: true } : {}),
                       }
                       const formatter = client.chain?.formatters?.transactionRequest
-                      const { keyAuthorization, ...request } = fillRequest
                       const formatted = formatter
-                        ? formatter.format({ ...request } as never, 'fillTransaction')
-                        : request
+                        ? formatter.format({ ...fillRequest } as never, 'fillTransaction')
+                        : fillRequest
                       return client.request({
                         method: 'eth_fillTransaction',
-                        params: [
-                          {
-                            ...formatted,
-                            ...(keyAuthorization ? { keyAuthorization } : {}),
-                          } as never,
-                        ],
+                        params: [formatted as never],
                       })
                     }
 

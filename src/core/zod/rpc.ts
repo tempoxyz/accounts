@@ -1,3 +1,5 @@
+import { Hex } from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
 import type { SignatureEnvelope } from 'ox/tempo'
 import * as z from 'zod/mini'
 
@@ -45,7 +47,39 @@ export const signatureEnvelope = z.custom<SignatureEnvelope.SignatureEnvelopeRpc
 
 export const keyType = z.union([z.literal('secp256k1'), z.literal('p256'), z.literal('webAuthn')])
 
-export const keyAuthorization = z.object({
+type KeyAuthorizationRpcDecoded = Omit<KeyAuthorization.Rpc, 'chainId' | 'expiry' | 'limits'> & {
+  address?: KeyAuthorization.Rpc['keyId'] | undefined
+  chainId: bigint
+  expiry: number | null | undefined
+  limits?:
+    | readonly {
+        token: KeyAuthorization.RpcTokenLimit['token']
+        limit: bigint
+        period?: number | undefined
+      }[]
+    | undefined
+}
+
+const keyAuthorizationRpc = z.object({
+  allowedCalls: z.optional(
+    z.readonly(
+      z.array(
+        z.object({
+          target: u.address(),
+          selectorRules: z.optional(
+            z.readonly(
+              z.array(
+                z.object({
+                  selector: u.hex(),
+                  recipients: z.optional(z.readonly(z.array(u.address()))),
+                }),
+              ),
+            ),
+          ),
+        }),
+      ),
+    ),
+  ),
   address: z.optional(u.address()),
   chainId: u.bigint(),
   expiry: z.union([u.number(), z.null(), z.undefined()]),
@@ -57,6 +91,73 @@ export const keyAuthorization = z.object({
     ),
   ),
   signature: signatureEnvelope,
+}) as z.ZodMiniType<
+  KeyAuthorizationRpcDecoded,
+  KeyAuthorization.Rpc & { address?: KeyAuthorization.Rpc['keyId'] | undefined }
+>
+
+export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthorization.Signed>(), {
+  decode(value) {
+    const authorization = {
+      chainId: Hex.fromNumber(value.chainId),
+      expiry: value.expiry == null ? null : Hex.fromNumber(value.expiry),
+      keyId: value.keyId,
+      keyType: value.keyType,
+      limits: value.limits?.map(({ limit, period, token }) => ({
+        token,
+        limit: Hex.fromNumber(limit),
+        ...(typeof period === 'number' ? { period: Hex.fromNumber(period) } : {}),
+      })),
+      signature: value.signature,
+      ...(value.allowedCalls
+        ? {
+            allowedCalls: value.allowedCalls.map(({ selectorRules, target }) => ({
+              target,
+              ...(selectorRules
+                ? {
+                    selectorRules: selectorRules.map(({ recipients, selector }) => ({
+                      selector,
+                      ...(recipients ? { recipients } : {}),
+                    })),
+                  }
+                : {}),
+            })),
+          }
+        : {}),
+    } satisfies KeyAuthorization.Rpc
+    return KeyAuthorization.fromRpc(authorization)
+  },
+  encode(value) {
+    const keyAuthorization = KeyAuthorization.toRpc(value)
+    return {
+      chainId: keyAuthorization.chainId === '0x' ? 0n : Hex.toBigInt(keyAuthorization.chainId),
+      expiry: keyAuthorization.expiry == null ? null : Hex.toNumber(keyAuthorization.expiry),
+      keyId: keyAuthorization.keyId,
+      keyType: keyAuthorization.keyType,
+      limits: keyAuthorization.limits?.map(({ limit, period, token }) => ({
+        token,
+        limit: Hex.toBigInt(limit),
+        ...(period ? { period: Hex.toNumber(period) } : {}),
+      })),
+      signature: keyAuthorization.signature,
+      address: keyAuthorization.keyId,
+      ...(keyAuthorization.allowedCalls
+        ? {
+            allowedCalls: keyAuthorization.allowedCalls.map(({ selectorRules, target }) => ({
+              target,
+              ...(selectorRules
+                ? {
+                    selectorRules: selectorRules.map(({ recipients, selector }) => ({
+                      selector,
+                      ...(recipients ? { recipients } : {}),
+                    })),
+                  }
+                : {}),
+            })),
+          }
+        : {}),
+    }
+  },
 })
 
 export const call = z.object({
