@@ -379,7 +379,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             ...request,
             params: [
               z.encode(
-                Rpc.wallet_connect.authorizeAccessKey,
+                Rpc.wallet_authorizeAccessKey.parameters,
                 accessKey ? accessKey.request : parameters,
               )!,
             ],

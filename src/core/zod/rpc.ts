@@ -450,7 +450,9 @@ export namespace wallet_revokeAccessKey {
 }
 
 export namespace wallet_connect {
-  export const authorizeAccessKey = z.optional(wallet_authorizeAccessKey.parameters)
+  export const authorizeAccessKey = z.optional(
+    z.omit(wallet_authorizeAccessKey.parameters, { showDeposit: true }),
+  )
 
   /** Shows an optional funding prompt after `wallet_connect` succeeds. */
   export const showDeposit = z.optional(
@@ -602,7 +604,9 @@ export namespace wallet_connect {
 }
 
 export namespace wallet_connect_strict {
-  const authorizeAccessKey = z.optional(wallet_authorizeAccessKey_strict.parameters)
+  const authorizeAccessKey = z.optional(
+    z.omit(wallet_authorizeAccessKey_strict.parameters, { showDeposit: true }),
+  )
   const auth = wallet_connect.auth
   const personalSign = wallet_connect.personalSign
   const showDeposit = wallet_connect.showDeposit

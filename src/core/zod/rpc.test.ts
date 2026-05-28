@@ -308,6 +308,25 @@ describe('wallet_connect.capabilities.request: showDeposit', () => {
       }),
     ).toThrow()
   })
+
+  test('omits nested showDeposit from authorizeAccessKey', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        authorizeAccessKey: {
+          expiry: 123,
+          showDeposit: true,
+        },
+        method: 'register',
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "authorizeAccessKey": {
+          "expiry": 123,
+        },
+        "method": "register",
+      }
+    `)
+  })
 })
 
 describe('wallet_authorizeAccessKey.parameters: showDeposit', () => {
@@ -540,5 +559,41 @@ describe('wallet_connect_strict.parameters: showDeposit', () => {
         },
       },
     })
+  })
+
+  test('omits nested showDeposit from authorizeAccessKey', () => {
+    expect(
+      z.parse(Rpc.wallet_connect_strict.parameters, {
+        capabilities: {
+          authorizeAccessKey: {
+            expiry: 123,
+            limits: [{ limit: 1n, token: '0x0000000000000000000000000000000000000001' }],
+            scopes: [{ address: '0x0000000000000000000000000000000000000001' }],
+            showDeposit: true,
+          },
+          method: 'register',
+        },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "capabilities": {
+          "authorizeAccessKey": {
+            "expiry": 123,
+            "limits": [
+              {
+                "limit": 1n,
+                "token": "0x0000000000000000000000000000000000000001",
+              },
+            ],
+            "scopes": [
+              {
+                "address": "0x0000000000000000000000000000000000000001",
+              },
+            ],
+          },
+          "method": "register",
+        },
+      }
+    `)
   })
 })

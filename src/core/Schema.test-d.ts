@@ -107,6 +107,8 @@ describe('Encoded', () => {
     type ShowDeposit = Register['showDeposit']
     type LoginShowDeposit = Login['showDeposit']
     type ShowDepositObject = Exclude<Exclude<ShowDeposit, boolean | undefined>, undefined>
+    type AuthorizeAccessKey = NonNullable<Register['authorizeAccessKey']>
+    type LoginAuthorizeAccessKey = NonNullable<Login['authorizeAccessKey']>
 
     expectTypeOf<ShowDeposit>().toMatchTypeOf<
       | boolean
@@ -121,6 +123,8 @@ describe('Encoded', () => {
     expectTypeOf<LoginShowDeposit>().toEqualTypeOf<ShowDeposit>()
     expectTypeOf<ShowDepositObject>().not.toHaveProperty('address')
     expectTypeOf<ShowDepositObject>().not.toHaveProperty('chainId')
+    expectTypeOf<LoginAuthorizeAccessKey>().toEqualTypeOf<AuthorizeAccessKey>()
+    expectTypeOf<AuthorizeAccessKey>().not.toHaveProperty('showDeposit')
   })
 
   test('wallet_authorizeAccessKey: showDeposit', () => {
