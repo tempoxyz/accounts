@@ -331,7 +331,7 @@ function HeroIntro({
         <h1
           data-hero-stagger
           style={staggerStyle}
-          className="text-halo font-display text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-5xl sm:whitespace-nowrap"
+          className="text-halo font-display text-[32px] leading-[1.1] tracking-[-0.03em] text-foreground sm:text-5xl sm:whitespace-nowrap"
         >
           Tempo Accounts SDK
         </h1>
@@ -788,7 +788,7 @@ function DemoSplit() {
     <section className="relative px-6 pt-20 pb-0 sm:pt-[80px]">
       <div className="flex flex-col items-center gap-3 text-center">
         <h2
-          className="font-display text-[32px] leading-[1.1] tracking-[-0.02em] text-foreground sm:text-[48px] sm:whitespace-nowrap"
+          className="font-display text-[32px] leading-[1.1] tracking-[-0.03em] text-foreground sm:text-[48px] sm:whitespace-nowrap"
           style={{ animation: `fadeUp 600ms ${easeOut} 0ms both` }}
         >
           Bring your own wallet provider
