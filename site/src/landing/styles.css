@@ -332,6 +332,8 @@
   --fill-0: #ffffff;
   --stroke-0: #ffffff;
   --footer-glow: rgba(0, 0, 0, 0.85);
+  --play-outline: #ededed;
+  --play-fill: #000000;
   --accent-live: #22c55e;
   --network-testnet: #fbbf24;
   --network-testnet-bg: rgba(251, 191, 36, 0.11);
@@ -498,6 +500,8 @@ html[style*="color-scheme: light"] .accounts-landing {
   --fill-0: #0a0a0a;
   --stroke-0: #0a0a0a;
   --footer-glow: rgba(255, 255, 255, 0.85);
+  --play-outline: #383838;
+  --play-fill: #ffffff;
   --accent-live: #16a34a;
   --network-testnet: #b45309;
   --network-testnet-bg: rgba(180, 83, 9, 0.08);
