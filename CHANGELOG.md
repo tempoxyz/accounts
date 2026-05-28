@@ -1,5 +1,12 @@
 # accounts
 
+## 0.14.5
+
+### Patch Changes
+
+- a33ed22: Added a `strict` option to `Remote.validateSearch` to let trusted wallet routes defer access-key policy validation.
+- b6fb206: Added `showDeposit` support to `wallet_authorizeAccessKey` requests.
+
 ## 0.14.4
 
 ### Patch Changes
