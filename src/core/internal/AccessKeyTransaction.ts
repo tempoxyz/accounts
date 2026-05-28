@@ -105,6 +105,8 @@ function createTransaction(options: {
   return {
     async fill(parameters) {
       try {
+        // Run prepareTransactionRequest to attach any pending key authorizations.
+        // `eth_fillTransaction` below needs to return the node's fill response.
         const request = await prepareTransactionRequest(client, {
           account,
           ...parameters,
