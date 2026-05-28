@@ -6,7 +6,7 @@ import { Link } from "vocs";
 import { springs } from "./animation";
 import AsciiBackground from "./ascii-bg";
 import { connectWallet } from "./demo/sdk";
-import { AgentCopyIcon, CopyIcon, DocsIcon, GithubIcon, TempoLogo } from "./icons";
+import { AgentCopyIcon, CopyIcon, DocsIcon, GithubIcon, TempoIcon } from "./icons";
 import { useTempoSession } from "./sections/useTempoSession";
 import { ThemeSwitch } from "./theme-switch";
 
@@ -125,9 +125,9 @@ function TopNav({
         style={navStaggerStyles[0]}
         href="/"
         aria-label="Tempo"
-        className="grid size-12 place-items-center bg-background text-foreground outline-none active:translate-y-px focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
+        className="grid size-12 place-items-center text-foreground outline-none active:translate-y-px focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
       >
-        <TempoLogo width={20} height={21} />
+        <TempoIcon className="size-12" />
       </a>
       <div className="flex items-center gap-7 px-3">
         <span
@@ -338,7 +338,7 @@ function HeroIntro({
         <p
           data-hero-stagger
           style={staggerStyle}
-          className="text-halo max-w-lg text-[16px] text-foreground-muted sm:text-xl"
+          className="text-halo max-w-lg text-[18px] text-foreground-muted"
         >
           The fastest way to build stablecoin-powered apps, wallets, and agentic workflows.
         </p>
