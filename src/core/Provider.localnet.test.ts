@@ -1863,6 +1863,42 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       expect(provider.store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
     })
+
+    test('behavior: stale access key is removed and send retries with root account', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      expect(provider.store.getState().accessKeys).toHaveLength(1)
+
+      // Send a tx to register the key on-chain via keyAuthorization.
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      const accessKey = provider.store.getState().accessKeys[0]!
+      await provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [{ address, accessKeyAddress: accessKey.address }],
+      })
+
+      // Restore stale local state after revocation.
+      provider.store.setState({
+        accessKeys: [accessKey],
+      })
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+      expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+    })
   })
 
   describe('wallet_revokeAccessKey', () => {
@@ -2018,48 +2054,6 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       })
       expect(result.tx.gas).toBeDefined()
       expect((result.tx as { keyAuthorization?: unknown }).keyAuthorization).toBeDefined()
-    })
-
-    test('behavior: removes stale access key and retries on error', async () => {
-      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
-      const address = await connect(provider)
-      await fund(address)
-
-      await provider.request({
-        method: 'wallet_authorizeAccessKey',
-        params: [{ expiry: Expiry.days(1) }],
-      })
-      expect(provider.store.getState().accessKeys).toHaveLength(1)
-
-      // Send a tx to register the key on-chain via keyAuthorization.
-      await provider.request({
-        method: 'eth_sendTransactionSync',
-        params: [{ calls: [transferCall] }],
-      })
-
-      // Revoke the access key on-chain so the node will reject it.
-      const { accessKeys } = provider.store.getState()
-      const accessKeyAddress = accessKeys[0]!.address
-      await provider.request({
-        method: 'wallet_revokeAccessKey',
-        params: [{ address, accessKeyAddress }],
-      })
-
-      // Re-add a fake keyAuthorization to simulate stale local state.
-      provider.store.setState({
-        accessKeys: provider.store.getState().accessKeys.map((k) => ({
-          ...k,
-          keyAuthorization: accessKeys[0]!.keyAuthorization,
-        })),
-      })
-
-      // eth_fillTransaction should fail with the stale key, remove it, and retry successfully.
-      const result = await provider.request({
-        method: 'eth_fillTransaction',
-        params: [{ from: address, ...fillTx }],
-      })
-      expect(result.tx.gas).toBeDefined()
-      expect(provider.store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
     })
 
     test('behavior: does not inject keyAuthorization when already on params', async () => {

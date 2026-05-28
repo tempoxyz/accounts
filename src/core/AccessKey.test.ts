@@ -167,7 +167,7 @@ describe('create invalidation', () => {
     return { account_other, store }
   }
 
-  test('behavior: preserves access key for stale-key errors', async () => {
+  test('behavior: removes selected access key for stale-key errors', async () => {
     const { account_other, store } = await setup({ other: true })
     const transaction = await AccessKeyTransaction.create({
       address: rootAddress,
@@ -181,7 +181,7 @@ describe('create invalidation', () => {
     })
 
     await expect(transaction?.fill({ chainId: 1, from: rootAddress })).rejects.toThrowError()
-    expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`2`)
+    expect(store.getState().accessKeys.length).toMatchInlineSnapshot(`1`)
     expect(
       store.getState().accessKeys.some((key) => key.address === account_other.accessKeyAddress),
     ).toMatchInlineSnapshot(`true`)

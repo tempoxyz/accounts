@@ -5,6 +5,7 @@ import type { PrepareTransactionRequestReturnType } from 'viem/actions'
 import type { Account as TempoAccount, Transaction as TempoTransaction } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
+import * as ExecutionError from '../ExecutionError.js'
 import type * as Store from '../Store.js'
 import type * as Rpc from '../zod/rpc.js'
 
@@ -12,6 +13,16 @@ type Call = {
   to?: Address.Address | undefined
   data?: Hex.Hex | undefined
 }
+
+const removalErrorNames = new Set([
+  'InvalidSignature',
+  'InvalidSignatureFormat',
+  'InvalidSignatureType',
+  'KeyAlreadyRevoked',
+  'KeyExpired',
+  'KeyNotFound',
+  'SignatureTypeMismatch',
+])
 
 /** Creates a transaction helper for a matching locally-signable access key. */
 export async function create(options: create.Options): Promise<create.ReturnType> {
@@ -23,7 +34,7 @@ export async function create(options: create.Options): Promise<create.ReturnType
     store,
   })
   if (!account) return undefined
-  return createTransaction({ account, client })
+  return createTransaction({ account, address, chainId, client, store })
 }
 
 export declare namespace create {
@@ -85,61 +96,95 @@ export declare namespace create {
 
 function createTransaction(options: {
   account: TempoAccount.AccessKeyAccount
+  address: Address.Address
+  chainId: number
   client: Client<Transport>
+  store: Store.Store
 }): create.Transaction {
-  const { account, client } = options
+  const { account, address, chainId, client, store } = options
   return {
     async fill(parameters) {
-      const request = await prepareTransactionRequest(client, {
-        account,
-        ...parameters,
-        parameters: [],
-        type: 'tempo',
-      } as never)
-      return await fillTransaction(client, request as never)
+      try {
+        const request = await prepareTransactionRequest(client, {
+          account,
+          ...parameters,
+          parameters: [],
+          type: 'tempo',
+        } as never)
+        return await fillTransaction(client, request as never)
+      } catch (error) {
+        removeForError(error, { account, address, chainId, store })
+        throw error
+      }
     },
     async prepare(parameters) {
-      const request = await prepareTransactionRequest(client, {
-        account,
-        ...parameters,
-        type: 'tempo',
-      } as never)
-      return createPreparedTransaction({
-        account,
-        client,
-        request: request as never,
-      })
+      try {
+        const request = await prepareTransactionRequest(client, {
+          account,
+          ...parameters,
+          type: 'tempo',
+        } as never)
+        return createPreparedTransaction({
+          account,
+          address,
+          chainId,
+          client,
+          request: request as never,
+          store,
+        })
+      } catch (error) {
+        removeForError(error, { account, address, chainId, store })
+        throw error
+      }
     },
   }
 }
 
 function createPreparedTransaction(options: {
   account: TempoAccount.AccessKeyAccount
+  address: Address.Address
+  chainId: number
   client: Client<Transport>
   request: create.PreparedRequest
+  store: Store.Store
 }): create.Prepared {
-  const { account, client, request } = options
+  const { account, address, chainId, client, request, store } = options
 
   async function sign() {
-    return await account.signTransaction(request as never)
+    try {
+      return await account.signTransaction(request as never)
+    } catch (error) {
+      removeForError(error, { account, address, chainId, store })
+      throw error
+    }
   }
 
   return {
     request,
     sign,
     async send() {
-      const signed = await sign()
-      return (await client.request({
-        method: 'eth_sendRawTransaction' as never,
-        params: [signed],
-      })) as Hex.Hex
+      try {
+        const signed = await sign()
+        return (await client.request({
+          method: 'eth_sendRawTransaction' as never,
+          params: [signed],
+        })) as Hex.Hex
+      } catch (error) {
+        removeForError(error, { account, address, chainId, store })
+        throw error
+      }
     },
     async sendSync() {
-      const signed = await sign()
-      return (await client.request({
-        method: 'eth_sendRawTransactionSync' as never,
-        params: [signed],
-      })) as create.SendSyncReturnType
+      try {
+        const signed = await sign()
+        return (await client.request({
+          method: 'eth_sendRawTransactionSync' as never,
+          params: [signed],
+        })) as create.SendSyncReturnType
+      } catch (error) {
+        removeForError(error, { account, address, chainId, store })
+        throw error
+      }
     },
   }
 }
@@ -156,4 +201,43 @@ async function fillTransaction(
     method: 'eth_fillTransaction' as never,
     params: [formatted as never],
   })) as create.FillReturnType
+}
+
+function removeForError(
+  error: unknown,
+  options: {
+    account: TempoAccount.AccessKeyAccount
+    address: Address.Address
+    chainId: number
+    store: Store.Store
+  },
+): void {
+  if (!shouldRemoveForError(error)) return
+  AccessKey.remove({
+    accessKey: options.account.accessKeyAddress,
+    account: options.address,
+    chainId: options.chainId,
+    store: options.store,
+  })
+}
+
+function shouldRemoveForError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const parsed = ExecutionError.parse(error)
+  if (removalErrorNames.has(parsed.errorName)) return true
+  const text = getErrorText(error)
+  return [...removalErrorNames].some((name) => text.includes(name))
+}
+
+function getErrorText(error: unknown): string {
+  if (!(error instanceof Error)) return ''
+  const details = (error as { details?: unknown }).details
+  const shortMessage = (error as { shortMessage?: unknown }).shortMessage
+  const cause = (error as { cause?: unknown }).cause
+  return [
+    error.message,
+    typeof details === 'string' ? details : '',
+    typeof shortMessage === 'string' ? shortMessage : '',
+    getErrorText(cause),
+  ].join('\n')
 }
