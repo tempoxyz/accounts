@@ -1,4 +1,5 @@
 import { announceProvider } from 'mipd'
+import { Challenge } from 'mppx'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
@@ -120,6 +121,10 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const instance = adapter({ getAccount, getClient, storage, store })
   const { actions } = instance
+  const resolveSigner = Account.createSignerResolver({
+    getFallbackAccount: (options = {}) => getAccount(options),
+    store,
+  })
 
   const emitter = ox_Provider.createEmitter()
 
@@ -184,6 +189,71 @@ export function create(options: create.Options = {}): create.ReturnType {
     if (url.startsWith('http://') || url.startsWith('https://')) return url
     if (typeof window !== 'undefined') return new URL(url, window.location.origin).href
     return url
+  }
+
+  let mppClient: Mppx.Mppx | undefined
+
+  async function authorizeMpp(options: {
+    challenges: readonly Challenge.Challenge[]
+    session?: z.output<typeof Rpc.mpp_authorize.session> | undefined
+  }): Promise<string> {
+    const { challenges, session } = options
+    const challenge = (() => {
+      if (session) return challenges[0]
+      return challenges.find((challenge) => challenge.intent === 'charge') ?? challenges[0]
+    })()
+    if (!challenge)
+      throw new RpcResponse.InvalidParamsError({
+        message: '`challenges` must include at least one challenge.',
+      })
+
+    const chainId = getMppChainId(challenge) ?? store.getState().chainId
+    const account = await resolveSigner({
+      chainId,
+      ...(session ? { requiredSigner: session.authorizedSigner } : {}),
+    })
+    const client = Object.assign(
+      Client.fromChainId(chainId, {
+        chains,
+        provider: providerRef,
+        store,
+        transports,
+      }),
+      { account },
+    )
+    const client_mpp = getMppSigningClient(client)
+    const {
+      mode = 'push',
+      polyfill: _polyfill,
+      ...methodOptions
+    } = typeof mpp === 'object' ? mpp : {}
+
+    switch (challenge.intent) {
+      case 'charge': {
+        const method = mppx_tempo.charge({
+          ...methodOptions,
+          account,
+          getClient: () => client_mpp,
+          mode,
+        })
+        return await method.createCredential({ challenge: challenge as never, context: {} })
+      }
+      case 'session': {
+        const method = mppx_tempo({
+          ...methodOptions,
+          account,
+          getClient: () => client_mpp,
+        })[1]
+        return await method.createCredential({
+          challenge: challenge as never,
+          context: session ? (toMppSessionContext({ account, session }) as never) : {},
+        })
+      }
+      default:
+        throw new RpcResponse.InvalidParamsError({
+          message: `Unsupported Tempo challenge intent "${challenge.intent}".`,
+        })
+    }
   }
 
   const provider = Object.assign(
@@ -533,6 +603,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         accessKeys: { status: 'supported' }
                         atomic: { status: 'supported' }
                         feePayer?: { status: 'supported' } | undefined
+                        mpp?: { status: 'supported' } | undefined
                       }
                     > = {}
                     for (const chain of filtered)
@@ -540,8 +611,59 @@ export function create(options: create.Options = {}): create.ReturnType {
                         accessKeys: { status: 'supported' },
                         atomic: { status: 'supported' },
                         ...(feePayerConfig ? { feePayer: { status: 'supported' } } : {}),
+                        ...(mppClient ? { mpp: { status: 'supported' } } : {}),
                       }
                     return result as Rpc.wallet_getCapabilities.Encoded['returns']
+                  }
+
+                  case 'mpp_authorize': {
+                    if (!mpp)
+                      throw new ox_Provider.UnsupportedMethodError({
+                        message: '`mpp_authorize` requires `mpp` support.',
+                      })
+                    assertConnected()
+
+                    const decoded = request._decoded.params[0]
+                    const challenges = decoded.challenges.map((header) => {
+                      try {
+                        return Challenge.deserialize(header)
+                      } catch (error) {
+                        throw new RpcResponse.InvalidParamsError({
+                          message:
+                            error instanceof Error
+                              ? `Invalid Payment challenge: ${error.message}`
+                              : 'Invalid Payment challenge.',
+                        })
+                      }
+                    })
+                    if (!challenges.every((challenge) => challenge.method === 'tempo'))
+                      throw new RpcResponse.InvalidParamsError({
+                        message: 'All challenges must use method "tempo".',
+                      })
+
+                    if (decoded.session && challenges.length !== 1)
+                      throw new RpcResponse.InvalidParamsError({
+                        message: '`session` requires exactly one challenge.',
+                      })
+
+                    const selected = decoded.session ? challenges[0] : undefined
+                    if (decoded.session) {
+                      if (!selected)
+                        throw new RpcResponse.InvalidParamsError({
+                          message: '`session` requires exactly one challenge.',
+                        })
+                      if (selected.intent !== 'session')
+                        throw new RpcResponse.InvalidParamsError({
+                          message: '`session` can only be used with a Tempo session challenge.',
+                        })
+                    }
+
+                    return {
+                      authorization: await authorizeMpp({
+                        challenges,
+                        session: decoded.session,
+                      }),
+                    } satisfies Rpc.mpp_authorize.Encoded['returns']
                   }
 
                   case 'wallet_connect': {
@@ -1048,6 +1170,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
     // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
     const polyfill = polyfill_option ?? isFetchWritable()
+
     const getClient = ({ chainId }: { chainId?: number | undefined }) => {
       const client = provider.getClient({ chainId })
       const account = store.getState().accounts[store.getState().activeAccount]
@@ -1059,7 +1182,8 @@ export function create(options: create.Options = {}): create.ReturnType {
         },
       })
     }
-    Mppx.create({
+
+    mppClient = Mppx.create({
       methods: [
         mppx_tempo({ ...methodOptions, getClient, mode }),
         mppx_tempo.subscription({ getClient }),
@@ -1073,9 +1197,71 @@ export function create(options: create.Options = {}): create.ReturnType {
   return provider
 }
 
+function getMppSigningClient(client: ViemClient): ViemClient {
+  const request = client.request
+  return Object.assign(client, {
+    async request(
+      parameters: { method: string; params?: unknown },
+      options?: Parameters<typeof request>[1],
+    ) {
+      const result = await request(parameters as never, options as never)
+      if (parameters.method !== 'wallet_getCapabilities') return result
+      if (!result || typeof result !== 'object') return result
+      return Object.fromEntries(
+        Object.entries(result).map(([chainId, capabilities]) => {
+          if (!capabilities || typeof capabilities !== 'object') return [chainId, capabilities]
+          const { mpp: _mpp, ...rest } = capabilities as { mpp?: unknown } & Record<string, unknown>
+          return [chainId, rest]
+        }),
+      ) as never
+    },
+  }) as never
+}
+
 const defaultIcon =
   'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>' as const
 const sendCallsMagic = Hash.keccak256(Hex.fromString('TEMPO_5792'))
+
+function toMppSessionContext(options: toMppSessionContext.Options): toMppSessionContext.ReturnType {
+  const { account, session } = options
+  switch (session.action) {
+    case 'voucher':
+    case 'close':
+      return {
+        account,
+        action: session.action,
+        authorizedSigner: session.authorizedSigner,
+        channelId: session.channelId,
+        cumulativeAmountRaw: session.cumulativeAmount,
+      }
+    case 'topUp':
+      throw new ox_Provider.UnsupportedMethodError({
+        message: '`mpp_authorize` session topUp is not supported yet.',
+      })
+  }
+}
+
+declare namespace toMppSessionContext {
+  type Options = {
+    account: Account.resolveSigner.ReturnType
+    session: z.output<typeof Rpc.mpp_authorize.session>
+  }
+
+  type ReturnType = {
+    account: Account.resolveSigner.ReturnType
+    action: 'voucher' | 'close'
+    authorizedSigner: Address.Address
+    channelId: Hex.Hex
+    cumulativeAmountRaw: string
+  }
+}
+
+function getMppChainId(challenge: Challenge.Challenge) {
+  const methodDetails = challenge.request.methodDetails as
+    | { chainId?: number | undefined }
+    | undefined
+  return methodDetails?.chainId
+}
 
 export declare namespace create {
   type Options = {

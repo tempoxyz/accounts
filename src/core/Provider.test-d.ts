@@ -48,6 +48,10 @@ describe('request', () => {
     expectTypeOf<Result<'wallet_disconnect'>>().toEqualTypeOf<undefined>()
   })
 
+  test('mpp_authorize', () => {
+    expectTypeOf<Result<'mpp_authorize'>>().toEqualTypeOf<{ authorization: string }>()
+  })
+
   test('wallet_swap', () => {
     expectTypeOf<Result<'wallet_swap'>>().toMatchTypeOf<{
       receipt: { transactionHash: `0x${string}` }

@@ -14,7 +14,7 @@
     "@privy-io/js-sdk-core": "^0.61.3",
     "@turnkey/core": "1.13.0",
     "accounts": "workspace:*",
-    "mppx": "catalog:",
+    "mppx": "file:/Users/tony/.codex/worktrees/a4fb/mppx",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "regen-ui": "^0.3.0",

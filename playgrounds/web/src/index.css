@@ -425,6 +425,19 @@ html {
   width: 100%;
 }
 
+.mpp-trace-table {
+  min-width: 760px;
+}
+
+.mpp-trace-table th {
+  text-align: left;
+}
+
+.mpp-trace-table th,
+.mpp-trace-table td {
+  vertical-align: top;
+}
+
 .events-table th,
 .events-table td {
   font-size: 13px;

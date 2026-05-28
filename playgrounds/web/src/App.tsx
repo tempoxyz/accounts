@@ -1,3 +1,4 @@
+import { Credential } from 'mppx'
 import { tempo as mppx_tempo } from 'mppx/client'
 import { Hex, Json } from 'ox'
 import {
@@ -9,7 +10,7 @@ import {
   useState,
 } from 'react'
 import { Button as RegenButton } from 'regen-ui'
-import { formatUnits, parseUnits } from 'viem'
+import { type Address, formatUnits, isAddress, parseUnits } from 'viem'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
@@ -1873,7 +1874,6 @@ function WalletAuthorizeAccessKey() {
   const [result, error, execute] = useRequest()
   const tokenlist = useTokenlist()
   const [limits, setLimits] = useState<LimitInput[]>([{ token: '', amount: '100', period: '' }])
-  const [showDepositEnabled, setShowDepositEnabled] = useState(false)
 
   // Once the tokenlist resolves, hydrate any unselected limit row with the first token.
   useEffect(() => {
@@ -1916,7 +1916,6 @@ function WalletAuthorizeAccessKey() {
             }))
           if (scopeSelector && filledLimits[0])
             params.scopes = [{ address: filledLimits[0].token, selector: scopeSelector }]
-          if (showDepositEnabled) params.showDeposit = true
 
           execute(() =>
             provider.request({
@@ -2005,18 +2004,6 @@ function WalletAuthorizeAccessKey() {
             ))}
           </select>
         </div>
-        <fieldset style={{ marginBottom: 8 }}>
-          <legend>
-            <label>
-              <input
-                checked={showDepositEnabled}
-                onChange={(e) => setShowDepositEnabled(e.target.checked)}
-                type="checkbox"
-              />{' '}
-              Show Deposit
-            </label>
-          </legend>
-        </fieldset>
         <Button type="submit">Authorize</Button>
       </form>
     </Method>
@@ -2074,11 +2061,26 @@ type MppScenarioResult = {
 }
 
 type MppSseEvent = { data: unknown; event: string }
+type MppTraceRow = {
+  action: string
+  channelId?: string | undefined
+  cumulative?: string | undefined
+  detail?: string | undefined
+  remaining?: string | undefined
+  spent?: string | undefined
+  step: string
+}
 type MppSessionState = {
   lastAction?: string | undefined
   remaining?: string | undefined
   spent?: string | undefined
   status: 'active' | 'closed' | 'idle' | 'open'
+}
+type MppAuthorizeSession = {
+  action: 'close' | 'voucher'
+  authorizedSigner: Address
+  channelId: Hex.Hex
+  cumulativeAmount: string
 }
 type MppSubscriptionState = {
   status: 'active' | 'canceled' | 'missing' | 'renewal due'
@@ -2098,6 +2100,7 @@ function MppPlayground(props: { adapterType: AdapterType; rerender: () => void }
 
   return (
     <>
+      <MppRpcAuthorize />
       <MppOneTimeCharges applyMode={applyMode} />
       <MppSessions adapterType={adapterType} mode={mode} />
       <MppSubscriptions />
@@ -2138,6 +2141,36 @@ function MppOneTimeCharges(props: { applyMode: (mode: MppMode) => Promise<void> 
   )
 }
 
+function MppRpcAuthorize() {
+  const request = useMppRequest()
+
+  async function run(label: string, fn: () => Promise<MppScenarioResult>) {
+    await request.execute(label, fn)
+  }
+
+  return (
+    <MppPanel
+      title="mpp_authorize (RPC)"
+      pending={request.pending}
+      result={request.result}
+      error={request.error}
+    >
+      <Button
+        disabled={request.pending}
+        onClick={() => run('RPC paid charge', () => runMppRpcCharge('RPC paid charge'))}
+      >
+        Paid Charge
+      </Button>
+      <Button
+        disabled={request.pending}
+        onClick={() => run('RPC stream session', () => runMppRpcSse('RPC stream session'))}
+      >
+        Stream Session
+      </Button>
+    </MppPanel>
+  )
+}
+
 function MppSessions(props: { adapterType: AdapterType; mode: MppMode }) {
   const { adapterType, mode } = props
   const request = useMppRequest()
@@ -2160,6 +2193,13 @@ function MppSessions(props: { adapterType: AdapterType; mode: MppMode }) {
     await request.execute('Reset local session', () => runMppLocalResult('Reset local session'))
   }
 
+  async function streamChunks() {
+    const next = createMppSessionManager()
+    setManager(next)
+    setSession({ status: 'idle' })
+    await run('Stream chunks', () => runMppManagedSse('Stream chunks', next), 'voucher')
+  }
+
   return (
     <MppPanel
       title="Sessions"
@@ -2174,8 +2214,11 @@ function MppSessions(props: { adapterType: AdapterType; mode: MppMode }) {
           run(
             'Start session',
             () =>
-              runMppManagedRequest('Start session', '/mpp/session/content', () =>
-                manager.fetch('/mpp/session/content'),
+              runMppManagedRequest(
+                'Start session',
+                '/mpp/session/content',
+                () => manager.fetch('/mpp/session/content'),
+                manager.trace,
               ),
             'open',
           )
@@ -2189,8 +2232,11 @@ function MppSessions(props: { adapterType: AdapterType; mode: MppMode }) {
           run(
             'Pay another',
             () =>
-              runMppManagedRequest('Pay another', '/mpp/session/content', () =>
-                manager.fetch('/mpp/session/content'),
+              runMppManagedRequest(
+                'Pay another',
+                '/mpp/session/content',
+                () => manager.fetch('/mpp/session/content'),
+                manager.trace,
               ),
             'voucher',
           )
@@ -2198,12 +2244,7 @@ function MppSessions(props: { adapterType: AdapterType; mode: MppMode }) {
       >
         Pay Another
       </Button>
-      <Button
-        disabled={request.pending || session.status === 'closed'}
-        onClick={() =>
-          run('Stream chunks', () => runMppManagedSse('Stream chunks', manager), 'voucher')
-        }
-      >
+      <Button disabled={request.pending || session.status === 'closed'} onClick={streamChunks}>
         Stream Chunks
       </Button>
       <Button
@@ -2334,10 +2375,57 @@ function MppPanel(props: {
       </header>
       <div className="method-body">{children}</div>
       {error && <pre className="method-error">{`${error.name}: ${error.message}`}</pre>}
+      {result && <MppPaymentTrace result={result} />}
       {display !== undefined && (
         <pre className="method-result">{Json.stringify(display, null, 2)}</pre>
       )}
     </article>
+  )
+}
+
+function MppPaymentTrace(props: { result: MppScenarioResult }) {
+  const rows = getMppTraceRows(props.result)
+  if (rows.length === 0) return null
+
+  return (
+    <div className="events-table-wrap">
+      <table className="events-table mpp-trace-table">
+        <thead>
+          <tr>
+            <th>Step</th>
+            <th>Event</th>
+            <th>Cumulative</th>
+            <th>Spent</th>
+            <th>Remaining</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.step}>
+              <td>{row.step}</td>
+              <td>{row.action}</td>
+              <td>
+                <code className="events-table-value">{formatMppTraceAmount(row.cumulative)}</code>
+              </td>
+              <td>
+                <code className="events-table-value">{formatMppTraceAmount(row.spent)}</code>
+              </td>
+              <td>
+                <code className="events-table-value">{formatMppTraceAmount(row.remaining)}</code>
+              </td>
+              <td>
+                <code className="events-table-value">
+                  {[row.detail, row.channelId ? `channel ${shortMppHex(row.channelId)}` : undefined]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </code>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -2346,7 +2434,11 @@ function MppSummary(props: { children: ReactNode }) {
 }
 
 function createMppSessionManager() {
-  return mppx_tempo.session({
+  const trace: MppSseEvent[] = []
+  const manager = mppx_tempo.session({
+    fetch(input, init) {
+      return mppSessionFetch(input, init, trace)
+    },
     getClient(options: { chainId?: number | undefined } = {}) {
       const client = provider.getClient({ chainId: options.chainId })
       const account = provider.getAccount()
@@ -2354,6 +2446,45 @@ function createMppSessionManager() {
     },
     maxDeposit: '0.05',
   })
+  return Object.assign(manager, { trace })
+}
+
+async function mppSessionFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit | undefined,
+  trace?: MppSseEvent[] | undefined,
+) {
+  const headers = new Headers(init?.headers)
+  const authorization = headers.get('Authorization')
+  const hasBody = init?.body !== undefined && init.body !== null
+  if (authorization)
+    trace?.push({
+      data: summarizeMppAuthorizationHeader(authorization),
+      event: 'payment-authorization',
+    })
+
+  // Cloudflare/Vite can expose an empty POST body as non-null, so use HEAD for
+  // voucher management calls that should not serve content. Close is already
+  // classified by credential action server-side, so keep it as POST.
+  if (init?.method === 'POST' && authorization && !hasBody) {
+    const summary = summarizeMppAuthorizationHeader(authorization)
+    if ('action' in summary && summary.action === 'close') return getRawFetch()(input, init)
+
+    const response = await getRawFetch()(input, {
+      ...init,
+      method: 'HEAD',
+    })
+    trace?.push({
+      data: {
+        receipt: decodePaymentReceipt(response.headers.get('Payment-Receipt')) ?? null,
+        status: response.status,
+      },
+      event: 'payment-management-response',
+    })
+    return response
+  }
+
+  return getRawFetch()(input, init)
 }
 
 async function runMppRequest(
@@ -2388,20 +2519,24 @@ async function runMppManagedRequest(
   label: string,
   path: string,
   fetcher: () => Promise<Response & { receipt?: unknown | null | undefined }>,
+  trace?: MppSseEvent[] | undefined,
 ): Promise<MppScenarioResult> {
+  const traceStart = trace?.length ?? 0
   const balanceBefore = await getPathUsdBalance()
   const started = performance.now()
   const response = await fetcher()
   const elapsedMs = Math.round(performance.now() - started)
   const body = await readResponseBody(response)
+  const events = trace?.slice(traceStart)
   const receipt = response.receipt ?? decodePaymentReceipt(response.headers.get('Payment-Receipt'))
   const inspection = await readInspection(receipt)
   const balanceAfter = await getPathUsdBalance()
   return {
     balanceAfter,
     balanceBefore,
-    body,
+    body: events?.length ? { response: body, trace: events } : body,
     elapsedMs,
+    events: events?.length ? events : undefined,
     headers: readPaymentHeaders(response),
     inspection,
     label,
@@ -2418,6 +2553,7 @@ async function runMppManagedSse(
 ): Promise<MppScenarioResult> {
   const receipts: unknown[] = []
   const chunks: string[] = []
+  const traceStart = manager.trace.length
   const balanceBefore = await getPathUsdBalance()
   const started = performance.now()
   const stream = await manager.sse('/mpp/session/stream', {
@@ -2429,14 +2565,16 @@ async function runMppManagedSse(
   for await (const chunk of stream) chunks.push(chunk)
 
   const elapsedMs = Math.round(performance.now() - started)
+  const trace = manager.trace.slice(traceStart)
   const receipt = receipts.at(-1)
   const inspection = await readInspection(receipt)
   return {
     balanceAfter: await getPathUsdBalance(),
     balanceBefore,
-    body: { chunks },
+    body: { chunks, trace },
     elapsedMs,
     events: [
+      ...trace,
       ...chunks.map((chunk) => ({ data: chunk, event: 'message' })),
       ...receipts.map((item) => ({ data: item, event: 'payment-receipt' })),
     ],
@@ -2450,20 +2588,201 @@ async function runMppManagedSse(
   }
 }
 
-async function runMppSessionClose(
-  label: string,
-  manager: ReturnType<typeof createMppSessionManager>,
-): Promise<MppScenarioResult> {
+async function runMppRpcCharge(label: string): Promise<MppScenarioResult> {
+  const path = '/mpp/charge/paid'
+  const rawFetch = getRawFetch()
   const balanceBefore = await getPathUsdBalance()
   const started = performance.now()
-  const receipt = await manager.close()
+  const probe = await rawFetch(path)
+  const challenge = await readMppChallenge(probe, path)
+  const authorization = await authorizeMpp(challenge)
+  const response = await rawFetch(path, {
+    headers: { Authorization: authorization },
+  })
   const elapsedMs = Math.round(performance.now() - started)
+  const body = await readResponseBody(response)
+  const receipt = decodePaymentReceipt(response.headers.get('Payment-Receipt'))
   const inspection = await readInspection(receipt)
   return {
     balanceAfter: await getPathUsdBalance(),
     balanceBefore,
-    body: receipt ? { closed: true } : { closed: false },
+    body: {
+      authorization: summarizeMppAuthorization(authorization),
+      response: body,
+    },
     elapsedMs,
+    headers: readPaymentHeaders(response),
+    inspection,
+    label,
+    ok: response.ok,
+    receipt,
+    status: response.status,
+    url: path,
+  }
+}
+
+async function runMppRpcSse(label: string): Promise<MppScenarioResult> {
+  const path = '/mpp/session/stream'
+  const rawFetch = getRawFetch()
+  const balanceBefore = await getPathUsdBalance()
+  const started = performance.now()
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 45_000)
+  const events: MppSseEvent[] = []
+  const authorizations: unknown[] = []
+  const chunks: string[] = []
+
+  try {
+    const probe = await rawFetch(path, {
+      headers: { Accept: 'text/event-stream' },
+      signal: controller.signal,
+    })
+    const challenge = await readMppChallenge(probe, path)
+    const openAuthorization = await authorizeMpp(challenge)
+    const open = readMppOpenAuthorization(openAuthorization)
+    authorizations.push(open.summary)
+
+    const response = await rawFetch(path, {
+      headers: {
+        Accept: 'text/event-stream',
+        Authorization: openAuthorization,
+      },
+      signal: controller.signal,
+    })
+    if (!response.ok) throw await mppResponseError('Stream open failed', response)
+
+    let latestReceipt: unknown
+    let latestCumulative = open.cumulativeAmount
+
+    for await (const event of readMppSse(response)) {
+      events.push(event)
+
+      if (event.event === 'message') {
+        if (typeof event.data === 'string') chunks.push(event.data)
+        continue
+      }
+
+      if (event.event === 'payment-receipt') {
+        latestReceipt = event.data
+        const spent = readStringProperty(event.data, 'spent')
+        if (spent) latestCumulative = spent
+        continue
+      }
+
+      if (event.event !== 'payment-need-voucher') continue
+
+      const voucher = readMppNeedVoucher(event.data)
+      latestCumulative = voucher.requiredCumulative
+      const authorization = await authorizeMpp(challenge, {
+        action: 'voucher',
+        authorizedSigner: open.authorizedSigner,
+        channelId: voucher.channelId,
+        cumulativeAmount: voucher.requiredCumulative,
+      })
+      authorizations.push(summarizeMppAuthorization(authorization))
+      const voucherResponse = await rawFetch(path, {
+        method: 'HEAD',
+        headers: { Authorization: authorization },
+        signal: controller.signal,
+      })
+      const voucherReceipt = decodePaymentReceipt(voucherResponse.headers.get('Payment-Receipt'))
+      events.push({
+        data: {
+          receipt: voucherReceipt ?? null,
+          status: voucherResponse.status,
+        },
+        event: 'payment-voucher-response',
+      })
+      if (!voucherResponse.ok)
+        throw await mppResponseError('Voucher request failed', voucherResponse)
+    }
+
+    const closeAuthorization = await authorizeMpp(challenge, {
+      action: 'close',
+      authorizedSigner: open.authorizedSigner,
+      channelId: open.channelId,
+      cumulativeAmount: latestCumulative,
+    })
+    authorizations.push(summarizeMppAuthorization(closeAuthorization))
+    const closeResponse = await rawFetch(path, {
+      method: 'HEAD',
+      headers: { Authorization: closeAuthorization },
+      signal: controller.signal,
+    })
+    const closeReceipt = decodePaymentReceipt(closeResponse.headers.get('Payment-Receipt'))
+    events.push({
+      data: {
+        receipt: closeReceipt ?? null,
+        status: closeResponse.status,
+      },
+      event: 'payment-close-response',
+    })
+    if (!closeResponse.ok) throw await mppResponseError('Close request failed', closeResponse)
+
+    const elapsedMs = Math.round(performance.now() - started)
+    const receipt = closeReceipt ?? latestReceipt
+    const inspection = await readInspection(receipt)
+    return {
+      balanceAfter: await getPathUsdBalance(),
+      balanceBefore,
+      body: {
+        authorizations,
+        chunks,
+      },
+      elapsedMs,
+      events,
+      headers: readPaymentHeaders(response),
+      inspection,
+      label,
+      ok: true,
+      receipt,
+      status: response.status,
+      url: path,
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) throw error
+    return {
+      balanceAfter: await getPathUsdBalance(),
+      balanceBefore,
+      body: {
+        authorizations,
+        chunks,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      elapsedMs: Math.round(performance.now() - started),
+      events,
+      headers: {
+        'content-type': null,
+        'payment-receipt': null,
+        'www-authenticate': null,
+      },
+      label,
+      ok: false,
+      status: 499,
+      url: path,
+    }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function runMppSessionClose(
+  label: string,
+  manager: ReturnType<typeof createMppSessionManager>,
+): Promise<MppScenarioResult> {
+  const traceStart = manager.trace.length
+  const balanceBefore = await getPathUsdBalance()
+  const started = performance.now()
+  const receipt = await manager.close()
+  const elapsedMs = Math.round(performance.now() - started)
+  const trace = manager.trace.slice(traceStart)
+  const inspection = await readInspection(receipt)
+  return {
+    balanceAfter: await getPathUsdBalance(),
+    balanceBefore,
+    body: receipt ? { closed: true, trace } : { closed: false, trace },
+    elapsedMs,
+    events: trace.length ? trace : undefined,
     headers: {},
     inspection,
     label,
@@ -2522,6 +2841,166 @@ function readPaymentHeaders(response: Response) {
   }
 }
 
+async function mppResponseError(label: string, response: Response) {
+  const body = await readResponseBody(response).catch(() => null)
+  const challenge = response.headers.get('WWW-Authenticate')
+  return new Error(
+    `${label} with status ${response.status}.${body ? ` ${Json.stringify(body)}` : ''}${challenge ? ` WWW-Authenticate: ${challenge}` : ''}`,
+  )
+}
+
+async function readMppChallenge(response: Response, path: string) {
+  if (response.status !== 402) {
+    const body = await readResponseBody(response).catch(() => null)
+    throw new Error(
+      `Expected ${path} to return a payment challenge, received ${response.status}.${body ? ` ${Json.stringify(body)}` : ''}`,
+    )
+  }
+
+  const challenge = response.headers.get('WWW-Authenticate')
+  if (!challenge) throw new Error(`${path} did not return WWW-Authenticate.`)
+  return challenge
+}
+
+async function authorizeMpp(challenge: string, session?: MppAuthorizeSession | undefined) {
+  const result = await provider.request({
+    method: 'mpp_authorize',
+    params: [
+      {
+        challenges: [challenge],
+        ...(session ? { session } : {}),
+      },
+    ],
+  })
+  return result.authorization
+}
+
+async function* readMppSse(response: Response): AsyncGenerator<MppSseEvent> {
+  if (!response.body) throw new Error('Stream response has no body.')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop()!
+
+      for (const part of parts) {
+        const event = parseMppSseEvent(part)
+        if (event) yield event
+      }
+    }
+
+    const tail = parseMppSseEvent(buffer)
+    if (tail) yield tail
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+function parseMppSseEvent(raw: string): MppSseEvent | undefined {
+  if (!raw.trim()) return undefined
+
+  let event = 'message'
+  const data: string[] = []
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event: ')) event = line.slice(7).trim()
+    else if (line.startsWith('data: ')) data.push(line.slice(6))
+    else if (line === 'data:') data.push('')
+  }
+  if (data.length === 0) return undefined
+
+  const value = data.join('\n')
+  if (event.startsWith('payment-')) {
+    try {
+      return { data: JSON.parse(value), event }
+    } catch {
+      return { data: value, event }
+    }
+  }
+
+  return { data: value, event }
+}
+
+function readMppOpenAuthorization(authorization: string) {
+  const summary = summarizeMppAuthorization(authorization)
+  if (summary.action !== 'open') throw new Error('Expected an open session credential.')
+  if (!summary.authorizedSigner)
+    throw new Error('Open session credential missing authorizedSigner.')
+  if (!summary.channelId) throw new Error('Open session credential missing channelId.')
+  if (!summary.cumulativeAmount)
+    throw new Error('Open session credential missing cumulativeAmount.')
+
+  return {
+    authorizedSigner: asAddress(summary.authorizedSigner, 'authorizedSigner'),
+    channelId: asHex(summary.channelId, 'channelId'),
+    cumulativeAmount: summary.cumulativeAmount,
+    summary,
+  }
+}
+
+function summarizeMppAuthorization(authorization: string) {
+  const credential = Credential.deserialize(authorization)
+  const payload = isRecord(credential.payload) ? credential.payload : {}
+  return {
+    action: stringValue(payload.action),
+    authorizedSigner: stringValue(payload.authorizedSigner),
+    channelId: stringValue(payload.channelId),
+    cumulativeAmount: stringValue(payload.cumulativeAmount),
+    type: stringValue(payload.type) ?? (payload.action ? 'voucher' : undefined),
+  }
+}
+
+function summarizeMppAuthorizationHeader(authorization: string) {
+  try {
+    return summarizeMppAuthorization(authorization)
+  } catch {
+    return { raw: authorization }
+  }
+}
+
+function readMppNeedVoucher(value: unknown) {
+  const channelId = readStringProperty(value, 'channelId')
+  const requiredCumulative = readStringProperty(value, 'requiredCumulative')
+  if (!channelId) throw new Error('payment-need-voucher missing channelId.')
+  if (!requiredCumulative) throw new Error('payment-need-voucher missing requiredCumulative.')
+  return {
+    channelId: asHex(channelId, 'channelId'),
+    requiredCumulative,
+  }
+}
+
+function readStringProperty(value: unknown, key: string) {
+  if (!isRecord(value)) return undefined
+  return stringValue(value[key])
+}
+
+function asAddress(value: string, label: string): Address {
+  if (!isAddress(value)) throw new Error(`${label} is not an address.`)
+  return value
+}
+
+function asHex(value: string, label: string): Hex.Hex {
+  if (!Hex.validate(value)) throw new Error(`${label} is not hex.`)
+  return value as Hex.Hex
+}
+
+function getRawFetch() {
+  const mppxFetchWrapper = Symbol.for('mppx.fetch.wrapper')
+  let current = globalThis.fetch as typeof globalThis.fetch &
+    Record<symbol, typeof globalThis.fetch | undefined>
+  while (current[mppxFetchWrapper])
+    current = current[mppxFetchWrapper] as typeof globalThis.fetch &
+      Record<symbol, typeof globalThis.fetch | undefined>
+  return current
+}
+
 function summarizeMppResult(result: MppScenarioResult) {
   return {
     balance: {
@@ -2542,6 +3021,163 @@ function summarizeMppResult(result: MppScenarioResult) {
     status: result.status,
     url: result.url,
   }
+}
+
+function getMppTraceRows(result: MppScenarioResult) {
+  const rows: MppTraceRow[] = []
+  let receiptSeen = false
+
+  function push(row: Omit<MppTraceRow, 'step'>) {
+    rows.push({ ...row, step: String(rows.length + 1) })
+  }
+
+  function pushAuthorization(value: unknown) {
+    if (!isRecord(value)) return
+    const action = readStringProperty(value, 'action') ?? readStringProperty(value, 'type')
+    const raw = readStringProperty(value, 'raw')
+    push({
+      action: `authorize ${action ?? 'payment'}`,
+      channelId: readStringProperty(value, 'channelId'),
+      cumulative: readStringProperty(value, 'cumulativeAmount'),
+      detail: raw ? 'unreadable credential' : readStringProperty(value, 'type'),
+    })
+  }
+
+  function pushReceipt(action: string, value: unknown, detail?: string | undefined) {
+    const receipt = readMppTraceReceipt(value)
+    if (!receipt) return false
+    const cumulative = readStringProperty(receipt, 'acceptedCumulative')
+    const spent = readStringProperty(receipt, 'spent')
+    receiptSeen = true
+    push({
+      action,
+      channelId: readMppTraceReference(receipt),
+      cumulative,
+      detail,
+      remaining: subtractMppAmounts(cumulative, spent),
+      spent,
+    })
+    return true
+  }
+
+  const events = result.events ?? []
+  const eventHasAuthorization = events.some((event) => event.event === 'payment-authorization')
+  const authorizations =
+    isRecord(result.body) && Array.isArray(result.body.authorizations)
+      ? result.body.authorizations
+      : []
+  let authorizationIndex = 0
+
+  if (isRecord(result.body)) {
+    const authorization = result.body.authorization
+    if (authorization) pushAuthorization(authorization)
+  }
+
+  if (authorizations.length > 0) {
+    if (events.length === 0 || eventHasAuthorization)
+      for (const item of authorizations) pushAuthorization(item)
+    else pushAuthorization(authorizations[authorizationIndex++])
+  }
+
+  for (const event of events) {
+    if (event.event === 'message') {
+      push({
+        action: 'chunk',
+        detail: typeof event.data === 'string' ? event.data : formatEventValue(event.data),
+      })
+      continue
+    }
+
+    if (event.event === 'payment-authorization') {
+      pushAuthorization(event.data)
+      continue
+    }
+
+    if (event.event === 'payment-need-voucher') {
+      const cumulative = readStringProperty(event.data, 'requiredCumulative')
+      const spent = readStringProperty(event.data, 'spent')
+      const accepted = readStringProperty(event.data, 'acceptedCumulative')
+      push({
+        action: 'need voucher',
+        channelId: readStringProperty(event.data, 'channelId'),
+        cumulative,
+        detail: accepted ? `accepted ${formatMppAmount(accepted)}` : undefined,
+        remaining: subtractMppAmounts(cumulative, spent),
+        spent,
+      })
+      if (!eventHasAuthorization && authorizationIndex < authorizations.length)
+        pushAuthorization(authorizations[authorizationIndex++])
+      continue
+    }
+
+    if (event.event === 'payment-voucher-response') {
+      if (!pushReceipt('voucher accepted', event.data, readMppTraceStatus(event.data)))
+        push({ action: 'voucher accepted', detail: readMppTraceStatus(event.data) })
+      continue
+    }
+
+    if (event.event === 'payment-close-response') {
+      if (!eventHasAuthorization && authorizationIndex < authorizations.length)
+        pushAuthorization(authorizations[authorizationIndex++])
+      if (!pushReceipt('close accepted', event.data, readMppTraceStatus(event.data)))
+        push({ action: 'close accepted', detail: readMppTraceStatus(event.data) })
+      continue
+    }
+
+    if (event.event === 'payment-management-response') {
+      if (!pushReceipt('management accepted', event.data, readMppTraceStatus(event.data)))
+        push({ action: 'management accepted', detail: readMppTraceStatus(event.data) })
+      continue
+    }
+
+    if (event.event === 'payment-receipt') {
+      pushReceipt('receipt', event.data)
+      continue
+    }
+
+    if (event.event.startsWith('payment-')) {
+      push({
+        action: event.event.replace(/^payment-/, ''),
+        detail: formatEventValue(event.data),
+      })
+    }
+  }
+
+  while (!eventHasAuthorization && authorizationIndex < authorizations.length)
+    pushAuthorization(authorizations[authorizationIndex++])
+
+  if (result.receipt && !receiptSeen) pushReceipt('receipt', result.receipt, 'response receipt')
+  return rows
+}
+
+function readMppTraceReceipt(value: unknown) {
+  if (!isRecord(value)) return undefined
+  if ('receipt' in value) return isRecord(value.receipt) ? value.receipt : undefined
+  return value
+}
+
+function readMppTraceReference(value: Record<string, unknown>) {
+  return (
+    readStringProperty(value, 'channelId') ??
+    readStringProperty(value, 'reference') ??
+    readStringProperty(value, 'subscriptionId')
+  )
+}
+
+function readMppTraceStatus(value: unknown) {
+  if (!isRecord(value)) return undefined
+  const status = value.status
+  if (typeof status !== 'number' && typeof status !== 'string') return undefined
+  return `status ${status}`
+}
+
+function formatMppTraceAmount(value: string | undefined) {
+  if (!value) return ''
+  return formatMppAmount(value)
+}
+
+function shortMppHex(value: string) {
+  return value.length > 18 ? `${value.slice(0, 10)}...${value.slice(-6)}` : value
 }
 
 function readMppSessionState(result: MppScenarioResult, actionFallback?: string | undefined) {

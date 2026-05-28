@@ -132,6 +132,40 @@ describe('transactionRequest.keyAuthorization', () => {
   })
 })
 
+describe('mpp_authorize', () => {
+  test('accepts voucher session params', () => {
+    expect(
+      z.parse(Rpc.mpp_authorize.schema.params!, [
+        {
+          challenges: [
+            'Payment id="test", realm="example.com", method="tempo", intent="session", request="eyJhbW91bnQiOiIxIn0"',
+          ],
+          session: {
+            action: 'voucher',
+            authorizedSigner: accessKey,
+            channelId: `0x${'00'.repeat(32)}`,
+            cumulativeAmount: '2500000',
+          },
+        },
+      ]),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "challenges": [
+            "Payment id="test", realm="example.com", method="tempo", intent="session", request="eyJhbW91bnQiOiIxIn0"",
+          ],
+          "session": {
+            "action": "voucher",
+            "authorizedSigner": "0x0000000000000000000000000000000000000002",
+            "channelId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "cumulativeAmount": "2500000",
+          },
+        },
+      ]
+    `)
+  })
+})
+
 describe('wallet_connect.capabilities.request: auth', () => {
   test('accepts string shorthand', () => {
     expect(

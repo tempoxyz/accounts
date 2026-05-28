@@ -3,7 +3,7 @@ import { SignatureEnvelope } from 'ox/tempo'
 import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
 import type { Address, LocalAccount } from 'viem/accounts'
 import { prepareTransactionRequest } from 'viem/actions'
-import { Actions, Transaction as TempoTransaction } from 'viem/tempo'
+import { Account as TempoAccount, Actions, Transaction as TempoTransaction } from 'viem/tempo'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
@@ -87,7 +87,7 @@ export function privy<const client extends privy.Client>(
       }
     }
 
-    function toTempoAccount(account: privy.EmbeddedWallet) {
+    function toTempoAccount(account: privy.EmbeddedWallet): TempoAccount.Account {
       const address = core_Address.from(account.address)
 
       async function sign(parameters: { hash: Hex.Hex }) {
@@ -104,13 +104,7 @@ export function privy<const client extends privy.Client>(
           await privySignTransaction({ sign, transaction }),
         source: 'privy',
         type: 'local',
-      } satisfies {
-        address: Address
-        sign: (parameters: { hash: Hex.Hex }) => Promise<Hex.Hex>
-        signTransaction: (transaction: unknown) => Promise<Hex.Hex>
-        source: 'privy'
-        type: 'local'
-      }
+      } as unknown as TempoAccount.Account
     }
 
     function clear() {
@@ -341,7 +335,7 @@ export function privy<const client extends privy.Client>(
         ...(feePayer ? { feePayer: true } : {}),
         type: 'tempo',
       } as never)
-      return await account.signTransaction(prepared)
+      return await account.signTransaction(prepared as never)
     }
 
     async function privySignTransaction(parameters: {
@@ -382,7 +376,7 @@ export function privy<const client extends privy.Client>(
       const wallets = await loadEthereumWallets(privyClient)
       const selected = selectWalletAccounts(wallets, addresses)
 
-      const account = selected[0] ? toTempoAccount(selected[0]) : undefined
+      const account = selected[0] ? await toTempoAccount(selected[0]) : undefined
       if (!account && parameters.noAccountsMessage)
         throw new ox_Provider.DisconnectedError({
           message: parameters.noAccountsMessage,
@@ -579,7 +573,7 @@ export function privy<const client extends privy.Client>(
           const account = await getTempoAccount(parameters.address)
           try {
             await Actions.accessKey.revoke(getClient(), {
-              account: account as LocalAccount<'privy'>,
+              account: account as unknown as LocalAccount<'privy'>,
               accessKey: parameters.accessKeyAddress,
             })
           } catch (error) {

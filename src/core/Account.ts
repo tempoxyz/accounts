@@ -4,6 +4,7 @@ import type { Address, JsonRpcAccount } from 'viem/accounts'
 import { Account as TempoAccount } from 'viem/tempo'
 
 import type { OneOf } from '../internal/types.js'
+import * as AccessKey from './AccessKey.js'
 import type * as core_Store from './Store.js'
 
 /** Account stored in the provider state. */
@@ -113,4 +114,85 @@ export declare namespace hydrate {
     /** Whether to hydrate signing capability. @default false */
     signable?: boolean | undefined
   }
+}
+
+/** Creates a resolver for the signer available for a shared provider action. */
+export function createSignerResolver(
+  options: createSignerResolver.Options,
+): createSignerResolver.ReturnType {
+  const { getFallbackAccount, store } = options
+  return async function resolveSigner(options = {}) {
+    const state = store.getState()
+    const account = find({
+      address: options.address,
+      store,
+    })
+    const chainId = options.chainId ?? state.chainId
+
+    if (options.requiredSigner) {
+      if (account.address.toLowerCase() === options.requiredSigner.toLowerCase())
+        return await getFallbackAccount({ address: account.address })
+      const accessKey = await AccessKey.get({
+        account: account.address,
+        accessKey: options.requiredSigner,
+        chainId,
+        store,
+      })
+      if (accessKey) return accessKey
+    }
+
+    if (options.calls) {
+      const accessKey = await AccessKey.select({
+        account: account.address,
+        calls: options.calls,
+        chainId,
+        store,
+      })
+      if (accessKey) return accessKey
+    }
+
+    return await getFallbackAccount({ address: account.address })
+  }
+}
+
+export declare namespace createSignerResolver {
+  type Options = {
+    /** Returns the fallback account when no local access key should sign. */
+    getFallbackAccount: (
+      options?: getFallbackAccount.Options | undefined,
+    ) => getFallbackAccount.ReturnType
+    /** Reactive state store. */
+    store: core_Store.Store
+  }
+
+  type ReturnType = (
+    options?: resolveSigner.Options | undefined,
+  ) => Promise<resolveSigner.ReturnType>
+}
+
+export declare namespace getFallbackAccount {
+  type Options = {
+    /** Root account address. Defaults to the active account. */
+    address?: Address | undefined
+  }
+
+  type ReturnType =
+    | TempoAccount.Account
+    | JsonRpcAccount
+    | Promise<TempoAccount.Account | JsonRpcAccount>
+}
+
+export declare namespace resolveSigner {
+  type Options = {
+    /** Root account address. Defaults to the active account. */
+    address?: Address | undefined
+    /** Calls used to select an access key when one can satisfy the action. */
+    calls?: readonly { to?: Address | undefined; data?: Hex | undefined }[] | undefined
+    /** Chain ID used when selecting chain-scoped access keys. Defaults to the active chain. */
+    chainId?: number | undefined
+    /** Exact signer required by the action. */
+    requiredSigner?: Address | undefined
+  }
+
+  type ReturnType = TempoAccount.Account | TempoAccount.AccessKeyAccount | JsonRpcAccount
 }

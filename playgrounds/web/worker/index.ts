@@ -24,13 +24,11 @@ const payment = Mppx.create({
     tempo.charge({
       account,
       currency: pathUsd,
-      feePayer: true,
       testnet,
     }),
     tempo.session({
       account,
       currency: pathUsd,
-      feePayer: true,
       sse: { poll: true },
       store,
       suggestedDeposit: '0.03',

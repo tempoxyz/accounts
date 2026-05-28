@@ -169,6 +169,38 @@ describe('Encoded', () => {
     }>()
   })
 
+  test('mpp_authorize', () => {
+    expectTypeOf<Rpc.mpp_authorize.Encoded>().toMatchTypeOf<{
+      method: 'mpp_authorize'
+      params: readonly [
+        {
+          challenges: readonly string[]
+          session?:
+            | {
+                action: 'voucher'
+                authorizedSigner: Hex
+                channelId: Hex
+                cumulativeAmount: string
+              }
+            | {
+                action: 'topUp'
+                additionalDeposit: string
+                authorizedSigner: Hex
+                channelId: Hex
+              }
+            | {
+                action: 'close'
+                authorizedSigner: Hex
+                channelId: Hex
+                cumulativeAmount: string
+              }
+            | undefined
+        },
+      ]
+      returns: { authorization: string }
+    }>()
+  })
+
   test('wallet_transfer', () => {
     expectTypeOf<Rpc.wallet_transfer.Encoded>().toMatchTypeOf<{
       method: 'wallet_transfer'
@@ -260,7 +292,7 @@ describe('Ox', () => {
 describe('Viem', () => {
   test('is a tuple of all provider methods', () => {
     expectTypeOf<Schema.Viem[0]['Method']>().toEqualTypeOf<'eth_accounts'>()
-    expectTypeOf<Schema.Viem[21]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
+    expectTypeOf<Schema.Viem[22]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
   })
 })
 
@@ -275,6 +307,7 @@ describe('Request', () => {
       | 'eth_sendTransaction'
       | 'eth_signTransaction'
       | 'eth_signTypedData_v4'
+      | 'mpp_authorize'
       | 'personal_sign'
       | 'wallet_connect'
       | 'wallet_disconnect'

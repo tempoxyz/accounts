@@ -1,8 +1,10 @@
-import { WebCryptoP256 } from 'viem/tempo'
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { Account as TempoAccount, WebCryptoP256 } from 'viem/tempo'
 import { tempoLocalnet } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 
 import { accounts, privateKeys } from '../../test/config.js'
+import * as AccessKey from './AccessKey.js'
 import * as Account from './Account.js'
 import * as Store from './Store.js'
 
@@ -169,5 +171,130 @@ describe('find', () => {
     expect(() => Account.find({ store })).toThrowErrorMatchingInlineSnapshot(
       `[Provider.DisconnectedError: No active account.]`,
     )
+  })
+})
+
+describe('createSignerResolver', () => {
+  function setup(storeAccounts: readonly Account.Store[] = []) {
+    const store = Store.create({ chainId: tempoLocalnet.id })
+    store.setState({ accounts: storeAccounts, activeAccount: 0 })
+    const resolveSigner = Account.createSignerResolver({
+      getFallbackAccount: (options = {}) =>
+        Account.find({ address: options.address, signable: true, store }),
+      store,
+    })
+    return { resolveSigner, store }
+  }
+
+  function createKeyAuthorization(address: `0x${string}`) {
+    return KeyAuthorization.from(
+      {
+        address,
+        chainId: BigInt(tempoLocalnet.id),
+        scopes: [
+          {
+            address: accounts[1].address,
+            selector: 'transfer(address,uint256)',
+          },
+        ],
+        type: 'p256',
+      },
+      { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
+    )
+  }
+
+  test('default: falls back to the adapter root account', async () => {
+    const { resolveSigner } = setup([
+      { address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] },
+    ])
+
+    const result = await resolveSigner()
+
+    expect(result.address).toMatchInlineSnapshot(`"${accounts[0].address}"`)
+    expect('type' in result ? result.type : undefined).toMatchInlineSnapshot(`"local"`)
+  })
+
+  test('behavior: fallback can be a JSON-RPC root account', async () => {
+    const store = Store.create({ chainId: tempoLocalnet.id })
+    store.setState({ accounts: [{ address: accounts[0].address }], activeAccount: 0 })
+    const resolveSigner = Account.createSignerResolver({
+      getFallbackAccount: (options = {}) => Account.find({ address: options.address, store }),
+      store,
+    })
+
+    const result = await resolveSigner({
+      chainId: tempoLocalnet.id,
+      requiredSigner: accounts[1].address,
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "address": "${accounts[0].address}",
+        "type": "json-rpc",
+      }
+    `)
+  })
+
+  test('behavior: resolves an exact access key signer without transaction calls', async () => {
+    const { resolveSigner, store } = setup([
+      { address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] },
+    ])
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: accounts[0].address })
+    AccessKey.add({
+      account: accounts[0].address,
+      authorization: createKeyAuthorization(accessKey.accessKeyAddress),
+      keyPair,
+      store,
+    })
+
+    const result = await resolveSigner({
+      chainId: tempoLocalnet.id,
+      requiredSigner: accessKey.accessKeyAddress,
+    })
+
+    expect(result.address).toMatchInlineSnapshot(`"${accounts[0].address}"`)
+    expect(
+      'accessKeyAddress' in result ? result.accessKeyAddress : undefined,
+    ).toMatchInlineSnapshot(`"${accessKey.accessKeyAddress}"`)
+  })
+
+  test('behavior: falls through to scoped access key when exact signer is unavailable', async () => {
+    const { resolveSigner, store } = setup([
+      { address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] },
+    ])
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: accounts[0].address })
+    AccessKey.add({
+      account: accounts[0].address,
+      authorization: createKeyAuthorization(accessKey.accessKeyAddress),
+      keyPair,
+      store,
+    })
+
+    const result = await resolveSigner({
+      calls: [{ to: accounts[1].address, data: '0xa9059cbb' }],
+      chainId: tempoLocalnet.id,
+      requiredSigner: accounts[2].address,
+    })
+
+    expect(result.address).toMatchInlineSnapshot(`"${accounts[0].address}"`)
+    expect(
+      'accessKeyAddress' in result ? result.accessKeyAddress : undefined,
+    ).toMatchInlineSnapshot(`"${accessKey.accessKeyAddress}"`)
+  })
+
+  test('behavior: falls back to root when exact signer is unavailable and no scoped key matches', async () => {
+    const { resolveSigner } = setup([
+      { address: accounts[0].address, keyType: 'secp256k1', privateKey: privateKeys[0] },
+    ])
+
+    const result = await resolveSigner({
+      chainId: tempoLocalnet.id,
+      requiredSigner: accounts[1].address,
+    })
+
+    expect(result.address).toMatchInlineSnapshot(`"${accounts[0].address}"`)
+    expect('type' in result ? result.type : undefined).toMatchInlineSnapshot(`"local"`)
   })
 })

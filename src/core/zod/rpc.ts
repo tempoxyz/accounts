@@ -440,8 +440,55 @@ export namespace wallet_getCapabilities {
             status: z.union([z.literal('supported'), z.literal('unsupported')]),
           }),
         ),
+        mpp: z.optional(
+          z.object({
+            status: z.union([z.literal('supported'), z.literal('unsupported')]),
+          }),
+        ),
       }),
     ),
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
+export namespace mpp_authorize {
+  const sessionBase = {
+    authorizedSigner: u.address(),
+    channelId: u.hex(),
+  }
+
+  export const session = z.discriminatedUnion('action', [
+    z.object({
+      ...sessionBase,
+      action: z.literal('voucher'),
+      cumulativeAmount: z.string(),
+    }),
+    z.object({
+      ...sessionBase,
+      action: z.literal('topUp'),
+      additionalDeposit: z.string(),
+    }),
+    z.object({
+      ...sessionBase,
+      action: z.literal('close'),
+      cumulativeAmount: z.string(),
+    }),
+  ])
+
+  export const schema = Schema.defineItem({
+    method: z.literal('mpp_authorize'),
+    params: z.readonly(
+      z.tuple([
+        z.object({
+          challenges: z.readonly(z.array(z.string()).check(z.minLength(1))),
+          session: z.optional(session),
+        }),
+      ]),
+    ),
+    returns: z.object({
+      authorization: z.string(),
+    }),
   })
   export type Encoded = Schema.Encoded<typeof schema>
   export type Decoded = Schema.Decoded<typeof schema>

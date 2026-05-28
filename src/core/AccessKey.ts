@@ -312,6 +312,36 @@ export async function select(
   }
 }
 
+/** Returns a locally-signable access key account by exact address. */
+export async function get(options: get.Options): Promise<get.ReturnType> {
+  const { accessKey, account, chainId, store } = options
+  const now = options.now ?? Date.now() / 1000
+  const record = list({ account, accessKey, chainId, store })[0]
+  if (!record) return undefined
+  if (isExpired(record.expiry, now)) {
+    remove({ accessKey: record.address, account: record.access, chainId: record.chainId, store })
+    return undefined
+  }
+  return hydrate(record, store)
+}
+
+export declare namespace get {
+  type Options = {
+    /** Root account address. */
+    account: Address.Address
+    /** Specific access key address to match. */
+    accessKey: Address.Address
+    /** Chain ID the access key must be authorized on. */
+    chainId: number
+    /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
+    now?: number | undefined
+    /** Reactive state store. */
+    store: Store.Store
+  }
+
+  type ReturnType = TempoAccount.AccessKeyAccount | undefined
+}
+
 function createKeyAuthorizationManager(store: Store.Store): KeyAuthorizationManager {
   return TempoKeyAuthorizationManager.from({
     source: {
