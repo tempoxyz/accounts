@@ -706,7 +706,15 @@ export default function Customize() {
         </div>
       </div>
 
-      <div className="group mt-14 -mx-6 overflow-hidden">
+      <div
+        className="group mt-14 -mx-6 overflow-hidden"
+        style={{
+          maskImage:
+            "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
+          WebkitMaskImage:
+            "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
+        }}
+      >
         <div
           ref={marqueeRef}
           className="flex w-max items-center will-change-transform"
