@@ -433,7 +433,7 @@ function HeroIntro({
       <div
         data-hero-stagger
         style={staggerStyle}
-        className="text-halo mt-[-14px] flex items-center gap-5"
+        className="mt-[-14px] flex items-center gap-5 bg-background px-4 py-2"
       >
         <Link
           to="/docs"
