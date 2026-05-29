@@ -2,6 +2,7 @@ import type { KeyAuthorization } from 'ox/tempo'
 import type { Client, Hex, Transport } from 'viem'
 import type { Address } from 'viem/accounts'
 import type { tempo } from 'viem/tempo/chains'
+import type * as z from 'zod/mini'
 
 import type * as Account from './Account.js'
 import type * as Schema from './Schema.js'
@@ -27,6 +28,8 @@ export type Meta = {
   icon?: `data:image/${string}` | undefined
   /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */
   name?: string | undefined
+  /** Schema for the minimum persisted account shape the adapter can restore. */
+  persistedAccount?: z.ZodMiniType | undefined
   /** Reverse DNS identifier (e.g. `"com.example.mywallet"`). @default `com.{lowercase name}` */
   rdns?: string | undefined
 }

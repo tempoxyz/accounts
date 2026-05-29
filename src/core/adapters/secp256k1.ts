@@ -1,8 +1,17 @@
 import type { Hex } from 'viem'
 import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
+import * as z from 'zod/mini'
 
 import * as Adapter from '../Adapter.js'
+import * as u from '../zod/utils.js'
 import { local } from './local.js'
+
+const persistedAccount = z.object({
+  address: u.address(),
+  keyType: z.literal('secp256k1'),
+  label: z.optional(z.string()),
+  privateKey: u.hex(),
+})
 
 /**
  * Creates a secp256k1 adapter that signs in-process with a `secp256k1` private key.
@@ -43,7 +52,7 @@ export function secp256k1(options: secp256k1.Options = {}): Adapter.Adapter {
       }
     : undefined
 
-  return Adapter.define({ icon, name, rdns }, (config) => {
+  return Adapter.define({ icon, name, persistedAccount, rdns }, (config) => {
     const { store } = config
 
     return local({

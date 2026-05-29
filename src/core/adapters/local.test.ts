@@ -5,17 +5,42 @@ import { describe, expect, test } from 'vp/test'
 
 import {
   accounts as core_accounts,
+  chain,
   getClient,
   privateKeys,
   webAuthnAccounts,
 } from '../../../test/config.js'
 import * as Account from '../Account.js'
 import type * as Adapter from '../Adapter.js'
+import * as Provider from '../Provider.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { local } from './local.js'
 
 describe('local', () => {
+  test('behavior: does not hydrate account without local signing fields', async () => {
+    const storage = Storage.memory({ key: 'local-invalid-account' })
+    storage.setItem('store', {
+      state: {
+        accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+        activeAccount: 0,
+        chainId: chain.id,
+      },
+      version: 0,
+    })
+    const provider = Provider.create({
+      adapter: local({ loadAccounts: async () => ({ accounts: [] }) }),
+      chains: [chain],
+      storage,
+    })
+
+    await Store.waitForHydration(provider.store)
+
+    await expect(provider.request({ method: 'eth_accounts' })).resolves.toMatchInlineSnapshot(
+      `[]`,
+    )
+  })
+
   describe('loadAccounts', () => {
     test('default: loads accounts', async () => {
       const { adapter } = setup()
