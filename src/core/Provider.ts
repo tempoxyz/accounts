@@ -1,9 +1,10 @@
 import { announceProvider } from 'mipd'
 import { Challenge } from 'mppx'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
+import { Charge as MppCharge, Session as MppSession } from 'mppx/tempo'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
-import type { JsonRpcAccount } from 'viem/accounts'
+import type { Account as ViemAccount, JsonRpcAccount } from 'viem/accounts'
 import { parseSiweMessage } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
@@ -208,20 +209,15 @@ export function create(options: create.Options = {}): create.ReturnType {
       })
 
     const chainId = getMppChainId(challenge) ?? store.getState().chainId
-    const account = await resolveSigner({
-      chainId,
-      ...(session ? { requiredSigner: session.authorizedSigner } : {}),
-    })
-    const client = Object.assign(
+    const account = getAccount()
+    const client = getMppSigningClient(
       Client.fromChainId(chainId, {
         chains,
         provider: providerRef,
         store,
         transports,
       }),
-      { account },
     )
-    const client_mpp = getMppSigningClient(client)
     const {
       mode = 'push',
       polyfill: _polyfill,
@@ -230,24 +226,78 @@ export function create(options: create.Options = {}): create.ReturnType {
 
     switch (challenge.intent) {
       case 'charge': {
-        const method = mppx_tempo.charge({
-          ...methodOptions,
-          account,
-          getClient: () => client_mpp,
-          mode,
+        const filled = await MppCharge.fill(client, {
+          autoSwap: methodOptions.autoSwap,
+          challenge: challenge as MppCharge.ChargeChallenge,
+          clientId: methodOptions.clientId,
+          expectedRecipients: methodOptions.expectedRecipients,
+          payer: account.address,
         })
-        return await method.createCredential({ challenge: challenge as never, context: {} })
+        const signer = await resolveSigner({
+          chainId: filled.chainId,
+          // Proof credentials have no transaction calls, but should still use a locally
+          // authorized access key when one is available.
+          calls: filled.kind === 'calls' ? filled.calls : [],
+        })
+        return await MppCharge.createCredential(client, { filled, mode, signer })
       }
       case 'session': {
-        const method = mppx_tempo({
-          ...methodOptions,
-          account,
-          getClient: () => client_mpp,
-        })[1]
-        return await method.createCredential({
-          challenge: challenge as never,
-          context: session ? (toMppSessionContext({ account, session }) as never) : {},
+        const challenge_session = challenge as MppSession.SessionChallenge
+        if (!session) {
+          let signer = await resolveSigner({ chainId, keyType: 'secp256k1' })
+          let filled = await fillMppSessionOpen({
+            account,
+            challenge: challenge_session,
+            client,
+            options: methodOptions,
+            signer,
+          })
+          const signer_open = await resolveSigner({
+            calls: filled.calls,
+            chainId: filled.chainId,
+            keyType: 'secp256k1',
+          })
+          if (!isMppSigner(signer, signer_open)) {
+            signer = signer_open
+            filled = await fillMppSessionOpen({
+              account,
+              challenge: challenge_session,
+              client,
+              options: methodOptions,
+              signer,
+            })
+          }
+          return await MppSession.open.createCredential(client, {
+            filled,
+            signer: signer_open,
+            voucherSigner: signer,
+          })
+        }
+        const signer = await resolveSigner({
+          chainId,
+          keyType: 'secp256k1',
+          requiredSigner: session.authorizedSigner,
         })
+        switch (session.action) {
+          case 'voucher':
+            return await MppSession.voucher.createCredential(client, {
+              challenge: challenge_session,
+              channelId: session.channelId,
+              cumulativeAmount: BigInt(session.cumulativeAmount),
+              signer,
+            })
+          case 'close':
+            return await MppSession.close.createCredential(client, {
+              challenge: challenge_session,
+              channelId: session.channelId,
+              cumulativeAmount: BigInt(session.cumulativeAmount),
+              signer,
+            })
+          case 'topUp':
+            throw new ox_Provider.UnsupportedMethodError({
+              message: '`mpp_authorize` session topUp is not supported yet.',
+            })
+        }
       }
       default:
         throw new RpcResponse.InvalidParamsError({
@@ -1172,7 +1222,12 @@ export function create(options: create.Options = {}): create.ReturnType {
     const polyfill = polyfill_option ?? isFetchWritable()
 
     const getClient = ({ chainId }: { chainId?: number | undefined }) => {
-      const client = provider.getClient({ chainId })
+      const client = Client.fromChainId(chainId, {
+        chains,
+        provider,
+        store,
+        transports,
+      })
       const account = store.getState().accounts[store.getState().activeAccount]
       if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
       return Object.assign(client, {
@@ -1222,38 +1277,76 @@ const defaultIcon =
   'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>' as const
 const sendCallsMagic = Hash.keccak256(Hex.fromString('TEMPO_5792'))
 
-function toMppSessionContext(options: toMppSessionContext.Options): toMppSessionContext.ReturnType {
-  const { account, session } = options
-  switch (session.action) {
-    case 'voucher':
-    case 'close':
-      return {
-        account,
-        action: session.action,
-        authorizedSigner: session.authorizedSigner,
-        channelId: session.channelId,
-        cumulativeAmountRaw: session.cumulativeAmount,
-      }
-    case 'topUp':
-      throw new ox_Provider.UnsupportedMethodError({
-        message: '`mpp_authorize` session topUp is not supported yet.',
-      })
+async function fillMppSessionOpen(
+  options: fillMppSessionOpen.Options,
+): Promise<MppSession.open.fill.Filled> {
+  const { account, challenge, client, options: options_mpp, signer } = options
+  return await MppSession.open.fill(client, {
+    authorizedSigner: getMppSignerAddress(signer),
+    challenge,
+    deposit: resolveMppSessionDeposit({
+      challenge,
+      options: options_mpp,
+    }),
+    escrowContract: options_mpp.escrowContract,
+    payer: account.address,
+  })
+}
+
+declare namespace fillMppSessionOpen {
+  type Options = {
+    account: { address: Address.Address }
+    challenge: MppSession.SessionChallenge
+    client: ViemClient
+    options: {
+      decimals?: number | undefined
+      deposit?: string | undefined
+      escrowContract?: Address.Address | undefined
+      maxDeposit?: string | undefined
+    }
+    signer: ViemAccount
   }
 }
 
-declare namespace toMppSessionContext {
-  type Options = {
-    account: Account.resolveSigner.ReturnType
-    session: z.output<typeof Rpc.mpp_authorize.session>
-  }
+function resolveMppSessionDeposit(options: resolveMppSessionDeposit.Options): bigint {
+  const { challenge, options: options_mpp } = options
+  const decimals = options_mpp.decimals ?? 6
+  const suggestedDeposit = challenge.request.suggestedDeposit
+    ? BigInt(challenge.request.suggestedDeposit)
+    : undefined
+  const maxDeposit =
+    options_mpp.maxDeposit !== undefined ? parseUnits(options_mpp.maxDeposit, decimals) : undefined
 
-  type ReturnType = {
-    account: Account.resolveSigner.ReturnType
-    action: 'voucher' | 'close'
-    authorizedSigner: Address.Address
-    channelId: Hex.Hex
-    cumulativeAmountRaw: string
+  if (options_mpp.deposit !== undefined) return parseUnits(options_mpp.deposit, decimals)
+  if (suggestedDeposit !== undefined && maxDeposit !== undefined)
+    return suggestedDeposit < maxDeposit ? suggestedDeposit : maxDeposit
+  if (maxDeposit !== undefined) return maxDeposit
+  if (suggestedDeposit !== undefined) return suggestedDeposit
+  throw new RpcResponse.InvalidParamsError({
+    message:
+      'No session deposit amount available. Set `mpp.deposit`, `mpp.maxDeposit`, or use a challenge with `suggestedDeposit`.',
+  })
+}
+
+declare namespace resolveMppSessionDeposit {
+  type Options = {
+    challenge: MppSession.SessionChallenge
+    options: {
+      decimals?: number | undefined
+      deposit?: string | undefined
+      maxDeposit?: string | undefined
+    }
   }
+}
+
+function getMppSignerAddress(account: ViemAccount): Address.Address {
+  if ('accessKeyAddress' in account && typeof account.accessKeyAddress === 'string')
+    return account.accessKeyAddress as Address.Address
+  return account.address
+}
+
+function isMppSigner(a: ViemAccount, b: ViemAccount): boolean {
+  return getMppSignerAddress(a).toLowerCase() === getMppSignerAddress(b).toLowerCase()
 }
 
 function getMppChainId(challenge: Challenge.Challenge) {

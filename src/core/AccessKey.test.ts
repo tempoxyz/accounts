@@ -4,7 +4,7 @@ import { BaseError, encodeErrorResult, encodeFunctionResult } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
-import { accounts } from '../../test/config.js'
+import { accounts, privateKeys } from '../../test/config.js'
 import * as AccessKey from './AccessKey.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import * as Store from './Store.js'
@@ -20,6 +20,7 @@ function createKeyAuthorization(
   options: {
     chainId?: bigint | undefined
     expiry?: number | undefined
+    keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     limits?: { token: `0x${string}`; limit: bigint }[] | undefined
     scopes?: KeyAuthorization.Scope[] | undefined
   } = {},
@@ -31,7 +32,7 @@ function createKeyAuthorization(
       expiry: options.expiry,
       limits: options.limits,
       scopes: options.scopes,
-      type: 'p256',
+      type: options.keyType ?? 'p256',
     },
     { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
   )
@@ -552,6 +553,76 @@ describe('select', () => {
         "miss": false,
       }
     `)
+  })
+
+  test('behavior: selects a secp256k1 access key without transaction calls', async () => {
+    const store = createStore()
+    addAuthorization({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(accounts[1]!.address, {
+        keyType: 'secp256k1',
+      }),
+      privateKey: privateKeys[1],
+      store,
+    })
+
+    const result = await AccessKey.select({
+      account: rootAddress,
+      calls: [],
+      chainId: 1,
+      keyType: 'secp256k1',
+      store,
+    })
+
+    expect(result?.accessKeyAddress).toMatchInlineSnapshot(
+      `"0x8c8d35429f74ec245f8ef2f4fd1e551cff97d650"`,
+    )
+  })
+
+  test('behavior: skips p256 access keys when secp256k1 is required', async () => {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    addAuthorization({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(accessKey.accessKeyAddress),
+      keyPair,
+      store,
+    })
+
+    const result = await AccessKey.select({
+      account: rootAddress,
+      calls: [],
+      chainId: 1,
+      keyType: 'secp256k1',
+      store,
+    })
+
+    expect(result).toMatchInlineSnapshot(`undefined`)
+  })
+})
+
+describe('get', () => {
+  test('behavior: skips exact access key with wrong key type', async () => {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    addAuthorization({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(accessKey.accessKeyAddress),
+      keyPair,
+      store,
+    })
+
+    const result = await AccessKey.get({
+      accessKey: accessKey.accessKeyAddress,
+      account: rootAddress,
+      chainId: 1,
+      keyType: 'secp256k1',
+      store,
+    })
+
+    expect(result).toMatchInlineSnapshot(`undefined`)
   })
 })
 

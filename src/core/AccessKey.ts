@@ -96,6 +96,8 @@ type SelectQuery = {
   calls?: readonly Call[] | undefined
   /** Chain ID the access key must be authorized on. */
   chainId: number
+  /** Key type the access key must use. */
+  keyType?: AccessKey['keyType'] | undefined
   /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
   now?: number | undefined
   /** Reactive state store. */
@@ -128,7 +130,7 @@ type ManagedAccount = TempoAccount.AccessKeyAccount
 
 type KeyAuthorizationManager = TempoKeyAuthorizationManager.KeyAuthorizationManager
 
-/** Generates a P256 key pair and access key account. */
+/** Generates local key material and an access key account. */
 export async function generate(options: generate.Options = {}): Promise<generate.ReturnType> {
   const { account } = options
   const keyPair = await WebCryptoP256.createKeyPair()
@@ -294,11 +296,12 @@ export async function getStatus(options: StatusQuery): Promise<Status> {
 export async function select(
   options: SelectQuery,
 ): Promise<TempoAccount.AccessKeyAccount | undefined> {
-  const { account, calls, chainId, store } = options
+  const { account, calls, chainId, keyType, store } = options
   const now = options.now ?? Date.now() / 1000
   const records = list({ account, chainId, store })
 
   for (const record of records) {
+    if (keyType && record.keyType !== keyType) continue
     if (!scopesMatch(record, { calls })) continue
     if (isExpired(record.expiry, now)) {
       remove({ accessKey: record.address, account: record.access, chainId: record.chainId, store })
@@ -314,10 +317,11 @@ export async function select(
 
 /** Returns a locally-signable access key account by exact address. */
 export async function get(options: get.Options): Promise<get.ReturnType> {
-  const { accessKey, account, chainId, store } = options
+  const { accessKey, account, chainId, keyType, store } = options
   const now = options.now ?? Date.now() / 1000
   const record = list({ account, accessKey, chainId, store })[0]
   if (!record) return undefined
+  if (keyType && record.keyType !== keyType) return undefined
   if (isExpired(record.expiry, now)) {
     remove({ accessKey: record.address, account: record.access, chainId: record.chainId, store })
     return undefined
@@ -333,6 +337,8 @@ export declare namespace get {
     accessKey: Address.Address
     /** Chain ID the access key must be authorized on. */
     chainId: number
+    /** Key type the access key must use. */
+    keyType?: AccessKey['keyType'] | undefined
     /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
     now?: number | undefined
     /** Reactive state store. */
