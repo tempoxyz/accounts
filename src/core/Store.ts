@@ -65,8 +65,12 @@ export type Store = Mutate<
 
 /** Options for {@link create}. */
 export type Options = {
-  /** Schema for the minimum persisted account shape the current adapter can restore. */
-  account?: z.ZodMiniType | undefined
+  /**
+   * Minimum account schema required for hydration.
+   *
+   * This is a perimeter check for persisted state, not the full account schema.
+   */
+  schema?: z.ZodMiniType | undefined
   /** Initial chain ID. */
   chainId: number
   /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
@@ -100,10 +104,10 @@ export type QueuedRequest<result = unknown> = OneOf<
  */
 export function create(options: Options): Store {
   const {
-    account,
     chainId,
     maxAccounts,
     persistCredentials = true,
+    schema,
     storage = typeof window !== 'undefined'
       ? Storage.idb({ key: 'tempo' })
       : Storage.memory({ key: 'tempo' }),
@@ -120,7 +124,7 @@ export function create(options: Options): Store {
           requestQueue: [],
         }),
         {
-          merge: (persisted, current) => hydrate(persisted, current, { account }),
+          merge: (persisted, current) => hydrate(persisted, current, { schema }),
           name: 'store',
           partialize: (state) => serialize(state, { maxAccounts, persistCredentials }),
           storage,
@@ -170,8 +174,8 @@ export function hydrate(persisted: unknown, current: State, options: hydrate.Opt
       )
       return account ?? persisted
     }) ?? current.accounts
-  const accounts_valid = options.account
-    ? accounts.filter((account) => z.safeParse(options.account!, account).success)
+  const accounts_valid = options.schema
+    ? accounts.filter((account) => z.safeParse(options.schema!, account).success)
     : accounts
   return {
     ...state,
@@ -189,8 +193,12 @@ export function hydrate(persisted: unknown, current: State, options: hydrate.Opt
 export declare namespace hydrate {
   /** Options for {@link hydrate}. */
   type Options = {
-    /** Schema for the minimum persisted account shape the current adapter can restore. */
-    account?: z.ZodMiniType | undefined
+    /**
+     * Minimum account schema required for hydration.
+     *
+     * This is a perimeter check for persisted state, not the full account schema.
+     */
+    schema?: z.ZodMiniType | undefined
   }
 }
 

@@ -28,7 +28,11 @@ export type Meta = {
   icon?: `data:image/${string}` | undefined
   /** Display name of the provider (e.g. `"My Wallet"`). @default "Injected Wallet" */
   name?: string | undefined
-  /** Schema for the minimum persisted account shape the adapter can restore. */
+  /**
+   * Minimum persisted account schema the adapter can hydrate.
+   *
+   * This only guards the storage boundary; it is not the full runtime account schema.
+   */
   persistedAccount?: z.ZodMiniType | undefined
   /** Reverse DNS identifier (e.g. `"com.example.mywallet"`). @default `com.{lowercase name}` */
   rdns?: string | undefined
