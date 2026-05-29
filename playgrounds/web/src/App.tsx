@@ -1,6 +1,7 @@
 import { Credential } from 'mppx'
 import { tempo as mppx_tempo } from 'mppx/client'
 import { Hex, Json } from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
 import {
   type ComponentProps,
   type ReactNode,
@@ -10,10 +11,11 @@ import {
   useState,
 } from 'react'
 import { Button as RegenButton } from 'regen-ui'
-import { type Address, formatUnits, isAddress, parseUnits } from 'viem'
+import { type Address, createClient, custom, formatUnits, isAddress, parseUnits } from 'viem'
+import { generatePrivateKey } from 'viem/accounts'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
-import { Actions } from 'viem/tempo'
+import { Account, Actions } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 
 import { PrivyEmailOtp } from './PrivyEmailOtp.js'
@@ -740,7 +742,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
   const [accessKeyEnabled, setAccessKeyEnabled] = useState(false)
   const [expiry, setExpiry] = useState('86400')
   const [limits, setLimits] = useState<LimitInput[]>([{ token: '', amount: '100', period: '' }])
-  const [scopeSelector, setScopeSelector] = useState('transfer(address,uint256)')
+  const [scopeSelector, setScopeSelector] = useState('')
   const [authEnabled, setAuthEnabled] = useState(false)
   const [showDepositEnabled, setShowDepositEnabled] = useState(false)
   const turnkey = adapterType === 'turnkey'
@@ -771,12 +773,15 @@ function WalletConnect(props: { adapterType: AdapterType }) {
     const name = turnkey ? undefined : (form.get('name') as string)
     const digest = form.get('digest') as Hex.Hex
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
+    const generated = accessKeyEnabled ? createPlaygroundSecp256k1AccessKey() : undefined
 
     const authorizeAccessKey = accessKeyEnabled
       ? (() => {
           const filledLimits = limits.filter((l) => l.token && l.amount)
           return {
             expiry: Math.floor(Date.now() / 1000) + Number(expiry || '86400'),
+            keyType: 'secp256k1',
+            publicKey: generated!.publicKey,
             ...(filledLimits.length > 0 && {
               limits: filledLimits.map((l) => ({
                 token: l.token,
@@ -813,8 +818,8 @@ function WalletConnect(props: { adapterType: AdapterType }) {
             ...(showDeposit ? { showDeposit } : {}),
           }
 
-    execute(() =>
-      provider.request({
+    execute(async () => {
+      const result = await provider.request({
         method: 'wallet_connect',
         params: [
           {
@@ -824,8 +829,17 @@ function WalletConnect(props: { adapterType: AdapterType }) {
             ),
           },
         ],
-      }),
-    )
+      })
+      const account = result.accounts[0]
+      const keyAuthorization = account?.capabilities?.keyAuthorization
+      if (generated && account && keyAuthorization)
+        savePlaygroundAccessKey({
+          keyAuthorization,
+          privateKey: generated.privateKey,
+          rootAddress: account.address,
+        })
+      return result
+    })
   }
 
   return (
@@ -1822,6 +1836,10 @@ const periodOptions = [
 const scopePresets = [
   { label: 'None', value: '' },
   { label: 'transfer(address,uint256)', value: 'transfer(address,uint256)' },
+  {
+    label: 'transferWithMemo(address,uint256,bytes32)',
+    value: 'transferWithMemo(address,uint256,bytes32)',
+  },
   { label: 'approve(address,uint256)', value: 'approve(address,uint256)' },
   {
     label: 'transferFrom(address,address,uint256)',
@@ -1836,6 +1854,43 @@ type TokenlistEntry = {
   logoURI?: string
   name: string
   symbol: string
+}
+
+function createPlaygroundSecp256k1AccessKey() {
+  const privateKey = generatePrivateKey()
+  const accessKey = Account.fromSecp256k1(privateKey)
+  return { privateKey, publicKey: accessKey.publicKey }
+}
+
+function savePlaygroundAccessKey(options: {
+  keyAuthorization: unknown
+  privateKey: Hex.Hex
+  rootAddress: Address
+}) {
+  const authorization = KeyAuthorization.fromRpc(options.keyAuthorization as never)
+  provider.store.setState((state) => ({
+    accessKeys: [
+      {
+        address: authorization.address,
+        access: options.rootAddress,
+        chainId: Number(authorization.chainId),
+        expiry: authorization.expiry ?? undefined,
+        keyAuthorization: authorization,
+        keyType: authorization.type,
+        limits: authorization.limits as never,
+        privateKey: options.privateKey,
+        scopes: authorization.scopes as never,
+      },
+      ...state.accessKeys.filter(
+        (key) =>
+          !(
+            key.access.toLowerCase() === options.rootAddress.toLowerCase() &&
+            key.address.toLowerCase() === authorization.address.toLowerCase() &&
+            key.chainId === Number(authorization.chainId)
+          ),
+      ),
+    ],
+  }))
 }
 
 type LimitInput = {
@@ -1906,8 +1961,11 @@ function WalletAuthorizeAccessKey() {
           const scopeSelector = form.get('scopeSelector') as string
 
           const filledLimits = limits.filter((l) => l.token && l.amount)
+          const generated = createPlaygroundSecp256k1AccessKey()
           const params: Record<string, unknown> = {}
           if (expiry) params.expiry = Math.floor(Date.now() / 1000) + Number(expiry)
+          params.keyType = 'secp256k1'
+          params.publicKey = generated.publicKey
           if (filledLimits.length > 0)
             params.limits = filledLimits.map((l) => ({
               token: l.token,
@@ -1917,12 +1975,18 @@ function WalletAuthorizeAccessKey() {
           if (scopeSelector && filledLimits[0])
             params.scopes = [{ address: filledLimits[0].token, selector: scopeSelector }]
 
-          execute(() =>
-            provider.request({
+          execute(async () => {
+            const result = await provider.request({
               method: 'wallet_authorizeAccessKey',
               ...(Object.keys(params).length > 0 ? { params: [params] } : {}),
-            } as never),
-          )
+            } as never)
+            savePlaygroundAccessKey({
+              keyAuthorization: result.keyAuthorization,
+              privateKey: generated.privateKey,
+              rootAddress: result.rootAddress,
+            })
+            return result
+          })
         }}
       >
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
@@ -1996,7 +2060,7 @@ function WalletAuthorizeAccessKey() {
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Scope</label>
-          <select defaultValue="transfer(address,uint256)" name="scopeSelector" style={{ flex: 1 }}>
+          <select defaultValue="" name="scopeSelector" style={{ flex: 1 }}>
             {scopePresets.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
@@ -2440,7 +2504,12 @@ function createMppSessionManager() {
       return mppSessionFetch(input, init, trace)
     },
     getClient(options: { chainId?: number | undefined } = {}) {
-      const client = provider.getClient({ chainId: options.chainId })
+      const base = provider.getClient({ chainId: options.chainId })
+      const client = createClient({
+        chain: base.chain,
+        pollingInterval: base.pollingInterval,
+        transport: custom(provider),
+      })
       const account = provider.getAccount()
       return Object.assign(client, { account })
     },

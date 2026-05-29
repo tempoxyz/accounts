@@ -146,6 +146,7 @@ export function createSignerResolver(
         account: account.address,
         calls: options.calls,
         chainId,
+        keyType: options.keyType,
         store,
       })
       if (accessKey) return accessKey
@@ -190,6 +191,8 @@ export declare namespace resolveSigner {
     calls?: readonly { to?: Address | undefined; data?: Hex | undefined }[] | undefined
     /** Chain ID used when selecting chain-scoped access keys. Defaults to the active chain. */
     chainId?: number | undefined
+    /** Key type used when selecting access keys. */
+    keyType?: AccessKey.AccessKey['keyType'] | undefined
     /** Exact signer required by the action. */
     requiredSigner?: Address | undefined
   }

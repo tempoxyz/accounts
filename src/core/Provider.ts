@@ -16,6 +16,7 @@ import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import { withDedupe } from './internal/withDedupe.js'
+import * as Mpp from './Mpp.js'
 import * as Schema from './Schema.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
@@ -192,69 +193,6 @@ export function create(options: create.Options = {}): create.ReturnType {
   }
 
   let mppClient: Mppx.Mppx | undefined
-
-  async function authorizeMpp(options: {
-    challenges: readonly Challenge.Challenge[]
-    session?: z.output<typeof Rpc.mpp_authorize.session> | undefined
-  }): Promise<string> {
-    const { challenges, session } = options
-    const challenge = (() => {
-      if (session) return challenges[0]
-      return challenges.find((challenge) => challenge.intent === 'charge') ?? challenges[0]
-    })()
-    if (!challenge)
-      throw new RpcResponse.InvalidParamsError({
-        message: '`challenges` must include at least one challenge.',
-      })
-
-    const chainId = getMppChainId(challenge) ?? store.getState().chainId
-    const account = await resolveSigner({
-      chainId,
-      ...(session ? { requiredSigner: session.authorizedSigner } : {}),
-    })
-    const client = Object.assign(
-      Client.fromChainId(chainId, {
-        chains,
-        provider: providerRef,
-        store,
-        transports,
-      }),
-      { account },
-    )
-    const client_mpp = getMppSigningClient(client)
-    const {
-      mode = 'push',
-      polyfill: _polyfill,
-      ...methodOptions
-    } = typeof mpp === 'object' ? mpp : {}
-
-    switch (challenge.intent) {
-      case 'charge': {
-        const method = mppx_tempo.charge({
-          ...methodOptions,
-          account,
-          getClient: () => client_mpp,
-          mode,
-        })
-        return await method.createCredential({ challenge: challenge as never, context: {} })
-      }
-      case 'session': {
-        const method = mppx_tempo({
-          ...methodOptions,
-          account,
-          getClient: () => client_mpp,
-        })[1]
-        return await method.createCredential({
-          challenge: challenge as never,
-          context: session ? (toMppSessionContext({ account, session }) as never) : {},
-        })
-      }
-      default:
-        throw new RpcResponse.InvalidParamsError({
-          message: `Unsupported Tempo challenge intent "${challenge.intent}".`,
-        })
-    }
-  }
 
   const provider = Object.assign(
     ox_Provider.from(
@@ -659,8 +597,19 @@ export function create(options: create.Options = {}): create.ReturnType {
                     }
 
                     return {
-                      authorization: await authorizeMpp({
+                      authorization: await Mpp.authorize({
+                        account: getAccount(),
                         challenges,
+                        defaultChainId: store.getState().chainId,
+                        getClient: ({ chainId }) =>
+                          Client.fromChainId(chainId, {
+                            chains,
+                            provider: providerRef,
+                            store,
+                            transports,
+                          }),
+                        options: typeof mpp === 'object' ? mpp : {},
+                        resolveSigner,
                         session: decoded.session,
                       }),
                     } satisfies Rpc.mpp_authorize.Encoded['returns']
@@ -1172,7 +1121,12 @@ export function create(options: create.Options = {}): create.ReturnType {
     const polyfill = polyfill_option ?? isFetchWritable()
 
     const getClient = ({ chainId }: { chainId?: number | undefined }) => {
-      const client = provider.getClient({ chainId })
+      const client = Client.fromChainId(chainId, {
+        chains,
+        provider,
+        store,
+        transports,
+      })
       const account = store.getState().accounts[store.getState().activeAccount]
       if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
       return Object.assign(client, {
@@ -1197,71 +1151,9 @@ export function create(options: create.Options = {}): create.ReturnType {
   return provider
 }
 
-function getMppSigningClient(client: ViemClient): ViemClient {
-  const request = client.request
-  return Object.assign(client, {
-    async request(
-      parameters: { method: string; params?: unknown },
-      options?: Parameters<typeof request>[1],
-    ) {
-      const result = await request(parameters as never, options as never)
-      if (parameters.method !== 'wallet_getCapabilities') return result
-      if (!result || typeof result !== 'object') return result
-      return Object.fromEntries(
-        Object.entries(result).map(([chainId, capabilities]) => {
-          if (!capabilities || typeof capabilities !== 'object') return [chainId, capabilities]
-          const { mpp: _mpp, ...rest } = capabilities as { mpp?: unknown } & Record<string, unknown>
-          return [chainId, rest]
-        }),
-      ) as never
-    },
-  }) as never
-}
-
 const defaultIcon =
   'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>' as const
 const sendCallsMagic = Hash.keccak256(Hex.fromString('TEMPO_5792'))
-
-function toMppSessionContext(options: toMppSessionContext.Options): toMppSessionContext.ReturnType {
-  const { account, session } = options
-  switch (session.action) {
-    case 'voucher':
-    case 'close':
-      return {
-        account,
-        action: session.action,
-        authorizedSigner: session.authorizedSigner,
-        channelId: session.channelId,
-        cumulativeAmountRaw: session.cumulativeAmount,
-      }
-    case 'topUp':
-      throw new ox_Provider.UnsupportedMethodError({
-        message: '`mpp_authorize` session topUp is not supported yet.',
-      })
-  }
-}
-
-declare namespace toMppSessionContext {
-  type Options = {
-    account: Account.resolveSigner.ReturnType
-    session: z.output<typeof Rpc.mpp_authorize.session>
-  }
-
-  type ReturnType = {
-    account: Account.resolveSigner.ReturnType
-    action: 'voucher' | 'close'
-    authorizedSigner: Address.Address
-    channelId: Hex.Hex
-    cumulativeAmountRaw: string
-  }
-}
-
-function getMppChainId(challenge: Challenge.Challenge) {
-  const methodDetails = challenge.request.methodDetails as
-    | { chainId?: number | undefined }
-    | undefined
-  return methodDetails?.chainId
-}
 
 export declare namespace create {
   type Options = {
@@ -1297,7 +1189,7 @@ export declare namespace create {
      *
      * @default true
      */
-    mpp?: boolean | mpp.Options | undefined
+    mpp?: boolean | Mpp.mpp.Options | undefined
     /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
     persistCredentials?: boolean | undefined
     /**
@@ -1358,20 +1250,6 @@ export declare namespace getAccessKeyStatus {
 
   /** Access-key publication status. */
   type ReturnType = 'missing' | 'pending' | 'published' | 'expired'
-}
-
-export declare namespace mpp {
-  /** Options for Machine Payment Protocol (mppx) integration. */
-  type Options = Omit<mppx_tempo.Parameters, 'account' | 'getClient'> & {
-    /**
-     * Whether to polyfill `globalThis.fetch` with the payment-aware wrapper.
-     *
-     * Defaults to `true` when `globalThis.fetch` is writable, and `false`
-     * otherwise (e.g. Cloudflare Workers, where `globalThis.fetch` is
-     * read-only).
-     */
-    polyfill?: boolean | undefined
-  }
 }
 
 function withDetails(error: unknown): Error & { details: string } {
