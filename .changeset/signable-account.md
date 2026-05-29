@@ -2,4 +2,4 @@
 "accounts": patch
 ---
 
-getAccount signs again
+Fixed getAccounts to respect signable.
