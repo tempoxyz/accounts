@@ -2,13 +2,26 @@ import { PublicKey, Signature } from 'ox'
 import { SignatureEnvelope } from 'ox/tempo'
 import { Account } from 'viem/tempo'
 import { Authentication, Registration } from 'webauthx/client'
-import type { z } from 'zod'
+import type * as core_z from 'zod'
+import * as z from 'zod/mini'
 
 import type { OneOf } from '../../internal/types.js'
 import * as Adapter from '../Adapter.js'
 import * as WebAuthnCeremony from '../WebAuthnCeremony.js'
 import * as Rpc from '../zod/rpc.js'
+import * as u from '../zod/utils.js'
 import { local } from './local.js'
+
+const schema = z.object({
+  address: u.address(),
+  credential: z.object({
+    id: z.string(),
+    publicKey: u.hex(),
+    rpId: z.string(),
+  }),
+  keyType: z.literal('webAuthn'),
+  label: z.optional(z.string()),
+})
 
 /**
  * Creates a WebAuthn adapter backed by real passkey ceremonies.
@@ -33,7 +46,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     return authUrl
   })()
 
-  return Adapter.define({ icon, name, rdns }, (parameters) => {
+  return Adapter.define({ icon, name, rdns, schema }, (parameters) => {
     const { storage } = parameters
 
     const ceremony =
@@ -151,7 +164,7 @@ export declare namespace webAuthn {
          * other fields (`challenge`, `verify`, `logout`, `returnToken`) are
          * SIWE-only and ignored by the WebAuthn ceremony.
          */
-        auth?: z.input<typeof Rpc.wallet_connect.auth> | undefined
+        auth?: core_z.input<typeof Rpc.wallet_connect.auth> | undefined
         /** @deprecated Use `auth` instead. */
         authUrl?: string | undefined
       }

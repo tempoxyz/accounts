@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'vp/test'
+import * as z from 'zod/mini'
 
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
+import * as u from './zod/utils.js'
+
+const secp256k1Account = z.object({
+  address: u.address(),
+  keyType: z.literal('secp256k1'),
+  privateKey: u.hex(),
+})
 
 describe('create', () => {
   test('default', () => {
@@ -273,6 +281,119 @@ describe('hydrate', () => {
     `)
   })
 
+  test('behavior: filters accounts that the adapter cannot restore', () => {
+    const current: Store.State = {
+      accessKeys: [],
+      accounts: [],
+      activeAccount: 0,
+      chainId: 123,
+      requestQueue: [],
+    }
+
+    const result = Store.hydrate(
+      {
+        accounts: [
+          { address: '0x0000000000000000000000000000000000000001' },
+          {
+            address: '0x0000000000000000000000000000000000000002',
+            keyType: 'secp256k1',
+            privateKey: '0x1234',
+          },
+        ],
+        activeAccount: 1,
+        chainId: 456,
+      },
+      current,
+      {
+        schema: secp256k1Account,
+      },
+    )
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "accessKeys": [],
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000002",
+            "keyType": "secp256k1",
+            "privateKey": "0x1234",
+          },
+        ],
+        "activeAccount": 0,
+        "chainId": 456,
+        "requestQueue": [],
+      }
+    `)
+  })
+
+  test('behavior: clears active account when every persisted account is invalid', () => {
+    const current: Store.State = {
+      accessKeys: [],
+      accounts: [],
+      activeAccount: 0,
+      chainId: 123,
+      requestQueue: [],
+    }
+
+    const result = Store.hydrate(
+      {
+        accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+        activeAccount: 0,
+        chainId: 456,
+      },
+      current,
+      { schema: secp256k1Account },
+    )
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "accessKeys": [],
+        "accounts": [],
+        "activeAccount": 0,
+        "chainId": 456,
+        "requestQueue": [],
+      }
+    `)
+  })
+
+  test('behavior: keeps unknown account fields after schema validation', () => {
+    const current: Store.State = {
+      accessKeys: [],
+      accounts: [],
+      activeAccount: 0,
+      chainId: 123,
+      requestQueue: [],
+    }
+
+    const result = Store.hydrate(
+      {
+        accounts: [
+          {
+            address: '0x0000000000000000000000000000000000000001',
+            extra: 'kept',
+            keyType: 'secp256k1',
+            privateKey: '0x1234',
+          },
+        ],
+        activeAccount: 0,
+        chainId: 456,
+      },
+      current,
+      { schema: secp256k1Account },
+    )
+
+    expect(result.accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x0000000000000000000000000000000000000001",
+          "extra": "kept",
+          "keyType": "secp256k1",
+          "privateKey": "0x1234",
+        },
+      ]
+    `)
+  })
+
   test('behavior: drops legacy access key without chain context', () => {
     const current: Store.State = {
       accessKeys: [],
@@ -348,6 +469,48 @@ describe('persistence', () => {
         "accounts": [
           {
             "address": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "activeAccount": 0,
+        "chainId": 456,
+        "requestQueue": [],
+      }
+    `)
+  })
+
+  test('behavior: filters stored accounts with the adapter restore guard', async () => {
+    const storage = Storage.memory()
+    storage.setItem('store', {
+      state: {
+        accounts: [
+          { address: '0x0000000000000000000000000000000000000001' },
+          {
+            address: '0x0000000000000000000000000000000000000002',
+            keyType: 'secp256k1',
+            privateKey: '0x1234',
+          },
+        ],
+        activeAccount: 1,
+        chainId: 456,
+      },
+      version: 0,
+    })
+
+    const store = Store.create({
+      chainId: 123,
+      schema: secp256k1Account,
+      storage,
+    })
+    await Store.waitForHydration(store)
+
+    expect(store.getState()).toMatchInlineSnapshot(`
+      {
+        "accessKeys": [],
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000002",
+            "keyType": "secp256k1",
+            "privateKey": "0x1234",
           },
         ],
         "activeAccount": 0,

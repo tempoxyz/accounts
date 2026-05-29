@@ -3,6 +3,7 @@ import type { Mutate, StoreApi } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { createStore } from 'zustand/vanilla'
+import * as z from 'zod/mini'
 
 import type { OneOf } from '../internal/types.js'
 import type { AccessKey } from './AccessKey.js'
@@ -64,6 +65,12 @@ export type Store = Mutate<
 
 /** Options for {@link create}. */
 export type Options = {
+  /**
+   * Minimum account schema required for hydration.
+   *
+   * This is a perimeter check for persisted state, not the full account schema.
+   */
+  schema?: z.ZodMiniType | undefined
   /** Initial chain ID. */
   chainId: number
   /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
@@ -100,6 +107,7 @@ export function create(options: Options): Store {
     chainId,
     maxAccounts,
     persistCredentials = true,
+    schema,
     storage = typeof window !== 'undefined'
       ? Storage.idb({ key: 'tempo' })
       : Storage.memory({ key: 'tempo' }),
@@ -116,7 +124,7 @@ export function create(options: Options): Store {
           requestQueue: [],
         }),
         {
-          merge: hydrate,
+          merge: (persisted, current) => hydrate(persisted, current, { schema }),
           name: 'store',
           partialize: (state) => serialize(state, { maxAccounts, persistCredentials }),
           storage,
@@ -154,21 +162,43 @@ export declare namespace serialize {
 }
 
 /** Restores runtime provider state from a persisted refresh snapshot. */
-export function hydrate(persisted: unknown, current: State): State {
+export function hydrate(persisted: unknown, current: State, options: hydrate.Options = {}): State {
   const state = persisted && typeof persisted === 'object' ? (persisted as Partial<Persisted>) : {}
+  const accounts_persisted = Array.isArray(state.accounts)
+    ? state.accounts.filter(isStoredAccount)
+    : undefined
+  const accounts =
+    accounts_persisted?.map((persisted) => {
+      const account = current.accounts.find(
+        (a) => a.address.toLowerCase() === persisted.address.toLowerCase(),
+      )
+      return account ?? persisted
+    }) ?? current.accounts
+  const accounts_valid = options.schema
+    ? accounts.filter((account) => z.safeParse(options.schema!, account).success)
+    : accounts
   return {
     ...state,
     ...current,
-    // Preserve in-memory credentials when persisted accounts only have addresses.
-    accounts:
-      state.accounts?.map((persisted) => {
-        const account = current.accounts.find(
-          (a) => a.address.toLowerCase() === persisted.address.toLowerCase(),
-        )
-        return account ?? persisted
-      }) ?? current.accounts,
+    accounts: accounts_valid,
+    activeAccount:
+      accounts_valid.length === 0
+        ? 0
+        : Math.min(state.activeAccount ?? current.activeAccount, accounts_valid.length - 1),
     accessKeys: normalizeAccessKeys(state.accessKeys) ?? current.accessKeys,
     chainId: state.chainId ?? current.chainId,
+  }
+}
+
+export declare namespace hydrate {
+  /** Options for {@link hydrate}. */
+  type Options = {
+    /**
+     * Minimum account schema required for hydration.
+     *
+     * This is a perimeter check for persisted state, not the full account schema.
+     */
+    schema?: z.ZodMiniType | undefined
   }
 }
 
@@ -192,6 +222,11 @@ function normalizeAccessKeys(accessKeys: Persisted['accessKeys']) {
         value.keyType === 'webCrypto')
     )
   })
+}
+
+function isStoredAccount(account: unknown): account is Account {
+  if (!account || typeof account !== 'object') return false
+  return typeof (account as { address?: unknown }).address === 'string'
 }
 
 /**
