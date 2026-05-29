@@ -5,6 +5,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 
 const pathUsd = '0x20c0000000000000000000000000000000000000' as const
 const testnet = process.env.VITE_ENV !== 'mainnet'
+const feePayer = import.meta.env.DEV ? false : true
 const account = privateKeyToAccount(process.env.PRIVATE_KEY)
 const subscriptionAccessAccount = privateKeyToAccount(
   '0x0000000000000000000000000000000000000000000000000000000000000002',
@@ -24,11 +25,13 @@ const payment = Mppx.create({
     tempo.charge({
       account,
       currency: pathUsd,
+      feePayer,
       testnet,
     }),
     tempo.session({
       account,
       currency: pathUsd,
+      feePayer,
       sse: { poll: true },
       store,
       suggestedDeposit: '0.03',
@@ -64,6 +67,7 @@ const payment = Mppx.create({
       periodCount: '1',
       periodUnit: 'day',
       recipient: account.address,
+      feePayer,
       renew: async ({ periodIndex, subscription }) => {
         renewalCount += 1
         const record = {
