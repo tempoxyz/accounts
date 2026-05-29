@@ -36,9 +36,7 @@ describe('local', () => {
 
     await Store.waitForHydration(provider.store)
 
-    await expect(provider.request({ method: 'eth_accounts' })).resolves.toMatchInlineSnapshot(
-      `[]`,
-    )
+    await expect(provider.request({ method: 'eth_accounts' })).resolves.toMatchInlineSnapshot(`[]`)
   })
 
   describe('loadAccounts', () => {
