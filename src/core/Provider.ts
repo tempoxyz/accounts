@@ -187,14 +187,6 @@ export function create(options: create.Options = {}): create.ReturnType {
     return url
   }
 
-  const getProviderAccount: Provider['getAccount'] = (
-    (options?: Omit<Account.find.Options, 'store'>) => {
-      const account = getAccount(options)
-      if (options?.signable) return account
-      return { address: account.address, type: 'json-rpc' as const }
-    }
-  ) as Provider['getAccount']
-
   const provider = Object.assign(
     ox_Provider.from(
       {
@@ -996,7 +988,11 @@ export function create(options: create.Options = {}): create.ReturnType {
     ),
     {
       chains,
-      getAccount: getProviderAccount,
+      getAccount: ((options?: Omit<Account.find.Options, 'store'>) => {
+        const account = getAccount(options)
+        if (options?.signable) return account
+        return { address: account.address, type: 'json-rpc' as const }
+      }) as Provider['getAccount'],
       async getAccessKeyStatus(options: getAccessKeyStatus.Options = {}) {
         const state = store.getState()
         const address = options.address ?? state.accounts[state.activeAccount]?.address
