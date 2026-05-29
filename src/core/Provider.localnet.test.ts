@@ -1584,6 +1584,25 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(accts2[0]).toBe(accts1[0])
     })
 
+    test('behavior: ignores persisted accounts the adapter cannot restore', async () => {
+      const storage = Storage.memory({ key: 'persist-invalid' })
+      storage.setItem('store', {
+        state: {
+          accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+          activeAccount: 0,
+          chainId: chain.id,
+        },
+        version: 0,
+      })
+
+      const provider = Provider.create({ adapter: adapter(), chains: [chain], storage })
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      await expect(provider.request({ method: 'eth_accounts' })).resolves.toMatchInlineSnapshot(
+        `[]`,
+      )
+    })
+
     test('behavior: concurrent providers with different storage keys are isolated', async () => {
       const providerA = Provider.create({
         adapter: adapter(),

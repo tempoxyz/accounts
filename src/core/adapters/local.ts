@@ -1,13 +1,72 @@
-import { Provider as ox_Provider } from 'ox'
+import { Provider as ox_Provider, type WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { hashMessage } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
-import { Actions } from 'viem/tempo'
+import { Account as TempoAccount, Actions } from 'viem/tempo'
+import * as z from 'zod/mini'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Account from '../Account.js'
 import * as Adapter from '../Adapter.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
+import * as u from '../zod/utils.js'
+
+const secp256k1Stored = z.object({
+  address: u.address(),
+  keyType: z.literal('secp256k1'),
+  label: z.optional(z.string()),
+  privateKey: u.hex(),
+})
+
+const p256Stored = z.object({
+  address: u.address(),
+  keyType: z.literal('p256'),
+  label: z.optional(z.string()),
+  privateKey: u.hex(),
+})
+
+const webAuthnStored = z.object({
+  address: u.address(),
+  credential: z.object({
+    id: z.string(),
+    publicKey: u.hex(),
+    rpId: z.string(),
+  }),
+  keyType: z.literal('webAuthn'),
+  label: z.optional(z.string()),
+})
+
+const webAuthnHeadlessStored = z.object({
+  address: u.address(),
+  keyType: z.literal('webAuthn_headless'),
+  label: z.optional(z.string()),
+  origin: z.string(),
+  privateKey: u.hex(),
+  rpId: z.string(),
+})
+
+const webCryptoStored = z.object({
+  address: u.address(),
+  keyPair: z.custom<Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>>(),
+  keyType: z.literal('webCrypto'),
+  label: z.optional(z.string()),
+})
+
+const functionSignerStored = z.object({
+  address: u.address(),
+  keyType: z.union([z.literal('secp256k1'), z.literal('p256'), z.literal('webAuthn')]),
+  label: z.optional(z.string()),
+  sign: z.custom<TempoAccount.Account['sign']>(),
+})
+
+const signableStored = z.union([
+  secp256k1Stored,
+  p256Stored,
+  webAuthnStored,
+  webAuthnHeadlessStored,
+  webCryptoStored,
+  functionSignerStored,
+])
 
 /**
  * Creates a local adapter where the app manages keys and signing in-process.
@@ -28,7 +87,7 @@ import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 export function local(options: local.Options): Adapter.Adapter {
   const { createAccount, icon, loadAccounts, name, rdns } = options
 
-  return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
+  return Adapter.define({ icon, name, persistedAccount: signableStored, rdns }, ({ getAccount, getClient, store }) => {
     async function prepareTransaction(parameters: Adapter.signTransaction.Parameters) {
       const { feePayer, ...rest } = parameters
       const client = getClient({

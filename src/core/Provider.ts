@@ -91,6 +91,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     : chains[0]!
 
   const store = Store.create({
+    account: adapter.persistedAccount,
     chainId: defaultChain.id,
     maxAccounts,
     persistCredentials,
