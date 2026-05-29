@@ -46,4 +46,22 @@ describe('secp256k1', () => {
     expect(connected).toHaveLength(1)
     expect(connected[0]).toBe(account.address)
   })
+
+  test('behavior: provider getAccount honors signable option', async () => {
+    const account = accounts[1]!
+    const provider = Provider.create({
+      adapter: secp256k1({ privateKey: privateKeys[1]! }),
+      storage: Storage.memory({ key: 'secp256k1-provider-get-account' }),
+    })
+
+    await provider.request({ method: 'wallet_connect' })
+
+    const jsonRpc = provider.getAccount()
+    expect(jsonRpc).toEqual({ address: account.address, type: 'json-rpc' })
+
+    const signable = provider.getAccount({ signable: true })
+    expect(signable.address).toBe(account.address)
+    expect(signable.type).toBe('local')
+    expect(typeof signable.sign).toBe('function')
+  })
 })
