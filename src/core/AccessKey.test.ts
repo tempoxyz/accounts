@@ -434,6 +434,42 @@ describe('authorize', () => {
       ]
     `)
   })
+
+  test('behavior: saves provided private key material', async () => {
+    const store = createStore()
+    const accessKey = TempoAccount.fromSecp256k1(privateKeys[1])
+    const account = {
+      ...accounts[0]!,
+      sign: async () => `0x${'11'.repeat(32)}${'22'.repeat(32)}1b` as const,
+    } as TempoAccount.Account
+
+    await AccessKey.authorize({
+      account,
+      chainId: 1,
+      parameters: {
+        expiry: 123,
+        keyType: 'secp256k1',
+        privateKey: privateKeys[1],
+      },
+      store,
+    })
+
+    expect(store.getState().accessKeys.map(({ keyAuthorization: _, ...accessKey }) => accessKey))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+          "address": "${accessKey.address}",
+          "chainId": 1,
+          "expiry": 123,
+          "keyType": "secp256k1",
+          "limits": undefined,
+          "privateKey": "${privateKeys[1]}",
+          "scopes": undefined,
+        },
+      ]
+    `)
+  })
 })
 
 describe('select', () => {

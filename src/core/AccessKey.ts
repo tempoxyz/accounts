@@ -132,7 +132,32 @@ type KeyAuthorizationManager = TempoKeyAuthorizationManager.KeyAuthorizationMana
 export async function prepareAuthorization(
   options: prepareAuthorization.Options,
 ): Promise<prepareAuthorization.ReturnType> {
-  const { address, chainId, expiry, keyType, limits, publicKey, scopes } = options
+  const { address, chainId, expiry, keyType, limits, privateKey, publicKey, scopes } = options
+
+  if (privateKey) {
+    const type = keyType ?? 'secp256k1'
+    const accessKey = (() => {
+      switch (type) {
+        case 'secp256k1':
+          return TempoAccount.fromSecp256k1(privateKey)
+        case 'p256':
+          return TempoAccount.fromP256(privateKey)
+        case 'webAuthn':
+          throw new RpcResponse.InvalidParamsError({
+            message: '`privateKey` cannot be used with `keyType: "webAuthn"`.',
+          })
+      }
+    })()
+    const keyAuthorization = KeyAuthorization.from({
+      address: accessKey.address,
+      chainId: BigInt(chainId),
+      expiry,
+      limits,
+      scopes,
+      type,
+    })
+    return { keyAuthorization, privateKey }
+  }
 
   if (address || publicKey) {
     const keyAuthorization = KeyAuthorization.from({
@@ -180,6 +205,8 @@ export declare namespace prepareAuthorization {
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
     limits?: readonly KeyAuthorization.TokenLimit[] | undefined
+    /** Exported private key backing the access key. */
+    privateKey?: Hex.Hex | undefined
     /** External public key to derive the access key address from. */
     publicKey?: Hex.Hex | undefined
     /** Call scopes restricting which contracts/selectors this key can call. */
@@ -192,6 +219,8 @@ export declare namespace prepareAuthorization {
     keyAuthorization: KeyAuthorization.KeyAuthorization<false>
     /** Generated WebCrypto key pair for local access keys. */
     keyPair?: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
+    /** Exported private key backing an external access key. */
+    privateKey?: Hex.Hex | undefined
   }
 }
 
@@ -212,6 +241,7 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
     account: account.address,
     authorization: keyAuthorization,
     ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
+    ...(prepared.privateKey ? { privateKey: prepared.privateKey } : {}),
     store,
   })
 
