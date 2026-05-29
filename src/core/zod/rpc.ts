@@ -530,6 +530,7 @@ export namespace wallet_authorizeAccessKey {
         ),
       ),
     ),
+    privateKey: z.optional(u.hex()),
     publicKey: z.optional(u.hex()),
     scopes: z.optional(
       z.readonly(
@@ -569,6 +570,7 @@ export namespace wallet_authorizeAccessKey_strict {
         .array(z.object({ token: u.address(), limit: u.bigint(), period: z.optional(z.number()) }))
         .check(z.minLength(1)),
     ),
+    privateKey: z.optional(u.hex()),
     publicKey: z.optional(u.hex()),
     scopes: z.readonly(
       z

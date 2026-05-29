@@ -1,5 +1,7 @@
 import { Address, Hex, Provider as ox_Provider, PublicKey } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { generatePrivateKey } from 'viem/accounts'
+import { Account } from 'viem/tempo'
 import { tempoLocalnet } from 'viem/tempo/chains'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
@@ -346,6 +348,50 @@ describe('dialog', () => {
     expect(params.keyType).toMatchInlineSnapshot(`"secp256k1"`)
     expect(params.address).toMatchInlineSnapshot(`"0x0000000000000000000000000000000000000002"`)
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: authorizeAccessKey forwards public material for a provided private key', async () => {
+    const { adapter, store } = setup()
+    const expiry = 123
+    const privateKey = generatePrivateKey()
+    const accessKey = Account.fromSecp256k1(privateKey)
+    const promise = adapter.actions.authorizeAccessKey!(
+      { expiry, keyType: 'secp256k1', privateKey },
+      {
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry, keyType: 'secp256k1', privateKey }],
+      },
+    )
+
+    const queued = await takeRequest(store)
+    const request = queued.request as {
+      params: [{ expiry: number; keyType: 'secp256k1'; privateKey?: Hex.Hex; publicKey: Hex.Hex }]
+    }
+    const params = request.params[0]
+    store.setState({
+      requestQueue: [
+        {
+          request: queued.request,
+          result: {
+            keyAuthorization: createKeyAuthorization(params),
+            rootAddress: address,
+          },
+          status: 'success',
+        },
+      ],
+    })
+
+    await expect(promise).resolves.toMatchObject({ rootAddress: address })
+    expect(params.privateKey).toMatchInlineSnapshot(`undefined`)
+    expect(params.publicKey).toBe(accessKey.publicKey)
+    expect(store.getState().accessKeys).toMatchObject([
+      {
+        access: address,
+        address: accessKey.address.toLowerCase(),
+        keyType: 'secp256k1',
+        privateKey,
+      },
+    ])
   })
 
   test('behavior: authorizeAccessKey generates a p256 key by default', async () => {

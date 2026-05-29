@@ -1,7 +1,6 @@
 import { Credential } from 'mppx'
 import { tempo as mppx_tempo } from 'mppx/client'
 import { Hex, Json } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
 import {
   type ComponentProps,
   type ReactNode,
@@ -15,7 +14,7 @@ import { type Address, createClient, custom, formatUnits, isAddress, parseUnits 
 import { generatePrivateKey } from 'viem/accounts'
 import { verifyMessage, verifyTypedData } from 'viem/actions'
 import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
-import { Account, Actions } from 'viem/tempo'
+import { Actions } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 
 import { PrivyEmailOtp } from './PrivyEmailOtp.js'
@@ -773,7 +772,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
     const name = turnkey ? undefined : (form.get('name') as string)
     const digest = form.get('digest') as Hex.Hex
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
-    const generated = accessKeyEnabled ? createPlaygroundSecp256k1AccessKey() : undefined
+    const privateKey = accessKeyEnabled ? createPlaygroundSecp256k1AccessKey() : undefined
 
     const authorizeAccessKey = accessKeyEnabled
       ? (() => {
@@ -781,7 +780,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
           return {
             expiry: Math.floor(Date.now() / 1000) + Number(expiry || '86400'),
             keyType: 'secp256k1',
-            publicKey: generated!.publicKey,
+            privateKey: privateKey!,
             ...(filledLimits.length > 0 && {
               limits: filledLimits.map((l) => ({
                 token: l.token,
@@ -830,14 +829,6 @@ function WalletConnect(props: { adapterType: AdapterType }) {
           },
         ],
       })
-      const account = result.accounts[0]
-      const keyAuthorization = account?.capabilities?.keyAuthorization
-      if (generated && account && keyAuthorization)
-        savePlaygroundAccessKey({
-          keyAuthorization,
-          privateKey: generated.privateKey,
-          rootAddress: account.address,
-        })
       return result
     })
   }
@@ -1857,40 +1848,7 @@ type TokenlistEntry = {
 }
 
 function createPlaygroundSecp256k1AccessKey() {
-  const privateKey = generatePrivateKey()
-  const accessKey = Account.fromSecp256k1(privateKey)
-  return { privateKey, publicKey: accessKey.publicKey }
-}
-
-function savePlaygroundAccessKey(options: {
-  keyAuthorization: unknown
-  privateKey: Hex.Hex
-  rootAddress: Address
-}) {
-  const authorization = KeyAuthorization.fromRpc(options.keyAuthorization as never)
-  provider.store.setState((state) => ({
-    accessKeys: [
-      {
-        address: authorization.address,
-        access: options.rootAddress,
-        chainId: Number(authorization.chainId),
-        expiry: authorization.expiry ?? undefined,
-        keyAuthorization: authorization,
-        keyType: authorization.type,
-        limits: authorization.limits as never,
-        privateKey: options.privateKey,
-        scopes: authorization.scopes as never,
-      },
-      ...state.accessKeys.filter(
-        (key) =>
-          !(
-            key.access.toLowerCase() === options.rootAddress.toLowerCase() &&
-            key.address.toLowerCase() === authorization.address.toLowerCase() &&
-            key.chainId === Number(authorization.chainId)
-          ),
-      ),
-    ],
-  }))
+  return generatePrivateKey()
 }
 
 type LimitInput = {
@@ -1961,11 +1919,11 @@ function WalletAuthorizeAccessKey() {
           const scopeSelector = form.get('scopeSelector') as string
 
           const filledLimits = limits.filter((l) => l.token && l.amount)
-          const generated = createPlaygroundSecp256k1AccessKey()
+          const privateKey = createPlaygroundSecp256k1AccessKey()
           const params: Record<string, unknown> = {}
           if (expiry) params.expiry = Math.floor(Date.now() / 1000) + Number(expiry)
           params.keyType = 'secp256k1'
-          params.publicKey = generated.publicKey
+          params.privateKey = privateKey
           if (filledLimits.length > 0)
             params.limits = filledLimits.map((l) => ({
               token: l.token,
@@ -1976,16 +1934,10 @@ function WalletAuthorizeAccessKey() {
             params.scopes = [{ address: filledLimits[0].token, selector: scopeSelector }]
 
           execute(async () => {
-            const result = await provider.request({
+            return await provider.request({
               method: 'wallet_authorizeAccessKey',
               ...(Object.keys(params).length > 0 ? { params: [params] } : {}),
             } as never)
-            savePlaygroundAccessKey({
-              keyAuthorization: result.keyAuthorization,
-              privateKey: generated.privateKey,
-              rootAddress: result.rootAddress,
-            })
-            return result
           })
         }}
       >
