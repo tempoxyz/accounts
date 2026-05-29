@@ -4,7 +4,7 @@ import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from '
 import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
 import type { JsonRpcAccount } from 'viem/accounts'
 import { parseSiweMessage } from 'viem/siwe'
-import { Actions } from 'viem/tempo'
+import { Account as TempoAccount, Actions } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 import * as z from 'zod/mini'
 
@@ -26,8 +26,9 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
   ox_Provider.Emitter & {
     /** Configured chains. */
     chains: readonly [Chain, ...Chain[]]
-    /** Returns the active root account as a viem JSON-RPC account. */
-    getAccount(): JsonRpcAccount
+    /** Returns the active root account as a viem account. */
+    getAccount(options: Omit<Account.find.Options, 'store'> & { signable: true }): TempoAccount.Account
+    getAccount(options?: Omit<Account.find.Options, 'store'>): JsonRpcAccount
     /** Returns local or on-chain publication status for an access key. */
     getAccessKeyStatus(
       options?: getAccessKeyStatus.Options | undefined,
@@ -987,10 +988,11 @@ export function create(options: create.Options = {}): create.ReturnType {
     ),
     {
       chains,
-      getAccount() {
-        const account = getAccount()
+      getAccount: ((options?: Omit<Account.find.Options, 'store'>) => {
+        const account = getAccount(options)
+        if (options?.signable) return account
         return { address: account.address, type: 'json-rpc' as const }
-      },
+      }) as Provider['getAccount'],
       async getAccessKeyStatus(options: getAccessKeyStatus.Options = {}) {
         const state = store.getState()
         const address = options.address ?? state.accounts[state.activeAccount]?.address
