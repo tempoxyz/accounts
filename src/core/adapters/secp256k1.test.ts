@@ -26,9 +26,7 @@ describe('secp256k1', () => {
 
     await Store.waitForHydration(provider.store)
 
-    await expect(provider.request({ method: 'eth_accounts' })).resolves.toMatchInlineSnapshot(
-      `[]`,
-    )
+    await expect(provider.request({ method: 'eth_accounts' })).resolves.toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: privateKey option pins the connected account', async () => {

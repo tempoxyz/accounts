@@ -27,7 +27,9 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     /** Configured chains. */
     chains: readonly [Chain, ...Chain[]]
     /** Returns the active root account as a viem account. */
-    getAccount(options: Omit<Account.find.Options, 'store'> & { signable: true }): TempoAccount.Account
+    getAccount(
+      options: Omit<Account.find.Options, 'store'> & { signable: true },
+    ): TempoAccount.Account
     getAccount(options?: Omit<Account.find.Options, 'store'>): JsonRpcAccount
     /** Returns local or on-chain publication status for an access key. */
     getAccessKeyStatus(

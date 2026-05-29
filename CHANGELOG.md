@@ -1,5 +1,11 @@
 # accounts
 
+## 0.14.6
+
+### Patch Changes
+
+- 89a107f: Fixed getAccounts to respect signable.
+
 ## 0.14.5
 
 ### Patch Changes
