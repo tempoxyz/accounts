@@ -281,6 +281,39 @@ describe('hydrate', () => {
     `)
   })
 
+  test('behavior: ignores persisted chain IDs outside the supported set', () => {
+    const current: Store.State = {
+      accessKeys: [],
+      accounts: [],
+      activeAccount: 0,
+      chainId: 123,
+      requestQueue: [],
+    }
+
+    const result = Store.hydrate(
+      {
+        accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+        chainId: 999,
+      },
+      current,
+      { chainIds: [123, 456] },
+    )
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "accessKeys": [],
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "activeAccount": 0,
+        "chainId": 123,
+        "requestQueue": [],
+      }
+    `)
+  })
+
   test('behavior: filters accounts that the adapter cannot restore', () => {
     const current: Store.State = {
       accessKeys: [],
@@ -515,6 +548,39 @@ describe('persistence', () => {
         ],
         "activeAccount": 0,
         "chainId": 456,
+        "requestQueue": [],
+      }
+    `)
+  })
+
+  test('behavior: ignores stored chain IDs outside the supported set', async () => {
+    const storage = Storage.memory()
+    storage.setItem('store', {
+      state: {
+        accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+        activeAccount: 0,
+        chainId: 999,
+      },
+      version: 0,
+    })
+
+    const store = Store.create({
+      chainId: 123,
+      chainIds: [123, 456],
+      storage,
+    })
+    await Store.waitForHydration(store)
+
+    expect(store.getState()).toMatchInlineSnapshot(`
+      {
+        "accessKeys": [],
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "activeAccount": 0,
+        "chainId": 123,
         "requestQueue": [],
       }
     `)

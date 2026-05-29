@@ -65,18 +65,20 @@ export type Store = Mutate<
 
 /** Options for {@link create}. */
 export type Options = {
+  /** Initial chain ID. */
+  chainId: number
+  /** Chain IDs the provider supports. Persisted chain IDs outside this list are ignored. */
+  chainIds?: readonly number[] | undefined
+  /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
+  maxAccounts?: number | undefined
+  /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
+  persistCredentials?: boolean | undefined
   /**
    * Minimum account schema required for hydration.
    *
    * This is a perimeter check for persisted state, not the full account schema.
    */
   schema?: z.ZodMiniType | undefined
-  /** Initial chain ID. */
-  chainId: number
-  /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
-  maxAccounts?: number | undefined
-  /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
-  persistCredentials?: boolean | undefined
   /** Storage adapter for persistence. */
   storage?: Storage.Storage | undefined
 }
@@ -105,6 +107,7 @@ export type QueuedRequest<result = unknown> = OneOf<
 export function create(options: Options): Store {
   const {
     chainId,
+    chainIds,
     maxAccounts,
     persistCredentials = true,
     schema,
@@ -124,7 +127,7 @@ export function create(options: Options): Store {
           requestQueue: [],
         }),
         {
-          merge: (persisted, current) => hydrate(persisted, current, { schema }),
+          merge: (persisted, current) => hydrate(persisted, current, { chainIds, schema }),
           name: 'store',
           partialize: (state) => serialize(state, { maxAccounts, persistCredentials }),
           storage,
@@ -177,6 +180,10 @@ export function hydrate(persisted: unknown, current: State, options: hydrate.Opt
   const accounts_valid = options.schema
     ? accounts.filter((account) => z.safeParse(options.schema!, account).success)
     : accounts
+  const chainId =
+    state.chainId !== undefined && (options.chainIds?.includes(state.chainId) ?? true)
+      ? state.chainId
+      : current.chainId
   return {
     ...state,
     ...current,
@@ -186,13 +193,15 @@ export function hydrate(persisted: unknown, current: State, options: hydrate.Opt
         ? 0
         : Math.min(state.activeAccount ?? current.activeAccount, accounts_valid.length - 1),
     accessKeys: normalizeAccessKeys(state.accessKeys) ?? current.accessKeys,
-    chainId: state.chainId ?? current.chainId,
+    chainId,
   }
 }
 
 export declare namespace hydrate {
   /** Options for {@link hydrate}. */
   type Options = {
+    /** Chain IDs the provider supports. Persisted chain IDs outside this list are ignored. */
+    chainIds?: readonly number[] | undefined
     /**
      * Minimum account schema required for hydration.
      *
