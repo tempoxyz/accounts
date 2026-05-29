@@ -6,7 +6,7 @@ import * as Adapter from '../Adapter.js'
 import * as u from '../zod/utils.js'
 import { local } from './local.js'
 
-const persistedAccount = z.object({
+const schema = z.object({
   address: u.address(),
   keyType: z.literal('secp256k1'),
   label: z.optional(z.string()),
@@ -52,7 +52,7 @@ export function secp256k1(options: secp256k1.Options = {}): Adapter.Adapter {
       }
     : undefined
 
-  return Adapter.define({ icon, name, persistedAccount, rdns }, (config) => {
+  return Adapter.define({ icon, name, rdns, schema }, (config) => {
     const { store } = config
 
     return local({

@@ -33,7 +33,7 @@ export type Meta = {
    *
    * This only guards the storage boundary; it is not the full runtime account schema.
    */
-  persistedAccount?: z.ZodMiniType | undefined
+  schema?: z.ZodMiniType | undefined
   /** Reverse DNS identifier (e.g. `"com.example.mywallet"`). @default `com.{lowercase name}` */
   rdns?: string | undefined
 }

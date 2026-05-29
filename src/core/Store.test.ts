@@ -305,7 +305,7 @@ describe('hydrate', () => {
       },
       current,
       {
-        account: secp256k1Account,
+        schema: secp256k1Account,
       },
     )
 
@@ -342,7 +342,7 @@ describe('hydrate', () => {
         chainId: 456,
       },
       current,
-      { account: secp256k1Account },
+      { schema: secp256k1Account },
     )
 
     expect(result).toMatchInlineSnapshot(`
@@ -379,7 +379,7 @@ describe('hydrate', () => {
         chainId: 456,
       },
       current,
-      { account: secp256k1Account },
+      { schema: secp256k1Account },
     )
 
     expect(result.accounts).toMatchInlineSnapshot(`
@@ -498,7 +498,7 @@ describe('persistence', () => {
 
     const store = Store.create({
       chainId: 123,
-      account: secp256k1Account,
+      schema: secp256k1Account,
       storage,
     })
     await Store.waitForHydration(store)

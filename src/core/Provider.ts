@@ -94,7 +94,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     chainId: defaultChain.id,
     maxAccounts,
     persistCredentials,
-    schema: adapter.persistedAccount,
+    schema: adapter.schema,
     storage,
   })
 

@@ -12,7 +12,7 @@ import * as Rpc from '../zod/rpc.js'
 import * as u from '../zod/utils.js'
 import { local } from './local.js'
 
-const persistedAccount = z.object({
+const schema = z.object({
   address: u.address(),
   credential: z.object({
     id: z.string(),
@@ -46,7 +46,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     return authUrl
   })()
 
-  return Adapter.define({ icon, name, persistedAccount, rdns }, (parameters) => {
+  return Adapter.define({ icon, name, rdns, schema }, (parameters) => {
     const { storage } = parameters
 
     const ceremony =

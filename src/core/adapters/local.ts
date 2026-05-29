@@ -11,21 +11,21 @@ import * as Adapter from '../Adapter.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as u from '../zod/utils.js'
 
-const secp256k1Stored = z.object({
+const secp256k1Schema = z.object({
   address: u.address(),
   keyType: z.literal('secp256k1'),
   label: z.optional(z.string()),
   privateKey: u.hex(),
 })
 
-const p256Stored = z.object({
+const p256Schema = z.object({
   address: u.address(),
   keyType: z.literal('p256'),
   label: z.optional(z.string()),
   privateKey: u.hex(),
 })
 
-const webAuthnStored = z.object({
+const webAuthnSchema = z.object({
   address: u.address(),
   credential: z.object({
     id: z.string(),
@@ -36,7 +36,7 @@ const webAuthnStored = z.object({
   label: z.optional(z.string()),
 })
 
-const webAuthnHeadlessStored = z.object({
+const webAuthnHeadlessSchema = z.object({
   address: u.address(),
   keyType: z.literal('webAuthn_headless'),
   label: z.optional(z.string()),
@@ -45,27 +45,27 @@ const webAuthnHeadlessStored = z.object({
   rpId: z.string(),
 })
 
-const webCryptoStored = z.object({
+const webCryptoSchema = z.object({
   address: u.address(),
   keyPair: z.custom<Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>>(),
   keyType: z.literal('webCrypto'),
   label: z.optional(z.string()),
 })
 
-const functionSignerStored = z.object({
+const functionSignerSchema = z.object({
   address: u.address(),
   keyType: z.union([z.literal('secp256k1'), z.literal('p256'), z.literal('webAuthn')]),
   label: z.optional(z.string()),
   sign: z.custom<TempoAccount.Account['sign']>(),
 })
 
-const signableStored = z.union([
-  secp256k1Stored,
-  p256Stored,
-  webAuthnStored,
-  webAuthnHeadlessStored,
-  webCryptoStored,
-  functionSignerStored,
+const signableSchema = z.union([
+  secp256k1Schema,
+  p256Schema,
+  webAuthnSchema,
+  webAuthnHeadlessSchema,
+  webCryptoSchema,
+  functionSignerSchema,
 ])
 
 /**
@@ -87,7 +87,7 @@ const signableStored = z.union([
 export function local(options: local.Options): Adapter.Adapter {
   const { createAccount, icon, loadAccounts, name, rdns } = options
 
-  return Adapter.define({ icon, name, persistedAccount: signableStored, rdns }, ({ getAccount, getClient, store }) => {
+  return Adapter.define({ icon, name, rdns, schema: signableSchema }, ({ getAccount, getClient, store }) => {
     async function prepareTransaction(parameters: Adapter.signTransaction.Parameters) {
       const { feePayer, ...rest } = parameters
       const client = getClient({
