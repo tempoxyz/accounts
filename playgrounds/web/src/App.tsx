@@ -740,6 +740,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
   const tokenlist = useTokenlist()
   const [accessKeyEnabled, setAccessKeyEnabled] = useState(false)
   const [expiry, setExpiry] = useState('86400')
+  const [keyType, setKeyType] = useState<AccessKeyKeyType>('p256')
   const [limits, setLimits] = useState<LimitInput[]>([{ token: '', amount: '100', period: '' }])
   const [scopeSelector, setScopeSelector] = useState('')
   const [authEnabled, setAuthEnabled] = useState(false)
@@ -772,27 +773,15 @@ function WalletConnect(props: { adapterType: AdapterType }) {
     const name = turnkey ? undefined : (form.get('name') as string)
     const digest = form.get('digest') as Hex.Hex
     const method = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value')
-    const privateKey = accessKeyEnabled ? createPlaygroundSecp256k1AccessKey() : undefined
 
     const authorizeAccessKey = accessKeyEnabled
-      ? (() => {
-          const filledLimits = limits.filter((l) => l.token && l.amount)
-          return {
-            expiry: Math.floor(Date.now() / 1000) + Number(expiry || '86400'),
-            keyType: 'secp256k1',
-            privateKey: privateKey!,
-            ...(filledLimits.length > 0 && {
-              limits: filledLimits.map((l) => ({
-                token: l.token,
-                limit: Hex.fromNumber(parseUnits(l.amount, tokenInfo(l.token)?.decimals ?? 6)),
-                ...(l.period ? { period: Number(l.period) } : {}),
-              })),
-            }),
-            ...(scopeSelector && filledLimits[0]
-              ? { scopes: [{ address: filledLimits[0].token, selector: scopeSelector }] }
-              : {}),
-          } as never
-        })()
+      ? buildAuthorizeAccessKey({
+          expiry,
+          keyType,
+          limits,
+          scopeSelector,
+          tokenInfo,
+        })
       : undefined
 
     // Server Authentication: the SDK absolutizes relative URLs against
@@ -863,6 +852,20 @@ function WalletConnect(props: { adapterType: AdapterType }) {
           </legend>
           {accessKeyEnabled && (
             <>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                <label>Key Type</label>
+                <select
+                  onChange={(e) => setKeyType(e.target.value as AccessKeyKeyType)}
+                  style={{ flex: 1 }}
+                  value={keyType}
+                >
+                  {accessKeyKeyTypes.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
                 <label>Expiry (seconds)</label>
                 <input
@@ -1847,15 +1850,43 @@ type TokenlistEntry = {
   symbol: string
 }
 
-function createPlaygroundSecp256k1AccessKey() {
-  return generatePrivateKey()
-}
-
 type LimitInput = {
   token: string
   amount: string
   /** Empty string = no period (lifetime budget). */
   period: string
+}
+
+type AccessKeyKeyType = 'p256' | 'secp256k1'
+
+const accessKeyKeyTypes = [
+  { label: 'P256', value: 'p256' },
+  { label: 'secp256k1', value: 'secp256k1' },
+] as const
+
+function buildAuthorizeAccessKey(options: {
+  expiry: string
+  keyType: AccessKeyKeyType
+  limits: readonly LimitInput[]
+  scopeSelector: string
+  tokenInfo(address: string): TokenlistEntry | undefined
+}) {
+  const filledLimits = options.limits.filter((l) => l.token && l.amount)
+  return {
+    expiry: Math.floor(Date.now() / 1000) + Number(options.expiry || '86400'),
+    keyType: options.keyType,
+    ...(options.keyType === 'secp256k1' ? { privateKey: generatePrivateKey() } : {}),
+    ...(filledLimits.length > 0 && {
+      limits: filledLimits.map((l) => ({
+        token: l.token,
+        limit: Hex.fromNumber(parseUnits(l.amount, options.tokenInfo(l.token)?.decimals ?? 6)),
+        ...(l.period ? { period: Number(l.period) } : {}),
+      })),
+    }),
+    ...(options.scopeSelector && filledLimits[0]
+      ? { scopes: [{ address: filledLimits[0].token, selector: options.scopeSelector }] }
+      : {}),
+  } as never
 }
 
 /** Fetch the live token list for the current chain, with a static fallback. */
@@ -1916,22 +1947,16 @@ function WalletAuthorizeAccessKey() {
           e.preventDefault()
           const form = new FormData(e.currentTarget)
           const expiry = (form.get('expiry') as string) || '3600'
+          const keyType = form.get('keyType') as AccessKeyKeyType
           const scopeSelector = form.get('scopeSelector') as string
 
-          const filledLimits = limits.filter((l) => l.token && l.amount)
-          const privateKey = createPlaygroundSecp256k1AccessKey()
-          const params: Record<string, unknown> = {}
-          if (expiry) params.expiry = Math.floor(Date.now() / 1000) + Number(expiry)
-          params.keyType = 'secp256k1'
-          params.privateKey = privateKey
-          if (filledLimits.length > 0)
-            params.limits = filledLimits.map((l) => ({
-              token: l.token,
-              limit: Hex.fromNumber(parseUnits(l.amount, tokenInfo(l.token)?.decimals ?? 6)),
-              ...(l.period ? { period: Number(l.period) } : {}),
-            }))
-          if (scopeSelector && filledLimits[0])
-            params.scopes = [{ address: filledLimits[0].token, selector: scopeSelector }]
+          const params = buildAuthorizeAccessKey({
+            expiry,
+            keyType,
+            limits,
+            scopeSelector,
+            tokenInfo,
+          })
 
           execute(async () => {
             return await provider.request({
@@ -1941,6 +1966,17 @@ function WalletAuthorizeAccessKey() {
           })
         }}
       >
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <label>Key Type</label>
+          <select defaultValue="p256" name="keyType" style={{ flex: 1 }}>
+            {accessKeyKeyTypes.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <label>Expiry (seconds)</label>
           <input name="expiry" placeholder="3600" style={{ flex: 1 }} />
