@@ -1,15 +1,18 @@
 import { Address, Hex, Provider as ox_Provider, PublicKey } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { tempoLocalnet } from 'viem/tempo/chains'
-import { afterEach, describe, expect, test, vi } from 'vp/test'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Dialog from '../Dialog.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
+import * as RemoteRequests from '../internal/RemoteRequests.js'
+import type * as Remote from '../Remote.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { dialog } from './dialog.js'
 
 const address = '0x0000000000000000000000000000000000000001'
+const host = 'https://wallet.test/embed'
 const recipient = '0x0000000000000000000000000000000000000002'
 
 function createKeyAuthorization(options: {
@@ -34,7 +37,8 @@ function createKeyAuthorization(options: {
 function setup() {
   const storage = Storage.memory()
   const store = Store.create({ chainId: tempoLocalnet.id, storage })
-  const adapter = dialog({ dialog: Dialog.noop() })({
+  const dialog_ = createDialog()
+  const adapter = dialog({ dialog: dialog_.dialog, host })({
     getAccount: (options) => {
       if (options?.signable) throw new ox_Provider.UnauthorizedError({ message: 'No signer.' })
       return { address, type: 'json-rpc' } as never
@@ -43,19 +47,50 @@ function setup() {
     storage,
     store,
   })
-  return { adapter, store }
+  return { adapter, dialog: dialog_, store }
 }
 
-async function takeRequest(store: Store.Store) {
-  await vi.waitFor(() => {
-    if (!store.getState().requestQueue[0]) throw new Error('request not queued')
-  })
-  return store.getState().requestQueue[0]!
+function createDialog() {
+  let parameters: Dialog.SetupFn.Parameters | undefined
+  const syncs: Remote.Sync[] = []
+  const synced: (readonly Remote.Request[])[] = []
+  return {
+    dialog: Dialog.define({ name: 'test' }, (options) => ({
+      close() {},
+      destroy() {},
+      open() {},
+      async syncRequests(sync) {
+        parameters = options
+        syncs.push(sync)
+        synced.push(sync.requests)
+      },
+      syncTheme() {},
+    })),
+    async takeRequest() {
+      await vi.waitFor(() => {
+        if (!syncs[0]?.requests[0]) throw new Error('request not synced')
+      })
+      return syncs[0]!.requests[0]!
+    },
+    failure(request: Remote.Request, error: { code: number; message: string }) {
+      parameters!.onResponse({ error, id: request.request.id })
+    },
+    success(request: Remote.Request, result: unknown) {
+      parameters!.onResponse({ id: request.request.id, result })
+    },
+    syncs,
+    synced,
+  }
 }
 
 describe('dialog', () => {
+  beforeEach(() => {
+    RemoteRequests.reset(host)
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
+    RemoteRequests.reset(host)
   })
 
   test('behavior: sendTransaction signs locally when an access key is selected', async () => {
@@ -81,7 +116,8 @@ describe('dialog', () => {
         },
       }),
     })
-    const adapter = dialog({ dialog: Dialog.noop() })({
+    const dialog_ = createDialog()
+    const adapter = dialog({ dialog: dialog_.dialog, host })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
       },
@@ -96,7 +132,6 @@ describe('dialog', () => {
       storage,
       store,
     })
-
     const result = await adapter.actions.sendTransaction(
       {
         calls: [{ data: '0x12345678', to: recipient }],
@@ -131,13 +166,14 @@ describe('dialog', () => {
         },
       ]
     `)
-    expect(store.getState().requestQueue).toMatchInlineSnapshot(`[]`)
+    expect(dialog_.syncs).toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: loadAccounts forwards auth capabilities returned by the dialog', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
-    const adapter = dialog({ dialog: Dialog.noop() })({
+    const dialog_ = createDialog()
+    const adapter = dialog({ dialog: dialog_.dialog, host })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
       },
@@ -162,26 +198,14 @@ describe('dialog', () => {
 
     const promise = adapter.actions.loadAccounts(undefined, request)
 
-    await vi.waitFor(() => {
-      if (!store.getState().requestQueue[0]) throw new Error('request not queued')
-    })
-
-    const queued = store.getState().requestQueue[0]!
-    store.setState({
-      requestQueue: [
+    const queued = await dialog_.takeRequest()
+    dialog_.success(queued, {
+      accounts: [
         {
-          request: queued.request,
-          result: {
-            accounts: [
-              {
-                address,
-                capabilities: {
-                  auth: { token: 'test-token' },
-                },
-              },
-            ],
+          address,
+          capabilities: {
+            auth: { token: 'test-token' },
           },
-          status: 'success',
         },
       ],
     })
@@ -200,11 +224,235 @@ describe('dialog', () => {
     `)
   })
 
+  test('behavior: host session syncs pending requests through the attached dialog', async () => {
+    const storage = Storage.memory()
+    const store_a = Store.create({ chainId: 123, storage })
+    store_a.setState({ accounts: [{ address }], activeAccount: 0 })
+    const store_b = Store.create({ chainId: 456, storage })
+    const dialog_a = createDialog()
+    const dialog_b = createDialog()
+    const adapter_a = dialog({ dialog: dialog_a.dialog, host })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store: store_a,
+    })
+    const adapter_b = dialog({ dialog: dialog_b.dialog, host })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store: store_b,
+    })
+
+    const promise = adapter_a.actions.sendTransaction(
+      {
+        calls: [{ data: '0x12345678', to: recipient }],
+        chainId: 1,
+        from: address,
+      },
+      {
+        method: 'eth_sendTransaction',
+        params: [
+          {
+            calls: [{ data: '0x12345678' as const, to: recipient }],
+            chainId: '0x1' as const,
+            from: address,
+          },
+        ] as const,
+      },
+    )
+
+    const queued = await dialog_b.takeRequest()
+
+    expect(dialog_a.synced).toMatchInlineSnapshot(`[]`)
+    expect(dialog_b.synced.map((requests) => requests.map((x) => x.request.method)))
+      .toMatchInlineSnapshot(`
+        [
+          [
+            "eth_sendTransaction",
+          ],
+        ]
+      `)
+    expect(dialog_b.syncs.map((sync) => ({ account: sync.account, chainId: sync.chainId })))
+      .toMatchInlineSnapshot(`
+        [
+          {
+            "account": {
+              "address": "0x0000000000000000000000000000000000000001",
+            },
+            "chainId": 123,
+          },
+        ]
+      `)
+
+    dialog_b.success(queued, '0x1234')
+
+    await expect(promise).resolves.toMatchInlineSnapshot(`"0x1234"`)
+    expect(dialog_b.synced.map((requests) => requests.map((x) => x.request.method)))
+      .toMatchInlineSnapshot(`
+        [
+          [
+            "eth_sendTransaction",
+          ],
+        ]
+      `)
+    adapter_a.cleanup?.()
+    adapter_b.cleanup?.()
+  })
+
+  test('behavior: remounted provider resumes pending host requests', async () => {
+    const storage = Storage.memory()
+    const store_a = Store.create({ chainId: 123, storage })
+    store_a.setState({ accounts: [{ address }], activeAccount: 0 })
+    const dialog_a = createDialog()
+    const adapter_a = dialog({ dialog: dialog_a.dialog, host })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store: store_a,
+    })
+
+    const promise = adapter_a.actions.sendTransaction(
+      {
+        calls: [{ data: '0x12345678', to: recipient }],
+        chainId: 1,
+        from: address,
+      },
+      {
+        method: 'eth_sendTransaction',
+        params: [
+          {
+            calls: [{ data: '0x12345678' as const, to: recipient }],
+            chainId: '0x1' as const,
+            from: address,
+          },
+        ] as const,
+      },
+    )
+
+    const queued = await dialog_a.takeRequest()
+    adapter_a.cleanup?.()
+
+    const store_b = Store.create({ chainId: 456, storage })
+    const dialog_b = createDialog()
+    const adapter_b = dialog({ dialog: dialog_b.dialog, host })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store: store_b,
+    })
+
+    expect(dialog_b.synced.map((requests) => requests.map((x) => x.request.method)))
+      .toMatchInlineSnapshot(`
+        [
+          [
+            "eth_sendTransaction",
+          ],
+        ]
+      `)
+    expect(dialog_b.syncs.map((sync) => ({ account: sync.account, chainId: sync.chainId })))
+      .toMatchInlineSnapshot(`
+        [
+          {
+            "account": {
+              "address": "0x0000000000000000000000000000000000000001",
+            },
+            "chainId": 123,
+          },
+        ]
+      `)
+
+    dialog_b.success(queued, '0x1234')
+
+    await expect(promise).resolves.toMatchInlineSnapshot(`"0x1234"`)
+    adapter_b.cleanup?.()
+  })
+
+  test('behavior: resolving one pending request advances the remote queue', async () => {
+    const storage = Storage.memory()
+    const store = Store.create({ chainId: 123, storage })
+    const dialog_ = createDialog()
+    const adapter = dialog({ dialog: dialog_.dialog, host })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store,
+    })
+
+    const first = adapter.actions.sendTransaction(
+      {
+        calls: [{ data: '0x11111111', to: recipient }],
+        chainId: 1,
+        from: address,
+      },
+      {
+        method: 'eth_sendTransaction',
+        params: [
+          {
+            calls: [{ data: '0x11111111' as const, to: recipient }],
+            chainId: '0x1' as const,
+            from: address,
+          },
+        ] as const,
+      },
+    )
+    const second = adapter.actions.sendTransaction(
+      {
+        calls: [{ data: '0x22222222', to: recipient }],
+        chainId: 1,
+        from: address,
+      },
+      {
+        method: 'eth_sendTransaction',
+        params: [
+          {
+            calls: [{ data: '0x22222222' as const, to: recipient }],
+            chainId: '0x1' as const,
+            from: address,
+          },
+        ] as const,
+      },
+    )
+
+    const request_1 = await dialog_.takeRequest()
+    dialog_.success(request_1, '0x1')
+
+    await expect(first).resolves.toMatchInlineSnapshot(`"0x1"`)
+    expect(dialog_.synced.map((requests) => requests.map((x) => x.request.id)))
+      .toMatchInlineSnapshot(`
+        [
+          [
+            0,
+          ],
+          [
+            1,
+          ],
+        ]
+      `)
+
+    const request_2 = dialog_.synced.at(-1)![0]!
+    dialog_.success(request_2, '0x2')
+
+    await expect(second).resolves.toMatchInlineSnapshot(`"0x2"`)
+    adapter.cleanup?.()
+  })
+
   test('behavior: sendTransaction falls through when no access key is selected', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
     const lookups: unknown[] = []
-    const adapter = dialog({ dialog: Dialog.noop() })({
+    const dialog_ = createDialog()
+    const adapter = dialog({ dialog: dialog_.dialog, host })({
       getAccount: (options) => {
         lookups.push(options)
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
@@ -233,20 +481,8 @@ describe('dialog', () => {
       request,
     )
 
-    await vi.waitFor(() => {
-      if (!store.getState().requestQueue[0]) throw new Error('request not queued')
-    })
-
-    const queued = store.getState().requestQueue[0]!
-    store.setState({
-      requestQueue: [
-        {
-          request: queued.request,
-          result: '0x1234',
-          status: 'success',
-        },
-      ],
-    })
+    const queued = await dialog_.takeRequest()
+    dialog_.success(queued, '0x1234')
 
     await expect(promise).resolves.toMatchInlineSnapshot(`"0x1234"`)
     expect(lookups).toMatchInlineSnapshot(`[]`)
@@ -265,7 +501,8 @@ describe('dialog', () => {
         } as never,
       ],
     })
-    const adapter = dialog({ dialog: Dialog.noop() })({
+    const dialog_ = createDialog()
+    const adapter = dialog({ dialog: dialog_.dialog, host })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
       },
@@ -283,27 +520,15 @@ describe('dialog', () => {
       request,
     )
 
-    await vi.waitFor(() => {
-      if (!store.getState().requestQueue[0]) throw new Error('request not queued')
-    })
-
-    const queued = store.getState().requestQueue[0]!
-    store.setState({
-      requestQueue: [
-        {
-          request: queued.request,
-          result: undefined,
-          status: 'success',
-        },
-      ],
-    })
+    const queued = await dialog_.takeRequest()
+    dialog_.success(queued, undefined)
 
     await expect(promise).resolves.toMatchInlineSnapshot(`undefined`)
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: authorizeAccessKey forwards an external secp256k1 key', async () => {
-    const { adapter, store } = setup()
+    const { adapter, dialog, store } = setup()
     const expiry = 123
     const promise = adapter.actions.authorizeAccessKey!(
       { address: recipient, expiry, keyType: 'secp256k1' },
@@ -313,7 +538,7 @@ describe('dialog', () => {
       },
     )
 
-    const queued = await takeRequest(store)
+    const queued = await dialog.takeRequest()
     const request = queued.request as {
       params: [{ address: typeof recipient; expiry: number; keyType: 'secp256k1' }]
     }
@@ -329,18 +554,7 @@ describe('dialog', () => {
         { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
       ),
     )
-    store.setState({
-      requestQueue: [
-        {
-          request: queued.request,
-          result: {
-            keyAuthorization,
-            rootAddress: address,
-          },
-          status: 'success',
-        },
-      ],
-    })
+    dialog.success(queued, { keyAuthorization, rootAddress: address })
 
     await expect(promise).resolves.toMatchObject({ rootAddress: address })
     expect(params.keyType).toMatchInlineSnapshot(`"secp256k1"`)
@@ -349,29 +563,21 @@ describe('dialog', () => {
   })
 
   test('behavior: authorizeAccessKey generates a p256 key by default', async () => {
-    const { adapter, store } = setup()
+    const { adapter, dialog, store } = setup()
     const expiry = 123
     const promise = adapter.actions.authorizeAccessKey!(
       { expiry },
       { method: 'wallet_authorizeAccessKey', params: [{ expiry }] },
     )
 
-    const queued = await takeRequest(store)
+    const queued = await dialog.takeRequest()
     const request = queued.request as {
       params: [{ expiry: number; keyType: 'p256'; publicKey: Hex.Hex }]
     }
     const params = request.params[0]
-    store.setState({
-      requestQueue: [
-        {
-          request: queued.request,
-          result: {
-            keyAuthorization: createKeyAuthorization(params),
-            rootAddress: address,
-          },
-          status: 'success',
-        },
-      ],
+    dialog.success(queued, {
+      keyAuthorization: createKeyAuthorization(params),
+      rootAddress: address,
     })
 
     await expect(promise).resolves.toMatchObject({ rootAddress: address })
@@ -386,7 +592,7 @@ describe('dialog', () => {
   })
 
   test('behavior: authorizeAccessKey forwards showDeposit', async () => {
-    const { adapter, store } = setup()
+    const { adapter, dialog } = setup()
     const expiry = 123
     const showDeposit = { amount: '50', token: 'USDC' }
     const promise = adapter.actions.authorizeAccessKey!(
@@ -394,7 +600,7 @@ describe('dialog', () => {
       { method: 'wallet_authorizeAccessKey', params: [{ expiry, showDeposit }] },
     )
 
-    const queued = await takeRequest(store)
+    const queued = await dialog.takeRequest()
     const request = queued.request as {
       params: [
         {
@@ -406,17 +612,9 @@ describe('dialog', () => {
       ]
     }
     const params = request.params[0]
-    store.setState({
-      requestQueue: [
-        {
-          request: queued.request,
-          result: {
-            keyAuthorization: createKeyAuthorization(params),
-            rootAddress: address,
-          },
-          status: 'success',
-        },
-      ],
+    dialog.success(queued, {
+      keyAuthorization: createKeyAuthorization(params),
+      rootAddress: address,
     })
 
     await expect(promise).resolves.toMatchObject({ rootAddress: address })
@@ -429,29 +627,21 @@ describe('dialog', () => {
   })
 
   test('behavior: authorizeAccessKey generates a p256 key when requested', async () => {
-    const { adapter, store } = setup()
+    const { adapter, dialog, store } = setup()
     const expiry = 123
     const promise = adapter.actions.authorizeAccessKey!(
       { expiry, keyType: 'p256' },
       { method: 'wallet_authorizeAccessKey', params: [{ expiry, keyType: 'p256' }] },
     )
 
-    const queued = await takeRequest(store)
+    const queued = await dialog.takeRequest()
     const request = queued.request as {
       params: [{ expiry: number; keyType: 'p256'; publicKey: Hex.Hex }]
     }
     const params = request.params[0]
-    store.setState({
-      requestQueue: [
-        {
-          request: queued.request,
-          result: {
-            keyAuthorization: createKeyAuthorization(params),
-            rootAddress: address,
-          },
-          status: 'success',
-        },
-      ],
+    dialog.success(queued, {
+      keyAuthorization: createKeyAuthorization(params),
+      rootAddress: address,
     })
 
     await expect(promise).resolves.toMatchObject({ rootAddress: address })
@@ -466,7 +656,7 @@ describe('dialog', () => {
   })
 
   test('error: secp256k1 access key requires external key material', async () => {
-    const { adapter, store } = setup()
+    const { adapter, dialog } = setup()
 
     await expect(
       adapter.actions.authorizeAccessKey!(
@@ -479,11 +669,11 @@ describe('dialog', () => {
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[RpcResponse.InvalidParamsError: \`keyType: "secp256k1"\` requires externally generated key material; provide \`publicKey\` or \`address\`.]`,
     )
-    expect(store.getState().requestQueue).toMatchInlineSnapshot(`[]`)
+    expect(dialog.syncs).toMatchInlineSnapshot(`[]`)
   })
 
   test('error: webAuthn access key requires external key material', async () => {
-    const { adapter, store } = setup()
+    const { adapter, dialog } = setup()
 
     await expect(
       adapter.actions.authorizeAccessKey!(
@@ -496,13 +686,14 @@ describe('dialog', () => {
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[RpcResponse.InvalidParamsError: \`keyType: "webAuthn"\` requires externally generated key material; provide \`publicKey\` or \`address\`.]`,
     )
-    expect(store.getState().requestQueue).toMatchInlineSnapshot(`[]`)
+    expect(dialog.syncs).toMatchInlineSnapshot(`[]`)
   })
 
   test('error: wallet validation errors keep their RPC code', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: tempoLocalnet.id, storage })
-    const adapter = dialog({ dialog: Dialog.noop() })({
+    const dialog_ = createDialog()
+    const adapter = dialog({ dialog: dialog_.dialog, host })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
       },
@@ -528,22 +719,10 @@ describe('dialog', () => {
       },
     )
 
-    await vi.waitFor(() => {
-      if (!store.getState().requestQueue[0]) throw new Error('request not queued')
-    })
-
-    const queued = store.getState().requestQueue[0]!
-    store.setState({
-      requestQueue: [
-        {
-          request: queued.request,
-          error: {
-            code: -32602,
-            message: '`authorizeAccessKey` must include at least one `limits` entry.',
-          },
-          status: 'error',
-        },
-      ],
+    const queued = await dialog_.takeRequest()
+    dialog_.failure(queued, {
+      code: -32602,
+      message: '`authorizeAccessKey` must include at least one `limits` entry.',
     })
 
     await expect(

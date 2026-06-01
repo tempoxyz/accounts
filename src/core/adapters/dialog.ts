@@ -1,4 +1,4 @@
-import { Address, Provider as ox_Provider, RpcRequest as ox_RpcRequest, RpcResponse } from 'ox'
+import { Address, Provider as ox_Provider, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { z } from 'zod/mini'
 
@@ -6,8 +6,8 @@ import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
+import * as RemoteRequests from '../internal/RemoteRequests.js'
 import * as Schema from '../Schema.js'
-import type * as Store from '../Store.js'
 import * as Rpc from '../zod/rpc.js'
 
 /**
@@ -27,7 +27,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
   const {
     dialog = Dialog.isInsecureContext() ? Dialog.popup() : Dialog.iframe(),
     // TODO: use the new host
-    // host = 'https://wallet-next.tempo.xyz/remote',
+    // host = 'https://wallet.tempo.xyz/embed',
     host = 'https://wallet.tempo.xyz/embed',
     icon = 'data:image/svg+xml,<svg width="269" height="269" viewBox="0 0 269 269" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="269" height="269" fill="black"/><path d="M123.273 190.794H93.445L121.09 105.318H85.7334L93.445 80.2642H191.95L184.238 105.318H150.773L123.273 190.794Z" fill="white"/></svg>',
     name = 'Tempo Wallet',
@@ -43,47 +43,14 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     )
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
-    const listeners = new Set<(requestQueue: readonly Store.QueuedRequest[]) => void>()
-    const requestStore = ox_RpcRequest.createStore()
+    const detach = RemoteRequests.attach(host, { dialog, host, store, theme })
 
-    /** Wait for a queued request to be resolved via the store. */
-    function waitForQueuedRequest(requestId: number) {
-      return new Promise((resolve, reject) => {
-        const listener = (requestQueue: readonly Store.QueuedRequest[]) => {
-          const queued = requestQueue.find((x) => x.request.id === requestId)
-
-          // Request removed and queue empty — cancelled or dialog closed.
-          if (!queued && requestQueue.length === 0) {
-            listeners.delete(listener)
-            reject(new ox_Provider.UserRejectedRequestError())
-            return
-          }
-
-          // Request not found but queue has other requests — wait.
-          if (!queued) return
-
-          // Request found but not yet resolved — wait.
-          if (queued.status !== 'success' && queued.status !== 'error') return
-
-          listeners.delete(listener)
-
-          if (queued.status === 'success') resolve(queued.result)
-          else reject(ox_Provider.parseError(queued.error))
-
-          // Remove the resolved request from the queue.
-          store.setState((x) => ({
-            ...x,
-            requestQueue: x.requestQueue.filter((x) => x.request.id !== requestId),
-          }))
-        }
-
-        listeners.add(listener)
-
-        // Notify immediately with current state so the store subscription
-        // picks up the request that was just added (setState fires
-        // synchronously before this listener is registered).
-        listener(store.getState().requestQueue)
-      })
+    /** Returns the active account from the adapter source store. */
+    function getActiveAccount(): { address: string } | undefined {
+      const { accounts, activeAccount } = store.getState()
+      const account = accounts[activeAccount]
+      if (!account) return undefined
+      return { address: account.address }
     }
 
     /**
@@ -93,14 +60,11 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     const provider = ox_Provider.from(
       {
         async request(r) {
-          const request = requestStore.prepare(r as never)
-
-          store.setState((x) => ({
-            ...x,
-            requestQueue: [...x.requestQueue, { request, status: 'pending' as const }],
-          }))
-
-          return waitForQueuedRequest(request.id)
+          return RemoteRequests.request(host, {
+            account: getActiveAccount(),
+            chainId: store.getState().chainId,
+            request: r,
+          })
         },
       },
       { schema: Schema.ox },
@@ -150,28 +114,9 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       })
     }
 
-    const dialogInstance = dialog({ host, store, theme })
-
-    // Sync store → dialog: whenever the request queue changes, notify
-    // listeners and sync pending requests to the dialog.
-    const unsubscribe = store.subscribe(
-      (x) => x.requestQueue,
-      (requestQueue) => {
-        for (const listener of listeners) listener(requestQueue)
-
-        const pending = requestQueue.filter(
-          (x): x is Store.QueuedRequest & { status: 'pending' } => x.status === 'pending',
-        )
-
-        dialogInstance?.syncRequests(pending)
-        if (pending.length === 0) dialogInstance?.close()
-      },
-    )
-
     return {
       cleanup() {
-        unsubscribe()
-        dialogInstance?.destroy()
+        detach()
       },
       forwardsAuth: true,
       actions: {
@@ -444,7 +389,7 @@ export declare namespace dialog {
   type Options = {
     /** Dialog to use for the embed app. @default `Dialog.iframe()` (or `Dialog.popup()` in Safari/insecure contexts) */
     dialog?: Dialog.Dialog | undefined
-    /** URL of the embed app. @default `'https://wallet-next.tempo.xyz/remote'` */
+    /** URL of the embed app. @default `'https://wallet.tempo.xyz/embed'` */
     host?: string | undefined
     /** Data URI of the provider icon. */
     icon?: `data:image/${string}` | undefined

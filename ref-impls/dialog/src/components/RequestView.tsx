@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
-import type { Store } from 'accounts'
+import type { Remote } from 'accounts'
 import { Json } from 'ox'
 
 import { remote } from '../lib/config.js'
@@ -42,6 +42,6 @@ export function RequestView(props: RequestView.Props) {
 
 export declare namespace RequestView {
   type Props = {
-    request: Store.QueuedRequest['request']
+    request: NonNullable<Remote.onUserRequest.Payload['request']>
   }
 }

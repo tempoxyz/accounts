@@ -20,7 +20,6 @@ describe('create', () => {
         "accounts": [],
         "activeAccount": 0,
         "chainId": 123,
-        "requestQueue": [],
       }
     `)
   })
@@ -42,7 +41,6 @@ describe('create', () => {
         ],
         "activeAccount": 0,
         "chainId": 123,
-        "requestQueue": [],
       }
     `)
   })
@@ -108,12 +106,6 @@ describe('serialize', () => {
       activeAccount: 1,
       auth: { logout: 'https://example.com/logout' },
       chainId: 123,
-      requestQueue: [
-        {
-          request: { method: 'eth_accounts' } as never,
-          status: 'pending',
-        },
-      ],
     })
 
     expect(result).toMatchInlineSnapshot(`
@@ -154,7 +146,6 @@ describe('serialize', () => {
         ],
         activeAccount: 0,
         chainId: 123,
-        requestQueue: [],
       },
       { maxAccounts: 1 },
     )
@@ -183,7 +174,6 @@ describe('serialize', () => {
         accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
         activeAccount: 0,
         chainId: 123,
-        requestQueue: [],
       },
       { persistCredentials: false },
     )
@@ -203,18 +193,12 @@ describe('serialize', () => {
 })
 
 describe('hydrate', () => {
-  test('behavior: restores persisted state with runtime-only request queue', () => {
+  test('behavior: restores persisted state', () => {
     const current: Store.State = {
       accessKeys: [],
       accounts: [],
       activeAccount: 0,
       chainId: 123,
-      requestQueue: [
-        {
-          request: { method: 'eth_accounts' } as never,
-          status: 'pending',
-        },
-      ],
     }
 
     const result = Store.hydrate(
@@ -235,14 +219,6 @@ describe('hydrate', () => {
         ],
         "activeAccount": 0,
         "chainId": 456,
-        "requestQueue": [
-          {
-            "request": {
-              "method": "eth_accounts",
-            },
-            "status": "pending",
-          },
-        ],
       }
     `)
   })
@@ -259,7 +235,6 @@ describe('hydrate', () => {
       ],
       activeAccount: 0,
       chainId: 123,
-      requestQueue: [],
     }
 
     const result = Store.hydrate(
@@ -287,7 +262,6 @@ describe('hydrate', () => {
       accounts: [],
       activeAccount: 0,
       chainId: 123,
-      requestQueue: [],
     }
 
     const result = Store.hydrate(
@@ -321,7 +295,6 @@ describe('hydrate', () => {
         ],
         "activeAccount": 0,
         "chainId": 456,
-        "requestQueue": [],
       }
     `)
   })
@@ -332,7 +305,6 @@ describe('hydrate', () => {
       accounts: [],
       activeAccount: 0,
       chainId: 123,
-      requestQueue: [],
     }
 
     const result = Store.hydrate(
@@ -351,7 +323,6 @@ describe('hydrate', () => {
         "accounts": [],
         "activeAccount": 0,
         "chainId": 456,
-        "requestQueue": [],
       }
     `)
   })
@@ -362,7 +333,6 @@ describe('hydrate', () => {
       accounts: [],
       activeAccount: 0,
       chainId: 123,
-      requestQueue: [],
     }
 
     const result = Store.hydrate(
@@ -400,7 +370,6 @@ describe('hydrate', () => {
       accounts: [],
       activeAccount: 0,
       chainId: 123,
-      requestQueue: [],
     }
 
     const result = Store.hydrate(
@@ -473,7 +442,6 @@ describe('persistence', () => {
         ],
         "activeAccount": 0,
         "chainId": 456,
-        "requestQueue": [],
       }
     `)
   })
@@ -515,7 +483,6 @@ describe('persistence', () => {
         ],
         "activeAccount": 0,
         "chainId": 456,
-        "requestQueue": [],
       }
     `)
   })
@@ -658,7 +625,6 @@ describe('waitForHydration', () => {
         ],
         "activeAccount": 0,
         "chainId": 789,
-        "requestQueue": [],
       }
     `)
   })

@@ -1,23 +1,36 @@
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Dialog from './Dialog.js'
+import type * as Remote from './Remote.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
 
-const host = 'https://wallet-next.tempo.xyz/remote'
+const host = 'https://wallet.tempo.xyz/embed'
 
 function setup() {
   const store = Store.create({
     chainId: 1,
     storage: Storage.memory({ key: 'dialog-test' }),
   })
+  const onReject = vi.fn()
   const dialog = Dialog.iframe()
-  const handle = dialog({ host, store })
+  const handle = dialog({ host, onReject, onResponse() {}, store })
   lastHandle = handle
-  return { handle, store }
+  return { handle, onReject, store }
 }
 
 let lastHandle: Dialog.Instance | undefined
+
+function pending(id: number): Remote.Request & { status: 'pending' } {
+  return {
+    request: { _returnType: undefined, id, jsonrpc: '2.0', method: 'eth_accounts' },
+    status: 'pending',
+  }
+}
+
+function sync(requests: readonly Remote.Request[]): Remote.Sync {
+  return { account: undefined, chainId: 1, requests }
+}
 
 afterEach(() => {
   lastHandle?.destroy()
@@ -64,7 +77,7 @@ describe('Dialog.iframe', () => {
   test('behavior: iframe src points to host', () => {
     setup()
     const iframe = document.querySelector('dialog[data-tempo-wallet] iframe') as HTMLIFrameElement
-    expect(iframe.src).toMatchInlineSnapshot(`"https://wallet-next.tempo.xyz/remote"`)
+    expect(iframe.src).toMatchInlineSnapshot(`"https://wallet.tempo.xyz/embed"`)
     expect(iframe.src).toContain(host)
   })
 
@@ -132,13 +145,22 @@ describe('Dialog.iframe', () => {
     expect(document.querySelector('dialog[data-tempo-wallet]')).toBeNull()
   })
 
-  test('behavior: cancel event rejects pending requests', () => {
-    const { handle, store } = setup()
+  test('behavior: cancel event rejects displayed pending requests', () => {
+    const { handle, onReject } = setup()
+    const displayed = pending(1)
+    void handle.syncRequests(sync([displayed]))
     handle.open()
     const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
     dialog.dispatchEvent(new Event('cancel'))
-    const queue = store.getState().requestQueue
-    for (const q of queue) expect(q.status).toBe('error')
+    expect(onReject.mock.calls).toMatchInlineSnapshot(`
+      [
+        [
+          [
+            1,
+          ],
+        ],
+      ]
+    `)
   })
 
   test('behavior: focus restored to previous element on close', () => {
@@ -155,15 +177,24 @@ describe('Dialog.iframe', () => {
     button.remove()
   })
 
-  test('behavior: backdrop click rejects pending requests', () => {
-    const { handle, store } = setup()
+  test('behavior: backdrop click rejects displayed pending requests', () => {
+    const { handle, onReject } = setup()
+    const displayed = pending(1)
+    void handle.syncRequests(sync([displayed]))
     handle.open()
     const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
 
     dialog.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
-    const queue = store.getState().requestQueue
-    for (const q of queue) expect(q.status).toBe('error')
+    expect(onReject.mock.calls).toMatchInlineSnapshot(`
+      [
+        [
+          [
+            1,
+          ],
+        ],
+      ]
+    `)
   })
 
   test('behavior: click inside iframe does not close dialog', () => {
@@ -210,7 +241,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, store })
+    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
     handle.open()
 
     expect(openSpy).toHaveBeenCalledOnce()
@@ -231,7 +262,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, store })
+    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
     handle.open()
 
     const features = openSpy.mock.calls[0]![2] as string
@@ -256,7 +287,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, store })
+    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
     handle.open()
     handle.close()
 
@@ -274,7 +305,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, store })
+    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
 
     expect(() => handle.open()).toThrow('Failed to open popup')
 
@@ -293,7 +324,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, store })
+    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
     handle.open()
     handle.destroy()
 
@@ -310,7 +341,7 @@ describe('Dialog.noop', () => {
       storage: Storage.memory({ key: 'noop-test' }),
     })
     const dialog = Dialog.noop()
-    const handle = dialog({ host, store })
+    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
     expect(() => handle.open()).not.toThrow()
     expect(() => handle.close()).not.toThrow()
     expect(() => handle.destroy()).not.toThrow()

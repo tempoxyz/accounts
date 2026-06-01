@@ -67,6 +67,6 @@ type State = {
   /** Whether the dialog is ready to display content. */
   ready: boolean
   /** Queued RPC requests received from the host. */
-  requests: readonly Store.QueuedRequest[]
+  requests: Remote.State['requests']
 }
 ```
