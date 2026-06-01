@@ -6,16 +6,15 @@ import {
   dialog,
   Dialog,
   local,
-  privy,
   Provider,
   turnkey,
   webAuthn,
 } from 'accounts'
+import { privyReact } from 'accounts/react/privy'
 import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
-import { getPrivyReactClient, requestPrivyReactAccounts } from './privyReactStore.js'
 import { requestTurnkeyEmailOtp, type TurnkeyEmailOtpClient } from './turnkeyOtpStore.js'
 
 export type AdapterType =
@@ -144,12 +143,8 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     if (!import.meta.env.VITE_PRIVY_APP_ID)
       throw new Error('VITE_PRIVY_APP_ID is required for the Privy adapter.')
 
-    const client = getPrivyReactClient()
     return Provider.create({
-      adapter: privy({
-        client,
-        loadAccounts: async () => await requestPrivyReactAccounts(),
-      }),
+      adapter: privyReact(),
       mpp: true,
       testnet,
     })

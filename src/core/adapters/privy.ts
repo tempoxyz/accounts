@@ -56,7 +56,9 @@ const privySessionErrorCodes = new Set([
  * const provider = Provider.create({
  *   adapter: privy({
  *     client,
- *     loadAccounts: async () => await requestPrivyAccounts(),
+ *     loadAccounts: async ({ client }) => {
+ *       await signInWithPrivyEmail(client.auth)
+ *     },
  *   }),
  * })
  * ```

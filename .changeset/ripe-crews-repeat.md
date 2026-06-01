@@ -2,4 +2,4 @@
 "accounts": patch
 ---
 
-Simplified Privy account loading and fixed stale wallet cache handling after failed account selection.
+Added Privy React Auth helpers that build proper Tempo viem accounts from Privy public keys, while preserving Core JS fallback signing.

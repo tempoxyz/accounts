@@ -1,10 +1,10 @@
 import { PrivyProvider } from '@privy-io/react-auth'
+import { PrivyAccountsBridge } from 'accounts/react/privy'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { App } from './App.js'
 import './index.css'
-import { PrivyReactBridge } from './PrivyReactBridge.js'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -28,7 +28,7 @@ function Root() {
         ? { clientId: import.meta.env.VITE_PRIVY_CLIENT_ID }
         : {})}
     >
-      <PrivyReactBridge />
+      <PrivyAccountsBridge />
       <App />
     </PrivyProvider>
   )

@@ -7,49 +7,36 @@ description: Adapter backed by Privy sessions and embedded Ethereum wallets.
 
 Creates a Privy adapter for Privy-authenticated embedded Ethereum wallets.
 
-The preferred React integration uses `@privy-io/react-auth` and returns account objects with a raw signer and matching public key from [`loadAccounts`](#loadaccounts). When an account includes `publicKey`, the adapter builds a full Tempo viem account with `viem/tempo` `Account.from(...)`.
+React apps should usually use `privyReact` from `accounts/react/privy`. It wraps this core adapter, opens Privy's login UI through a React boundary, and returns account objects with a raw signer and matching public key. When an account includes `publicKey`, the adapter builds a full Tempo viem account with `viem/tempo` `Account.from(...)`.
 
-The adapter still accepts a structural client compatible with `@privy-io/js-sdk-core` for session checks, silent restore, provider lookup, and logout.
+Use this core `privy` adapter directly for `@privy-io/js-sdk-core` integrations or custom React flows that need explicit account selection.
 
 ## Usage
 
 ```ts
-import { Provider, privy } from 'accounts'
-
-import {
-  privyReactClient,
-  requestPrivyAccounts,
-} from './privy-react-bridge.js'
+import { Provider } from 'accounts'
+import { privyReact } from 'accounts/react/privy'
 
 export const provider = Provider.create({
-  adapter: privy({
-    client: privyReactClient,
-    loadAccounts: async () => await requestPrivyAccounts(),
-  }),
+  adapter: privyReact(),
 })
 ```
 
-In a React bridge component, resolve `requestPrivyAccounts()` with Privy's viem accounts:
+The helper expects `PrivyAccountsBridge` under `PrivyProvider`:
 
-```ts
-import { toViemAccount } from '@privy-io/react-auth'
+```tsx
+import { PrivyProvider } from '@privy-io/react-auth'
+import { PrivyAccountsBridge } from 'accounts/react/privy'
 
-const embedded = wallets.wallets.filter(
-  (wallet) =>
-    wallet.type === 'ethereum' &&
-    (wallet.walletClientType === 'privy' || wallet.walletClientType === 'privy-v2'),
-)
-
-const accounts = await Promise.all(
-  embedded.map(async (wallet) => {
-    const account = await toViemAccount({ wallet })
-    const publicKey = getPublicKey(privy.user, wallet.address)
-    return { ...account, ...(publicKey ? { publicKey } : {}) }
-  }),
+root.render(
+  <PrivyProvider appId={appId}>
+    <PrivyAccountsBridge />
+    <App />
+  </PrivyProvider>,
 )
 ```
 
-Here, `getPublicKey` should read the matching embedded Ethereum wallet from Privy's authenticated `user.linkedAccounts` state.
+The bridge resolves connect requests with Privy's viem accounts and matching public keys.
 
 ## Parameters
 
@@ -58,7 +45,7 @@ Here, `getPublicKey` should read the matching embedded Ethereum wallet from Priv
 - **Type:** `privy.Client`
 - **Required**
 
-Structural Privy client used by the adapter. `Privy` from `@privy-io/js-sdk-core` satisfies this directly. React apps can provide a small shim backed by `@privy-io/react-auth` hooks, as shown in the [Privy adapter guide](/docs/adapters/privy).
+Structural Privy client used by the core adapter. `Privy` from `@privy-io/js-sdk-core` satisfies this directly. React apps should prefer `privyReact()` unless they need a custom bridge.
 
 The adapter calls `initialize?.()` once on first use, and uses `getAccessToken`, `user.get`, `embeddedWallet.getEthereumProvider`, and `auth.logout` for the rest of the lifecycle.
 
@@ -68,7 +55,9 @@ import { Provider, privy } from 'accounts'
 const provider = Provider.create({
   adapter: privy({
     client, // [!code focus]
-    loadAccounts: async () => await requestPrivyAccounts(),
+    loadAccounts: async ({ client }) => {
+      await signInWithPrivyEmail(client.auth)
+    },
   }),
 })
 ```
@@ -86,7 +75,9 @@ import { Provider, privy } from 'accounts'
 const provider = Provider.create({
   adapter: privy({
     client,
-    loadAccounts: async () => await requestPrivyAccounts(),
+    loadAccounts: async ({ client }) => {
+      await signInWithPrivyEmail(client.auth)
+    },
     icon: 'data:image/svg+xml,...', // [!code focus]
   }),
 })
@@ -99,7 +90,7 @@ const provider = Provider.create({
 
 Runs the Privy login UI in response to a user-initiated `wallet_connect`.
 
-For React apps, use a bridge component to open Privy's login modal and return the `toViemAccount({ wallet })` results with the matching wallet public key. The first returned account is active by default, matching `eth_requestAccounts`.
+For React apps using `privyReact()`, this callback is supplied by the SDK. Custom integrations can still use a bridge component to open Privy's login modal and return the `toViemAccount({ wallet })` results with the matching wallet public key. The first returned account is active by default, matching `eth_requestAccounts`.
 
 ```ts
 import { Provider, privy } from 'accounts'
@@ -107,7 +98,9 @@ import { Provider, privy } from 'accounts'
 const provider = Provider.create({
   adapter: privy({
     client,
-    loadAccounts: async () => await requestPrivyAccounts(), // [!code focus]
+    loadAccounts: async ({ client }) => {
+      await signInWithPrivyEmail(client.auth)
+    }, // [!code focus]
   }),
 })
 ```
@@ -143,8 +136,12 @@ import { Provider, privy } from 'accounts'
 const provider = Provider.create({
   adapter: privy({
     client,
-    createAccount: async () => await requestPrivyAccounts(), // [!code focus]
-    loadAccounts: async () => await requestPrivyAccounts(),
+    createAccount: async ({ client }) => {
+      await registerWithPrivy(client.auth)
+    }, // [!code focus]
+    loadAccounts: async ({ client }) => {
+      await signInWithPrivyEmail(client.auth)
+    },
   }),
 })
 ```
@@ -162,7 +159,9 @@ import { Provider, privy } from 'accounts'
 const provider = Provider.create({
   adapter: privy({
     client,
-    loadAccounts: async () => await requestPrivyAccounts(),
+    loadAccounts: async ({ client }) => {
+      await signInWithPrivyEmail(client.auth)
+    },
     name: 'My Wallet', // [!code focus]
   }),
 })
@@ -181,7 +180,9 @@ import { Provider, privy } from 'accounts'
 const provider = Provider.create({
   adapter: privy({
     client,
-    loadAccounts: async () => await requestPrivyAccounts(),
+    loadAccounts: async ({ client }) => {
+      await signInWithPrivyEmail(client.auth)
+    },
     rdns: 'com.example.wallet', // [!code focus]
   }),
 })
@@ -225,7 +226,7 @@ When `publicKey` is present, the adapter validates that it matches `address` and
 
 ## Client Shape
 
-`privy.Client` is structural. `Privy` from `@privy-io/js-sdk-core` satisfies this directly, and React apps can provide the same shape with hook-backed state.
+`privy.Client` is structural. `Privy` from `@privy-io/js-sdk-core` satisfies this directly. React apps should prefer `privyReact()` unless they need to customize the bridge.
 
 ```ts
 import { privy } from 'accounts'

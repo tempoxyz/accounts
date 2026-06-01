@@ -7,7 +7,7 @@ import { Cards, Card } from 'vocs'
 
 # Privy Adapter
 
-The Privy adapter is for apps that want Privy to own authentication, session state, and embedded wallets while plugging into Tempo account features. Prefer `@privy-io/react-auth` for React apps because Privy's hooks can provide the wallet public key and raw signer the adapter needs to build a full Tempo viem account.
+The Privy adapter is for apps that want Privy to own authentication, session state, and embedded wallets while plugging into Tempo account features. React apps should use `privyReact` from `accounts/react/privy`; it wires Privy's hooks into the core adapter and builds a full Tempo viem account when Privy exposes a public key.
 
 Use it when you want:
 
@@ -17,16 +17,16 @@ Use it when you want:
 
 ## Usage
 
-Wrap your app with `PrivyProvider`, configure embedded Ethereum wallet creation, and mount a small bridge component that resolves Accounts SDK connect requests with Privy's `toViemAccount({ wallet })` result plus the matching wallet public key.
+Wrap your app with `PrivyProvider`, configure embedded Ethereum wallet creation, and mount `PrivyAccountsBridge` inside the same React tree. Then create the provider with `privyReact()`.
 
 :::code-group
 
 ```tsx [main.tsx]
 import { PrivyProvider } from '@privy-io/react-auth'
+import { PrivyAccountsBridge } from 'accounts/react/privy'
 import { createRoot } from 'react-dom/client'
 
 import { App } from './App.js'
-import { PrivyAccountsBridge } from './PrivyAccountsBridge.js'
 
 createRoot(document.getElementById('root')!).render(
   <PrivyProvider
@@ -44,113 +44,27 @@ createRoot(document.getElementById('root')!).render(
 ```
 
 ```ts [provider.ts]
-import { Provider, privy } from 'accounts'
-
-import {
-  privyReactClient,
-  requestPrivyAccounts,
-} from './privy-react-bridge.js'
+import { Provider } from 'accounts'
+import { privyReact } from 'accounts/react/privy'
 
 export const provider = Provider.create({
-  adapter: privy({
-    client: privyReactClient,
-    loadAccounts: async () => await requestPrivyAccounts(),
-  }),
+  adapter: privyReact(),
 })
-```
-
-```tsx [PrivyAccountsBridge.tsx]
-import { type User, toViemAccount, useLogin, usePrivy, useWallets } from '@privy-io/react-auth'
-import { useEffect, useRef } from 'react'
-
-import {
-  rejectPrivyAccounts,
-  resolvePrivyAccounts,
-  syncPrivyReactState,
-  usePrivyAccountsRequest,
-} from './privy-react-bridge.js'
-
-export function PrivyAccountsBridge() {
-  const privy = usePrivy()
-  const wallets = useWallets()
-  const request = usePrivyAccountsRequest()
-  const pending = useRef(false)
-  const login_started = useRef(false)
-  const login = useLogin({
-    onError(error) {
-      login_started.current = false
-      rejectPrivyAccounts(new Error(String(error)))
-    },
-  })
-
-  useEffect(() => {
-    syncPrivyReactState({ privy, wallets })
-  }, [privy, wallets])
-
-  useEffect(() => {
-    if (!request || pending.current || !privy.ready) return
-
-    if (!privy.authenticated) {
-      if (!login_started.current) {
-        login_started.current = true
-        login.login()
-      }
-      return
-    }
-
-    login_started.current = false
-    if (!wallets.ready) return
-
-    pending.current = true
-    void (async () => {
-      try {
-        const embedded = wallets.wallets.filter(
-          (wallet) =>
-            wallet.type === 'ethereum' &&
-            (wallet.walletClientType === 'privy' ||
-              wallet.walletClientType === 'privy-v2'),
-        )
-        resolvePrivyAccounts(
-          await Promise.all(
-            embedded.map(async (wallet) => {
-              const account = await toViemAccount({ wallet })
-              const publicKey = getPublicKey(privy.user, wallet.address)
-              return { ...account, ...(publicKey ? { publicKey } : {}) }
-            }),
-          ),
-        )
-      } catch (error) {
-        rejectPrivyAccounts(error instanceof Error ? error : new Error(String(error)))
-      } finally {
-        pending.current = false
-      }
-    })()
-  }, [login, privy.authenticated, privy.ready, request, wallets.ready, wallets.wallets])
-
-  return null
-}
-
-function getPublicKey(user: User | null | undefined, address: string) {
-  return user?.linkedAccounts.find(
-    (account) =>
-      account.type === 'wallet' &&
-      account.chainType === 'ethereum' &&
-      account.address.toLowerCase() === address.toLowerCase(),
-  )?.publicKey
-}
 ```
 
 :::
 
 :::tip
-The playground has the complete bridge, including the structural client used for silent restore and disconnect. See `playgrounds/web/src/privyReactStore.ts` and `playgrounds/web/src/PrivyReactBridge.tsx`.
+`PrivyAccountsBridge` is a React boundary. It exists because Privy's `usePrivy`, `useWallets`, and `useLogin` hooks can only run under `PrivyProvider`, while the Accounts SDK provider is plain TypeScript.
 :::
 
 ## Account Selection
 
-By default, all embedded Ethereum wallets on the Privy user are connected. Return addresses from `createAccount` or `loadAccounts` only when you want to select or order the accounts exposed through the provider.
+With `privyReact()`, all embedded Ethereum wallets on the Privy user are connected. Use the core `privy` adapter directly when you need to select or order the accounts exposed through the provider.
 
 ```ts
+import { Provider, privy } from 'accounts'
+
 const provider = Provider.create({
   adapter: privy({
     client,
@@ -159,7 +73,7 @@ const provider = Provider.create({
 })
 ```
 
-React integrations should return account objects with a public key and raw signer instead of only returning addresses when possible. Privy's `toViemAccount({ wallet })` provides the raw signer, and the wallet public key can be read from Privy's authenticated user state.
+Advanced React integrations should return account objects with a public key and raw signer instead of only returning addresses when possible. Privy's `toViemAccount({ wallet })` provides the raw signer, and the wallet public key can be read from Privy's authenticated user state.
 
 ```ts
 import { toViemAccount } from '@privy-io/react-auth'
