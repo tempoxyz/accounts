@@ -41,6 +41,18 @@ export function PrivyAccountsBridge() {
   })
 
   useEffect(() => {
+    bridge_mounts += 1
+
+    return () => {
+      bridge_mounts = Math.max(bridge_mounts - 1, 0)
+      if (bridge_mounts === 0)
+        rejectPrivyAccounts(
+          new Error('PrivyAccountsBridge unmounted before Privy returned accounts.'),
+        )
+    }
+  }, [])
+
+  useEffect(() => {
     const keys = getPublicKeys(privy.user)
 
     setPrivyReactState({
@@ -137,6 +149,7 @@ let state: PrivyReactState = {
   wallets: [],
   walletsReady: false,
 }
+let bridge_mounts = 0
 const listeners = new Set<() => void>()
 const ready_listeners = new Set<() => void>()
 const wallets_ready_listeners = new Set<() => void>()
@@ -204,6 +217,7 @@ function usePrivyAccountsRequest() {
 }
 
 function requestPrivyAccounts() {
+  if (bridge_mounts === 0) throw createMissingBridgeError()
   if (request) request.reject(new Error('Another Privy React request is already active.'))
 
   return new Promise<Exclude<core_privy.AccountSelection, void>>((resolve, reject) => {
@@ -254,6 +268,10 @@ function emitReady() {
 function emitWalletsReady() {
   for (const listener of wallets_ready_listeners) listener()
   wallets_ready_listeners.clear()
+}
+
+function createMissingBridgeError() {
+  return new Error('PrivyAccountsBridge must be mounted under PrivyProvider to use privyReact().')
 }
 
 function getPublicKeys(user: User | null | undefined) {
