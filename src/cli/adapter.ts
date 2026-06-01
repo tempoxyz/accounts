@@ -14,7 +14,6 @@ import { KeyAuthorization } from 'ox/tempo'
 import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 import * as z from 'zod/mini'
 
-import * as AccessKey from '../core/AccessKey.js'
 import * as Adapter from '../core/Adapter.js'
 import * as AccessKeyTransaction from '../core/internal/AccessKeyTransaction.js'
 import * as CliAuth from '../server/CliAuth.js'
@@ -44,11 +43,10 @@ export function cli(options: cli.Options): Adapter.Adapter {
       const deserialized = KeyAuthorization.deserialize(entry.keyAuthorization)
       if (!deserialized.signature) throw new Error('Managed access key is missing a signature.')
       const keyAuthorization = deserialized as KeyAuthorization.Signed
-      AccessKey.add({
+      await store.accessKeys.add({
         account: address,
         authorization: keyAuthorization,
         privateKey: entry.key,
-        store,
       })
 
       return entry
@@ -104,11 +102,10 @@ export function cli(options: cli.Options): Adapter.Adapter {
       if (!managedKey) return
 
       const signed = KeyAuthorization.fromRpc(z.encode(CliAuth.keyAuthorization, keyAuthorization))
-      AccessKey.add({
+      await store.accessKeys.add({
         account: address,
         authorization: signed,
         privateKey: managedKey.key,
-        store,
       })
 
       await Keyring.upsert(

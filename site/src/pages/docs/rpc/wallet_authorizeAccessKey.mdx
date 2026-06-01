@@ -33,6 +33,11 @@ type Request = {
       /** Window length in seconds. Omit for an absolute (non-resetting) cap. */
       period?: number
     }[]
+    /**
+     * Private key material to keep in SDK storage. The SDK derives `publicKey`
+     * before forwarding the request to a wallet approval surface.
+     */
+    privateKey?: Hex
     /** Public key to authorize. */
     publicKey?: Hex
     /** Per-target call scopes. The key may only call these targets. */
@@ -62,6 +67,8 @@ type ShowDeposit = boolean | {
 Tempo Wallet-hosted approval pages require at least one `limits` entry and one `scopes` entry. Use the `address` field on each scope for the target contract; malformed scope entries are rejected before approval.
 
 Set `showDeposit` to `true` or funding hints to show the optional deposit picker before the wallet returns the authorization result.
+
+`privateKey` is an SDK convenience for locally managed access keys. Adapters that show a wallet approval surface derive and forward public material, then store the private key through the provider's key material storage after authorization. Do not send private key material to wallet-hosted endpoints directly.
 
 ## Response
 

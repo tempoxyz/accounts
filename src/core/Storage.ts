@@ -3,29 +3,47 @@ import { Json } from 'ox'
 
 import type { MaybePromise } from '../internal/types.js'
 
-/** Pluggable storage adapter for persisting provider state. */
+const supportsStructuredClone = Symbol.for('accounts.storage.supportsStructuredClone')
+
+/** Pluggable storage adapter. */
 export type Storage = {
+  /** Loads a stored value. */
   getItem: <value>(name: string) => MaybePromise<value | null>
+  /** Saves a stored value. */
   setItem: (name: string, value: unknown) => MaybePromise<void>
+  /** Removes a stored value. */
   removeItem: (name: string) => MaybePromise<void>
 }
+
+type StructuredStorage = Storage & { [supportsStructuredClone]?: true | undefined }
 
 /** Creates a storage adapter from a custom implementation, optionally scoping all keys under a prefix. */
 export function from(storage: Storage, options: from.Options = {}): Storage {
   const key = options.key ?? 'tempo'
   const prefix = `${key}.`
-  return {
-    getItem: (name) => storage.getItem(`${prefix}${name}`),
-    setItem: (name, value) => storage.setItem(`${prefix}${name}`, value),
-    removeItem: (name) => storage.removeItem(`${prefix}${name}`),
+  const scoped = {
+    getItem: <value>(name: string) => storage.getItem<value>(`${prefix}${name}`),
+    setItem: (name: string, value: unknown) => storage.setItem(`${prefix}${name}`, value),
+    removeItem: (name: string) => storage.removeItem(`${prefix}${name}`),
   }
+  if (canStructuredClone(storage)) return markStructuredClone(scoped)
+  return scoped
 }
 
 export declare namespace from {
+  /** Options for {@link from}. */
   type Options = {
     /** Key prefix for all stored items. @default "tempo" */
     key?: string | undefined
   }
+}
+
+function canStructuredClone(storage: Storage): boolean {
+  return (storage as StructuredStorage)[supportsStructuredClone] === true
+}
+
+function markStructuredClone(storage: Storage): Storage {
+  return Object.assign(storage, { [supportsStructuredClone]: true as const })
 }
 
 /**
@@ -34,20 +52,22 @@ export declare namespace from {
  * via `Promise.allSettled`).
  */
 export function combine(...storages: readonly Storage[]): Storage {
-  return {
+  const storage = {
     async getItem<value>(name: string) {
       const results = await Promise.allSettled(storages.map((x) => x.getItem<value>(name)))
       const result = results.find((x) => x.status === 'fulfilled' && x.value != null)
       if (result?.status !== 'fulfilled') return null
       return result.value as value
     },
-    async removeItem(name) {
+    async removeItem(name: string) {
       await Promise.allSettled(storages.map((x) => x.removeItem(name)))
     },
-    async setItem(name, value) {
+    async setItem(name: string, value: unknown) {
       await Promise.allSettled(storages.map((x) => x.setItem(name, value)))
     },
   }
+  if (storages.length > 0 && storages.every(canStructuredClone)) return markStructuredClone(storage)
+  return storage
 }
 
 /** Creates a `document.cookie`-backed storage adapter. Uses `SameSite=None; Secure` with a 1-year expiry. Deep objects are flattened into individual cookies to stay within the 4KB-per-cookie browser limit. */
@@ -139,7 +159,7 @@ export declare namespace cookie {
 /** Creates an IndexedDB-backed storage adapter. Stores raw values (no JSON serialization). */
 export function idb(options: idb.Options = {}): Storage {
   const store = typeof indexedDB !== 'undefined' ? createStore('tempo', 'store') : undefined
-  return from(
+  const storage = from(
     {
       async getItem(name) {
         const value = await get(name, store)
@@ -155,6 +175,7 @@ export function idb(options: idb.Options = {}): Storage {
     },
     options,
   )
+  return markStructuredClone(storage)
 }
 
 export declare namespace idb {
@@ -192,7 +213,7 @@ export declare namespace localStorage {
 /** Creates an in-memory storage adapter. Useful for SSR and tests. */
 export function memory(options: memory.Options = {}): Storage {
   const store = new Map<string, unknown>()
-  return from(
+  const storage = from(
     {
       getItem(name) {
         return (store.get(name) as any) ?? null
@@ -206,6 +227,7 @@ export function memory(options: memory.Options = {}): Storage {
     },
     options,
   )
+  return markStructuredClone(storage)
 }
 
 export declare namespace memory {

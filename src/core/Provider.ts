@@ -34,7 +34,6 @@ import { Account as TempoAccount, Actions } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 import * as z from 'zod/mini'
 
-import * as AccessKey from './AccessKey.js'
 import * as Account from './Account.js'
 import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
@@ -94,6 +93,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     chains = [tempo, tempoModerato, tempoDevnet],
     maxAccounts,
     persistCredentials,
+    keyMaterialStorage,
     relay,
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
@@ -127,6 +127,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const store = Store.create({
     chainId: defaultChain.id,
+    keyMaterialStorage,
     maxAccounts,
     persistCredentials,
     schema: adapter.schema,
@@ -1250,12 +1251,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         credentials: 'include',
                       }).catch(() => {})
                     await actions.disconnect?.()
-                    store.setState({
-                      accessKeys: [],
-                      accounts: [],
-                      activeAccount: 0,
-                      auth: undefined,
-                    })
+                    await store.disconnect()
                     return
                   }
 
@@ -1466,13 +1462,12 @@ export function create(options: create.Options = {}): create.ReturnType {
         if (!address) return 'missing'
         const chainId = options.chainId ?? state.chainId
         const { accessKey, calls } = options
-        return await AccessKey.getStatus({
+        return await store.accessKeys.getStatus({
           account: address,
           ...(accessKey ? { accessKey } : {}),
           ...(calls ? { calls } : {}),
           chainId,
           client: provider.getClient({ chainId }),
-          store,
         })
       },
       getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
@@ -1583,6 +1578,8 @@ export declare namespace create {
     mpp?: boolean | mpp.Options | undefined
     /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
     persistCredentials?: boolean | undefined
+    /** Storage adapter for exported access-key material. */
+    keyMaterialStorage?: Storage.Storage | undefined
     /**
      * Base URL for a wallet relay endpoint. When set, every chain's transport
      * defaults to `http(`${relay}/${chainId}`)` — a single endpoint that

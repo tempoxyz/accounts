@@ -90,12 +90,17 @@ export function isSafari(): boolean {
   return ua.includes('safari') && !ua.includes('chrome')
 }
 
-/** Cached iframe singleton — keyed by host, reused across setup calls. */
-let cached: { host: string; instance: Instance } | undefined
+type Cached = {
+  host: string
+  instance: Instance
+  refs: {
+    fallback: Instance
+    store: Store.Store
+  }
+}
 
-/** Mutable refs swapped on re-entry so the singleton always uses the latest caller's state. */
-let store: Store.Store | undefined
-let fallback: Instance | undefined
+/** Cached iframe singleton — keyed by host, reused across setup calls. */
+let cached: Cached | undefined
 
 /** Creates an iframe dialog that embeds the auth app in a `<dialog>` element. */
 export function iframe(): Dialog {
@@ -106,10 +111,10 @@ export function iframe(): Dialog {
 
     // Reuse existing iframe if the host matches — just swap the store/fallback refs.
     if (cached && cached.host === host) {
-      store = parameters.store
+      cached.refs.store = parameters.store
 
-      fallback?.destroy()
-      fallback = popup()(parameters)
+      cached.refs.fallback.destroy()
+      cached.refs.fallback = popup()(parameters)
       cached.instance.syncTheme(parameters.theme)
       return cached.instance
     }
@@ -117,15 +122,17 @@ export function iframe(): Dialog {
     // Different host — tear down old iframe and create fresh.
     cached?.instance.destroy()
 
-    store = parameters.store
-    fallback = popup()(parameters)
+    const refs = {
+      fallback: popup()(parameters),
+      store: parameters.store,
+    }
 
     let open = false
 
     const referrer = getReferrer()
 
     const hostUrl = new URL(host)
-    hostUrl.searchParams.set('chainId', String(store.getState().chainId))
+    hostUrl.searchParams.set('chainId', String(refs.store.getState().chainId))
     hostUrl.searchParams.set('mode', 'iframe')
     if (referrer.icon) {
       if (typeof referrer.icon === 'string') hostUrl.searchParams.set('icon', referrer.icon)
@@ -213,10 +220,10 @@ export function iframe(): Dialog {
         readyResult = result
         if (result.colorScheme) frame.style.colorScheme = result.colorScheme
         // Ask the wallet to verify the SDK's stored accounts are still valid.
-        syncAccounts(m)
+        syncAccounts(m, refs.store)
       })
       m.on('sync', ({ valid }) => {
-        if (valid === false) store?.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
+        if (valid === false) void refs.store.disconnect()
       })
       m.on('switch-mode', () => {
         hideDialog()
@@ -224,7 +231,8 @@ export function iframe(): Dialog {
         open = false
         switchedToPopup = true
 
-        if (sync_displayed && requests_displayed.length > 0) fallback?.syncRequests(sync_displayed)
+        if (sync_displayed && requests_displayed.length > 0)
+          refs.fallback.syncRequests(sync_displayed)
       })
       return m
     }
@@ -318,7 +326,7 @@ export function iframe(): Dialog {
 
     const instance: Instance = {
       close() {
-        fallback!.close()
+        refs.fallback.close()
         open = false
 
         hideDialog()
@@ -327,19 +335,16 @@ export function iframe(): Dialog {
       destroy() {
         if (cached?.instance === instance) cached = undefined
 
-        fallback?.close()
+        refs.fallback.close()
         open = false
 
         activatePage()
         hideDialog()
 
-        fallback?.destroy()
+        refs.fallback.destroy()
         messenger.destroy()
         root.remove()
         inertObserver.disconnect()
-
-        store = undefined
-        fallback = undefined
       },
       open() {
         if (open) return
@@ -353,7 +358,7 @@ export function iframe(): Dialog {
         sync_displayed = sync
         requests_displayed = requests
         if (switchedToPopup) {
-          fallback!.syncRequests(sync)
+          refs.fallback.syncRequests(sync)
           return
         }
 
@@ -364,7 +369,7 @@ export function iframe(): Dialog {
           isSafari() &&
           requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
         ) {
-          fallback!.syncRequests(sync)
+          refs.fallback.syncRequests(sync)
           return
         }
 
@@ -384,7 +389,7 @@ export function iframe(): Dialog {
               'To enable the iframe dialog, add your hostname to the trusted hosts list.',
             ].join('\n'),
           )
-          fallback!.syncRequests(sync)
+          refs.fallback.syncRequests(sync)
         } else {
           const requiresConfirm = requests.some((x) => x.status === 'pending')
           if (!open && requiresConfirm) this.open()
@@ -401,7 +406,7 @@ export function iframe(): Dialog {
       },
     }
 
-    cached = { host, instance }
+    cached = { host, instance, refs }
     return instance
   })
 }
@@ -554,8 +559,7 @@ export function noop(): Dialog {
 }
 
 /** Sends stored account addresses to the wallet for session validation. */
-function syncAccounts(messenger: Messenger.Bridge) {
-  if (!store) return
+function syncAccounts(messenger: Messenger.Bridge, store: Store.Store) {
   const { accounts } = store.getState()
   if (accounts.length === 0) return
   messenger.send('sync', { addresses: accounts.map((a) => a.address) })

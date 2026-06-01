@@ -148,6 +148,11 @@ declare function authorizeAccessKey(): {
   /** TIP-20 spending limits. Optional `period` (seconds) makes the limit roll over each period. */
   limits?: { limit: bigint; period?: number; token: Address }[] | undefined
   /**
+   * Private key material to keep in SDK storage. Dialog-style adapters derive
+   * `publicKey` before forwarding the request to the wallet approval surface.
+   */
+  privateKey?: Hex | undefined
+  /**
    * External public key to authorize. When provided, no key pair is generated —
    * the caller holds the signing material.
    */
@@ -182,6 +187,8 @@ const provider = Provider.create({
 You can also pre-derive the access key locally by passing `publicKey` or `address` with `keyType`. The wallet still authorizes that key during `wallet_connect`; the app keeps the signing material.
 
 For `keyType: 'secp256k1'`, generate and store the private key in your app or backend, then pass either the derived `address` or the `publicKey` in `authorizeAccessKey`.
+
+Alternatively, pass `privateKey` to let the SDK derive `publicKey` and store the private key through [`keyMaterialStorage`](#keymaterialstorage). Dialog-style adapters do not forward `privateKey` to the wallet approval surface.
 
 ```ts twoslash
 // @noErrors
@@ -332,6 +339,24 @@ import { Provider, Storage } from 'accounts'
 
 const provider = Provider.create({
   storage: Storage.memory(), // [!code focus]
+})
+```
+
+### keyMaterialStorage
+
+- **Type:** `Storage`
+- **Default:** `undefined`
+
+Optional storage for exported access-key material. When provided, access-key metadata is persisted in `storage` and private key material is persisted separately in `keyMaterialStorage`.
+
+```ts twoslash
+import { Provider, Storage } from 'accounts'
+
+declare const secureStorage: Storage.Storage
+
+const provider = Provider.create({
+  storage: Storage.localStorage(),
+  keyMaterialStorage: secureStorage, // [!code focus]
 })
 ```
 

@@ -4,16 +4,18 @@ import { persist } from 'zustand/middleware'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { createStore } from 'zustand/vanilla'
 
-import type { AccessKey } from './AccessKey.js'
+import * as core_AccessKey from './AccessKey.js'
 import type { Store as Account } from './Account.js'
 import * as Storage from './Storage.js'
 
-export type { AccessKey, Account }
+const supportsStructuredClone = Symbol.for('accounts.storage.supportsStructuredClone')
+
+export type { Account }
 
 /** Reactive state for the provider. */
 export type State = {
   /** Stored access keys. */
-  accessKeys: readonly AccessKey[]
+  accessKeys: readonly core_AccessKey.AccessKey[]
   /** Connected accounts. */
   accounts: readonly Account[]
   /** Index of the active account. */
@@ -37,7 +39,7 @@ export type State = {
 }
 
 /** Provider state persisted as a refresh snapshot. */
-export type Persisted = {
+type Persisted = {
   /** Stored access keys. */
   accessKeys?: readonly unknown[] | undefined
   /** Connected accounts. */
@@ -54,10 +56,18 @@ export type Persisted = {
 }
 
 /** Zustand vanilla store with `subscribeWithSelector` and `persist` middleware. */
-export type Store = Mutate<
+type ZustandStore = Mutate<
   StoreApi<State>,
   [['zustand/subscribeWithSelector', never], ['zustand/persist', Persisted]]
 >
+
+/** Provider store facade. */
+export type Store = ZustandStore & {
+  /** Store-bound access-key operations. */
+  accessKeys: ReturnType<typeof core_AccessKey.createManager>
+  /** Disconnects all accounts and clears locally signable access-key material. */
+  disconnect: () => Promise<void>
+}
 
 /** Options for {@link create}. */
 export type Options = {
@@ -73,6 +83,8 @@ export type Options = {
   maxAccounts?: number | undefined
   /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
   persistCredentials?: boolean | undefined
+  /** Storage adapter for exported access-key material. */
+  keyMaterialStorage?: Storage.Storage | undefined
   /** Storage adapter for persistence. */
   storage?: Storage.Storage | undefined
 }
@@ -85,13 +97,15 @@ export function create(options: Options): Store {
     chainId,
     maxAccounts,
     persistCredentials = true,
+    keyMaterialStorage,
     schema,
     storage = typeof window !== 'undefined'
       ? Storage.idb({ key: 'tempo' })
       : Storage.memory({ key: 'tempo' }),
   } = options
+  const storage_keyMaterial = persistCredentials ? keyMaterialStorage : undefined
 
-  return createStore(
+  const state = createStore(
     subscribeWithSelector(
       persist<State, [], [], Persisted>(
         () => ({
@@ -103,18 +117,41 @@ export function create(options: Options): Store {
         {
           merge: (persisted, current) => hydrate(persisted, current, { schema }),
           name: 'store',
-          partialize: (state) => serialize(state, { maxAccounts, persistCredentials }),
+          partialize: (state) =>
+            serialize(state, {
+              maxAccounts,
+              persistCredentials,
+              splitKeyMaterial: Boolean(storage_keyMaterial),
+              structuredClone: canStructuredClone(storage),
+            }),
           storage,
           version: 0,
         },
       ),
     ),
-  )
+  ) as ZustandStore
+  const store = state as Store
+  const options_accessKey = {
+    keyMaterialStorage: storage_keyMaterial,
+    state,
+  }
+  store.accessKeys = core_AccessKey.createManager(options_accessKey)
+  store.disconnect = async () => {
+    const clear = store.accessKeys.clear()
+    state.setState({ accounts: [], activeAccount: 0, auth: undefined })
+    await clear
+  }
+  return store
 }
 
 /** Converts runtime provider state into the persisted refresh snapshot. */
-export function serialize(state: State, options: serialize.Options = {}): Persisted {
-  const { maxAccounts, persistCredentials = true } = options
+function serialize(state: State, options: serialize.Options = {}): Persisted {
+  const {
+    maxAccounts,
+    persistCredentials = true,
+    splitKeyMaterial = false,
+    structuredClone = false,
+  } = options
   const accounts =
     maxAccounts && state.accounts.length > maxAccounts
       ? state.accounts.slice(0, maxAccounts)
@@ -122,24 +159,34 @@ export function serialize(state: State, options: serialize.Options = {}): Persis
   return {
     accounts,
     activeAccount: state.activeAccount,
-    ...(persistCredentials ? { accessKeys: state.accessKeys } : {}),
+    ...(persistCredentials
+      ? {
+          accessKeys: state.accessKeys.map((accessKey) =>
+            serializeAccessKey(accessKey, { splitKeyMaterial, structuredClone }),
+          ),
+        }
+      : {}),
     ...(state.auth ? { auth: state.auth } : {}),
     chainId: state.chainId,
   }
 }
 
-export declare namespace serialize {
+declare namespace serialize {
   /** Options for {@link serialize}. */
   type Options = {
     /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded. */
     maxAccounts?: number | undefined
     /** Whether to persist credentials and access keys to storage. @default true */
     persistCredentials?: boolean | undefined
+    /** Whether locally signable material is stored outside provider state. @default false */
+    splitKeyMaterial?: boolean | undefined
+    /** Whether provider state can persist structured-clone values like WebCrypto key pairs. @default false */
+    structuredClone?: boolean | undefined
   }
 }
 
 /** Restores runtime provider state from a persisted refresh snapshot. */
-export function hydrate(persisted: unknown, current: State, options: hydrate.Options = {}): State {
+function hydrate(persisted: unknown, current: State, options: hydrate.Options = {}): State {
   const state = persisted && typeof persisted === 'object' ? (persisted as Partial<Persisted>) : {}
   const accounts_persisted = Array.isArray(state.accounts)
     ? state.accounts.filter(isStoredAccount)
@@ -167,7 +214,7 @@ export function hydrate(persisted: unknown, current: State, options: hydrate.Opt
   }
 }
 
-export declare namespace hydrate {
+declare namespace hydrate {
   /** Options for {@link hydrate}. */
   type Options = {
     /**
@@ -181,7 +228,7 @@ export declare namespace hydrate {
 
 function normalizeAccessKeys(accessKeys: Persisted['accessKeys']) {
   if (!accessKeys) return undefined
-  return accessKeys.filter((key): key is AccessKey => {
+  return accessKeys.filter((key): key is core_AccessKey.AccessKey => {
     if (!key || typeof key !== 'object') return false
     const value = key as {
       access?: unknown
@@ -204,6 +251,28 @@ function normalizeAccessKeys(accessKeys: Persisted['accessKeys']) {
 function isStoredAccount(account: unknown): account is Account {
   if (!account || typeof account !== 'object') return false
   return typeof (account as { address?: unknown }).address === 'string'
+}
+
+function serializeAccessKey(
+  accessKey: core_AccessKey.AccessKey,
+  options: { splitKeyMaterial: boolean; structuredClone: boolean },
+): core_AccessKey.AccessKey {
+  const { privateKey: _privateKey, ...withoutPrivateKey } =
+    accessKey as core_AccessKey.AccessKey & { privateKey?: unknown }
+  const state = options.splitKeyMaterial ? withoutPrivateKey : accessKey
+  // WebCrypto key pairs are opaque/non-extractable, so structured-clone stores can keep them inline.
+  if (options.structuredClone) return state as core_AccessKey.AccessKey
+  const { keyPair: _keyPair, ...metadata } = state as core_AccessKey.AccessKey & {
+    keyPair?: unknown
+  }
+  return metadata as core_AccessKey.AccessKey
+}
+
+function canStructuredClone(storage: Storage.Storage): boolean {
+  return (
+    (storage as Storage.Storage & { [supportsStructuredClone]?: true })[supportsStructuredClone] ===
+    true
+  )
 }
 
 /**

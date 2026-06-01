@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Address, Hex } from 'ox'
 
-import type { AccessKey } from '../core/Store.js'
+import type { AccessKey } from '../core/AccessKey.js'
 
 /** Managed CLI access key persisted in `~/.tempo/wallet/keys.toml`. */
 export type Entry = {
