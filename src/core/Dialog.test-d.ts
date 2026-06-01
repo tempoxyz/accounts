@@ -1,7 +1,7 @@
 import { describe, expectTypeOf, test } from 'vp/test'
 
 import type * as Dialog from './Dialog.js'
-import type * as RemoteRequest from './internal/RemoteRequest.js'
+import type * as Remote from './Remote.js'
 import type * as Store from './Store.js'
 
 describe('Dialog', () => {
@@ -17,16 +17,16 @@ describe('Dialog', () => {
       }) => void
       theme?: Dialog.Theme | undefined
     }>()
-    expectTypeOf<RemoteRequest.Sync>().toEqualTypeOf<{
+    expectTypeOf<Remote.Sync>().toEqualTypeOf<{
       account: { address: string } | undefined
       chainId: number
-      requests: readonly RemoteRequest.Request[]
+      requests: readonly Remote.Request[]
     }>()
     expectTypeOf<Dialog.Instance>().toMatchTypeOf<{
       open: () => void
       close: () => void
       destroy: () => void
-      syncRequests: (sync: RemoteRequest.Sync) => Promise<void>
+      syncRequests: (sync: Remote.Sync) => Promise<void>
     }>()
   })
 })

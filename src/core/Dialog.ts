@@ -1,6 +1,6 @@
-import type * as RemoteRequest from './internal/RemoteRequest.js'
 import * as IO from './IntersectionObserver.js'
 import * as Messenger from './Messenger.js'
+import type * as Remote from './Remote.js'
 import type * as Store from './Store.js'
 import * as TrustedHosts from './TrustedHosts.js'
 
@@ -21,7 +21,7 @@ export type Instance = {
   /** Open the dialog (show iframe / open popup). */
   open: () => void
   /** Sync the pending request queue to the remote auth app. */
-  syncRequests: (sync: RemoteRequest.Sync) => Promise<void>
+  syncRequests: (sync: Remote.Sync) => Promise<void>
   /** Update the visual theme at runtime. */
   syncTheme: (theme: Theme | undefined) => void
 }
@@ -190,8 +190,8 @@ export function iframe(): Dialog {
     root.appendChild(frame)
 
     let readyResult: Messenger.ReadyOptions | undefined
-    let sync_displayed: RemoteRequest.Sync | undefined
-    let requests_displayed: readonly RemoteRequest.Request[] = []
+    let sync_displayed: Remote.Sync | undefined
+    let requests_displayed: readonly Remote.Request[] = []
     let switchedToPopup = false
 
     function rejectDisplayedRequests() {
@@ -416,7 +416,7 @@ export function popup(options: popup.Options = {}): Dialog {
     const { host, store } = parameters
 
     let win: Window | null = null
-    let requests_displayed: readonly RemoteRequest.Request[] = []
+    let requests_displayed: readonly Remote.Request[] = []
 
     function rejectDisplayedRequests() {
       parameters.onReject(requests_displayed.map((x) => x.request.id))

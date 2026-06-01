@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Dialog from '../Dialog.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
-import type * as RemoteRequest from '../internal/RemoteRequest.js'
-import * as RemoteSession from '../internal/RemoteSession.js'
+import * as RemoteRequests from '../internal/RemoteRequests.js'
+import type * as Remote from '../Remote.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { dialog } from './dialog.js'
@@ -38,7 +38,6 @@ function setup() {
   const storage = Storage.memory()
   const store = Store.create({ chainId: tempoLocalnet.id, storage })
   const dialog_ = createDialog()
-  RemoteSession.reset(host)
   const adapter = dialog({ dialog: dialog_.dialog, host })({
     getAccount: (options) => {
       if (options?.signable) throw new ox_Provider.UnauthorizedError({ message: 'No signer.' })
@@ -48,80 +47,50 @@ function setup() {
     storage,
     store,
   })
-  return { adapter, requestStore: RemoteSession.get(host).store, store }
+  return { adapter, dialog: dialog_, store }
 }
 
 function createDialog() {
+  let parameters: Dialog.SetupFn.Parameters | undefined
+  const syncs: Remote.Sync[] = []
+  const synced: (readonly Remote.Request[])[] = []
   return {
-    dialog: Dialog.define({ name: 'test' }, () => ({
-      close() {},
-      destroy() {},
-      open() {},
-      async syncRequests() {},
-      syncTheme() {},
-    })),
-  }
-}
-
-function createTrackedDialog() {
-  const syncs: RemoteRequest.Sync[] = []
-  const synced: (readonly RemoteRequest.Request[])[] = []
-  return {
-    dialog: Dialog.define({ name: 'tracked' }, () => ({
+    dialog: Dialog.define({ name: 'test' }, (options) => ({
       close() {},
       destroy() {},
       open() {},
       async syncRequests(sync) {
+        parameters = options
         syncs.push(sync)
         synced.push(sync.requests)
       },
       syncTheme() {},
     })),
+    async takeRequest() {
+      await vi.waitFor(() => {
+        if (!syncs[0]?.requests[0]) throw new Error('request not synced')
+      })
+      return syncs[0]!.requests[0]!
+    },
+    failure(request: Remote.Request, error: { code: number; message: string }) {
+      parameters!.onResponse({ error, id: request.request.id })
+    },
+    success(request: Remote.Request, result: unknown) {
+      parameters!.onResponse({ id: request.request.id, result })
+    },
     syncs,
     synced,
   }
 }
 
-async function takeRequest(store: ReturnType<typeof RemoteSession.get>['store']) {
-  await vi.waitFor(() => {
-    if (!store.getState().requestQueue[0]) throw new Error('request not queued')
-  })
-  return store.getState().requestQueue[0]!
-}
-
-function success(queued: Awaited<ReturnType<typeof takeRequest>>, result: unknown) {
-  return {
-    account: queued.account,
-    chainId: queued.chainId,
-    request: queued.request,
-    result,
-    status: 'success' as const,
-    synced: queued.synced,
-  }
-}
-
-function failure(
-  queued: Awaited<ReturnType<typeof takeRequest>>,
-  error: { code: number; message: string },
-) {
-  return {
-    account: queued.account,
-    chainId: queued.chainId,
-    error,
-    request: queued.request,
-    status: 'error' as const,
-    synced: queued.synced,
-  }
-}
-
 describe('dialog', () => {
   beforeEach(() => {
-    RemoteSession.reset(host)
+    RemoteRequests.reset(host)
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
-    RemoteSession.reset(host)
+    RemoteRequests.reset(host)
   })
 
   test('behavior: sendTransaction signs locally when an access key is selected', async () => {
@@ -163,8 +132,6 @@ describe('dialog', () => {
       storage,
       store,
     })
-    const requestStore = RemoteSession.get(host).store
-
     const result = await adapter.actions.sendTransaction(
       {
         calls: [{ data: '0x12345678', to: recipient }],
@@ -199,7 +166,7 @@ describe('dialog', () => {
         },
       ]
     `)
-    expect(requestStore.getState().requestQueue).toMatchInlineSnapshot(`[]`)
+    expect(dialog_.syncs).toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: loadAccounts forwards auth capabilities returned by the dialog', async () => {
@@ -214,7 +181,6 @@ describe('dialog', () => {
       storage,
       store,
     })
-    const requestStore = RemoteSession.get(host).store
     const request = {
       method: 'wallet_connect' as const,
       params: [
@@ -232,23 +198,15 @@ describe('dialog', () => {
 
     const promise = adapter.actions.loadAccounts(undefined, request)
 
-    await vi.waitFor(() => {
-      if (!requestStore.getState().requestQueue[0]) throw new Error('request not queued')
-    })
-
-    const queued = requestStore.getState().requestQueue[0]!
-    requestStore.setState({
-      requestQueue: [
-        success(queued, {
-          accounts: [
-            {
-              address,
-              capabilities: {
-                auth: { token: 'test-token' },
-              },
-            },
-          ],
-        }),
+    const queued = await dialog_.takeRequest()
+    dialog_.success(queued, {
+      accounts: [
+        {
+          address,
+          capabilities: {
+            auth: { token: 'test-token' },
+          },
+        },
       ],
     })
 
@@ -271,8 +229,8 @@ describe('dialog', () => {
     const store_a = Store.create({ chainId: 123, storage })
     store_a.setState({ accounts: [{ address }], activeAccount: 0 })
     const store_b = Store.create({ chainId: 456, storage })
-    const dialog_a = createTrackedDialog()
-    const dialog_b = createTrackedDialog()
+    const dialog_a = createDialog()
+    const dialog_b = createDialog()
     const adapter_a = dialog({ dialog: dialog_a.dialog, host })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
@@ -289,7 +247,6 @@ describe('dialog', () => {
       storage,
       store: store_b,
     })
-    const requestStore = RemoteSession.get(host).store
 
     const promise = adapter_a.actions.sendTransaction(
       {
@@ -309,7 +266,7 @@ describe('dialog', () => {
       },
     )
 
-    const queued = await takeRequest(requestStore)
+    const queued = await dialog_b.takeRequest()
 
     expect(dialog_a.synced).toMatchInlineSnapshot(`[]`)
     expect(dialog_b.synced.map((requests) => requests.map((x) => x.request.method)))
@@ -332,9 +289,7 @@ describe('dialog', () => {
         ]
       `)
 
-    requestStore.setState({
-      requestQueue: [success(queued, '0x1234')],
-    })
+    dialog_b.success(queued, '0x1234')
 
     await expect(promise).resolves.toMatchInlineSnapshot(`"0x1234"`)
     expect(dialog_b.synced.map((requests) => requests.map((x) => x.request.method)))
@@ -353,7 +308,7 @@ describe('dialog', () => {
     const storage = Storage.memory()
     const store_a = Store.create({ chainId: 123, storage })
     store_a.setState({ accounts: [{ address }], activeAccount: 0 })
-    const dialog_a = createTrackedDialog()
+    const dialog_a = createDialog()
     const adapter_a = dialog({ dialog: dialog_a.dialog, host })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
@@ -362,7 +317,6 @@ describe('dialog', () => {
       storage,
       store: store_a,
     })
-    const requestStore = RemoteSession.get(host).store
 
     const promise = adapter_a.actions.sendTransaction(
       {
@@ -382,11 +336,11 @@ describe('dialog', () => {
       },
     )
 
-    const queued = await takeRequest(requestStore)
+    const queued = await dialog_a.takeRequest()
     adapter_a.cleanup?.()
 
     const store_b = Store.create({ chainId: 456, storage })
-    const dialog_b = createTrackedDialog()
+    const dialog_b = createDialog()
     const adapter_b = dialog({ dialog: dialog_b.dialog, host })({
       getAccount: () => {
         throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
@@ -416,12 +370,81 @@ describe('dialog', () => {
         ]
       `)
 
-    requestStore.setState({
-      requestQueue: [success(queued, '0x1234')],
-    })
+    dialog_b.success(queued, '0x1234')
 
     await expect(promise).resolves.toMatchInlineSnapshot(`"0x1234"`)
     adapter_b.cleanup?.()
+  })
+
+  test('behavior: resolving one pending request advances the remote queue', async () => {
+    const storage = Storage.memory()
+    const store = Store.create({ chainId: 123, storage })
+    const dialog_ = createDialog()
+    const adapter = dialog({ dialog: dialog_.dialog, host })({
+      getAccount: () => {
+        throw new ox_Provider.UnauthorizedError({ message: 'No local signer.' })
+      },
+      getClient: () => ({}) as never,
+      storage,
+      store,
+    })
+
+    const first = adapter.actions.sendTransaction(
+      {
+        calls: [{ data: '0x11111111', to: recipient }],
+        chainId: 1,
+        from: address,
+      },
+      {
+        method: 'eth_sendTransaction',
+        params: [
+          {
+            calls: [{ data: '0x11111111' as const, to: recipient }],
+            chainId: '0x1' as const,
+            from: address,
+          },
+        ] as const,
+      },
+    )
+    const second = adapter.actions.sendTransaction(
+      {
+        calls: [{ data: '0x22222222', to: recipient }],
+        chainId: 1,
+        from: address,
+      },
+      {
+        method: 'eth_sendTransaction',
+        params: [
+          {
+            calls: [{ data: '0x22222222' as const, to: recipient }],
+            chainId: '0x1' as const,
+            from: address,
+          },
+        ] as const,
+      },
+    )
+
+    const request_1 = await dialog_.takeRequest()
+    dialog_.success(request_1, '0x1')
+
+    await expect(first).resolves.toMatchInlineSnapshot(`"0x1"`)
+    expect(dialog_.synced.map((requests) => requests.map((x) => x.request.id)))
+      .toMatchInlineSnapshot(`
+        [
+          [
+            0,
+          ],
+          [
+            1,
+          ],
+        ]
+      `)
+
+    const request_2 = dialog_.synced.at(-1)![0]!
+    dialog_.success(request_2, '0x2')
+
+    await expect(second).resolves.toMatchInlineSnapshot(`"0x2"`)
+    adapter.cleanup?.()
   })
 
   test('behavior: sendTransaction falls through when no access key is selected', async () => {
@@ -438,7 +461,6 @@ describe('dialog', () => {
       storage,
       store,
     })
-    const requestStore = RemoteSession.get(host).store
     const request = {
       method: 'eth_sendTransaction' as const,
       params: [
@@ -459,14 +481,8 @@ describe('dialog', () => {
       request,
     )
 
-    await vi.waitFor(() => {
-      if (!requestStore.getState().requestQueue[0]) throw new Error('request not queued')
-    })
-
-    const queued = requestStore.getState().requestQueue[0]!
-    requestStore.setState({
-      requestQueue: [success(queued, '0x1234')],
-    })
+    const queued = await dialog_.takeRequest()
+    dialog_.success(queued, '0x1234')
 
     await expect(promise).resolves.toMatchInlineSnapshot(`"0x1234"`)
     expect(lookups).toMatchInlineSnapshot(`[]`)
@@ -494,7 +510,6 @@ describe('dialog', () => {
       storage,
       store,
     })
-    const requestStore = RemoteSession.get(host).store
     const request = {
       method: 'wallet_revokeAccessKey' as const,
       params: [{ accessKeyAddress: recipient, address }] as const,
@@ -505,21 +520,15 @@ describe('dialog', () => {
       request,
     )
 
-    await vi.waitFor(() => {
-      if (!requestStore.getState().requestQueue[0]) throw new Error('request not queued')
-    })
-
-    const queued = requestStore.getState().requestQueue[0]!
-    requestStore.setState({
-      requestQueue: [success(queued, undefined)],
-    })
+    const queued = await dialog_.takeRequest()
+    dialog_.success(queued, undefined)
 
     await expect(promise).resolves.toMatchInlineSnapshot(`undefined`)
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: authorizeAccessKey forwards an external secp256k1 key', async () => {
-    const { adapter, requestStore, store } = setup()
+    const { adapter, dialog, store } = setup()
     const expiry = 123
     const promise = adapter.actions.authorizeAccessKey!(
       { address: recipient, expiry, keyType: 'secp256k1' },
@@ -529,7 +538,7 @@ describe('dialog', () => {
       },
     )
 
-    const queued = await takeRequest(requestStore)
+    const queued = await dialog.takeRequest()
     const request = queued.request as {
       params: [{ address: typeof recipient; expiry: number; keyType: 'secp256k1' }]
     }
@@ -545,9 +554,7 @@ describe('dialog', () => {
         { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
       ),
     )
-    requestStore.setState({
-      requestQueue: [success(queued, { keyAuthorization, rootAddress: address })],
-    })
+    dialog.success(queued, { keyAuthorization, rootAddress: address })
 
     await expect(promise).resolves.toMatchObject({ rootAddress: address })
     expect(params.keyType).toMatchInlineSnapshot(`"secp256k1"`)
@@ -556,25 +563,21 @@ describe('dialog', () => {
   })
 
   test('behavior: authorizeAccessKey generates a p256 key by default', async () => {
-    const { adapter, requestStore, store } = setup()
+    const { adapter, dialog, store } = setup()
     const expiry = 123
     const promise = adapter.actions.authorizeAccessKey!(
       { expiry },
       { method: 'wallet_authorizeAccessKey', params: [{ expiry }] },
     )
 
-    const queued = await takeRequest(requestStore)
+    const queued = await dialog.takeRequest()
     const request = queued.request as {
       params: [{ expiry: number; keyType: 'p256'; publicKey: Hex.Hex }]
     }
     const params = request.params[0]
-    requestStore.setState({
-      requestQueue: [
-        success(queued, {
-          keyAuthorization: createKeyAuthorization(params),
-          rootAddress: address,
-        }),
-      ],
+    dialog.success(queued, {
+      keyAuthorization: createKeyAuthorization(params),
+      rootAddress: address,
     })
 
     await expect(promise).resolves.toMatchObject({ rootAddress: address })
@@ -589,7 +592,7 @@ describe('dialog', () => {
   })
 
   test('behavior: authorizeAccessKey forwards showDeposit', async () => {
-    const { adapter, requestStore } = setup()
+    const { adapter, dialog } = setup()
     const expiry = 123
     const showDeposit = { amount: '50', token: 'USDC' }
     const promise = adapter.actions.authorizeAccessKey!(
@@ -597,7 +600,7 @@ describe('dialog', () => {
       { method: 'wallet_authorizeAccessKey', params: [{ expiry, showDeposit }] },
     )
 
-    const queued = await takeRequest(requestStore)
+    const queued = await dialog.takeRequest()
     const request = queued.request as {
       params: [
         {
@@ -609,13 +612,9 @@ describe('dialog', () => {
       ]
     }
     const params = request.params[0]
-    requestStore.setState({
-      requestQueue: [
-        success(queued, {
-          keyAuthorization: createKeyAuthorization(params),
-          rootAddress: address,
-        }),
-      ],
+    dialog.success(queued, {
+      keyAuthorization: createKeyAuthorization(params),
+      rootAddress: address,
     })
 
     await expect(promise).resolves.toMatchObject({ rootAddress: address })
@@ -628,25 +627,21 @@ describe('dialog', () => {
   })
 
   test('behavior: authorizeAccessKey generates a p256 key when requested', async () => {
-    const { adapter, requestStore, store } = setup()
+    const { adapter, dialog, store } = setup()
     const expiry = 123
     const promise = adapter.actions.authorizeAccessKey!(
       { expiry, keyType: 'p256' },
       { method: 'wallet_authorizeAccessKey', params: [{ expiry, keyType: 'p256' }] },
     )
 
-    const queued = await takeRequest(requestStore)
+    const queued = await dialog.takeRequest()
     const request = queued.request as {
       params: [{ expiry: number; keyType: 'p256'; publicKey: Hex.Hex }]
     }
     const params = request.params[0]
-    requestStore.setState({
-      requestQueue: [
-        success(queued, {
-          keyAuthorization: createKeyAuthorization(params),
-          rootAddress: address,
-        }),
-      ],
+    dialog.success(queued, {
+      keyAuthorization: createKeyAuthorization(params),
+      rootAddress: address,
     })
 
     await expect(promise).resolves.toMatchObject({ rootAddress: address })
@@ -661,7 +656,7 @@ describe('dialog', () => {
   })
 
   test('error: secp256k1 access key requires external key material', async () => {
-    const { adapter, requestStore } = setup()
+    const { adapter, dialog } = setup()
 
     await expect(
       adapter.actions.authorizeAccessKey!(
@@ -674,11 +669,11 @@ describe('dialog', () => {
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[RpcResponse.InvalidParamsError: \`keyType: "secp256k1"\` requires externally generated key material; provide \`publicKey\` or \`address\`.]`,
     )
-    expect(requestStore.getState().requestQueue).toMatchInlineSnapshot(`[]`)
+    expect(dialog.syncs).toMatchInlineSnapshot(`[]`)
   })
 
   test('error: webAuthn access key requires external key material', async () => {
-    const { adapter, requestStore } = setup()
+    const { adapter, dialog } = setup()
 
     await expect(
       adapter.actions.authorizeAccessKey!(
@@ -691,7 +686,7 @@ describe('dialog', () => {
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[RpcResponse.InvalidParamsError: \`keyType: "webAuthn"\` requires externally generated key material; provide \`publicKey\` or \`address\`.]`,
     )
-    expect(requestStore.getState().requestQueue).toMatchInlineSnapshot(`[]`)
+    expect(dialog.syncs).toMatchInlineSnapshot(`[]`)
   })
 
   test('error: wallet validation errors keep their RPC code', async () => {
@@ -706,7 +701,6 @@ describe('dialog', () => {
       storage,
       store,
     })
-    const requestStore = RemoteSession.get(host).store
     const promise = adapter.actions.sendTransaction(
       {
         calls: [{ data: '0x12345678', to: recipient }],
@@ -725,18 +719,10 @@ describe('dialog', () => {
       },
     )
 
-    await vi.waitFor(() => {
-      if (!requestStore.getState().requestQueue[0]) throw new Error('request not queued')
-    })
-
-    const queued = requestStore.getState().requestQueue[0]!
-    requestStore.setState({
-      requestQueue: [
-        failure(queued, {
-          code: -32602,
-          message: '`authorizeAccessKey` must include at least one `limits` entry.',
-        }),
-      ],
+    const queued = await dialog_.takeRequest()
+    dialog_.failure(queued, {
+      code: -32602,
+      message: '`authorizeAccessKey` must include at least one `limits` entry.',
     })
 
     await expect(

@@ -1,14 +1,50 @@
-import { Hex } from 'ox'
+import { Hex, type RpcRequest } from 'ox'
 import * as Provider from 'ox/Provider'
 import * as RpcResponse from 'ox/RpcResponse'
 import type { StoreApi } from 'zustand/vanilla'
 import { createStore } from 'zustand/vanilla'
 
-import type * as RemoteRequest from '../core/internal/RemoteRequest.js'
 import type * as Messenger from '../core/Messenger.js'
 import type * as CoreProvider from '../core/Provider.js'
 import * as Schema from '../core/Schema.js'
 import * as Rpc from '../core/zod/rpc.js'
+import type { OneOf } from '../internal/types.js'
+
+/** A remote JSON-RPC request tracked across the host/remote boundary. */
+export type Request<result = unknown> = OneOf<
+  | {
+      /** JSON-RPC request sent to the remote. */
+      request: RpcRequest.RpcRequest
+      /** Request is waiting for a remote response. */
+      status: 'pending'
+    }
+  | {
+      /** JSON-RPC request sent to the remote. */
+      request: RpcRequest.RpcRequest
+      /** Resolved RPC result. */
+      result: result
+      /** Request completed successfully. */
+      status: 'success'
+    }
+  | {
+      /** JSON-RPC request sent to the remote. */
+      request: RpcRequest.RpcRequest
+      /** RPC error returned by the remote. */
+      error: RpcResponse.ErrorObject
+      /** Request completed with an error. */
+      status: 'error'
+    }
+>
+
+/** Request queue payload synced from a host adapter instance to the remote app. */
+export type Sync = {
+  /** Active account for the request source, or `undefined` if none is selected. */
+  account: { address: string } | undefined
+  /** Chain ID for the request source. */
+  chainId: number
+  /** Pending request queue sent to the remote auth app. */
+  requests: readonly Request[]
+}
 
 /** State managed by the remote (dialog) side. */
 export type State = {
@@ -19,7 +55,7 @@ export type State = {
   /** Whether the dialog is ready to display content. */
   ready: boolean
   /** Queued RPC requests received from the host. */
-  requests: readonly RemoteRequest.Request[]
+  requests: readonly Request[]
 }
 
 /** Remote context — bundles messenger, provider, and remote store. */
@@ -61,7 +97,7 @@ export type Remote = {
    */
   onRequests: (
     cb: (
-      requests: readonly RemoteRequest.Request[],
+      requests: readonly Request[],
       event: MessageEvent,
       extra: { account: { address: string } | undefined },
     ) => void,
@@ -75,7 +111,7 @@ export type Remote = {
    * Reject an RPC request.
    */
   reject: (
-    request: RemoteRequest.Request['request'],
+    request: Request['request'],
     error?: Provider.ProviderRpcError | RpcResponse.BaseError | undefined,
   ) => void
   /** Reject all pending RPC requests. */
@@ -87,10 +123,7 @@ export type Remote = {
    * When `options.error` is provided, sends an error response.
    * Otherwise, executes `provider.request(request)` and sends the result.
    */
-  respond: (
-    request: RemoteRequest.Request['request'],
-    options?: respond.Options,
-  ) => Promise<unknown>
+  respond: (request: Request['request'], options?: respond.Options) => Promise<unknown>
 }
 
 export declare namespace onUserRequest {
@@ -100,7 +133,7 @@ export declare namespace onUserRequest {
     /** Origin of the host that opened this dialog. */
     origin: string
     /** The pending request to display, or `null` when the dialog should close. */
-    request: RemoteRequest.Request['request'] | null
+    request: Request['request'] | null
   }
 }
 

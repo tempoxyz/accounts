@@ -35,7 +35,7 @@ const wagmiStorage = createStorage({
 
 /**
  * Default `authorizeAccessKey` payload for `wallet_connect`. Mirrors
- * wallet-next's "lazy access key" pattern: at sign-in we co-sign a
+ * wallet.tempo.xyz's "lazy access key" pattern: at sign-in we co-sign a
  * scoped session key so subsequent demo transactions (Pay Once, Trade,
  * etc.) don't re-prompt the passkey on every click.
  *

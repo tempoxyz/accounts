@@ -1,6 +1,6 @@
 import type { RpcRequest, RpcResponse } from 'ox'
 
-import type * as RemoteRequest from './internal/RemoteRequest.js'
+import type * as Remote from './Remote.js'
 
 /** Messenger interface for cross-frame communication. */
 export type Messenger = {
@@ -44,7 +44,7 @@ export type Schema = [
   },
   {
     topic: 'rpc-requests'
-    payload: RemoteRequest.Sync
+    payload: Remote.Sync
   },
   {
     topic: 'rpc-response'

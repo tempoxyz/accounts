@@ -6,7 +6,7 @@ import { Hex } from 'ox'
 import { connect } from 'viem/experimental/erc7846'
 import { tempoMainnet, tempoTestnet, tempoDevnet } from 'viem/tempo/chains'
 
-const defaultHost = 'https://wallet-next.tempo.xyz/api/auth/cli' as const
+const defaultHost = 'https://wallet.tempo.xyz/api/auth/cli' as const
 const defaultToken = '0x20c0000000000000000000000000000000000000' as const
 
 const options = z.object({

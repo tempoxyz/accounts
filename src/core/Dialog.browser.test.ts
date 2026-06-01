@@ -1,50 +1,34 @@
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Dialog from './Dialog.js'
-import type * as RemoteRequest from './internal/RemoteRequest.js'
-import * as RemoteSession from './internal/RemoteSession.js'
+import type * as Remote from './Remote.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
 
-const host = 'https://wallet-next.tempo.xyz/remote'
+const host = 'https://wallet.tempo.xyz/embed'
 
 function setup() {
-  RemoteSession.reset(host)
   const store = Store.create({
     chainId: 1,
     storage: Storage.memory({ key: 'dialog-test' }),
   })
-  const requestStore = RemoteSession.get(host).store
+  const onReject = vi.fn()
   const dialog = Dialog.iframe()
-  const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+  const handle = dialog({ host, onReject, onResponse() {}, store })
   lastHandle = handle
-  return { handle, requestStore, store }
+  return { handle, onReject, store }
 }
 
 let lastHandle: Dialog.Instance | undefined
 
-type RequestQueue = ReturnType<
-  ReturnType<typeof RemoteSession.get>['store']['getState']
->['requestQueue']
-type StoredQueuedRequest = RequestQueue extends readonly (infer request)[] ? request : never
-
-function pending(id: number): StoredQueuedRequest & { status: 'pending' } {
+function pending(id: number): Remote.Request & { status: 'pending' } {
   return {
-    account: undefined,
-    chainId: 1,
     request: { _returnType: undefined, id, jsonrpc: '2.0', method: 'eth_accounts' },
     status: 'pending',
-    synced: false,
   }
 }
 
-function withoutSessionMetadata(requests: RequestQueue) {
-  return requests.map(
-    ({ account: _account, chainId: _chainId, synced: _synced, ...request }) => request,
-  )
-}
-
-function sync(requests: readonly RemoteRequest.Request[]): RemoteRequest.Sync {
+function sync(requests: readonly Remote.Request[]): Remote.Sync {
   return { account: undefined, chainId: 1, requests }
 }
 
@@ -53,7 +37,6 @@ afterEach(() => {
   lastHandle = undefined
   document.querySelectorAll('dialog[data-tempo-wallet]').forEach((el) => el.remove())
   document.body.style.overflow = ''
-  RemoteSession.reset(host)
 })
 
 describe('Dialog.iframe', () => {
@@ -94,7 +77,7 @@ describe('Dialog.iframe', () => {
   test('behavior: iframe src points to host', () => {
     setup()
     const iframe = document.querySelector('dialog[data-tempo-wallet] iframe') as HTMLIFrameElement
-    expect(iframe.src).toMatchInlineSnapshot(`"https://wallet-next.tempo.xyz/remote"`)
+    expect(iframe.src).toMatchInlineSnapshot(`"https://wallet.tempo.xyz/embed"`)
     expect(iframe.src).toContain(host)
   })
 
@@ -163,37 +146,19 @@ describe('Dialog.iframe', () => {
   })
 
   test('behavior: cancel event rejects displayed pending requests', () => {
-    const { handle, requestStore } = setup()
+    const { handle, onReject } = setup()
     const displayed = pending(1)
-    const other = pending(2)
-    requestStore.setState({ requestQueue: [displayed, other] })
     void handle.syncRequests(sync([displayed]))
     handle.open()
     const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
     dialog.dispatchEvent(new Event('cancel'))
-    const queue = requestStore.getState().requestQueue
-    expect(withoutSessionMetadata(queue)).toMatchInlineSnapshot(`
+    expect(onReject.mock.calls).toMatchInlineSnapshot(`
       [
-        {
-          "error": {
-            "code": 4001,
-            "message": "User rejected the request.",
-          },
-          "request": {
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "eth_accounts",
-          },
-          "status": "error",
-        },
-        {
-          "request": {
-            "id": 2,
-            "jsonrpc": "2.0",
-            "method": "eth_accounts",
-          },
-          "status": "pending",
-        },
+        [
+          [
+            1,
+          ],
+        ],
       ]
     `)
   })
@@ -213,39 +178,21 @@ describe('Dialog.iframe', () => {
   })
 
   test('behavior: backdrop click rejects displayed pending requests', () => {
-    const { handle, requestStore } = setup()
+    const { handle, onReject } = setup()
     const displayed = pending(1)
-    const other = pending(2)
-    requestStore.setState({ requestQueue: [displayed, other] })
     void handle.syncRequests(sync([displayed]))
     handle.open()
     const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
 
     dialog.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
-    const queue = requestStore.getState().requestQueue
-    expect(withoutSessionMetadata(queue)).toMatchInlineSnapshot(`
+    expect(onReject.mock.calls).toMatchInlineSnapshot(`
       [
-        {
-          "error": {
-            "code": 4001,
-            "message": "User rejected the request.",
-          },
-          "request": {
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": "eth_accounts",
-          },
-          "status": "error",
-        },
-        {
-          "request": {
-            "id": 2,
-            "jsonrpc": "2.0",
-            "method": "eth_accounts",
-          },
-          "status": "pending",
-        },
+        [
+          [
+            1,
+          ],
+        ],
       ]
     `)
   })
