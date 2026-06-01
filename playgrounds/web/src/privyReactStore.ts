@@ -44,6 +44,7 @@ let state: PrivyReactState = {
   wallets: [],
 }
 const listeners = new Set<() => void>()
+const ready_listeners = new Set<() => void>()
 
 const client = {
   auth: {
@@ -63,14 +64,15 @@ const client = {
     },
   },
   async getAccessToken() {
-    if (!state.ready || !state.authenticated) return null
+    await waitForReady()
+    if (!state.authenticated) return null
     return (await state.getAccessToken?.()) ?? null
   },
   initialize() {},
   user: {
     async get() {
-      if (!state.ready || !state.authenticated)
-        throw new Error('Privy React user is not authenticated.')
+      await waitForReady()
+      if (!state.authenticated) throw new Error('Privy React user is not authenticated.')
 
       return {
         user: {
@@ -98,6 +100,7 @@ export function getPrivyReactClient() {
 /** Mirrors the latest Privy React hook state into the adapter client shim. */
 export function setPrivyReactState(next: PrivyReactState) {
   state = next
+  if (next.ready) emitReady()
 }
 
 /** Returns the active Privy React account request for React rendering. */
@@ -133,6 +136,11 @@ function emit() {
   for (const listener of listeners) listener()
 }
 
+function emitReady() {
+  for (const listener of ready_listeners) listener()
+  ready_listeners.clear()
+}
+
 function getSnapshot() {
   return request
 }
@@ -144,4 +152,9 @@ function sameAddress(a: string, b: string) {
 function subscribe(listener: () => void) {
   listeners.add(listener)
   return () => listeners.delete(listener)
+}
+
+function waitForReady() {
+  if (state.ready) return Promise.resolve()
+  return new Promise<void>((resolve) => ready_listeners.add(resolve))
 }
