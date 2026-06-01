@@ -60,6 +60,30 @@ describe('privy', () => {
     expectTypeOf<privy.EmbeddedWallet>().toEqualTypeOf<{
       address: string
       provider: privy.EthereumProvider
+      publicKey?: string | undefined
+      sign?: ((parameters: { hash: `0x${string}` }) => Promise<`0x${string}`>) | undefined
+    }>()
+  })
+
+  test('account selection accepts materialized Privy React viem accounts', () => {
+    expectTypeOf<
+      readonly [
+        {
+          address: `0x${string}`
+          publicKey: `0x${string}`
+          sign?: ((parameters: { hash: `0x${string}` }) => Promise<`0x${string}`>) | undefined
+          source: string
+          type: 'local'
+        },
+      ]
+    >().toMatchTypeOf<privy.AccountSelection>()
+  })
+
+  test('materialized account shape is public key plus raw signer', () => {
+    expectTypeOf<privy.Account>().toEqualTypeOf<{
+      address: string
+      publicKey?: string | undefined
+      sign?: ((parameters: { hash: `0x${string}` }) => Promise<`0x${string}`>) | undefined
     }>()
   })
 
