@@ -1,34 +1,55 @@
 ---
 title: privy
-description: Adapter backed by Privy core SDK sessions and embedded wallets.
+description: Adapter backed by Privy sessions and embedded Ethereum wallets.
 ---
 
 # `privy`
 
-Creates a Privy adapter backed by `@privy-io/js-sdk-core` sessions and embedded Ethereum wallets.
+Creates a Privy adapter for Privy-authenticated embedded Ethereum wallets.
 
-The adapter owns silent reconnect, session cleanup, embedded wallet loading, and provider signing. Apps provide UI-bearing auth through [`loadAccounts`](#loadaccounts), and optionally [`createAccount`](#createaccount).
+The preferred React integration uses `@privy-io/react-auth` and returns account objects with a raw signer and matching public key from [`loadAccounts`](#loadaccounts). When an account includes `publicKey`, the adapter builds a full Tempo viem account with `viem/tempo` `Account.from(...)`.
+
+The adapter still accepts a structural client compatible with `@privy-io/js-sdk-core` for session checks, silent restore, provider lookup, and logout.
 
 ## Usage
 
 ```ts
 import { Provider, privy } from 'accounts'
 
-import { createPrivyClient } from './privy-client.js'
-import { signInWithPrivyEmail } from './privy-email.js'
-
-const client = createPrivyClient({ appId, clientId })
+import {
+  privyReactClient,
+  requestPrivyAccounts,
+} from './privy-react-bridge.js'
 
 export const provider = Provider.create({
   adapter: privy({
-    client,
-    loadAccounts: async ({ client }) => {
-      if (!(await client.getAccessToken().catch(() => null)))
-        await signInWithPrivyEmail(client.auth)
-    },
+    client: privyReactClient,
+    loadAccounts: async () => await requestPrivyAccounts(),
   }),
 })
 ```
+
+In a React bridge component, resolve `requestPrivyAccounts()` with Privy's viem accounts:
+
+```ts
+import { toViemAccount } from '@privy-io/react-auth'
+
+const embedded = wallets.wallets.filter(
+  (wallet) =>
+    wallet.type === 'ethereum' &&
+    (wallet.walletClientType === 'privy' || wallet.walletClientType === 'privy-v2'),
+)
+
+const accounts = await Promise.all(
+  embedded.map(async (wallet) => {
+    const account = await toViemAccount({ wallet })
+    const publicKey = getPublicKey(privy.user, wallet.address)
+    return { ...account, ...(publicKey ? { publicKey } : {}) }
+  }),
+)
+```
+
+Here, `getPublicKey` should read the matching embedded Ethereum wallet from Privy's authenticated `user.linkedAccounts` state.
 
 ## Parameters
 
@@ -37,7 +58,9 @@ export const provider = Provider.create({
 - **Type:** `privy.Client`
 - **Required**
 
-Existing Privy core SDK client, such as `Privy` from `@privy-io/js-sdk-core`. The adapter calls `initialize?.()` once on first use, and uses `getAccessToken`, `user.get`, `embeddedWallet.getEthereumProvider`, and `auth.logout` for the rest of the lifecycle.
+Structural Privy client used by the adapter. `Privy` from `@privy-io/js-sdk-core` satisfies this directly. React apps can provide a small shim backed by `@privy-io/react-auth` hooks, as shown in the [Privy adapter guide](/docs/adapters/privy).
+
+The adapter calls `initialize?.()` once on first use, and uses `getAccessToken`, `user.get`, `embeddedWallet.getEthereumProvider`, and `auth.logout` for the rest of the lifecycle.
 
 ```ts
 import { Provider, privy } from 'accounts'
@@ -45,7 +68,7 @@ import { Provider, privy } from 'accounts'
 const provider = Provider.create({
   adapter: privy({
     client, // [!code focus]
-    loadAccounts: async ({ client }) => { /* ... */ },
+    loadAccounts: async () => await requestPrivyAccounts(),
   }),
 })
 ```
@@ -63,7 +86,7 @@ import { Provider, privy } from 'accounts'
 const provider = Provider.create({
   adapter: privy({
     client,
-    loadAccounts: async () => { /* ... */ },
+    loadAccounts: async () => await requestPrivyAccounts(),
     icon: 'data:image/svg+xml,...', // [!code focus]
   }),
 })
@@ -71,14 +94,12 @@ const provider = Provider.create({
 
 ### loadAccounts
 
-- **Type:** `(params: { client; parameters? }) => Promise<readonly Address[] | void>`
+- **Type:** `(params: { client; parameters? }) => Promise<privy.AccountSelection>`
 - **Required**
 
-Runs the Privy login UI in response to a user-initiated `wallet_connect`. After this callback completes, the adapter loads embedded Ethereum wallets from Privy SDK state with `client.user.get()` and `client.embeddedWallet.getEthereumProvider(...)`.
+Runs the Privy login UI in response to a user-initiated `wallet_connect`.
 
-By default all the user's embedded Ethereum wallets will be connected. Return `Address[]` to select and order those wallets. The first returned address is active by default, matching `eth_requestAccounts`.
-
-When `createAccount` is omitted, register requests call `loadAccounts` too. This fits email and social auth flows where the same Privy ceremony can sign in an existing user or create one.
+For React apps, use a bridge component to open Privy's login modal and return the `toViemAccount({ wallet })` results with the matching wallet public key. The first returned account is active by default, matching `eth_requestAccounts`.
 
 ```ts
 import { Provider, privy } from 'accounts'
@@ -86,12 +107,12 @@ import { Provider, privy } from 'accounts'
 const provider = Provider.create({
   adapter: privy({
     client,
-    loadAccounts: async ({ client }) => { // [!code focus]
-      await signInWithPrivyEmail(client.auth) // [!code focus]
-    }, // [!code focus]
+    loadAccounts: async () => await requestPrivyAccounts(), // [!code focus]
   }),
 })
 ```
+
+For Core JS integrations, the callback may run auth and return no value. After it completes, the adapter loads embedded Ethereum wallets from Privy SDK state with `client.user.get()` and `client.embeddedWallet.getEthereumProvider(...)`.
 
 ```ts
 import { Provider, privy } from 'accounts'
@@ -101,7 +122,6 @@ const provider = Provider.create({
     client,
     loadAccounts: async ({ client }) => {
       await signInWithPrivyEmail(client.auth)
-      return [selectedAddress] // [!code focus]
     },
   }),
 })
@@ -109,15 +129,13 @@ const provider = Provider.create({
 
 ### createAccount
 
-- **Type:** `(params: { client; parameters }) => Promise<readonly Address[] | void>`
+- **Type:** `(params: { client; parameters }) => Promise<privy.AccountSelection>`
 - **Optional**
 - **Default:** `loadAccounts`
 
-Runs the Privy registration UI when registration needs a separate flow. The callback must leave the Privy client authenticated and ensure new users get an embedded Ethereum wallet.
+Runs a distinct Privy registration flow when registration needs to differ from login. The callback receives the initialized Privy `client` and the provider create-account `parameters` (display name, optional `digest`, `personalSign`, `userId`, etc.).
 
-Receives the initialized Privy `client` and the provider create-account `parameters` (display name, optional `digest`, `personalSign`, `userId`, etc.). After this callback completes, the adapter loads embedded Ethereum wallets from Privy SDK state.
-
-Like `loadAccounts`, by default all the user's embedded Ethereum wallets will be connected. Return `Address[]` to choose the returned accounts. The first address is active by default.
+Like `loadAccounts`, React integrations can return materialized Privy viem accounts, and Core JS integrations can return addresses or no value.
 
 ```ts
 import { Provider, privy } from 'accounts'
@@ -125,10 +143,8 @@ import { Provider, privy } from 'accounts'
 const provider = Provider.create({
   adapter: privy({
     client,
-    createAccount: async ({ client }) => { // [!code focus]
-      await signInWithPrivyEmail(client.auth) // [!code focus]
-    }, // [!code focus]
-    loadAccounts: async ({ client }) => { /* ... */ },
+    createAccount: async () => await requestPrivyAccounts(), // [!code focus]
+    loadAccounts: async () => await requestPrivyAccounts(),
   }),
 })
 ```
@@ -146,7 +162,7 @@ import { Provider, privy } from 'accounts'
 const provider = Provider.create({
   adapter: privy({
     client,
-    loadAccounts: async () => { /* ... */ },
+    loadAccounts: async () => await requestPrivyAccounts(),
     name: 'My Wallet', // [!code focus]
   }),
 })
@@ -165,7 +181,7 @@ import { Provider, privy } from 'accounts'
 const provider = Provider.create({
   adapter: privy({
     client,
-    loadAccounts: async () => { /* ... */ },
+    loadAccounts: async () => await requestPrivyAccounts(),
     rdns: 'com.example.wallet', // [!code focus]
   }),
 })
@@ -173,15 +189,43 @@ const provider = Provider.create({
 
 ## AccountSelection
 
-- **Type:** `readonly Address[] | void`
+- **Type:** `readonly (Address | privy.Account)[] | void`
 
-Optional selected addresses returned from a Privy login or sign-up callback. When omitted, all embedded Ethereum wallets loaded from Privy are used. When provided, the returned addresses select and order the wallets exposed through the provider.
+Optional selection returned from a Privy login or sign-up callback. When omitted, all embedded Ethereum wallets loaded from Privy are used. When provided, the returned values select and order the accounts exposed through the provider.
 
-Callbacks should not return `{ address, provider }` objects. The adapter materializes provider handles internally from the Privy client.
+Return `privy.Account` objects when you can, especially accounts assembled from `@privy-io/react-auth` `toViemAccount({ wallet })` plus the wallet public key. Return addresses only when your integration cannot expose a public key.
+
+```ts
+import { toViemAccount } from '@privy-io/react-auth'
+
+const selection = await Promise.all(
+  wallets.map(async (wallet) => {
+    const account = await toViemAccount({ wallet })
+    const publicKey = getPublicKey(privy.user, wallet.address)
+    return { ...account, ...(publicKey ? { publicKey } : {}) }
+  }),
+)
+```
+
+## Account Shape
+
+`privy.Account` is structural so apps can pass Privy's React SDK account without this package depending on `@privy-io/react-auth`.
+
+```ts
+import { privy } from 'accounts'
+
+type Account = {
+  address: string
+  publicKey?: string | undefined
+  sign?: ((parameters: { hash: `0x${string}` }) => Promise<`0x${string}`>) | undefined
+}
+```
+
+When `publicKey` is present, the adapter validates that it matches `address` and builds a full Tempo account. The optional `sign` function is used with that public key. When only `address` is returned, the adapter uses the embedded provider fallback.
 
 ## Client Shape
 
-`privy.Client` is a structural type satisfied by `Privy` from `@privy-io/js-sdk-core`. The adapter uses this surface:
+`privy.Client` is structural. `Privy` from `@privy-io/js-sdk-core` satisfies this directly, and React apps can provide the same shape with hook-backed state.
 
 ```ts
 import { privy } from 'accounts'

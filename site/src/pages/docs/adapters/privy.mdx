@@ -7,123 +7,143 @@ import { Cards, Card } from 'vocs'
 
 # Privy Adapter
 
-The Privy adapter is for apps that want Privy to own authentication, session state, and embedded wallet state while plugging into Tempo account features. Your app runs the login or sign-up ceremony; the adapter handles silent reconnect, wallet loading, and provider signing.
+The Privy adapter is for apps that want Privy to own authentication, session state, and embedded wallets while plugging into Tempo account features. Prefer `@privy-io/react-auth` for React apps because Privy's hooks can provide the wallet public key and raw signer the adapter needs to build a full Tempo viem account.
 
 Use it when you want:
 
 - Privy to own app authentication and embedded wallets.
-- Your app to keep its own login or sign-up experience.
-- Tempo account features without asking app code to construct wallet provider handles.
+- Your React app to keep using Privy's hosted login UI.
+- Tempo account features backed by a full viem account whenever Privy exposes the public key.
 
 ## Usage
 
-The `loadAccounts` callback should run Privy auth only. After the callback completes, the adapter loads embedded Ethereum wallets from the Privy client. If `createAccount` is omitted, registration also uses `loadAccounts`.
+Wrap your app with `PrivyProvider`, configure embedded Ethereum wallet creation, and mount a small bridge component that resolves Accounts SDK connect requests with Privy's `toViemAccount({ wallet })` result plus the matching wallet public key.
 
 :::code-group
+
+```tsx [main.tsx]
+import { PrivyProvider } from '@privy-io/react-auth'
+import { createRoot } from 'react-dom/client'
+
+import { App } from './App.js'
+import { PrivyAccountsBridge } from './PrivyAccountsBridge.js'
+
+createRoot(document.getElementById('root')!).render(
+  <PrivyProvider
+    appId={import.meta.env.VITE_PRIVY_APP_ID}
+    config={{
+      embeddedWallets: {
+        ethereum: { createOnLogin: 'users-without-wallets' },
+      },
+    }}
+  >
+    <PrivyAccountsBridge />
+    <App />
+  </PrivyProvider>,
+)
+```
 
 ```ts [provider.ts]
 import { Provider, privy } from 'accounts'
 
-import { createPrivyClient } from './privy-client.js'
-import { signInWithPrivyEmail } from './privy-email.js'
-
-const client = createPrivyClient({
-  appId: import.meta.env.VITE_PRIVY_APP_ID,
-  clientId: import.meta.env.VITE_PRIVY_CLIENT_ID,
-})
+import {
+  privyReactClient,
+  requestPrivyAccounts,
+} from './privy-react-bridge.js'
 
 export const provider = Provider.create({
   adapter: privy({
-    client,
-    loadAccounts: async ({ client }) => {
-      if (!(await client.getAccessToken().catch(() => null)))
-        await signInWithPrivyEmail(client.auth)
-    },
+    client: privyReactClient,
+    loadAccounts: async () => await requestPrivyAccounts(),
   }),
 })
 ```
 
-```ts [privy-client.ts]
-import Privy, { LocalStorage as PrivyLocalStorage } from '@privy-io/js-sdk-core'
+```tsx [PrivyAccountsBridge.tsx]
+import { type User, toViemAccount, useLogin, usePrivy, useWallets } from '@privy-io/react-auth'
+import { useEffect, useRef } from 'react'
 
-export function createPrivyClient(options: {
-  appId: string
-  clientId?: string | undefined
-}) {
-  const client = new Privy({
-    appId: options.appId,
-    ...(options.clientId ? { clientId: options.clientId } : {}),
-    storage: new PrivyLocalStorage(),
+import {
+  rejectPrivyAccounts,
+  resolvePrivyAccounts,
+  syncPrivyReactState,
+  usePrivyAccountsRequest,
+} from './privy-react-bridge.js'
+
+export function PrivyAccountsBridge() {
+  const privy = usePrivy()
+  const wallets = useWallets()
+  const request = usePrivyAccountsRequest()
+  const pending = useRef(false)
+  const login_started = useRef(false)
+  const login = useLogin({
+    onError(error) {
+      login_started.current = false
+      rejectPrivyAccounts(new Error(String(error)))
+    },
   })
 
-  const ready = mountPrivyEmbeddedWalletIframe(client)
-  const getEthereumProvider = client.embeddedWallet.getEthereumProvider.bind(
-    client.embeddedWallet,
-  )
+  useEffect(() => {
+    syncPrivyReactState({ privy, wallets })
+  }, [privy, wallets])
 
-  client.embeddedWallet.getEthereumProvider = (async (parameters) => {
-    await ready
-    return await getEthereumProvider(parameters)
-  }) as typeof client.embeddedWallet.getEthereumProvider
+  useEffect(() => {
+    if (!request || pending.current || !privy.ready) return
 
-  return client
+    if (!privy.authenticated) {
+      if (!login_started.current) {
+        login_started.current = true
+        login.login()
+      }
+      return
+    }
+
+    login_started.current = false
+    if (!wallets.ready) return
+
+    pending.current = true
+    void (async () => {
+      try {
+        const embedded = wallets.wallets.filter(
+          (wallet) =>
+            wallet.type === 'ethereum' &&
+            (wallet.walletClientType === 'privy' ||
+              wallet.walletClientType === 'privy-v2'),
+        )
+        resolvePrivyAccounts(
+          await Promise.all(
+            embedded.map(async (wallet) => {
+              const account = await toViemAccount({ wallet })
+              const publicKey = getPublicKey(privy.user, wallet.address)
+              return { ...account, ...(publicKey ? { publicKey } : {}) }
+            }),
+          ),
+        )
+      } catch (error) {
+        rejectPrivyAccounts(error instanceof Error ? error : new Error(String(error)))
+      } finally {
+        pending.current = false
+      }
+    })()
+  }, [login, privy.authenticated, privy.ready, request, wallets.ready, wallets.wallets])
+
+  return null
 }
 
-function mountPrivyEmbeddedWalletIframe(client: Privy) {
-  const iframe = document.createElement('iframe')
-  iframe.src = client.embeddedWallet.getURL()
-  iframe.title = 'Privy embedded wallet'
-  iframe.style.display = 'none'
-
-  const ready = new Promise<void>((resolve) => {
-    iframe.addEventListener('load', () => resolve(), { once: true })
-  })
-
-  document.body.appendChild(iframe)
-
-  client.setMessagePoster(
-    iframe.contentWindow as unknown as Parameters<Privy['setMessagePoster']>[0],
-  )
-
-  window.addEventListener('message', (event) => {
-    if (event.source !== iframe.contentWindow) return
-    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-    client.embeddedWallet.onMessage(data)
-  })
-
-  return ready
-}
-```
-
-```ts [privy-email.ts]
-import type Privy from '@privy-io/js-sdk-core'
-
-export async function signInWithPrivyEmail(client: Privy['auth']) {
-  const email = window.prompt('Email')
-  if (!email) throw new Error('Email is required.')
-
-  await client.email.sendCode(email)
-
-  const code = window.prompt('Verification code')
-  if (!code) throw new Error('Verification code is required.')
-
-  await client.email.loginWithCode(
-    email,
-    code,
-    'login-or-sign-up',
-    { embedded: { ethereum: { createOnLogin: 'users-without-wallets' } } },
-  )
+function getPublicKey(user: User | null | undefined, address: string) {
+  return user?.linkedAccounts.find(
+    (account) =>
+      account.type === 'wallet' &&
+      account.chainType === 'ethereum' &&
+      account.address.toLowerCase() === address.toLowerCase(),
+  )?.publicKey
 }
 ```
 
 :::
 
-:::info[Why the iframe setup is required]
-Privy Core JS requires apps to mount the embedded wallet secure-context iframe and wire bidirectional message passing before embedded wallet provider requests can work. See Privy's [secure context setup](https://docs.privy.io/recipes/core-js#3-connect-to-the-secure-context).
-:::
-
-:::info
-`signInWithPrivyEmail` is intentionally small so the example is runnable. Replace it with your app's real Privy UI, OAuth flow, or account recovery flow while keeping the adapter callbacks the same: run auth only, then let the adapter load wallets from Privy.
+:::tip
+The playground has the complete bridge, including the structural client used for silent restore and disconnect. See `playgrounds/web/src/privyReactStore.ts` and `playgrounds/web/src/PrivyReactBridge.tsx`.
 :::
 
 ## Account Selection
@@ -134,21 +154,36 @@ By default, all embedded Ethereum wallets on the Privy user are connected. Retur
 const provider = Provider.create({
   adapter: privy({
     client,
-    loadAccounts: async ({ client }) => {
-      await signInWithPrivyEmail(client.auth)
-      return [selectedAddress]
-    },
+    loadAccounts: async () => [selectedAddress],
   }),
 })
 ```
 
-The first returned address is active by default. Do not return `{ address, provider }` objects from these callbacks.
+React integrations should return account objects with a public key and raw signer instead of only returning addresses when possible. Privy's `toViemAccount({ wallet })` provides the raw signer, and the wallet public key can be read from Privy's authenticated user state.
+
+```ts
+import { toViemAccount } from '@privy-io/react-auth'
+
+const accounts = await Promise.all(
+  wallets.map(async (wallet) => {
+    const account = await toViemAccount({ wallet })
+    const publicKey = getPublicKey(privy.user, wallet.address)
+    return { ...account, ...(publicKey ? { publicKey } : {}) }
+  }),
+)
+```
+
+The first returned address or account is active by default.
+
+## Core JS Fallback
+
+The adapter still supports a structural client compatible with `@privy-io/js-sdk-core`. This path is useful outside React or for apps that already own a Core JS integration. Core JS embedded Ethereum wallet records do not currently expose a public key in the linked-account shape, so address-only callbacks use the adapter's provider signing fallback through `secp256k1_sign`.
 
 ## Next Steps
 
 <Cards>
   <Card
-    description="Full API reference for the privy adapter, including client and account loading hooks."
+    description="Full API reference for the privy adapter, including React account selection and the structural client shape."
     icon="lucide:book"
     to="/docs/api/privy"
     title="privy reference"
