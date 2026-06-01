@@ -18,7 +18,7 @@ import { privy as core_privy } from '../core/adapters/privy.js'
  * React tree. The bridge owns Privy's login modal, hook state, public-key
  * lookup, and account materialization for this adapter.
  */
-export function privyReact(options: privyReact.Options = {}): Adapter.Adapter {
+export function privy(options: privy.Options = {}): Adapter.Adapter {
   return core_privy({
     ...options,
     client,
@@ -26,7 +26,7 @@ export function privyReact(options: privyReact.Options = {}): Adapter.Adapter {
   })
 }
 
-/** Mounts the React boundary needed by {@link privyReact}. */
+/** Mounts the React boundary needed by {@link privy}. */
 export function PrivyAccountsBridge() {
   const privy = usePrivy()
   const wallets = useWallets()
@@ -67,7 +67,6 @@ export function PrivyAccountsBridge() {
           address: wallet.address,
           getEthereumProvider: wallet.getEthereumProvider,
           ...(publicKey ? { publicKey } : {}),
-          walletClientType: wallet.walletClientType,
           walletIndex: wallet.walletIndex,
         }
       }),
@@ -123,7 +122,6 @@ type PrivyReactWallet = {
   address: string
   getEthereumProvider: () => Promise<core_privy.EthereumProvider> | core_privy.EthereumProvider
   publicKey?: string | undefined
-  walletClientType: string
   walletIndex?: number | undefined
 }
 
@@ -197,7 +195,7 @@ const client = {
             connector_type: 'embedded',
             ...(wallet.publicKey ? { public_key: wallet.publicKey } : {}),
             type: 'wallet',
-            wallet_client_type: wallet.walletClientType,
+            wallet_client_type: 'privy',
             wallet_index: wallet.walletIndex ?? index,
           })),
         },
@@ -243,12 +241,6 @@ async function toPrivyAccount(
   keys: Map<string, string>,
 ): Promise<core_privy.Account> {
   const publicKey = keys.get(normalizeAddress(wallet.address))
-  if (wallet.walletClientType !== 'privy')
-    return {
-      address: wallet.address,
-      ...(publicKey ? { publicKey } : {}),
-    }
-
   const account = await toViemAccount({ wallet })
   return {
     ...account,
@@ -271,7 +263,7 @@ function emitWalletsReady() {
 }
 
 function createMissingBridgeError() {
-  return new Error('PrivyAccountsBridge must be mounted under PrivyProvider to use privyReact().')
+  return new Error('PrivyAccountsBridge must be mounted under PrivyProvider to use privy().')
 }
 
 function getPublicKeys(user: User | null | undefined) {
@@ -287,7 +279,7 @@ function getSnapshot() {
 }
 
 function isEmbeddedEthereumWallet(wallet: ConnectedWallet) {
-  return wallet.type === 'ethereum' && ['privy', 'privy-v2'].includes(wallet.walletClientType)
+  return wallet.type === 'ethereum' && wallet.walletClientType === 'privy'
 }
 
 function isEmbeddedEthereumLinkedAccount(
@@ -296,7 +288,7 @@ function isEmbeddedEthereumLinkedAccount(
   return (
     account.type === 'wallet' &&
     account.chainType === 'ethereum' &&
-    ['privy', 'privy-v2'].includes(account.walletClientType ?? '') &&
+    account.walletClientType === 'privy' &&
     typeof account.publicKey === 'string'
   )
 }
@@ -325,8 +317,8 @@ async function waitForWallets() {
   return new Promise<void>((resolve) => wallets_ready_listeners.add(resolve))
 }
 
-export declare namespace privyReact {
-  /** Options for {@link privyReact}. */
+export declare namespace privy {
+  /** Options for {@link privy}. */
   type Options = {
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined

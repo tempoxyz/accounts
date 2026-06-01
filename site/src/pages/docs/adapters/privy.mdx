@@ -7,7 +7,7 @@ import { Cards, Card } from 'vocs'
 
 # Privy Adapter
 
-The Privy adapter is for apps that want Privy to own authentication, session state, and embedded wallets while plugging into Tempo account features. React apps should use `privyReact` from `accounts/react/privy`; it wires Privy's hooks into the core adapter and builds a full Tempo viem account when Privy exposes a public key.
+The Privy adapter is for React apps that want Privy to own authentication, session state, and embedded wallets while plugging into Tempo account features. Use `privy` from `accounts/react/privy`; it wires Privy's hooks into the Accounts SDK and builds a full Tempo viem account when Privy exposes a public key.
 
 Use it when you want:
 
@@ -17,7 +17,7 @@ Use it when you want:
 
 ## Usage
 
-Wrap your app with `PrivyProvider`, configure embedded Ethereum wallet creation, and mount `PrivyAccountsBridge` inside the same React tree. Then create the provider with `privyReact()`.
+Wrap your app with `PrivyProvider`, configure embedded Ethereum wallet creation, and mount `PrivyAccountsBridge` inside the same React tree. Then create the provider with `privy()`.
 
 :::code-group
 
@@ -45,10 +45,10 @@ createRoot(document.getElementById('root')!).render(
 
 ```ts [provider.ts]
 import { Provider } from 'accounts'
-import { privyReact } from 'accounts/react/privy'
+import { privy } from 'accounts/react/privy'
 
 export const provider = Provider.create({
-  adapter: privyReact(),
+  adapter: privy(),
 })
 ```
 
@@ -58,46 +58,21 @@ export const provider = Provider.create({
 `PrivyAccountsBridge` is a React boundary. It exists because Privy's `usePrivy`, `useWallets`, and `useLogin` hooks can only run under `PrivyProvider`, while the Accounts SDK provider is plain TypeScript.
 :::
 
-## Account Selection
+## Account Behavior
 
-With `privyReact()`, all embedded Ethereum wallets on the Privy user are connected. Use the core `privy` adapter directly when you need to select or order the accounts exposed through the provider.
+With `privy()`, all embedded Ethereum wallets on the Privy user are connected. The bridge calls Privy's `toViemAccount({ wallet })` helper internally and pairs that signer with the wallet public key from Privy's authenticated user state when available.
 
-```ts
-import { Provider, privy } from 'accounts'
+The first embedded Ethereum wallet returned by Privy is active by default.
 
-const provider = Provider.create({
-  adapter: privy({
-    client,
-    loadAccounts: async () => [selectedAddress],
-  }),
-})
-```
+## Implementation Note
 
-Advanced React integrations should return account objects with a public key and raw signer instead of only returning addresses when possible. Privy's `toViemAccount({ wallet })` provides the raw signer, and the wallet public key can be read from Privy's authenticated user state.
-
-```ts
-import { toViemAccount } from '@privy-io/react-auth'
-
-const accounts = await Promise.all(
-  wallets.map(async (wallet) => {
-    const account = await toViemAccount({ wallet })
-    const publicKey = getPublicKey(privy.user, wallet.address)
-    return { ...account, ...(publicKey ? { publicKey } : {}) }
-  }),
-)
-```
-
-The first returned address or account is active by default.
-
-## Core JS Fallback
-
-The adapter still supports a structural client compatible with `@privy-io/js-sdk-core`. This path is useful outside React or for apps that already own a Core JS integration. Core JS embedded Ethereum wallet records do not currently expose a public key in the linked-account shape, so address-only callbacks use the adapter's provider signing fallback through `secp256k1_sign`.
+The public Privy integration lives at `accounts/react/privy`. Internally, it wraps the lower-level Privy adapter with a hook-backed client so app code does not need to manage a separate adapter bridge.
 
 ## Next Steps
 
 <Cards>
   <Card
-    description="Full API reference for the privy adapter, including React account selection and the structural client shape."
+    description="Full API reference for the React Privy adapter."
     icon="lucide:book"
     to="/docs/api/privy"
     title="privy reference"

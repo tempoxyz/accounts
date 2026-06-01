@@ -10,7 +10,7 @@ import {
   turnkey,
   webAuthn,
 } from 'accounts'
-import { privyReact } from 'accounts/react/privy'
+import { privy } from 'accounts/react/privy'
 import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
@@ -144,7 +144,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       throw new Error('VITE_PRIVY_APP_ID is required for the Privy adapter.')
 
     return Provider.create({
-      adapter: privyReact(),
+      adapter: privy(),
       mpp: true,
       testnet,
     })

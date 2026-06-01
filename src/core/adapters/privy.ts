@@ -171,7 +171,7 @@ export function privy<const client extends privy.Client>(
         .filter(
           (account) =>
             account.type === 'wallet' &&
-            (account.wallet_client_type === 'privy' || account.wallet_client_type === 'privy-v2') &&
+            account.wallet_client_type === 'privy' &&
             account.connector_type === 'embedded' &&
             account.chain_type === 'ethereum' &&
             typeof account.address === 'string',
