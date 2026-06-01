@@ -4,10 +4,10 @@ import * as RpcResponse from 'ox/RpcResponse'
 import type { StoreApi } from 'zustand/vanilla'
 import { createStore } from 'zustand/vanilla'
 
+import type * as RemoteRequest from '../core/internal/RemoteRequest.js'
 import type * as Messenger from '../core/Messenger.js'
 import type * as CoreProvider from '../core/Provider.js'
 import * as Schema from '../core/Schema.js'
-import type * as Store from '../core/Store.js'
 import * as Rpc from '../core/zod/rpc.js'
 
 /** State managed by the remote (dialog) side. */
@@ -19,7 +19,7 @@ export type State = {
   /** Whether the dialog is ready to display content. */
   ready: boolean
   /** Queued RPC requests received from the host. */
-  requests: readonly Store.QueuedRequest[]
+  requests: readonly RemoteRequest.Request[]
 }
 
 /** Remote context — bundles messenger, provider, and remote store. */
@@ -61,7 +61,7 @@ export type Remote = {
    */
   onRequests: (
     cb: (
-      requests: readonly Store.QueuedRequest[],
+      requests: readonly RemoteRequest.Request[],
       event: MessageEvent,
       extra: { account: { address: string } | undefined },
     ) => void,
@@ -75,7 +75,7 @@ export type Remote = {
    * Reject an RPC request.
    */
   reject: (
-    request: Store.QueuedRequest['request'],
+    request: RemoteRequest.Request['request'],
     error?: Provider.ProviderRpcError | RpcResponse.BaseError | undefined,
   ) => void
   /** Reject all pending RPC requests. */
@@ -87,7 +87,10 @@ export type Remote = {
    * When `options.error` is provided, sends an error response.
    * Otherwise, executes `provider.request(request)` and sends the result.
    */
-  respond: (request: Store.QueuedRequest['request'], options?: respond.Options) => Promise<unknown>
+  respond: (
+    request: RemoteRequest.Request['request'],
+    options?: respond.Options,
+  ) => Promise<unknown>
 }
 
 export declare namespace onUserRequest {
@@ -97,7 +100,7 @@ export declare namespace onUserRequest {
     /** Origin of the host that opened this dialog. */
     origin: string
     /** The pending request to display, or `null` when the dialog should close. */
-    request: Store.QueuedRequest['request'] | null
+    request: RemoteRequest.Request['request'] | null
   }
 }
 

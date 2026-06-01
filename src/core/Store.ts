@@ -1,11 +1,9 @@
-import type { RpcRequest, RpcResponse } from 'ox'
 import * as z from 'zod/mini'
 import type { Mutate, StoreApi } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { createStore } from 'zustand/vanilla'
 
-import type { OneOf } from '../internal/types.js'
 import type { AccessKey } from './AccessKey.js'
 import type { Store as Account } from './Account.js'
 import * as Storage from './Storage.js'
@@ -36,8 +34,6 @@ export type State = {
     | undefined
   /** Active chain ID. */
   chainId: number
-  /** Queued RPC requests pending resolution by the dialog. */
-  requestQueue: readonly QueuedRequest[]
 }
 
 /** Provider state persisted as a refresh snapshot. */
@@ -81,24 +77,6 @@ export type Options = {
   storage?: Storage.Storage | undefined
 }
 
-/** A queued JSON-RPC request tracked in the store. */
-export type QueuedRequest<result = unknown> = OneOf<
-  | {
-      request: RpcRequest.RpcRequest
-      status: 'pending'
-    }
-  | {
-      request: RpcRequest.RpcRequest
-      result: result
-      status: 'success'
-    }
-  | {
-      request: RpcRequest.RpcRequest
-      error: RpcResponse.ErrorObject
-      status: 'error'
-    }
->
-
 /**
  * Creates a Zustand vanilla store with `subscribeWithSelector` and `persist` middleware.
  */
@@ -121,7 +99,6 @@ export function create(options: Options): Store {
           accounts: [],
           activeAccount: 0,
           chainId,
-          requestQueue: [],
         }),
         {
           merge: (persisted, current) => hydrate(persisted, current, { schema }),
