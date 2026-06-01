@@ -15,7 +15,6 @@ import { createSiweMessage, generateSiweNonce } from 'viem/siwe'
 import { Actions } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 
-import { PrivyEmailOtp } from './PrivyEmailOtp.js'
 import {
   type AdapterType,
   type DialogMode,
@@ -65,7 +64,6 @@ export function App() {
 
   return (
     <div className="playground min-h-dvh bg-background text-foreground" data-regen-radius="small">
-      <PrivyEmailOtp />
       <TurnkeyEmailOtp />
       <div className="playground-layout">
         <aside className="playground-rail">

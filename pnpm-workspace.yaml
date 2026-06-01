@@ -5,14 +5,18 @@ auditConfig:
     - GHSA-qjx8-664m-686j # transitive Privy js-cookie usage in playground.
 
 allowBuilds:
+  '@reown/appkit': false
+  bufferutil: false
   cloudflared: true
   cpu-features: true
   es5-ext: true
   esbuild: true
+  keccak: false
   protobufjs: true
   sharp: true
   simple-git-hooks: true
   ssh2: true
+  utf-8-validate: false
   workerd: true
 
 blockExoticSubdeps: true
