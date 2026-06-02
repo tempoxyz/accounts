@@ -39,6 +39,27 @@ describe('local', () => {
     await expect(provider.request({ method: 'eth_accounts' })).resolves.toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: getAccount materializes a local signer', async () => {
+    const { adapter, store } = setup()
+    store.setState({
+      accounts: [
+        {
+          address: core_accounts[0]!.address,
+          keyType: 'secp256k1',
+          privateKey: privateKeys[0]!,
+        },
+      ],
+      activeAccount: 0,
+    })
+
+    const { account } = await adapter.getAccount!({ address: core_accounts[0]!.address })
+    const signature = await account.sign({ hash: hashMessage({ raw: '0x68656c6c6f' }) })
+
+    expect(signature).toMatchInlineSnapshot(
+      `"0xf16ea9a3478698f695fd1401bfe27e9e4a7e8e3da94aa72b021125e31fa899cc573c48ea3fe1d4ab61a9db10c19032026e3ed2dbccba5a178235ac27f94504311c"`,
+    )
+  })
+
   describe('loadAccounts', () => {
     test('default: loads accounts', async () => {
       const { adapter } = setup()

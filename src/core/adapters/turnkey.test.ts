@@ -1,5 +1,5 @@
 import { Hex, PublicKey } from 'ox'
-import { decodeFunctionData } from 'viem'
+import { decodeFunctionData, hashMessage } from 'viem'
 import type { Address } from 'viem/accounts'
 import { Abis } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
@@ -352,6 +352,25 @@ describe('turnkey', () => {
 
     expect(client.fetchCalls).toMatchInlineSnapshot(`1`)
     expect(client.loadCalls).toMatchInlineSnapshot(`0`)
+  })
+
+  test('behavior: getAccount materializes a local signer from an existing session', async () => {
+    const { adapter, client, store } = setup()
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    const { account } = await adapter.getAccount!({ address })
+    const result = await account.sign({ hash: hashMessage({ raw: '0x68656c6c6f' }) })
+
+    expect(client.fetchCalls).toMatchInlineSnapshot(`1`)
+    expect(client.loadCalls).toMatchInlineSnapshot(`0`)
+    expect(client.signWith).toMatchInlineSnapshot(`
+      [
+        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      ]
+    `)
+    expect(result).toMatchInlineSnapshot(
+      `"0x000000000000000000000000000000000000000000000000000000000000001100000000000000000000000000000000000000000000000000000000000000221b"`,
+    )
   })
 
   test('behavior: silent restore does not connect accounts when the provider store is empty', async () => {

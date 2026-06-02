@@ -1,6 +1,7 @@
 import type { KeyAuthorization } from 'ox/tempo'
 import type { Client, Hex, Transport } from 'viem'
 import type { Address } from 'viem/accounts'
+import type { Account as TempoAccount } from 'viem/tempo'
 import type { tempo } from 'viem/tempo/chains'
 import type * as z from 'zod/mini'
 
@@ -132,6 +133,10 @@ export type Instance = {
   }
   /** Cleanup function called when the provider is destroyed. */
   cleanup?: (() => void) | undefined
+  /** Materialize an adapter-owned signer account. */
+  getAccount?:
+    | ((options?: getAccount.Options | undefined) => Promise<getAccount.ReturnType>)
+    | undefined
   /**
    * When `true`, the provider skips Server Authentication orchestration on
    * `wallet_connect` and forwards `capabilities.auth` to the adapter
@@ -181,6 +186,20 @@ export declare namespace getClient {
     chainId?: number | undefined
     /** Fee payer service URL, or `false` to opt out of fee payers for this transaction if set globally. */
     feePayer?: string | false | undefined
+  }
+}
+
+export declare namespace getAccount {
+  /** Options for materializing an adapter-owned signer account. */
+  type Options = {
+    /** Account address to materialize. Defaults to the active account. */
+    address?: Address | undefined
+  }
+
+  /** Materialized account returned by an adapter. */
+  type ReturnType = {
+    /** Tempo-compatible local signer account. */
+    account: TempoAccount.Account
   }
 }
 

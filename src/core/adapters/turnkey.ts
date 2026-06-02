@@ -323,6 +323,9 @@ export function turnkey<const client extends turnkey.Client>(
       cleanup() {
         if (expiry_timeout) clearTimeout(expiry_timeout)
       },
+      async getAccount(options = {}) {
+        return { account: await getTurnkeyAccount(options.address) }
+      },
       actions: {
         async createAccount(parameters) {
           const { authorizeAccessKey, personalSign } = parameters

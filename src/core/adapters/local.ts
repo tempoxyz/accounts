@@ -154,6 +154,9 @@ export function local(options: local.Options): Adapter.Adapter {
       }
 
       return {
+        async getAccount(options = {}) {
+          return { account: getAccount({ ...options, signable: true }) }
+        },
         actions: {
           async createAccount(parameters) {
             if (!createAccount)
