@@ -17,9 +17,11 @@ describe('channel', () => {
     })
     const requests: { meta: Dialog.host.Meta; sync: Dialog.Sync }[] = []
     const responses: Dialog.channel.Response[] = []
+    const modes: Dialog.channel.SwitchMode[] = []
 
     host.onRequests((sync, meta) => requests.push({ meta, sync }))
     consumer.onResponse((response) => responses.push(response))
+    consumer.onSwitchMode((mode) => modes.push(mode))
 
     await host.start()
     await consumer.start()
@@ -91,6 +93,18 @@ describe('channel', () => {
             "result": [
               "0x0000000000000000000000000000000000000001",
             ],
+          },
+        ]
+      `)
+    })
+
+    await host.switchMode({ mode: 'popup' })
+
+    await vi.waitFor(() => {
+      expect(modes).toMatchInlineSnapshot(`
+        [
+          {
+            "mode": "popup",
           },
         ]
       `)

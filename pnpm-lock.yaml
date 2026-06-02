@@ -104,8 +104,8 @@ importers:
         specifier: 0.14.25
         version: 0.14.25(typescript@5.9.3)(zod@4.3.6)
       wata:
-        specifier: https://pkg.pr.new/wevm/wata/wata@main
-        version: https://pkg.pr.new/wevm/wata/wata@main(typescript@5.9.3)
+        specifier: https://pkg.pr.new/wevm/wata/wata@dfc1c3678acc39718c3fba7dd409fe5d598f0c3e
+        version: https://pkg.pr.new/wevm/wata/wata@dfc1c3678acc39718c3fba7dd409fe5d598f0c3e(typescript@5.9.3)
       webauthx:
         specifier: ~0.1.1
         version: 0.1.1(typescript@5.9.3)(zod@4.3.6)
@@ -9841,8 +9841,8 @@ packages:
   warn-once@0.1.1:
     resolution: {integrity: sha512-VkQZJbO8zVImzYFteBXvBOZEl1qL175WH8VmZcxF2fZAoudNhNDvHi+doCaAEdU2l2vtcIwa2zn0QK5+I1HQ3Q==}
 
-  wata@https://pkg.pr.new/wevm/wata/wata@main:
-    resolution: {tarball: https://pkg.pr.new/wevm/wata/wata@main}
+  wata@https://pkg.pr.new/wevm/wata/wata@dfc1c3678acc39718c3fba7dd409fe5d598f0c3e:
+    resolution: {tarball: https://pkg.pr.new/wevm/wata/wata@dfc1c3678acc39718c3fba7dd409fe5d598f0c3e}
     version: 0.0.0
 
   watchpack@2.5.1:
@@ -21388,7 +21388,7 @@ snapshots:
 
   warn-once@0.1.1: {}
 
-  wata@https://pkg.pr.new/wevm/wata/wata@main(typescript@5.9.3):
+  wata@https://pkg.pr.new/wevm/wata/wata@dfc1c3678acc39718c3fba7dd409fe5d598f0c3e(typescript@5.9.3):
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.23)
       '@noble/ciphers': 2.2.0

@@ -71,11 +71,6 @@ type DialogRequestPayload = {
   request: RpcRequest.RpcRequest
 }
 
-type DialogSwitchModeResult = {
-  __dialog: 'switch-mode'
-  payload: SwitchMode
-}
-
 type RequestId = string | number
 
 /** Creates the app/SDK side of a Wata-backed dialog channel. */
@@ -103,6 +98,11 @@ export function consumerPostMessage(options: consumerPostMessage.Options): Consu
   wata.on('error', (error_) => {
     error = error_
     ready.reject(error_)
+  })
+  wata.on('notification', (event) => {
+    if (event.method !== 'dialog.mode.switch') return
+    const payload = firstParam(event.params) as SwitchMode
+    for (const listener of switchModeListeners) listener(payload)
   })
 
   return {
@@ -204,10 +204,6 @@ export function consumerPostMessage(options: consumerPostMessage.Options): Consu
         params: [normalizeValue(payload)] as const,
       })
       .then(({ result }) => {
-        if (isSwitchModeResult(result)) {
-          for (const listener of switchModeListeners) listener(result.payload)
-          return
-        }
         const response = {
           _request: payload.request,
           id: payload.request.id,
@@ -351,10 +347,10 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
       return request.respond(normalizeValue(payload))
     },
     switchMode(payload) {
-      const request = requests.values().next().value
-      if (!request) return Promise.resolve()
-      requests.delete(request.id)
-      return request.respond({ __dialog: 'switch-mode', payload } satisfies DialogSwitchModeResult)
+      return wata.notify({
+        method: 'dialog.mode.switch',
+        params: [normalizeValue(payload)] as const,
+      })
     },
     async start() {
       if (options.open) await options.open
@@ -483,20 +479,13 @@ function errorToResponse(error: unknown): RpcResponse.ErrorObject {
 }
 
 function firstParam(
-  params: HostWata.RequestEvent['params'] | HostWata.NotificationEvent['params'],
+  params:
+    | HostWata.RequestEvent['params']
+    | HostWata.NotificationEvent['params']
+    | Wata.NotificationEvent['params'],
 ) {
   if (!Array.isArray(params)) return undefined
   return params[0]
-}
-
-function isSwitchModeResult(value: unknown): value is DialogSwitchModeResult {
-  return Boolean(
-    value &&
-    typeof value === 'object' &&
-    '__dialog' in value &&
-    value.__dialog === 'switch-mode' &&
-    'payload' in value,
-  )
 }
 
 function normalizeValue<type>(value: type): type {
