@@ -1,7 +1,7 @@
 import type * as React from 'react'
-import { Remote } from 'accounts/react'
+import { Dialog } from 'accounts/react'
 
-import { remote } from '../lib/config.js'
+import { host } from '../lib/config.js'
 
 /**
  * Wraps children with IO v2 occlusion detection when rendered in an iframe.
@@ -9,9 +9,9 @@ import { remote } from '../lib/config.js'
 export function EnsureVisibility(props: { children: React.ReactNode }) {
   const { children } = props
 
-  const mode = Remote.useState(remote, (s) => s.mode)
+  const mode = Dialog.host.useState(host, (s) => s.mode)
 
-  const { invokePopup, ref, visible } = Remote.useEnsureVisibility(remote, {
+  const { invokePopup, ref, visible } = Dialog.host.useEnsureVisibility(host, {
     enabled: mode === 'iframe',
   })
 

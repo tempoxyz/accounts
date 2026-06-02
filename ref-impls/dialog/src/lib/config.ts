@@ -1,11 +1,11 @@
 import { getConnectors } from '@wagmi/core'
-import { Remote, Storage } from 'accounts'
+import { Dialog, Storage } from 'accounts'
 import { http } from 'viem'
 import { createConfig } from 'wagmi'
 import { tempo, tempoModerato } from 'wagmi/chains'
 import { webAuthn } from 'wagmi/tempo'
 
-import * as Messenger from './messenger.js'
+import * as Channel from './channel.js'
 
 /** Provider instance for executing confirmed requests. */
 export const wagmiConfig = createConfig({
@@ -25,8 +25,8 @@ export const wagmiConfig = createConfig({
   },
 })
 
-/** Remote context singleton. */
-export const remote = Remote.create({
-  messenger: Messenger.init(),
+/** Dialog host context singleton. */
+export const host = Dialog.host.create({
+  channel: Channel.init(),
   provider: await getConnectors(wagmiConfig as any)[0]!.getProvider(),
 })

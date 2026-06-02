@@ -1,7 +1,6 @@
 import { Provider as ox_Provider, RpcRequest } from 'ox'
 
 import type * as Dialog from '../Dialog.js'
-import type * as Remote from '../Remote.js'
 import type * as core_Store from '../Store.js'
 
 /** Request stored by the host request coordinator. */
@@ -12,17 +11,17 @@ type StoredRequest = {
   chainId: number
   /** Rejects the provider request promise. */
   reject: (error: Error) => void
-  /** JSON-RPC request sent to the remote. */
+  /** JSON-RPC request sent to the dialog host. */
   request: RpcRequest.RpcRequest
   /** Resolves the provider request promise. */
   resolve: (result: unknown) => void
-  /** Request is waiting for a remote response. */
+  /** Request is waiting for a dialog response. */
   status: 'pending'
-  /** Whether this pending request has been synced to the remote UI. */
+  /** Whether this pending request has been synced to the dialog UI. */
   synced: boolean
 }
 
-/** Host-scoped remote request context. */
+/** Host-scoped dialog request context. */
 type Context = {
   /** Active provider attachments. */
   attachments: Set<symbol>
@@ -38,9 +37,9 @@ type Context = {
 
 /** Provider attachment options for a host request coordinator. */
 export type AttachOptions = {
-  /** Dialog implementation used to communicate with the remote app. */
+  /** Dialog implementation used to communicate with the host app. */
   dialog: Dialog.Dialog
-  /** Remote host URL. */
+  /** Dialog host URL. */
   host: string
   /** Provider store used by the dialog transport for account sync and referrer setup. */
   store: core_Store.Store
@@ -48,7 +47,7 @@ export type AttachOptions = {
   theme?: Dialog.Theme | undefined
 }
 
-/** Remote request enqueue options. */
+/** Dialog request enqueue options. */
 export type RequestOptions = {
   /** Active account captured from the provider enqueueing the request. */
   account: { address: string } | undefined
@@ -119,7 +118,7 @@ function key(host: string): string {
   return new URL(host).host
 }
 
-/** Returns the request context shared by remotes on the same host. */
+/** Returns the request context shared by adapters on the same host. */
 function get(host: string): Context {
   const key_ = key(host)
   const current = contexts.get(key_)
@@ -159,7 +158,7 @@ function reject(host: string, ids: readonly number[]) {
   sync(host, { force: true })
 }
 
-/** Resolves or rejects a pending request with an RPC response from the remote UI. */
+/** Resolves or rejects a pending request with an RPC response from the dialog UI. */
 function respond(
   host: string,
   response: { id: number; result?: unknown; error?: { code: number; message: string } | undefined },
@@ -174,7 +173,7 @@ function respond(
   sync(host, { force: true })
 }
 
-/** Syncs newly pending host requests to the remote dialog. */
+/** Syncs newly pending requests to the dialog. */
 function sync(host: string, options: sync.Options = {}) {
   const context = get(host)
   const dialog = context.dialog
@@ -207,8 +206,8 @@ declare namespace sync {
   }
 }
 
-/** Removes host-only metadata before syncing requests to the remote UI. */
-function toRequest(request: StoredRequest): Remote.Request {
+/** Removes local metadata before syncing requests to the dialog UI. */
+function toRequest(request: StoredRequest): Dialog.Request {
   return {
     request: request.request,
     status: request.status,

@@ -5,8 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Dialog from '../Dialog.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
-import * as RemoteRequests from '../internal/RemoteRequests.js'
-import type * as Remote from '../Remote.js'
+import * as DialogRequests from '../internal/DialogRequests.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { dialog } from './dialog.js'
@@ -52,8 +51,8 @@ function setup() {
 
 function createDialog() {
   let parameters: Dialog.SetupFn.Parameters | undefined
-  const syncs: Remote.Sync[] = []
-  const synced: (readonly Remote.Request[])[] = []
+  const syncs: Dialog.Sync[] = []
+  const synced: (readonly Dialog.Request[])[] = []
   return {
     dialog: Dialog.define({ name: 'test' }, (options) => ({
       close() {},
@@ -72,10 +71,10 @@ function createDialog() {
       })
       return syncs[0]!.requests[0]!
     },
-    failure(request: Remote.Request, error: { code: number; message: string }) {
+    failure(request: Dialog.Request, error: { code: number; message: string }) {
       parameters!.onResponse({ error, id: request.request.id })
     },
-    success(request: Remote.Request, result: unknown) {
+    success(request: Dialog.Request, result: unknown) {
       parameters!.onResponse({ id: request.request.id, result })
     },
     syncs,
@@ -85,12 +84,12 @@ function createDialog() {
 
 describe('dialog', () => {
   beforeEach(() => {
-    RemoteRequests.reset(host)
+    DialogRequests.reset(host)
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
-    RemoteRequests.reset(host)
+    DialogRequests.reset(host)
   })
 
   test('behavior: sendTransaction signs locally when an access key is selected', async () => {
@@ -376,7 +375,7 @@ describe('dialog', () => {
     adapter_b.cleanup?.()
   })
 
-  test('behavior: resolving one pending request advances the remote queue', async () => {
+  test('behavior: resolving one pending request advances the host queue', async () => {
     const storage = Storage.memory()
     const store = Store.create({ chainId: 123, storage })
     const dialog_ = createDialog()

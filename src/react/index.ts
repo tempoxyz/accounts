@@ -1,1 +1,1 @@
-export * as Remote from './Remote.js'
+export * as Dialog from './Dialog.js'

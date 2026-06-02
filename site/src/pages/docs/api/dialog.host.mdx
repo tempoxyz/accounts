@@ -1,33 +1,33 @@
 ---
-title: Remote
+title: Dialog.host
 description: Bridge that runs inside the wallet's iframe/popup and serves RPC requests from the host SDK.
 ---
 
 import { Cards, Card } from 'vocs'
 
-# `Remote`
+# `Dialog.host`
 
-The `Remote` namespace is the **wallet-side** counterpart to the [`Provider`](/docs/api/provider). It:
+The `Dialog.host` namespace is the **wallet-side** counterpart to the [`Provider`](/docs/api/provider). It:
 
 - runs inside the iframe or popup served by the wallet's auth app
-- receives RPC requests forwarded from the host SDK over [`Messenger`](https://github.com/tempoxyz/accounts/blob/main/src/core/Messenger.ts)
+- receives RPC requests forwarded from the host SDK over [`Dialog.channel`](https://github.com/tempoxyz/accounts/blob/main/src/core/Dialog/channel.ts)
 - exposes a queue of pending requests for the UI to render approval surfaces against
 
-A typical wallet app calls [`Remote.create`](/docs/api/remote.create) once at startup, subscribes to the request queue with `onUserRequest`, navigates to a per-method route, and either [`respond`](#respond) or [`reject`](#reject)s once the user has approved or cancelled.
+A typical wallet app calls [`Dialog.host.create`](/docs/api/dialog.host.create) once at startup, subscribes to the request queue with `onUserRequest`, navigates to a per-method route, and either [`respond`](#respond) or [`reject`](#reject)s once the user has approved or cancelled.
 
 ## Core
 
 <Cards>
   <Card
-    description="Create a remote context bound to a Messenger and Provider"
+    description="Create a host context bound to a Dialog.channel and Provider"
     icon="lucide:plug"
-    to="/docs/api/remote.create"
+    to="/docs/api/dialog.host.create"
     title=".create"
   />
   <Card
     description="Validate an RPC request payload from URL search params"
     icon="lucide:shield-check"
-    to="/docs/api/remote.validateSearch"
+    to="/docs/api/dialog.host.validateSearch"
     title=".validateSearch"
   />
 </Cards>
@@ -40,19 +40,19 @@ The React hooks live in the `accounts/react` entrypoint and are designed to be u
   <Card
     description="Detect iframe occlusion and fall back to a popup"
     icon="lucide:eye"
-    to="/docs/api/remote.useEnsureVisibility"
+    to="/docs/api/dialog.host.useEnsureVisibility"
     title=".useEnsureVisibility"
   />
   <Card
-    description="Subscribe to a remote context's state store"
+    description="Subscribe to a host context's state store"
     icon="lucide:database"
-    to="/docs/api/remote.useState"
+    to="/docs/api/dialog.host.useState"
     title=".useState"
   />
   <Card
     description="Apply theme overrides from the host SDK"
     icon="lucide:palette"
-    to="/docs/api/remote.useTheme"
+    to="/docs/api/dialog.host.useTheme"
     title=".useTheme"
   />
 </Cards>

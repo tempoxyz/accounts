@@ -6,7 +6,7 @@ import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
-import * as RemoteRequests from '../internal/RemoteRequests.js'
+import * as DialogRequests from '../internal/DialogRequests.js'
 import * as Schema from '../Schema.js'
 import * as Rpc from '../zod/rpc.js'
 
@@ -43,7 +43,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     )
 
   return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
-    const detach = RemoteRequests.attach(host, { dialog, host, store, theme })
+    const detach = DialogRequests.attach(host, { dialog, host, store, theme })
 
     /** Returns the active account from the adapter source store. */
     function getActiveAccount(): { address: string } | undefined {
@@ -60,7 +60,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     const provider = ox_Provider.from(
       {
         async request(r) {
-          return RemoteRequests.request(host, {
+          return DialogRequests.request(host, {
             account: getActiveAccount(),
             chainId: store.getState().chainId,
             request: r,

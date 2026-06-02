@@ -1,0 +1,64 @@
+---
+title: Dialog.host.useTheme
+description: React hook that applies theme overrides from URL search params and live channel updates.
+---
+
+# `Dialog.host.useTheme`
+
+React hook that applies theme overrides to the document root. On mount, it reads `accent`, `radius`, and `scheme` from the wallet app's URL search params and writes them to `<html>`. When a `host` context is provided, it also subscribes to live `theme` messages from the host SDK and re-applies the latest values.
+
+The hook captures the original document attributes/styles on mount and restores them on unmount, so it is safe to use inside a route that may unmount and remount.
+
+## Usage
+
+```tsx
+import { Dialog } from 'accounts/react'
+
+import { host } from '../lib/config.js'
+
+function App() {
+  Dialog.host.useTheme(host)
+  return <Outlet />
+}
+```
+
+## Parameters
+
+### host
+
+- **Type:** `Dialog.Host | undefined`
+- **Optional**
+
+The host context returned from [`Dialog.host.create`](/docs/api/dialog.host.create). When provided, the hook subscribes to live `theme` messages on the channel so the wallet re-themes whenever the host SDK pushes an update.
+
+When omitted, only the initial URL-search-param theme is applied — useful for SSR-rendered pages or static previews.
+
+```tsx
+import { Dialog } from 'accounts/react'
+
+import { host } from '../lib/config.js'
+
+Dialog.host.useTheme(host) // [!code focus]
+```
+
+## Theme values
+
+The following values are read from URL search params (and from `theme` channel payloads) and applied to `<html>`:
+
+### accent
+
+- **Type:** `'neutral' | 'blue' | 'red' | 'amber' | 'green' | 'purple' | string`
+
+Sets the `data-theme-accent` attribute. When the value is not one of the named presets above, it is also written to the `--theme-accent` CSS custom property and `data-theme-accent` is set to `'custom'`.
+
+### radius
+
+- **Type:** `string`
+
+Sets the `data-theme-radius` attribute on `<html>` so theme CSS can pick up corner-radius variants.
+
+### scheme
+
+- **Type:** `string`
+
+Written to `document.documentElement.style.colorScheme` (e.g. `'light'`, `'dark'`).

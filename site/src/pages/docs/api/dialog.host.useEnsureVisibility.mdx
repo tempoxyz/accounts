@@ -1,24 +1,24 @@
 ---
-title: Remote.useEnsureVisibility
+title: Dialog.host.useEnsureVisibility
 description: React hook that monitors iframe visibility and falls back to a popup when occluded.
 ---
 
-# `Remote.useEnsureVisibility`
+# `Dialog.host.useEnsureVisibility`
 
 React hook that monitors element visibility using [IntersectionObserver v2](https://web.dev/articles/intersectionobserver-v2). When the wallet is rendered inside an iframe on an **untrusted host**, this hook detects occlusion / clickjacking attempts and exposes a `visible` flag plus an `invokePopup` action so the wallet can fall back to a popup.
 
-The hook is a no-op when the host is in [`remote.trustedHosts`](/docs/api/remote.create#trustedhosts), or when `enabled` is `false`. If IntersectionObserver v2 is not supported by the browser, `visible` is set to `false` so the wallet can immediately switch to a popup.
+The hook is a no-op when the host is in [`host.trustedHosts`](/docs/api/dialog.host.create#trustedhosts), or when `enabled` is `false`. If IntersectionObserver v2 is not supported by the browser, `visible` is set to `false` so the wallet can immediately switch to a popup.
 
 ## Usage
 
 ```tsx
-import { Remote } from 'accounts/react'
+import { Dialog } from 'accounts/react'
 
-import { remote } from '../lib/config.js'
+import { host } from '../lib/config.js'
 
 function EnsureVisibility(props: { children: React.ReactNode }) {
-  const mode = Remote.useState(remote, (s) => s.mode)
-  const { invokePopup, ref, visible } = Remote.useEnsureVisibility(remote, {
+  const mode = Dialog.host.useState(host, (s) => s.mode)
+  const { invokePopup, ref, visible } = Dialog.host.useEnsureVisibility(host, {
     enabled: mode === 'iframe',
   })
 
@@ -32,20 +32,20 @@ function EnsureVisibility(props: { children: React.ReactNode }) {
 
 ## Parameters
 
-### remote
+### host
 
-- **Type:** `Remote.Remote`
+- **Type:** `Dialog.Host`
 - **Required**
 
-The remote context returned from [`Remote.create`](/docs/api/remote.create). Used to read `trustedHosts` and to send the `switch-mode` message when `invokePopup` is called.
+The host context returned from [`Dialog.host.create`](/docs/api/dialog.host.create). Used to read `trustedHosts` and to send the `switch-mode` message when `invokePopup` is called.
 
 ```tsx
-import { Remote } from 'accounts/react'
+import { Dialog } from 'accounts/react'
 
-import { remote } from '../lib/config.js'
+import { host } from '../lib/config.js'
 
-const { invokePopup, ref, visible } = Remote.useEnsureVisibility(
-  remote, // [!code focus]
+const { invokePopup, ref, visible } = Dialog.host.useEnsureVisibility(
+  host, // [!code focus]
 )
 ```
 
@@ -57,12 +57,12 @@ const { invokePopup, ref, visible } = Remote.useEnsureVisibility(
 Whether visibility monitoring is enabled. Wire this to `mode === 'iframe'` so the hook is inert when the wallet is already rendered in a popup.
 
 ```tsx
-import { Remote } from 'accounts/react'
+import { Dialog } from 'accounts/react'
 
-import { remote } from '../lib/config.js'
+import { host } from '../lib/config.js'
 
-const mode = Remote.useState(remote, (s) => s.mode)
-const { invokePopup, ref, visible } = Remote.useEnsureVisibility(remote, {
+const mode = Dialog.host.useState(host, (s) => s.mode)
+const { invokePopup, ref, visible } = Dialog.host.useEnsureVisibility(host, {
   enabled: mode === 'iframe', // [!code focus]
 })
 ```

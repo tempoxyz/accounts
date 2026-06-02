@@ -1,12 +1,12 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router'
 import { reconnect } from '@wagmi/core'
-import { Remote } from 'accounts/react'
+import { Dialog } from 'accounts/react'
 
 import { EnsureVisibility } from '../components/EnsureVisibility'
-import { remote, wagmiConfig } from '../lib/config'
+import { host, wagmiConfig } from '../lib/config'
 import { router } from '../router'
 
-remote.onUserRequest(async ({ account, request }) => {
+host.onUserRequest(async ({ account, request }) => {
   if (!request) return
 
   await reconnect(wagmiConfig as never)
@@ -18,14 +18,14 @@ remote.onUserRequest(async ({ account, request }) => {
   })
 })
 
-remote.ready()
+host.ready()
 
 export const Route = createRootRoute({
   component: RootComponent,
 })
 
 function RootComponent() {
-  const ready = Remote.useState(remote, (s) => s.ready)
+  const ready = Dialog.host.useState(host, (s) => s.ready)
 
   return (
     <div
@@ -38,7 +38,7 @@ function RootComponent() {
         paddingTop: 16,
         background: 'rgba(0, 0, 0, 0.5)',
       }}
-      onClick={() => remote.rejectAll()}
+      onClick={() => host.rejectAll()}
     >
       {ready && (
         <div

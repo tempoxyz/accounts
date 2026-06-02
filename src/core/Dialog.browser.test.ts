@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Dialog from './Dialog.js'
-import type * as Remote from './Remote.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
 
@@ -21,14 +20,14 @@ function setup() {
 
 let lastHandle: Dialog.Instance | undefined
 
-function pending(id: number): Remote.Request & { status: 'pending' } {
+function pending(id: number): Dialog.Request & { status: 'pending' } {
   return {
     request: { _returnType: undefined, id, jsonrpc: '2.0', method: 'eth_accounts' },
     status: 'pending',
   }
 }
 
-function sync(requests: readonly Remote.Request[]): Remote.Sync {
+function sync(requests: readonly Dialog.Request[]): Dialog.Sync {
   return { account: undefined, chainId: 1, requests }
 }
 

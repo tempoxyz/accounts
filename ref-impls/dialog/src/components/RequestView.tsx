@@ -1,15 +1,15 @@
 import { useMutation } from '@tanstack/react-query'
-import type { Remote } from 'accounts'
+import type { Dialog } from 'accounts'
 import { Json } from 'ox'
 
-import { remote } from '../lib/config.js'
+import { host } from '../lib/config.js'
 
 /** Generic confirm/reject UI for an RPC request. */
 export function RequestView(props: RequestView.Props) {
   const { request } = props
 
   const confirm = useMutation({
-    mutationFn: () => remote.respond(request),
+    mutationFn: () => host.respond(request),
   })
 
   return (
@@ -20,7 +20,7 @@ export function RequestView(props: RequestView.Props) {
           {confirm.isPending ? 'Confirming...' : 'Confirm'}
         </button>{' '}
         <button
-          onClick={() => remote.reject(request)}
+          onClick={() => host.reject(request)}
           disabled={confirm.isPending}
           data-testid="reject"
         >
@@ -42,6 +42,6 @@ export function RequestView(props: RequestView.Props) {
 
 export declare namespace RequestView {
   type Props = {
-    request: NonNullable<Remote.onUserRequest.Payload['request']>
+    request: NonNullable<Dialog.onUserRequest.Payload['request']>
   }
 }

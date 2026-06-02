@@ -1,16 +1,16 @@
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { Remote } from 'accounts'
-import { Remote as RemoteReact } from 'accounts/react'
+import { Dialog } from 'accounts'
+import { Dialog as DialogReact } from 'accounts/react'
 import { useState } from 'react'
 import { useConnection } from 'wagmi'
 
-import { remote } from '../../lib/config.js'
+import { host } from '../../lib/config.js'
 
 export const Route = createFileRoute('/rpc/wallet_connect')({
   component: Wrapper,
   validateSearch: (search) =>
-    Remote.validateSearch(remote, search, { method: 'wallet_connect' }),
+    Dialog.host.validateSearch(host, search, { method: 'wallet_connect' }),
 })
 
 function Wrapper() {
@@ -38,7 +38,7 @@ function Component() {
         ...search,
         params: [{ ...search.params?.[0], capabilities }] as const,
       }
-      return remote.respond(request as never)
+      return host.respond(request as never)
     },
   })
 
@@ -63,9 +63,9 @@ type Submit = ReturnType<
 
 function Continue(props: { submit: Submit; onSignUp: () => void }) {
   const { submit, onSignUp } = props
-  const origin = RemoteReact.useState(remote, (s) => s.origin)
+  const origin = DialogReact.host.useState(host, (s) => s.origin)
   const { address } = useConnection()
-  const host = origin ? new URL(origin).host : undefined
+  const originHost = origin ? new URL(origin).host : undefined
   const truncated = address ? `${address.slice(0, 8)}...${address.slice(-6)}` : undefined
 
   return (
@@ -77,7 +77,7 @@ function Continue(props: { submit: Submit; onSignUp: () => void }) {
     >
       <h2>Sign in</h2>
       <p>
-        Continue as <code>{truncated}</code> on {host}
+        Continue as <code>{truncated}</code> on {originHost}
       </p>
       <button type="submit" disabled={submit.isPending}>
         Continue with Passkey
@@ -92,8 +92,8 @@ function Continue(props: { submit: Submit; onSignUp: () => void }) {
 
 function SignInOrSignUp(props: { submit: Submit; method: string | undefined }) {
   const { submit, method } = props
-  const origin = RemoteReact.useState(remote, (s) => s.origin)
-  const host = origin ? new URL(origin).host : undefined
+  const origin = DialogReact.host.useState(host, (s) => s.origin)
+  const originHost = origin ? new URL(origin).host : undefined
 
   return (
     <form
@@ -104,7 +104,7 @@ function SignInOrSignUp(props: { submit: Submit; method: string | undefined }) {
       }}
     >
       <h2>Sign in</h2>
-      <p>Sign in to {host}</p>
+      <p>Sign in to {originHost}</p>
       <div>
         <input type="email" name="email" required placeholder="example@tempo.xyz" />
       </div>

@@ -160,15 +160,18 @@ const config: Config = defineConfig({
             ],
           },
           {
-            text: 'Remote',
+            text: 'Dialog.host',
             collapsed: true,
             items: [
-              { text: 'Overview', link: '/docs/api/remote' },
-              { text: '.create', link: '/docs/api/remote.create' },
-              { text: '.useEnsureVisibility', link: '/docs/api/remote.useEnsureVisibility' },
-              { text: '.useState', link: '/docs/api/remote.useState' },
-              { text: '.useTheme', link: '/docs/api/remote.useTheme' },
-              { text: '.validateSearch', link: '/docs/api/remote.validateSearch' },
+              { text: 'Overview', link: '/docs/api/dialog.host' },
+              { text: '.create', link: '/docs/api/dialog.host.create' },
+              {
+                text: '.useEnsureVisibility',
+                link: '/docs/api/dialog.host.useEnsureVisibility',
+              },
+              { text: '.useState', link: '/docs/api/dialog.host.useState' },
+              { text: '.useTheme', link: '/docs/api/dialog.host.useTheme' },
+              { text: '.validateSearch', link: '/docs/api/dialog.host.validateSearch' },
             ],
           },
           {

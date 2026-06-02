@@ -1,0 +1,234 @@
+---
+title: Dialog.host.create
+description: Create a host context bound to a Dialog.channel and Provider.
+---
+
+# `Dialog.host.create`
+
+Creates a host context for the wallet's iframe/popup app. The context bundles:
+
+- a [`Dialog.channel`](https://github.com/tempoxyz/accounts/blob/main/src/core/Dialog/channel.ts) transport to the host SDK
+- a [`Provider`](/docs/api/provider) used to actually execute approved requests
+- a [Zustand](https://github.com/pmndrs/zustand) store of queued RPC requests
+
+## Usage
+
+The `channel` is a [`Dialog.channel.Host`](https://github.com/tempoxyz/accounts/blob/main/src/core/Dialog/channel.ts) that connects the wallet app to its host (the iframe `parent` or popup `opener`). The `provider` is the wallet's own [`Provider`](/docs/api/provider) instance — the one that holds the wallet's accounts and actually executes signing operations.
+
+```ts
+import { Dialog, Provider, webAuthn } from 'accounts'
+
+// 1. Build a channel to the parent/opener (the page that opened this iframe/popup).
+const target = window.opener ?? window.parent
+if (!target || target === window) throw new Error('No host window found')
+const channel = Dialog.channel.hostPostMessage({ target })
+
+// 2. Build the wallet-side provider that will execute approved requests.
+const provider = Provider.create({
+  adapter: webAuthn({ auth: '/auth' }),
+})
+
+// 3. Wire them together.
+const host = Dialog.host.create({
+  channel,
+  provider,
+})
+
+host.onUserRequest(({ account, request }) => {
+  if (!request) return
+  // Navigate to the request's approval UI...
+})
+
+host.ready()
+```
+
+## Parameters
+
+### channel
+
+- **Type:** `Dialog.channel.Host`
+- **Required**
+
+Channel used to receive RPC requests from the host SDK and to send back responses, sync events, and mode switches.
+
+```ts
+import { Dialog } from 'accounts'
+
+const host = Dialog.host.create({
+  channel, // [!code focus]
+  provider,
+})
+```
+
+### provider
+
+- **Type:** `Provider.Provider`
+- **Required**
+
+[`Provider`](/docs/api/provider) instance used to execute RPC requests once the user approves them.
+
+```ts
+import { Dialog } from 'accounts'
+
+const host = Dialog.host.create({
+  channel,
+  provider, // [!code focus]
+})
+```
+
+### trustedHosts
+
+- **Type:** `readonly string[]`
+- **Default:** `[]`
+
+Hostnames trusted to render the wallet in an iframe. Sent with `Dialog.host.ready` and consulted by [`Dialog.host.useEnsureVisibility`](/docs/api/dialog.host.useEnsureVisibility) to decide whether occlusion monitoring is required.
+
+```ts
+import { Dialog } from 'accounts'
+
+const host = Dialog.host.create({
+  channel,
+  provider,
+  trustedHosts: ['example.com', '*.example.com'], // [!code focus]
+})
+```
+
+## Returns
+
+`Dialog.host.create` returns a `Dialog.host` object with the following properties:
+
+### channel
+
+- **Type:** `Dialog.channel.Host`
+
+The channel passed in via options.
+
+### provider
+
+- **Type:** `Provider.Provider`
+
+The provider passed in via options.
+
+### store
+
+- **Type:** `StoreApi<Dialog.State>`
+
+Zustand store holding the host context's state:
+
+```ts
+type State = {
+  /** Whether the dialog is rendered in an iframe or popup. */
+  mode: 'iframe' | 'popup' | undefined
+  /** Trusted host origin from MessageEvent. */
+  origin: string | undefined
+  /** Whether the dialog is ready to display content. */
+  ready: boolean
+  /** Queued RPC requests received from the host. */
+  requests: Dialog.State['requests']
+}
+```
+
+### trustedHosts
+
+- **Type:** `readonly string[]`
+
+The trusted hosts list passed in via options (defaulted to `[]`).
+
+### onUserRequest
+
+- **Type:** `(cb: (payload: { account; origin; request }) => void | Promise<void>) => () => void`
+
+Subscribes to user-facing RPC requests. Syncs the host's active account/chain, updates the host store, and invokes the callback with the first pending request — or `null` when the queue is cleared, signalling the UI should close. Returns an unsubscribe function.
+
+```ts
+import { Dialog } from 'accounts'
+
+const host = Dialog.host.create({ channel, provider })
+
+const unsubscribe = host.onUserRequest(({ account, request }) => { // [!code focus]
+  if (!request) return // Queue cleared — close the dialog. // [!code focus]
+  // Navigate to the per-method approval UI. // [!code focus]
+}) // [!code focus]
+```
+
+### onRequests
+
+- **Type:** `(cb: (requests, event, extra) => void) => () => void`
+
+Lower-level subscription that fires on every `rpc-requests` message and receives the full queued request list, the underlying `MessageEvent`, and the host's active account. Used internally by `onUserRequest`. Returns an unsubscribe function.
+
+### ready
+
+- **Type:** `(options?: { accounts?: readonly string[] } & Dialog.channel.ReadyOptions) => void`
+
+Signals readiness to the host and begins accepting requests. Call this after the host context is fully initialized. When `accounts` is provided, the wallet responds to SDK account-sync messages.
+
+```ts
+import { Dialog } from 'accounts'
+
+const host = Dialog.host.create({ channel, provider })
+
+host.ready({ accounts: ['0x...'] }) // [!code focus]
+```
+
+### reject
+
+- **Type:** `(request: NonNullable<Dialog.onUserRequest.Payload['request']>, error?: ProviderRpcError | RpcResponse.BaseError) => void`
+
+Rejects a single RPC request. Defaults to `Provider.UserRejectedRequestError` when no `error` is provided.
+
+```ts
+host.reject(request) // [!code focus]
+```
+
+### rejectAll
+
+- **Type:** `(error?: ProviderRpcError | RpcResponse.BaseError) => void`
+
+Rejects every pending RPC request. Typically wired to backdrop clicks and dialog dismissals.
+
+```ts
+host.rejectAll() // [!code focus]
+```
+
+### respond
+
+- **Type:** `(request, options?: respond.Options) => Promise<unknown>`
+
+Responds to an RPC request. When `options.result` is provided, sends it directly. When `options.error` is provided, sends an error response. Otherwise, executes `provider.request(request)` and sends the result.
+
+```ts
+declare namespace respond {
+  type Options = {
+    /** Error to respond with (takes precedence over result). */
+    error?: { code: number; message: string } | undefined
+    /**
+     * Called when `provider.request()` throws. Return `true` to suppress the
+     * error response to the parent — the dialog stays open and can show a
+     * recovery UI. The error is still re-thrown to the caller.
+     */
+    onError?: ((error: Error) => boolean | void) | undefined
+    /** Explicit result — if omitted, calls `provider.request(request)`. */
+    result?: unknown | undefined
+    /** Transform the result before sending. */
+    selector?: ((result: any) => unknown) | undefined
+  }
+}
+```
+
+```ts
+// Defer to the bound provider. // [!code focus]
+await host.respond(request) // [!code focus]
+
+// Send an explicit result. // [!code focus]
+await host.respond(request, { result: '0x...' }) // [!code focus]
+
+// Send an explicit error. // [!code focus]
+await host.respond(request, { // [!code focus]
+  error: { code: 4001, message: 'User rejected' }, // [!code focus]
+}) // [!code focus]
+```
+
+## SSR
+
+In SSR environments (no `window`), prefer `Dialog.host.noop()` which returns an inert context whose methods are no-ops.

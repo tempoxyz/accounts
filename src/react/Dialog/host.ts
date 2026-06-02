@@ -1,28 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState as react_useState } from 'react'
 import { useStore } from 'zustand'
 
-import * as IO from '../core/IntersectionObserver.js'
-import type * as CoreRemote from '../core/Remote.js'
-import * as TrustedHosts from '../core/TrustedHosts.js'
+import type * as CoreHost from '../../core/Dialog/host.js'
+import * as IO from '../../core/IntersectionObserver.js'
+import * as TrustedHosts from '../../core/TrustedHosts.js'
 
 /** Monitors element visibility using IntersectionObserver v2. */
 export function useEnsureVisibility(
-  remote: CoreRemote.Remote,
+  host: CoreHost.Host,
   options: useEnsureVisibility.Options = {},
 ): useEnsureVisibility.ReturnType {
   const { enabled = true } = options
 
-  const origin = useState(remote, (s) => s.origin)
+  const origin = useState(host, (s) => s.origin)
 
   const trusted = useMemo(() => {
     if (!origin) return false
     try {
       const hostname = new URL(origin).hostname.replace(/^www\./, '')
-      return TrustedHosts.match(remote.trustedHosts, hostname, window.location.hostname)
+      return TrustedHosts.match(host.trustedHosts, hostname, window.location.hostname)
     } catch {
       return false
     }
-  }, [origin, remote.trustedHosts])
+  }, [origin, host.trustedHosts])
 
   const active = enabled && !trusted
 
@@ -58,29 +58,23 @@ export function useEnsureVisibility(
     return () => observer.disconnect()
   }, [active])
 
-  const invokePopup = useCallback(
-    () => remote.messenger.send('switch-mode', { mode: 'popup' }),
-    [remote],
-  )
+  const invokePopup = useCallback(() => host.channel.switchMode({ mode: 'popup' }), [host])
 
   return { invokePopup, ref, visible }
 }
 
-/** React hook to select state from a remote context's store. */
-export function useState(remote: CoreRemote.Remote): CoreRemote.State
+/** React hook to select state from a dialog host's store. */
+export function useState(host: CoreHost.Host): CoreHost.State
 export function useState<selected>(
-  remote: CoreRemote.Remote,
-  selector: (state: CoreRemote.State) => selected,
+  host: CoreHost.Host,
+  selector: (state: CoreHost.State) => selected,
 ): selected
-export function useState(
-  remote: CoreRemote.Remote,
-  selector?: (state: CoreRemote.State) => unknown,
-) {
-  return useStore(remote.store, selector as never)
+export function useState(host: CoreHost.Host, selector?: (state: CoreHost.State) => unknown) {
+  return useStore(host.store, selector as never)
 }
 
-/** Applies theme overrides from URL search params and live messenger updates. */
-export function useTheme(remote?: CoreRemote.Remote | undefined) {
+/** Applies theme overrides from URL search params and live channel updates. */
+export function useTheme(host?: CoreHost.Host | undefined) {
   const snapshot = useRef<ThemeSnapshot | undefined>(undefined)
 
   useEffect(() => {
@@ -102,12 +96,12 @@ export function useTheme(remote?: CoreRemote.Remote | undefined) {
   }, [])
 
   useEffect(() => {
-    if (!remote) return
-    return remote.messenger.on('theme', (payload) => {
+    if (!host) return
+    return host.channel.onTheme((payload) => {
       if (snapshot.current) restoreTheme(snapshot.current)
       applyTheme(payload)
     })
-  }, [remote])
+  }, [host])
 }
 
 /** Applies theme values to the document root. */
