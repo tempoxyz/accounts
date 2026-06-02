@@ -82,7 +82,9 @@ describe('Dialog.iframe', () => {
   test('behavior: iframe src points to host', () => {
     setup()
     const iframe = document.querySelector('dialog[data-tempo-wallet] iframe') as HTMLIFrameElement
-    expect(iframe.src).toMatchInlineSnapshot(`"https://wallet.tempo.xyz/embed"`)
+    expect(iframe.src).toMatchInlineSnapshot(
+      `"https://wallet.tempo.xyz/embed?chainId=1&mode=iframe&transport=wata"`,
+    )
     expect(iframe.src).toContain(host)
   })
 
@@ -265,7 +267,9 @@ describe('Dialog.popup', () => {
     handle.open()
 
     expect(openSpy).toHaveBeenCalledOnce()
-    expect(openSpy.mock.calls[0]![0]).toBe(host)
+    expect(openSpy.mock.calls[0]![0]).toMatchInlineSnapshot(
+      `"https://wallet.tempo.xyz/embed?chainId=1&mode=popup&transport=wata"`,
+    )
 
     handle.destroy()
     openSpy.mockRestore()

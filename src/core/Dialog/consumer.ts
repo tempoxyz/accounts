@@ -104,6 +104,7 @@ export function iframe(): Dialog {
     const hostUrl = new URL(host)
     hostUrl.searchParams.set('chainId', String(parameters.getChainId()))
     hostUrl.searchParams.set('mode', 'iframe')
+    hostUrl.searchParams.set('transport', 'wata')
     if (referrer.icon) {
       if (typeof referrer.icon === 'string') hostUrl.searchParams.set('icon', referrer.icon)
       else {
@@ -570,6 +571,7 @@ export function popup(options: popup.Options = {}): Dialog {
         const hostUrl = new URL(host)
         hostUrl.searchParams.set('chainId', String(parameters.getChainId()))
         hostUrl.searchParams.set('mode', 'popup')
+        hostUrl.searchParams.set('transport', 'wata')
         if (referrer.icon) {
           if (typeof referrer.icon === 'string') hostUrl.searchParams.set('icon', referrer.icon)
           else {
