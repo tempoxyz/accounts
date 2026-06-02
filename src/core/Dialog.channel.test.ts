@@ -8,11 +8,11 @@ describe('channel', () => {
     const consumer = Dialog.channel.consumerPostMessage({
       host: `${windows.host.origin}/dialog`,
       source: windows.app.source as unknown as Window,
-      target: windows.appToHost as unknown as Window,
+      target: () => windows.appToHost as unknown as Window,
     })
     const host = Dialog.channel.hostPostMessage({
       source: windows.host.source as unknown as Window,
-      target: windows.hostToApp as unknown as Window,
+      target: () => windows.hostToApp as unknown as Window,
       targetOrigin: windows.app.origin,
     })
     const requests: { meta: Dialog.host.Meta; sync: Dialog.Sync }[] = []
@@ -119,7 +119,7 @@ describe('channel', () => {
     const consumer = Dialog.channel.consumerPostMessage({
       host: `${windows.host.origin}/dialog`,
       source: windows.app.source as unknown as Window,
-      target: windows.appToHost as unknown as Window,
+      target: () => windows.appToHost as unknown as Window,
     })
 
     await consumer.start()

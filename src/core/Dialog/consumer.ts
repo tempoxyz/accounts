@@ -190,13 +190,21 @@ export function iframe(): Dialog {
     function createChannel() {
       readyResult = undefined
 
+      const { port1, port2 } = new MessageChannel()
       const loaded = new Promise<void>((resolve) => {
-        frame.addEventListener('load', () => resolve(), { once: true })
+        frame.addEventListener(
+          'load',
+          () => {
+            frame.contentWindow!.postMessage({ type: 'wata.port' }, hostUrl.origin, [port2])
+            resolve()
+          },
+          { once: true },
+        )
       })
       const channel_ = channel.consumerPostMessage({
         host: hostUrl.toString(),
         open: loaded,
-        target: frame.contentWindow!,
+        target: () => port1,
       })
       channel_.onResponse((response) => parameters.onResponse(response))
       void channel_
@@ -506,7 +514,7 @@ export function popup(options: popup.Options = {}): Dialog {
 
         channel_ = channel.consumerPostMessage({
           host: hostUrl.toString(),
-          target: win,
+          target: () => win!,
         })
         channel_.onResponse((response) => parameters.onResponse(response))
         void channel_.start().catch(() => {})

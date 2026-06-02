@@ -72,6 +72,7 @@ type DialogRequestPayload = {
 }
 
 type RequestId = string | number
+type PostMessageTarget = Window | MessagePort
 
 /** Creates the app/SDK side of a Wata-backed dialog channel. */
 export function consumerPostMessage(options: consumerPostMessage.Options): Consumer {
@@ -82,7 +83,7 @@ export function consumerPostMessage(options: consumerPostMessage.Options): Consu
         close: () => {},
         host: options.host,
         source,
-        target: () => options.target,
+        target: options.target,
       }),
     ],
   })
@@ -233,7 +234,7 @@ export declare namespace consumerPostMessage {
     /** Window that receives inbound postMessage events. */
     source?: Window | undefined
     /** Peer window to send messages to. */
-    target: Window
+    target: () => PostMessageTarget
   }
 }
 
@@ -246,7 +247,7 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
       wataHostPostMessage({
         close: () => {},
         source: source_,
-        target: () => options.target,
+        target: options.target,
         targetOrigin: options.targetOrigin,
       }),
     ],
@@ -398,7 +399,7 @@ export declare namespace hostPostMessage {
     /** Window that receives inbound postMessage events. */
     source?: Window | undefined
     /** Peer window to send messages to. */
-    target: Window
+    target: () => PostMessageTarget
     /** Consumer origin. Defaults to Wata's host-side wildcard. */
     targetOrigin?: string | undefined
   }
