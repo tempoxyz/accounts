@@ -1,21 +1,22 @@
 import { Hex } from 'ox'
 import * as Provider from 'ox/Provider'
 import * as RpcResponse from 'ox/RpcResponse'
-import { createStore } from 'zustand/vanilla'
+import { createStore, type StoreApi } from 'zustand/vanilla'
 
 import type * as CoreProvider from '../Provider.js'
 import * as Schema from '../Schema.js'
 import * as Rpc from '../zod/rpc.js'
 import * as channel from './channel.js'
-import type { Host, State } from './types.js'
+import type { Host, Request, State } from './types.js'
 
 export type {
   Host,
   Meta,
+  PendingRequest,
   ReadyOptions,
   Request,
+  RequestContext,
   State,
-  Sync,
   Theme,
   onUserRequest,
   ready,
@@ -34,27 +35,26 @@ export function create(options: create.Options): Host {
     requests: [],
   }))
 
-  return {
+  const host: Host = {
     channel,
     provider,
     store,
     trustedHosts: trustedHosts ?? [],
 
     onUserRequest(cb) {
-      return this.onRequests(async (requests, meta, { account }) => {
+      return host.onRequest(async (request, meta, { account }) => {
         if (account) {
           const state = provider.store.getState()
           const index = state.accounts.findIndex(
             (a) => a.address.toLowerCase() === account.address.toLowerCase(),
           )
           if (index < 0) {
-            for (const r of requests) if (r.status === 'pending') this.reject(r.request)
+            host.reject(request.request)
             return
           }
           if (index !== state.activeAccount) provider.store.setState({ activeAccount: index })
         }
 
-        const pending = requests.find((r) => r.status === 'pending')
         store.setState({
           origin: meta.origin,
           ready: false,
@@ -62,19 +62,22 @@ export function create(options: create.Options): Host {
         await cb({
           account,
           origin: meta.origin,
-          request: pending?.request ?? null,
+          request: request.request,
         })
-        if (pending) store.setState({ ready: true })
+        if (hasRequest(store.getState().requests, request.request.id))
+          store.setState({ ready: true })
       })
     },
 
-    onRequests(cb) {
-      return channel.onRequests(async (payload, meta) => {
-        const { account, chainId, requests } = payload
+    onRequest(cb) {
+      return channel.onRequest(async (payload, meta) => {
+        const { account, chainId, request } = payload
 
         await provider.store.persist?.rehydrate()
 
-        store.setState({ requests })
+        store.setState((state) => ({
+          requests: [...state.requests.filter((x) => x.request.id !== request.request.id), request],
+        }))
 
         if (provider.store.getState().chainId !== chainId)
           void provider.request({
@@ -82,7 +85,7 @@ export function create(options: create.Options): Host {
             params: [{ chainId: Hex.fromNumber(chainId) }],
           })
 
-        cb(requests, meta, { account })
+        cb(request, meta, { account, chainId })
       })
     },
 
@@ -90,7 +93,7 @@ export function create(options: create.Options): Host {
       const { accounts, ...readyOptions } = options ?? {}
 
       if (accounts)
-        channel.onValidateAccounts(({ addresses }) => {
+        channel.onValidateCachedAccounts(({ addresses }) => {
           if (!addresses) return {}
           const valid = addresses.some((a) =>
             accounts.some((b) => a.toLowerCase() === b.toLowerCase()),
@@ -110,16 +113,18 @@ export function create(options: create.Options): Host {
 
     reject(request, error) {
       const error_ = error ?? new Provider.UserRejectedRequestError()
-      void channel.sendResponse(
-        Object.assign(
-          RpcResponse.from({
-            error: { code: error_.code, message: error_.message },
-            id: request.id,
-            jsonrpc: '2.0',
-          }),
-          { _request: request },
-        ),
-      )
+      void channel
+        .sendResponse(
+          Object.assign(
+            RpcResponse.from({
+              error: { code: error_.code, message: error_.message },
+              id: request.id,
+              jsonrpc: '2.0',
+            }),
+            { _request: request },
+          ),
+        )
+        .finally(() => removeRequest(store, request.id))
     },
 
     rejectAll(error) {
@@ -133,11 +138,12 @@ export function create(options: create.Options): Host {
       const shared = { id: request.id, jsonrpc: '2.0' } as const
 
       if (error) {
-        void channel.sendResponse(
+        await channel.sendResponse(
           Object.assign(RpcResponse.from({ ...shared, error, status: 'error' }), {
             _request: request,
           }),
         )
+        removeRequest(store, request.id)
         return
       }
 
@@ -145,9 +151,10 @@ export function create(options: create.Options): Host {
         let result = 'result' in options ? options.result : await provider.request(request as never)
         if (selector) result = selector(result)
         if (defer) return result
-        void channel.sendResponse(
+        await channel.sendResponse(
           Object.assign(RpcResponse.from({ ...shared, result }), { _request: request }),
         )
+        removeRequest(store, request.id)
         return result
       } catch (e) {
         if (e instanceof Error && e.message.includes('sameOriginWithAncestors')) {
@@ -158,15 +165,25 @@ export function create(options: create.Options): Host {
         if (e instanceof Error && onError?.(e)) throw e
 
         const err = e as RpcResponse.BaseError
-        void channel.sendResponse(
+        await channel.sendResponse(
           Object.assign(RpcResponse.from({ ...shared, error: err, status: 'error' }), {
             _request: request,
           }),
         )
+        removeRequest(store, request.id)
         throw err
       }
     },
   }
+
+  channel.onCancelRequests(({ ids }) => {
+    if (!ids) return
+    const ids_ = new Set(ids)
+    const requests = store.getState().requests
+    for (const request of requests) if (ids_.has(request.request.id)) host.reject(request.request)
+  })
+
+  return host
 }
 
 export declare namespace create {
@@ -195,7 +212,7 @@ export function noop(): Host {
     store,
     trustedHosts: [],
     onUserRequest: off,
-    onRequests: off,
+    onRequest: off,
     ready: () => {},
     reject: () => {},
     rejectAll: () => {},
@@ -247,6 +264,16 @@ export function validateSearch<const method extends Schema.Request['method']>(
     if (error instanceof RpcResponse.BaseError) void host.rejectAll(error)
     throw error
   }
+}
+
+function hasRequest(requests: readonly Request[], id: string | number) {
+  return requests.some((request) => request.request.id === id)
+}
+
+function removeRequest(store: StoreApi<State>, id: string | number) {
+  store.setState((state) => ({
+    requests: state.requests.filter((request) => request.request.id !== id),
+  }))
 }
 
 export declare namespace validateSearch {

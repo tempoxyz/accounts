@@ -50,14 +50,17 @@ export type Request<result = unknown> = OneOf<
     }
 >
 
-/** Request queue payload synced from a consumer adapter to the dialog host. */
-export type Sync = {
+/** Pending JSON-RPC request tracked across the dialog boundary. */
+export type PendingRequest = Extract<Request, { status: 'pending' }>
+
+/** RPC request payload sent from a consumer adapter to the dialog host. */
+export type RequestContext = {
   /** Active account for the request source, or `undefined` if none is selected. */
   account: { address: string } | undefined
   /** Chain ID for the request source. */
   chainId: number
-  /** Pending request queue sent to the dialog host. */
-  requests: readonly Request[]
+  /** Pending request sent to the dialog host. */
+  request: PendingRequest
 }
 
 /** State managed by the dialog host side. */
@@ -91,12 +94,12 @@ export type Host = {
   /** Subscribes to user-facing RPC requests from the consumer context. */
   onUserRequest: (cb: (payload: onUserRequest.Payload) => void | Promise<void>) => () => void
   /** Subscribes to incoming RPC requests from the consumer context. */
-  onRequests: (
+  onRequest: (
     cb: (
-      requests: readonly Request[],
+      request: PendingRequest,
       meta: Meta,
-      extra: { account: { address: string } | undefined },
-    ) => void,
+      extra: { account: { address: string } | undefined; chainId: number },
+    ) => void | Promise<void>,
   ) => () => void
   /** Signals readiness to the consumer and begins accepting requests. */
   ready: (options?: ready.Options | undefined) => void
@@ -117,14 +120,14 @@ export declare namespace onUserRequest {
     account: { address: string } | undefined
     /** Origin of the consumer that opened this dialog. */
     origin: string
-    /** The pending request to display, or `null` when the queue is cleared. */
-    request: Request['request'] | null
+    /** The pending request to display. */
+    request: Request['request']
   }
 }
 
 export declare namespace ready {
   type Options = ReadyOptions & {
-    /** Authenticated account addresses. When provided, the host responds to SDK sync requests. */
+    /** Authenticated account addresses. When provided, the host validates cached consumer accounts. */
     accounts?: readonly string[] | undefined
   }
 }

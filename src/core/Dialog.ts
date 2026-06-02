@@ -16,9 +16,10 @@ export type { Dialog, Meta, Session, SetupFn } from './Dialog/consumer.js'
 export type {
   Host,
   ReadyOptions,
+  PendingRequest,
   Request,
+  RequestContext,
   State,
-  Sync,
   Theme,
   onUserRequest,
   ready,

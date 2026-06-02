@@ -13,7 +13,7 @@ The `Dialog.host` namespace is the **wallet-side** counterpart to the [`Provider
 - receives RPC requests forwarded from the host SDK over [`Dialog.channel`](https://github.com/tempoxyz/accounts/blob/main/src/core/Dialog/channel.ts)
 - exposes a queue of pending requests for the UI to render approval surfaces against
 
-A typical wallet app calls [`Dialog.host.create`](/docs/api/dialog.host.create) once at startup, subscribes to the request queue with `onUserRequest`, navigates to a per-method route, and either [`respond`](#respond) or [`reject`](#reject)s once the user has approved or cancelled.
+A typical wallet app calls [`Dialog.host.create`](/docs/api/dialog.host.create) once at startup, subscribes to incoming requests with `onUserRequest`, navigates to a per-method route, and either [`respond`](#respond) or [`reject`](#reject)s once the user has approved or cancelled.
 
 ## Core
 

@@ -62,11 +62,11 @@ The full `Dialog.State` when no `selector` is provided, otherwise the selector's
 type State = {
   /** Whether the dialog is rendered in an iframe or popup. */
   mode: 'iframe' | 'popup' | undefined
-  /** Trusted host origin from MessageEvent. */
+  /** Consumer origin that opened this dialog. */
   origin: string | undefined
   /** Whether the dialog is ready to display content. */
   ready: boolean
-  /** Queued RPC requests received from the host. */
+  /** Pending RPC requests owned by the dialog host. */
   requests: Dialog.State['requests']
 }
 ```

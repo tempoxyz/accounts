@@ -1,7 +1,9 @@
+import { Provider as ox_Provider } from 'ox'
+
 import * as IO from '../IntersectionObserver.js'
 import * as TrustedHosts from '../TrustedHosts.js'
 import * as channel from './channel.js'
-import type { ReadyOptions, Request, Sync, Theme } from './types.js'
+import type { ReadyOptions, RequestContext, Theme } from './types.js'
 
 export { attach } from './consumer.attach.js'
 export type { AttachOptions, Attachment, RequestOptions } from './consumer.attach.js'
@@ -23,8 +25,8 @@ export type Session = {
   destroy: () => void
   /** Open the dialog (show iframe / open popup). */
   open: () => void
-  /** Sync the pending request queue to the remote auth app. */
-  syncRequests: (sync: Sync) => Promise<void>
+  /** Send a request to the remote auth app. */
+  request: (context: RequestContext) => Promise<unknown>
   /** Update the visual theme at runtime. */
   syncTheme: (theme: Theme | undefined) => void
 }
@@ -42,17 +44,16 @@ export declare namespace SetupFn {
     getChainId: () => number
     /** Called when the dialog host reports that locally stored accounts are invalid. */
     onAccountsInvalid: () => void
-    /** Called when the user rejects the currently displayed requests. */
-    onReject: (ids: readonly number[]) => void
-    /** Called when the remote UI responds to a request. */
-    onResponse: (response: {
-      id: number
-      result?: unknown
-      error?: { code: number; message: string } | undefined
-    }) => void
     /** Visual theme overrides applied to the embed. */
     theme?: Theme | undefined
   }
+}
+
+type Pending = {
+  reject: (error: Error) => void
+  resolve: (result: unknown) => void
+  sync: RequestContext
+  version: number
 }
 
 /** Serializes theme options onto a URL's search params. */
@@ -95,9 +96,8 @@ export function iframe(): Dialog {
     const { host } = parameters
 
     let open = false
-    let requests_displayed: readonly Request[] = []
+    const pending = new Map<channel.RequestId, Pending>()
     let switchedToPopup = false
-    let sync_displayed: Sync | undefined
 
     const referrer = getReferrer()
 
@@ -168,21 +168,31 @@ export function iframe(): Dialog {
     let readyResult: ReadyOptions | undefined
 
     function rejectDisplayedRequests() {
-      parameters.onReject(requests_displayed.map((x) => x.request.id))
+      const ids = [...pending.keys()]
+      if (ids.length === 0) return
+      void channel_.cancelRequests({ ids })
+      for (const request of pending.values())
+        request.reject(new ox_Provider.UserRejectedRequestError())
+      pending.clear()
+      closeSession()
     }
 
-    function createChannel() {
-      readyResult = undefined
+    const src = hostUrl.toString()
 
-      const loaded = new Promise<void>((resolve) => {
+    function waitForFrameLoad() {
+      return new Promise<void>((resolve) => {
         frame.addEventListener('load', () => resolve(), { once: true })
       })
+    }
+
+    function createChannel(loaded: Promise<void>) {
+      readyResult = undefined
+
       const channel_ = channel.consumerPostMessage({
-        host: hostUrl.toString(),
+        host: src,
         open: loaded,
         target: () => frame.contentWindow!,
       })
-      channel_.onResponse((response) => parameters.onResponse(response))
       void channel_
         .waitForReady()
         .then((result) => {
@@ -196,16 +206,23 @@ export function iframe(): Dialog {
         open = false
         switchedToPopup = true
 
-        if (sync_displayed && requests_displayed.length > 0) fallback.syncRequests(sync_displayed)
+        for (const request of pending.values()) submitFallback(request)
       })
       void channel_.start().catch(() => {})
       return channel_
     }
 
     const fallback = popup()(parameters)
-    let channel_ = createChannel()
-    frame.src = hostUrl.toString()
-    document.body.appendChild(root)
+    let channel_ = channel.noopConsumer()
+
+    function mountFrame() {
+      const loaded = waitForFrameLoad()
+      frame.src = src
+      document.body.appendChild(root)
+      channel_ = createChannel(loaded)
+    }
+
+    mountFrame()
 
     // Re-mount if removed (e.g. React hydration clears non-server-rendered elements).
     // The iframe reloads on re-append, so the channel must be re-established.
@@ -214,9 +231,7 @@ export function iframe(): Dialog {
         for (const node of mutation.removedNodes) {
           if (node !== root) continue
           channel_.close()
-          channel_ = createChannel()
-          frame.src = hostUrl.toString()
-          document.body.appendChild(root)
+          mountFrame()
           return
         }
       }
@@ -293,61 +308,87 @@ export function iframe(): Dialog {
       }
     }
 
-    function validateAccounts() {
+    function validateCachedAccounts() {
       const accounts = parameters.getAccounts()
       if (accounts.length === 0) return
       void channel_
-        .validateAccounts({ addresses: accounts.map((a) => a.address) })
+        .validateCachedAccounts({ addresses: accounts.map((a) => a.address) })
         .then(({ valid }) => {
           if (valid === false) parameters.onAccountsInvalid()
         })
         .catch(() => {})
     }
 
-    return {
-      close() {
-        fallback.close()
-        open = false
-        hideDialog()
-        activatePage()
-      },
-      destroy() {
-        fallback.close()
-        open = false
-        activatePage()
-        hideDialog()
+    function closeSession() {
+      fallback.close()
+      open = false
+      hideDialog()
+      activatePage()
+    }
 
-        fallback.destroy()
-        channel_.close()
-        root.remove()
-        mountObserver.disconnect()
-        inertObserver.disconnect()
-      },
-      open() {
-        if (open) return
-        open = true
-        showDialog()
-        activateDialog()
-      },
-      async syncRequests(sync) {
-        const { requests } = sync
-        sync_displayed = sync
-        requests_displayed = requests
+    function finishRequest(id: channel.RequestId, version: number, fn: (request: Pending) => void) {
+      const request = pending.get(id)
+      if (!request) return
+      if (request.version !== version) return
+      pending.delete(id)
+      fn(request)
+      if (pending.size === 0) closeSession()
+    }
+
+    function submitIframe(request: Pending) {
+      const id = request.sync.request.request.id
+      const version = ++request.version
+      void channel_
+        .request(request.sync)
+        .then((result) => finishRequest(id, version, (request) => request.resolve(result)))
+        .catch((error) => finishRequest(id, version, (request) => request.reject(toError(error))))
+    }
+
+    function submitFallback(request: Pending) {
+      const id = request.sync.request.request.id
+      const version = ++request.version
+      void fallback
+        .request(request.sync)
+        .then((result) => finishRequest(id, version, (request) => request.resolve(result)))
+        .catch((error) => finishRequest(id, version, (request) => request.reject(toError(error))))
+    }
+
+    function createPending(sync: RequestContext) {
+      const id = sync.request.request.id
+      let request: Pending | undefined
+      const promise = new Promise<unknown>((resolve, reject) => {
+        request = { reject, resolve, sync, version: 0 }
+        pending.set(id, request)
+      })
+      return { promise, request: request! }
+    }
+
+    async function prepareRequest(request: Pending) {
+      const id = request.sync.request.request.id
+      try {
+        if (!pending.has(id)) return
         if (switchedToPopup) {
-          await fallback.syncRequests(sync)
+          submitFallback(request)
           return
         }
 
         const ready = readyResult ?? channel_.waitForReady()
         const { trustedHosts } = readyResult ?? (await ready)
-        validateAccounts()
+        if (!pending.has(id)) return
+        if (request.version > 0) return
+        if (switchedToPopup) {
+          submitFallback(request)
+          return
+        }
+
+        validateCachedAccounts()
 
         // Safari does not support WebAuthn credential creation in iframes.
         if (
           isSafari() &&
-          requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
+          ['wallet_connect', 'eth_requestAccounts'].includes(request.sync.request.request.method)
         ) {
-          await fallback.syncRequests(sync)
+          submitFallback(request)
           return
         }
 
@@ -367,17 +408,49 @@ export function iframe(): Dialog {
               'To enable the iframe dialog, add your hostname to the trusted hosts list.',
             ].join('\n'),
           )
-          await fallback.syncRequests(sync)
+          submitFallback(request)
           return
         }
 
-        const requiresConfirm = requests.some((x) => x.status === 'pending')
-        if (!open && requiresConfirm) this.open()
-        await channel_.sendRequests({
-          account: sync.account,
-          chainId: sync.chainId,
-          requests,
-        })
+        if (!open) show()
+        submitIframe(request)
+      } catch (error) {
+        finishRequest(id, request.version, (request) => request.reject(toError(error)))
+      }
+    }
+
+    function show() {
+      open = true
+      showDialog()
+      activateDialog()
+    }
+
+    function sendRequest(sync: RequestContext) {
+      const { promise, request } = createPending(sync)
+      void prepareRequest(request)
+      return promise
+    }
+
+    return {
+      close() {
+        closeSession()
+      },
+      destroy() {
+        rejectDisplayedRequests()
+        closeSession()
+
+        fallback.destroy()
+        channel_.close()
+        root.remove()
+        mountObserver.disconnect()
+        inertObserver.disconnect()
+      },
+      open() {
+        if (open) return
+        show()
+      },
+      request(sync) {
+        return sendRequest(sync)
       },
       syncTheme(theme) {
         frame.style.colorScheme = theme?.scheme ?? 'light dark'
@@ -397,10 +470,16 @@ export function popup(options: popup.Options = {}): Dialog {
     const { host } = parameters
 
     let win: Window | null = null
-    let requests_displayed: readonly Request[] = []
+    const pending = new Map<channel.RequestId, Pending>()
 
     function rejectDisplayedRequests() {
-      parameters.onReject(requests_displayed.map((x) => x.request.id))
+      const ids = [...pending.keys()]
+      if (ids.length === 0) return
+      void channel_?.cancelRequests({ ids })
+      for (const request of pending.values())
+        request.reject(new ox_Provider.UserRejectedRequestError())
+      pending.clear()
+      closeSession()
     }
 
     const offDetectClosed = (() => {
@@ -446,14 +525,37 @@ export function popup(options: popup.Options = {}): Dialog {
     overlay.appendChild(overlayClose)
     document.body.appendChild(overlay)
 
+    function closeSession() {
+      overlay.style.display = 'none'
+      if (!win) return
+      win.close()
+      win = null
+    }
+
+    function finishRequest(id: channel.RequestId, version: number, fn: (request: Pending) => void) {
+      const request = pending.get(id)
+      if (!request) return
+      if (request.version !== version) return
+      pending.delete(id)
+      fn(request)
+      if (pending.size === 0) closeSession()
+    }
+
+    function submit(request: Pending) {
+      const id = request.sync.request.request.id
+      const version = ++request.version
+      void channel_
+        ?.request(request.sync)
+        .then((result) => finishRequest(id, version, (request) => request.resolve(result)))
+        .catch((error) => finishRequest(id, version, (request) => request.reject(toError(error))))
+    }
+
     return {
       close() {
-        overlay.style.display = 'none'
-        if (!win) return
-        win.close()
-        win = null
+        closeSession()
       },
       destroy() {
+        rejectDisplayedRequests()
         this.close()
         channel_?.close()
         offDetectClosed()
@@ -491,23 +593,17 @@ export function popup(options: popup.Options = {}): Dialog {
           host: hostUrl.toString(),
           target: () => win!,
         })
-        channel_.onResponse((response) => parameters.onResponse(response))
         void channel_.start().catch(() => {})
 
         overlay.style.display = 'flex'
       },
-      async syncRequests(sync) {
-        const { requests } = sync
-        requests_displayed = requests
-        const requiresConfirm = requests.some((x) => x.status === 'pending')
-        if (requiresConfirm) {
-          if (!win || win.closed) this.open()
-          else win.focus()
-        }
-        await channel_?.sendRequests({
-          account: sync.account,
-          chainId: sync.chainId,
-          requests,
+      async request(sync) {
+        if (!win || win.closed) this.open()
+        else win.focus()
+        return new Promise<unknown>((resolve, reject) => {
+          const request: Pending = { reject, resolve, sync, version: 0 }
+          pending.set(sync.request.request.id, request)
+          submit(request)
         })
       },
       syncTheme() {},
@@ -529,7 +625,9 @@ export function noop(): Dialog {
       open() {},
       close() {},
       destroy() {},
-      async syncRequests() {},
+      async request() {
+        return undefined
+      },
       syncTheme() {},
     }
   })
@@ -565,4 +663,14 @@ declare namespace getReferrer {
     /** Document title of the host page. */
     title: string
   }
+}
+
+function toError(error: unknown): Error {
+  if (error && typeof error === 'object' && 'code' in error && 'message' in error)
+    return ox_Provider.parseError({
+      code: Number(error.code),
+      message: String(error.message),
+    })
+  if (error instanceof Error) return error
+  return new Error(String(error))
 }

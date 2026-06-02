@@ -7,8 +7,6 @@ import { host, wagmiConfig } from '../lib/config'
 import { router } from '../router'
 
 host.onUserRequest(async ({ account, request }) => {
-  if (!request) return
-
   await reconnect(wagmiConfig as never)
 
   const existing = router.state.location.search as Record<string, unknown>

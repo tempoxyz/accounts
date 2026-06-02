@@ -49,32 +49,37 @@ function setup() {
 }
 
 function createDialog() {
-  let parameters: Dialog.SetupFn.Parameters | undefined
-  const syncs: Dialog.Sync[] = []
+  const pending = new Map<
+    number,
+    { reject: (error: Error) => void; resolve: (result: unknown) => void }
+  >()
+  const syncs: Dialog.RequestContext[] = []
   const synced: (readonly Dialog.Request[])[] = []
   return {
-    dialog: Dialog.define({ name: 'test' }, (options) => ({
+    dialog: Dialog.define({ name: 'test' }, () => ({
       close() {},
       destroy() {},
       open() {},
-      async syncRequests(sync) {
-        parameters = options
+      request(sync) {
         syncs.push(sync)
-        synced.push(sync.requests)
+        synced.push([sync.request])
+        return new Promise((resolve, reject) => {
+          pending.set(sync.request.request.id, { reject, resolve })
+        })
       },
       syncTheme() {},
     })),
     async takeRequest() {
       await vi.waitFor(() => {
-        if (!syncs[0]?.requests[0]) throw new Error('request not synced')
+        if (!syncs[0]?.request) throw new Error('request not sent')
       })
-      return syncs[0]!.requests[0]!
+      return syncs[0]!.request
     },
     failure(request: Dialog.Request, error: { code: number; message: string }) {
-      parameters!.onResponse({ error, id: request.request.id })
+      pending.get(request.request.id)?.reject(ox_Provider.parseError(error))
     },
     success(request: Dialog.Request, result: unknown) {
-      parameters!.onResponse({ id: request.request.id, result })
+      pending.get(request.request.id)?.resolve(result)
     },
     syncs,
     synced,

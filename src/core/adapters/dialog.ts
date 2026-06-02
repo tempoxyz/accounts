@@ -59,10 +59,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       return { address: account.address }
     }
 
-    /**
-     * An ox provider that queues RPC requests in the store. The store
-     * subscription syncs the pending queue to the dialog via `syncRequests`.
-     */
+    /** An ox provider that forwards RPC requests to the dialog host. */
     const provider = ox_Provider.from(
       {
         async request(r) {

@@ -2,26 +2,28 @@ import type { RpcRequest, RpcResponse } from 'ox'
 import { postMessage as wataConsumerPostMessage, Wata } from 'wata'
 import { postMessage as wataHostPostMessage, Wata as HostWata } from 'wata/host'
 
-import type { Meta, ReadyOptions, Sync, Theme } from './types.js'
+import type { Meta, ReadyOptions, RequestContext, Theme } from './types.js'
 
 /** Channel used by the app/SDK side of the dialog protocol. */
 export type Consumer = {
   /** Close the underlying Wata session. */
   close: () => Promise<void>
+  /** Cancel pending dialog requests. */
+  cancelRequests: (payload: CancelRequests) => Promise<void>
   /** Subscribe to host info from the dialog host. */
   onReady: (listener: (options: ReadyOptions) => void) => () => void
-  /** Subscribe to RPC responses from the dialog host. */
-  onResponse: (listener: (response: Response) => void) => () => void
   /** Subscribe to iframe-to-popup switch requests from the dialog host. */
   onSwitchMode: (listener: (payload: SwitchMode) => void) => () => void
-  /** Send the pending request queue to the dialog host. */
-  sendRequests: (sync: Sync) => Promise<void>
+  /** Send a dialog request to the dialog host and wait for its response. */
+  request: (payload: RequestContext) => Promise<unknown>
   /** Send the current theme to the dialog host. */
   sendTheme: (theme: Theme) => Promise<void>
   /** Start the underlying Wata session after handlers are registered. */
   start: () => Promise<void>
-  /** Ask the dialog host to validate local account addresses. */
-  validateAccounts: (payload: ValidateAccountsRequest) => Promise<ValidateAccountsResponse>
+  /** Ask the dialog host to validate cached local account addresses. */
+  validateCachedAccounts: (
+    payload: ValidateCachedAccountsRequest,
+  ) => Promise<ValidateCachedAccountsResponse>
   /** Resolves when the dialog host sends host info. */
   waitForReady: () => Promise<ReadyOptions>
 }
@@ -30,14 +32,16 @@ export type Consumer = {
 export type Host = {
   /** Close the underlying Wata session. */
   close: () => Promise<void>
-  /** Subscribe to request queues from the consumer. */
-  onRequests: (listener: (sync: Sync, meta: Meta) => void) => () => void
-  /** Handle account-validation requests from the consumer. */
-  onValidateAccounts: (
+  /** Subscribe to cancellation requests from the consumer. */
+  onCancelRequests: (listener: (payload: CancelRequests, meta: Meta) => void) => () => void
+  /** Subscribe to requests from the consumer. */
+  onRequest: (listener: (payload: RequestContext, meta: Meta) => void) => () => void
+  /** Handle cached-account validation requests from the consumer. */
+  onValidateCachedAccounts: (
     listener: (
-      payload: ValidateAccountsRequest,
+      payload: ValidateCachedAccountsRequest,
       meta: Meta,
-    ) => ValidateAccountsResponse | Promise<ValidateAccountsResponse> | void,
+    ) => ValidateCachedAccountsResponse | Promise<ValidateCachedAccountsResponse> | void,
   ) => () => void
   /** Subscribe to live theme updates from the consumer. */
   onTheme: (listener: (theme: Theme, meta: Meta) => void) => () => void
@@ -57,22 +61,26 @@ export type Response = RpcResponse.RpcResponse & {
   _request: RpcRequest.RpcRequest
 }
 
-/** Consumer-to-host account validation request. */
-export type ValidateAccountsRequest = { addresses?: readonly string[] | undefined }
+/** Dialog request cancellation payload. */
+export type CancelRequests = { ids?: readonly RequestId[] | undefined }
 
-/** Host-to-consumer account validation response. */
-export type ValidateAccountsResponse = { valid?: boolean | undefined }
+/** Consumer-to-host cached-account validation request. */
+export type ValidateCachedAccountsRequest = { addresses?: readonly string[] | undefined }
+
+/** Host-to-consumer cached-account validation response. */
+export type ValidateCachedAccountsResponse = { valid?: boolean | undefined }
 
 /** Dialog mode switch request. */
 export type SwitchMode = { mode: 'popup' }
 
 type DialogRequestPayload = {
-  account: Sync['account']
-  chainId: Sync['chainId']
+  account: RequestContext['account']
+  chainId: RequestContext['chainId']
   request: RpcRequest.RpcRequest
 }
 
-type RequestId = string | number
+/** JSON-RPC request identifier used for dialog request routing. */
+export type RequestId = string | number
 type PostMessageTarget = Window | MessagePort
 
 /** Creates the app/SDK side of a Wata-backed dialog channel. */
@@ -91,7 +99,6 @@ export function consumerPostMessage(options: consumerPostMessage.Options): Consu
   const ready = withResolvers<ReadyOptions>()
   void ready.promise.catch(() => {})
   const readyListeners = new Set<(options: ReadyOptions) => void>()
-  const responseListeners = new Set<(response: Response) => void>()
   const switchModeListeners = new Set<(payload: SwitchMode) => void>()
   let error: Error | undefined
   let readyPromise: Promise<ReadyOptions> | undefined
@@ -110,19 +117,18 @@ export function consumerPostMessage(options: consumerPostMessage.Options): Consu
     async close() {
       await wata.close()
       readyListeners.clear()
-      responseListeners.clear()
       switchModeListeners.clear()
+    },
+    cancelRequests(payload) {
+      return wata.notify({
+        method: 'dialog.requests.cancel',
+        params: [normalizeValue(payload)] as const,
+      })
     },
     onReady(listener) {
       readyListeners.add(listener)
       return () => {
         readyListeners.delete(listener)
-      }
-    },
-    onResponse(listener) {
-      responseListeners.add(listener)
-      return () => {
-        responseListeners.delete(listener)
       }
     },
     onSwitchMode(listener) {
@@ -131,24 +137,28 @@ export function consumerPostMessage(options: consumerPostMessage.Options): Consu
         switchModeListeners.delete(listener)
       }
     },
-    async sendRequests(sync) {
+    async request(payload) {
       await start()
-      for (const item of sync.requests) {
-        if (item.status !== 'pending') continue
-        sendRequest({
-          account: sync.account,
-          chainId: sync.chainId,
-          request: item.request,
-        })
-      }
+      const { result } = await wata.send({
+        id: payload.request.request.id,
+        method: 'dialog.request',
+        params: [
+          normalizeValue({
+            account: payload.account,
+            chainId: payload.chainId,
+            request: payload.request.request,
+          }),
+        ] as const,
+      })
+      return result
     },
-    async validateAccounts(payload) {
+    async validateCachedAccounts(payload) {
       if (!payload.addresses) return {}
       const { result } = await wata.send({
-        method: 'dialog.accounts.validate',
+        method: 'dialog.cachedAccounts.validate',
         params: [normalizeValue(payload)] as const,
       })
-      return result as ValidateAccountsResponse
+      return result as ValidateCachedAccountsResponse
     },
     async sendTheme(theme) {
       await wata.notify({
@@ -188,33 +198,6 @@ export function consumerPostMessage(options: consumerPostMessage.Options): Consu
       throw error
     }
   }
-
-  function sendRequest(payload: DialogRequestPayload) {
-    void wata
-      .send({
-        id: payload.request.id,
-        method: 'dialog.request',
-        params: [normalizeValue(payload)] as const,
-      })
-      .then(({ result }) => {
-        const response = {
-          _request: payload.request,
-          id: payload.request.id,
-          jsonrpc: '2.0',
-          result,
-        } as Response
-        for (const listener of responseListeners) listener(response)
-      })
-      .catch((error) => {
-        const response = {
-          _request: payload.request,
-          error: errorToResponse(error),
-          id: payload.request.id,
-          jsonrpc: '2.0',
-        } as Response
-        for (const listener of responseListeners) listener(response)
-      })
-  }
 }
 
 export declare namespace consumerPostMessage {
@@ -244,12 +227,13 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
       }),
     ],
   })
-  const requestListeners = new Set<(sync: Sync, meta: Meta) => void>()
-  let validateAccountsListener:
+  const cancelRequestsListeners = new Set<(payload: CancelRequests, meta: Meta) => void>()
+  const requestListeners = new Set<(payload: RequestContext, meta: Meta) => void>()
+  let validateCachedAccountsListener:
     | ((
-        payload: ValidateAccountsRequest,
+        payload: ValidateCachedAccountsRequest,
         meta: Meta,
-      ) => ValidateAccountsResponse | Promise<ValidateAccountsResponse> | void)
+      ) => ValidateCachedAccountsResponse | Promise<ValidateCachedAccountsResponse> | void)
     | undefined
   const themeListeners = new Set<(theme: Theme, meta: Meta) => void>()
   const hostInfoRequests = new Set<HostWata.RequestEvent>()
@@ -263,13 +247,13 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
       else hostInfoRequests.add(event)
       return
     }
-    if (event.method === 'dialog.accounts.validate') {
-      const payload = firstParam(event.params) as ValidateAccountsRequest
-      if (!validateAccountsListener) {
+    if (event.method === 'dialog.cachedAccounts.validate') {
+      const payload = firstParam(event.params) as ValidateCachedAccountsRequest
+      if (!validateCachedAccountsListener) {
         void event.respond({})
         return
       }
-      void Promise.resolve(validateAccountsListener(payload, meta))
+      void Promise.resolve(validateCachedAccountsListener(payload, meta))
         .then((result) => event.respond(normalizeValue(result ?? {})))
         .catch((error) => event.reject(errorToResponse(error)))
       return
@@ -283,38 +267,51 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
         {
           account: payload.account,
           chainId: payload.chainId,
-          requests: [{ request: payload.request, status: 'pending' }],
+          request: { request: payload.request, status: 'pending' },
         },
         meta,
       )
   })
 
   wata.on('notification', (event) => {
-    if (event.method !== 'dialog.theme.update') return
-    const theme = firstParam(event.params) as Theme
     const meta = { origin: getOrigin() ?? '' }
-    for (const listener of themeListeners) listener(theme, meta)
+    if (event.method === 'dialog.requests.cancel') {
+      const payload = firstParam(event.params) as CancelRequests
+      for (const listener of cancelRequestsListeners) listener(payload, meta)
+      return
+    }
+    if (event.method === 'dialog.theme.update') {
+      const theme = firstParam(event.params) as Theme
+      for (const listener of themeListeners) listener(theme, meta)
+    }
   })
 
   return {
     async close() {
       await wata.close()
+      cancelRequestsListeners.clear()
       requestListeners.clear()
-      validateAccountsListener = undefined
+      validateCachedAccountsListener = undefined
       themeListeners.clear()
       hostInfoRequests.clear()
       requests.clear()
     },
-    onRequests(listener) {
+    onCancelRequests(listener) {
+      cancelRequestsListeners.add(listener)
+      return () => {
+        cancelRequestsListeners.delete(listener)
+      }
+    },
+    onRequest(listener) {
       requestListeners.add(listener)
       return () => {
         requestListeners.delete(listener)
       }
     },
-    onValidateAccounts(listener) {
-      validateAccountsListener = listener
+    onValidateCachedAccounts(listener) {
+      validateCachedAccountsListener = listener
       return () => {
-        if (validateAccountsListener === listener) validateAccountsListener = undefined
+        if (validateCachedAccountsListener === listener) validateCachedAccountsListener = undefined
       }
     },
     onTheme(listener) {
@@ -358,13 +355,13 @@ export function noopConsumer(): Consumer {
   const ready = Promise.resolve({})
   return {
     close: async () => {},
+    cancelRequests: async () => {},
     onReady: () => () => {},
-    onResponse: () => () => {},
     onSwitchMode: () => () => {},
-    sendRequests: async () => {},
+    request: async () => undefined,
     sendTheme: async () => {},
     start: async () => {},
-    validateAccounts: async () => ({}),
+    validateCachedAccounts: async () => ({}),
     waitForReady: () => ready,
   }
 }
@@ -373,8 +370,9 @@ export function noopConsumer(): Consumer {
 export function noopHost(): Host {
   return {
     close: async () => {},
-    onRequests: () => () => {},
-    onValidateAccounts: () => () => {},
+    onCancelRequests: () => () => {},
+    onRequest: () => () => {},
+    onValidateCachedAccounts: () => () => {},
     onTheme: () => () => {},
     ready: async () => {},
     sendResponse: async () => {},

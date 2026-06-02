@@ -358,8 +358,9 @@ describe('respond', () => {
     const sendResponse = vi.fn()
     const host = Dialog.host.create({
       channel: {
-        onRequests: vi.fn(),
-        onValidateAccounts: vi.fn(),
+        onCancelRequests: vi.fn(),
+        onRequest: vi.fn(),
+        onValidateCachedAccounts: vi.fn(),
         ready: vi.fn(),
         sendResponse,
       } as never,
@@ -399,8 +400,9 @@ describe('respond', () => {
     const sendResponse = vi.fn()
     const host = Dialog.host.create({
       channel: {
-        onRequests: vi.fn(),
-        onValidateAccounts: vi.fn(),
+        onCancelRequests: vi.fn(),
+        onRequest: vi.fn(),
+        onValidateCachedAccounts: vi.fn(),
         ready: vi.fn(),
         sendResponse,
       } as never,
@@ -427,8 +429,9 @@ describe('respond', () => {
     const switchMode = vi.fn()
     const host = Dialog.host.create({
       channel: {
-        onRequests: vi.fn(),
-        onValidateAccounts: vi.fn(),
+        onCancelRequests: vi.fn(),
+        onRequest: vi.fn(),
+        onValidateCachedAccounts: vi.fn(),
         ready: vi.fn(),
         sendResponse,
         switchMode,
@@ -457,18 +460,19 @@ describe('respond', () => {
 })
 
 describe('ready', () => {
-  test('behavior: publishes trusted hosts and validates account sync', () => {
-    let onValidateAccounts:
+  test('behavior: publishes trusted hosts and validates cached accounts', () => {
+    let onValidateCachedAccounts:
       | ((
-          payload: Dialog.channel.ValidateAccountsRequest,
-        ) => Dialog.channel.ValidateAccountsResponse | void)
+          payload: Dialog.channel.ValidateCachedAccountsRequest,
+        ) => Dialog.channel.ValidateCachedAccountsResponse | void)
       | undefined
     const ready = vi.fn()
     const host = Dialog.host.create({
       channel: {
-        onRequests: vi.fn(),
-        onValidateAccounts: vi.fn((listener) => {
-          onValidateAccounts = listener
+        onCancelRequests: vi.fn(),
+        onRequest: vi.fn(),
+        onValidateCachedAccounts: vi.fn((listener) => {
+          onValidateCachedAccounts = listener
           return () => {}
         }),
         ready,
@@ -493,8 +497,12 @@ describe('ready', () => {
       ]
     `)
     expect([
-      onValidateAccounts!({ addresses: ['0x0000000000000000000000000000000000000001'] }),
-      onValidateAccounts!({ addresses: ['0x0000000000000000000000000000000000000002'] }),
+      onValidateCachedAccounts!({
+        addresses: ['0x0000000000000000000000000000000000000001'],
+      }),
+      onValidateCachedAccounts!({
+        addresses: ['0x0000000000000000000000000000000000000002'],
+      }),
     ]).toMatchInlineSnapshot(`
       [
         {

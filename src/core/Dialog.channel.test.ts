@@ -15,20 +15,18 @@ describe('channel', () => {
       target: () => windows.hostToApp as unknown as Window,
       targetOrigin: windows.app.origin,
     })
-    const requests: { meta: Dialog.host.Meta; sync: Dialog.Sync }[] = []
-    const responses: Dialog.channel.Response[] = []
+    const requests: { meta: Dialog.host.Meta; payload: Dialog.RequestContext }[] = []
     const modes: Dialog.channel.SwitchMode[] = []
     const validations: {
       meta: Dialog.host.Meta
-      request: Dialog.channel.ValidateAccountsRequest
+      request: Dialog.channel.ValidateCachedAccountsRequest
     }[] = []
 
-    host.onRequests((sync, meta) => requests.push({ meta, sync }))
-    host.onValidateAccounts((request, meta) => {
+    host.onRequest((payload, meta) => requests.push({ meta, payload }))
+    host.onValidateCachedAccounts((request, meta) => {
       validations.push({ meta, request })
       return { valid: true }
     })
-    consumer.onResponse((response) => responses.push(response))
     consumer.onSwitchMode((mode) => modes.push(mode))
 
     await host.start()
@@ -43,7 +41,7 @@ describe('channel', () => {
       }
     `)
     await expect(
-      consumer.validateAccounts({
+      consumer.validateCachedAccounts({
         addresses: ['0x0000000000000000000000000000000000000001'],
       }),
     ).resolves.toMatchInlineSnapshot(`
@@ -66,42 +64,39 @@ describe('channel', () => {
       ]
     `)
 
-    await consumer.sendRequests({
+    const response = consumer.request({
       account: undefined,
       chainId: 1,
-      requests: [
-        {
-          request: { id: 1, jsonrpc: '2.0', method: 'eth_accounts' } as never,
-          status: 'pending',
-        },
-      ],
+      request: {
+        request: { id: 1, jsonrpc: '2.0', method: 'eth_accounts' } as never,
+        status: 'pending',
+      },
     })
 
     await vi.waitFor(() => {
-      expect(requests).toMatchInlineSnapshot(`
-        [
-          {
-            "meta": {
-              "origin": "https://app.test",
-            },
-            "sync": {
-              "account": undefined,
-              "chainId": 1,
-              "requests": [
-                {
-                  "request": {
-                    "id": 1,
-                    "jsonrpc": "2.0",
-                    "method": "eth_accounts",
-                  },
-                  "status": "pending",
-                },
-              ],
+      if (requests.length === 0) throw new Error('request not received')
+    })
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        {
+          "meta": {
+            "origin": "https://app.test",
+          },
+          "payload": {
+            "account": undefined,
+            "chainId": 1,
+            "request": {
+              "request": {
+                "id": 1,
+                "jsonrpc": "2.0",
+                "method": "eth_accounts",
+              },
+              "status": "pending",
             },
           },
-        ]
-      `)
-    })
+        },
+      ]
+    `)
 
     await host.sendResponse({
       _request: { id: 1, jsonrpc: '2.0', method: 'eth_accounts' } as never,
@@ -110,24 +105,11 @@ describe('channel', () => {
       result: ['0x0000000000000000000000000000000000000001'],
     })
 
-    await vi.waitFor(() => {
-      expect(responses).toMatchInlineSnapshot(`
-        [
-          {
-            "_request": {
-              "id": 1,
-              "jsonrpc": "2.0",
-              "method": "eth_accounts",
-            },
-            "id": 1,
-            "jsonrpc": "2.0",
-            "result": [
-              "0x0000000000000000000000000000000000000001",
-            ],
-          },
-        ]
-      `)
-    })
+    await expect(response).resolves.toMatchInlineSnapshot(`
+      [
+        "0x0000000000000000000000000000000000000001",
+      ]
+    `)
 
     await host.switchMode({ mode: 'popup' })
 

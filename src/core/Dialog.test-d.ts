@@ -9,24 +9,18 @@ describe('Dialog', () => {
       getAccounts: () => readonly { address: string }[]
       getChainId: () => number
       onAccountsInvalid: () => void
-      onReject: (ids: readonly number[]) => void
-      onResponse: (response: {
-        id: number
-        result?: unknown
-        error?: { code: number; message: string } | undefined
-      }) => void
       theme?: Dialog.Theme | undefined
     }>()
-    expectTypeOf<Dialog.Sync>().toEqualTypeOf<{
+    expectTypeOf<Dialog.RequestContext>().toEqualTypeOf<{
       account: { address: string } | undefined
       chainId: number
-      requests: readonly Dialog.Request[]
+      request: Dialog.PendingRequest
     }>()
     expectTypeOf<Dialog.Session>().toMatchTypeOf<{
       open: () => void
       close: () => void
       destroy: () => void
-      syncRequests: (sync: Dialog.Sync) => Promise<void>
+      request: (context: Dialog.RequestContext) => Promise<unknown>
     }>()
   })
 })

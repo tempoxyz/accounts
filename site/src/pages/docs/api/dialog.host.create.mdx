@@ -9,7 +9,7 @@ Creates a host context for the wallet's iframe/popup app. The context bundles:
 
 - a [`Dialog.channel`](https://github.com/tempoxyz/accounts/blob/main/src/core/Dialog/channel.ts) transport to the host SDK
 - a [`Provider`](/docs/api/provider) used to actually execute approved requests
-- a [Zustand](https://github.com/pmndrs/zustand) store of queued RPC requests
+- a [Zustand](https://github.com/pmndrs/zustand) store of host-owned pending RPC requests
 
 ## Usage
 
@@ -35,7 +35,6 @@ const host = Dialog.host.create({
 })
 
 host.onUserRequest(({ account, request }) => {
-  if (!request) return
   // Navigate to the request's approval UI...
 })
 
@@ -49,7 +48,7 @@ host.ready()
 - **Type:** `Dialog.channel.Host`
 - **Required**
 
-Channel used to receive RPC requests from the host SDK and to send back responses, sync events, and mode switches.
+Channel used to receive RPC requests from the host SDK and to send back responses, theme updates, cancellation events, and mode switches.
 
 ```ts
 import { Dialog } from 'accounts'
@@ -119,11 +118,11 @@ Zustand store holding the host context's state:
 type State = {
   /** Whether the dialog is rendered in an iframe or popup. */
   mode: 'iframe' | 'popup' | undefined
-  /** Trusted host origin from MessageEvent. */
+  /** Consumer origin that opened this dialog. */
   origin: string | undefined
   /** Whether the dialog is ready to display content. */
   ready: boolean
-  /** Queued RPC requests received from the host. */
+  /** Pending RPC requests owned by the dialog host. */
   requests: Dialog.State['requests']
 }
 ```
@@ -138,7 +137,7 @@ The trusted hosts list passed in via options (defaulted to `[]`).
 
 - **Type:** `(cb: (payload: { account; origin; request }) => void | Promise<void>) => () => void`
 
-Subscribes to user-facing RPC requests. Syncs the host's active account/chain, updates the host store, and invokes the callback with the first pending request — or `null` when the queue is cleared, signalling the UI should close. Returns an unsubscribe function.
+Subscribes to user-facing RPC requests. Syncs the host's active account and chain, updates the host store, and invokes the callback with each pending request. Returns an unsubscribe function.
 
 ```ts
 import { Dialog } from 'accounts'
@@ -146,22 +145,21 @@ import { Dialog } from 'accounts'
 const host = Dialog.host.create({ channel, provider })
 
 const unsubscribe = host.onUserRequest(({ account, request }) => { // [!code focus]
-  if (!request) return // Queue cleared — close the dialog. // [!code focus]
   // Navigate to the per-method approval UI. // [!code focus]
 }) // [!code focus]
 ```
 
-### onRequests
+### onRequest
 
-- **Type:** `(cb: (requests, event, extra) => void) => () => void`
+- **Type:** `(cb: (request, meta, extra) => void | Promise<void>) => () => void`
 
-Lower-level subscription that fires on every `rpc-requests` message and receives the full queued request list, the underlying `MessageEvent`, and the host's active account. Used internally by `onUserRequest`. Returns an unsubscribe function.
+Lower-level subscription that fires for each incoming dialog request and receives the request, channel metadata, and the consumer's active account and chain ID. Used internally by `onUserRequest`. Returns an unsubscribe function.
 
 ### ready
 
 - **Type:** `(options?: { accounts?: readonly string[] } & Dialog.channel.ReadyOptions) => void`
 
-Signals readiness to the host and begins accepting requests. Call this after the host context is fully initialized. When `accounts` is provided, the wallet responds to SDK account-sync messages.
+Signals readiness to the host and begins accepting requests. Call this after the host context is fully initialized. When `accounts` is provided, the wallet responds to cached-account validation messages from the SDK.
 
 ```ts
 import { Dialog } from 'accounts'

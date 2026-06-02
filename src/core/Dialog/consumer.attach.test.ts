@@ -6,16 +6,18 @@ const host = 'https://wallet.test/embed'
 
 describe('Dialog.consumer.attach', () => {
   test('behavior: each attachment owns its local request lifecycle', async () => {
-    const sessions: Dialog.SetupFn.Parameters[] = []
-    const syncs: Dialog.Sync[] = []
-    const dialog = Dialog.define({ name: 'test' }, (parameters) => {
-      sessions.push(parameters)
+    const requests: Dialog.RequestContext[] = []
+    const resolves: ((result: unknown) => void)[] = []
+    const dialog = Dialog.define({ name: 'test' }, () => {
       return {
         close() {},
         destroy() {},
         open() {},
-        async syncRequests(sync) {
-          syncs.push(sync)
+        request(request) {
+          requests.push(request)
+          return new Promise((resolve) => {
+            resolves.push(resolve)
+          })
         },
         syncTheme() {},
       }
@@ -48,33 +50,29 @@ describe('Dialog.consumer.attach', () => {
     })
 
     await vi.waitFor(() => {
-      if (syncs.length < 2) throw new Error('requests not synced')
+      if (requests.length < 2) throw new Error('requests not sent')
     })
 
-    expect(syncs.map((sync) => sync.requests.map((x) => x.request))).toMatchInlineSnapshot(`
+    expect(requests.map((request) => request.request.request)).toMatchInlineSnapshot(`
       [
-        [
-          {
-            "id": 0,
-            "jsonrpc": "2.0",
-            "method": "eth_accounts",
-          },
-        ],
-        [
-          {
-            "id": 0,
-            "jsonrpc": "2.0",
-            "method": "wallet_getCallsStatus",
-            "params": [
-              "0x1",
-            ],
-          },
-        ],
+        {
+          "id": 0,
+          "jsonrpc": "2.0",
+          "method": "eth_accounts",
+        },
+        {
+          "id": 0,
+          "jsonrpc": "2.0",
+          "method": "wallet_getCallsStatus",
+          "params": [
+            "0x1",
+          ],
+        },
       ]
     `)
 
-    sessions[0]!.onResponse({ id: syncs[0]!.requests[0]!.request.id, result: 'accounts' })
-    sessions[1]!.onResponse({ id: syncs[1]!.requests[0]!.request.id, result: 'status' })
+    resolves[0]!('accounts')
+    resolves[1]!('status')
 
     await expect(promise_a).resolves.toMatchInlineSnapshot(`"accounts"`)
     await expect(promise_b).resolves.toMatchInlineSnapshot(`"status"`)

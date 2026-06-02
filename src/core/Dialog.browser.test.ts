@@ -11,38 +11,32 @@ function setup() {
     chainId: 1,
     storage: Storage.memory({ key: 'dialog-test' }),
   })
-  const onReject = vi.fn()
   const dialog = Dialog.iframe()
-  const handle = dialog(parameters(store, { onReject }))
+  const handle = dialog(parameters(store))
   handles.push(handle)
-  return { handle, onReject, store }
+  return { handle, store }
 }
 
 let handles: Dialog.Session[] = []
 
-function parameters(
-  store: Store.Store,
-  options: { onReject?: ((ids: readonly number[]) => void) | undefined } = {},
-): Dialog.SetupFn.Parameters {
+function parameters(store: Store.Store): Dialog.SetupFn.Parameters {
   return {
     getAccounts: () => store.getState().accounts,
     getChainId: () => store.getState().chainId,
     host,
     onAccountsInvalid: () => store.setState({ accessKeys: [], accounts: [], activeAccount: 0 }),
-    onReject: options.onReject ?? (() => {}),
-    onResponse() {},
   }
 }
 
-function pending(id: number): Dialog.Request & { status: 'pending' } {
+function pending(id: number): Dialog.PendingRequest {
   return {
     request: { _returnType: undefined, id, jsonrpc: '2.0', method: 'eth_accounts' },
     status: 'pending',
   }
 }
 
-function sync(requests: readonly Dialog.Request[]): Dialog.Sync {
-  return { account: undefined, chainId: 1, requests }
+function context(request: Dialog.PendingRequest): Dialog.RequestContext {
+  return { account: undefined, chainId: 1, request }
 }
 
 afterEach(() => {
@@ -156,45 +150,40 @@ describe('Dialog.iframe', () => {
     expect(document.querySelector('dialog[data-tempo-wallet]')).toBeNull()
   })
 
-  test('behavior: cancel event rejects displayed pending requests', () => {
-    const { handle, onReject } = setup()
+  test('behavior: cancel event rejects displayed pending requests', async () => {
+    const { handle } = setup()
     const displayed = pending(1)
-    void handle.syncRequests(sync([displayed]))
+    const promise = handle.request(context(displayed))
     handle.open()
     const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
     dialog.dispatchEvent(new Event('cancel'))
-    expect(onReject.mock.calls).toMatchInlineSnapshot(`
-      [
-        [
-          [
-            1,
-          ],
-        ],
-      ]
+    await expect(promise).rejects.toThrowErrorMatchingInlineSnapshot(`
+      [Provider.UserRejectedRequestError: The user rejected the request.
+
+      Details: The user rejected the request.
+      Version: ox@0.9.6]
     `)
   })
 
-  test('behavior: cancel event only rejects that iframe request', () => {
+  test('behavior: cancel event only rejects that iframe request', async () => {
     const a = setup()
     const b = setup()
 
-    void a.handle.syncRequests(sync([pending(1)]))
-    void b.handle.syncRequests(sync([pending(2)]))
+    const promise_a = a.handle.request(context(pending(1)))
+    const promise_b = b.handle.request(context(pending(2)))
+    void promise_b.catch(() => {})
     a.handle.open()
 
     const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
     dialog.dispatchEvent(new Event('cancel'))
 
-    expect(a.onReject.mock.calls).toMatchInlineSnapshot(`
-      [
-        [
-          [
-            1,
-          ],
-        ],
-      ]
+    await expect(promise_a).rejects.toThrowErrorMatchingInlineSnapshot(`
+      [Provider.UserRejectedRequestError: The user rejected the request.
+
+      Details: The user rejected the request.
+      Version: ox@0.9.6]
     `)
-    expect(b.onReject.mock.calls).toMatchInlineSnapshot(`[]`)
+    expect(promise_b).toBeInstanceOf(Promise)
   })
 
   test('behavior: focus restored to previous element on close', () => {
@@ -211,23 +200,20 @@ describe('Dialog.iframe', () => {
     button.remove()
   })
 
-  test('behavior: backdrop click rejects displayed pending requests', () => {
-    const { handle, onReject } = setup()
+  test('behavior: backdrop click rejects displayed pending requests', async () => {
+    const { handle } = setup()
     const displayed = pending(1)
-    void handle.syncRequests(sync([displayed]))
+    const promise = handle.request(context(displayed))
     handle.open()
     const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
 
     dialog.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
-    expect(onReject.mock.calls).toMatchInlineSnapshot(`
-      [
-        [
-          [
-            1,
-          ],
-        ],
-      ]
+    await expect(promise).rejects.toThrowErrorMatchingInlineSnapshot(`
+      [Provider.UserRejectedRequestError: The user rejected the request.
+
+      Details: The user rejected the request.
+      Version: ox@0.9.6]
     `)
   })
 
