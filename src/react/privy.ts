@@ -1,12 +1,6 @@
-import {
-  type ConnectedWallet,
-  type User,
-  toViemAccount,
-  useLogin,
-  usePrivy,
-  useWallets,
-} from '@privy-io/react-auth'
+import { type ConnectedWallet, useLogin, usePrivy, useWallets } from '@privy-io/react-auth'
 import { useEffect, useRef, useSyncExternalStore } from 'react'
+import type { Address } from 'viem/accounts'
 
 import type * as Adapter from '../core/Adapter.js'
 import { privy as core_privy } from '../core/adapters/privy.js'
@@ -15,8 +9,8 @@ import { privy as core_privy } from '../core/adapters/privy.js'
  * Creates a Privy adapter wired to `@privy-io/react-auth`.
  *
  * Mount {@link PrivyAccountsBridge} under Privy's `PrivyProvider` in the same
- * React tree. The bridge owns Privy's login modal, hook state, public-key
- * lookup, and account materialization for this adapter.
+ * React tree. The bridge owns Privy's login modal, hook state, and embedded
+ * wallet selection for this adapter.
  */
 export function privy(options: privy.Options = {}): Adapter.Adapter {
   return core_privy({
@@ -53,23 +47,17 @@ export function PrivyAccountsBridge() {
   }, [])
 
   useEffect(() => {
-    const keys = getPublicKeys(privy.user)
-
     setPrivyReactState({
       authenticated: privy.authenticated,
       getAccessToken: privy.getAccessToken,
       logout: privy.logout,
       ready: privy.ready,
       userId: privy.user?.id,
-      wallets: wallets.wallets.filter(isEmbeddedEthereumWallet).map((wallet) => {
-        const publicKey = keys.get(normalizeAddress(wallet.address))
-        return {
-          address: wallet.address,
-          getEthereumProvider: wallet.getEthereumProvider,
-          ...(publicKey ? { publicKey } : {}),
-          walletIndex: wallet.walletIndex,
-        }
-      }),
+      wallets: wallets.wallets.filter(isEmbeddedEthereumWallet).map((wallet) => ({
+        address: wallet.address,
+        getEthereumProvider: wallet.getEthereumProvider,
+        walletIndex: wallet.walletIndex,
+      })),
       walletsReady: wallets.ready,
     })
   }, [
@@ -99,14 +87,11 @@ export function PrivyAccountsBridge() {
     loading.current = true
     void (async () => {
       try {
-        const keys = getPublicKeys(privy.user)
         const embedded = wallets.wallets.filter(isEmbeddedEthereumWallet)
         if (embedded.length === 0)
           throw new Error('Privy React returned no embedded Ethereum wallet.')
 
-        resolvePrivyAccounts(
-          await Promise.all(embedded.map(async (wallet) => await toPrivyAccount(wallet, keys))),
-        )
+        resolvePrivyAccounts(embedded.map((wallet) => wallet.address as Address))
       } catch (error) {
         rejectPrivyAccounts(error instanceof Error ? error : new Error(String(error)))
       } finally {
@@ -121,7 +106,6 @@ export function PrivyAccountsBridge() {
 type PrivyReactWallet = {
   address: string
   getEthereumProvider: () => Promise<core_privy.EthereumProvider> | core_privy.EthereumProvider
-  publicKey?: string | undefined
   walletIndex?: number | undefined
 }
 
@@ -193,7 +177,6 @@ const client = {
             address: wallet.address,
             chain_type: 'ethereum',
             connector_type: 'embedded',
-            ...(wallet.publicKey ? { public_key: wallet.publicKey } : {}),
             type: 'wallet',
             wallet_client_type: 'privy',
             wallet_index: wallet.walletIndex ?? index,
@@ -236,18 +219,6 @@ function rejectPrivyAccounts(error: Error) {
   emit()
 }
 
-async function toPrivyAccount(
-  wallet: ConnectedWallet,
-  keys: Map<string, string>,
-): Promise<core_privy.Account> {
-  const publicKey = keys.get(normalizeAddress(wallet.address))
-  const account = await toViemAccount({ wallet })
-  return {
-    ...account,
-    ...(account.publicKey || publicKey ? { publicKey: account.publicKey ?? publicKey } : {}),
-  }
-}
-
 function emit() {
   for (const listener of listeners) listener()
 }
@@ -266,35 +237,12 @@ function createMissingBridgeError() {
   return new Error('PrivyAccountsBridge must be mounted under PrivyProvider to use privy().')
 }
 
-function getPublicKeys(user: User | null | undefined) {
-  return new Map(
-    (user?.linkedAccounts ?? [])
-      .filter(isEmbeddedEthereumLinkedAccount)
-      .map((account) => [normalizeAddress(account.address), account.publicKey]),
-  )
-}
-
 function getSnapshot() {
   return request
 }
 
 function isEmbeddedEthereumWallet(wallet: ConnectedWallet) {
   return wallet.type === 'ethereum' && wallet.walletClientType === 'privy'
-}
-
-function isEmbeddedEthereumLinkedAccount(
-  account: User['linkedAccounts'][number],
-): account is Extract<User['linkedAccounts'][number], { type: 'wallet' }> & { publicKey: string } {
-  return (
-    account.type === 'wallet' &&
-    account.chainType === 'ethereum' &&
-    account.walletClientType === 'privy' &&
-    typeof account.publicKey === 'string'
-  )
-}
-
-function normalizeAddress(address: string) {
-  return address.toLowerCase()
 }
 
 function sameAddress(a: string, b: string) {

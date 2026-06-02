@@ -7,7 +7,7 @@ description: React adapter backed by Privy sessions and embedded Ethereum wallet
 
 Creates a Privy adapter for React apps using `@privy-io/react-auth`.
 
-Import it from `accounts/react/privy`. The adapter opens Privy's login UI through a React boundary, reads Privy's hook state, and returns embedded Ethereum wallets to the Accounts SDK. When Privy exposes a public key, the adapter builds a full Tempo viem account with `viem/tempo` `Account.from(...)`; otherwise it uses Privy's embedded provider signer fallback.
+Import it from `accounts/react/privy`. The adapter opens Privy's login UI through a React boundary, reads Privy's hook state, and returns embedded Ethereum wallets to the Accounts SDK. Privy does not expose secp256k1 public keys for embedded Ethereum wallets, so the adapter signs Tempo payloads through Privy's embedded provider with `secp256k1_sign`.
 
 ## Usage
 
@@ -34,7 +34,7 @@ root.render(
 )
 ```
 
-The bridge resolves connect requests with Privy's embedded Ethereum wallets, Privy's viem account signer when available, and matching public keys when Privy exposes them.
+The bridge resolves connect requests with Privy's embedded Ethereum wallets.
 
 ## Parameters
 
@@ -100,8 +100,8 @@ It exists because Privy's `usePrivy`, `useWallets`, and `useLogin` hooks can onl
 
 ## Account Behavior
 
-The public React adapter connects all embedded Ethereum wallets returned by Privy. During connect, the bridge materializes each Privy wallet into the shape expected by the internal adapter.
+The public React adapter connects all embedded Ethereum wallets returned by Privy. During connect, the bridge returns those wallet addresses to the internal adapter.
 
-For Privy-hosted embedded wallets, the bridge calls Privy's `toViemAccount({ wallet })` helper and pairs the resulting raw signer with the wallet public key from Privy's authenticated user state when available.
+The internal adapter materializes each embedded wallet provider with Privy's SDK and signs with `provider.request({ method: 'secp256k1_sign', params: [hash] })`.
 
-When a public key is present, the adapter validates that it matches the wallet address and builds a full Tempo viem account. When only an address is available, the adapter still signs through Privy's embedded provider fallback.
+Because Privy does not expose the Ethereum wallet public key, the adapter does not construct a `viem/tempo` `Account` directly from the connected Privy account.

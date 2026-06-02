@@ -1,4 +1,4 @@
-import { Address as core_Address, Hex, PublicKey, Secp256k1, Signature } from 'ox'
+import { Address as core_Address, Hex, Secp256k1, Signature } from 'ox'
 import { decodeFunctionData } from 'viem'
 import type { Address } from 'viem/accounts'
 import { Abis } from 'viem/tempo'
@@ -21,23 +21,10 @@ function signWithKey(privateKey: Hex.Hex, payload: Hex.Hex): Hex.Hex {
   return Signature.toHex(signature)
 }
 
-function publicKeyForPrivateKey(privateKey: Hex.Hex): Hex.Hex {
-  return PublicKey.toHex(Secp256k1.getPublicKey({ privateKey }), { includePrefix: false })
-}
-
 function privateKeyForAddress(walletAddress: string): Hex.Hex {
   if (core_Address.from(walletAddress) === address) return privateKeyA
   if (core_Address.from(walletAddress) === other) return privateKeyB
   throw new Error(`No test private key for ${walletAddress}`)
-}
-
-function toPrivyAccount(walletAddress: Address): privy.Account {
-  const privateKey = privateKeyForAddress(walletAddress)
-  return {
-    address: walletAddress,
-    publicKey: publicKeyForPrivateKey(privateKey),
-    sign: async ({ hash }) => signWithKey(privateKey, hash),
-  }
 }
 
 describe('privy', () => {
@@ -207,7 +194,7 @@ describe('privy', () => {
     `)
   })
 
-  test('default: signs transactions with a materialized Privy account', async () => {
+  test('default: signs transactions with the provider-backed Privy account', async () => {
     const { adapter, client, store } = setup()
     await connect({ adapter, store })
 
@@ -230,67 +217,6 @@ describe('privy', () => {
         "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
       ]
     `)
-    expect(client.signPayloads).toMatchInlineSnapshot(`
-      [
-        "0x62f087d34b8a023e0461eb1b9a01267ba5b8400c13d2ffdac615ccec872cc288",
-      ]
-    `)
-    expect(result).toMatchInlineSnapshot(
-      `"0x76f86a010101825208d8d7942b5ad5c4795c026514f8317c7a215e218dccd6cf0180c0808080808080c0b8418b0c18077cb78666296a4c0e8149935124f70d7820ec4e4ae81de428659d6c305c098dea43ccb536e813bb1c136eab5e96611de69489be6291169b2bb2318cde1b"`,
-    )
-  })
-
-  test('default: Privy React viem accounts use Tempo account signing', async () => {
-    const { adapter, client, store } = setup({ loadAddresses: [toPrivyAccount(address)] })
-    await connect({ adapter, store })
-
-    const result = await adapter.actions.signTransaction(
-      {
-        chainId: 1,
-        from: address,
-        gas: 21_000n,
-        maxFeePerGas: 1n,
-        maxPriorityFeePerGas: 1n,
-        nonce: 0,
-        to: other,
-        value: 1n,
-      },
-      { method: 'eth_signTransaction', params: [{ from: address }] },
-    )
-
-    expect(client.signPayloads).toMatchInlineSnapshot(`[]`)
-    expect(result).toMatchInlineSnapshot(
-      `"0x76f86a010101825208d8d7942b5ad5c4795c026514f8317c7a215e218dccd6cf0180c0808080808080c0b8418b0c18077cb78666296a4c0e8149935124f70d7820ec4e4ae81de428659d6c305c098dea43ccb536e813bb1c136eab5e96611de69489be6291169b2bb2318cde1b"`,
-    )
-  })
-
-  test('default: app-returned signer without publicKey uses provider signing', async () => {
-    const { adapter, client, store } = setup({
-      loadAddresses: [
-        {
-          address,
-          sign: async () => {
-            throw new Error('unexpected app signer')
-          },
-        },
-      ],
-    })
-    await connect({ adapter, store })
-
-    const result = await adapter.actions.signTransaction(
-      {
-        chainId: 1,
-        from: address,
-        gas: 21_000n,
-        maxFeePerGas: 1n,
-        maxPriorityFeePerGas: 1n,
-        nonce: 0,
-        to: other,
-        value: 1n,
-      },
-      { method: 'eth_signTransaction', params: [{ from: address }] },
-    )
-
     expect(client.signPayloads).toMatchInlineSnapshot(`
       [
         "0x62f087d34b8a023e0461eb1b9a01267ba5b8400c13d2ffdac615ccec872cc288",
@@ -692,20 +618,6 @@ describe('privy', () => {
       `[Provider.UnauthorizedError: Privy provider returned a signature for "${other}" that does not match the requested wallet "${address}".]`,
     )
   })
-
-  test('error: app-returned account publicKey must match address', async () => {
-    const account = {
-      ...toPrivyAccount(address),
-      publicKey: publicKeyForPrivateKey(privateKeyB),
-    }
-    const { adapter } = setup({ loadAddresses: [account] })
-
-    await expect(
-      adapter.actions.loadAccounts(undefined, { method: 'wallet_connect', params: undefined }),
-    ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[RpcResponse.InternalError: Privy account publicKey does not match address "${address}".]`,
-    )
-  })
 })
 
 function setup(options: setup.Options = {}) {
@@ -757,8 +669,8 @@ declare namespace setup {
   type Options = {
     /** Pass `false` to omit the adapter's `createAccount` callback (tests fallback to `loadAccounts`). */
     createAccount?: false | undefined
-    createAddresses?: readonly (Address | privy.Account)[] | undefined
-    loadAddresses?: readonly (Address | privy.Account)[] | undefined
+    createAddresses?: readonly Address[] | undefined
+    loadAddresses?: readonly Address[] | undefined
     /** Make the mock client's `user.get` throw, to test restore-side session errors. */
     restoreError?: unknown
     token?: string | null | undefined
@@ -863,7 +775,6 @@ function createClient(options: setup.Options = {}) {
               type: 'wallet',
               wallet_client_type: 'privy',
               wallet_index: index,
-              ...(wallet.publicKey ? { public_key: wallet.publicKey } : {}),
             })),
           },
         }
