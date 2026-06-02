@@ -96,6 +96,8 @@ type SelectQuery = {
   calls?: readonly Call[] | undefined
   /** Chain ID the access key must be authorized on. */
   chainId: number
+  /** Key type the access key must use. */
+  keyType?: AccessKey['keyType'] | undefined
   /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
   now?: number | undefined
   /** Reactive state store. */
@@ -294,11 +296,12 @@ export async function getStatus(options: StatusQuery): Promise<Status> {
 export async function select(
   options: SelectQuery,
 ): Promise<TempoAccount.AccessKeyAccount | undefined> {
-  const { account, calls, chainId, store } = options
+  const { account, calls, chainId, keyType, store } = options
   const now = options.now ?? Date.now() / 1000
   const records = list({ account, chainId, store })
 
   for (const record of records) {
+    if (keyType && record.keyType !== keyType) continue
     if (!scopesMatch(record, { calls })) continue
     if (isExpired(record.expiry, now)) {
       remove({ accessKey: record.address, account: record.access, chainId: record.chainId, store })
