@@ -308,7 +308,7 @@ export function local(options: local.Options): Adapter.Adapter {
             const account = getAccount({ signable: true })
             const client = getClient()
             try {
-              await Actions.accessKey.revoke(client, {
+              await Actions.accessKey.revokeSync(client, {
                 account,
                 accessKey: parameters.accessKeyAddress,
               })

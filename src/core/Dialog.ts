@@ -201,11 +201,18 @@ export function iframe(): Dialog {
     function createMessenger() {
       readyResult = undefined
 
+      const loaded = new Promise<void>((resolve) => {
+        frame.addEventListener('load', () => resolve(), { once: true })
+      })
+      const transport = Messenger.fromPostMessage({
+        host: hostUrl.toString(),
+        open: loaded,
+        role: 'consumer',
+        target: frame.contentWindow!,
+      })
       const m = Messenger.bridge({
-        from: Messenger.fromWindow(window, { targetOrigin: hostUrl.origin }),
-        to: Messenger.fromWindow(frame.contentWindow!, {
-          targetOrigin: hostUrl.origin,
-        }),
+        from: transport,
+        to: transport,
         waitForReady: true,
       })
       m.on('rpc-response', (response) => parameters.onResponse(response))
@@ -506,11 +513,12 @@ export function popup(options: popup.Options = {}): Dialog {
         )
         if (!win) throw new Error('Failed to open popup')
 
-        messenger = Messenger.bridge({
-          from: Messenger.fromWindow(window, { targetOrigin: hostUrl.origin }),
-          to: Messenger.fromWindow(win, { targetOrigin: hostUrl.origin }),
-          waitForReady: true,
+        const transport = Messenger.fromPostMessage({
+          host: hostUrl.toString(),
+          role: 'consumer',
+          target: win,
         })
+        messenger = Messenger.bridge({ from: transport, to: transport, waitForReady: true })
 
         messenger.on('rpc-response', (response) => parameters.onResponse(response))
 

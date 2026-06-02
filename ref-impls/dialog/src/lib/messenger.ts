@@ -7,8 +7,6 @@ export function init(): Messenger.Bridge {
   const target = window.opener ?? window.parent
   if (!target || target === window) return Messenger.noop()
 
-  return Messenger.bridge({
-    from: Messenger.fromWindow(window),
-    to: Messenger.fromWindow(target),
-  })
+  const transport = Messenger.fromPostMessage({ role: 'host', target })
+  return Messenger.bridge({ from: transport, to: transport })
 }

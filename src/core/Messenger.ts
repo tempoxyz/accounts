@@ -1,4 +1,7 @@
 import type { RpcRequest, RpcResponse } from 'ox'
+import { Envelope, postMessage as consumerPostMessage, Rpc } from 'wata'
+import type { Transport } from 'wata'
+import { postMessage as hostPostMessage } from 'wata/host'
 
 import type * as Remote from './Remote.js'
 
@@ -18,6 +21,11 @@ export type Messenger = {
     payload: Payload<topic>,
     targetOrigin?: string | undefined,
   ) => Promise<{ id: string; topic: topic; payload: Payload<topic> }>
+}
+
+type Startable = Messenger & {
+  /** Start the underlying transport after listeners are registered. */
+  start: () => Promise<void>
 }
 
 /** Options sent with the `ready` signal from the remote frame. */
@@ -85,45 +93,197 @@ export function from(messenger: Messenger): Messenger {
   return messenger
 }
 
-/**
- * Creates a messenger backed by `window.postMessage` / `addEventListener('message')`.
- * Filters messages by `targetOrigin` when provided.
- */
-export function fromWindow(w: Window, options: fromWindow.Options = {}): Messenger {
-  const { targetOrigin } = options
-  const listeners = new Map<string, (event: MessageEvent) => void>()
+/** Creates a messenger backed by Wata's `postMessage` transport. */
+export function fromPostMessage(options: fromPostMessage.Options): Messenger {
+  const { source = window } = options
+  const { source: source_, getOrigin } = withOrigin(source)
+  if (options.role === 'consumer') {
+    return fromTransport(
+      consumerPostMessage({
+        close: () => {},
+        host: options.host,
+        source: source_,
+        target: () => options.target,
+      }),
+      { getOrigin, open: options.open },
+    )
+  }
 
-  return from({
-    destroy() {
-      for (const listener of listeners.values()) w.removeEventListener('message', listener)
-      listeners.clear()
-    },
-    on(topic, listener, id) {
-      function onMessage(event: MessageEvent) {
-        if (event.data.topic !== topic) return
-        if (id && event.data.id !== id) return
-        if (targetOrigin && event.origin !== targetOrigin) return
-        listener(event.data.payload as never, event)
-      }
-      w.addEventListener('message', onMessage)
-      listeners.set(topic, onMessage)
-      return () => {
-        w.removeEventListener('message', onMessage)
-        listeners.delete(topic)
-      }
-    },
-    async send(topic, payload, target) {
-      const id = crypto.randomUUID()
-      w.postMessage(normalizeValue({ id, payload, topic }), target ?? targetOrigin ?? '*')
-      return { id, payload, topic } as never
-    },
-  })
+  return fromTransport(
+    hostPostMessage({
+      close: () => {},
+      source: source_,
+      target: () => options.target,
+      targetOrigin: options.targetOrigin,
+    }),
+    { getOrigin, open: options.open },
+  )
 }
 
-export declare namespace fromWindow {
-  type Options = {
-    /** Only accept messages from this origin. Also used as the `targetOrigin` for `postMessage`. */
-    targetOrigin?: string | undefined
+export declare namespace fromPostMessage {
+  type Options =
+    | {
+        /** Consumer side of the Wata postMessage transport. */
+        role: 'consumer'
+        /** Host URL or origin. Used for Wata origin pinning. */
+        host: string
+        /** Window that receives inbound postMessage events. */
+        source?: Window | undefined
+        /** Optional gate before opening the Wata transport. */
+        open?: Promise<void> | undefined
+        /** Peer window to send messages to. */
+        target: Window
+      }
+    | {
+        /** Host side of the Wata postMessage transport. */
+        role: 'host'
+        /** Window that receives inbound postMessage events. */
+        source?: Window | undefined
+        /** Optional gate before opening the Wata transport. */
+        open?: Promise<void> | undefined
+        /** Peer window to send messages to. */
+        target: Window
+        /** Consumer origin. Defaults to Wata's host-side wildcard. */
+        targetOrigin?: string | undefined
+      }
+}
+
+function fromTransport(
+  transport: Transport.Transport,
+  options: { getOrigin: () => string | undefined; open?: Promise<void> | undefined },
+): Startable {
+  const listeners = new Set<{
+    topic: Topic
+    id: string | undefined
+    listener: (payload: never, event: MessageEvent) => void
+  }>()
+  const abort = new AbortController()
+  let opening: Promise<void> | undefined
+  transport.on(
+    'message',
+    (envelope) => {
+      if (envelope.type !== 'rpc-requests') return
+      const event = { origin: options.getOrigin() ?? '' } as MessageEvent
+      for (const message of envelope.payload) {
+        if (!('id' in message)) continue
+        const topic = message.method as Topic
+        const payload = Array.isArray(message.params) ? message.params[0] : undefined
+        const id = String(message.id)
+        dispatch({ event, id, payload, topic })
+      }
+    },
+    { signal: abort.signal },
+  )
+  transport.on('error', () => {}, { signal: abort.signal })
+
+  return {
+    destroy() {
+      abort.abort()
+      listeners.clear()
+      void transport.close()
+    },
+    on(topic, listener, id) {
+      const item = { id, listener: listener as never, topic }
+      listeners.add(item)
+      return () => {
+        listeners.delete(item)
+      }
+    },
+    async send(topic, payload) {
+      const id = crypto.randomUUID()
+      await start()
+      await transport.send(
+        Envelope.rpcRequests([
+          Rpc.request({
+            id,
+            method: topic,
+            params: [normalizeValue(payload)] as const,
+          }),
+        ]),
+      )
+      return { id, payload, topic } as never
+    },
+    start,
+  }
+
+  function start() {
+    opening ??= (async () => {
+      if (options.open) await options.open
+      await transport.start()
+    })()
+    return opening
+  }
+
+  function dispatch(message: {
+    topic: Topic
+    id: string
+    payload: unknown
+    event: MessageEvent
+  }): boolean {
+    let handled = false
+    for (const item of listeners) {
+      if (item.topic !== message.topic) continue
+      if (item.id && item.id !== message.id) continue
+      handled = true
+      item.listener(message.payload as never, message.event)
+    }
+    return handled
+  }
+}
+
+function withOrigin(source: Window): {
+  getOrigin: () => string | undefined
+  source: fromPostMessage.WindowLike
+} {
+  const listeners = new Map<EventListenerOrEventListenerObject, EventListener>()
+  let origin: string | undefined
+  return {
+    getOrigin() {
+      return origin
+    },
+    source: {
+      addEventListener(
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: AddEventListenerOptions | boolean | undefined,
+      ) {
+        if (type !== 'message') {
+          source.addEventListener(type, listener, options)
+          return
+        }
+        const wrapped = ((event: MessageEvent) => {
+          origin = event.origin
+          if (typeof listener === 'function') listener(event)
+          else listener.handleEvent(event)
+        }) as EventListener
+        listeners.set(listener, wrapped)
+        source.addEventListener(type, wrapped, options)
+      },
+      postMessage(data, targetOrigin) {
+        source.postMessage(data, targetOrigin)
+      },
+      removeEventListener(
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: EventListenerOptions | boolean | undefined,
+      ) {
+        if (type !== 'message') {
+          source.removeEventListener(type, listener, options)
+          return
+        }
+        const wrapped = listeners.get(listener)
+        source.removeEventListener(type, wrapped ?? listener, options)
+        listeners.delete(listener)
+      },
+    },
+  }
+}
+
+export declare namespace fromPostMessage {
+  type WindowLike = {
+    addEventListener: Window['addEventListener']
+    postMessage: (data: unknown, targetOrigin: string) => void
+    removeEventListener: Window['removeEventListener']
   }
 }
 
@@ -138,11 +298,13 @@ export function bridge(parameters: bridge.Parameters): Bridge {
 
   const ready = withResolvers<ReadyOptions>()
   from_.on('ready', (payload) => ready.resolve(payload ?? {}))
+  start(from_)
+  if (from_ !== to) start(to)
 
   const messenger = from({
     destroy() {
       from_.destroy()
-      to.destroy()
+      if (from_ !== to) to.destroy()
       if (pending) ready.reject()
     },
     on(topic, listener, id) {
@@ -175,6 +337,10 @@ export declare namespace bridge {
     /** Buffer sends until `ready` is received. */
     waitForReady?: boolean | undefined
   }
+}
+
+function start(messenger: Messenger) {
+  void (messenger as Partial<Startable>).start?.()
 }
 
 /** Returns a no-op bridge for SSR environments. */

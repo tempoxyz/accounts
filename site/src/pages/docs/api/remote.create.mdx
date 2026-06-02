@@ -13,16 +13,18 @@ Creates a remote context for the wallet's iframe/popup app. The context bundles:
 
 ## Usage
 
-The `messenger` is a [`Messenger.Bridge`](https://github.com/tempoxyz/accounts/blob/main/src/core/Messenger.ts) that connects the wallet app to its host (the iframe `parent` or popup `opener`). The `provider` is the wallet's own [`Provider`](/docs/api/provider) instance -- the one that holds the wallet's accounts and actually executes signing operations.
+The `messenger` is a [`Messenger.Bridge`](https://github.com/tempoxyz/accounts/blob/main/src/core/Messenger.ts) that connects the wallet app to its host (the iframe `parent` or popup `opener`). The `provider` is the wallet's own [`Provider`](/docs/api/provider) instance — the one that holds the wallet's accounts and actually executes signing operations.
 
 ```ts
 import { Messenger, Provider, Remote, webAuthn } from 'accounts'
 
 // 1. Build a bridge to the parent/opener (the page that opened this iframe/popup).
 const target = window.opener ?? window.parent
+if (!target || target === window) throw new Error('No host window found')
+const transport = Messenger.fromPostMessage({ role: 'host', target })
 const messenger = Messenger.bridge({
-  from: Messenger.fromWindow(window),
-  to: Messenger.fromWindow(target),
+  from: transport,
+  to: transport,
 })
 
 // 2. Build the wallet-side provider that will execute approved requests.
