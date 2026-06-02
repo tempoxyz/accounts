@@ -1,5 +1,7 @@
 import { Address, Hex, Provider as ox_Provider, PublicKey } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { generatePrivateKey } from 'viem/accounts'
+import { Account as TempoAccount } from 'viem/tempo'
 import { tempoLocalnet } from 'viem/tempo/chains'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vp/test'
 
@@ -220,6 +222,63 @@ describe('dialog', () => {
         "auth": {
           "token": "test-token",
         },
+      }
+    `)
+  })
+
+  test('behavior: authorizeAccessKey forwards public material for a provided private key', async () => {
+    const { adapter, dialog, store } = setup()
+    const expiry = 123
+    const privateKey = generatePrivateKey()
+    const accessKey = TempoAccount.fromSecp256k1(privateKey)
+    const promise = adapter.actions.authorizeAccessKey!(
+      { expiry, keyType: 'secp256k1', privateKey },
+      {
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry, keyType: 'secp256k1' }],
+      },
+    )
+
+    const queued = await dialog.takeRequest()
+    const request = queued.request as {
+      params: readonly [
+        {
+          expiry: number
+          keyType: 'secp256k1'
+          privateKey?: Hex.Hex | undefined
+          publicKey: Hex.Hex
+        },
+      ]
+    }
+    const params = request.params[0] as {
+      expiry: number
+      keyType: 'secp256k1'
+      privateKey?: Hex.Hex | undefined
+      publicKey: Hex.Hex
+    }
+    dialog.success(queued, {
+      keyAuthorization: createKeyAuthorization(params),
+      rootAddress: address,
+    })
+
+    await expect(promise).resolves.toMatchObject({ rootAddress: address })
+    expect(params.privateKey).toMatchInlineSnapshot(`undefined`)
+    expect(params.publicKey).toMatchInlineSnapshot(`"${accessKey.publicKey}"`)
+    const {
+      address: storedAddress,
+      privateKey: storedPrivateKey,
+      ...stored
+    } = store.getState().accessKeys.map(({ keyAuthorization: _, ...key }) => key)[0]!
+    expect(storedAddress).toBe(accessKey.address.toLowerCase())
+    expect(storedPrivateKey).toBe(privateKey)
+    expect(stored).toMatchInlineSnapshot(`
+      {
+        "access": "0x0000000000000000000000000000000000000001",
+        "chainId": 1337,
+        "expiry": 123,
+        "keyType": "secp256k1",
+        "limits": undefined,
+        "scopes": undefined,
       }
     `)
   })

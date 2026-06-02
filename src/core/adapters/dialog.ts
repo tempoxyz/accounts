@@ -1,5 +1,6 @@
-import { Address, Provider as ox_Provider, RpcResponse } from 'ox'
+import { Address, Hex, Provider as ox_Provider, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
+import { Account as TempoAccount } from 'viem/tempo'
 import { z } from 'zod/mini'
 
 import * as AccessKey from '../AccessKey.js'
@@ -75,8 +76,32 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
      * an external publicKey/address, and returns the params to inject into the
      * RPC request so the dialog signs the authorization.
      */
-    async function generateAccessKey(options: Adapter.authorizeAccessKey.Parameters | undefined) {
+    async function prepareAccessKey(options: Adapter.authorizeAccessKey.Parameters | undefined) {
       if (!options) return undefined
+      if (options.privateKey) {
+        const keyType = options.keyType ?? 'secp256k1'
+        const accessKey = (() => {
+          switch (keyType) {
+            case 'secp256k1':
+              return TempoAccount.fromSecp256k1(options.privateKey)
+            case 'p256':
+              return TempoAccount.fromP256(options.privateKey)
+            case 'webAuthn':
+              throw new RpcResponse.InvalidParamsError({
+                message: '`privateKey` cannot be used with `keyType: "webAuthn"`.',
+              })
+          }
+        })()
+        const { privateKey: _privateKey, ...request } = options
+        return {
+          generated: { privateKey: options.privateKey },
+          request: {
+            ...request,
+            publicKey: accessKey.publicKey,
+            keyType,
+          },
+        }
+      }
       if (options.publicKey || options.address) return undefined
       if (options.keyType && options.keyType !== 'p256')
         throw new RpcResponse.InvalidParamsError({
@@ -103,13 +128,14 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     function saveAccessKey(
       address: Address.Address,
       keyAuth: KeyAuthorization.Rpc,
-      generated: Awaited<ReturnType<typeof AccessKey.generate>>,
+      generated: Awaited<ReturnType<typeof AccessKey.generate>> | { privateKey: Hex.Hex },
     ) {
       const keyAuthorization = KeyAuthorization.fromRpc(keyAuth)
       AccessKey.add({
         account: address,
         authorization: keyAuthorization,
-        keyPair: generated.keyPair,
+        ...('keyPair' in generated ? { keyPair: generated.keyPair } : {}),
+        ...('privateKey' in generated ? { privateKey: generated.privateKey } : {}),
         store,
       })
     }
@@ -121,7 +147,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       forwardsAuth: true,
       actions: {
         async createAccount(parameters, request) {
-          const accessKey = await generateAccessKey(parameters.authorizeAccessKey)
+          const accessKey = await prepareAccessKey(parameters.authorizeAccessKey)
 
           const { accounts } = await provider.request({
             ...request,
@@ -160,7 +186,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async loadAccounts(parameters, request) {
-          const accessKey = await generateAccessKey(parameters?.authorizeAccessKey)
+          const accessKey = await prepareAccessKey(parameters?.authorizeAccessKey)
 
           const { accounts } = await provider.request({
             ...request,
@@ -318,7 +344,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async authorizeAccessKey(parameters, request) {
-          const accessKey = await generateAccessKey(parameters)
+          const accessKey = await prepareAccessKey(parameters)
 
           const result = await provider.request({
             ...request,
