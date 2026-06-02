@@ -18,8 +18,13 @@ describe('channel', () => {
     const requests: { meta: Dialog.host.Meta; sync: Dialog.Sync }[] = []
     const responses: Dialog.channel.Response[] = []
     const modes: Dialog.channel.SwitchMode[] = []
+    const validations: { meta: Dialog.host.Meta; sync: Dialog.channel.SyncRequest }[] = []
 
     host.onRequests((sync, meta) => requests.push({ meta, sync }))
+    host.onSync((sync, meta) => {
+      validations.push({ meta, sync })
+      return { valid: true }
+    })
     consumer.onResponse((response) => responses.push(response))
     consumer.onSwitchMode((mode) => modes.push(mode))
 
@@ -33,6 +38,29 @@ describe('channel', () => {
           "app.test",
         ],
       }
+    `)
+    await expect(
+      consumer.validateAccounts({
+        addresses: ['0x0000000000000000000000000000000000000001'],
+      }),
+    ).resolves.toMatchInlineSnapshot(`
+      {
+        "valid": true,
+      }
+    `)
+    expect(validations).toMatchInlineSnapshot(`
+      [
+        {
+          "meta": {
+            "origin": "https://app.test",
+          },
+          "sync": {
+            "addresses": [
+              "0x0000000000000000000000000000000000000001",
+            ],
+          },
+        },
+      ]
     `)
 
     await consumer.sendRequests({

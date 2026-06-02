@@ -126,10 +126,10 @@ export function iframe(): Dialog {
 function createIframeSurface(parameters_initial: SetupFn.Parameters): IframeSurface {
   const { host } = parameters_initial
 
-  let active: IframeSession | undefined
+  let displayed: IframeSession | undefined
   let open = false
-  let syncSession: IframeSession | undefined
 
+  const queue: IframeSession[] = []
   const sessions = new Set<IframeSession>()
   const sessionsByRequestId = new Map<string | number, IframeSession>()
   const ids = RpcRequest.createStore()
@@ -203,10 +203,11 @@ function createIframeSurface(parameters_initial: SetupFn.Parameters): IframeSurf
   let readyResult: ReadyOptions | undefined
 
   function rejectDisplayedRequests() {
-    if (!active) return
-    for (const request of active.requests_displayed)
-      if (request.status === 'pending') sessionsByRequestId.delete(request.request.id)
-    active.parameters.onReject(active.requests_displayed.map((x) => x.request.id))
+    if (!displayed) return
+    const session = displayed
+    clearDisplayed(session)
+    session.parameters.onReject(session.requests_displayed.map((x) => x.request.id))
+    pump()
   }
 
   function createChannel() {
@@ -231,7 +232,9 @@ function createIframeSurface(parameters_initial: SetupFn.Parameters): IframeSurf
     channel_.onResponse((response) => {
       const session = sessionsByRequestId.get(response.id)
       sessionsByRequestId.delete(response.id)
+      if (session) clearDisplayed(session)
       session?.parameters.onResponse(response)
+      pump()
     })
     void channel_
       .waitForReady()
@@ -240,19 +243,17 @@ function createIframeSurface(parameters_initial: SetupFn.Parameters): IframeSurf
         if (result.colorScheme) frame.style.colorScheme = result.colorScheme
       })
       .catch(() => {})
-    channel_.onSync(({ valid }) => {
-      if (valid === false) syncSession?.parameters.onAccountsInvalid()
-      syncSession = undefined
-    })
     channel_.onSwitchMode(() => {
-      if (!active) return
+      if (!displayed) return
       hideDialog()
       activatePage()
       open = false
-      active.switchedToPopup = true
+      displayed.switchedToPopup = true
+      for (const request of displayed.requests_displayed)
+        if (request.status === 'pending') sessionsByRequestId.delete(request.request.id)
 
-      if (active.sync_displayed && active.requests_displayed.length > 0)
-        active.fallback.syncRequests(active.sync_displayed)
+      if (displayed.sync_displayed && displayed.requests_displayed.length > 0)
+        displayed.fallback.syncRequests(displayed.sync_displayed)
     })
     void channel_.start().catch(() => {})
     return channel_
@@ -348,41 +349,170 @@ function createIframeSurface(parameters_initial: SetupFn.Parameters): IframeSurf
     }
   }
 
+  function clearDisplayed(session: IframeSession) {
+    if (displayed !== session) return
+    for (const request of session.requests_displayed)
+      if (request.status === 'pending') sessionsByRequestId.delete(request.request.id)
+    displayed = undefined
+  }
+
+  function closeIfIdle() {
+    if (displayed) return
+    if (queue.length > 0) return
+    open = false
+    hideDialog()
+    activatePage()
+  }
+
+  function queueSession(session: IframeSession) {
+    if (displayed === session) return
+    if (!queue.includes(session)) queue.push(session)
+    pump()
+  }
+
+  function removeQueued(session: IframeSession) {
+    const index = queue.indexOf(session)
+    if (index < 0) return
+    queue.splice(index, 1)
+  }
+
+  function validateAccounts(session: IframeSession) {
+    const accounts = session.parameters.getAccounts()
+    if (accounts.length === 0) return
+    void channel_
+      .validateAccounts({ addresses: accounts.map((a) => a.address) })
+      .then(({ valid }) => {
+        if (!sessions.has(session)) return
+        if (valid === false) session.parameters.onAccountsInvalid()
+      })
+      .catch(() => {})
+  }
+
+  function pump() {
+    if (displayed) return
+
+    const session = queue.shift()
+    if (!session) {
+      closeIfIdle()
+      return
+    }
+    if (!sessions.has(session)) {
+      pump()
+      return
+    }
+    const sync = session.sync_displayed
+    if (!sync || !sync.requests.some((x) => x.status === 'pending')) {
+      pump()
+      return
+    }
+
+    displayed = session
+    void display(session, sync).catch((error) => {
+      clearDisplayed(session)
+      console.warn('[accounts] Failed to sync dialog requests.', error)
+      pump()
+    })
+  }
+
+  async function display(session: IframeSession, sync: Sync) {
+    const { requests } = sync
+
+    if (session.switchedToPopup) {
+      session.fallback.syncRequests(sync)
+      return
+    }
+
+    const ready = readyResult ?? channel_.waitForReady()
+    const { trustedHosts } = readyResult ?? (await ready)
+    validateAccounts(session)
+
+    // Safari does not support WebAuthn credential creation in iframes.
+    if (
+      isSafari() &&
+      requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
+    ) {
+      session.fallback.syncRequests(sync)
+      return
+    }
+
+    const ioSupported = IO.supported()
+    const hostname = window.location.hostname.replace(/^www\./, '')
+    const trusted = Boolean(
+      trustedHosts && TrustedHosts.match(trustedHosts, hostname, hostUrl.hostname),
+    )
+    const secure = ioSupported || trusted
+
+    if (!secure) {
+      console.warn(
+        [
+          `[accounts] Browser does not support IntersectionObserver v2 and "${window.location.hostname}" is not a trusted host.`,
+          'Falling back to popup dialog.',
+          '',
+          'To enable the iframe dialog, add your hostname to the trusted hosts list.',
+        ].join('\n'),
+      )
+      session.fallback.syncRequests(sync)
+      return
+    }
+
+    const requiresConfirm = requests.some((x) => x.status === 'pending')
+    if (!open && requiresConfirm) {
+      open = true
+      showDialog()
+      activateDialog()
+    }
+    for (const request of requests)
+      if (request.status === 'pending') sessionsByRequestId.set(request.request.id, session)
+    await channel_.sendRequests({
+      account: sync.account,
+      chainId: sync.chainId,
+      requests,
+    })
+  }
+
   const surface: IframeSurface = {
     createSession(parameters) {
       const session: IframeSession = {
-        fallback: popup()(parameters),
+        fallback: undefined as never,
         parameters,
         requests_displayed: [],
         switchedToPopup: false,
         sync_displayed: undefined,
       }
+      session.fallback = popup()({
+        ...parameters,
+        onReject(ids) {
+          clearDisplayed(session)
+          parameters.onReject(ids)
+          pump()
+        },
+        onResponse(response) {
+          clearDisplayed(session)
+          parameters.onResponse(response)
+          pump()
+        },
+      })
       sessions.add(session)
 
       const instance: Instance = {
         close() {
           session.fallback.close()
-          if (active !== session) return
-          open = false
-          hideDialog()
-          activatePage()
+          removeQueued(session)
+          clearDisplayed(session)
+          closeIfIdle()
         },
         destroy() {
           session.fallback.close()
           session.fallback.destroy()
           sessions.delete(session)
+          removeQueued(session)
           for (const [id, session_] of sessionsByRequestId)
             if (session_ === session) sessionsByRequestId.delete(id)
-          if (active === session) {
-            active = undefined
-            open = false
-            activatePage()
-            hideDialog()
-          }
+          clearDisplayed(session)
           if (sessions.size === 0) surface.destroy()
+          else pump()
         },
         open() {
-          active = session
           if (open) return
           open = true
           showDialog()
@@ -393,62 +523,13 @@ function createIframeSurface(parameters_initial: SetupFn.Parameters): IframeSurf
         },
         async syncRequests(sync) {
           const { requests } = sync
-          active = session
           session.sync_displayed = sync
           session.requests_displayed = requests
-          if (session.switchedToPopup) {
-            session.fallback.syncRequests(sync)
+          if (!requests.some((x) => x.status === 'pending')) {
+            removeQueued(session)
             return
           }
-
-          const ready = readyResult ?? channel_.waitForReady()
-          if (!readyResult) void channel_.sendSync({}).catch(() => {})
-          const { trustedHosts } = readyResult ?? (await ready)
-          const accounts = session.parameters.getAccounts()
-          if (accounts.length > 0) {
-            syncSession = session
-            channel_.sendSync({ addresses: accounts.map((a) => a.address) })
-          }
-
-          // Safari does not support WebAuthn credential creation in iframes.
-          if (
-            isSafari() &&
-            requests.some((x) =>
-              ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method),
-            )
-          ) {
-            session.fallback.syncRequests(sync)
-            return
-          }
-
-          const ioSupported = IO.supported()
-          const hostname = window.location.hostname.replace(/^www\./, '')
-          const trusted = Boolean(
-            trustedHosts && TrustedHosts.match(trustedHosts, hostname, hostUrl.hostname),
-          )
-          const secure = ioSupported || trusted
-
-          if (!secure) {
-            console.warn(
-              [
-                `[accounts] Browser does not support IntersectionObserver v2 and "${window.location.hostname}" is not a trusted host.`,
-                'Falling back to popup dialog.',
-                '',
-                'To enable the iframe dialog, add your hostname to the trusted hosts list.',
-              ].join('\n'),
-            )
-            session.fallback.syncRequests(sync)
-          } else {
-            const requiresConfirm = requests.some((x) => x.status === 'pending')
-            if (!open && requiresConfirm) this.open()
-            for (const request of requests)
-              if (request.status === 'pending') sessionsByRequestId.set(request.request.id, session)
-            await channel_.sendRequests({
-              account: sync.account,
-              chainId: sync.chainId,
-              requests,
-            })
-          }
+          queueSession(session)
         },
         syncTheme(theme) {
           frame.style.colorScheme = theme?.scheme ?? 'light dark'
@@ -461,11 +542,12 @@ function createIframeSurface(parameters_initial: SetupFn.Parameters): IframeSurf
     },
     destroy() {
       if (cached?.surface === surface) cached = undefined
-      active = undefined
+      displayed = undefined
       open = false
       activatePage()
       hideDialog()
       for (const session of sessions) session.fallback.destroy()
+      queue.length = 0
       sessions.clear()
       sessionsByRequestId.clear()
       channel_.close()

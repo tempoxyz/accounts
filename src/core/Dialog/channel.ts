@@ -12,18 +12,16 @@ export type Consumer = {
   onReady: (listener: (options: ReadyOptions) => void) => () => void
   /** Subscribe to RPC responses from the dialog host. */
   onResponse: (listener: (response: Response) => void) => () => void
-  /** Subscribe to account-validation responses from the dialog host. */
-  onSync: (listener: (payload: SyncResponse) => void) => () => void
   /** Subscribe to iframe-to-popup switch requests from the dialog host. */
   onSwitchMode: (listener: (payload: SwitchMode) => void) => () => void
   /** Send the pending request queue to the dialog host. */
   sendRequests: (sync: Sync) => Promise<void>
-  /** Ask the dialog host to validate local account addresses. */
-  sendSync: (payload: SyncRequest) => Promise<void>
   /** Send the current theme to the dialog host. */
   sendTheme: (theme: Theme) => Promise<void>
   /** Start the underlying Wata session after handlers are registered. */
   start: () => Promise<void>
+  /** Ask the dialog host to validate local account addresses. */
+  validateAccounts: (payload: SyncRequest) => Promise<SyncResponse>
   /** Resolves when the dialog host sends host info. */
   waitForReady: () => Promise<ReadyOptions>
 }
@@ -34,16 +32,16 @@ export type Host = {
   close: () => Promise<void>
   /** Subscribe to request queues from the consumer. */
   onRequests: (listener: (sync: Sync, meta: Meta) => void) => () => void
-  /** Subscribe to account-validation requests from the consumer. */
-  onSync: (listener: (payload: SyncRequest, meta: Meta) => void) => () => void
+  /** Handle account-validation requests from the consumer. */
+  onSync: (
+    listener: (payload: SyncRequest, meta: Meta) => SyncResponse | Promise<SyncResponse> | void,
+  ) => () => void
   /** Subscribe to live theme updates from the consumer. */
   onTheme: (listener: (theme: Theme, meta: Meta) => void) => () => void
   /** Send host metadata to the consumer. */
   ready: (options?: ReadyOptions | undefined) => Promise<void>
   /** Send an RPC response to the consumer. */
   sendResponse: (response: Response) => Promise<void>
-  /** Send account-validation results to the consumer. */
-  sendSync: (payload: SyncResponse) => Promise<void>
   /** Request that the consumer switch an iframe flow to popup mode. */
   switchMode: (payload: SwitchMode) => Promise<void>
   /** Start the underlying Wata session after handlers are registered. */
@@ -91,7 +89,6 @@ export function consumerPostMessage(options: consumerPostMessage.Options): Consu
   void ready.promise.catch(() => {})
   const readyListeners = new Set<(options: ReadyOptions) => void>()
   const responseListeners = new Set<(response: Response) => void>()
-  const syncListeners = new Set<(payload: SyncResponse) => void>()
   const switchModeListeners = new Set<(payload: SwitchMode) => void>()
   let error: Error | undefined
   let readyPromise: Promise<ReadyOptions> | undefined
@@ -111,7 +108,6 @@ export function consumerPostMessage(options: consumerPostMessage.Options): Consu
       await wata.close()
       readyListeners.clear()
       responseListeners.clear()
-      syncListeners.clear()
       switchModeListeners.clear()
     },
     onReady(listener) {
@@ -124,12 +120,6 @@ export function consumerPostMessage(options: consumerPostMessage.Options): Consu
       responseListeners.add(listener)
       return () => {
         responseListeners.delete(listener)
-      }
-    },
-    onSync(listener) {
-      syncListeners.add(listener)
-      return () => {
-        syncListeners.delete(listener)
       }
     },
     onSwitchMode(listener) {
@@ -149,14 +139,13 @@ export function consumerPostMessage(options: consumerPostMessage.Options): Consu
         })
       }
     },
-    async sendSync(payload) {
-      if (!payload.addresses) return
+    async validateAccounts(payload) {
+      if (!payload.addresses) return {}
       const { result } = await wata.send({
         method: 'dialog.accounts.validate',
         params: [normalizeValue(payload)] as const,
       })
-      const sync = result as SyncResponse
-      for (const listener of syncListeners) listener(sync)
+      return result as SyncResponse
     },
     async sendTheme(theme) {
       await wata.notify({
@@ -253,10 +242,11 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
     ],
   })
   const requestListeners = new Set<(sync: Sync, meta: Meta) => void>()
-  const syncListeners = new Set<(payload: SyncRequest, meta: Meta) => void>()
+  let syncListener:
+    | ((payload: SyncRequest, meta: Meta) => SyncResponse | Promise<SyncResponse> | void)
+    | undefined
   const themeListeners = new Set<(theme: Theme, meta: Meta) => void>()
   const hostInfoRequests = new Set<HostWata.RequestEvent>()
-  const syncRequests = new Set<HostWata.RequestEvent>()
   const requests = new Map<RequestId, HostWata.RequestEvent>()
   let readyOptions: ReadyOptions | undefined
 
@@ -268,10 +258,14 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
       return
     }
     if (event.method === 'dialog.accounts.validate') {
-      syncRequests.add(event)
       const payload = firstParam(event.params) as SyncRequest
-      if (syncListeners.size === 0) void event.respond({})
-      for (const listener of syncListeners) listener(payload, meta)
+      if (!syncListener) {
+        void event.respond({})
+        return
+      }
+      void Promise.resolve(syncListener(payload, meta))
+        .then((result) => event.respond(normalizeValue(result ?? {})))
+        .catch((error) => event.reject(errorToResponse(error)))
       return
     }
     if (event.method !== 'dialog.request') return
@@ -300,10 +294,9 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
     async close() {
       await wata.close()
       requestListeners.clear()
-      syncListeners.clear()
+      syncListener = undefined
       themeListeners.clear()
       hostInfoRequests.clear()
-      syncRequests.clear()
       requests.clear()
     },
     onRequests(listener) {
@@ -313,9 +306,9 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
       }
     },
     onSync(listener) {
-      syncListeners.add(listener)
+      syncListener = listener
       return () => {
-        syncListeners.delete(listener)
+        if (syncListener === listener) syncListener = undefined
       }
     },
     onTheme(listener) {
@@ -341,12 +334,6 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
         })
       return request.respond(normalizeValue(response.result))
     },
-    sendSync(payload) {
-      const request = syncRequests.values().next().value
-      if (!request) return Promise.resolve()
-      syncRequests.delete(request)
-      return request.respond(normalizeValue(payload))
-    },
     switchMode(payload) {
       return wata.notify({
         method: 'dialog.mode.switch',
@@ -367,12 +354,11 @@ export function noopConsumer(): Consumer {
     close: async () => {},
     onReady: () => () => {},
     onResponse: () => () => {},
-    onSync: () => () => {},
     onSwitchMode: () => () => {},
     sendRequests: async () => {},
-    sendSync: async () => {},
     sendTheme: async () => {},
     start: async () => {},
+    validateAccounts: async () => ({}),
     waitForReady: () => ready,
   }
 }
@@ -386,7 +372,6 @@ export function noopHost(): Host {
     onTheme: () => () => {},
     ready: async () => {},
     sendResponse: async () => {},
-    sendSync: async () => {},
     switchMode: async () => {},
     start: async () => {},
   }

@@ -174,6 +174,38 @@ describe('Dialog.iframe', () => {
     `)
   })
 
+  test('behavior: cancel event rejects one shared iframe request at a time', () => {
+    const a = setup()
+    const b = setup()
+
+    void a.handle.syncRequests(sync([pending(1)]))
+    void b.handle.syncRequests(sync([pending(2)]))
+    a.handle.open()
+
+    const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
+    dialog.dispatchEvent(new Event('cancel'))
+    dialog.dispatchEvent(new Event('cancel'))
+
+    expect(a.onReject.mock.calls).toMatchInlineSnapshot(`
+      [
+        [
+          [
+            1,
+          ],
+        ],
+      ]
+    `)
+    expect(b.onReject.mock.calls).toMatchInlineSnapshot(`
+      [
+        [
+          [
+            2,
+          ],
+        ],
+      ]
+    `)
+  })
+
   test('behavior: focus restored to previous element on close', () => {
     const button = document.createElement('button')
     document.body.appendChild(button)

@@ -48,7 +48,6 @@ export function create(options: create.Options): Host {
             (a) => a.address.toLowerCase() === account.address.toLowerCase(),
           )
           if (index < 0) {
-            void channel.sendSync({ valid: false })
             for (const r of requests) if (r.status === 'pending') this.reject(r.request)
             return
           }
@@ -92,11 +91,11 @@ export function create(options: create.Options): Host {
 
       if (accounts)
         channel.onSync(({ addresses }) => {
-          if (!addresses) return
+          if (!addresses) return {}
           const valid = addresses.some((a) =>
             accounts.some((b) => a.toLowerCase() === b.toLowerCase()),
           )
-          void channel.sendSync({ valid })
+          return { valid }
         })
 
       if (typeof window !== 'undefined') {

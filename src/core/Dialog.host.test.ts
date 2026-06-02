@@ -458,9 +458,10 @@ describe('respond', () => {
 
 describe('ready', () => {
   test('behavior: publishes trusted hosts and validates account sync', () => {
-    let onSync: ((payload: Dialog.channel.SyncRequest) => void) | undefined
+    let onSync:
+      | ((payload: Dialog.channel.SyncRequest) => Dialog.channel.SyncResponse | void)
+      | undefined
     const ready = vi.fn()
-    const sendSync = vi.fn()
     const host = Dialog.host.create({
       channel: {
         onRequests: vi.fn(),
@@ -469,7 +470,6 @@ describe('ready', () => {
           return () => {}
         }),
         ready,
-        sendSync,
       } as never,
       provider: {
         request: vi.fn(),
@@ -478,8 +478,6 @@ describe('ready', () => {
     })
 
     host.ready({ accounts: ['0x0000000000000000000000000000000000000001'] })
-    onSync!({ addresses: ['0x0000000000000000000000000000000000000001'] })
-    onSync!({ addresses: ['0x0000000000000000000000000000000000000002'] })
 
     expect(ready.mock.calls).toMatchInlineSnapshot(`
       [
@@ -492,18 +490,17 @@ describe('ready', () => {
         ],
       ]
     `)
-    expect(sendSync.mock.calls).toMatchInlineSnapshot(`
+    expect([
+      onSync!({ addresses: ['0x0000000000000000000000000000000000000001'] }),
+      onSync!({ addresses: ['0x0000000000000000000000000000000000000002'] }),
+    ]).toMatchInlineSnapshot(`
       [
-        [
-          {
-            "valid": true,
-          },
-        ],
-        [
-          {
-            "valid": false,
-          },
-        ],
+        {
+          "valid": true,
+        },
+        {
+          "valid": false,
+        },
       ]
     `)
   })
