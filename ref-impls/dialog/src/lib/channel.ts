@@ -7,5 +7,5 @@ export function init(): Dialog.channel.Host {
   const target = window.opener ?? window.parent
   if (!target || target === window) return Dialog.channel.noopHost()
 
-  return Dialog.channel.hostPostMessage({ target })
+  return Dialog.channel.hostPostMessage({ target: () => target })
 }

@@ -1,4 +1,3 @@
-import { RpcRequest } from 'ox'
 import { describe, expect, test, vi } from 'vp/test'
 
 import * as Dialog from '../Dialog.js'
@@ -6,8 +5,7 @@ import * as Dialog from '../Dialog.js'
 const host = 'https://wallet.test/embed'
 
 describe('Dialog.consumer.attach', () => {
-  test('behavior: shared dialog request preparation gives attachments distinct request ids', async () => {
-    const ids = RpcRequest.createStore()
+  test('behavior: each attachment owns its local request lifecycle', async () => {
     const sessions: Dialog.SetupFn.Parameters[] = []
     const syncs: Dialog.Sync[] = []
     const dialog = Dialog.define({ name: 'test' }, (parameters) => {
@@ -16,9 +14,6 @@ describe('Dialog.consumer.attach', () => {
         close() {},
         destroy() {},
         open() {},
-        prepareRequest(request) {
-          return ids.prepare(request as never)
-        },
         async syncRequests(sync) {
           syncs.push(sync)
         },
@@ -67,7 +62,7 @@ describe('Dialog.consumer.attach', () => {
         ],
         [
           {
-            "id": 1,
+            "id": 0,
             "jsonrpc": "2.0",
             "method": "wallet_getCallsStatus",
             "params": [

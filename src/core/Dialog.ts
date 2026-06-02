@@ -12,7 +12,7 @@ export {
   popup,
 } from './Dialog/consumer.js'
 
-export type { Dialog, Instance, Meta, SetupFn } from './Dialog/consumer.js'
+export type { Dialog, Meta, Session, SetupFn } from './Dialog/consumer.js'
 export type {
   Host,
   ReadyOptions,

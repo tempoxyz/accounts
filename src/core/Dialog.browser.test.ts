@@ -18,7 +18,7 @@ function setup() {
   return { handle, onReject, store }
 }
 
-let handles: Dialog.Instance[] = []
+let handles: Dialog.Session[] = []
 
 function parameters(
   store: Store.Store,
@@ -61,12 +61,12 @@ describe('Dialog.iframe', () => {
     expect(iframe).not.toBeNull()
   })
 
-  test('behavior: singleton — multiple calls reuse same iframe', () => {
+  test('behavior: multiple calls create independent iframes', () => {
     setup()
     setup()
     setup()
     const dialogs = document.querySelectorAll('dialog[data-tempo-wallet]')
-    expect(dialogs.length).toBe(1)
+    expect(dialogs.length).toBe(3)
   })
 
   test('behavior: iframe has correct sandbox attributes', () => {
@@ -174,7 +174,7 @@ describe('Dialog.iframe', () => {
     `)
   })
 
-  test('behavior: cancel event rejects one shared iframe request at a time', () => {
+  test('behavior: cancel event only rejects that iframe request', () => {
     const a = setup()
     const b = setup()
 
@@ -183,7 +183,6 @@ describe('Dialog.iframe', () => {
     a.handle.open()
 
     const dialog = document.querySelector('dialog[data-tempo-wallet]') as HTMLDialogElement
-    dialog.dispatchEvent(new Event('cancel'))
     dialog.dispatchEvent(new Event('cancel'))
 
     expect(a.onReject.mock.calls).toMatchInlineSnapshot(`
@@ -195,15 +194,7 @@ describe('Dialog.iframe', () => {
         ],
       ]
     `)
-    expect(b.onReject.mock.calls).toMatchInlineSnapshot(`
-      [
-        [
-          [
-            2,
-          ],
-        ],
-      ]
-    `)
+    expect(b.onReject.mock.calls).toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: focus restored to previous element on close', () => {

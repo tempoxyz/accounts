@@ -90,7 +90,7 @@ export function create(options: create.Options): Host {
       const { accounts, ...readyOptions } = options ?? {}
 
       if (accounts)
-        channel.onSync(({ addresses }) => {
+        channel.onValidateAccounts(({ addresses }) => {
           if (!addresses) return {}
           const valid = addresses.some((a) =>
             accounts.some((b) => a.toLowerCase() === b.toLowerCase()),

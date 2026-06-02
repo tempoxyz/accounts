@@ -1,4 +1,4 @@
-import { Address, Hex, Provider as ox_Provider, PublicKey, RpcRequest } from 'ox'
+import { Address, Hex, Provider as ox_Provider, PublicKey } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { tempoLocalnet } from 'viem/tempo/chains'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
@@ -53,23 +53,17 @@ function createDialog() {
   const syncs: Dialog.Sync[] = []
   const synced: (readonly Dialog.Request[])[] = []
   return {
-    dialog: Dialog.define({ name: 'test' }, (options) => {
-      const ids = RpcRequest.createStore()
-      return {
-        close() {},
-        destroy() {},
-        open() {},
-        prepareRequest(request) {
-          return ids.prepare(request as never)
-        },
-        async syncRequests(sync) {
-          parameters = options
-          syncs.push(sync)
-          synced.push(sync.requests)
-        },
-        syncTheme() {},
-      }
-    }),
+    dialog: Dialog.define({ name: 'test' }, (options) => ({
+      close() {},
+      destroy() {},
+      open() {},
+      async syncRequests(sync) {
+        parameters = options
+        syncs.push(sync)
+        synced.push(sync.requests)
+      },
+      syncTheme() {},
+    })),
     async takeRequest() {
       await vi.waitFor(() => {
         if (!syncs[0]?.requests[0]) throw new Error('request not synced')

@@ -21,7 +21,7 @@ export type Consumer = {
   /** Start the underlying Wata session after handlers are registered. */
   start: () => Promise<void>
   /** Ask the dialog host to validate local account addresses. */
-  validateAccounts: (payload: SyncRequest) => Promise<SyncResponse>
+  validateAccounts: (payload: ValidateAccountsRequest) => Promise<ValidateAccountsResponse>
   /** Resolves when the dialog host sends host info. */
   waitForReady: () => Promise<ReadyOptions>
 }
@@ -33,8 +33,11 @@ export type Host = {
   /** Subscribe to request queues from the consumer. */
   onRequests: (listener: (sync: Sync, meta: Meta) => void) => () => void
   /** Handle account-validation requests from the consumer. */
-  onSync: (
-    listener: (payload: SyncRequest, meta: Meta) => SyncResponse | Promise<SyncResponse> | void,
+  onValidateAccounts: (
+    listener: (
+      payload: ValidateAccountsRequest,
+      meta: Meta,
+    ) => ValidateAccountsResponse | Promise<ValidateAccountsResponse> | void,
   ) => () => void
   /** Subscribe to live theme updates from the consumer. */
   onTheme: (listener: (theme: Theme, meta: Meta) => void) => () => void
@@ -55,10 +58,10 @@ export type Response = RpcResponse.RpcResponse & {
 }
 
 /** Consumer-to-host account validation request. */
-export type SyncRequest = { addresses?: readonly string[] | undefined }
+export type ValidateAccountsRequest = { addresses?: readonly string[] | undefined }
 
 /** Host-to-consumer account validation response. */
-export type SyncResponse = { valid?: boolean | undefined }
+export type ValidateAccountsResponse = { valid?: boolean | undefined }
 
 /** Dialog mode switch request. */
 export type SwitchMode = { mode: 'popup' }
@@ -145,7 +148,7 @@ export function consumerPostMessage(options: consumerPostMessage.Options): Consu
         method: 'dialog.accounts.validate',
         params: [normalizeValue(payload)] as const,
       })
-      return result as SyncResponse
+      return result as ValidateAccountsResponse
     },
     async sendTheme(theme) {
       await wata.notify({
@@ -242,8 +245,11 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
     ],
   })
   const requestListeners = new Set<(sync: Sync, meta: Meta) => void>()
-  let syncListener:
-    | ((payload: SyncRequest, meta: Meta) => SyncResponse | Promise<SyncResponse> | void)
+  let validateAccountsListener:
+    | ((
+        payload: ValidateAccountsRequest,
+        meta: Meta,
+      ) => ValidateAccountsResponse | Promise<ValidateAccountsResponse> | void)
     | undefined
   const themeListeners = new Set<(theme: Theme, meta: Meta) => void>()
   const hostInfoRequests = new Set<HostWata.RequestEvent>()
@@ -258,12 +264,12 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
       return
     }
     if (event.method === 'dialog.accounts.validate') {
-      const payload = firstParam(event.params) as SyncRequest
-      if (!syncListener) {
+      const payload = firstParam(event.params) as ValidateAccountsRequest
+      if (!validateAccountsListener) {
         void event.respond({})
         return
       }
-      void Promise.resolve(syncListener(payload, meta))
+      void Promise.resolve(validateAccountsListener(payload, meta))
         .then((result) => event.respond(normalizeValue(result ?? {})))
         .catch((error) => event.reject(errorToResponse(error)))
       return
@@ -294,7 +300,7 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
     async close() {
       await wata.close()
       requestListeners.clear()
-      syncListener = undefined
+      validateAccountsListener = undefined
       themeListeners.clear()
       hostInfoRequests.clear()
       requests.clear()
@@ -305,10 +311,10 @@ export function hostPostMessage(options: hostPostMessage.Options): Host {
         requestListeners.delete(listener)
       }
     },
-    onSync(listener) {
-      syncListener = listener
+    onValidateAccounts(listener) {
+      validateAccountsListener = listener
       return () => {
-        if (syncListener === listener) syncListener = undefined
+        if (validateAccountsListener === listener) validateAccountsListener = undefined
       }
     },
     onTheme(listener) {
@@ -368,7 +374,7 @@ export function noopHost(): Host {
   return {
     close: async () => {},
     onRequests: () => () => {},
-    onSync: () => () => {},
+    onValidateAccounts: () => () => {},
     onTheme: () => () => {},
     ready: async () => {},
     sendResponse: async () => {},

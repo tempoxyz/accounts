@@ -1,7 +1,6 @@
-import { Provider as ox_Provider } from 'ox'
-import type { RpcRequest } from 'ox'
+import { Provider as ox_Provider, RpcRequest } from 'ox'
 
-import type { Dialog, Instance } from './consumer.js'
+import type { Dialog, Session } from './consumer.js'
 import type { Request, Theme } from './types.js'
 
 /** Request stored by the consumer-side dialog coordinator. */
@@ -27,7 +26,9 @@ type Context = {
   /** Whether the provider attachment is still active. */
   attached: boolean
   /** Active dialog transport. */
-  dialog: Instance | undefined
+  dialog: Session | undefined
+  /** JSON-RPC request ID allocator. */
+  ids: ReturnType<typeof RpcRequest.createStore>
   /** In-memory pending request queue. */
   requestQueue: StoredRequest[]
   /** Whether pending work has been synced since the last empty queue. */
@@ -73,6 +74,7 @@ export function attach(options: AttachOptions): Attachment {
   const context: Context = {
     attached: true,
     dialog: undefined,
+    ids: RpcRequest.createStore(),
     requestQueue: [],
     synced: false,
   }
@@ -106,7 +108,7 @@ function request(context: Context, options: RequestOptions): Promise<unknown> {
   if (!context.attached) return Promise.reject(new Error('Dialog consumer attachment is detached.'))
   if (!context.dialog) return Promise.reject(new Error('Dialog consumer attachment is detached.'))
 
-  const request = context.dialog.prepareRequest(options.request)
+  const request = context.ids.prepare(options.request as never)
 
   return new Promise((resolve, reject) => {
     context.requestQueue.push({

@@ -1,5 +1,3 @@
-import { RpcRequest } from 'ox'
-
 import * as IO from '../IntersectionObserver.js'
 import * as TrustedHosts from '../TrustedHosts.js'
 import * as channel from './channel.js'
@@ -17,15 +15,14 @@ export type Meta = {
   name?: string | undefined
 }
 
-export type Instance = {
+/** Active consumer-side dialog session returned by a dialog setup function. */
+export type Session = {
   /** Close the dialog (hide iframe / close popup). */
   close: () => void
   /** Destroy the dialog (remove DOM elements, clean up). */
   destroy: () => void
   /** Open the dialog (show iframe / open popup). */
   open: () => void
-  /** Prepare a provider RPC request with an id unique to this dialog surface. */
-  prepareRequest: (request: unknown) => RpcRequest.RpcRequest
   /** Sync the pending request queue to the remote auth app. */
   syncRequests: (sync: Sync) => Promise<void>
   /** Update the visual theme at runtime. */
@@ -33,7 +30,7 @@ export type Instance = {
 }
 
 /** The setup function a dialog must implement. */
-export type SetupFn = (parameters: SetupFn.Parameters) => Instance
+export type SetupFn = (parameters: SetupFn.Parameters) => Session
 
 export declare namespace SetupFn {
   type Parameters = {
@@ -90,22 +87,6 @@ export function isSafari(): boolean {
   return ua.includes('safari') && !ua.includes('chrome')
 }
 
-type IframeSession = {
-  fallback: Instance
-  parameters: SetupFn.Parameters
-  requests_displayed: readonly Request[]
-  switchedToPopup: boolean
-  sync_displayed: Sync | undefined
-}
-
-type IframeSurface = {
-  createSession: (parameters: SetupFn.Parameters) => Instance
-  destroy: () => void
-}
-
-/** Cached iframe surface — keyed by host, reused across setup calls. */
-let cached: { host: string; surface: IframeSurface } | undefined
-
 /** Creates an iframe dialog that embeds the auth app in a `<dialog>` element. */
 export function iframe(): Dialog {
   if (typeof window === 'undefined') return noop()
@@ -113,451 +94,297 @@ export function iframe(): Dialog {
   return define({ name: 'iframe' }, (parameters) => {
     const { host } = parameters
 
-    if (cached && cached.host === host) return cached.surface.createSession(parameters)
+    let open = false
+    let requests_displayed: readonly Request[] = []
+    let switchedToPopup = false
+    let sync_displayed: Sync | undefined
 
-    // Different host — tear down old iframe and create fresh.
-    cached?.surface.destroy()
-    const surface = createIframeSurface(parameters)
-    cached = { host, surface }
-    return surface.createSession(parameters)
-  })
-}
+    const referrer = getReferrer()
 
-function createIframeSurface(parameters_initial: SetupFn.Parameters): IframeSurface {
-  const { host } = parameters_initial
-
-  let displayed: IframeSession | undefined
-  let open = false
-
-  const queue: IframeSession[] = []
-  const sessions = new Set<IframeSession>()
-  const sessionsByRequestId = new Map<string | number, IframeSession>()
-  const ids = RpcRequest.createStore()
-
-  const referrer = getReferrer()
-
-  const hostUrl = new URL(host)
-  hostUrl.searchParams.set('chainId', String(parameters_initial.getChainId()))
-  hostUrl.searchParams.set('mode', 'iframe')
-  if (referrer.icon) {
-    if (typeof referrer.icon === 'string') hostUrl.searchParams.set('icon', referrer.icon)
-    else {
-      hostUrl.searchParams.set('icon', referrer.icon.light)
-      hostUrl.searchParams.set('iconDark', referrer.icon.dark)
+    const hostUrl = new URL(host)
+    hostUrl.searchParams.set('chainId', String(parameters.getChainId()))
+    hostUrl.searchParams.set('mode', 'iframe')
+    if (referrer.icon) {
+      if (typeof referrer.icon === 'string') hostUrl.searchParams.set('icon', referrer.icon)
+      else {
+        hostUrl.searchParams.set('icon', referrer.icon.light)
+        hostUrl.searchParams.set('iconDark', referrer.icon.dark)
+      }
     }
-  }
-  applyThemeParams(hostUrl, parameters_initial.theme)
+    applyThemeParams(hostUrl, parameters.theme)
 
-  const root = document.createElement('dialog')
-  root.dataset.tempoWallet = ''
+    const root = document.createElement('dialog')
+    root.dataset.tempoWallet = ''
 
-  root.setAttribute('role', 'dialog')
-  root.setAttribute('aria-closed', 'true')
-  root.setAttribute('aria-label', 'Tempo Wallet')
-  root.setAttribute('hidden', 'until-found')
+    root.setAttribute('role', 'dialog')
+    root.setAttribute('aria-closed', 'true')
+    root.setAttribute('aria-label', 'Tempo Wallet')
+    root.setAttribute('hidden', 'until-found')
 
-  Object.assign(root.style, {
-    background: 'transparent',
-    border: '0',
-    outline: '0',
-    padding: '0',
-    position: 'fixed',
-  })
+    Object.assign(root.style, {
+      background: 'transparent',
+      border: '0',
+      outline: '0',
+      padding: '0',
+      position: 'fixed',
+    })
 
-  const frame = document.createElement('iframe')
-  frame.dataset.testid = 'tempo-wallet'
-  frame.setAttribute(
-    'allow',
-    [
-      `publickey-credentials-get ${hostUrl.origin}`,
-      `publickey-credentials-create ${hostUrl.origin}`,
-      'clipboard-write',
-      'payment',
-    ].join('; '),
-  )
-  frame.setAttribute('allowtransparency', 'true')
-  frame.setAttribute('tabindex', '0')
-  frame.setAttribute('title', 'Tempo Wallet')
+    const frame = document.createElement('iframe')
+    frame.dataset.testid = 'tempo-wallet'
+    frame.setAttribute(
+      'allow',
+      [
+        `publickey-credentials-get ${hostUrl.origin}`,
+        `publickey-credentials-create ${hostUrl.origin}`,
+        'clipboard-write',
+        'payment',
+      ].join('; '),
+    )
+    frame.setAttribute('allowtransparency', 'true')
+    frame.setAttribute('tabindex', '0')
+    frame.setAttribute('title', 'Tempo Wallet')
 
-  Object.assign(frame.style, {
-    backgroundColor: 'transparent',
-    border: '0',
-    colorScheme: parameters_initial.theme?.scheme ?? 'light dark',
-    height: '100%',
-    left: '0',
-    position: 'fixed',
-    top: '0',
-    width: '100%',
-  })
+    Object.assign(frame.style, {
+      backgroundColor: 'transparent',
+      border: '0',
+      colorScheme: parameters.theme?.scheme ?? 'light dark',
+      height: '100%',
+      left: '0',
+      position: 'fixed',
+      top: '0',
+      width: '100%',
+    })
 
-  const style = document.createElement('style')
-  style.innerHTML = `
+    const style = document.createElement('style')
+    style.innerHTML = `
         dialog[data-tempo-wallet]::backdrop {
           background: transparent!important;
         }
       `
 
-  root.appendChild(style)
-  root.appendChild(frame)
+    root.appendChild(style)
+    root.appendChild(frame)
 
-  let readyResult: ReadyOptions | undefined
+    let readyResult: ReadyOptions | undefined
 
-  function rejectDisplayedRequests() {
-    if (!displayed) return
-    const session = displayed
-    clearDisplayed(session)
-    session.parameters.onReject(session.requests_displayed.map((x) => x.request.id))
-    pump()
-  }
+    function rejectDisplayedRequests() {
+      parameters.onReject(requests_displayed.map((x) => x.request.id))
+    }
 
-  function createChannel() {
-    readyResult = undefined
+    function createChannel() {
+      readyResult = undefined
 
-    const { port1, port2 } = new MessageChannel()
-    const loaded = new Promise<void>((resolve) => {
-      frame.addEventListener(
-        'load',
-        () => {
-          frame.contentWindow!.postMessage({ type: 'wata.port' }, hostUrl.origin, [port2])
-          resolve()
-        },
-        { once: true },
-      )
-    })
-    const channel_ = channel.consumerPostMessage({
-      host: hostUrl.toString(),
-      open: loaded,
-      target: () => port1,
-    })
-    channel_.onResponse((response) => {
-      const session = sessionsByRequestId.get(response.id)
-      sessionsByRequestId.delete(response.id)
-      if (session) clearDisplayed(session)
-      session?.parameters.onResponse(response)
-      pump()
-    })
-    void channel_
-      .waitForReady()
-      .then((result) => {
-        readyResult = result
-        if (result.colorScheme) frame.style.colorScheme = result.colorScheme
+      const loaded = new Promise<void>((resolve) => {
+        frame.addEventListener('load', () => resolve(), { once: true })
       })
-      .catch(() => {})
-    channel_.onSwitchMode(() => {
-      if (!displayed) return
-      hideDialog()
-      activatePage()
-      open = false
-      displayed.switchedToPopup = true
-      for (const request of displayed.requests_displayed)
-        if (request.status === 'pending') sessionsByRequestId.delete(request.request.id)
+      const channel_ = channel.consumerPostMessage({
+        host: hostUrl.toString(),
+        open: loaded,
+        target: () => frame.contentWindow!,
+      })
+      channel_.onResponse((response) => parameters.onResponse(response))
+      void channel_
+        .waitForReady()
+        .then((result) => {
+          readyResult = result
+          if (result.colorScheme) frame.style.colorScheme = result.colorScheme
+        })
+        .catch(() => {})
+      channel_.onSwitchMode(() => {
+        hideDialog()
+        activatePage()
+        open = false
+        switchedToPopup = true
 
-      if (displayed.sync_displayed && displayed.requests_displayed.length > 0)
-        displayed.fallback.syncRequests(displayed.sync_displayed)
+        if (sync_displayed && requests_displayed.length > 0) fallback.syncRequests(sync_displayed)
+      })
+      void channel_.start().catch(() => {})
+      return channel_
+    }
+
+    const fallback = popup()(parameters)
+    let channel_ = createChannel()
+    frame.src = hostUrl.toString()
+    document.body.appendChild(root)
+
+    // Re-mount if removed (e.g. React hydration clears non-server-rendered elements).
+    // The iframe reloads on re-append, so the channel must be re-established.
+    const mountObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.removedNodes) {
+          if (node !== root) continue
+          channel_.close()
+          channel_ = createChannel()
+          frame.src = hostUrl.toString()
+          document.body.appendChild(root)
+          return
+        }
+      }
     })
-    void channel_.start().catch(() => {})
-    return channel_
-  }
+    mountObserver.observe(document.body, { childList: true })
 
-  let channel_ = createChannel()
-  frame.src = hostUrl.toString()
-  document.body.appendChild(root)
+    let savedOverflow = ''
+    let opener: HTMLElement | null = null
 
-  // Re-mount if removed (e.g. React hydration clears non-server-rendered elements).
-  // The iframe reloads on re-append, so the channel must be re-established.
-  const mountObserver = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      for (const node of mutation.removedNodes) {
-        if (node !== root) continue
+    const onBlur = () => rejectDisplayedRequests()
+
+    // 1Password extension adds `inert` attribute to `dialog` rendering it unusable.
+    const inertObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type !== 'attributes') continue
+        if (mutation.attributeName !== 'inert') continue
+        root.removeAttribute('inert')
+      }
+    })
+    inertObserver.observe(root, { attributeOldValue: true, attributes: true })
+
+    // dialog/page interactivity (no visibility change)
+    let dialogActive = false
+    const activatePage = () => {
+      if (!dialogActive) return
+      dialogActive = false
+
+      root.removeEventListener('cancel', onBlur)
+      root.removeEventListener('click', onBlur)
+      root.style.pointerEvents = 'none'
+      opener?.focus()
+      opener = null
+
+      document.body.style.overflow = savedOverflow
+    }
+    const activateDialog = () => {
+      if (dialogActive) return
+      dialogActive = true
+
+      root.addEventListener('cancel', onBlur)
+      root.addEventListener('click', onBlur)
+      frame.focus()
+      root.style.pointerEvents = 'auto'
+
+      savedOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+    }
+
+    // dialog visibility
+    let visible = false
+    const showDialog = () => {
+      if (visible) return
+      visible = true
+
+      if (document.activeElement instanceof HTMLElement) opener = document.activeElement
+
+      root.removeAttribute('hidden')
+      root.removeAttribute('aria-closed')
+      root.showModal()
+    }
+    const hideDialog = () => {
+      if (!visible) return
+      visible = false
+      root.setAttribute('hidden', 'true')
+      root.setAttribute('aria-closed', 'true')
+      root.close()
+
+      // 1Password extension sometimes adds `inert` to dialog siblings
+      // and does not clean up when dialog closes.
+      for (const sibling of root.parentNode ? Array.from(root.parentNode.children) : []) {
+        if (sibling === root) continue
+        if (!sibling.hasAttribute('inert')) continue
+        sibling.removeAttribute('inert')
+      }
+    }
+
+    function validateAccounts() {
+      const accounts = parameters.getAccounts()
+      if (accounts.length === 0) return
+      void channel_
+        .validateAccounts({ addresses: accounts.map((a) => a.address) })
+        .then(({ valid }) => {
+          if (valid === false) parameters.onAccountsInvalid()
+        })
+        .catch(() => {})
+    }
+
+    return {
+      close() {
+        fallback.close()
+        open = false
+        hideDialog()
+        activatePage()
+      },
+      destroy() {
+        fallback.close()
+        open = false
+        activatePage()
+        hideDialog()
+
+        fallback.destroy()
         channel_.close()
-        channel_ = createChannel()
-        frame.src = hostUrl.toString()
-        document.body.appendChild(root)
-        return
-      }
+        root.remove()
+        mountObserver.disconnect()
+        inertObserver.disconnect()
+      },
+      open() {
+        if (open) return
+        open = true
+        showDialog()
+        activateDialog()
+      },
+      async syncRequests(sync) {
+        const { requests } = sync
+        sync_displayed = sync
+        requests_displayed = requests
+        if (switchedToPopup) {
+          await fallback.syncRequests(sync)
+          return
+        }
+
+        const ready = readyResult ?? channel_.waitForReady()
+        const { trustedHosts } = readyResult ?? (await ready)
+        validateAccounts()
+
+        // Safari does not support WebAuthn credential creation in iframes.
+        if (
+          isSafari() &&
+          requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
+        ) {
+          await fallback.syncRequests(sync)
+          return
+        }
+
+        const ioSupported = IO.supported()
+        const hostname = window.location.hostname.replace(/^www\./, '')
+        const trusted = Boolean(
+          trustedHosts && TrustedHosts.match(trustedHosts, hostname, hostUrl.hostname),
+        )
+        const secure = ioSupported || trusted
+
+        if (!secure) {
+          console.warn(
+            [
+              `[accounts] Browser does not support IntersectionObserver v2 and "${window.location.hostname}" is not a trusted host.`,
+              'Falling back to popup dialog.',
+              '',
+              'To enable the iframe dialog, add your hostname to the trusted hosts list.',
+            ].join('\n'),
+          )
+          await fallback.syncRequests(sync)
+          return
+        }
+
+        const requiresConfirm = requests.some((x) => x.status === 'pending')
+        if (!open && requiresConfirm) this.open()
+        await channel_.sendRequests({
+          account: sync.account,
+          chainId: sync.chainId,
+          requests,
+        })
+      },
+      syncTheme(theme) {
+        frame.style.colorScheme = theme?.scheme ?? 'light dark'
+        void channel_.sendTheme(theme ?? {})
+      },
     }
   })
-  mountObserver.observe(document.body, { childList: true })
-
-  let savedOverflow = ''
-  let opener: HTMLElement | null = null
-
-  const onBlur = () => rejectDisplayedRequests()
-
-  // 1Password extension adds `inert` attribute to `dialog` rendering it unusable.
-  const inertObserver = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      if (mutation.type !== 'attributes') continue
-      if (mutation.attributeName !== 'inert') continue
-      root.removeAttribute('inert')
-    }
-  })
-  inertObserver.observe(root, { attributeOldValue: true, attributes: true })
-
-  // dialog/page interactivity (no visibility change)
-  let dialogActive = false
-  const activatePage = () => {
-    if (!dialogActive) return
-    dialogActive = false
-
-    root.removeEventListener('cancel', onBlur)
-    root.removeEventListener('click', onBlur)
-    root.style.pointerEvents = 'none'
-    opener?.focus()
-    opener = null
-
-    document.body.style.overflow = savedOverflow
-  }
-  const activateDialog = () => {
-    if (dialogActive) return
-    dialogActive = true
-
-    root.addEventListener('cancel', onBlur)
-    root.addEventListener('click', onBlur)
-    frame.focus()
-    root.style.pointerEvents = 'auto'
-
-    savedOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-  }
-
-  // dialog visibility
-  let visible = false
-  const showDialog = () => {
-    if (visible) return
-    visible = true
-
-    if (document.activeElement instanceof HTMLElement) opener = document.activeElement
-
-    root.removeAttribute('hidden')
-    root.removeAttribute('aria-closed')
-    root.showModal()
-  }
-  const hideDialog = () => {
-    if (!visible) return
-    visible = false
-    root.setAttribute('hidden', 'true')
-    root.setAttribute('aria-closed', 'true')
-    root.close()
-
-    // 1Password extension sometimes adds `inert` to dialog siblings
-    // and does not clean up when dialog closes.
-    for (const sibling of root.parentNode ? Array.from(root.parentNode.children) : []) {
-      if (sibling === root) continue
-      if (!sibling.hasAttribute('inert')) continue
-      sibling.removeAttribute('inert')
-    }
-  }
-
-  function clearDisplayed(session: IframeSession) {
-    if (displayed !== session) return
-    for (const request of session.requests_displayed)
-      if (request.status === 'pending') sessionsByRequestId.delete(request.request.id)
-    displayed = undefined
-  }
-
-  function closeIfIdle() {
-    if (displayed) return
-    if (queue.length > 0) return
-    open = false
-    hideDialog()
-    activatePage()
-  }
-
-  function queueSession(session: IframeSession) {
-    if (displayed === session) return
-    if (!queue.includes(session)) queue.push(session)
-    pump()
-  }
-
-  function removeQueued(session: IframeSession) {
-    const index = queue.indexOf(session)
-    if (index < 0) return
-    queue.splice(index, 1)
-  }
-
-  function validateAccounts(session: IframeSession) {
-    const accounts = session.parameters.getAccounts()
-    if (accounts.length === 0) return
-    void channel_
-      .validateAccounts({ addresses: accounts.map((a) => a.address) })
-      .then(({ valid }) => {
-        if (!sessions.has(session)) return
-        if (valid === false) session.parameters.onAccountsInvalid()
-      })
-      .catch(() => {})
-  }
-
-  function pump() {
-    if (displayed) return
-
-    const session = queue.shift()
-    if (!session) {
-      closeIfIdle()
-      return
-    }
-    if (!sessions.has(session)) {
-      pump()
-      return
-    }
-    const sync = session.sync_displayed
-    if (!sync || !sync.requests.some((x) => x.status === 'pending')) {
-      pump()
-      return
-    }
-
-    displayed = session
-    void display(session, sync).catch((error) => {
-      clearDisplayed(session)
-      console.warn('[accounts] Failed to sync dialog requests.', error)
-      pump()
-    })
-  }
-
-  async function display(session: IframeSession, sync: Sync) {
-    const { requests } = sync
-
-    if (session.switchedToPopup) {
-      session.fallback.syncRequests(sync)
-      return
-    }
-
-    const ready = readyResult ?? channel_.waitForReady()
-    const { trustedHosts } = readyResult ?? (await ready)
-    validateAccounts(session)
-
-    // Safari does not support WebAuthn credential creation in iframes.
-    if (
-      isSafari() &&
-      requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
-    ) {
-      session.fallback.syncRequests(sync)
-      return
-    }
-
-    const ioSupported = IO.supported()
-    const hostname = window.location.hostname.replace(/^www\./, '')
-    const trusted = Boolean(
-      trustedHosts && TrustedHosts.match(trustedHosts, hostname, hostUrl.hostname),
-    )
-    const secure = ioSupported || trusted
-
-    if (!secure) {
-      console.warn(
-        [
-          `[accounts] Browser does not support IntersectionObserver v2 and "${window.location.hostname}" is not a trusted host.`,
-          'Falling back to popup dialog.',
-          '',
-          'To enable the iframe dialog, add your hostname to the trusted hosts list.',
-        ].join('\n'),
-      )
-      session.fallback.syncRequests(sync)
-      return
-    }
-
-    const requiresConfirm = requests.some((x) => x.status === 'pending')
-    if (!open && requiresConfirm) {
-      open = true
-      showDialog()
-      activateDialog()
-    }
-    for (const request of requests)
-      if (request.status === 'pending') sessionsByRequestId.set(request.request.id, session)
-    await channel_.sendRequests({
-      account: sync.account,
-      chainId: sync.chainId,
-      requests,
-    })
-  }
-
-  const surface: IframeSurface = {
-    createSession(parameters) {
-      const session: IframeSession = {
-        fallback: undefined as never,
-        parameters,
-        requests_displayed: [],
-        switchedToPopup: false,
-        sync_displayed: undefined,
-      }
-      session.fallback = popup()({
-        ...parameters,
-        onReject(ids) {
-          clearDisplayed(session)
-          parameters.onReject(ids)
-          pump()
-        },
-        onResponse(response) {
-          clearDisplayed(session)
-          parameters.onResponse(response)
-          pump()
-        },
-      })
-      sessions.add(session)
-
-      const instance: Instance = {
-        close() {
-          session.fallback.close()
-          removeQueued(session)
-          clearDisplayed(session)
-          closeIfIdle()
-        },
-        destroy() {
-          session.fallback.close()
-          session.fallback.destroy()
-          sessions.delete(session)
-          removeQueued(session)
-          for (const [id, session_] of sessionsByRequestId)
-            if (session_ === session) sessionsByRequestId.delete(id)
-          clearDisplayed(session)
-          if (sessions.size === 0) surface.destroy()
-          else pump()
-        },
-        open() {
-          if (open) return
-          open = true
-          showDialog()
-          activateDialog()
-        },
-        prepareRequest(request) {
-          return ids.prepare(request as never)
-        },
-        async syncRequests(sync) {
-          const { requests } = sync
-          session.sync_displayed = sync
-          session.requests_displayed = requests
-          if (!requests.some((x) => x.status === 'pending')) {
-            removeQueued(session)
-            return
-          }
-          queueSession(session)
-        },
-        syncTheme(theme) {
-          frame.style.colorScheme = theme?.scheme ?? 'light dark'
-          void channel_.sendTheme(theme ?? {})
-        },
-      }
-
-      instance.syncTheme(parameters.theme)
-      return instance
-    },
-    destroy() {
-      if (cached?.surface === surface) cached = undefined
-      displayed = undefined
-      open = false
-      activatePage()
-      hideDialog()
-      for (const session of sessions) session.fallback.destroy()
-      queue.length = 0
-      sessions.clear()
-      sessionsByRequestId.clear()
-      channel_.close()
-      root.remove()
-      mountObserver.disconnect()
-      inertObserver.disconnect()
-    },
-  }
-
-  return surface
 }
 
 /** Opens the auth app in a new browser window. */
@@ -569,7 +396,6 @@ export function popup(options: popup.Options = {}): Dialog {
   return define({ name: 'popup' }, (parameters) => {
     const { host } = parameters
 
-    const ids = RpcRequest.createStore()
     let win: Window | null = null
     let requests_displayed: readonly Request[] = []
 
@@ -670,9 +496,6 @@ export function popup(options: popup.Options = {}): Dialog {
 
         overlay.style.display = 'flex'
       },
-      prepareRequest(request) {
-        return ids.prepare(request as never)
-      },
       async syncRequests(sync) {
         const { requests } = sync
         requests_displayed = requests
@@ -702,14 +525,10 @@ export declare namespace popup {
 /** Returns a no-op dialog for SSR environments. */
 export function noop(): Dialog {
   return define({ name: 'noop' }, () => {
-    const ids = RpcRequest.createStore()
     return {
       open() {},
       close() {},
       destroy() {},
-      prepareRequest(request) {
-        return ids.prepare(request as never)
-      },
       async syncRequests() {},
       syncTheme() {},
     }

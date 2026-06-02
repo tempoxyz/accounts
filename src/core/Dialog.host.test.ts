@@ -359,7 +359,7 @@ describe('respond', () => {
     const host = Dialog.host.create({
       channel: {
         onRequests: vi.fn(),
-        onSync: vi.fn(),
+        onValidateAccounts: vi.fn(),
         ready: vi.fn(),
         sendResponse,
       } as never,
@@ -400,7 +400,7 @@ describe('respond', () => {
     const host = Dialog.host.create({
       channel: {
         onRequests: vi.fn(),
-        onSync: vi.fn(),
+        onValidateAccounts: vi.fn(),
         ready: vi.fn(),
         sendResponse,
       } as never,
@@ -428,7 +428,7 @@ describe('respond', () => {
     const host = Dialog.host.create({
       channel: {
         onRequests: vi.fn(),
-        onSync: vi.fn(),
+        onValidateAccounts: vi.fn(),
         ready: vi.fn(),
         sendResponse,
         switchMode,
@@ -458,15 +458,17 @@ describe('respond', () => {
 
 describe('ready', () => {
   test('behavior: publishes trusted hosts and validates account sync', () => {
-    let onSync:
-      | ((payload: Dialog.channel.SyncRequest) => Dialog.channel.SyncResponse | void)
+    let onValidateAccounts:
+      | ((
+          payload: Dialog.channel.ValidateAccountsRequest,
+        ) => Dialog.channel.ValidateAccountsResponse | void)
       | undefined
     const ready = vi.fn()
     const host = Dialog.host.create({
       channel: {
         onRequests: vi.fn(),
-        onSync: vi.fn((listener) => {
-          onSync = listener
+        onValidateAccounts: vi.fn((listener) => {
+          onValidateAccounts = listener
           return () => {}
         }),
         ready,
@@ -491,8 +493,8 @@ describe('ready', () => {
       ]
     `)
     expect([
-      onSync!({ addresses: ['0x0000000000000000000000000000000000000001'] }),
-      onSync!({ addresses: ['0x0000000000000000000000000000000000000002'] }),
+      onValidateAccounts!({ addresses: ['0x0000000000000000000000000000000000000001'] }),
+      onValidateAccounts!({ addresses: ['0x0000000000000000000000000000000000000002'] }),
     ]).toMatchInlineSnapshot(`
       [
         {

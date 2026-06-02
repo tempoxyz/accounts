@@ -3,7 +3,7 @@ import { describe, expectTypeOf, test } from 'vp/test'
 import type * as Dialog from './Dialog.js'
 
 describe('Dialog', () => {
-  test('has name and setup returning a dialog instance', () => {
+  test('has name and setup returning a dialog session', () => {
     expectTypeOf<Dialog.SetupFn.Parameters>().toEqualTypeOf<{
       host: string
       getAccounts: () => readonly { address: string }[]
@@ -22,11 +22,10 @@ describe('Dialog', () => {
       chainId: number
       requests: readonly Dialog.Request[]
     }>()
-    expectTypeOf<Dialog.Instance>().toMatchTypeOf<{
+    expectTypeOf<Dialog.Session>().toMatchTypeOf<{
       open: () => void
       close: () => void
       destroy: () => void
-      prepareRequest: (request: unknown) => unknown
       syncRequests: (sync: Dialog.Sync) => Promise<void>
     }>()
   })

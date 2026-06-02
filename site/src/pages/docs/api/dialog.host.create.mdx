@@ -21,7 +21,7 @@ import { Dialog, Provider, webAuthn } from 'accounts'
 // 1. Build a channel to the parent/opener (the page that opened this iframe/popup).
 const target = window.opener ?? window.parent
 if (!target || target === window) throw new Error('No host window found')
-const channel = Dialog.channel.hostPostMessage({ target })
+const channel = Dialog.channel.hostPostMessage({ target: () => target })
 
 // 2. Build the wallet-side provider that will execute approved requests.
 const provider = Provider.create({
