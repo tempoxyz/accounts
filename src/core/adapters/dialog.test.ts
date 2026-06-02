@@ -1,11 +1,10 @@
-import { Address, Hex, Provider as ox_Provider, PublicKey } from 'ox'
+import { Address, Hex, Provider as ox_Provider, PublicKey, RpcRequest } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { tempoLocalnet } from 'viem/tempo/chains'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vp/test'
+import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Dialog from '../Dialog.js'
 import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
-import * as DialogRequests from '../internal/DialogRequests.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { dialog } from './dialog.js'
@@ -54,17 +53,23 @@ function createDialog() {
   const syncs: Dialog.Sync[] = []
   const synced: (readonly Dialog.Request[])[] = []
   return {
-    dialog: Dialog.define({ name: 'test' }, (options) => ({
-      close() {},
-      destroy() {},
-      open() {},
-      async syncRequests(sync) {
-        parameters = options
-        syncs.push(sync)
-        synced.push(sync.requests)
-      },
-      syncTheme() {},
-    })),
+    dialog: Dialog.define({ name: 'test' }, (options) => {
+      const ids = RpcRequest.createStore()
+      return {
+        close() {},
+        destroy() {},
+        open() {},
+        prepareRequest(request) {
+          return ids.prepare(request as never)
+        },
+        async syncRequests(sync) {
+          parameters = options
+          syncs.push(sync)
+          synced.push(sync.requests)
+        },
+        syncTheme() {},
+      }
+    }),
     async takeRequest() {
       await vi.waitFor(() => {
         if (!syncs[0]?.requests[0]) throw new Error('request not synced')
@@ -83,13 +88,8 @@ function createDialog() {
 }
 
 describe('dialog', () => {
-  beforeEach(() => {
-    DialogRequests.reset(host)
-  })
-
   afterEach(() => {
     vi.restoreAllMocks()
-    DialogRequests.reset(host)
   })
 
   test('behavior: sendTransaction signs locally when an access key is selected', async () => {
@@ -223,7 +223,7 @@ describe('dialog', () => {
     `)
   })
 
-  test('behavior: host session syncs pending requests through the attached dialog', async () => {
+  test('behavior: attachment syncs pending requests through its own dialog', async () => {
     const storage = Storage.memory()
     const store_a = Store.create({ chainId: 123, storage })
     store_a.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -265,10 +265,9 @@ describe('dialog', () => {
       },
     )
 
-    const queued = await dialog_b.takeRequest()
+    const queued = await dialog_a.takeRequest()
 
-    expect(dialog_a.synced).toMatchInlineSnapshot(`[]`)
-    expect(dialog_b.synced.map((requests) => requests.map((x) => x.request.method)))
+    expect(dialog_a.synced.map((requests) => requests.map((x) => x.request.method)))
       .toMatchInlineSnapshot(`
         [
           [
@@ -276,7 +275,7 @@ describe('dialog', () => {
           ],
         ]
       `)
-    expect(dialog_b.syncs.map((sync) => ({ account: sync.account, chainId: sync.chainId })))
+    expect(dialog_a.syncs.map((sync) => ({ account: sync.account, chainId: sync.chainId })))
       .toMatchInlineSnapshot(`
         [
           {
@@ -287,11 +286,12 @@ describe('dialog', () => {
           },
         ]
       `)
+    expect(dialog_b.synced).toMatchInlineSnapshot(`[]`)
 
-    dialog_b.success(queued, '0x1234')
+    dialog_a.success(queued, '0x1234')
 
     await expect(promise).resolves.toMatchInlineSnapshot(`"0x1234"`)
-    expect(dialog_b.synced.map((requests) => requests.map((x) => x.request.method)))
+    expect(dialog_a.synced.map((requests) => requests.map((x) => x.request.method)))
       .toMatchInlineSnapshot(`
         [
           [
@@ -303,7 +303,7 @@ describe('dialog', () => {
     adapter_b.cleanup?.()
   })
 
-  test('behavior: remounted provider resumes pending host requests', async () => {
+  test('behavior: remounted provider does not inherit pending requests', async () => {
     const storage = Storage.memory()
     const store_a = Store.create({ chainId: 123, storage })
     store_a.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -349,27 +349,10 @@ describe('dialog', () => {
       store: store_b,
     })
 
-    expect(dialog_b.synced.map((requests) => requests.map((x) => x.request.method)))
-      .toMatchInlineSnapshot(`
-        [
-          [
-            "eth_sendTransaction",
-          ],
-        ]
-      `)
-    expect(dialog_b.syncs.map((sync) => ({ account: sync.account, chainId: sync.chainId })))
-      .toMatchInlineSnapshot(`
-        [
-          {
-            "account": {
-              "address": "0x0000000000000000000000000000000000000001",
-            },
-            "chainId": 123,
-          },
-        ]
-      `)
+    expect(dialog_b.synced).toMatchInlineSnapshot(`[]`)
+    expect(dialog_b.syncs).toMatchInlineSnapshot(`[]`)
 
-    dialog_b.success(queued, '0x1234')
+    dialog_a.success(queued, '0x1234')
 
     await expect(promise).resolves.toMatchInlineSnapshot(`"0x1234"`)
     adapter_b.cleanup?.()

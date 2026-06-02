@@ -1,13 +1,14 @@
 import { describe, expectTypeOf, test } from 'vp/test'
 
 import type * as Dialog from './Dialog.js'
-import type * as Store from './Store.js'
 
 describe('Dialog', () => {
-  test('has name and setup returning open, close, destroy, syncRequests', () => {
+  test('has name and setup returning a dialog instance', () => {
     expectTypeOf<Dialog.SetupFn.Parameters>().toEqualTypeOf<{
       host: string
-      store: Store.Store
+      getAccounts: () => readonly { address: string }[]
+      getChainId: () => number
+      onAccountsInvalid: () => void
       onReject: (ids: readonly number[]) => void
       onResponse: (response: {
         id: number
@@ -25,6 +26,7 @@ describe('Dialog', () => {
       open: () => void
       close: () => void
       destroy: () => void
+      prepareRequest: (request: unknown) => unknown
       syncRequests: (sync: Dialog.Sync) => Promise<void>
     }>()
   })

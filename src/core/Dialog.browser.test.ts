@@ -13,12 +13,26 @@ function setup() {
   })
   const onReject = vi.fn()
   const dialog = Dialog.iframe()
-  const handle = dialog({ host, onReject, onResponse() {}, store })
-  lastHandle = handle
+  const handle = dialog(parameters(store, { onReject }))
+  handles.push(handle)
   return { handle, onReject, store }
 }
 
-let lastHandle: Dialog.Instance | undefined
+let handles: Dialog.Instance[] = []
+
+function parameters(
+  store: Store.Store,
+  options: { onReject?: ((ids: readonly number[]) => void) | undefined } = {},
+): Dialog.SetupFn.Parameters {
+  return {
+    getAccounts: () => store.getState().accounts,
+    getChainId: () => store.getState().chainId,
+    host,
+    onAccountsInvalid: () => store.setState({ accessKeys: [], accounts: [], activeAccount: 0 }),
+    onReject: options.onReject ?? (() => {}),
+    onResponse() {},
+  }
+}
 
 function pending(id: number): Dialog.Request & { status: 'pending' } {
   return {
@@ -32,8 +46,8 @@ function sync(requests: readonly Dialog.Request[]): Dialog.Sync {
 }
 
 afterEach(() => {
-  lastHandle?.destroy()
-  lastHandle = undefined
+  for (const handle of handles) handle.destroy()
+  handles = []
   document.querySelectorAll('dialog[data-tempo-wallet]').forEach((el) => el.remove())
   document.body.style.overflow = ''
 })
@@ -48,11 +62,9 @@ describe('Dialog.iframe', () => {
   })
 
   test('behavior: singleton — multiple calls reuse same iframe', () => {
-    const { handle: a } = setup()
-    const { handle: b } = setup()
-    const { handle: c } = setup()
-    expect(a).toBe(b)
-    expect(b).toBe(c)
+    setup()
+    setup()
+    setup()
     const dialogs = document.querySelectorAll('dialog[data-tempo-wallet]')
     expect(dialogs.length).toBe(1)
   })
@@ -240,7 +252,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+    const handle = dialog(parameters(store))
     handle.open()
 
     expect(openSpy).toHaveBeenCalledOnce()
@@ -261,7 +273,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+    const handle = dialog(parameters(store))
     handle.open()
 
     const features = openSpy.mock.calls[0]![2] as string
@@ -286,7 +298,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+    const handle = dialog(parameters(store))
     handle.open()
     handle.close()
 
@@ -304,7 +316,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+    const handle = dialog(parameters(store))
 
     expect(() => handle.open()).toThrow('Failed to open popup')
 
@@ -323,7 +335,7 @@ describe('Dialog.popup', () => {
       storage: Storage.memory({ key: 'popup-test' }),
     })
     const dialog = Dialog.popup()
-    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+    const handle = dialog(parameters(store))
     handle.open()
     handle.destroy()
 
@@ -340,7 +352,7 @@ describe('Dialog.noop', () => {
       storage: Storage.memory({ key: 'noop-test' }),
     })
     const dialog = Dialog.noop()
-    const handle = dialog({ host, onReject() {}, onResponse() {}, store })
+    const handle = dialog(parameters(store))
     expect(() => handle.open()).not.toThrow()
     expect(() => handle.close()).not.toThrow()
     expect(() => handle.destroy()).not.toThrow()
