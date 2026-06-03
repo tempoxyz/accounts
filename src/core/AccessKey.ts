@@ -128,31 +128,6 @@ type ManagedAccount = TempoAccount.AccessKeyAccount
 
 type KeyAuthorizationManager = TempoKeyAuthorizationManager.KeyAuthorizationManager
 
-/** Generates a P256 key pair and access key account. */
-export async function generate(options: generate.Options = {}): Promise<generate.ReturnType> {
-  const { account } = options
-  const keyPair = await WebCryptoP256.createKeyPair()
-  const accessKey = TempoAccount.fromWebCryptoP256(
-    keyPair,
-    account ? { access: account } : undefined,
-  )
-  return { accessKey, keyPair }
-}
-
-export declare namespace generate {
-  type Options = {
-    /** Root account to attach to the access key. */
-    account?: TempoAccount.Account | undefined
-  }
-
-  type ReturnType = {
-    /** The generated access key account. */
-    accessKey: TempoAccount.AccessKeyAccount
-    /** Generated key pair to pass to `authorizeAccessKey`. */
-    keyPair: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>>
-  }
-}
-
 /** Prepares an unsigned key authorization and local key material when needed. */
 export async function prepareAuthorization(
   options: prepareAuthorization.Options,
@@ -175,6 +150,11 @@ export async function prepareAuthorization(
       message: `\`keyType: "${keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
     })
 
+  if (!globalThis.crypto?.subtle)
+    throw new RpcResponse.InvalidParamsError({
+      message:
+        'Generated P256 access keys require WebCrypto support; provide `publicKey` or `address` instead.',
+    })
   const keyPair = await WebCryptoP256.createKeyPair()
   const keyAuthorization = KeyAuthorization.from({
     address: Address.fromPublicKey(PublicKey.from(keyPair.publicKey)),

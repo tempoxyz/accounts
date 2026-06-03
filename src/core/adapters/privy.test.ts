@@ -108,7 +108,7 @@ describe('privy', () => {
     const { adapter, client, store } = setup()
 
     await connect({ adapter, store })
-    const result = await adapter.actions.signPersonalMessage(
+    const result = await adapter.actions.signPersonalMessage!(
       { address, data: '0x68656c6c6f' },
       { method: 'personal_sign', params: ['0x68656c6c6f', address] },
     )
@@ -198,7 +198,7 @@ describe('privy', () => {
     const { adapter, client, store } = setup()
     await connect({ adapter, store })
 
-    const result = await adapter.actions.signTransaction(
+    const result = await adapter.actions.signTransaction!(
       {
         chainId: 1,
         from: address,
@@ -327,7 +327,7 @@ describe('privy', () => {
     const { adapter, client, store } = setup()
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
-    await adapter.actions.signPersonalMessage(
+    await adapter.actions.signPersonalMessage!(
       { address, data: '0x68656c6c6f' },
       { method: 'personal_sign', params: ['0x68656c6c6f', address] },
     )
@@ -340,7 +340,7 @@ describe('privy', () => {
     const { adapter, client } = setup()
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
@@ -356,7 +356,7 @@ describe('privy', () => {
     client.addWallet(other)
     store.setState({ accounts: [{ address: other }], activeAccount: 0 })
 
-    await adapter.actions.signPersonalMessage(
+    await adapter.actions.signPersonalMessage!(
       { address: other, data: '0x68656c6c6f' },
       { method: 'personal_sign', params: ['0x68656c6c6f', other] },
     )
@@ -380,7 +380,7 @@ describe('privy', () => {
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
@@ -395,7 +395,7 @@ describe('privy', () => {
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
@@ -409,7 +409,7 @@ describe('privy', () => {
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
@@ -425,7 +425,7 @@ describe('privy', () => {
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
@@ -441,7 +441,7 @@ describe('privy', () => {
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
@@ -456,7 +456,7 @@ describe('privy', () => {
     store.setState({ accounts: [{ address: other }], activeAccount: 0 })
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address: other, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', other] },
       ),
@@ -480,7 +480,7 @@ describe('privy', () => {
     )
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address: other, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', other] },
       ),
@@ -504,7 +504,7 @@ describe('privy', () => {
     )
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address: other, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', other] },
       ),
@@ -519,7 +519,7 @@ describe('privy', () => {
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
@@ -542,7 +542,7 @@ describe('privy', () => {
     await connect({ adapter, store })
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
@@ -556,7 +556,7 @@ describe('privy', () => {
     await connect({ adapter, store })
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address: other, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', other] },
       ),
@@ -570,7 +570,7 @@ describe('privy', () => {
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
@@ -596,7 +596,7 @@ describe('privy', () => {
     store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
@@ -610,7 +610,7 @@ describe('privy', () => {
     await connect({ adapter, store })
 
     await expect(
-      adapter.actions.signPersonalMessage(
+      adapter.actions.signPersonalMessage!(
         { address, data: '0x68656c6c6f' },
         { method: 'personal_sign', params: ['0x68656c6c6f', address] },
       ),
