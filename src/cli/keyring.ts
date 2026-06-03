@@ -105,7 +105,7 @@ export declare namespace upsert {
   }
 }
 
-function parse(text: string): readonly Entry[] {
+export function parse(text: string): readonly Entry[] {
   const keys: Entry[] = []
   let key: Partial<Entry> | undefined
   let limit: Partial<{ token: Address.Address; limit: bigint }> | undefined
@@ -171,12 +171,12 @@ function parse(text: string): readonly Entry[] {
 
     if (!key) continue
     if (name === 'wallet_address') key.walletAddress = stripQuotes(value) as Address.Address
-    if (name === 'chain_id') key.chainId = Number.parseInt(value, 10)
+    if (name === 'chain_id') key.chainId = parseInteger(value, 'chain_id')
     if (name === 'key_type') key.keyType = stripQuotes(value) as Entry['keyType']
     if (name === 'key_address') key.keyAddress = stripQuotes(value) as Address.Address
     if (name === 'key') key.key = stripQuotes(value) as Hex.Hex
     if (name === 'key_authorization') key.keyAuthorization = stripQuotes(value) as Hex.Hex
-    if (name === 'expiry') key.expiry = Number.parseInt(value, 10)
+    if (name === 'expiry') key.expiry = parseInteger(value, 'expiry')
   }
 
   flushKey()
@@ -207,6 +207,13 @@ function stringify(keys: readonly Entry[]) {
       ]),
     ]),
   ].join('\n')
+}
+
+function parseInteger(value: string, name: string) {
+  if (!/^\d+$/.test(value)) throw new Error(`Invalid ${name}: ${value}`)
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed)) throw new Error(`Invalid ${name}: ${value}`)
+  return parsed
 }
 
 function stripQuotes(value: string) {

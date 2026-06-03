@@ -116,3 +116,24 @@ describe('Keyring.find', () => {
     `)
   })
 })
+
+
+describe('Keyring.parse', () => {
+  test('rejects malformed integer fields', () => {
+    const content = `# Tempo connect keys — managed by \`tempo connect\`
+# Do not edit manually.
+
+[[keys]]
+wallet_type = "passkey"
+wallet_address = "${root.address}"
+chain_id = ${chain.id}abc
+key_type = "secp256k1"
+key_address = "${accessKey.address}"
+key = "0x11"
+key_authorization = "0x22"
+expiry = 2
+`
+
+    expect(() => Keyring.parse(content)).toThrow('Invalid chain_id')
+  })
+})
