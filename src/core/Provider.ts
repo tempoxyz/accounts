@@ -34,6 +34,7 @@ import { Account as TempoAccount, Actions } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
 import * as z from 'zod/mini'
 
+import * as AccessKey from './AccessKey.js'
 import * as Account from './Account.js'
 import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
@@ -422,11 +423,10 @@ export function create(options: create.Options = {}): create.ReturnType {
     const selected = await getAdapterAccount()
     const chainId = parameters.chainId ?? getClient().chain.id
     if (selected.account.type !== 'json-rpc') {
-      const keyAuthorization = await AccessKey.authorize({
+      const keyAuthorization = await store.accessKeys.authorize({
         account: selected.account as Pick<TempoAccount.Account, 'address' | 'sign'>,
         chainId,
         parameters,
-        store,
       })
       return { keyAuthorization, rootAddress: selected.account.address }
     }
@@ -441,7 +441,7 @@ export function create(options: create.Options = {}): create.ReturnType {
       method: 'wallet_authorizeAccessKey' as never,
       params: [z.encode(Rpc.wallet_authorizeAccessKey.parameters, prepared.parameters)] as never,
     })) as Adapter.authorizeAccessKey.ReturnType
-    savePreparedAccessKey({
+    await savePreparedAccessKey({
       account: result.rootAddress,
       accessKey: prepared,
       keyAuthorization: result.keyAuthorization,
@@ -515,7 +515,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     }
   }
 
-  function savePreparedAccessKey(options: {
+  async function savePreparedAccessKey(options: {
     accessKey: Awaited<ReturnType<typeof prepareAuthorizeAccessKey>> | undefined
     account: Address.Address | undefined
     keyAuthorization: KeyAuthorization.Rpc | undefined
@@ -525,11 +525,10 @@ export function create(options: create.Options = {}): create.ReturnType {
     const { keyPair, privateKey } = accessKey
     const material = keyPair ? { keyPair } : privateKey ? { privateKey } : undefined
     if (!material) return
-    AccessKey.add({
+    await store.accessKeys.add({
       account,
       authorization: KeyAuthorization.fromRpc(keyAuthorization),
       ...material,
-      store,
     })
   }
 
@@ -557,11 +556,10 @@ export function create(options: create.Options = {}): create.ReturnType {
         if (!AccessKey.isUnavailableError(error)) throw error
       }
     }
-    AccessKey.remove({
+    await store.accessKeys.remove({
       accessKey: parameters.accessKeyAddress,
       account: parameters.address,
       chainId: store.getState().chainId,
-      store,
     })
   }
 
@@ -1163,7 +1161,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     })
 
                     const accountAddress = accounts[0]?.address
-                    savePreparedAccessKey({
+                    await savePreparedAccessKey({
                       accessKey,
                       account: accountAddress,
                       keyAuthorization,

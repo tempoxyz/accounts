@@ -11,7 +11,7 @@ When `wallet_connect` or `wallet_authorizeAccessKey` runs, the provider:
 
 - opens the configured `host` in the user's default browser
 - prompts them to approve the access key
-- persists the resulting key in provider storage for re-use across CLI invocations
+- persists the resulting key under `keysPath` for re-use across CLI invocations
 
 Subsequent transaction signing happens locally with the managed key — no further browser round-trip is required until the key expires.
 
@@ -116,6 +116,21 @@ import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
   host: 'https://myapp.com/api/auth/cli', // [!code focus]
+})
+```
+
+### keysPath
+
+- **Type:** `string`
+- **Default:** `'~/.tempo/wallet/keys.toml'`
+
+Filesystem path for the managed access-key keyring. Generated keys, their authorizations, and expiry metadata are written to this TOML file so the CLI can re-use them across invocations.
+
+```ts twoslash [cli.ts]
+import { Provider } from 'accounts/cli'
+
+const provider = Provider.create({
+  keysPath: '~/.config/myapp/keys.toml', // [!code focus]
 })
 ```
 
@@ -258,17 +273,16 @@ const provider = Provider.create({
 ### storage
 
 - **Type:** `Storage`
-- **Default:** `Storage.filesystem({ path: '~/.tempo/wallet/store.json' })`
+- **Default:** `Storage.memory()` in CLI environments
 
-Storage adapter for provider persistence. The CLI default stores connected accounts, active chain state, and managed access keys in one filesystem-backed provider store.
+Storage adapter for persistence. Defaults to an in-memory map; managed access keys are persisted separately to `keysPath`.
 
 ```ts twoslash [cli.ts]
-import { Provider, Storage } from 'accounts/cli'
+import { Provider } from 'accounts/cli'
+import { Storage } from 'accounts'
 
 const provider = Provider.create({
-  storage: Storage.filesystem({ // [!code focus]
-    path: '~/.config/myapp/tempo-store.json', // [!code focus]
-  }), // [!code focus]
+  storage: Storage.memory(), // [!code focus]
 })
 ```
 

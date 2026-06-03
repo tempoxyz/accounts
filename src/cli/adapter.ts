@@ -17,6 +17,7 @@ import * as z from 'zod/mini'
 import * as Adapter from '../core/Adapter.js'
 import * as AccessKeyTransaction from '../core/internal/AccessKeyTransaction.js'
 import * as CliAuth from '../server/CliAuth.js'
+import * as Keyring from './keyring.js'
 
 /**
  * Creates a CLI bootstrap adapter backed by the device-code protocol.
@@ -25,6 +26,32 @@ export function cli(options: cli.Options): Adapter.Adapter {
   const { name = 'Tempo CLI', rdns = 'xyz.tempo.cli' } = options
 
   return Adapter.define({ name, rdns }, ({ getAccount, getClient, store }) => {
+    async function loadManagedKey(
+      address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
+      parameters: loadManagedKey.Options = {},
+    ): Promise<Keyring.Entry | undefined> {
+      const { keyType } = parameters
+      const { chainId } = store.getState()
+      const entry = await Keyring.find({
+        chainId,
+        ...(keyType ? { keyType } : {}),
+        ...(options.keysPath ? { path: options.keysPath } : {}),
+        walletAddress: address,
+      })
+      if (!entry) return
+
+      const deserialized = KeyAuthorization.deserialize(entry.keyAuthorization)
+      if (!deserialized.signature) throw new Error('Managed access key is missing a signature.')
+      const keyAuthorization = deserialized as KeyAuthorization.Signed
+      await store.accessKeys.add({
+        account: address,
+        authorization: keyAuthorization,
+        privateKey: entry.key,
+      })
+
+      return entry
+    }
+
     async function resolveManagedKey(
       options: {
         address?: Adapter.authorizeAccessKey.ReturnType['rootAddress'] | undefined
@@ -34,28 +61,20 @@ export function cli(options: cli.Options): Adapter.Adapter {
       const { address, keyType } = options
 
       const requestedKeyType = keyType === 'p256' || keyType === 'secp256k1' ? keyType : undefined
-      if (address) {
-        const { chainId } = store.getState()
-        const entries = store.accessKeys.list({
-          account: address,
-          chainId,
-        })
-        for (const entry of entries) {
-          if (requestedKeyType && entry.keyType !== requestedKeyType) continue
-          if (entry.keyType !== 'p256' && entry.keyType !== 'secp256k1') continue
-          const account = await store.accessKeys.get({
-            accessKey: entry.address,
-            account: address,
-            chainId,
-          })
-          if (!account) continue
-          return {
-            account,
-            existing: true,
-            keyAddress: entry.address,
-            keyType: entry.keyType,
-            publicKey: account.publicKey,
-          }
+      const entry = address
+        ? await loadManagedKey(address, requestedKeyType ? { keyType: requestedKeyType } : {})
+        : undefined
+      if (entry) {
+        const account =
+          entry.keyType === 'p256'
+            ? TempoAccount.fromP256(entry.key, { access: address })
+            : TempoAccount.fromSecp256k1(entry.key, { access: address })
+        return {
+          account,
+          key: entry.key,
+          keyAddress: entry.keyAddress,
+          keyType: entry.keyType,
+          publicKey: account.publicKey,
         }
       }
 
@@ -68,7 +87,6 @@ export function cli(options: cli.Options): Adapter.Adapter {
 
       return {
         account,
-        existing: false,
         key,
         keyAddress: Address.fromPublicKey(PublicKey.from(account.publicKey)),
         keyType: nextKeyType,
@@ -84,20 +102,28 @@ export function cli(options: cli.Options): Adapter.Adapter {
       if (!managedKey) return
 
       const signed = KeyAuthorization.fromRpc(z.encode(CliAuth.keyAuthorization, keyAuthorization))
-      if (managedKey.existing) {
-        await store.accessKeys.updateAuthorization({
-          accessKey: managedKey.keyAddress,
-          account: address,
-          authorization: signed,
-          chainId: Number(signed.chainId),
-        })
-        return
-      }
       await store.accessKeys.add({
         account: address,
         authorization: signed,
-        privateKey: managedKey.key!,
+        privateKey: managedKey.key,
       })
+
+      await Keyring.upsert(
+        {
+          chainId: Number(keyAuthorization.chainId),
+          expiry: keyAuthorization.expiry ?? 0,
+          key: managedKey.key,
+          keyAddress: managedKey.keyAddress,
+          keyAuthorization: KeyAuthorization.serialize(signed),
+          keyType: managedKey.keyType,
+          ...(keyAuthorization.limits
+            ? { limits: keyAuthorization.limits.map((limit) => ({ ...limit })) }
+            : {}),
+          walletAddress: address,
+          walletType: 'passkey',
+        },
+        options.keysPath ? { path: options.keysPath } : {},
+      )
     }
 
     async function prepareManagedTransaction(
@@ -111,6 +137,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
       const state = store.getState()
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
       if (!address) throw new core_Provider.DisconnectedError({ message: 'No active account.' })
+      await loadManagedKey(address)
       const transaction = await AccessKeyTransaction.create({
         address,
         calls: options.calls,
@@ -126,6 +153,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
     }
 
     async function loadManagedAccount(address: Adapter.signPersonalMessage.Parameters['address']) {
+      await loadManagedKey(address)
       return getAccount({ address, signable: true })
     }
 
@@ -360,6 +388,8 @@ export declare namespace cli {
     host: string
     /** Provider display name. @default "Tempo CLI" */
     name?: string | undefined
+    /** Path for managed CLI access keys. @default "~/.tempo/wallet/keys.toml" */
+    keysPath?: string | undefined
     /** Browser opener override. */
     open?: ((url: string) => Promise<void> | void) | undefined
     /** Poll interval in milliseconds. @default 2000 */
@@ -374,11 +404,16 @@ export declare namespace cli {
 declare namespace resolveManagedKey {
   type ReturnType = {
     account: TempoAccount.Account
-    existing: boolean
-    key?: Hex.Hex | undefined
-    keyAddress: Address.Address
-    keyType: 'secp256k1' | 'p256'
+    key: Hex.Hex
+    keyAddress: Keyring.Entry['keyAddress']
+    keyType: Keyring.Entry['keyType']
     publicKey: Hex.Hex
+  }
+}
+
+declare namespace loadManagedKey {
+  type Options = {
+    keyType?: Keyring.Entry['keyType'] | undefined
   }
 }
 

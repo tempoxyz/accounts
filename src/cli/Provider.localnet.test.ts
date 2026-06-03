@@ -1,7 +1,7 @@
 import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Address, Hex, Json, PublicKey } from 'ox'
+import { Address, Hex, PublicKey } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { type Address as ViemAddress, parseUnits } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
@@ -12,8 +12,8 @@ import { accounts, chain, getClient } from '../../test/config.js'
 import { createServer } from '../../test/utils.js'
 import * as CliAuth from '../server/CliAuth.js'
 import * as Handler from '../server/Handler.js'
+import * as Keyring from './keyring.js'
 import * as Provider from './Provider.js'
-import * as Storage from './storage.js'
 
 const root = accounts[0]!
 const accessKey = accounts[1]!
@@ -128,26 +128,8 @@ async function authorizePending(serverUrl: string, code: string) {
   })
 }
 
-async function createStoragePath() {
-  return join(await mkdtemp(join(tmpdir(), 'accounts-cli-')), 'store.json')
-}
-
-async function readAccessKeys(path: string) {
-  const value = Json.parse(await readFile(path, 'utf8')) as {
-    'tempo-cli.store': {
-      state: {
-        accessKeys: {
-          address: Address.Address
-          access: Address.Address
-          chainId: number
-          expiry?: number | undefined
-          keyType: string
-          privateKey?: Hex.Hex | undefined
-        }[]
-      }
-    }
-  }
-  return value['tempo-cli.store'].state.accessKeys
+async function createKeysPath() {
+  return join(await mkdtemp(join(tmpdir(), 'accounts-cli-')), 'keys.toml')
 }
 
 async function fund(address: ViemAddress) {
@@ -604,11 +586,12 @@ describe('Provider.create', () => {
   test('behavior: generates, persists, and uses a managed key during wallet_connect', async () => {
     const handler = createHandler()
     const server = await createServer(handler.listener)
-    const storagePath = await createStoragePath()
+    const keysPath = await createKeysPath()
 
     try {
       const provider = Provider.create({
         chains: [chain],
+        keysPath,
         open: async (url) => {
           const code = new URL(url).searchParams.get('code')!
           await fetch(`${server.url}/cli-auth`, {
@@ -618,7 +601,6 @@ describe('Provider.create', () => {
           })
         },
         host: `${server.url}/cli-auth`,
-        storage: Storage.filesystem({ path: storagePath }),
       })
 
       const result = await provider.request({
@@ -632,25 +614,25 @@ describe('Provider.create', () => {
         method: 'eth_sendTransactionSync',
         params: [{ calls: [transferCall] }],
       })
-      const [entry] = await readAccessKeys(storagePath)
+      const [entry] = await Keyring.load({ path: keysPath })
+      const { key, keyAuthorization, ...persisted } = entry!
 
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
       expect({
-        access: entry!.access,
-        address: entry!.address.toLowerCase(),
-        chainId: entry!.chainId,
-        expiry: entry!.expiry,
-        keyType: entry!.keyType,
+        ...persisted,
+        keyAddress: persisted.keyAddress.toLowerCase(),
       }).toMatchInlineSnapshot(`
         {
-          "access": "${root.address}",
-          "address": "${account.capabilities.keyAuthorization!.keyId.toLowerCase()}",
           "chainId": ${chain.id},
           "expiry": ${expiry_2},
+          "keyAddress": "${account.capabilities.keyAuthorization!.keyId.toLowerCase()}",
           "keyType": "secp256k1",
+          "walletAddress": "${root.address}",
+          "walletType": "passkey",
         }
       `)
-      expect(entry!.privateKey).toMatch(/^0x[0-9a-f]{64}$/i)
+      expect(key).toMatch(/^0x[0-9a-f]{64}$/i)
+      expect(keyAuthorization).toMatch(/^0x[0-9a-f]+$/i)
     } finally {
       await server.closeAsync()
     }
@@ -659,11 +641,12 @@ describe('Provider.create', () => {
   test('behavior: generates a managed key for wallet_authorizeAccessKey without publicKey', async () => {
     const handler = createHandler()
     const server = await createServer(handler.listener)
-    const storagePath = await createStoragePath()
+    const keysPath = await createKeysPath()
 
     try {
       const provider = Provider.create({
         chains: [chain],
+        keysPath,
         open: async (url) => {
           const code = new URL(url).searchParams.get('code')!
           await fetch(`${server.url}/cli-auth`, {
@@ -673,7 +656,6 @@ describe('Provider.create', () => {
           })
         },
         host: `${server.url}/cli-auth`,
-        storage: Storage.filesystem({ path: storagePath }),
       })
 
       const result = await provider.request({
@@ -686,18 +668,11 @@ describe('Provider.create', () => {
         method: 'eth_sendTransactionSync',
         params: [{ calls: [transferCall] }],
       })
-      const [entry] = await readAccessKeys(storagePath)
+      const toml = await readFile(keysPath, 'utf8')
 
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
-      expect({
-        access: entry!.access,
-        chainId: entry!.chainId,
-      }).toMatchInlineSnapshot(`
-        {
-          "access": "${root.address}",
-          "chainId": ${chain.id},
-        }
-      `)
+      expect(toml).toContain(`wallet_address = "${root.address}"`)
+      expect(toml).toContain(`chain_id = ${chain.id}`)
     } finally {
       await server.closeAsync()
     }
@@ -706,11 +681,12 @@ describe('Provider.create', () => {
   test('behavior: regenerates a managed key when the requested key type changes', async () => {
     const handler = createHandler()
     const server = await createServer(handler.listener)
-    const storagePath = await createStoragePath()
+    const keysPath = await createKeysPath()
 
     try {
       const provider = Provider.create({
         chains: [chain],
+        keysPath,
         open: async (url) => {
           const code = new URL(url).searchParams.get('code')!
           await fetch(`${server.url}/cli-auth`, {
@@ -720,7 +696,6 @@ describe('Provider.create', () => {
           })
         },
         host: `${server.url}/cli-auth`,
-        storage: Storage.filesystem({ path: storagePath }),
       })
 
       const first = await provider.request({
@@ -737,16 +712,7 @@ describe('Provider.create', () => {
         method: 'eth_sendTransactionSync',
         params: [{ calls: [transferCall] }],
       })
-      const keys = await readAccessKeys(storagePath)
-      const stored = [first.keyAuthorization, second.keyAuthorization].map((authorization) => {
-        const key = keys.find(
-          (key) => key.address.toLowerCase() === authorization.keyId.toLowerCase(),
-        )!
-        return {
-          keyAddress: key.address.toLowerCase(),
-          keyType: key.keyType,
-        }
-      })
+      const keys = await Keyring.load({ path: keysPath })
 
       expect({
         first: {
@@ -757,7 +723,10 @@ describe('Provider.create', () => {
           keyId: second.keyAuthorization.keyId,
           keyType: second.keyAuthorization.keyType,
         },
-        stored,
+        stored: keys.map((key) => ({
+          keyAddress: key.keyAddress.toLowerCase(),
+          keyType: key.keyType,
+        })),
       }).toMatchInlineSnapshot(`
         {
           "first": {
