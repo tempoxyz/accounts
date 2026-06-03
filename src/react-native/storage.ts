@@ -2,7 +2,7 @@ import { Json } from 'ox'
 
 import * as Storage from '../core/Storage.js'
 
-/** Creates storage backed by `expo-secure-store`. */
+/** Creates a storage adapter backed by `expo-secure-store`. For private key material. */
 export function secureStorage(options: secureStorage.Options = {}): Storage.Storage {
   return Storage.from(
     {
@@ -30,11 +30,10 @@ export function secureStorage(options: secureStorage.Options = {}): Storage.Stor
 }
 
 export declare namespace secureStorage {
-  /** Options for {@link secureStorage}. */
   type Options = Storage.from.Options
 }
 
-/** Creates storage backed by `@react-native-async-storage/async-storage`. */
+/** Creates a storage adapter backed by `@react-native-async-storage/async-storage`. */
 export function asyncStorage(options: asyncStorage.Options = {}): Storage.Storage {
   return Storage.from(
     {
@@ -62,6 +61,5 @@ export function asyncStorage(options: asyncStorage.Options = {}): Storage.Storag
 }
 
 export declare namespace asyncStorage {
-  /** Options for {@link asyncStorage}. */
   type Options = Storage.from.Options
 }

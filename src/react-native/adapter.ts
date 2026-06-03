@@ -1,14 +1,18 @@
-import { Hex, P256, Provider as core_Provider, RpcResponse } from 'ox'
+import {
+  Address as core_Address,
+  Base64,
+  Hex,
+  P256,
+  Provider as core_Provider,
+  PublicKey,
+  RpcResponse,
+} from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
-import { z } from 'zod/mini'
+import { Actions, Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 
 import * as Adapter from '../core/Adapter.js'
-import * as AccessKeyRequests from '../core/internal/AccessKeyRequests.js'
 import * as AccessKeyTransaction from '../core/internal/AccessKeyTransaction.js'
-import * as Schema from '../core/Schema.js'
-import * as Rpc from '../core/zod/rpc.js'
-import { mobileWebAuth } from './mobileWebAuth.js'
+import type * as Storage from '../core/Storage.js'
 
 /**
  * Creates a React Native adapter that authorizes access keys via the system browser.
@@ -20,75 +24,165 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
   const { name = 'Tempo Mobile', rdns = 'xyz.tempo.mobile' } = options
 
   return Adapter.define({ name, rdns }, ({ getAccount, getClient, store }) => {
-    const transport = mobileWebAuth({
-      callback: options.redirectUri,
-      host: options.host,
-      ...(options.id ? { id: options.id } : {}),
-      ...(options.open ? { open: options.open } : {}),
-    })
+    async function loadManagedKey(
+      address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
+      parameters: loadManagedKey.Options = {},
+    ): Promise<loadManagedKey.ReturnType | undefined> {
+      const { keyType } = parameters
+      const { secureStorage } = options
+      if (!secureStorage) return undefined
 
-    const provider = core_Provider.from(
-      {
-        async request(request) {
-          return await transport.request(request)
-        },
-      },
-      { schema: Schema.ox },
-    )
-
-    async function prepareAccessKey(
-      parameters: Adapter.authorizeAccessKey.Parameters | undefined,
-    ): Promise<prepareAccessKey.ReturnType | undefined> {
-      if (!parameters) return undefined
-
-      const { keyType, privateKey, publicKey } = parameters
-      const requestedKeyType = keyType === 'p256' || keyType === 'secp256k1' ? keyType : undefined
-      if (privateKey) {
-        if (keyType === 'webAuthn')
-          throw new RpcResponse.InvalidParamsError({
-            message: '`privateKey` cannot be used with `keyType: "webAuthn"`.',
-          })
-        const nextKeyType = requestedKeyType ?? 'secp256k1'
-        const account =
-          nextKeyType === 'p256'
-            ? TempoAccount.fromP256(privateKey)
-            : TempoAccount.fromSecp256k1(privateKey)
-        const { privateKey: _privateKey, ...request } = parameters
-        return {
-          material: { privateKey },
-          request: { ...request, publicKey: account.publicKey, keyType: nextKeyType },
-        }
+      const { chainId } = store.getState()
+      const storageKeys = keyType
+        ? [managedKeyStorageKey(address, chainId, keyType)]
+        : [
+            managedKeyStorageKey(address, chainId, 'secp256k1'),
+            managedKeyStorageKey(address, chainId, 'p256'),
+            managedKeyStorageKey(address, chainId),
+          ]
+      let entry: ManagedKeyEntry | null = null
+      for (const storageKey of storageKeys) {
+        entry = await secureStorage.getItem<ManagedKeyEntry>(storageKey)
+        if (entry) break
       }
+      if (!entry) return undefined
 
-      if (publicKey || parameters.address) return undefined
+      const account =
+        entry.keyType === 'p256'
+          ? TempoAccount.fromP256(entry.key, { access: address })
+          : TempoAccount.fromSecp256k1(entry.key, { access: address })
+      const keyAddress = core_Address.fromPublicKey(PublicKey.from(account.publicKey))
+      const deserialized = KeyAuthorization.deserialize(entry.keyAuthorization)
+      if (!deserialized.signature) throw new Error('Managed access key is missing a signature.')
+      const keyAuthorization = deserialized as KeyAuthorization.Signed
 
-      if (keyType && !requestedKeyType)
-        throw new RpcResponse.InvalidParamsError({
-          message: `\`keyType: "${keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
+      if (keyAuthorization.address.toLowerCase() === keyAddress.toLowerCase())
+        await store.accessKeys.add({
+          account: address,
+          authorization: keyAuthorization,
+          privateKey: entry.key,
         })
+      else
+        await store.accessKeys.remove({
+          account: address,
+          accessKey: keyAuthorization.address,
+          chainId: Number(keyAuthorization.chainId),
+        })
+
+      return {
+        account,
+        expiry: entry.expiry,
+        key: entry.key,
+        keyAddress,
+        keyType: entry.keyType,
+        publicKey: account.publicKey,
+        storedAuthorization: keyAuthorization,
+      }
+    }
+
+    async function resolveManagedKey(
+      resolveOptions: {
+        address?: Adapter.authorizeAccessKey.ReturnType['rootAddress'] | undefined
+        keyType?: Adapter.authorizeAccessKey.Parameters['keyType'] | undefined
+      } = {},
+    ): Promise<resolveManagedKey.ReturnType> {
+      const { address, keyType } = resolveOptions
+
+      const requestedKeyType = keyType === 'p256' || keyType === 'secp256k1' ? keyType : undefined
+      const entry = address
+        ? await loadManagedKey(address, requestedKeyType ? { keyType: requestedKeyType } : {})
+        : undefined
+      if (entry)
+        return {
+          account: entry.account,
+          key: entry.key,
+          keyAddress: entry.keyAddress,
+          keyType: entry.keyType,
+          publicKey: entry.publicKey,
+        }
 
       const nextKeyType = requestedKeyType === 'p256' ? 'p256' : 'secp256k1'
       const key = nextKeyType === 'p256' ? P256.randomPrivateKey() : Secp256k1.randomPrivateKey()
       const account =
-        nextKeyType === 'p256' ? TempoAccount.fromP256(key) : TempoAccount.fromSecp256k1(key)
+        nextKeyType === 'p256'
+          ? TempoAccount.fromP256(key, address ? { access: address } : undefined)
+          : TempoAccount.fromSecp256k1(key, address ? { access: address } : undefined)
 
       return {
-        material: { privateKey: key },
-        request: { ...parameters, publicKey: account.publicKey, keyType: nextKeyType },
+        account,
+        key,
+        keyAddress: core_Address.fromPublicKey(PublicKey.from(account.publicKey)),
+        keyType: nextKeyType,
+        publicKey: account.publicKey,
       }
     }
 
-    async function saveAccessKey(
+    async function saveManagedKey(
       address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
-      keyAuthorization: KeyAuthorization.Rpc,
-      accessKey: prepareAccessKey.ReturnType,
+      managedKey: Awaited<ReturnType<typeof resolveManagedKey>>,
+      keyAuthorization: KeyAuthorization.Signed,
     ) {
-      if (!accessKey.material) return
+      if (!managedKey) return
+
       await store.accessKeys.add({
         account: address,
-        authorization: KeyAuthorization.fromRpc(keyAuthorization),
-        ...accessKey.material,
+        authorization: keyAuthorization,
+        privateKey: managedKey.key,
       })
+
+      const { secureStorage } = options
+      if (!secureStorage) return
+
+      const { chainId } = store.getState()
+      const storageKey = managedKeyStorageKey(address, chainId, managedKey.keyType)
+      const entry: ManagedKeyEntry = {
+        chainId,
+        expiry: keyAuthorization.expiry ?? 0,
+        key: managedKey.key,
+        keyAddress: managedKey.keyAddress,
+        keyAuthorization: KeyAuthorization.serialize(keyAuthorization),
+        keyType: managedKey.keyType,
+        walletAddress: address,
+      }
+      await secureStorage.setItem(storageKey, entry)
+    }
+
+    async function isManagedKeyAuthorized(
+      address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
+      managedKey: loadManagedKey.ReturnType,
+    ) {
+      try {
+        const metadata = await Actions.accessKey.getMetadata(getClient(), {
+          account: address,
+          accessKey: managedKey.keyAddress,
+        })
+        return (
+          metadata.address.toLowerCase() === managedKey.keyAddress.toLowerCase() &&
+          !metadata.isRevoked
+        )
+      } catch {
+        return false
+      }
+    }
+
+    async function reauthorizeManagedKey(
+      address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
+      managedKey: loadManagedKey.ReturnType,
+    ) {
+      const result = await authorize({
+        account: address,
+        authorizeAccessKey: {
+          expiry: managedKey.expiry,
+          keyType: managedKey.keyType,
+          ...(managedKey.storedAuthorization.limits
+            ? { limits: managedKey.storedAuthorization.limits.map((limit) => ({ ...limit })) }
+            : {}),
+          publicKey: managedKey.publicKey,
+        },
+        method: 'wallet_authorizeAccessKey',
+      })
+      await saveManagedKey(address, managedKey, result.keyAuthorization)
+      return result.keyAuthorization
     }
 
     async function prepareManagedTransaction(
@@ -102,6 +196,9 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       const state = store.getState()
       const address = parameters.from ?? state.accounts[state.activeAccount]?.address
       if (!address) throw new core_Provider.DisconnectedError({ message: 'No active account.' })
+      const managedKey = await loadManagedKey(address)
+      if (managedKey && !(await isManagedKeyAuthorized(address, managedKey)))
+        await reauthorizeManagedKey(address, managedKey)
       const transaction = await AccessKeyTransaction.create({
         address,
         calls: options.calls,
@@ -117,90 +214,164 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
     }
 
     async function loadManagedAccount(address: Adapter.signPersonalMessage.Parameters['address']) {
-      const account = await store.accessKeys.select({
-        account: address,
-        chainId: store.getState().chainId,
-      })
-      if (account) return account
+      await loadManagedKey(address)
       return getAccount({ address, signable: true })
+    }
+
+    async function authorize(request: {
+      account?: Adapter.authorizeAccessKey.ReturnType['rootAddress'] | undefined
+      authorizeAccessKey: Adapter.authorizeAccessKey.Parameters | undefined
+      method: 'wallet_authorizeAccessKey' | 'wallet_connect'
+      personalSign?: Adapter.loadAccounts.Parameters['personalSign'] | undefined
+      showDeposit?: Adapter.createAccount.Parameters['showDeposit'] | undefined
+    }) {
+      const { host, redirectUri, open = defaultOpen } = options
+      const { account, authorizeAccessKey, method, personalSign, showDeposit } = request
+
+      const managedKey =
+        authorizeAccessKey && !authorizeAccessKey.publicKey && !authorizeAccessKey.address
+          ? await resolveManagedKey({
+              ...(account ? { address: account } : {}),
+              ...(authorizeAccessKey.keyType ? { keyType: authorizeAccessKey.keyType } : {}),
+            })
+          : undefined
+
+      const publicKey = authorizeAccessKey?.publicKey ?? managedKey?.publicKey
+      const keyType = authorizeAccessKey?.keyType ?? managedKey?.keyType
+
+      if (!publicKey)
+        throw new RpcResponse.InvalidParamsError({
+          message:
+            method === 'wallet_connect'
+              ? '`wallet_connect` on the React Native adapter requires `capabilities.authorizeAccessKey`.'
+              : '`wallet_authorizeAccessKey` on the React Native adapter requires key parameters.',
+        })
+
+      const state = Base64.fromBytes(Hex.toBytes(Hex.random(16)), { pad: false, url: true })
+      const authUrl = buildAuthUrl(host, {
+        callback: redirectUri,
+        chainId: store.getState().chainId,
+        ...(typeof authorizeAccessKey?.expiry !== 'undefined'
+          ? { expiry: authorizeAccessKey.expiry }
+          : {}),
+        ...(keyType ? { keyType } : {}),
+        ...(authorizeAccessKey?.limits
+          ? { limits: authorizeAccessKey.limits.map((l) => ({ ...l, limit: String(l.limit) })) }
+          : {}),
+        ...(personalSign ? { personalSign } : {}),
+        pubKey: publicKey,
+        ...(showDeposit !== undefined ? { showDeposit } : {}),
+        state,
+      })
+
+      const callbackUrl = await open(authUrl, redirectUri)
+      if (!callbackUrl) throw new AuthCancelledError()
+
+      const params = new URL(callbackUrl).searchParams
+      const returnedState = params.get('state')
+      if (returnedState !== state) throw new StateMismatchError()
+
+      const accountAddress = params.get('accountAddress')
+      if (!accountAddress) throw new Error('Missing accountAddress in callback.')
+
+      const keyAuthorizationHex = params.get('keyAuthorization')
+      if (!keyAuthorizationHex) throw new Error('Missing keyAuthorization in callback.')
+
+      const keyAuthorization = KeyAuthorization.deserialize(keyAuthorizationHex as Hex.Hex)
+      if (!keyAuthorization.signature)
+        throw new Error('Key authorization in callback is missing a signature.')
+      const signed = keyAuthorization as KeyAuthorization.Signed
+      const signature = params.get('signature') as Hex.Hex | null
+      const personalSignMessage = params.get('personalSignMessage')
+
+      if (managedKey)
+        await saveManagedKey(accountAddress as core_Address.Address, managedKey, signed)
+
+      return {
+        accountAddress: accountAddress as core_Address.Address,
+        keyAuthorization: signed,
+        ...(personalSignMessage ? { personalSign: { message: personalSignMessage } } : {}),
+        ...(signature ? { signature } : {}),
+      }
     }
 
     return {
       actions: {
-        async authorizeAccessKey(parameters, request) {
+        async authorizeAccessKey(parameters) {
           const { accounts, activeAccount } = store.getState()
           const account = accounts[activeAccount]?.address
-          const accessKey = await prepareAccessKey(parameters)
-
-          const result = await provider.request({
-            ...request,
-            params: [
-              z.encode(
-                Rpc.wallet_authorizeAccessKey.parameters,
-                accessKey ? accessKey.request : parameters,
-              )!,
-            ],
+          const result = await authorize({
+            ...(account ? { account } : {}),
+            authorizeAccessKey: parameters,
+            method: 'wallet_authorizeAccessKey',
+            ...(parameters.showDeposit !== undefined
+              ? { showDeposit: parameters.showDeposit }
+              : {}),
           })
 
           if (!account)
             store.setState({
-              accounts: [{ address: result.rootAddress }],
+              accounts: [{ address: result.accountAddress }],
               activeAccount: 0,
             })
-          if (accessKey) await saveAccessKey(result.rootAddress, result.keyAuthorization, accessKey)
-
-          return result
-        },
-        async createAccount(parameters, request) {
-          if (parameters?.digest)
-            throw unsupported(
-              '`wallet_connect` digest signing not supported by React Native adapter.',
-            )
-
-          const accessKey = await prepareAccessKey(parameters?.authorizeAccessKey)
-
-          const { accounts } = await provider.request(
-            AccessKeyRequests.withAuthorizeAccessKey(request, accessKey?.request),
-          )
-
-          const address = accounts[0]?.address
-          const capabilities = accounts[0]?.capabilities
-          const keyAuthorization = capabilities?.keyAuthorization
-
-          if (accessKey && address && keyAuthorization)
-            await saveAccessKey(address, keyAuthorization, accessKey)
 
           return {
-            accounts: accounts.map((a) => ({ address: a.address, capabilities: a.capabilities })),
-            ...(keyAuthorization ? { keyAuthorization } : {}),
-            ...(capabilities?.personalSign ? { personalSign: capabilities.personalSign } : {}),
-            ...(capabilities?.signature ? { signature: capabilities.signature } : {}),
+            keyAuthorization: KeyAuthorization.toRpc(result.keyAuthorization),
+            rootAddress: result.accountAddress,
           }
         },
-        async loadAccounts(parameters, request) {
+        async createAccount(parameters) {
           if (parameters?.digest)
             throw unsupported(
               '`wallet_connect` digest signing not supported by React Native adapter.',
             )
 
-          const accessKey = await prepareAccessKey(parameters?.authorizeAccessKey)
-
-          const { accounts } = await provider.request(
-            AccessKeyRequests.withAuthorizeAccessKey(request, accessKey?.request),
-          )
-
-          const address = accounts[0]?.address
-          const capabilities = accounts[0]?.capabilities
-          const keyAuthorization = capabilities?.keyAuthorization
-
-          if (accessKey && address && keyAuthorization)
-            await saveAccessKey(address, keyAuthorization, accessKey)
+          const result = await authorize({
+            authorizeAccessKey: parameters?.authorizeAccessKey,
+            method: 'wallet_connect',
+            ...(parameters?.personalSign ? { personalSign: parameters.personalSign } : {}),
+            ...(parameters?.showDeposit !== undefined
+              ? { showDeposit: parameters.showDeposit }
+              : {}),
+          })
 
           return {
-            accounts: accounts.map((a) => ({ address: a.address, capabilities: a.capabilities })),
-            ...(keyAuthorization ? { keyAuthorization } : {}),
-            ...(capabilities?.personalSign ? { personalSign: capabilities.personalSign } : {}),
-            ...(capabilities?.signature ? { signature: capabilities.signature } : {}),
+            accounts: [
+              {
+                address: result.accountAddress,
+                capabilities: {},
+              },
+            ],
+            keyAuthorization: KeyAuthorization.toRpc(result.keyAuthorization),
+            ...(result.personalSign ? { personalSign: result.personalSign } : {}),
+            ...(result.signature ? { signature: result.signature } : {}),
+          }
+        },
+        async loadAccounts(parameters) {
+          if (parameters?.digest)
+            throw unsupported(
+              '`wallet_connect` digest signing not supported by React Native adapter.',
+            )
+
+          const result = await authorize({
+            authorizeAccessKey: parameters?.authorizeAccessKey,
+            method: 'wallet_connect',
+            ...(parameters?.personalSign ? { personalSign: parameters.personalSign } : {}),
+            ...(parameters?.showDeposit !== undefined
+              ? { showDeposit: parameters.showDeposit }
+              : {}),
+          })
+
+          return {
+            accounts: [
+              {
+                address: result.accountAddress,
+                capabilities: {},
+              },
+            ],
+            keyAuthorization: KeyAuthorization.toRpc(result.keyAuthorization),
+            ...(result.personalSign ? { personalSign: result.personalSign } : {}),
+            ...(result.signature ? { signature: result.signature } : {}),
           }
         },
         async revokeAccessKey() {
@@ -274,8 +445,6 @@ export declare namespace reactNative {
   export type Options = {
     /** Host URL for the mobile auth page. @default "https://wallet.tempo.xyz" */
     host: string
-    /** Consumer identifier sent to the wallet mobile auth page. */
-    id?: string | undefined
     /** Provider display name. @default "Tempo Mobile" */
     name?: string | undefined
     /**
@@ -287,14 +456,100 @@ export declare namespace reactNative {
     redirectUri: string
     /** Reverse-DNS provider identifier. @default "xyz.tempo.mobile" */
     rdns?: string | undefined
+    /** Secure storage adapter for persisting managed access keys. */
+    secureStorage?: Storage.Storage | undefined
   }
 }
 
-declare namespace prepareAccessKey {
+declare namespace resolveManagedKey {
   type ReturnType = {
-    material?: { privateKey: Hex.Hex } | undefined
-    request: Adapter.authorizeAccessKey.Parameters
+    account: TempoAccount.Account
+    key: Hex.Hex
+    keyAddress: core_Address.Address
+    keyType: 'secp256k1' | 'p256'
+    publicKey: Hex.Hex
   }
+}
+
+declare namespace loadManagedKey {
+  type Options = {
+    keyType?: 'secp256k1' | 'p256' | undefined
+  }
+
+  type ReturnType = resolveManagedKey.ReturnType & {
+    expiry: number
+    storedAuthorization: KeyAuthorization.Signed
+  }
+}
+
+/** Entry shape persisted to secure storage for managed access keys. */
+type ManagedKeyEntry = {
+  chainId: number
+  expiry: number
+  key: Hex.Hex
+  keyAddress: core_Address.Address
+  keyAuthorization: Hex.Hex
+  keyType: 'secp256k1' | 'p256'
+  walletAddress: core_Address.Address
+}
+
+class AuthCancelledError extends Error {
+  constructor() {
+    super('Authentication was cancelled by the user.')
+    this.name = 'AuthCancelledError'
+  }
+}
+
+class StateMismatchError extends Error {
+  constructor() {
+    super('State parameter mismatch — possible CSRF attack.')
+    this.name = 'StateMismatchError'
+  }
+}
+
+async function defaultOpen(url: string, redirectUri: string): Promise<string | null> {
+  const { openAuthSessionAsync } = await import('expo-web-browser')
+  const result = await openAuthSessionAsync(url, redirectUri)
+  if (result.type !== 'success') return null
+  return result.url
+}
+
+function buildAuthUrl(
+  host: string,
+  params: {
+    callback: string
+    chainId: number
+    expiry?: number | undefined
+    keyType?: string | undefined
+    limits?: readonly { token: string; limit: string }[] | undefined
+    personalSign?: { message: string } | undefined
+    pubKey: Hex.Hex
+    showDeposit?: Adapter.createAccount.Parameters['showDeposit'] | undefined
+    state: string
+  },
+): string {
+  const url = new URL('/remote/auth/mobile', host)
+  url.searchParams.set('pubKey', params.pubKey)
+  if (params.keyType) url.searchParams.set('keyType', params.keyType)
+  url.searchParams.set('chainId', `0x${params.chainId.toString(16)}`)
+  if (typeof params.expiry !== 'undefined')
+    url.searchParams.set('expiry', `0x${params.expiry.toString(16)}`)
+  if (params.limits) url.searchParams.set('limits', JSON.stringify(params.limits))
+  if (params.personalSign) url.searchParams.set('personalSign', JSON.stringify(params.personalSign))
+  if (params.showDeposit === true) url.searchParams.set('showDeposit', 'true')
+  else if (params.showDeposit)
+    url.searchParams.set('showDeposit', JSON.stringify(params.showDeposit))
+  url.searchParams.set('callback', params.callback)
+  url.searchParams.set('state', params.state)
+  return url.toString()
+}
+
+function managedKeyStorageKey(
+  address: core_Address.Address,
+  chainId: number,
+  keyType?: string | undefined,
+): string {
+  return `managedKey.${address.toLowerCase()}.${chainId}${keyType ? `.${keyType}` : ''}`
 }
 
 function unsupported(message: string) {
