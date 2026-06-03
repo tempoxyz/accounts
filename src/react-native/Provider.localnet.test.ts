@@ -67,6 +67,7 @@ describe('create', () => {
       }),
       chains: [chain],
       host: 'https://wallet.tempo.xyz',
+      id: 'https://app.example',
       open: browser.open,
       redirectUri: 'accounts-playground://auth',
       storage: Storage.memory(),
@@ -81,6 +82,7 @@ describe('create', () => {
     expect({
       callback: authUrl.searchParams.get('callback'),
       host: authUrl.origin,
+      id: authUrl.searchParams.get('id'),
       message: Boolean(authUrl.searchParams.get('message')),
       path: authUrl.pathname,
       pubkey: Boolean(authUrl.searchParams.get('pubkey')),
@@ -90,6 +92,7 @@ describe('create', () => {
       {
         "callback": "accounts-playground://auth",
         "host": "https://wallet.tempo.xyz",
+        "id": "https://app.example",
         "message": true,
         "path": "/remote/auth/mobile",
         "pubkey": true,

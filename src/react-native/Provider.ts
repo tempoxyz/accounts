@@ -5,7 +5,7 @@ import { asyncStorage, secureStorage } from './storage.js'
 
 /** Creates a provider for React Native apps using system browser authentication. */
 export function create(options: create.Options): create.ReturnType {
-  const { host = 'https://wallet.tempo.xyz', redirectUri, open, ...rest } = options
+  const { host = 'https://wallet.tempo.xyz', id, name, open, rdns, redirectUri, ...rest } = options
   const isReactNative = typeof navigator !== 'undefined' && navigator.product === 'ReactNative'
 
   return CoreProvider.create({
@@ -15,7 +15,10 @@ export function create(options: create.Options): create.ReturnType {
     adapter: reactNative({
       host,
       redirectUri,
+      ...(id ? { id } : {}),
+      ...(name ? { name } : {}),
       ...(open ? { open } : {}),
+      ...(rdns ? { rdns } : {}),
     }),
   })
 }
