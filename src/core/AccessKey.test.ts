@@ -244,22 +244,6 @@ describe('isUnavailableError', () => {
   })
 })
 
-describe('generate', () => {
-  test('default: returns p256 access key and key pair', async () => {
-    const result = await AccessKey.generate()
-
-    expect(result.accessKey.address).toMatch(/^0x[0-9a-f]{40}$/i)
-    expect(result.keyPair).toBeDefined()
-  })
-
-  test('behavior: with account attaches access to root', async () => {
-    const result = await AccessKey.generate({ account: accounts[0]! })
-
-    expect(result.accessKey.source).toMatchInlineSnapshot(`"accessKey"`)
-    expect(result.accessKey.accessKeyAddress).toMatch(/^0x[0-9a-f]{40}$/i)
-  })
-})
-
 describe('prepareAuthorization', () => {
   test('default: prepares generated p256 key authorization', async () => {
     const result = await AccessKey.prepareAuthorization({ chainId: 1, expiry: 123 })

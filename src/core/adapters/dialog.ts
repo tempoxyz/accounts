@@ -1,11 +1,9 @@
-import { Address, Provider as ox_Provider, RpcResponse } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { Hex, Provider as ox_Provider } from 'ox'
+import { custom } from 'viem'
 import { z } from 'zod/mini'
 
-import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
-import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as RemoteRequests from '../internal/RemoteRequests.js'
 import * as Schema from '../Schema.js'
 import * as Rpc from '../zod/rpc.js'
@@ -42,7 +40,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       'due to lack of WebAuthn passkey support in non-secure contexts.',
     )
 
-  return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
+  return Adapter.define({ icon, name, rdns }, ({ getAccount, store }) => {
     const detach = RemoteRequests.attach(host, { dialog, host, store, theme })
 
     /** Returns the active account from the adapter source store. */
@@ -60,6 +58,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     const provider = ox_Provider.from(
       {
         async request(r) {
+          if (r.method === 'eth_chainId') return Hex.fromNumber(store.getState().chainId)
           return RemoteRequests.request(host, {
             account: getActiveAccount(),
             chainId: store.getState().chainId,
@@ -70,85 +69,19 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       { schema: Schema.ox },
     )
 
-    /**
-     * Prepares a local key pair when `authorizeAccessKey` is requested without
-     * an external publicKey/address, and returns the params to inject into the
-     * RPC request so the dialog signs the authorization.
-     */
-    async function generateAccessKey(options: Adapter.authorizeAccessKey.Parameters | undefined) {
-      if (!options) return undefined
-      if (options.publicKey || options.address) return undefined
-      if (options.keyType && options.keyType !== 'p256')
-        throw new RpcResponse.InvalidParamsError({
-          message: `\`keyType: "${options.keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
-        })
-
-      const generated = await AccessKey.generate()
-      const { accessKey } = generated
-      return {
-        accessKey,
-        generated,
-        request: {
-          ...options,
-          publicKey: accessKey.publicKey,
-          keyType: 'p256' as const,
-        },
-      }
-    }
-
-    /**
-     * After the dialog returns a signed key authorization, saves the local
-     * key pair + key authorization into the store.
-     */
-    function saveAccessKey(
-      address: Address.Address,
-      keyAuth: KeyAuthorization.Rpc,
-      generated: Awaited<ReturnType<typeof AccessKey.generate>>,
-    ) {
-      const keyAuthorization = KeyAuthorization.fromRpc(keyAuth)
-      AccessKey.add({
-        account: address,
-        authorization: keyAuthorization,
-        keyPair: generated.keyPair,
-        store,
-      })
-    }
-
     return {
       cleanup() {
         detach()
       },
       forwardsAuth: true,
       actions: {
-        async createAccount(parameters, request) {
-          const accessKey = await generateAccessKey(parameters.authorizeAccessKey)
-
+        async createAccount(_parameters, request) {
           const { accounts } = await provider.request({
             ...request,
-            params: [
-              {
-                ...request.params?.[0],
-                capabilities: {
-                  ...request.params?.[0]?.capabilities,
-                  ...(accessKey
-                    ? {
-                        authorizeAccessKey: z.encode(
-                          Rpc.wallet_connect.authorizeAccessKey,
-                          accessKey.request,
-                        ),
-                      }
-                    : {}),
-                },
-              },
-            ] as const,
           })
 
-          const address = accounts[0]?.address
           const capabilities = accounts[0]?.capabilities
           const keyAuthorization = capabilities?.keyAuthorization
-
-          if (accessKey && address && keyAuthorization)
-            saveAccessKey(address, keyAuthorization, accessKey.generated)
 
           return {
             accounts: accounts.map((a) => ({ address: a.address })),
@@ -159,35 +92,13 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           }
         },
 
-        async loadAccounts(parameters, request) {
-          const accessKey = await generateAccessKey(parameters?.authorizeAccessKey)
-
+        async loadAccounts(_parameters, request) {
           const { accounts } = await provider.request({
             ...request,
-            params: [
-              {
-                ...request.params?.[0],
-                capabilities: {
-                  ...request.params?.[0]?.capabilities,
-                  ...(accessKey
-                    ? {
-                        authorizeAccessKey: z.encode(
-                          Rpc.wallet_connect.authorizeAccessKey,
-                          accessKey.request,
-                        ),
-                      }
-                    : {}),
-                },
-              },
-            ] as const,
           })
 
-          const address = accounts[0]?.address
           const capabilities = accounts[0]?.capabilities
           const keyAuthorization = capabilities?.keyAuthorization
-
-          if (accessKey && address && keyAuthorization)
-            saveAccessKey(address, keyAuthorization, accessKey.generated)
 
           return {
             accounts: accounts.map((a) => ({ address: a.address })),
@@ -196,156 +107,6 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             ...(capabilities?.signature ? { signature: capabilities.signature } : {}),
             ...(capabilities?.personalSign ? { personalSign: capabilities.personalSign } : {}),
           }
-        },
-
-        async signPersonalMessage(_params, request) {
-          return await provider.request(request)
-        },
-
-        async signTransaction(parameters, request) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient({
-            chainId: parameters.chainId,
-            feePayer: (() => {
-              if (feePayer === false) return false
-              if (typeof feePayer === 'string') return feePayer
-              return undefined
-            })(),
-          })
-          const transaction =
-            parameters.from && typeof parameters.chainId !== 'undefined'
-              ? await AccessKeyTransaction.create({
-                  address: parameters.from,
-                  calls: parameters.calls,
-                  chainId: parameters.chainId,
-                  client,
-                  store,
-                })
-              : undefined
-          if (transaction) {
-            try {
-              const prepared = await transaction.prepare({
-                ...rest,
-                ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-              })
-              return await prepared.sign()
-            } catch (error) {
-              console.warn('[accounts] access key sign failed, falling through to dialog:', error)
-            }
-          }
-          return await provider.request({
-            ...request,
-            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
-          })
-        },
-
-        async signTypedData(_params, request) {
-          return await provider.request(request)
-        },
-
-        async sendTransaction(parameters, request) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient({
-            chainId: parameters.chainId,
-            feePayer: (() => {
-              if (feePayer === false) return false
-              if (typeof feePayer === 'string') return feePayer
-              return undefined
-            })(),
-          })
-          const transaction =
-            parameters.from && typeof parameters.chainId !== 'undefined'
-              ? await AccessKeyTransaction.create({
-                  address: parameters.from,
-                  calls: parameters.calls,
-                  chainId: parameters.chainId,
-                  client,
-                  store,
-                })
-              : undefined
-          if (transaction) {
-            try {
-              const prepared = await transaction.prepare({
-                ...rest,
-                ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-              })
-              return await prepared.send()
-            } catch (error) {
-              console.warn('[accounts] access key sign failed, falling through to dialog:', error)
-            }
-          }
-          return await provider.request({
-            ...request,
-            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
-          })
-        },
-
-        async sendTransactionSync(parameters, request) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient({
-            chainId: parameters.chainId,
-            feePayer: (() => {
-              if (feePayer === false) return false
-              if (typeof feePayer === 'string') return feePayer
-              return undefined
-            })(),
-          })
-          const transaction =
-            parameters.from && typeof parameters.chainId !== 'undefined'
-              ? await AccessKeyTransaction.create({
-                  address: parameters.from,
-                  calls: parameters.calls,
-                  chainId: parameters.chainId,
-                  client,
-                  store,
-                })
-              : undefined
-          if (transaction) {
-            try {
-              const prepared = await transaction.prepare({
-                ...rest,
-                ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-              })
-              return await prepared.sendSync()
-            } catch (error) {
-              console.warn('[accounts] access key sign failed, falling through to dialog:', error)
-            }
-          }
-          return await provider.request({
-            ...request,
-            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
-          })
-        },
-
-        async authorizeAccessKey(parameters, request) {
-          const accessKey = await generateAccessKey(parameters)
-
-          const result = await provider.request({
-            ...request,
-            params: [
-              z.encode(
-                Rpc.wallet_authorizeAccessKey.parameters,
-                accessKey ? accessKey.request : parameters,
-              )!,
-            ],
-          })
-
-          if (accessKey) {
-            const account = getAccount({ signable: false })
-            saveAccessKey(account.address, result.keyAuthorization, accessKey.generated)
-          }
-
-          return result
-        },
-
-        async revokeAccessKey(params, request) {
-          await provider.request(request)
-          AccessKey.remove({
-            accessKey: params.accessKeyAddress,
-            account: params.address,
-            chainId: store.getState().chainId,
-            store,
-          })
         },
 
         async deposit(_params, request) {
@@ -380,6 +141,13 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         async disconnect() {
           store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
         },
+      },
+      getAccount(options = {}) {
+        const account = getAccount({ address: options.address, signable: false })
+        return {
+          account: { address: account.address, type: 'json-rpc' as const },
+          transport: custom(provider),
+        }
       },
     }
   })

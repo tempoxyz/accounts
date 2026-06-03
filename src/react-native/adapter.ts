@@ -438,6 +438,9 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
           return await account.signTypedData(JSON.parse(data) as never)
         },
       },
+      generateAccessKey() {
+        return undefined
+      },
     }
   })
 }
