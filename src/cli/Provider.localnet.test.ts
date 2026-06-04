@@ -176,13 +176,11 @@ describe('Provider.create', () => {
         open: async (url) => {
           opened.push(url)
           const code = new URL(url).searchParams.get('code')!
-          console.log('[DEBUG test open] authorizing code', code)
-          const res = await fetch(`${server.url}/cli-auth`, {
+          await fetch(`${server.url}/cli-auth`, {
             body: JSON.stringify(await authorize(code)),
             headers: { 'content-type': 'application/json' },
             method: 'POST',
           })
-          console.log('[DEBUG test open] authorize response', res.status, await res.clone().text())
         },
         host: `${server.url}/cli-auth`,
       })

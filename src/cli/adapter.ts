@@ -6,7 +6,6 @@ import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 import * as z from 'zod/mini'
 
 import * as Adapter from '../core/Adapter.js'
-import * as AccessKeyTransaction from '../core/internal/AccessKeyTransaction.js'
 import * as CliAuth from '../server/CliAuth.js'
 
 /**
@@ -15,96 +14,18 @@ import * as CliAuth from '../server/CliAuth.js'
 export function cli(options: cli.Options): Adapter.Adapter {
   const { name = 'Tempo CLI', rdns = 'xyz.tempo.cli' } = options
 
-  return Adapter.define({ name, rdns }, ({ getAccount, getClient, store }) => {
-    async function resolveManagedKey(
-      options: {
-        address?: Adapter.authorizeAccessKey.ReturnType['rootAddress'] | undefined
-        keyType?: Adapter.authorizeAccessKey.Parameters['keyType'] | undefined
-      } = {},
-    ): Promise<resolveManagedKey.ReturnType> {
-      const { address, keyType } = options
-
-      const requestedKeyType = keyType === 'p256' || keyType === 'secp256k1' ? keyType : undefined
-      const entry = address
-        ? store.getState().accessKeys.find((key) => {
-            if (key.access.toLowerCase() !== address.toLowerCase()) return false
-            if (key.chainId !== store.getState().chainId) return false
-            if (requestedKeyType && key.keyType !== requestedKeyType) return false
-            if (key.keyType !== 'p256' && key.keyType !== 'secp256k1') return false
-            return 'privateKey' in key && Boolean(key.privateKey)
-          })
-        : undefined
-      if (entry && 'privateKey' in entry && entry.privateKey) {
-        const keyType_entry = entry.keyType === 'p256' ? 'p256' : 'secp256k1'
-        const account =
-          keyType_entry === 'p256'
-            ? TempoAccount.fromP256(entry.privateKey, { access: address })
-            : TempoAccount.fromSecp256k1(entry.privateKey, { access: address })
-        return {
-          account,
-          key: entry.privateKey,
-          keyType: keyType_entry,
-          publicKey: account.publicKey,
-        }
-      }
-
-      const nextKeyType = requestedKeyType === 'p256' ? 'p256' : 'secp256k1'
-      const key = nextKeyType === 'p256' ? P256.randomPrivateKey() : Secp256k1.randomPrivateKey()
-      const account =
-        nextKeyType === 'p256'
-          ? TempoAccount.fromP256(key, address ? { access: address } : undefined)
-          : TempoAccount.fromSecp256k1(key, address ? { access: address } : undefined)
-
-      return {
-        account,
-        key,
-        keyType: nextKeyType,
-        publicKey: account.publicKey,
-      }
-    }
-
-    async function saveManagedKey(
+  return Adapter.define({ name, rdns }, ({ store }) => {
+    async function saveGeneratedAccessKey(
       address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
-      managedKey: Awaited<ReturnType<typeof resolveManagedKey>>,
+      accessKey: ReturnType<typeof createAccessKey>,
       keyAuthorization: z.output<typeof CliAuth.keyAuthorization>,
     ) {
-      if (!managedKey) return
-
       const signed = KeyAuthorization.fromRpc(z.encode(CliAuth.keyAuthorization, keyAuthorization))
       store.accessKeys.add({
         account: address,
         authorization: signed,
-        privateKey: managedKey.key,
+        privateKey: accessKey.privateKey,
       })
-    }
-
-    async function prepareManagedTransaction(
-      client: ReturnType<typeof getClient>,
-      parameters: AccessKeyTransaction.create.PrepareParameters,
-      options: {
-        calls?: AccessKeyTransaction.create.Options['calls'] | undefined
-        chainId?: number | undefined
-      } = {},
-    ) {
-      const state = store.getState()
-      const address = parameters.from ?? state.accounts[state.activeAccount]?.address
-      if (!address) throw new core_Provider.DisconnectedError({ message: 'No active account.' })
-      const transaction = await AccessKeyTransaction.create({
-        address,
-        calls: options.calls,
-        chainId: options.chainId ?? state.chainId,
-        client,
-        store,
-      })
-      if (!transaction)
-        throw new core_Provider.UnauthorizedError({
-          message: `Account "${address}" cannot sign with an access key.`,
-        })
-      return await transaction.prepare(parameters)
-    }
-
-    async function loadManagedAccount(address: Adapter.signPersonalMessage.Parameters['address']) {
-      return getAccount({ address, signable: true })
     }
 
     async function authorize(request: {
@@ -121,16 +42,13 @@ export function cli(options: cli.Options): Adapter.Adapter {
       } = options
       const { account, authorizeAccessKey, method } = request
 
-      const managedKey =
+      const generatedAccessKey =
         authorizeAccessKey && !authorizeAccessKey.publicKey && !authorizeAccessKey.address
-          ? await resolveManagedKey({
-              ...(account ? { address: account } : {}),
-              ...(authorizeAccessKey.keyType ? { keyType: authorizeAccessKey.keyType } : {}),
-            })
+          ? createAccessKey({ keyType: authorizeAccessKey.keyType })
           : undefined
 
-      const publicKey = authorizeAccessKey?.publicKey ?? managedKey?.publicKey
-      const keyType = authorizeAccessKey?.keyType ?? managedKey?.keyType
+      const publicKey = authorizeAccessKey?.publicKey ?? generatedAccessKey?.publicKey
+      const keyType = authorizeAccessKey?.keyType ?? generatedAccessKey?.keyType
 
       if (!publicKey)
         throw new RpcResponse.InvalidParamsError({
@@ -187,8 +105,12 @@ export function cli(options: cli.Options): Adapter.Adapter {
         if (result.status === 'expired')
           throw new Error('Device code expired before authorization completed.')
 
-        if (managedKey)
-          await saveManagedKey(result.accountAddress, managedKey, result.keyAuthorization)
+        if (generatedAccessKey)
+          await saveGeneratedAccessKey(
+            result.accountAddress,
+            generatedAccessKey,
+            result.keyAuthorization,
+          )
 
         return result
       }
@@ -268,65 +190,20 @@ export function cli(options: cli.Options): Adapter.Adapter {
         async revokeAccessKey() {
           throw unsupported('`wallet_revokeAccessKey` not supported by CLI adapter.')
         },
-        async sendTransaction(parameters) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const prepared = await prepareManagedTransaction(
-            client,
-            {
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-            },
-            {
-              calls: parameters.calls as AccessKeyTransaction.create.Options['calls'],
-              chainId: parameters.chainId,
-            },
-          )
-          return await prepared.send()
-        },
-        async sendTransactionSync(parameters) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const prepared = await prepareManagedTransaction(
-            client,
-            {
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-            },
-            {
-              calls: parameters.calls as AccessKeyTransaction.create.Options['calls'],
-              chainId: parameters.chainId,
-            },
-          )
-          return await prepared.sendSync()
-        },
-        async signPersonalMessage({ address, data }) {
-          const account = await loadManagedAccount(address)
-          return await account.signMessage({ message: { raw: data } })
-        },
-        async signTransaction(parameters) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient(typeof feePayer === 'string' ? { feePayer } : {})
-          const prepared = await prepareManagedTransaction(
-            client,
-            {
-              ...rest,
-              ...(feePayer ? { feePayer: true } : {}),
-            },
-            {
-              calls: parameters.calls as AccessKeyTransaction.create.Options['calls'],
-              chainId: parameters.chainId,
-            },
-          )
-          return await prepared.sign()
-        },
-        async signTypedData({ address, data }) {
-          const account = await loadManagedAccount(address)
-          return await account.signTypedData(JSON.parse(data) as never)
-        },
       },
-      generateAccessKey() {
-        return undefined
+      async getAccount(options = {}) {
+        const { accounts, activeAccount, chainId } = store.getState()
+        const address = options.address ?? accounts[activeAccount]?.address
+        if (!address) throw new core_Provider.DisconnectedError({ message: 'No active account.' })
+        const account = await store.accessKeys.select({ account: address, chainId })
+        if (!account)
+          throw new core_Provider.UnauthorizedError({
+            message: `Account "${address}" cannot sign with an access key.`,
+          })
+        return { account }
+      },
+      generateAccessKey(options) {
+        return createAccessKey(options)
       },
     }
   })
@@ -346,15 +223,6 @@ export declare namespace cli {
     rdns?: string | undefined
     /** Poll timeout in milliseconds. @default 300000 */
     timeoutMs?: number | undefined
-  }
-}
-
-declare namespace resolveManagedKey {
-  type ReturnType = {
-    account: TempoAccount.Account
-    key: Hex.Hex
-    keyType: 'secp256k1' | 'p256'
-    publicKey: Hex.Hex
   }
 }
 
@@ -453,4 +321,18 @@ async function post<
 
 function unsupported(message: string) {
   return new core_Provider.UnsupportedMethodError({ message })
+}
+
+function createAccessKey(
+  options: Adapter.generateAccessKey.Options = {},
+): NonNullable<Adapter.generateAccessKey.ReturnType> {
+  const keyType = options.keyType === 'p256' ? 'p256' : 'secp256k1'
+  const privateKey = keyType === 'p256' ? P256.randomPrivateKey() : Secp256k1.randomPrivateKey()
+  const account =
+    keyType === 'p256' ? TempoAccount.fromP256(privateKey) : TempoAccount.fromSecp256k1(privateKey)
+  return {
+    keyType,
+    privateKey,
+    publicKey: account.publicKey,
+  }
 }

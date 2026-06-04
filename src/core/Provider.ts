@@ -261,9 +261,10 @@ export function create(options: create.Options = {}): create.ReturnType {
           return undefined
         })(),
       })
-      const transaction = parameters.from
+      const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      const transaction = address
         ? await AccessKeyTransaction.create({
-            address: parameters.from,
+            address,
             calls: parameters.calls,
             chainId,
             client,
@@ -299,9 +300,10 @@ export function create(options: create.Options = {}): create.ReturnType {
           return undefined
         })(),
       })
-      const transaction = parameters.from
+      const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      const transaction = address
         ? await AccessKeyTransaction.create({
-            address: parameters.from,
+            address,
             calls: parameters.calls,
             chainId,
             client,
@@ -345,9 +347,10 @@ export function create(options: create.Options = {}): create.ReturnType {
           return undefined
         })(),
       })
-      const transaction = parameters.from
+      const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      const transaction = address
         ? await AccessKeyTransaction.create({
-            address: parameters.from,
+            address,
             calls: parameters.calls,
             chainId,
             client,
