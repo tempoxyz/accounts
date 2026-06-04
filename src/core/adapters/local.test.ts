@@ -165,7 +165,7 @@ describe('local', () => {
       expect(captured).toHaveLength(1)
       expect(captured[0]!.digest).not.toBe(hashMessage('hello'))
 
-      // The SIWT proof is the signed key authorization, surfaced as `keyAuthorization`.
+      // The auth proof is the signed key authorization, surfaced as `keyAuthorization`.
       const keyAuthorization = result.personalSign?.keyAuthorization
       expect(keyAuthorization).toBeDefined()
 

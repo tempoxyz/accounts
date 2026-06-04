@@ -111,7 +111,7 @@ export function local(options: local.Options): Adapter.Adapter {
             )
             const chainId = grantOptions?.chainId ?? client.chain.id
 
-            // TIP-1053 witness binding (see `loadAccounts`): fold the SIWT
+            // TIP-1053 witness binding (see `loadAccounts`): fold the auth
             // message into the access-key authorization and sign both in the
             // single create-account ceremony when the chain supports it.
             const witness =
@@ -225,7 +225,7 @@ export function local(options: local.Options): Adapter.Adapter {
             // an `authorizeAccessKey` are requested on a witness-capable chain,
             // bind the message into the key authorization's `witness` and sign
             // both in ONE ceremony. The signed key authorization doubles as the
-            // SIWT proof. Otherwise fall back to the two-ceremony path below.
+            // auth proof. Otherwise fall back to the two-ceremony path below.
             const witness =
               personalSign && authorizeAccessKey && supportsWitness(client.chain)
                 ? hashMessage(personalSign.message)
@@ -318,7 +318,7 @@ export function local(options: local.Options): Adapter.Adapter {
                 ? {
                     personalSign: {
                       message: personalSign.message,
-                      // On the witness path the SIWT proof IS the signed key
+                      // On the witness path the auth proof IS the signed key
                       // authorization; surface it so the verifier can run the
                       // TIP-1053 check.
                       ...(witness && keyAuthorization_signed
@@ -359,7 +359,7 @@ export declare namespace local {
 
 /**
  * Returns whether the given chain supports TIP-1053 witness binding, which
- * lets the wallet collapse access-key authorization and the SIWT proof into a
+ * lets the wallet collapse access-key authorization and the auth proof into a
  * single passkey ceremony. Witness binding ships in the T5 hardfork, so a
  * chain qualifies only once it is at T5 or later.
  *

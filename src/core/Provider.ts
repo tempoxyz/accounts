@@ -1197,7 +1197,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                             address: accountAddress,
                             message: verifyMessage,
                             signature,
-                            // TIP-1053 witness path: the SIWT proof is the signed
+                            // TIP-1053 witness path: the auth proof is the signed
                             // key authorization, so the verifier checks
                             // `witness == hashMessage(message)` and recovers over
                             // the authorization digest instead of the message.
