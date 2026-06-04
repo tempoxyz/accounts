@@ -132,11 +132,11 @@ type Key = {
 /** Store-bound access-key operations. */
 type Manager = {
   /** Adds a signed access-key authorization. */
-  add: (options: Omit<add.Options, 'store'>) => Promise<add.ReturnType>
+  add: (options: Omit<add.Options, 'store'>) => add.ReturnType
   /** Prepares, signs, and saves an access key authorization. */
   authorize: (options: Omit<authorize.Options, 'store'>) => Promise<authorize.ReturnType>
   /** Clears all access-key records. */
-  clear: () => Promise<void>
+  clear: () => void
   /** Returns publication status for a stored or on-chain access key. */
   getStatus: (options: Omit<StatusQuery, 'store'>) => Promise<Status>
   /** Returns a locally-signable access key account by exact address. */
@@ -144,13 +144,13 @@ type Manager = {
   /** Returns access-key metadata matching a query. */
   list: (options: Omit<ListQuery, 'store'>) => readonly AccessKey[]
   /** Removes an access-key record. */
-  remove: (options: Omit<remove.Options, 'store'>) => Promise<void>
+  remove: (options: Omit<remove.Options, 'store'>) => void
   /** Selects a locally-signable access key account for an intent. */
   select: (
     options: Omit<SelectQuery, 'store'>,
   ) => Promise<TempoAccount.AccessKeyAccount | undefined>
   /** Updates stored authorization metadata for an existing access key. */
-  updateAuthorization: (options: Omit<updateAuthorization.Options, 'store'>) => Promise<void>
+  updateAuthorization: (options: Omit<updateAuthorization.Options, 'store'>) => void
 }
 
 /** Creates store-bound access-key operations. */
@@ -283,7 +283,7 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
     signature: SignatureEnvelope.from(signature),
   })
 
-  await add({
+  add({
     account: account.address,
     authorization: keyAuthorization,
     ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
@@ -332,7 +332,7 @@ export async function getStatus(options: StatusQuery): Promise<Status> {
         now,
       }).catch(() => status.pending)
       if (publicationStatus === status.published)
-        await clearAuthorization({
+        clearAuthorization({
           accessKey: local.address,
           account,
           chainId,
@@ -422,7 +422,7 @@ function createKeyAuthorizationManager(store: ManagerOptions) {
         })[0]?.keyAuthorization
       },
       remove(key) {
-        void clearAuthorization({
+        clearAuthorization({
           account: key.address,
           accessKey: key.accessKey,
           chainId: key.chainId,
@@ -430,7 +430,7 @@ function createKeyAuthorizationManager(store: ManagerOptions) {
         })
       },
       set(key, keyAuthorization) {
-        void updateAuthorization({
+        updateAuthorization({
           account: key.address,
           accessKey: key.accessKey,
           authorization: keyAuthorization,
@@ -443,7 +443,7 @@ function createKeyAuthorizationManager(store: ManagerOptions) {
 }
 
 /** Adds a signed access key authorization. */
-export async function add(options: add.Options): Promise<add.ReturnType> {
+export function add(options: add.Options): add.ReturnType {
   const { account, authorization, keyPair, privateKey } = options
   const { store } = options
   const base = {
@@ -494,18 +494,18 @@ export declare namespace add {
   type ReturnType = AccessKey
 }
 
-async function clearAuthorization(options: Key & { store: ManagerOptions }): Promise<void> {
+function clearAuthorization(options: Key & { store: ManagerOptions }): void {
   const { store, ...key } = options
-  await patch({
+  patch({
     ...key,
     patch: { keyAuthorization: undefined },
     store,
   })
 }
 
-async function updateAuthorization(options: updateAuthorization.Options): Promise<void> {
+function updateAuthorization(options: updateAuthorization.Options): void {
   const { authorization, store, ...key } = options
-  await patch({
+  patch({
     ...key,
     patch: {
       expiry: authorization.expiry ?? undefined,
@@ -527,7 +527,7 @@ declare namespace updateAuthorization {
 }
 
 /** Removes an access key record. */
-export async function remove(options: remove.Options): Promise<void> {
+export function remove(options: remove.Options): void {
   const { store, ...key } = options
   store.state.setState((state) => ({
     accessKeys: state.accessKeys.filter((record) => !matches(record, key)),
@@ -543,7 +543,7 @@ export declare namespace remove {
 }
 
 /** Clears all access-key records. */
-async function clear(options: { store: ManagerOptions }): Promise<void> {
+function clear(options: { store: ManagerOptions }): void {
   const { store } = options
   store.state.setState({ accessKeys: [] })
 }
@@ -675,19 +675,8 @@ function list(options: ListQuery): readonly AccessKey[] {
   return store.state.getState().accessKeys.filter((key) => matches(key, query))
 }
 
-async function patch(
-  options: Key & { patch: Partial<AccessKey>; store: ManagerOptions },
-): Promise<void> {
+function patch(options: Key & { patch: Partial<AccessKey>; store: ManagerOptions }): void {
   const { patch, store, ...key } = options
-  patchRecord(store, key, patch)
-}
-
-function patchRecord(
-  store: ManagerOptions,
-  key: Key,
-  patch: Partial<AccessKey>,
-): AccessKey | undefined {
-  let nextRecord: AccessKey | undefined
   store.state.setState((state) => ({
     accessKeys: state.accessKeys.map((record) => {
       if (!matches(record, key)) return record
@@ -696,11 +685,9 @@ function patchRecord(
         if (typeof value === 'undefined') delete next[name]
         else next[name] = value
       }
-      nextRecord = next as AccessKey
-      return nextRecord
+      return next as AccessKey
     }),
   }))
-  return nextRecord
 }
 
 function matches(

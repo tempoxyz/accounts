@@ -223,7 +223,7 @@ export function iframe(): Dialog {
         syncAccounts(m, refs.store)
       })
       m.on('sync', ({ valid }) => {
-        if (valid === false) void refs.store.disconnect()
+        if (valid === false) refs.store.disconnect()
       })
       m.on('switch-mode', () => {
         hideDialog()

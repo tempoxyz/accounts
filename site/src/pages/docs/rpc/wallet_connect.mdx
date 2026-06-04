@@ -89,8 +89,6 @@ type AuthorizeAccessKeyCapability = {
     /** Window length in seconds. Omit for an absolute cap. */
     period?: number
   }[]
-  /** Private key material to keep in SDK storage. It is not forwarded to wallets over JSON-RPC. */
-  privateKey?: Hex
   publicKey?: Hex
   scopes?: {
     address: Address
@@ -116,8 +114,6 @@ type Auth = string | {
   returnToken?: boolean
 }
 ```
-
-`privateKey` is accepted by SDK adapters for locally managed access keys. Wallet approval surfaces should receive the derived public material, not the private key itself.
 
 ## Response
 

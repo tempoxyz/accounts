@@ -213,7 +213,7 @@ function removeForError(
   },
 ): void {
   if (!shouldRemoveForError(error)) return
-  void options.store.accessKeys.remove({
+  options.store.accessKeys.remove({
     accessKey: options.account.accessKeyAddress,
     account: options.address,
     chainId: options.chainId,

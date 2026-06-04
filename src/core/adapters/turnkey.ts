@@ -166,7 +166,7 @@ export function turnkey<const client extends turnkey.Client>(
       expiry_timeout = undefined
       restore_promise = undefined
       walletAccounts_cache = undefined
-      await store.disconnect()
+      store.disconnect()
     }
 
     function scheduleExpiry(session: turnkey.Session) {

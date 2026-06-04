@@ -208,7 +208,7 @@ export function local(options: local.Options): Adapter.Adapter {
                   signature: SignatureEnvelope.from(signature_keyAuthorization),
                 },
               )
-              await store.accessKeys.add({
+              store.accessKeys.add({
                 account: account.address,
                 authorization: keyAuthorization,
                 ...(keyAuthorization_unsigned.keyPair

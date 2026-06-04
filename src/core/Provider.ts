@@ -531,7 +531,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     const { keyPair, privateKey } = accessKey
     const material = keyPair ? { keyPair } : privateKey ? { privateKey } : undefined
     if (!material) return
-    await store.accessKeys.add({
+    store.accessKeys.add({
       account,
       authorization: KeyAuthorization.fromRpc(keyAuthorization),
       ...material,
@@ -562,7 +562,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         if (!AccessKey.isUnavailableError(error)) throw error
       }
     }
-    await store.accessKeys.remove({
+    store.accessKeys.remove({
       accessKey: parameters.accessKeyAddress,
       account: parameters.address,
       chainId: store.getState().chainId,
@@ -1255,7 +1255,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         credentials: 'include',
                       }).catch(() => {})
                     await actions.disconnect?.()
-                    await store.disconnect()
+                    store.disconnect()
                     return
                   }
 

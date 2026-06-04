@@ -137,7 +137,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async disconnect() {
-          await store.disconnect()
+          store.disconnect()
         },
       },
       getAccount(options = {}) {

@@ -74,7 +74,7 @@ function createMissingClient() {
   }
 }
 
-async function addAuthorization(options: {
+function addAuthorization(options: {
   address: `0x${string}`
   keyAuthorization: KeyAuthorization.Signed
   keyPair?: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
@@ -82,7 +82,7 @@ async function addAuthorization(options: {
   store: Store.Store
 }) {
   const { address, keyAuthorization, keyPair, privateKey, store } = options
-  await store.accessKeys.add({
+  store.accessKeys.add({
     account: address,
     authorization: keyAuthorization,
     ...(keyPair ? { keyPair } : {}),
@@ -119,7 +119,7 @@ describe('add', () => {
     const limits = [{ token: '0x20c0000000000000000000000000000000000001' as const, limit: 1000n }]
     const keyAuthorization = createKeyAuthorization(accessKey.address, { expiry, limits })
 
-    await addAuthorization({
+    addAuthorization({
       address: rootAddress,
       keyAuthorization,
       store,
@@ -149,7 +149,7 @@ describe('add', () => {
       keyType: 'secp256k1',
     })
 
-    await store.accessKeys.add({
+    store.accessKeys.add({
       account: rootAddress,
       authorization: keyAuthorization,
       privateKey: privateKeys[1],
@@ -176,7 +176,7 @@ describe('add', () => {
       keyType: 'secp256k1',
     })
 
-    await store.accessKeys.add({
+    store.accessKeys.add({
       account: rootAddress,
       authorization: keyAuthorization,
       privateKey: privateKeys[1],

@@ -1,4 +1,4 @@
-import { WebCryptoP256 } from 'ox'
+import { Json, WebCryptoP256 } from 'ox'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
@@ -30,16 +30,18 @@ async function getPersistedState(storage: Storage.Storage) {
 }
 
 function createJsonStorage() {
-  const items = new Map<string, unknown>()
+  const items = new Map<string, string>()
   return Storage.from({
     getItem<value>(name: string) {
-      return (items.get(name) as value) ?? null
+      const value = items.get(name)
+      if (!value) return null
+      return Json.parse(value) as value
     },
     removeItem(name: string) {
       items.delete(name)
     },
     setItem(name: string, value: unknown) {
-      items.set(name, value)
+      items.set(name, Json.stringify(value))
     },
   })
 }
@@ -394,7 +396,7 @@ describe('persistence', () => {
       auth: { logout: 'https://example.com/logout' },
     })
 
-    await store.disconnect()
+    store.disconnect()
 
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)

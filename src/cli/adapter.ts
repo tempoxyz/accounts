@@ -43,7 +43,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
       const deserialized = KeyAuthorization.deserialize(entry.keyAuthorization)
       if (!deserialized.signature) throw new Error('Managed access key is missing a signature.')
       const keyAuthorization = deserialized as KeyAuthorization.Signed
-      await store.accessKeys.add({
+      store.accessKeys.add({
         account: address,
         authorization: keyAuthorization,
         privateKey: entry.key,
@@ -102,7 +102,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
       if (!managedKey) return
 
       const signed = KeyAuthorization.fromRpc(z.encode(CliAuth.keyAuthorization, keyAuthorization))
-      await store.accessKeys.add({
+      store.accessKeys.add({
         account: address,
         authorization: signed,
         privateKey: managedKey.key,

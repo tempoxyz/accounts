@@ -57,13 +57,13 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       const keyAuthorization = deserialized as KeyAuthorization.Signed
 
       if (keyAuthorization.address.toLowerCase() === keyAddress.toLowerCase())
-        await store.accessKeys.add({
+        store.accessKeys.add({
           account: address,
           authorization: keyAuthorization,
           privateKey: entry.key,
         })
       else
-        await store.accessKeys.remove({
+        store.accessKeys.remove({
           account: address,
           accessKey: keyAuthorization.address,
           chainId: Number(keyAuthorization.chainId),
@@ -124,7 +124,7 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
     ) {
       if (!managedKey) return
 
-      await store.accessKeys.add({
+      store.accessKeys.add({
         account: address,
         authorization: keyAuthorization,
         privateKey: managedKey.key,

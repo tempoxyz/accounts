@@ -116,7 +116,7 @@ export function privy<const client extends privy.Client>(
     async function clear() {
       restore_promise = undefined
       walletAccounts = undefined
-      await store.disconnect()
+      store.disconnect()
     }
 
     async function hasValidSession() {
@@ -583,7 +583,7 @@ export function privy<const client extends privy.Client>(
           } catch (error) {
             if (!AccessKey.isUnavailableError(error)) throw error
           }
-          await store.accessKeys.remove({
+          store.accessKeys.remove({
             accessKey: parameters.accessKeyAddress,
             account: account.address,
             chainId: store.getState().chainId,

@@ -66,7 +66,7 @@ export type Store = ZustandStore & {
   /** Store-bound access-key operations. */
   accessKeys: ReturnType<typeof core_AccessKey.createManager>
   /** Disconnects all accounts and clears locally signable access-key material. */
-  disconnect: () => Promise<void>
+  disconnect: () => void
 }
 
 /** Options for {@link create}. */
@@ -127,11 +127,8 @@ export function create(options: Options): Store {
   ) as ZustandStore
   const store = state as Store
   store.accessKeys = core_AccessKey.createManager({ state })
-  store.disconnect = async () => {
-    const clear = store.accessKeys.clear()
-    state.setState({ accounts: [], activeAccount: 0, auth: undefined })
-    await clear
-  }
+  store.disconnect = () =>
+    state.setState({ accessKeys: [], accounts: [], activeAccount: 0, auth: undefined })
   return store
 }
 
