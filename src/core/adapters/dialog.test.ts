@@ -2,6 +2,7 @@ import { Provider as ox_Provider } from 'ox'
 import { tempoLocalnet } from 'viem/tempo/chains'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vp/test'
 
+import { accounts, privateKeys } from '../../../test/config.js'
 import * as Dialog from '../Dialog.js'
 import * as RemoteRequests from '../internal/RemoteRequests.js'
 import * as Provider from '../Provider.js'
@@ -411,6 +412,49 @@ describe('dialog', () => {
             "chainId": "0x539",
             "expiry": 123,
             "keyType": "secp256k1",
+          },
+        ],
+      }
+    `)
+
+    dialog_.failure(request, { code: 4001, message: 'Rejected' })
+    await promise.catch(() => undefined)
+  })
+
+  test('behavior: provider keeps SDK access-key private material out of forwarded JSON-RPC', async () => {
+    const dialog_ = createDialog()
+    const provider = Provider.create({
+      adapter: dialog({ dialog: dialog_.dialog, host }),
+      authorizeAccessKey: () => ({ expiry: 123, keyType: 'secp256k1', privateKey: privateKeys[1] }),
+      chains: [tempoLocalnet],
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    const promise = provider.request({
+      method: 'wallet_connect',
+    })
+    const request = await dialog_.takeRequest()
+    const { _decoded, ...request_rpc } = request.request as typeof request.request & {
+      _decoded?: unknown
+    }
+    void _decoded
+
+    expect(request_rpc).toMatchInlineSnapshot(`
+      {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "authorizeAccessKey": {
+                "address": "${accounts[1]!.address}",
+                "chainId": "0x539",
+                "expiry": 123,
+                "keyType": "secp256k1",
+              },
+            },
           },
         ],
       }

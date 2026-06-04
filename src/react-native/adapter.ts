@@ -10,7 +10,6 @@ import {
 import { KeyAuthorization } from 'ox/tempo'
 import { Actions, Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 
-import * as AccessKey from '../core/AccessKey.js'
 import * as Adapter from '../core/Adapter.js'
 import * as AccessKeyTransaction from '../core/internal/AccessKeyTransaction.js'
 import type * as Storage from '../core/Storage.js'
@@ -58,18 +57,16 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       const keyAuthorization = deserialized as KeyAuthorization.Signed
 
       if (keyAuthorization.address.toLowerCase() === keyAddress.toLowerCase())
-        AccessKey.add({
+        store.accessKeys.add({
           account: address,
           authorization: keyAuthorization,
           privateKey: entry.key,
-          store,
         })
       else
-        AccessKey.remove({
+        store.accessKeys.remove({
           account: address,
           accessKey: keyAuthorization.address,
           chainId: Number(keyAuthorization.chainId),
-          store,
         })
 
       return {
@@ -127,11 +124,10 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
     ) {
       if (!managedKey) return
 
-      AccessKey.add({
+      store.accessKeys.add({
         account: address,
         authorization: keyAuthorization,
         privateKey: managedKey.key,
-        store,
       })
 
       const { secureStorage } = options

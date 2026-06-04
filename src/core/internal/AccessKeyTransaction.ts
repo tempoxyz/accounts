@@ -4,7 +4,6 @@ import { prepareTransactionRequest } from 'viem/actions'
 import type { PrepareTransactionRequestReturnType } from 'viem/actions'
 import type { Account as TempoAccount, Transaction as TempoTransaction } from 'viem/tempo'
 
-import * as AccessKey from '../AccessKey.js'
 import * as ExecutionError from '../ExecutionError.js'
 import type * as Store from '../Store.js'
 import type * as Rpc from '../zod/rpc.js'
@@ -27,11 +26,10 @@ const removalErrorNames = new Set([
 /** Creates a transaction helper for a matching locally-signable access key. */
 export async function create(options: create.Options): Promise<create.ReturnType> {
   const { address, calls, chainId, client, store } = options
-  const account = await AccessKey.select({
+  const account = await store.accessKeys.select({
     account: address,
     calls,
     chainId,
-    store,
   })
   if (!account) return undefined
   return createTransaction({ account, address, chainId, client, store })
@@ -215,11 +213,10 @@ function removeForError(
   },
 ): void {
   if (!shouldRemoveForError(error)) return
-  AccessKey.remove({
+  options.store.accessKeys.remove({
     accessKey: options.account.accessKeyAddress,
     account: options.address,
     chainId: options.chainId,
-    store: options.store,
   })
 }
 

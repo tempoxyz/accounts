@@ -113,10 +113,10 @@ export function privy<const client extends privy.Client>(
       }
     }
 
-    function clear() {
+    async function clear() {
       restore_promise = undefined
       walletAccounts = undefined
-      store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
+      store.disconnect()
     }
 
     async function hasValidSession() {
@@ -205,13 +205,13 @@ export function privy<const client extends privy.Client>(
         if (persisted.length === 0) return
 
         if (!(await hasValidSession())) {
-          clear()
+          await clear()
           throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
         }
 
-        const restored = await loadEthereumWallets(await getPrivyClient()).catch((error) => {
+        const restored = await loadEthereumWallets(await getPrivyClient()).catch(async (error) => {
           if (!isSessionError(error)) throw error
-          clear()
+          await clear()
           throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
         })
         walletAccounts = restored
@@ -227,7 +227,7 @@ export function privy<const client extends privy.Client>(
         // signed in, wallets removed), wipe the stale state so callers see a
         // clean disconnected state instead of ghost accounts without providers.
         if (accounts.length === 0) {
-          clear()
+          await clear()
           throw new ox_Provider.DisconnectedError({
             message: 'Privy session no longer matches persisted accounts.',
           })
@@ -248,7 +248,7 @@ export function privy<const client extends privy.Client>(
 
     async function requireSession() {
       if (await hasValidSession()) return
-      clear()
+      await clear()
       throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
     }
 
@@ -286,7 +286,7 @@ export function privy<const client extends privy.Client>(
       const { payload, walletAccount } = parameters
       const result = await walletAccount.provider
         .request({ method: 'secp256k1_sign', params: [payload] })
-        .catch((error) => {
+        .catch(async (error) => {
           const code = getPrivyErrorCode(error)
           const message = getPrivyErrorMessage(error).toLowerCase()
           const unsupported =
@@ -300,7 +300,7 @@ export function privy<const client extends privy.Client>(
                 'Privy adapter requires raw secp256k1 hash signing via `secp256k1_sign` for Tempo transactions and access keys.',
             })
           if (isSessionError(error)) {
-            clear()
+            await clear()
             throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
           }
           throw error
@@ -391,11 +391,10 @@ export function privy<const client extends privy.Client>(
       const digest = personalSign ? hashMessage(personalSign.message) : parameters.digest
       const keyAuthorization =
         authorizeAccessKey && account
-          ? await AccessKey.authorize({
+          ? await store.accessKeys.authorize({
               account,
               chainId: getClient().chain.id,
               parameters: authorizeAccessKey,
-              store,
             })
           : undefined
 
@@ -567,11 +566,10 @@ export function privy<const client extends privy.Client>(
         },
         async authorizeAccessKey(parameters) {
           const account = await getTempoAccount(undefined)
-          const keyAuthorization = await AccessKey.authorize({
+          const keyAuthorization = await store.accessKeys.authorize({
             account,
             chainId: getClient().chain.id,
             parameters,
-            store,
           })
           return { keyAuthorization, rootAddress: account.address }
         },
@@ -585,11 +583,10 @@ export function privy<const client extends privy.Client>(
           } catch (error) {
             if (!AccessKey.isUnavailableError(error)) throw error
           }
-          AccessKey.remove({
+          store.accessKeys.remove({
             accessKey: parameters.accessKeyAddress,
             account: account.address,
             chainId: store.getState().chainId,
-            store,
           })
         },
         async signPersonalMessage(parameters) {
@@ -630,7 +627,7 @@ export function privy<const client extends privy.Client>(
               .catch(() => undefined)
             await privyClient.auth.logout(userId ? { userId } : undefined)
           } finally {
-            clear()
+            await clear()
           }
         },
       },

@@ -421,11 +421,10 @@ export function create(options: create.Options = {}): create.ReturnType {
     const selected = await getAdapterAccount()
     const chainId = parameters.chainId ?? getClient().chain.id
     if (selected.account.type !== 'json-rpc') {
-      const keyAuthorization = await AccessKey.authorize({
+      const keyAuthorization = await store.accessKeys.authorize({
         account: selected.account as Pick<TempoAccount.Account, 'address' | 'sign'>,
         chainId,
         parameters,
-        store,
       })
       return { keyAuthorization, rootAddress: selected.account.address }
     }
@@ -440,7 +439,7 @@ export function create(options: create.Options = {}): create.ReturnType {
       method: 'wallet_authorizeAccessKey' as never,
       params: [z.encode(Rpc.wallet_authorizeAccessKey.parameters, prepared.parameters)] as never,
     })) as Adapter.authorizeAccessKey.ReturnType
-    savePreparedAccessKey({
+    await savePreparedAccessKey({
       account: result.rootAddress,
       accessKey: prepared,
       keyAuthorization: result.keyAuthorization,
@@ -451,15 +450,21 @@ export function create(options: create.Options = {}): create.ReturnType {
   async function prepareAuthorizeAccessKey(
     parameters: Adapter.authorizeAccessKey.Parameters,
     chainId: number | undefined,
-  ) {
+  ): Promise<{
+    keyPair?: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
+    parameters: Adapter.authorizeAccessKey.Parameters
+    privateKey?: Hex.Hex | undefined
+  }> {
     const chainId_ = parameters.chainId ?? chainId ?? getClient().chain.id
-    if (parameters.address || parameters.publicKey) {
+    if (parameters.privateKey || parameters.address || parameters.publicKey) {
       const prepared = await AccessKey.prepareAuthorization({
         ...parameters,
         chainId: chainId_,
       })
       return {
+        ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
         parameters: toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
+        ...(prepared.privateKey ? { privateKey: prepared.privateKey } : {}),
       }
     }
 
@@ -490,8 +495,10 @@ export function create(options: create.Options = {}): create.ReturnType {
       ReturnType<typeof AccessKey.prepareAuthorization>
     >['keyAuthorization'],
   ) {
+    const parameters_rpc = { ...parameters }
+    delete parameters_rpc.privateKey
     return {
-      ...parameters,
+      ...parameters_rpc,
       address: keyAuthorization.address,
       chainId: keyAuthorization.chainId,
       keyType: keyAuthorization.type,
@@ -514,7 +521,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     }
   }
 
-  function savePreparedAccessKey(options: {
+  async function savePreparedAccessKey(options: {
     accessKey: Awaited<ReturnType<typeof prepareAuthorizeAccessKey>> | undefined
     account: Address.Address | undefined
     keyAuthorization: KeyAuthorization.Rpc | undefined
@@ -524,11 +531,10 @@ export function create(options: create.Options = {}): create.ReturnType {
     const { keyPair, privateKey } = accessKey
     const material = keyPair ? { keyPair } : privateKey ? { privateKey } : undefined
     if (!material) return
-    AccessKey.add({
+    store.accessKeys.add({
       account,
       authorization: KeyAuthorization.fromRpc(keyAuthorization),
       ...material,
-      store,
     })
   }
 
@@ -556,11 +562,10 @@ export function create(options: create.Options = {}): create.ReturnType {
         if (!AccessKey.isUnavailableError(error)) throw error
       }
     }
-    AccessKey.remove({
+    store.accessKeys.remove({
       accessKey: parameters.accessKeyAddress,
       account: parameters.address,
       chainId: store.getState().chainId,
-      store,
     })
   }
 
@@ -1162,7 +1167,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     })
 
                     const accountAddress = accounts[0]?.address
-                    savePreparedAccessKey({
+                    await savePreparedAccessKey({
                       accessKey,
                       account: accountAddress,
                       keyAuthorization,
@@ -1250,12 +1255,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         credentials: 'include',
                       }).catch(() => {})
                     await actions.disconnect?.()
-                    store.setState({
-                      accessKeys: [],
-                      accounts: [],
-                      activeAccount: 0,
-                      auth: undefined,
-                    })
+                    store.disconnect()
                     return
                   }
 
@@ -1466,13 +1466,12 @@ export function create(options: create.Options = {}): create.ReturnType {
         if (!address) return 'missing'
         const chainId = options.chainId ?? state.chainId
         const { accessKey, calls } = options
-        return await AccessKey.getStatus({
+        return await store.accessKeys.getStatus({
           account: address,
           ...(accessKey ? { accessKey } : {}),
           ...(calls ? { calls } : {}),
           chainId,
           client: provider.getClient({ chainId }),
-          store,
         })
       },
       getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {

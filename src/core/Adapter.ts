@@ -410,6 +410,8 @@ export declare namespace authorizeAccessKey {
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
     limits?: readonly { token: Address; limit: bigint; period?: number | undefined }[] | undefined
+    /** Exported private key backing the access key. The local SDK stores it; dialog adapters forward only public material. */
+    privateKey?: Hex | undefined
     /** External public key to authorize. When provided, no key pair is generated — the caller holds the signing material. */
     publicKey?: Hex | undefined
     /** Call scopes restricting which contracts/selectors this key can call. */

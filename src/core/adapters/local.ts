@@ -126,11 +126,10 @@ export function local(options: local.Options): Adapter.Adapter {
 
             const keyAuthorization = await (async () => {
               if (!grantOptions) return undefined
-              return await AccessKey.authorize({
+              return await store.accessKeys.authorize({
                 account,
                 chainId: getClient().chain.id,
                 parameters: grantOptions,
-                store,
               })
             })()
 
@@ -209,13 +208,15 @@ export function local(options: local.Options): Adapter.Adapter {
                   signature: SignatureEnvelope.from(signature_keyAuthorization),
                 },
               )
-              AccessKey.add({
+              store.accessKeys.add({
                 account: account.address,
                 authorization: keyAuthorization,
                 ...(keyAuthorization_unsigned.keyPair
                   ? { keyPair: keyAuthorization_unsigned.keyPair }
                   : {}),
-                store,
+                ...(keyAuthorization_unsigned.privateKey
+                  ? { privateKey: keyAuthorization_unsigned.privateKey }
+                  : {}),
               })
               return KeyAuthorization.toRpc(keyAuthorization)
             })()

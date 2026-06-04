@@ -11,7 +11,6 @@ import { hashMessage, isAddressEqual } from 'viem'
 import type { Address } from 'viem/accounts'
 import { Account as TempoAccount } from 'viem/tempo'
 
-import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Store from '../Store.js'
 
@@ -162,12 +161,12 @@ export function turnkey<const client extends turnkey.Client>(
       })
     }
 
-    function clear() {
+    async function clear() {
       if (expiry_timeout) clearTimeout(expiry_timeout)
       expiry_timeout = undefined
       restore_promise = undefined
       walletAccounts_cache = undefined
-      store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
+      store.disconnect()
     }
 
     function scheduleExpiry(session: turnkey.Session) {
@@ -175,7 +174,7 @@ export function turnkey<const client extends turnkey.Client>(
       expiry_timeout = undefined
 
       const delay = Math.max(session.expiry * 1000 - Date.now() - sessionSkewMs, 0)
-      expiry_timeout = setTimeout(() => clear(), delay)
+      expiry_timeout = setTimeout(() => void clear(), delay)
     }
 
     async function getValidSession() {
@@ -183,7 +182,7 @@ export function turnkey<const client extends turnkey.Client>(
       const session = await turnkeyClient.getSession()
 
       if (!session || session.expiry * 1000 - sessionSkewMs <= Date.now()) {
-        clear()
+        await clear()
         return undefined
       }
 
@@ -268,7 +267,7 @@ export function turnkey<const client extends turnkey.Client>(
         })
         .catch((error) => {
           if (!isSessionError(error)) throw error
-          clear()
+          void clear()
           throw new ox_Provider.DisconnectedError({ message: 'Turnkey session expired.' })
         })
 
@@ -333,11 +332,10 @@ export function turnkey<const client extends turnkey.Client>(
           const account = accounts[0]
           const keyAuthorization = authorizeAccessKey
             ? account
-              ? await AccessKey.authorize({
+              ? await store.accessKeys.authorize({
                   account: toTempoAccount(account),
                   chainId: getClient().chain.id,
                   parameters: authorizeAccessKey,
-                  store,
                 })
               : undefined
             : undefined
@@ -377,11 +375,10 @@ export function turnkey<const client extends turnkey.Client>(
           const account = accounts[0]
           const keyAuthorization =
             authorizeAccessKey && account
-              ? await AccessKey.authorize({
+              ? await store.accessKeys.authorize({
                   account: toTempoAccount(account),
                   chainId: getClient().chain.id,
                   parameters: authorizeAccessKey,
-                  store,
                 })
               : undefined
 
@@ -401,7 +398,7 @@ export function turnkey<const client extends turnkey.Client>(
         },
         async disconnect() {
           await (await getTurnkeyClient()).logout()
-          clear()
+          await clear()
         },
       },
       async getAccount(options = {}) {

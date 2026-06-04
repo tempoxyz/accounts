@@ -6,6 +6,7 @@ import {
   Actions,
   KeyAuthorizationManager as TempoKeyAuthorizationManager,
 } from 'viem/tempo'
+import type { StoreApi } from 'zustand'
 
 import type { OneOf } from '../internal/types.js'
 import * as ExecutionError from './ExecutionError.js'
@@ -84,8 +85,8 @@ type StatusQuery = {
   client: Client<Transport>
   /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
   now?: number | undefined
-  /** Reactive state store. */
-  store: Store.Store
+  /** Access-key manager options. */
+  store: ManagerOptions
 }
 
 /** Access key selection query. */
@@ -98,19 +99,8 @@ type SelectQuery = {
   chainId: number
   /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
   now?: number | undefined
-  /** Reactive state store. */
-  store: Store.Store
-}
-
-type Key = {
-  /** Root account address. */
-  account: Address.Address
-  /** Access key address. */
-  accessKey: Address.Address
-  /** Chain ID the access key is scoped to. */
-  chainId: number
-  /** Reactive state store. */
-  store: Store.Store
+  /** Access-key manager options. */
+  store: ManagerOptions
 }
 
 type ListQuery = {
@@ -120,19 +110,99 @@ type ListQuery = {
   accessKey?: Address.Address | undefined
   /** Chain ID the access key is scoped to. */
   chainId: number
-  /** Reactive state store. */
-  store: Store.Store
+  /** Access-key manager dependencies. */
+  store: ManagerOptions
 }
 
-type ManagedAccount = TempoAccount.AccessKeyAccount
+type ManagerOptions = {
+  /** Zustand store containing access-key metadata. */
+  state: Pick<StoreApi<Store.State>, 'getState' | 'setState'>
+}
 
-type KeyAuthorizationManager = TempoKeyAuthorizationManager.KeyAuthorizationManager
+/** Access-key identity. */
+type Key = {
+  /** Root account address. */
+  account: Address.Address
+  /** Access key address. */
+  accessKey: Address.Address
+  /** Chain ID the access key is scoped to. */
+  chainId: number
+}
+
+/** Store-bound access-key operations. */
+type Manager = {
+  /** Adds a signed access-key authorization. */
+  add: (options: Omit<add.Options, 'store'>) => add.ReturnType
+  /** Prepares, signs, and saves an access key authorization. */
+  authorize: (options: Omit<authorize.Options, 'store'>) => Promise<authorize.ReturnType>
+  /** Clears all access-key records. */
+  clear: () => void
+  /** Returns publication status for a stored or on-chain access key. */
+  getStatus: (options: Omit<StatusQuery, 'store'>) => Promise<Status>
+  /** Returns a locally-signable access key account by exact address. */
+  get: (options: Omit<get.Options, 'store'>) => Promise<get.ReturnType>
+  /** Returns access-key metadata matching a query. */
+  list: (options: Omit<ListQuery, 'store'>) => readonly AccessKey[]
+  /** Removes an access-key record. */
+  remove: (options: Omit<remove.Options, 'store'>) => void
+  /** Selects a locally-signable access key account for an intent. */
+  select: (
+    options: Omit<SelectQuery, 'store'>,
+  ) => Promise<TempoAccount.AccessKeyAccount | undefined>
+  /** Updates stored authorization metadata for an existing access key. */
+  updateAuthorization: (options: Omit<updateAuthorization.Options, 'store'>) => void
+}
+
+/** Creates store-bound access-key operations. */
+export function createManager(options: createManager.Options): Manager {
+  return {
+    add: (parameters) => add({ ...parameters, store: options }),
+    authorize: (parameters) => authorize({ ...parameters, store: options }),
+    clear: () => clear({ store: options }),
+    get: (parameters) => get({ ...parameters, store: options }),
+    getStatus: (parameters) => getStatus({ ...parameters, store: options }),
+    list: (parameters) => list({ ...parameters, store: options }),
+    remove: (parameters) => remove({ ...parameters, store: options }),
+    select: (parameters) => select({ ...parameters, store: options }),
+    updateAuthorization: (parameters) => updateAuthorization({ ...parameters, store: options }),
+  }
+}
+
+export declare namespace createManager {
+  /** Options for {@link createManager}. */
+  type Options = ManagerOptions
+}
 
 /** Prepares an unsigned key authorization and local key material when needed. */
 export async function prepareAuthorization(
   options: prepareAuthorization.Options,
 ): Promise<prepareAuthorization.ReturnType> {
-  const { address, chainId, expiry, keyType, limits, publicKey, scopes } = options
+  const { address, chainId, expiry, keyType, limits, privateKey, publicKey, scopes } = options
+
+  if (privateKey) {
+    const type = keyType ?? 'secp256k1'
+    const accessKey = (() => {
+      switch (type) {
+        case 'secp256k1':
+          return TempoAccount.fromSecp256k1(privateKey)
+        case 'p256':
+          return TempoAccount.fromP256(privateKey)
+        case 'webAuthn':
+          throw new RpcResponse.InvalidParamsError({
+            message: '`privateKey` cannot be used with `keyType: "webAuthn"`.',
+          })
+      }
+    })()
+    const keyAuthorization = KeyAuthorization.from({
+      address: accessKey.address,
+      chainId: BigInt(chainId),
+      expiry,
+      limits,
+      scopes,
+      type,
+    })
+    return { keyAuthorization, privateKey }
+  }
 
   if (address || publicKey) {
     const keyAuthorization = KeyAuthorization.from({
@@ -180,6 +250,8 @@ export declare namespace prepareAuthorization {
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
     limits?: readonly KeyAuthorization.TokenLimit[] | undefined
+    /** Exported private key backing the access key. */
+    privateKey?: Hex.Hex | undefined
     /** External public key to derive the access key address from. */
     publicKey?: Hex.Hex | undefined
     /** Call scopes restricting which contracts/selectors this key can call. */
@@ -192,12 +264,15 @@ export declare namespace prepareAuthorization {
     keyAuthorization: KeyAuthorization.KeyAuthorization<false>
     /** Generated WebCrypto key pair for local access keys. */
     keyPair?: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
+    /** Exported private key backing an external access key. */
+    privateKey?: Hex.Hex | undefined
   }
 }
 
 /** Prepares, signs, and saves an access key authorization. */
 export async function authorize(options: authorize.Options): Promise<authorize.ReturnType> {
-  const { account, chainId, parameters, store } = options
+  const { account, chainId, parameters } = options
+  const { store } = options
   const prepared = await prepareAuthorization({
     ...parameters,
     chainId: parameters.chainId ?? chainId,
@@ -212,6 +287,7 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
     account: account.address,
     authorization: keyAuthorization,
     ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
+    ...(prepared.privateKey ? { privateKey: prepared.privateKey } : {}),
     store,
   })
 
@@ -231,7 +307,7 @@ export declare namespace authorize {
       chainId?: bigint | number | undefined
     }
     /** Reactive state store. */
-    store: Store.Store
+    store: ManagerOptions
   }
 
   /** Signed key authorization in RPC form. */
@@ -240,7 +316,8 @@ export declare namespace authorize {
 
 /** Returns publication status for a stored or on-chain access key. */
 export async function getStatus(options: StatusQuery): Promise<Status> {
-  const { accessKey, account, calls, chainId, client, store } = options
+  const { accessKey, account, calls, chainId, client } = options
+  const { store } = options
   const now = options.now ?? Date.now() / 1000
   const local = list({ account, accessKey, chainId, store }).find((key) =>
     scopesMatch(key, { calls }),
@@ -281,18 +358,59 @@ export async function select(
   for (const record of records) {
     if (!scopesMatch(record, { calls })) continue
     if (isExpired(record.expiry, now)) {
-      remove({ accessKey: record.address, account: record.access, chainId: record.chainId, store })
+      await remove({
+        accessKey: record.address,
+        account: record.access,
+        chainId: record.chainId,
+        store,
+      })
       continue
     }
 
-    const account_accessKey = hydrate(record, store)
+    const account_accessKey = await hydrate(record, store)
     if (!account_accessKey) continue
 
     return account_accessKey
   }
 }
 
-function createKeyAuthorizationManager(store: Store.Store): KeyAuthorizationManager {
+/** Returns a locally-signable access key account by exact address. */
+export async function get(options: get.Options): Promise<get.ReturnType> {
+  const { accessKey, account, chainId } = options
+  const { store } = options
+  const now = options.now ?? Date.now() / 1000
+  const record = list({ account, accessKey, chainId, store })[0]
+  if (!record) return undefined
+  if (isExpired(record.expiry, now)) {
+    await remove({
+      accessKey: record.address,
+      account: record.access,
+      chainId: record.chainId,
+      store,
+    })
+    return undefined
+  }
+  return await hydrate(record, store)
+}
+
+export declare namespace get {
+  type Options = {
+    /** Root account address. */
+    account: Address.Address
+    /** Specific access key address to match. */
+    accessKey: Address.Address
+    /** Chain ID the access key must be authorized on. */
+    chainId: number
+    /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
+    now?: number | undefined
+    /** Reactive state store. */
+    store: ManagerOptions
+  }
+
+  type ReturnType = TempoAccount.AccessKeyAccount | undefined
+}
+
+function createKeyAuthorizationManager(store: ManagerOptions) {
   return TempoKeyAuthorizationManager.from({
     source: {
       get(key) {
@@ -312,11 +430,11 @@ function createKeyAuthorizationManager(store: Store.Store): KeyAuthorizationMana
         })
       },
       set(key, keyAuthorization) {
-        patch({
+        updateAuthorization({
           account: key.address,
           accessKey: key.accessKey,
+          authorization: keyAuthorization,
           chainId: key.chainId,
-          patch: { keyAuthorization },
           store,
         })
       },
@@ -326,7 +444,8 @@ function createKeyAuthorizationManager(store: Store.Store): KeyAuthorizationMana
 
 /** Adds a signed access key authorization. */
 export function add(options: add.Options): add.ReturnType {
-  const { account, authorization, keyPair, privateKey, store } = options
+  const { account, authorization, keyPair, privateKey } = options
+  const { store } = options
   const base = {
     address: authorization.address,
     access: account,
@@ -340,7 +459,7 @@ export function add(options: add.Options): add.ReturnType {
   const record = (
     privateKey ? { ...base, privateKey } : keyPair ? { ...base, keyPair } : base
   ) as AccessKey
-  store.setState((state) => ({
+  store.state.setState((state) => ({
     accessKeys: [
       record,
       ...state.accessKeys.filter(
@@ -368,14 +487,14 @@ export declare namespace add {
     /** The WebCrypto key pair backing the access key. */
     keyPair?: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
     /** Reactive state store. */
-    store: Store.Store
+    store: ManagerOptions
   }
 
   /** Stored access key record. */
   type ReturnType = AccessKey
 }
 
-function clearAuthorization(options: Key): void {
+function clearAuthorization(options: Key & { store: ManagerOptions }): void {
   const { store, ...key } = options
   patch({
     ...key,
@@ -384,17 +503,49 @@ function clearAuthorization(options: Key): void {
   })
 }
 
+function updateAuthorization(options: updateAuthorization.Options): void {
+  const { authorization, store, ...key } = options
+  patch({
+    ...key,
+    patch: {
+      expiry: authorization.expiry ?? undefined,
+      keyAuthorization: authorization,
+      limits: authorization.limits as AccessKey['limits'],
+      scopes: authorization.scopes as AccessKey['scopes'],
+    },
+    store,
+  })
+}
+
+declare namespace updateAuthorization {
+  type Options = Key & {
+    /** Signed key authorization for the access key. */
+    authorization: KeyAuthorization.Signed
+    /** Reactive state store. */
+    store: ManagerOptions
+  }
+}
+
 /** Removes an access key record. */
 export function remove(options: remove.Options): void {
   const { store, ...key } = options
-  store.setState((state) => ({
+  store.state.setState((state) => ({
     accessKeys: state.accessKeys.filter((record) => !matches(record, key)),
   }))
 }
 
 export declare namespace remove {
   /** Options for {@link remove}. */
-  type Options = Key
+  type Options = Key & {
+    /** Reactive state store. */
+    store: ManagerOptions
+  }
+}
+
+/** Clears all access-key records. */
+function clear(options: { store: ManagerOptions }): void {
+  const { store } = options
+  store.state.setState({ accessKeys: [] })
 }
 
 /** Returns whether an error means an access key is already unavailable on-chain. */
@@ -468,7 +619,10 @@ function isScope(scope: unknown): scope is NonNullable<AccessKey['scopes']>[numb
   return true
 }
 
-function hydrate(accessKey: AccessKey, store: Store.Store): ManagedAccount | undefined {
+async function hydrate(
+  accessKey: AccessKey,
+  store: ManagerOptions,
+): Promise<TempoAccount.AccessKeyAccount | undefined> {
   const keyAuthorizationManager = createKeyAuthorizationManager(store)
   if ('keyPair' in accessKey && accessKey.keyPair)
     return TempoAccount.fromWebCryptoP256(accessKey.keyPair, {
@@ -518,12 +672,12 @@ async function getPublishedStatus(
 
 function list(options: ListQuery): readonly AccessKey[] {
   const { store, ...query } = options
-  return store.getState().accessKeys.filter((key) => matches(key, query))
+  return store.state.getState().accessKeys.filter((key) => matches(key, query))
 }
 
-function patch(options: Key & { patch: Partial<AccessKey> }): void {
+function patch(options: Key & { patch: Partial<AccessKey>; store: ManagerOptions }): void {
   const { patch, store, ...key } = options
-  store.setState((state) => ({
+  store.state.setState((state) => ({
     accessKeys: state.accessKeys.map((record) => {
       if (!matches(record, key)) return record
       const next = { ...record } as Record<string, unknown>

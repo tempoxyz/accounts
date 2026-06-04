@@ -4,9 +4,10 @@ import { BaseError, encodeErrorResult, encodeFunctionResult } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
-import { accounts } from '../../test/config.js'
+import { accounts, privateKeys } from '../../test/config.js'
 import * as AccessKey from './AccessKey.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
+import * as Storage from './Storage.js'
 import * as Store from './Store.js'
 
 function createStore() {
@@ -20,6 +21,7 @@ function createKeyAuthorization(
   options: {
     chainId?: bigint | undefined
     expiry?: number | undefined
+    keyType?: KeyAuthorization.KeyAuthorization['type'] | undefined
     limits?: { token: `0x${string}`; limit: bigint }[] | undefined
     scopes?: KeyAuthorization.Scope[] | undefined
   } = {},
@@ -31,7 +33,7 @@ function createKeyAuthorization(
       expiry: options.expiry,
       limits: options.limits,
       scopes: options.scopes,
-      type: 'p256',
+      type: options.keyType ?? 'p256',
     },
     { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
   )
@@ -80,12 +82,11 @@ function addAuthorization(options: {
   store: Store.Store
 }) {
   const { address, keyAuthorization, keyPair, privateKey, store } = options
-  AccessKey.add({
+  store.accessKeys.add({
     account: address,
     authorization: keyAuthorization,
     ...(keyPair ? { keyPair } : {}),
     ...(privateKey ? { privateKey } : {}),
-    store,
   })
 }
 
@@ -141,6 +142,57 @@ describe('add', () => {
       ]
     `)
   })
+
+  test('behavior: saves locally signable material', async () => {
+    const store = createStore()
+    const keyAuthorization = createKeyAuthorization(accounts[1]!.address, {
+      keyType: 'secp256k1',
+    })
+
+    store.accessKeys.add({
+      account: rootAddress,
+      authorization: keyAuthorization,
+      privateKey: privateKeys[1],
+    })
+
+    const account = await store.accessKeys.get({
+      accessKey: accounts[1]!.address,
+      account: rootAddress,
+      chainId: 1,
+    })
+    expect(account?.accessKeyAddress).toMatchInlineSnapshot(
+      `"${accounts[1]!.address.toLowerCase()}"`,
+    )
+  })
+
+  test('behavior: skips locally signable material when credential persistence is disabled', async () => {
+    const storage = Storage.memory()
+    const store = Store.create({
+      chainId: 1,
+      persistCredentials: false,
+      storage,
+    })
+    const keyAuthorization = createKeyAuthorization(accounts[1]!.address, {
+      keyType: 'secp256k1',
+    })
+
+    store.accessKeys.add({
+      account: rootAddress,
+      authorization: keyAuthorization,
+      privateKey: privateKeys[1],
+    })
+
+    const store2 = Store.create({ chainId: 1, storage })
+    await Store.waitForHydration(store2)
+
+    await expect(
+      store2.accessKeys.get({
+        accessKey: accounts[1]!.address,
+        account: rootAddress,
+        chainId: 1,
+      }),
+    ).resolves.toMatchInlineSnapshot(`undefined`)
+  })
 })
 
 describe('create invalidation', () => {
@@ -149,7 +201,7 @@ describe('create invalidation', () => {
     const keyPair_other = await WebCryptoP256.createKeyPair()
     const account_other = TempoAccount.fromWebCryptoP256(keyPair_other, { access: rootAddress })
     if (options.other)
-      addAuthorization({
+      await addAuthorization({
         address: rootAddress,
         keyAuthorization: createKeyAuthorization(account_other.accessKeyAddress),
         keyPair: keyPair_other,
@@ -158,7 +210,7 @@ describe('create invalidation', () => {
 
     const keyPair = await WebCryptoP256.createKeyPair()
     const account = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
-    addAuthorization({
+    await addAuthorization({
       address: rootAddress,
       keyAuthorization: createKeyAuthorization(account.accessKeyAddress),
       keyPair,
@@ -389,14 +441,13 @@ describe('authorize', () => {
       },
     } as TempoAccount.Account
 
-    const result = await AccessKey.authorize({
+    const result = await store.accessKeys.authorize({
       account,
       chainId: 1,
       parameters: {
         address: accounts[1]!.address,
         expiry: 123,
       },
-      store,
     })
 
     expect(digests).toMatchInlineSnapshot(`
@@ -434,6 +485,41 @@ describe('authorize', () => {
       ]
     `)
   })
+
+  test('behavior: saves provided private key material', async () => {
+    const store = createStore()
+    const accessKey = TempoAccount.fromSecp256k1(privateKeys[1])
+    const account = {
+      ...accounts[0]!,
+      sign: async () => `0x${'11'.repeat(32)}${'22'.repeat(32)}1b` as const,
+    } as TempoAccount.Account
+
+    await store.accessKeys.authorize({
+      account,
+      chainId: 1,
+      parameters: {
+        expiry: 123,
+        keyType: 'secp256k1',
+        privateKey: privateKeys[1],
+      },
+    })
+
+    expect(store.getState().accessKeys.map(({ keyAuthorization: _, ...accessKey }) => accessKey))
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+          "address": "${accessKey.address}",
+          "chainId": 1,
+          "expiry": 123,
+          "keyType": "secp256k1",
+          "limits": undefined,
+          "privateKey": "${privateKeys[1]}",
+          "scopes": undefined,
+        },
+      ]
+    `)
+  })
 })
 
 describe('select', () => {
@@ -443,7 +529,7 @@ describe('select', () => {
     const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
     const keyAuthorization = createKeyAuthorization(accessKey.accessKeyAddress)
 
-    addAuthorization({
+    await addAuthorization({
       address: rootAddress,
       keyAuthorization,
       keyPair,
@@ -457,17 +543,16 @@ describe('select', () => {
     const store = createStore()
     const keyPair = await WebCryptoP256.createKeyPair()
     const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: accounts[1]!.address })
-    addAuthorization({
+    await addAuthorization({
       address: accounts[1]!.address,
       keyAuthorization: createKeyAuthorization(accessKey.accessKeyAddress),
       keyPair,
       store,
     })
 
-    const result = await AccessKey.select({
+    const result = await store.accessKeys.select({
       account: rootAddress,
       chainId: 1,
-      store,
     })
 
     expect(result).toMatchInlineSnapshot(`undefined`)
@@ -476,10 +561,9 @@ describe('select', () => {
   test('behavior: skips access keys for another chain', async () => {
     const { store } = await setup()
 
-    const result = await AccessKey.select({
+    const result = await store.accessKeys.select({
       account: rootAddress,
       chainId: 42_431,
-      store,
     })
 
     expect(result).toMatchInlineSnapshot(`undefined`)
@@ -488,16 +572,15 @@ describe('select', () => {
   test('behavior: skips external access keys without signer material', async () => {
     const store = createStore()
     const keyAuthorization = createKeyAuthorization('0x0000000000000000000000000000000000000099')
-    addAuthorization({
+    await addAuthorization({
       address: rootAddress,
       keyAuthorization,
       store,
     })
 
-    const result = await AccessKey.select({
+    const result = await store.accessKeys.select({
       account: rootAddress,
       chainId: 1,
-      store,
     })
 
     expect(result).toMatchInlineSnapshot(`undefined`)
@@ -508,7 +591,7 @@ describe('select', () => {
     const keyPair = await WebCryptoP256.createKeyPair()
     const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
     const token = '0x0000000000000000000000000000000000000abc' as const
-    addAuthorization({
+    await addAuthorization({
       address: rootAddress,
       keyAuthorization: createKeyAuthorization(accessKey.accessKeyAddress, {
         scopes: [{ address: token, selector: 'transfer(address,uint256)' }],
@@ -517,17 +600,15 @@ describe('select', () => {
       store,
     })
 
-    const match = await AccessKey.select({
+    const match = await store.accessKeys.select({
       account: rootAddress,
       calls: [{ to: token, data: '0xa9059cbb0000000000000000000000000000000000000001' }],
       chainId: 1,
-      store,
     })
-    const miss = await AccessKey.select({
+    const miss = await store.accessKeys.select({
       account: rootAddress,
       calls: [{ to: '0x0000000000000000000000000000000000000def', data: '0xdeadbeef' }],
       chainId: 1,
-      store,
     })
 
     expect({ match: !!match, miss: !!miss }).toMatchInlineSnapshot(`
@@ -546,18 +627,17 @@ describe('getStatus', () => {
     const accessKey = TempoAccount.fromWebCryptoP256(keyPair)
     const keyAuthorization = createKeyAuthorization(accessKey.address)
 
-    addAuthorization({
+    await addAuthorization({
       address: rootAddress,
       keyAuthorization,
       keyPair,
       store,
     })
 
-    const result = await AccessKey.getStatus({
+    const result = await store.accessKeys.getStatus({
       account: rootAddress,
       chainId: 1,
       client: createMissingClient() as never,
-      store,
     })
 
     expect(result).toMatchInlineSnapshot(`"pending"`)
@@ -569,18 +649,17 @@ describe('getStatus', () => {
     const accessKey = TempoAccount.fromWebCryptoP256(keyPair)
     const keyAuthorization = createKeyAuthorization(accessKey.address)
 
-    addAuthorization({
+    await addAuthorization({
       address: rootAddress,
       keyAuthorization,
       keyPair,
       store,
     })
 
-    const result = await AccessKey.getStatus({
+    const result = await store.accessKeys.getStatus({
       account: rootAddress,
       chainId: 1,
       client: createMetadataClient(accessKey.address) as never,
-      store,
     })
 
     expect(result).toMatchInlineSnapshot(`"published"`)
@@ -593,7 +672,7 @@ describe('getStatus', () => {
     const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
     const keyAuthorization = createKeyAuthorization(accessKey.accessKeyAddress)
 
-    addAuthorization({
+    await addAuthorization({
       address: rootAddress,
       keyAuthorization,
       keyPair,
@@ -601,11 +680,10 @@ describe('getStatus', () => {
     })
     removeStoredAuthorization({ accessKey: accessKey.accessKeyAddress, store })
 
-    const result = await AccessKey.getStatus({
+    const result = await store.accessKeys.getStatus({
       account: rootAddress,
       chainId: 1,
       client: createMetadataClient(accessKey.accessKeyAddress) as never,
-      store,
     })
 
     expect(result).toMatchInlineSnapshot(`"published"`)
@@ -617,19 +695,18 @@ describe('getStatus', () => {
     const accessKey = TempoAccount.fromWebCryptoP256(keyPair)
     const keyAuthorization = createKeyAuthorization(accessKey.address, { expiry: 100 })
 
-    addAuthorization({
+    await addAuthorization({
       address: rootAddress,
       keyAuthorization,
       keyPair,
       store,
     })
 
-    const result = await AccessKey.getStatus({
+    const result = await store.accessKeys.getStatus({
       account: rootAddress,
       chainId: 1,
       client: createMetadataClient(accessKey.address) as never,
       now: 101,
-      store,
     })
 
     expect(result).toMatchInlineSnapshot(`"expired"`)
@@ -643,19 +720,18 @@ describe('getStatus', () => {
       scopes: [{ address: '0x0000000000000000000000000000000000000abc' }],
     })
 
-    addAuthorization({
+    await addAuthorization({
       address: rootAddress,
       keyAuthorization,
       keyPair,
       store,
     })
 
-    const result = await AccessKey.getStatus({
+    const result = await store.accessKeys.getStatus({
       account: rootAddress,
       calls: [{ to: '0x0000000000000000000000000000000000000def', data: '0xdeadbeef' }],
       chainId: 1,
       client: createMissingClient() as never,
-      store,
     })
 
     expect(result).toMatchInlineSnapshot(`"missing"`)
