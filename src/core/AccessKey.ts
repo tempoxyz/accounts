@@ -177,7 +177,8 @@ export declare namespace createManager {
 export async function prepareAuthorization(
   options: prepareAuthorization.Options,
 ): Promise<prepareAuthorization.ReturnType> {
-  const { address, chainId, expiry, keyType, limits, privateKey, publicKey, scopes } = options
+  const { address, chainId, expiry, keyType, limits, privateKey, publicKey, scopes, witness } =
+    options
 
   if (privateKey) {
     const type = keyType ?? 'secp256k1'
@@ -200,6 +201,7 @@ export async function prepareAuthorization(
       limits,
       scopes,
       type,
+      ...(witness ? { witness } : {}),
     })
     return { keyAuthorization, privateKey }
   }
@@ -212,6 +214,7 @@ export async function prepareAuthorization(
       limits,
       scopes,
       type: keyType ?? 'secp256k1',
+      ...(witness ? { witness } : {}),
     })
     return { keyAuthorization }
   }
@@ -233,6 +236,7 @@ export async function prepareAuthorization(
     limits,
     scopes,
     type: 'p256',
+    ...(witness ? { witness } : {}),
   })
   return { keyAuthorization, keyPair }
 }
@@ -256,6 +260,12 @@ export declare namespace prepareAuthorization {
     publicKey?: Hex.Hex | undefined
     /** Call scopes restricting which contracts/selectors this key can call. */
     scopes?: readonly KeyAuthorization.Scope[] | undefined
+    /**
+     * TIP-1053 witness (32 bytes) to bind into the key authorization. Set to
+     * `hashMessage(message)` to fuse a Sign-In-with-Tempo proof into the
+     * access-key authorization so both are covered by a single signature.
+     */
+    witness?: Hex.Hex | undefined
   }
 
   /** Prepared unsigned key authorization and optional local key material. */

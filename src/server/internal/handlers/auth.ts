@@ -1,7 +1,8 @@
 import { Hex } from 'ox'
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import type { Address, Transport } from 'viem'
-import { createClient, http, zeroAddress } from 'viem'
-import { verifyMessage } from 'viem/actions'
+import { createClient, hashMessage, http, zeroAddress } from 'viem'
+import { verifyHash, verifyMessage } from 'viem/actions'
 import { createSiweMessage, generateSiweNonce, parseSiweMessage } from 'viem/siwe'
 import { tempo } from 'viem/tempo/chains'
 import * as z from 'zod/mini'
@@ -83,6 +84,13 @@ export namespace schema {
       address: u.address(),
       message: z.string(),
       signature: u.hex(),
+      /**
+       * TIP-1053 witness path: the RLP-serialized signed key authorization
+       * that bound this message into its `witness`. When present, the server
+       * asserts `witness == hashMessage(message)` and recovers the signer over
+       * the authorization digest instead of recovering over the message.
+       */
+      keyAuthorization: z.optional(u.hex()),
       /**
        * When `true`, the server returns the issued session token in the
        * response body as `{ token }` and does NOT set a session cookie.
@@ -204,7 +212,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
   })
 
   router.post(verifyPath, Hono.validate('json', schema.verify.parameters), async (c) => {
-    const { address, message, signature, returnToken } = c.req.valid('json')
+    const { address, message, signature, keyAuthorization, returnToken } = c.req.valid('json')
 
     const parsed = parseSiweMessage(message)
     if (!parsed.nonce) return c.json({ error: 'message missing `nonce`' }, 400)
@@ -233,12 +241,33 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
 
     if (parsed.chainId !== challenge.chainId) return c.json({ error: 'chainId mismatch' }, 400)
 
-    // Signature verification via viem's `verifyMessage`. Tempo's chain
-    // override unwraps `SignatureEnvelope` for WebAuthn / P256 / keychain
-    // sigs and falls back to ECDSA recovery for plain EOAs.
+    // Signature verification. Two paths:
+    //   - TIP-1053 witness (`keyAuthorization` present): the single passkey signature
+    //     authorized an access key whose `witness` binds this message. Assert
+    //     `witness == hashMessage(message)`, then recover the signer over the
+    //     key-authorization digest (not the message).
+    //   - Plain (`keyAuthorization` absent): viem's `verifyMessage` recovers over the
+    //     message. Tempo's chain override unwraps `SignatureEnvelope` for
+    //     WebAuthn / P256 / keychain sigs and falls back to ECDSA for EOAs.
     let valid: boolean
     try {
-      valid = await verifyMessage(client, { address, message, signature })
+      if (keyAuthorization) {
+        const decoded = KeyAuthorization.deserialize(keyAuthorization)
+        if (!decoded.signature) return c.json({ error: 'key authorization missing signature' }, 400)
+        if (Number(decoded.chainId) !== challenge.chainId)
+          return c.json({ error: 'chainId mismatch' }, 400)
+        if (!decoded.witness || decoded.witness !== hashMessage(message))
+          return c.json({ error: 'witness mismatch' }, 401)
+        valid = await verifyHash(client, {
+          address,
+          hash: KeyAuthorization.getSignPayload(decoded),
+          signature: SignatureEnvelope.serialize(decoded.signature, {
+            magic: decoded.signature.type === 'webAuthn',
+          }),
+        })
+      } else {
+        valid = await verifyMessage(client, { address, message, signature })
+      }
     } catch {
       return c.json({ error: 'invalid signature' }, 401)
     }

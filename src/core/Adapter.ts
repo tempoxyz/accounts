@@ -302,8 +302,14 @@ export declare namespace createAccount {
      * `personalSign`. The signature lives on the top-level `signature`
      * field — the message is echoed so consumers can verify locally
      * without round-tripping it.
+     *
+     * `keyAuthorization` is set only on the TIP-1053 witness path, when the message
+     * was bound into the access-key authorization and signed in the same
+     * ceremony. It carries the RLP-serialized signed key authorization so the
+     * verifier can recover the signer over the authorization digest and
+     * assert `witness == hashMessage(message)`.
      */
-    personalSign?: { message: string } | undefined
+    personalSign?: { message: string; keyAuthorization?: Hex | undefined } | undefined
     /** Signature over the digest, if one was provided. */
     signature?: Hex | undefined
     /** Username associated with the account. */
@@ -367,8 +373,14 @@ export declare namespace loadAccounts {
      * `personalSign`. The signature lives on the top-level `signature`
      * field — the message is echoed so consumers can verify locally
      * without round-tripping it.
+     *
+     * `keyAuthorization` is set only on the TIP-1053 witness path, when the message
+     * was bound into the access-key authorization and signed in the same
+     * ceremony. It carries the RLP-serialized signed key authorization so the
+     * verifier can recover the signer over the authorization digest and
+     * assert `witness == hashMessage(message)`.
      */
-    personalSign?: { message: string } | undefined
+    personalSign?: { message: string; keyAuthorization?: Hex | undefined } | undefined
     /** Signature over the digest, if one was provided. */
     signature?: Hex | undefined
     /** Username associated with the account. */

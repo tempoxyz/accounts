@@ -655,10 +655,16 @@ export namespace wallet_connect {
        * `capabilities.personalSign` (or `capabilities.auth` folded a SIWE
        * message into the same slot). The signature itself lives on the
        * top-level `capabilities.signature` field.
+       *
+       * `keyAuthorization` is set only on the TIP-1053 witness path: the
+       * RLP-serialized signed key authorization that bound the message into
+       * its `witness`, so the verifier recovers the signer over the
+       * authorization digest instead of `hashMessage(message)`.
        */
       personalSign: z.optional(
         z.object({
           message: z.string(),
+          keyAuthorization: z.optional(u.hex()),
         }),
       ),
       signature: z.optional(u.hex()),
