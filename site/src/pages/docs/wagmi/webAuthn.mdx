@@ -60,10 +60,10 @@ export const config = createConfig({
 
 ### authorizeAccessKey
 
-- **Type:** `() => { address?: Address; chainId?: bigint; expiry: number; keyType?: 'secp256k1' | 'p256' | 'webAuthn'; limits?: { token: Address; limit: bigint; period?: number }[]; privateKey?: Hex; publicKey?: Hex; scopes?: { address: Address; recipients?: Address[]; selector?: Hex | string }[] }`
+- **Type:** `() => { address?: Address; chainId?: bigint; expiry: number; keyType?: 'secp256k1' | 'p256' | 'webAuthn'; limits?: { token: Address; limit: bigint; period?: number }[]; privateKey?: Hex; publicKey?: Hex; scopes?: { address: Address; recipients?: Address[]; selector?: Hex | string }[] } | undefined`
 - **Optional**
 
-Default access key parameters for `wallet_connect`.
+Default access key parameters for `wallet_connect`. Return `undefined` to skip authorization for the current request.
 
 This matches [`Provider.authorizeAccessKey`](/docs/api/provider#authorizeaccesskey).
 

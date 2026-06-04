@@ -1,6 +1,7 @@
 import type { RpcSchema } from 'ox'
 import { describe, expectTypeOf, test } from 'vp/test'
 
+import type * as Adapter from './Adapter.js'
 import * as Provider from './Provider.js'
 import type * as Schema from './Schema.js'
 
@@ -60,6 +61,16 @@ describe('request', () => {
 })
 
 describe('create options', () => {
+  test('authorizeAccessKey can return undefined to opt out', () => {
+    expectTypeOf<NonNullable<Parameters<typeof Provider.create>[0]>>().toMatchTypeOf<{
+      authorizeAccessKey?: (() => Adapter.authorizeAccessKey.Parameters | undefined) | undefined
+    }>()
+
+    Provider.create({
+      authorizeAccessKey: () => undefined,
+    })
+  })
+
   test('mpp accepts session deposit options', () => {
     expectTypeOf<NonNullable<Parameters<typeof Provider.create>[0]>>().toMatchTypeOf<{
       mpp?:
