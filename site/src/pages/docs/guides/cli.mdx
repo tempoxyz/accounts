@@ -9,7 +9,7 @@ import { Cards, Card } from 'vocs'
 
 Build a command-line tool that asks a user to approve a scoped access key in the browser, then signs future commands locally from the terminal.
 
-The CLI provider uses a device-code flow. The command creates an access-key request, opens a Tempo Wallet approval page, polls until the user approves it, and stores the signed key in a local keyring. After that, matching transfers or paid API calls can run without reopening the browser until the key expires.
+The CLI provider uses a device-code flow. The command creates an access-key request, opens a Tempo Wallet approval page, polls until the user approves it, and stores the signed key in provider storage. After that, matching transfers or paid API calls can run without reopening the browser until the key expires.
 
 ## Example
 
@@ -200,15 +200,17 @@ const authorizeAccessKey = {
 }
 ```
 
-### Use App-Specific Keyrings
+### Use App-Specific Storage
 
-Set `keysPath` for production CLIs so managed keys are isolated by app, environment, and account. The default keyring is convenient for local experiments, but a named config path makes support and revocation easier.
+Set a filesystem storage path for production CLIs so managed keys are isolated by app, environment, and account. The default path is convenient for local experiments, but a named config path makes support and revocation easier.
 
 ```ts twoslash [cli.ts]
-import { Provider } from 'accounts/cli'
+import { Provider, Storage } from 'accounts/cli'
 
 const provider = Provider.create({
-  keysPath: '~/.config/example/tempo-keys.toml',
+  storage: Storage.filesystem({
+    path: '~/.config/example/tempo-store.json',
+  }),
 })
 ```
 
@@ -229,7 +231,7 @@ const handler = Handler.codeAuth({
 
 <Cards>
   <Card
-    description="Review every option accepted by the CLI provider, including host, keysPath, mpp, and poll timing."
+    description="Review every option accepted by the CLI provider, including host, storage, mpp, and poll timing."
     icon="lucide:terminal"
     to="/docs/cli/provider"
     title="CLI Provider"

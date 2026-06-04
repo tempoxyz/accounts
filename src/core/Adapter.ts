@@ -1,9 +1,12 @@
+import type { WebCryptoP256 } from 'ox'
 import type { KeyAuthorization } from 'ox/tempo'
 import type { Client, Hex, Transport } from 'viem'
-import type { Address } from 'viem/accounts'
+import type { Address, JsonRpcAccount } from 'viem/accounts'
+import type { Account as TempoAccount } from 'viem/tempo'
 import type { tempo } from 'viem/tempo/chains'
 import type * as z from 'zod/mini'
 
+import type { MaybePromise } from '../internal/types.js'
 import type * as Account from './Account.js'
 import type * as Schema from './Schema.js'
 import type * as Storage from './Storage.js'
@@ -96,30 +99,40 @@ export type Instance = {
         ) => Promise<swap.ReturnType>)
       | undefined
     /** Send a transaction. */
-    sendTransaction: (
-      params: sendTransaction.Parameters,
-      request: EncodedRequest<Rpc.eth_sendTransaction.Encoded>,
-    ) => Promise<sendTransaction.ReturnType>
+    sendTransaction?:
+      | ((
+          params: sendTransaction.Parameters,
+          request: EncodedRequest<Rpc.eth_sendTransaction.Encoded>,
+        ) => Promise<sendTransaction.ReturnType>)
+      | undefined
     /** Send a transaction and wait for the receipt. */
-    sendTransactionSync: (
-      params: sendTransactionSync.Parameters,
-      request: EncodedRequest<Rpc.eth_sendTransactionSync.Encoded>,
-    ) => Promise<sendTransactionSync.ReturnType>
+    sendTransactionSync?:
+      | ((
+          params: sendTransactionSync.Parameters,
+          request: EncodedRequest<Rpc.eth_sendTransactionSync.Encoded>,
+        ) => Promise<sendTransactionSync.ReturnType>)
+      | undefined
     /** Sign a personal message (EIP-191). */
-    signPersonalMessage: (
-      params: signPersonalMessage.Parameters,
-      request: EncodedRequest<Rpc.personal_sign.Encoded>,
-    ) => Promise<Hex>
+    signPersonalMessage?:
+      | ((
+          params: signPersonalMessage.Parameters,
+          request: EncodedRequest<Rpc.personal_sign.Encoded>,
+        ) => Promise<Hex>)
+      | undefined
     /** Sign a transaction without broadcasting it. */
-    signTransaction: (
-      params: signTransaction.Parameters,
-      request: EncodedRequest<Rpc.eth_signTransaction.Encoded>,
-    ) => Promise<signTransaction.ReturnType>
+    signTransaction?:
+      | ((
+          params: signTransaction.Parameters,
+          request: EncodedRequest<Rpc.eth_signTransaction.Encoded>,
+        ) => Promise<signTransaction.ReturnType>)
+      | undefined
     /** Sign EIP-712 typed data. */
-    signTypedData: (
-      params: signTypedData.Parameters,
-      request: EncodedRequest<Rpc.eth_signTypedData_v4.Encoded>,
-    ) => Promise<Hex>
+    signTypedData?:
+      | ((
+          params: signTypedData.Parameters,
+          request: EncodedRequest<Rpc.eth_signTypedData_v4.Encoded>,
+        ) => Promise<Hex>)
+      | undefined
     /** Switch chain hook for adapter-specific handling. */
     switchChain?: ((params: switchChain.Parameters) => Promise<void>) | undefined
     /** Open the zone-withdraw flow. */
@@ -132,6 +145,18 @@ export type Instance = {
   }
   /** Cleanup function called when the provider is destroyed. */
   cleanup?: (() => void) | undefined
+  /**
+   * Generates access-key material when `authorizeAccessKey` omits `address`
+   * and `publicKey`. Return `undefined` to let adapter actions handle key
+   * generation themselves.
+   */
+  generateAccessKey?:
+    | ((
+        options?: generateAccessKey.Options | undefined,
+      ) => MaybePromise<generateAccessKey.ReturnType>)
+    | undefined
+  /** Materializes the adapter-managed account used for provider-owned RPC actions. */
+  getAccount?: ((options?: getAccount.Options | undefined) => getAccount.ReturnType) | undefined
   /**
    * When `true`, the provider skips Server Authentication orchestration on
    * `wallet_connect` and forwards `capabilities.auth` to the adapter
@@ -182,6 +207,61 @@ export declare namespace getClient {
     /** Fee payer service URL, or `false` to opt out of fee payers for this transaction if set globally. */
     feePayer?: string | false | undefined
   }
+}
+
+export declare namespace generateAccessKey {
+  /** Options for {@link Instance.generateAccessKey}. */
+  type Options = {
+    /** Requested key type from `authorizeAccessKey`. Defaults to adapter policy. */
+    keyType?: authorizeAccessKey.Parameters['keyType'] | undefined
+  }
+
+  /** Generated access-key material. */
+  type ReturnType =
+    | {
+        /** Generated key type. */
+        keyType: 'secp256k1' | 'p256'
+        /** Generated public key. */
+        publicKey: Hex
+        /** Exported private key backing the generated access key. */
+        privateKey?: Hex | undefined
+        /** WebCrypto key pair backing the generated access key. */
+        keyPair?: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
+      }
+    | undefined
+}
+
+export declare namespace getAccount {
+  type Options = {
+    /** Address to materialize. Defaults to the active account. */
+    address?: Address | undefined
+  }
+
+  type ReturnType =
+    | {
+        /** Viem-compatible account used by provider-owned RPC actions. */
+        account: JsonRpcAccount
+        /** Transport used to route JSON-RPC wallet account requests. */
+        transport: Transport
+      }
+    | Promise<{
+        /** Viem-compatible account used by provider-owned RPC actions. */
+        account: JsonRpcAccount
+        /** Transport used to route JSON-RPC wallet account requests. */
+        transport: Transport
+      }>
+    | {
+        /** Viem-compatible account used by provider-owned RPC actions. */
+        account: TempoAccount.Account
+        /** Local signer accounts do not use a wallet transport. */
+        transport?: undefined
+      }
+    | Promise<{
+        /** Viem-compatible account used by provider-owned RPC actions. */
+        account: TempoAccount.Account
+        /** Local signer accounts do not use a wallet transport. */
+        transport?: undefined
+      }>
 }
 
 export declare namespace createAccount {
@@ -342,6 +422,8 @@ export declare namespace authorizeAccessKey {
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
     limits?: readonly { token: Address; limit: bigint; period?: number | undefined }[] | undefined
+    /** Exported private key backing the access key. The local SDK stores it; dialog adapters forward only public material. */
+    privateKey?: Hex | undefined
     /** External public key to authorize. When provided, no key pair is generated — the caller holds the signing material. */
     publicKey?: Hex | undefined
     /** Call scopes restricting which contracts/selectors this key can call. */

@@ -1,4 +1,4 @@
-import { Address, Hex, PublicKey } from 'ox'
+import { Address, Hex, Json, PublicKey } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { parseUnits, type Address as viem_Address } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
@@ -6,6 +6,7 @@ import { describe, expect, test } from 'vp/test'
 
 import { accounts, chain, getClient } from '../../test/config.js'
 import * as Storage from '../core/Storage.js'
+import * as Store from '../core/Store.js'
 import * as Provider from './Provider.js'
 
 const root = accounts[0]!
@@ -25,7 +26,27 @@ async function fund(address: viem_Address) {
   })
 }
 
-function createOpen(options: { mismatchFirstCall?: boolean | undefined } = {}) {
+function asyncJsonStorage(options: Storage.from.Options = {}) {
+  const store = new Map<string, string>()
+  return Storage.from(
+    {
+      async getItem(name) {
+        const raw = store.get(name)
+        if (!raw) return null
+        return Json.parse(raw)
+      },
+      async setItem(name, value) {
+        store.set(name, Json.stringify(value))
+      },
+      async removeItem(name) {
+        store.delete(name)
+      },
+    },
+    options,
+  )
+}
+
+function createOpen() {
   let calls = 0
   const urls: string[] = []
 
@@ -52,10 +73,7 @@ function createOpen(options: { mismatchFirstCall?: boolean | undefined } = {}) {
 
       const keyAuthorization = await root.signKeyAuthorization(
         {
-          accessKeyAddress:
-            options.mismatchFirstCall && calls === 1
-              ? accounts[1]!.address
-              : Address.fromPublicKey(PublicKey.fromHex(pubKey as Hex.Hex)),
+          accessKeyAddress: Address.fromPublicKey(PublicKey.fromHex(pubKey as Hex.Hex)),
           keyType,
         },
         {
@@ -85,6 +103,8 @@ function createOpen(options: { mismatchFirstCall?: boolean | undefined } = {}) {
         callbackUrl.searchParams.set('personalSignMessage', message)
         callbackUrl.searchParams.set('signature', await root.signMessage({ message }))
       }
+      const digest = authUrl.searchParams.get('digest') as Hex.Hex | null
+      if (digest) callbackUrl.searchParams.set('signature', await root.sign({ hash: digest }))
       callbackUrl.searchParams.set('state', state)
       return callbackUrl.toString()
     },
@@ -92,21 +112,21 @@ function createOpen(options: { mismatchFirstCall?: boolean | undefined } = {}) {
 }
 
 describe('create', () => {
-  test('behavior: reauthorizes the managed key when the saved authorization targets the wrong key', async () => {
-    const secureStorage = Storage.memory()
-    const browser = createOpen({ mismatchFirstCall: true })
-    const provider = Provider.create({
+  test('behavior: persists managed access keys through provider storage', async () => {
+    const storage = asyncJsonStorage({ key: 'react-native-managed-key' })
+    const browser = createOpen()
+    const provider1 = Provider.create({
       authorizeAccessKey: () => ({
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
       chains: [chain],
-      host: 'https://wallet-next.tempo.xyz',
+      host: 'https://wallet.tempo.xyz',
       open: browser.open,
       redirectUri: 'accounts-playground://auth',
-      secureStorage,
+      storage,
     })
 
-    const result = await provider.request({
+    const result = await provider1.request({
       method: 'wallet_connect',
       params: [{ capabilities: { method: 'register', name: 'Accounts RN Test' } }],
     })
@@ -114,12 +134,21 @@ describe('create', () => {
 
     await fund(root.address)
 
-    const receipt = await provider.request({
+    const provider2 = Provider.create({
+      chains: [chain],
+      host: 'https://wallet.tempo.xyz',
+      open: browser.open,
+      redirectUri: 'accounts-playground://auth',
+      storage,
+    })
+    await Store.waitForHydration(provider2.store)
+
+    const receipt = await provider2.request({
       method: 'eth_sendTransactionSync',
       params: [{ calls: [transferCall], feeToken: Addresses.pathUsd }],
     })
     expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
-    expect(browser.calls()).toMatchInlineSnapshot(`2`)
+    expect(browser.calls()).toMatchInlineSnapshot(`1`)
   })
 
   test('behavior: forwards showDeposit boolean to the mobile auth URL for registration', async () => {
@@ -129,10 +158,10 @@ describe('create', () => {
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
       chains: [chain],
-      host: 'https://wallet-next.tempo.xyz',
+      host: 'https://wallet.tempo.xyz',
       open: browser.open,
       redirectUri: 'accounts-playground://auth',
-      secureStorage: Storage.memory(),
+      storage: Storage.memory(),
     })
 
     await provider.request({
@@ -153,10 +182,10 @@ describe('create', () => {
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
       chains: [chain],
-      host: 'https://wallet-next.tempo.xyz',
+      host: 'https://wallet.tempo.xyz',
       open: browser.open,
       redirectUri: 'accounts-playground://auth',
-      secureStorage: Storage.memory(),
+      storage: Storage.memory(),
     })
 
     await provider.request({
@@ -176,10 +205,10 @@ describe('create', () => {
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
       chains: [chain],
-      host: 'https://wallet-next.tempo.xyz',
+      host: 'https://wallet.tempo.xyz',
       open: browser.open,
       redirectUri: 'accounts-playground://auth',
-      secureStorage: Storage.memory(),
+      storage: Storage.memory(),
     })
 
     await provider.request({
@@ -213,11 +242,19 @@ describe('create', () => {
   test('behavior: forwards showDeposit params to the mobile auth URL for wallet_authorizeAccessKey', async () => {
     const browser = createOpen()
     const provider = Provider.create({
+      authorizeAccessKey: () => ({
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }),
       chains: [chain],
-      host: 'https://wallet-next.tempo.xyz',
+      host: 'https://wallet.tempo.xyz',
       open: browser.open,
       redirectUri: 'accounts-playground://auth',
-      secureStorage: Storage.memory(),
+      storage: Storage.memory(),
+    })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
     })
 
     await provider.request({
@@ -233,7 +270,7 @@ describe('create', () => {
       ],
     })
 
-    expect(JSON.parse(new URL(browser.urls()[0]!).searchParams.get('showDeposit')!))
+    expect(JSON.parse(new URL(browser.urls()[1]!).searchParams.get('showDeposit')!))
       .toMatchInlineSnapshot(`
       {
         "amount": "25",
@@ -249,10 +286,10 @@ describe('create', () => {
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
       chains: [chain],
-      host: 'https://wallet-next.tempo.xyz',
+      host: 'https://wallet.tempo.xyz',
       open: browser.open,
       redirectUri: 'accounts-playground://auth',
-      secureStorage: Storage.memory(),
+      storage: Storage.memory(),
     })
 
     const result = await provider.request({
@@ -264,6 +301,31 @@ describe('create', () => {
       `"{"message":"hello"}"`,
     )
     expect(result.accounts[0]!.capabilities.personalSign).toEqual({ message: 'hello' })
+    expect(result.accounts[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
+  })
+
+  test('behavior: forwards digest to the mobile auth URL and returns signature', async () => {
+    const browser = createOpen()
+    const provider = Provider.create({
+      authorizeAccessKey: () => ({
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }),
+      chains: [chain],
+      host: 'https://wallet.tempo.xyz',
+      open: browser.open,
+      redirectUri: 'accounts-playground://auth',
+      storage: Storage.memory(),
+    })
+
+    const digest = Hex.random(32)
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { digest, method: 'login' } }],
+    })
+
+    expect(new URL(browser.urls()[0]!).searchParams.get('digest')).toMatchInlineSnapshot(
+      `"${digest}"`,
+    )
     expect(result.accounts[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
   })
 })

@@ -1,5 +1,6 @@
 import * as IO from './IntersectionObserver.js'
 import * as Messenger from './Messenger.js'
+import type * as Remote from './Remote.js'
 import type * as Store from './Store.js'
 import * as TrustedHosts from './TrustedHosts.js'
 
@@ -20,7 +21,7 @@ export type Instance = {
   /** Open the dialog (show iframe / open popup). */
   open: () => void
   /** Sync the pending request queue to the remote auth app. */
-  syncRequests: (requests: readonly Store.QueuedRequest[]) => Promise<void>
+  syncRequests: (sync: Remote.Sync) => Promise<void>
   /** Update the visual theme at runtime. */
   syncTheme: (theme: Theme | undefined) => void
 }
@@ -34,6 +35,14 @@ export declare namespace SetupFn {
     host: string
     /** Reactive state store. */
     store: Store.Store
+    /** Called when the user rejects the currently displayed requests. */
+    onReject: (ids: readonly number[]) => void
+    /** Called when the remote UI responds to a request. */
+    onResponse: (response: {
+      id: number
+      result?: unknown
+      error?: { code: number; message: string } | undefined
+    }) => void
     /** Visual theme overrides applied to the embed. */
     theme?: Theme | undefined
   }
@@ -81,14 +90,17 @@ export function isSafari(): boolean {
   return ua.includes('safari') && !ua.includes('chrome')
 }
 
-/** Cached iframe singleton — keyed by host, reused across setup calls. */
-let cached: { host: string; instance: Instance } | undefined
+type Cached = {
+  host: string
+  instance: Instance
+  refs: {
+    fallback: Instance
+    store: Store.Store
+  }
+}
 
-/** Mutable refs swapped on re-entry so the singleton always uses the latest caller's state. */
-let store: Store.Store | undefined
-let fallback: Instance | undefined
-/** Previous stores kept alive so in-flight responses find their matching request. */
-let previousStores: Store.Store[] = []
+/** Cached iframe singleton — keyed by host, reused across setup calls. */
+let cached: Cached | undefined
 
 /** Creates an iframe dialog that embeds the auth app in a `<dialog>` element. */
 export function iframe(): Dialog {
@@ -99,15 +111,10 @@ export function iframe(): Dialog {
 
     // Reuse existing iframe if the host matches — just swap the store/fallback refs.
     if (cached && cached.host === host) {
-      const oldStore = store
-      store = parameters.store
+      cached.refs.store = parameters.store
 
-      // Keep the old store so in-flight responses can find their matching request.
-      if (oldStore && oldStore !== store && !previousStores.includes(oldStore))
-        previousStores.push(oldStore)
-
-      fallback?.destroy()
-      fallback = popup()(parameters)
+      cached.refs.fallback.destroy()
+      cached.refs.fallback = popup()(parameters)
       cached.instance.syncTheme(parameters.theme)
       return cached.instance
     }
@@ -115,15 +122,17 @@ export function iframe(): Dialog {
     // Different host — tear down old iframe and create fresh.
     cached?.instance.destroy()
 
-    store = parameters.store
-    fallback = popup()(parameters)
+    const refs = {
+      fallback: popup()(parameters),
+      store: parameters.store,
+    }
 
     let open = false
 
     const referrer = getReferrer()
 
     const hostUrl = new URL(host)
-    hostUrl.searchParams.set('chainId', String(store.getState().chainId))
+    hostUrl.searchParams.set('chainId', String(refs.store.getState().chainId))
     hostUrl.searchParams.set('mode', 'iframe')
     if (referrer.icon) {
       if (typeof referrer.icon === 'string') hostUrl.searchParams.set('icon', referrer.icon)
@@ -188,7 +197,13 @@ export function iframe(): Dialog {
     root.appendChild(frame)
 
     let readyResult: Messenger.ReadyOptions | undefined
+    let sync_displayed: Remote.Sync | undefined
+    let requests_displayed: readonly Remote.Request[] = []
     let switchedToPopup = false
+
+    function rejectDisplayedRequests() {
+      parameters.onReject(requests_displayed.map((x) => x.request.id))
+    }
 
     function createMessenger() {
       readyResult = undefined
@@ -200,18 +215,15 @@ export function iframe(): Dialog {
         }),
         waitForReady: true,
       })
-      m.on('rpc-response', (response) => {
-        const targetStore = findStoreForResponse(store!, previousStores, response.id)
-        handleResponse(targetStore, response)
-      })
+      m.on('rpc-response', (response) => parameters.onResponse(response))
       m.waitForReady().then((result) => {
         readyResult = result
         if (result.colorScheme) frame.style.colorScheme = result.colorScheme
         // Ask the wallet to verify the SDK's stored accounts are still valid.
-        syncAccounts(m)
+        syncAccounts(m, refs.store)
       })
       m.on('sync', ({ valid }) => {
-        if (valid === false) store?.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
+        if (valid === false) refs.store.disconnect()
       })
       m.on('switch-mode', () => {
         hideDialog()
@@ -219,12 +231,8 @@ export function iframe(): Dialog {
         open = false
         switchedToPopup = true
 
-        const pending = store
-          ?.getState()
-          .requestQueue.filter(
-            (x): x is Store.QueuedRequest & { status: 'pending' } => x.status === 'pending',
-          )
-        if (pending && pending.length > 0) fallback?.syncRequests(pending)
+        if (sync_displayed && requests_displayed.length > 0)
+          refs.fallback.syncRequests(sync_displayed)
       })
       return m
     }
@@ -249,7 +257,7 @@ export function iframe(): Dialog {
     let savedOverflow = ''
     let opener: HTMLElement | null = null
 
-    const onBlur = () => handleBlur(store!)
+    const onBlur = () => rejectDisplayedRequests()
 
     // 1Password extension adds `inert` attribute to `dialog` rendering it unusable.
     const inertObserver = new MutationObserver((mutations) => {
@@ -318,7 +326,7 @@ export function iframe(): Dialog {
 
     const instance: Instance = {
       close() {
-        fallback!.close()
+        refs.fallback.close()
         open = false
 
         hideDialog()
@@ -327,20 +335,16 @@ export function iframe(): Dialog {
       destroy() {
         if (cached?.instance === instance) cached = undefined
 
-        fallback?.close()
+        refs.fallback.close()
         open = false
 
         activatePage()
         hideDialog()
 
-        fallback?.destroy()
+        refs.fallback.destroy()
         messenger.destroy()
         root.remove()
         inertObserver.disconnect()
-
-        store = undefined
-        fallback = undefined
-        previousStores = []
       },
       open() {
         if (open) return
@@ -349,9 +353,12 @@ export function iframe(): Dialog {
         showDialog()
         activateDialog()
       },
-      async syncRequests(requests) {
+      async syncRequests(sync) {
+        const { requests } = sync
+        sync_displayed = sync
+        requests_displayed = requests
         if (switchedToPopup) {
-          fallback!.syncRequests(requests)
+          refs.fallback.syncRequests(sync)
           return
         }
 
@@ -362,7 +369,7 @@ export function iframe(): Dialog {
           isSafari() &&
           requests.some((x) => ['wallet_connect', 'eth_requestAccounts'].includes(x.request.method))
         ) {
-          fallback!.syncRequests(requests)
+          refs.fallback.syncRequests(sync)
           return
         }
 
@@ -382,13 +389,13 @@ export function iframe(): Dialog {
               'To enable the iframe dialog, add your hostname to the trusted hosts list.',
             ].join('\n'),
           )
-          fallback!.syncRequests(requests)
+          refs.fallback.syncRequests(sync)
         } else {
           const requiresConfirm = requests.some((x) => x.status === 'pending')
           if (!open && requiresConfirm) this.open()
           messenger.send('rpc-requests', {
-            account: getAccount(store!),
-            chainId: store!.getState().chainId,
+            account: sync.account,
+            chainId: sync.chainId,
             requests,
           })
         }
@@ -399,7 +406,7 @@ export function iframe(): Dialog {
       },
     }
 
-    cached = { host, instance }
+    cached = { host, instance, refs }
     return instance
   })
 }
@@ -414,10 +421,15 @@ export function popup(options: popup.Options = {}): Dialog {
     const { host, store } = parameters
 
     let win: Window | null = null
+    let requests_displayed: readonly Remote.Request[] = []
+
+    function rejectDisplayedRequests() {
+      parameters.onReject(requests_displayed.map((x) => x.request.id))
+    }
 
     const offDetectClosed = (() => {
       const timer = setInterval(() => {
-        if (win?.closed) handleBlur(store)
+        if (win?.closed) rejectDisplayedRequests()
       }, 100)
       return () => clearInterval(timer)
     })()
@@ -453,7 +465,7 @@ export function popup(options: popup.Options = {}): Dialog {
       textDecoration: 'underline',
     })
     overlayClose.textContent = 'Close'
-    overlayClose.addEventListener('click', () => handleBlur(store))
+    overlayClose.addEventListener('click', () => rejectDisplayedRequests())
     overlay.appendChild(overlayMessage)
     overlay.appendChild(overlayClose)
     document.body.appendChild(overlay)
@@ -505,19 +517,21 @@ export function popup(options: popup.Options = {}): Dialog {
           waitForReady: true,
         })
 
-        messenger.on('rpc-response', (response) => handleResponse(store, response))
+        messenger.on('rpc-response', (response) => parameters.onResponse(response))
 
         overlay.style.display = 'flex'
       },
-      async syncRequests(requests) {
+      async syncRequests(sync) {
+        const { requests } = sync
+        requests_displayed = requests
         const requiresConfirm = requests.some((x) => x.status === 'pending')
         if (requiresConfirm) {
           if (!win || win.closed) this.open()
           else win.focus()
         }
         messenger?.send('rpc-requests', {
-          account: getAccount(store),
-          chainId: store.getState().chainId,
+          account: sync.account,
+          chainId: sync.chainId,
           requests,
         })
       },
@@ -544,73 +558,11 @@ export function noop(): Dialog {
   }))
 }
 
-/** Finds the store that owns the request matching the given response id. */
-function findStoreForResponse(
-  current: Store.Store,
-  previous: Store.Store[],
-  id: number,
-): Store.Store {
-  if (current.getState().requestQueue.some((q) => q.request.id === id)) return current
-  for (const s of previous) {
-    if (s.getState().requestQueue.some((q) => q.request.id === id)) return s
-  }
-  return current
-}
-
-/** Updates the store with an RPC response from the remote auth app. */
-function handleResponse(
-  store: Store.Store,
-  response: { id: number; result?: unknown; error?: { code: number; message: string } | undefined },
-) {
-  store.setState((x) => ({
-    ...x,
-    requestQueue: x.requestQueue.map((queued) => {
-      if (queued.request.id !== response.id) return queued
-      if (response.error)
-        return {
-          request: queued.request,
-          error: response.error,
-          status: 'error' as const,
-        }
-      return {
-        request: queued.request,
-        result: response.result,
-        status: 'success' as const,
-      }
-    }),
-  }))
-}
-
-/** Marks all pending requests as rejected (user closed the dialog). */
-function handleBlur(store: Store.Store) {
-  store.setState((x) => ({
-    ...x,
-    requestQueue: x.requestQueue.map((queued) =>
-      queued.status === 'pending'
-        ? {
-            request: queued.request,
-            error: { code: 4001, message: 'User rejected the request.' },
-            status: 'error' as const,
-          }
-        : queued,
-    ),
-  }))
-}
-
 /** Sends stored account addresses to the wallet for session validation. */
-function syncAccounts(messenger: Messenger.Bridge) {
-  if (!store) return
+function syncAccounts(messenger: Messenger.Bridge, store: Store.Store) {
   const { accounts } = store.getState()
   if (accounts.length === 0) return
   messenger.send('sync', { addresses: accounts.map((a) => a.address) })
-}
-
-/** Returns the active account from the store, or `undefined` if none. */
-function getAccount(store: Store.Store): { address: string } | undefined {
-  const { accounts, activeAccount } = store.getState()
-  const account = accounts[activeAccount]
-  if (!account) return undefined
-  return { address: account.address }
 }
 
 /**

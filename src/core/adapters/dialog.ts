@@ -1,13 +1,11 @@
-import { Address, Provider as ox_Provider, RpcRequest as ox_RpcRequest, RpcResponse } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { Hex, Provider as ox_Provider } from 'ox'
+import { custom } from 'viem'
 import { z } from 'zod/mini'
 
-import * as AccessKey from '../AccessKey.js'
 import * as Adapter from '../Adapter.js'
 import * as Dialog from '../Dialog.js'
-import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
+import * as RemoteRequests from '../internal/RemoteRequests.js'
 import * as Schema from '../Schema.js'
-import type * as Store from '../Store.js'
 import * as Rpc from '../zod/rpc.js'
 
 /**
@@ -26,8 +24,6 @@ import * as Rpc from '../zod/rpc.js'
 export function dialog(options: dialog.Options = {}): Adapter.Adapter {
   const {
     dialog = Dialog.isInsecureContext() ? Dialog.popup() : Dialog.iframe(),
-    // TODO: use the new host
-    // host = 'https://wallet-next.tempo.xyz/remote',
     host = 'https://wallet.tempo.xyz/embed',
     icon = 'data:image/svg+xml,<svg width="269" height="269" viewBox="0 0 269 269" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="269" height="269" fill="black"/><path d="M123.273 190.794H93.445L121.09 105.318H85.7334L93.445 80.2642H191.95L184.238 105.318H150.773L123.273 190.794Z" fill="white"/></svg>',
     name = 'Tempo Wallet',
@@ -42,48 +38,15 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
       'due to lack of WebAuthn passkey support in non-secure contexts.',
     )
 
-  return Adapter.define({ icon, name, rdns }, ({ getAccount, getClient, store }) => {
-    const listeners = new Set<(requestQueue: readonly Store.QueuedRequest[]) => void>()
-    const requestStore = ox_RpcRequest.createStore()
+  return Adapter.define({ icon, name, rdns }, ({ getAccount, store }) => {
+    const detach = RemoteRequests.attach(host, { dialog, host, store, theme })
 
-    /** Wait for a queued request to be resolved via the store. */
-    function waitForQueuedRequest(requestId: number) {
-      return new Promise((resolve, reject) => {
-        const listener = (requestQueue: readonly Store.QueuedRequest[]) => {
-          const queued = requestQueue.find((x) => x.request.id === requestId)
-
-          // Request removed and queue empty — cancelled or dialog closed.
-          if (!queued && requestQueue.length === 0) {
-            listeners.delete(listener)
-            reject(new ox_Provider.UserRejectedRequestError())
-            return
-          }
-
-          // Request not found but queue has other requests — wait.
-          if (!queued) return
-
-          // Request found but not yet resolved — wait.
-          if (queued.status !== 'success' && queued.status !== 'error') return
-
-          listeners.delete(listener)
-
-          if (queued.status === 'success') resolve(queued.result)
-          else reject(ox_Provider.parseError(queued.error))
-
-          // Remove the resolved request from the queue.
-          store.setState((x) => ({
-            ...x,
-            requestQueue: x.requestQueue.filter((x) => x.request.id !== requestId),
-          }))
-        }
-
-        listeners.add(listener)
-
-        // Notify immediately with current state so the store subscription
-        // picks up the request that was just added (setState fires
-        // synchronously before this listener is registered).
-        listener(store.getState().requestQueue)
-      })
+    /** Returns the active account from the adapter source store. */
+    function getActiveAccount(): { address: string } | undefined {
+      const { accounts, activeAccount } = store.getState()
+      const account = accounts[activeAccount]
+      if (!account) return undefined
+      return { address: account.address }
     }
 
     /**
@@ -93,117 +56,30 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     const provider = ox_Provider.from(
       {
         async request(r) {
-          const request = requestStore.prepare(r as never)
-
-          store.setState((x) => ({
-            ...x,
-            requestQueue: [...x.requestQueue, { request, status: 'pending' as const }],
-          }))
-
-          return waitForQueuedRequest(request.id)
+          if (r.method === 'eth_chainId') return Hex.fromNumber(store.getState().chainId)
+          return RemoteRequests.request(host, {
+            account: getActiveAccount(),
+            chainId: store.getState().chainId,
+            request: r,
+          })
         },
       },
       { schema: Schema.ox },
     )
 
-    /**
-     * Prepares a local key pair when `authorizeAccessKey` is requested without
-     * an external publicKey/address, and returns the params to inject into the
-     * RPC request so the dialog signs the authorization.
-     */
-    async function generateAccessKey(options: Adapter.authorizeAccessKey.Parameters | undefined) {
-      if (!options) return undefined
-      if (options.publicKey || options.address) return undefined
-      if (options.keyType && options.keyType !== 'p256')
-        throw new RpcResponse.InvalidParamsError({
-          message: `\`keyType: "${options.keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
-        })
-
-      const generated = await AccessKey.generate()
-      const { accessKey } = generated
-      return {
-        accessKey,
-        generated,
-        request: {
-          ...options,
-          publicKey: accessKey.publicKey,
-          keyType: 'p256' as const,
-        },
-      }
-    }
-
-    /**
-     * After the dialog returns a signed key authorization, saves the local
-     * key pair + key authorization into the store.
-     */
-    function saveAccessKey(
-      address: Address.Address,
-      keyAuth: KeyAuthorization.Rpc,
-      generated: Awaited<ReturnType<typeof AccessKey.generate>>,
-    ) {
-      const keyAuthorization = KeyAuthorization.fromRpc(keyAuth)
-      AccessKey.add({
-        account: address,
-        authorization: keyAuthorization,
-        keyPair: generated.keyPair,
-        store,
-      })
-    }
-
-    const dialogInstance = dialog({ host, store, theme })
-
-    // Sync store → dialog: whenever the request queue changes, notify
-    // listeners and sync pending requests to the dialog.
-    const unsubscribe = store.subscribe(
-      (x) => x.requestQueue,
-      (requestQueue) => {
-        for (const listener of listeners) listener(requestQueue)
-
-        const pending = requestQueue.filter(
-          (x): x is Store.QueuedRequest & { status: 'pending' } => x.status === 'pending',
-        )
-
-        dialogInstance?.syncRequests(pending)
-        if (pending.length === 0) dialogInstance?.close()
-      },
-    )
-
     return {
       cleanup() {
-        unsubscribe()
-        dialogInstance?.destroy()
+        detach()
       },
       forwardsAuth: true,
       actions: {
-        async createAccount(parameters, request) {
-          const accessKey = await generateAccessKey(parameters.authorizeAccessKey)
-
+        async createAccount(_parameters, request) {
           const { accounts } = await provider.request({
             ...request,
-            params: [
-              {
-                ...request.params?.[0],
-                capabilities: {
-                  ...request.params?.[0]?.capabilities,
-                  ...(accessKey
-                    ? {
-                        authorizeAccessKey: z.encode(
-                          Rpc.wallet_connect.authorizeAccessKey,
-                          accessKey.request,
-                        ),
-                      }
-                    : {}),
-                },
-              },
-            ] as const,
           })
 
-          const address = accounts[0]?.address
           const capabilities = accounts[0]?.capabilities
           const keyAuthorization = capabilities?.keyAuthorization
-
-          if (accessKey && address && keyAuthorization)
-            saveAccessKey(address, keyAuthorization, accessKey.generated)
 
           return {
             accounts: accounts.map((a) => ({ address: a.address })),
@@ -214,35 +90,13 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           }
         },
 
-        async loadAccounts(parameters, request) {
-          const accessKey = await generateAccessKey(parameters?.authorizeAccessKey)
-
+        async loadAccounts(_parameters, request) {
           const { accounts } = await provider.request({
             ...request,
-            params: [
-              {
-                ...request.params?.[0],
-                capabilities: {
-                  ...request.params?.[0]?.capabilities,
-                  ...(accessKey
-                    ? {
-                        authorizeAccessKey: z.encode(
-                          Rpc.wallet_connect.authorizeAccessKey,
-                          accessKey.request,
-                        ),
-                      }
-                    : {}),
-                },
-              },
-            ] as const,
           })
 
-          const address = accounts[0]?.address
           const capabilities = accounts[0]?.capabilities
           const keyAuthorization = capabilities?.keyAuthorization
-
-          if (accessKey && address && keyAuthorization)
-            saveAccessKey(address, keyAuthorization, accessKey.generated)
 
           return {
             accounts: accounts.map((a) => ({ address: a.address })),
@@ -251,156 +105,6 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
             ...(capabilities?.signature ? { signature: capabilities.signature } : {}),
             ...(capabilities?.personalSign ? { personalSign: capabilities.personalSign } : {}),
           }
-        },
-
-        async signPersonalMessage(_params, request) {
-          return await provider.request(request)
-        },
-
-        async signTransaction(parameters, request) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient({
-            chainId: parameters.chainId,
-            feePayer: (() => {
-              if (feePayer === false) return false
-              if (typeof feePayer === 'string') return feePayer
-              return undefined
-            })(),
-          })
-          const transaction =
-            parameters.from && typeof parameters.chainId !== 'undefined'
-              ? await AccessKeyTransaction.create({
-                  address: parameters.from,
-                  calls: parameters.calls,
-                  chainId: parameters.chainId,
-                  client,
-                  store,
-                })
-              : undefined
-          if (transaction) {
-            try {
-              const prepared = await transaction.prepare({
-                ...rest,
-                ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-              })
-              return await prepared.sign()
-            } catch (error) {
-              console.warn('[accounts] access key sign failed, falling through to dialog:', error)
-            }
-          }
-          return await provider.request({
-            ...request,
-            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
-          })
-        },
-
-        async signTypedData(_params, request) {
-          return await provider.request(request)
-        },
-
-        async sendTransaction(parameters, request) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient({
-            chainId: parameters.chainId,
-            feePayer: (() => {
-              if (feePayer === false) return false
-              if (typeof feePayer === 'string') return feePayer
-              return undefined
-            })(),
-          })
-          const transaction =
-            parameters.from && typeof parameters.chainId !== 'undefined'
-              ? await AccessKeyTransaction.create({
-                  address: parameters.from,
-                  calls: parameters.calls,
-                  chainId: parameters.chainId,
-                  client,
-                  store,
-                })
-              : undefined
-          if (transaction) {
-            try {
-              const prepared = await transaction.prepare({
-                ...rest,
-                ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-              })
-              return await prepared.send()
-            } catch (error) {
-              console.warn('[accounts] access key sign failed, falling through to dialog:', error)
-            }
-          }
-          return await provider.request({
-            ...request,
-            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
-          })
-        },
-
-        async sendTransactionSync(parameters, request) {
-          const { feePayer, ...rest } = parameters
-          const client = getClient({
-            chainId: parameters.chainId,
-            feePayer: (() => {
-              if (feePayer === false) return false
-              if (typeof feePayer === 'string') return feePayer
-              return undefined
-            })(),
-          })
-          const transaction =
-            parameters.from && typeof parameters.chainId !== 'undefined'
-              ? await AccessKeyTransaction.create({
-                  address: parameters.from,
-                  calls: parameters.calls,
-                  chainId: parameters.chainId,
-                  client,
-                  store,
-                })
-              : undefined
-          if (transaction) {
-            try {
-              const prepared = await transaction.prepare({
-                ...rest,
-                ...(typeof feePayer !== 'undefined' ? { feePayer: !!feePayer as never } : {}),
-              })
-              return await prepared.sendSync()
-            } catch (error) {
-              console.warn('[accounts] access key sign failed, falling through to dialog:', error)
-            }
-          }
-          return await provider.request({
-            ...request,
-            params: [z.encode(Rpc.transactionRequest, parameters)] as const,
-          })
-        },
-
-        async authorizeAccessKey(parameters, request) {
-          const accessKey = await generateAccessKey(parameters)
-
-          const result = await provider.request({
-            ...request,
-            params: [
-              z.encode(
-                Rpc.wallet_authorizeAccessKey.parameters,
-                accessKey ? accessKey.request : parameters,
-              )!,
-            ],
-          })
-
-          if (accessKey) {
-            const account = getAccount({ signable: false })
-            saveAccessKey(account.address, result.keyAuthorization, accessKey.generated)
-          }
-
-          return result
-        },
-
-        async revokeAccessKey(params, request) {
-          await provider.request(request)
-          AccessKey.remove({
-            accessKey: params.accessKeyAddress,
-            account: params.address,
-            chainId: store.getState().chainId,
-            store,
-          })
         },
 
         async deposit(_params, request) {
@@ -433,8 +137,15 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
         },
 
         async disconnect() {
-          store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
+          store.disconnect()
         },
+      },
+      getAccount(options = {}) {
+        const account = getAccount({ address: options.address, signable: false })
+        return {
+          account: { address: account.address, type: 'json-rpc' as const },
+          transport: custom(provider),
+        }
       },
     }
   })
@@ -444,7 +155,7 @@ export declare namespace dialog {
   type Options = {
     /** Dialog to use for the embed app. @default `Dialog.iframe()` (or `Dialog.popup()` in Safari/insecure contexts) */
     dialog?: Dialog.Dialog | undefined
-    /** URL of the embed app. @default `'https://wallet-next.tempo.xyz/remote'` */
+    /** URL of the embed app. @default `'https://wallet.tempo.xyz/embed'` */
     host?: string | undefined
     /** Data URI of the provider icon. */
     icon?: `data:image/${string}` | undefined

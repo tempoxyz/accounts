@@ -29,10 +29,12 @@ Accepts all [`dialog`](/docs/api/dialog) adapter options, plus all [`Provider`](
 
 ### authorizeAccessKey
 
-- **Type:** `() => { expiry: number; limits?: { token: Address; limit: bigint }[]; scopes?: { address: Address; selector?: Hex | string }[] }`
+- **Type:** `() => { address?: Address; chainId?: bigint; expiry: number; keyType?: 'secp256k1' | 'p256' | 'webAuthn'; limits?: { token: Address; limit: bigint; period?: number }[]; privateKey?: Hex; publicKey?: Hex; scopes?: { address: Address; recipients?: Address[]; selector?: Hex | string }[] } | undefined`
 - **Optional**
 
-Default access key parameters for `wallet_connect`.
+Default access key parameters for `wallet_connect`. Return `undefined` to skip authorization for the current request.
+
+This matches [`Provider.authorizeAccessKey`](/docs/api/provider#authorizeaccesskey).
 
 Tempo Wallet-hosted approval pages require at least one `limits` entry and one `scopes` entry. Local adapters accept unbounded keys, but production apps should pass both so local and wallet-hosted flows use the same policy.
 

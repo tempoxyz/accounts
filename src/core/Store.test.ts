@@ -1,3 +1,4 @@
+import { Json, WebCryptoP256 } from 'ox'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
@@ -11,6 +12,40 @@ const secp256k1Account = z.object({
   privateKey: u.hex(),
 })
 
+const account = '0x0000000000000000000000000000000000000001'
+const account2 = '0x0000000000000000000000000000000000000002'
+const accessKey = '0x0000000000000000000000000000000000000099'
+const privateKey = '0x1234'
+
+async function setup(options: Omit<Store.Options, 'chainId'> = {}) {
+  const storage = options.storage ?? Storage.memory()
+  const store = Store.create({ chainId: 123, ...options, storage })
+  await Store.waitForHydration(store)
+  return { storage, store }
+}
+
+async function getPersistedState(storage: Storage.Storage) {
+  const persisted = await storage.getItem<{ state: Record<string, unknown> }>('store')
+  return persisted?.state
+}
+
+function createJsonStorage() {
+  const items = new Map<string, string>()
+  return Storage.from({
+    getItem<value>(name: string) {
+      const value = items.get(name)
+      if (!value) return null
+      return Json.parse(value) as value
+    },
+    removeItem(name: string) {
+      items.delete(name)
+    },
+    setItem(name: string, value: unknown) {
+      items.set(name, Json.stringify(value))
+    },
+  })
+}
+
 describe('create', () => {
   test('default', () => {
     const store = Store.create({ chainId: 123 })
@@ -20,421 +55,22 @@ describe('create', () => {
         "accounts": [],
         "activeAccount": 0,
         "chainId": 123,
-        "requestQueue": [],
       }
     `)
-  })
-
-  test('behavior: setState updates state', () => {
-    const store = Store.create({ chainId: 123 })
-
-    store.setState({
-      accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
-    })
-
-    expect(store.getState()).toMatchInlineSnapshot(`
-      {
-        "accessKeys": [],
-        "accounts": [
-          {
-            "address": "0x0000000000000000000000000000000000000001",
-          },
-        ],
-        "activeAccount": 0,
-        "chainId": 123,
-        "requestQueue": [],
-      }
-    `)
-  })
-
-  test('behavior: subscribe fires on state change', () => {
-    const store = Store.create({ chainId: 123 })
-    const events: number[] = []
-
-    store.subscribe((state) => events.push(state.chainId))
-    store.setState({ chainId: 456 })
-
-    expect(events).toMatchInlineSnapshot(`
-      [
-        456,
-      ]
-    `)
-  })
-
-  test('behavior: subscribeWithSelector for granular subscriptions', () => {
-    const store = Store.create({ chainId: 123 })
-    const chainIds: number[] = []
-
-    store.subscribe(
-      (state) => state.chainId,
-      (chainId) => chainIds.push(chainId),
-    )
-
-    store.setState({ chainId: 456 })
-    expect(chainIds).toMatchInlineSnapshot(`
-      [
-        456,
-      ]
-    `)
-
-    // Changing accounts does NOT trigger the chainId subscription
-    store.setState({
-      accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
-    })
-    expect(chainIds).toMatchInlineSnapshot(`
-      [
-        456,
-      ]
-    `)
-  })
-})
-
-describe('serialize', () => {
-  test('default: returns the persisted refresh snapshot', () => {
-    const result = Store.serialize({
-      accessKeys: [
-        {
-          access: '0x0000000000000000000000000000000000000001',
-          address: '0x0000000000000000000000000000000000000099',
-          chainId: 123,
-          keyType: 'secp256k1',
-          privateKey: '0x1234',
-        },
-      ],
-      accounts: [
-        { address: '0x0000000000000000000000000000000000000001' },
-        { address: '0x0000000000000000000000000000000000000002' },
-      ],
-      activeAccount: 1,
-      auth: { logout: 'https://example.com/logout' },
-      chainId: 123,
-      requestQueue: [
-        {
-          request: { method: 'eth_accounts' } as never,
-          status: 'pending',
-        },
-      ],
-    })
-
-    expect(result).toMatchInlineSnapshot(`
-      {
-        "accessKeys": [
-          {
-            "access": "0x0000000000000000000000000000000000000001",
-            "address": "0x0000000000000000000000000000000000000099",
-            "chainId": 123,
-            "keyType": "secp256k1",
-            "privateKey": "0x1234",
-          },
-        ],
-        "accounts": [
-          {
-            "address": "0x0000000000000000000000000000000000000001",
-          },
-          {
-            "address": "0x0000000000000000000000000000000000000002",
-          },
-        ],
-        "activeAccount": 1,
-        "auth": {
-          "logout": "https://example.com/logout",
-        },
-        "chainId": 123,
-      }
-    `)
-  })
-
-  test('behavior: limits persisted accounts', () => {
-    const result = Store.serialize(
-      {
-        accessKeys: [],
-        accounts: [
-          { address: '0x0000000000000000000000000000000000000001' },
-          { address: '0x0000000000000000000000000000000000000002' },
-        ],
-        activeAccount: 0,
-        chainId: 123,
-        requestQueue: [],
-      },
-      { maxAccounts: 1 },
-    )
-
-    expect(result.accounts).toMatchInlineSnapshot(`
-      [
-        {
-          "address": "0x0000000000000000000000000000000000000001",
-        },
-      ]
-    `)
-  })
-
-  test('behavior: skips access keys when credential persistence is disabled', () => {
-    const result = Store.serialize(
-      {
-        accessKeys: [
-          {
-            access: '0x0000000000000000000000000000000000000001',
-            address: '0x0000000000000000000000000000000000000099',
-            chainId: 123,
-            keyType: 'secp256k1',
-            privateKey: '0x1234',
-          },
-        ],
-        accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
-        activeAccount: 0,
-        chainId: 123,
-        requestQueue: [],
-      },
-      { persistCredentials: false },
-    )
-
-    expect(result).toMatchInlineSnapshot(`
-      {
-        "accounts": [
-          {
-            "address": "0x0000000000000000000000000000000000000001",
-          },
-        ],
-        "activeAccount": 0,
-        "chainId": 123,
-      }
-    `)
-  })
-})
-
-describe('hydrate', () => {
-  test('behavior: restores persisted state with runtime-only request queue', () => {
-    const current: Store.State = {
-      accessKeys: [],
-      accounts: [],
-      activeAccount: 0,
-      chainId: 123,
-      requestQueue: [
-        {
-          request: { method: 'eth_accounts' } as never,
-          status: 'pending',
-        },
-      ],
-    }
-
-    const result = Store.hydrate(
-      {
-        accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
-        chainId: 456,
-      },
-      current,
-    )
-
-    expect(result).toMatchInlineSnapshot(`
-      {
-        "accessKeys": [],
-        "accounts": [
-          {
-            "address": "0x0000000000000000000000000000000000000001",
-          },
-        ],
-        "activeAccount": 0,
-        "chainId": 456,
-        "requestQueue": [
-          {
-            "request": {
-              "method": "eth_accounts",
-            },
-            "status": "pending",
-          },
-        ],
-      }
-    `)
-  })
-
-  test('behavior: preserves in-memory account credentials when persisted accounts are redacted', () => {
-    const current: Store.State = {
-      accessKeys: [],
-      accounts: [
-        {
-          address: '0x0000000000000000000000000000000000000001',
-          keyType: 'secp256k1',
-          privateKey: '0x1234',
-        },
-      ],
-      activeAccount: 0,
-      chainId: 123,
-      requestQueue: [],
-    }
-
-    const result = Store.hydrate(
-      {
-        accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
-        chainId: 456,
-      },
-      current,
-    )
-
-    expect(result.accounts).toMatchInlineSnapshot(`
-      [
-        {
-          "address": "0x0000000000000000000000000000000000000001",
-          "keyType": "secp256k1",
-          "privateKey": "0x1234",
-        },
-      ]
-    `)
-  })
-
-  test('behavior: filters accounts that the adapter cannot restore', () => {
-    const current: Store.State = {
-      accessKeys: [],
-      accounts: [],
-      activeAccount: 0,
-      chainId: 123,
-      requestQueue: [],
-    }
-
-    const result = Store.hydrate(
-      {
-        accounts: [
-          { address: '0x0000000000000000000000000000000000000001' },
-          {
-            address: '0x0000000000000000000000000000000000000002',
-            keyType: 'secp256k1',
-            privateKey: '0x1234',
-          },
-        ],
-        activeAccount: 1,
-        chainId: 456,
-      },
-      current,
-      {
-        schema: secp256k1Account,
-      },
-    )
-
-    expect(result).toMatchInlineSnapshot(`
-      {
-        "accessKeys": [],
-        "accounts": [
-          {
-            "address": "0x0000000000000000000000000000000000000002",
-            "keyType": "secp256k1",
-            "privateKey": "0x1234",
-          },
-        ],
-        "activeAccount": 0,
-        "chainId": 456,
-        "requestQueue": [],
-      }
-    `)
-  })
-
-  test('behavior: clears active account when every persisted account is invalid', () => {
-    const current: Store.State = {
-      accessKeys: [],
-      accounts: [],
-      activeAccount: 0,
-      chainId: 123,
-      requestQueue: [],
-    }
-
-    const result = Store.hydrate(
-      {
-        accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
-        activeAccount: 0,
-        chainId: 456,
-      },
-      current,
-      { schema: secp256k1Account },
-    )
-
-    expect(result).toMatchInlineSnapshot(`
-      {
-        "accessKeys": [],
-        "accounts": [],
-        "activeAccount": 0,
-        "chainId": 456,
-        "requestQueue": [],
-      }
-    `)
-  })
-
-  test('behavior: keeps unknown account fields after schema validation', () => {
-    const current: Store.State = {
-      accessKeys: [],
-      accounts: [],
-      activeAccount: 0,
-      chainId: 123,
-      requestQueue: [],
-    }
-
-    const result = Store.hydrate(
-      {
-        accounts: [
-          {
-            address: '0x0000000000000000000000000000000000000001',
-            extra: 'kept',
-            keyType: 'secp256k1',
-            privateKey: '0x1234',
-          },
-        ],
-        activeAccount: 0,
-        chainId: 456,
-      },
-      current,
-      { schema: secp256k1Account },
-    )
-
-    expect(result.accounts).toMatchInlineSnapshot(`
-      [
-        {
-          "address": "0x0000000000000000000000000000000000000001",
-          "extra": "kept",
-          "keyType": "secp256k1",
-          "privateKey": "0x1234",
-        },
-      ]
-    `)
-  })
-
-  test('behavior: drops legacy access key without chain context', () => {
-    const current: Store.State = {
-      accessKeys: [],
-      accounts: [],
-      activeAccount: 0,
-      chainId: 123,
-      requestQueue: [],
-    }
-
-    const result = Store.hydrate(
-      {
-        accessKeys: [
-          {
-            access: '0x0000000000000000000000000000000000000001',
-            address: '0x0000000000000000000000000000000000000099',
-            keyType: 'webCrypto',
-            keyPair: {} as any,
-          },
-        ],
-      },
-      current,
-    )
-
-    expect(result.accessKeys).toMatchInlineSnapshot(`[]`)
   })
 })
 
 describe('persistence', () => {
   test('default: persists accounts, activeAccount, and chainId to storage', async () => {
-    const storage = Storage.memory()
-    const store = Store.create({ chainId: 123, storage })
-    await Store.waitForHydration(store)
+    const { storage, store } = await setup()
 
     store.setState({
-      accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+      accounts: [{ address: account }],
       activeAccount: 1,
       chainId: 456,
     })
 
-    const raw = storage.getItem('store') as any
-    expect(raw.state).toMatchInlineSnapshot(`
+    expect(await getPersistedState(storage)).toMatchInlineSnapshot(`
       {
         "accessKeys": [],
         "accounts": [
@@ -451,17 +87,15 @@ describe('persistence', () => {
   test('behavior: hydrates from storage', async () => {
     const storage = Storage.memory()
 
-    const store1 = Store.create({ chainId: 123, storage })
-    await Store.waitForHydration(store1)
+    const { store: store1 } = await setup({ storage })
 
     store1.setState({
-      accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+      accounts: [{ address: account }],
       activeAccount: 0,
       chainId: 456,
     })
 
-    const store2 = Store.create({ chainId: 123, storage })
-    await Store.waitForHydration(store2)
+    const { store: store2 } = await setup({ storage })
 
     expect(store2.getState()).toMatchInlineSnapshot(`
       {
@@ -473,7 +107,6 @@ describe('persistence', () => {
         ],
         "activeAccount": 0,
         "chainId": 456,
-        "requestQueue": [],
       }
     `)
   })
@@ -483,11 +116,11 @@ describe('persistence', () => {
     storage.setItem('store', {
       state: {
         accounts: [
-          { address: '0x0000000000000000000000000000000000000001' },
+          { address: account },
           {
-            address: '0x0000000000000000000000000000000000000002',
+            address: account2,
             keyType: 'secp256k1',
-            privateKey: '0x1234',
+            privateKey,
           },
         ],
         activeAccount: 1,
@@ -496,12 +129,10 @@ describe('persistence', () => {
       version: 0,
     })
 
-    const store = Store.create({
-      chainId: 123,
+    const { store } = await setup({
       schema: secp256k1Account,
       storage,
     })
-    await Store.waitForHydration(store)
 
     expect(store.getState()).toMatchInlineSnapshot(`
       {
@@ -515,38 +146,49 @@ describe('persistence', () => {
         ],
         "activeAccount": 0,
         "chainId": 456,
-        "requestQueue": [],
       }
     `)
   })
 
-  test('behavior: persists accessKeys to storage', async () => {
-    const storage = Storage.memory()
-    const store = Store.create({ chainId: 123, storage })
-    await Store.waitForHydration(store)
+  test('behavior: preserves in-memory account credentials during hydration', async () => {
+    let resolve!: () => void
+    const hydration = new Promise<void>((r) => (resolve = r))
+    const storage = {
+      async getItem<value>(name: string) {
+        await hydration
+        if (name !== 'store') return null
+        return {
+          state: {
+            accounts: [{ address: account }],
+            activeAccount: 0,
+            chainId: 456,
+          },
+          version: 0,
+        } as value
+      },
+      removeItem() {},
+      setItem() {},
+    } satisfies Storage.Storage
 
+    const store = Store.create({ chainId: 123, storage })
     store.setState({
-      accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
-      accessKeys: [
+      accounts: [
         {
-          address: '0x0000000000000000000000000000000000000099',
-          access: '0x0000000000000000000000000000000000000001',
-          chainId: 123,
-          keyType: 'webCrypto',
-          keyPair: {} as any,
+          address: account,
+          keyType: 'secp256k1',
+          privateKey,
         },
       ],
     })
+    resolve()
+    await Store.waitForHydration(store)
 
-    const raw = storage.getItem('store') as any
-    expect(raw.state.accessKeys).toMatchInlineSnapshot(`
+    expect(store.getState().accounts).toMatchInlineSnapshot(`
       [
         {
-          "access": "0x0000000000000000000000000000000000000001",
-          "address": "0x0000000000000000000000000000000000000099",
-          "chainId": 123,
-          "keyPair": {},
-          "keyType": "webCrypto",
+          "address": "0x0000000000000000000000000000000000000001",
+          "keyType": "secp256k1",
+          "privateKey": "0x1234",
         },
       ]
     `)
@@ -555,26 +197,24 @@ describe('persistence', () => {
   test('behavior: hydrates accessKeys from storage', async () => {
     const storage = Storage.memory()
 
-    const store1 = Store.create({ chainId: 123, storage })
-    await Store.waitForHydration(store1)
+    const { store: store1 } = await setup({ storage })
 
     store1.setState({
-      accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+      accounts: [{ address: account }],
       accessKeys: [
         {
-          address: '0x0000000000000000000000000000000000000099',
-          access: '0x0000000000000000000000000000000000000001',
+          address: accessKey,
+          access: account,
           chainId: 123,
           expiry: 9999999999,
           limits: [{ token: '0x0000000000000000000000000000000000000abc', limit: 500n }],
-          keyType: 'webCrypto',
-          keyPair: {} as any,
+          keyType: 'secp256k1',
+          privateKey,
         },
       ],
     })
 
-    const store2 = Store.create({ chainId: 123, storage })
-    await Store.waitForHydration(store2)
+    const { store: store2 } = await setup({ storage })
 
     expect(store2.getState().accessKeys).toMatchInlineSnapshot(`
       [
@@ -583,52 +223,193 @@ describe('persistence', () => {
           "address": "0x0000000000000000000000000000000000000099",
           "chainId": 123,
           "expiry": 9999999999,
-          "keyPair": {},
-          "keyType": "webCrypto",
+          "keyType": "secp256k1",
           "limits": [
             {
               "limit": 500n,
               "token": "0x0000000000000000000000000000000000000abc",
             },
           ],
+          "privateKey": "0x1234",
         },
       ]
     `)
   })
 
-  test('behavior: disconnect clears accessKeys', async () => {
-    const storage = Storage.memory()
-    const store = Store.create({ chainId: 123, storage })
-    await Store.waitForHydration(store)
+  test('behavior: limits persisted accounts', async () => {
+    const { storage, store } = await setup({ maxAccounts: 1 })
 
     store.setState({
-      accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+      accounts: [{ address: account }, { address: account2 }],
+    })
+
+    expect((await getPersistedState(storage))?.accounts).toMatchInlineSnapshot(`
+      [
+        {
+          "address": "0x0000000000000000000000000000000000000001",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: skips access keys when credential persistence is disabled', async () => {
+    const { storage, store } = await setup({ persistCredentials: false })
+
+    store.setState({
+      accounts: [{ address: account }],
       accessKeys: [
         {
-          address: '0x0000000000000000000000000000000000000099',
-          access: '0x0000000000000000000000000000000000000001',
+          access: account,
+          address: accessKey,
           chainId: 123,
-          keyType: 'webCrypto',
-          keyPair: {} as any,
+          keyType: 'secp256k1',
+          privateKey,
         },
       ],
     })
 
-    store.setState({ accessKeys: [], accounts: [], activeAccount: 0 })
+    expect(await getPersistedState(storage)).toMatchInlineSnapshot(`
+      {
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "activeAccount": 0,
+        "chainId": 123,
+      }
+    `)
+  })
+
+  test('behavior: persists private key material inline', async () => {
+    const { storage, store } = await setup()
+
+    store.setState({
+      accessKeys: [
+        {
+          access: account,
+          address: accessKey,
+          chainId: 123,
+          keyType: 'secp256k1',
+          privateKey,
+        },
+      ],
+    })
+
+    expect((await getPersistedState(storage))?.accessKeys).toMatchInlineSnapshot(`
+      [
+        {
+          "access": "0x0000000000000000000000000000000000000001",
+          "address": "0x0000000000000000000000000000000000000099",
+          "chainId": 123,
+          "keyType": "secp256k1",
+          "privateKey": "0x1234",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: strips WebCrypto key pairs from JSON-backed storage', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const storage = createJsonStorage()
+    const { store } = await setup({ storage })
+
+    store.setState({
+      accessKeys: [
+        {
+          access: account,
+          address: accessKey,
+          chainId: 123,
+          keyPair,
+          keyType: 'webCrypto',
+        },
+      ],
+    })
+
+    expect((await getPersistedState(storage))?.accessKeys).toMatchInlineSnapshot(`
+      [
+        {
+          "access": "0x0000000000000000000000000000000000000001",
+          "address": "0x0000000000000000000000000000000000000099",
+          "chainId": 123,
+          "keyType": "webCrypto",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: keeps WebCrypto key pairs in structured-clone storage', async () => {
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const { storage, store } = await setup()
+
+    store.setState({
+      accessKeys: [
+        {
+          access: account,
+          address: accessKey,
+          chainId: 123,
+          keyPair,
+          keyType: 'webCrypto',
+        },
+      ],
+    })
+
+    const accessKeys = (await getPersistedState(storage))?.accessKeys as Record<string, unknown>[]
+    expect('keyPair' in accessKeys[0]!).toMatchInlineSnapshot(`true`)
+  })
+
+  test('behavior: drops legacy access key without chain context', async () => {
+    const storage = Storage.memory()
+    storage.setItem('store', {
+      state: {
+        accessKeys: [
+          {
+            access: account,
+            address: accessKey,
+            keyPair: {},
+            keyType: 'webCrypto',
+          },
+        ],
+      },
+      version: 0,
+    })
+
+    const { store } = await setup({ storage })
+
+    expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: disconnect clears accounts, auth, and access keys', async () => {
+    const { store } = await setup({ storage: Storage.memory() })
+
+    store.setState({
+      accounts: [{ address: account }],
+      accessKeys: [
+        {
+          address: accessKey,
+          access: account,
+          chainId: 123,
+          keyType: 'secp256k1',
+          privateKey,
+        },
+      ],
+      auth: { logout: 'https://example.com/logout' },
+    })
+
+    store.disconnect()
 
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
     expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
+    expect(store.getState().auth).toMatchInlineSnapshot(`undefined`)
   })
 
   test('behavior: custom storage key', async () => {
     const storage = Storage.memory({ key: 'custom' })
-    const store = Store.create({ chainId: 123, storage })
-    await Store.waitForHydration(store)
+    const { store } = await setup({ storage })
 
     store.setState({ chainId: 789 })
 
-    const raw = storage.getItem('store') as any
-    expect(raw.state.chainId).toMatchInlineSnapshot(`789`)
+    expect((await getPersistedState(storage))?.chainId).toMatchInlineSnapshot(`789`)
   })
 })
 
@@ -658,7 +439,6 @@ describe('waitForHydration', () => {
         ],
         "activeAccount": 0,
         "chainId": 789,
-        "requestQueue": [],
       }
     `)
   })

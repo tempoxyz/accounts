@@ -128,10 +128,10 @@ const provider = Provider.create({
 
 ### authorizeAccessKey
 
-- **Type:** `() => Adapter.authorizeAccessKey.Parameters`
+- **Type:** `() => Adapter.authorizeAccessKey.Parameters | undefined`
 - **Optional**
 
-Default access key parameters for `wallet_connect`. When set, `wallet_connect` will automatically authorize an access key.
+Default access key parameters for `wallet_connect`. When set, `wallet_connect` will automatically authorize an access key. Return `undefined` to skip authorization for the current request.
 
 Tempo Wallet-hosted approval pages require at least one `limits` entry and one `scopes` entry. Local adapters accept unbounded keys, but production apps should pass both so local and wallet-hosted flows use the same policy.
 
@@ -147,6 +147,8 @@ declare function authorizeAccessKey(): {
   keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
   /** TIP-20 spending limits. Optional `period` (seconds) makes the limit roll over each period. */
   limits?: { limit: bigint; period?: number; token: Address }[] | undefined
+  /** Private key material to keep in SDK storage. It is not forwarded to wallets over JSON-RPC. */
+  privateKey?: Hex | undefined
   /**
    * External public key to authorize. When provided, no key pair is generated —
    * the caller holds the signing material.
@@ -156,7 +158,7 @@ declare function authorizeAccessKey(): {
   scopes?:
     | { address: Address; recipients?: readonly Address[]; selector?: Hex | string }[]
     | undefined
-}
+} | undefined
 ```
 
 ```ts twoslash
@@ -182,6 +184,8 @@ const provider = Provider.create({
 You can also pre-derive the access key locally by passing `publicKey` or `address` with `keyType`. The wallet still authorizes that key during `wallet_connect`; the app keeps the signing material.
 
 For `keyType: 'secp256k1'`, generate and store the private key in your app or backend, then pass either the derived `address` or the `publicKey` in `authorizeAccessKey`.
+
+Alternatively, pass `privateKey` to let the SDK derive the access-key address and persist the private key through the configured [`storage`](#storage). `privateKey` material is not forwarded to wallets over JSON-RPC.
 
 ```ts twoslash
 // @noErrors

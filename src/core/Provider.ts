@@ -1,8 +1,34 @@
 import { announceProvider } from 'mipd'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
-import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
-import { http, parseUnits, type Chain, type Client as ViemClient, type Transport } from 'viem'
+import {
+  Address,
+  Hash,
+  Hex,
+  Json,
+  Provider as ox_Provider,
+  PublicKey,
+  RpcResponse,
+  WebCryptoP256,
+} from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
+import {
+  createWalletClient,
+  custom,
+  hashMessage,
+  hashTypedData,
+  http,
+  parseUnits,
+  type Chain,
+  type Client as ViemClient,
+  type Transport,
+} from 'viem'
 import type { JsonRpcAccount } from 'viem/accounts'
+import {
+  prepareTransactionRequest,
+  sendTransaction,
+  sendTransactionSync as viem_sendTransactionSync,
+  signTransaction as viem_signTransaction,
+} from 'viem/actions'
 import { parseSiweMessage } from 'viem/siwe'
 import { Account as TempoAccount, Actions } from 'viem/tempo'
 import { tempo, tempoDevnet, tempoModerato } from 'viem/tempo/chains'
@@ -45,6 +71,12 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
   }
 
 const announced = new Set<string>()
+
+type TransactionParameters = Adapter.ActionRequest<typeof Rpc.eth_sendTransaction.schema>
+
+function isBrowserWebCrypto() {
+  return typeof document !== 'undefined' && !!globalThis.crypto?.subtle
+}
 
 /**
  * Creates an EIP-1193 provider with a pluggable adapter.
@@ -168,6 +200,441 @@ export function create(options: create.Options = {}): create.ReturnType {
     return sorted.map((a) => a.address)
   }
 
+  function unsupported(action: string): never {
+    throw new ox_Provider.UnsupportedMethodError({
+      message: `\`${action}\` not supported by adapter.`,
+    })
+  }
+
+  async function getAdapterAccount(
+    options: Adapter.getAccount.Options = {},
+  ): Promise<Awaited<Adapter.getAccount.ReturnType>> {
+    if (!instance.getAccount) unsupported('getAccount')
+    return await instance.getAccount(options)
+  }
+
+  function getWalletClient(options: {
+    account: Awaited<Adapter.getAccount.ReturnType>['account']
+    chainId?: number | undefined
+    feePayer?: string | false | undefined
+    transport?: Transport | undefined
+  }) {
+    const client = getClient({ chainId: options.chainId, feePayer: options.feePayer })
+    return createWalletClient({
+      account: options.account,
+      chain: client.chain,
+      transport: options.transport ?? custom({ request: client.request }),
+    })
+  }
+
+  async function prepareRootTransaction(parameters: TransactionParameters) {
+    const { feePayer, ...rest } = parameters
+    const selected = await getAdapterAccount({ address: parameters.from })
+    const client = getWalletClient({
+      account: selected.account,
+      chainId: parameters.chainId,
+      feePayer: feePayer === true ? undefined : feePayer,
+      transport: selected.transport,
+    })
+    const request = {
+      ...rest,
+      ...(feePayer ? { feePayer: true as const } : {}),
+    }
+    if (selected.account.type === 'json-rpc') return { client, request, selected }
+    const prepared = await prepareTransactionRequest(client, {
+      account: selected.account,
+      ...request,
+      type: 'tempo',
+    } as never)
+    return { client, request: prepared, selected }
+  }
+
+  async function signTransaction_(parameters: TransactionParameters) {
+    {
+      const state = store.getState()
+      const chainId = parameters.chainId ?? state.chainId
+      const client = getClient({
+        chainId,
+        feePayer: (() => {
+          if (parameters.feePayer === false) return false
+          if (typeof parameters.feePayer === 'string') return parameters.feePayer
+          return undefined
+        })(),
+      })
+      const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      const transaction = address
+        ? await AccessKeyTransaction.create({
+            address,
+            calls: parameters.calls,
+            chainId,
+            client,
+            store,
+          })
+        : undefined
+      if (transaction)
+        try {
+          const { feePayer, ...rest } = parameters
+          const prepared = await transaction.prepare({
+            ...rest,
+            ...(feePayer ? { feePayer: true as never } : {}),
+          })
+          return await prepared.sign()
+        } catch {}
+    }
+
+    const { client, request, selected } = await prepareRootTransaction(parameters)
+    if (selected.account.type === 'json-rpc')
+      return await viem_signTransaction(client, request as never)
+    return await selected.account.signTransaction!(request as never)
+  }
+
+  async function sendTransaction_(parameters: TransactionParameters) {
+    {
+      const state = store.getState()
+      const chainId = parameters.chainId ?? state.chainId
+      const client = getClient({
+        chainId,
+        feePayer: (() => {
+          if (parameters.feePayer === false) return false
+          if (typeof parameters.feePayer === 'string') return parameters.feePayer
+          return undefined
+        })(),
+      })
+      const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      const transaction = address
+        ? await AccessKeyTransaction.create({
+            address,
+            calls: parameters.calls,
+            chainId,
+            client,
+            store,
+          })
+        : undefined
+      if (transaction)
+        try {
+          const { feePayer, ...rest } = parameters
+          const prepared = await transaction.prepare({
+            ...rest,
+            ...(feePayer ? { feePayer: true as never } : {}),
+          })
+          return await prepared.send()
+        } catch {}
+    }
+
+    const { feePayer, ...rest } = parameters
+    const selected = await getAdapterAccount({ address: parameters.from })
+    const client = getWalletClient({
+      account: selected.account,
+      chainId: parameters.chainId,
+      feePayer: feePayer === true ? undefined : feePayer,
+      transport: selected.transport,
+    })
+    return await sendTransaction(client, {
+      ...rest,
+      ...(feePayer ? { feePayer: true as never } : {}),
+    } as never)
+  }
+
+  async function sendTransactionSync_(parameters: TransactionParameters) {
+    {
+      const state = store.getState()
+      const chainId = parameters.chainId ?? state.chainId
+      const client = getClient({
+        chainId,
+        feePayer: (() => {
+          if (parameters.feePayer === false) return false
+          if (typeof parameters.feePayer === 'string') return parameters.feePayer
+          return undefined
+        })(),
+      })
+      const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+      const transaction = address
+        ? await AccessKeyTransaction.create({
+            address,
+            calls: parameters.calls,
+            chainId,
+            client,
+            store,
+          })
+        : undefined
+      if (transaction)
+        try {
+          const { feePayer, ...rest } = parameters
+          const prepared = await transaction.prepare({
+            ...rest,
+            ...(feePayer ? { feePayer: true as never } : {}),
+          })
+          return await prepared.sendSync()
+        } catch {}
+    }
+
+    const { feePayer, ...rest } = parameters
+    const selected = await getAdapterAccount({ address: parameters.from })
+    const client = getWalletClient({
+      account: selected.account,
+      chainId: parameters.chainId,
+      feePayer: feePayer === true ? undefined : feePayer,
+      transport: selected.transport,
+    })
+    const request = {
+      ...rest,
+      ...(feePayer ? { feePayer: true as const } : {}),
+    }
+    if (selected.account.type === 'json-rpc')
+      return (await client.request({
+        method: 'eth_sendTransactionSync' as never,
+        params: [z.encode(Rpc.transactionRequest, request)] as never,
+      })) as Rpc.eth_sendTransactionSync.Encoded['returns']
+    const receipt = await viem_sendTransactionSync(client, {
+      account: selected.account,
+      ...request,
+    } as never)
+    return z.encode(Rpc.receipt, receipt as never) as Rpc.eth_sendTransactionSync.Encoded['returns']
+  }
+
+  async function signPersonalMessage(parameters: { address: Address.Address; data: Hex.Hex }) {
+    const selected = await getAdapterAccount({ address: parameters.address })
+    const client = getWalletClient({ account: selected.account, transport: selected.transport })
+    if (selected.account.type === 'json-rpc')
+      return await client.signMessage({
+        account: selected.account,
+        message: { raw: parameters.data },
+      })
+    return await selected.account.sign!({ hash: hashMessage({ raw: parameters.data }) })
+  }
+
+  async function signTypedData(parameters: { address: Address.Address; data: string }) {
+    const typedData = JSON.parse(parameters.data) as {
+      domain: Record<string, unknown>
+      message: Record<string, unknown>
+      primaryType: string
+      types: Record<string, unknown>
+    }
+    const selected = await getAdapterAccount({ address: parameters.address })
+    const client = getWalletClient({ account: selected.account, transport: selected.transport })
+    if (selected.account.type === 'json-rpc')
+      return await client.signTypedData({
+        account: selected.account,
+        ...typedData,
+      } as never)
+    return await selected.account.sign!({ hash: hashTypedData(typedData as never) })
+  }
+
+  async function authorizeAccessKey(parameters: Adapter.authorizeAccessKey.Parameters) {
+    const selected = await getAdapterAccount()
+    const chainId = parameters.chainId ?? getClient().chain.id
+    if (selected.account.type !== 'json-rpc') {
+      const keyAuthorization = await store.accessKeys.authorize({
+        account: selected.account as Pick<TempoAccount.Account, 'address' | 'sign'>,
+        chainId,
+        parameters,
+      })
+      return { keyAuthorization, rootAddress: selected.account.address }
+    }
+
+    const prepared = await prepareAuthorizeAccessKey(parameters, Number(chainId))
+    const client = getWalletClient({
+      account: selected.account,
+      chainId: Number(chainId),
+      transport: selected.transport,
+    })
+    const result = (await client.request({
+      method: 'wallet_authorizeAccessKey' as never,
+      params: [z.encode(Rpc.wallet_authorizeAccessKey.parameters, prepared.parameters)] as never,
+    })) as Adapter.authorizeAccessKey.ReturnType
+    await savePreparedAccessKey({
+      account: result.rootAddress,
+      accessKey: prepared,
+      keyAuthorization: result.keyAuthorization,
+    })
+    return result
+  }
+
+  async function prepareAuthorizeAccessKey(
+    parameters: Adapter.authorizeAccessKey.Parameters,
+    chainId: number | undefined,
+  ): Promise<{
+    keyPair?: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
+    parameters: Adapter.authorizeAccessKey.Parameters
+    privateKey?: Hex.Hex | undefined
+  }> {
+    const chainId_ = parameters.chainId ?? chainId ?? getClient().chain.id
+    if (parameters.privateKey || parameters.address || parameters.publicKey) {
+      const prepared = await AccessKey.prepareAuthorization({
+        ...parameters,
+        chainId: chainId_,
+      })
+      return {
+        ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
+        parameters: toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
+        ...(prepared.privateKey ? { privateKey: prepared.privateKey } : {}),
+      }
+    }
+
+    const generated = instance.generateAccessKey
+      ? await instance.generateAccessKey({ keyType: parameters.keyType })
+      : await generateBrowserP256AccessKey(parameters)
+    if (!generated) return { parameters }
+
+    const prepared = await AccessKey.prepareAuthorization({
+      ...parameters,
+      chainId: chainId_,
+      keyType: generated.keyType,
+      publicKey: generated.publicKey,
+    })
+    return {
+      keyPair: generated.keyPair,
+      parameters: {
+        ...toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
+        publicKey: generated.publicKey,
+      },
+      privateKey: generated.privateKey,
+    }
+  }
+
+  function toAuthorizeAccessKeyParameters(
+    parameters: Adapter.authorizeAccessKey.Parameters,
+    keyAuthorization: Awaited<
+      ReturnType<typeof AccessKey.prepareAuthorization>
+    >['keyAuthorization'],
+  ) {
+    const parameters_rpc = { ...parameters }
+    delete parameters_rpc.privateKey
+    return {
+      ...parameters_rpc,
+      address: keyAuthorization.address,
+      chainId: keyAuthorization.chainId,
+      keyType: keyAuthorization.type,
+    }
+  }
+
+  async function generateBrowserP256AccessKey(
+    parameters: Adapter.authorizeAccessKey.Parameters,
+  ): Promise<Adapter.generateAccessKey.ReturnType> {
+    if (!isBrowserWebCrypto()) return undefined
+    if (parameters.keyType && parameters.keyType !== 'p256')
+      throw new RpcResponse.InvalidParamsError({
+        message: `\`keyType: "${parameters.keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
+      })
+    const keyPair = await WebCryptoP256.createKeyPair()
+    return {
+      keyPair,
+      keyType: 'p256',
+      publicKey: PublicKey.toHex(keyPair.publicKey),
+    }
+  }
+
+  async function savePreparedAccessKey(options: {
+    accessKey: Awaited<ReturnType<typeof prepareAuthorizeAccessKey>> | undefined
+    account: Address.Address | undefined
+    keyAuthorization: KeyAuthorization.Rpc | undefined
+  }) {
+    const { accessKey, account, keyAuthorization } = options
+    if (!account || !keyAuthorization || !accessKey) return
+    const { keyPair, privateKey } = accessKey
+    const material = keyPair ? { keyPair } : privateKey ? { privateKey } : undefined
+    if (!material) return
+    store.accessKeys.add({
+      account,
+      authorization: KeyAuthorization.fromRpc(keyAuthorization),
+      ...material,
+    })
+  }
+
+  async function revokeAccessKey(parameters: {
+    address: Address.Address
+    accessKeyAddress: Address.Address
+  }) {
+    const selected = await getAdapterAccount({ address: parameters.address })
+    const client = getWalletClient({
+      account: selected.account,
+      transport: selected.transport,
+    })
+    if (selected.account.type === 'json-rpc') {
+      await client.request({
+        method: 'wallet_revokeAccessKey' as never,
+        params: [parameters] as never,
+      })
+    } else {
+      try {
+        await Actions.accessKey.revoke(getClient(), {
+          account: selected.account as TempoAccount.Account,
+          accessKey: parameters.accessKeyAddress,
+        })
+      } catch (error) {
+        if (!AccessKey.isUnavailableError(error)) throw error
+      }
+    }
+    store.accessKeys.remove({
+      accessKey: parameters.accessKeyAddress,
+      account: parameters.address,
+      chainId: store.getState().chainId,
+    })
+  }
+
+  async function signTransactionAction(
+    parameters: TransactionParameters,
+    request: Pick<Rpc.eth_signTransaction.Encoded, 'method' | 'params'>,
+  ) {
+    if (actions.signTransaction) return await actions.signTransaction(parameters, request)
+    if (instance.getAccount) return await signTransaction_(parameters)
+    unsupported('signTransaction')
+  }
+
+  async function sendTransactionAction(
+    parameters: TransactionParameters,
+    request: Pick<Rpc.eth_sendTransaction.Encoded, 'method' | 'params'>,
+  ) {
+    if (actions.sendTransaction) return await actions.sendTransaction(parameters, request)
+    if (instance.getAccount) return await sendTransaction_(parameters)
+    unsupported('sendTransaction')
+  }
+
+  async function sendTransactionSyncAction(
+    parameters: TransactionParameters,
+    request: Pick<Rpc.eth_sendTransactionSync.Encoded, 'method' | 'params'>,
+  ) {
+    if (actions.sendTransactionSync) return await actions.sendTransactionSync(parameters, request)
+    if (instance.getAccount) return await sendTransactionSync_(parameters)
+    unsupported('sendTransactionSync')
+  }
+
+  async function signPersonalMessageAction(
+    parameters: { address: Address.Address; data: Hex.Hex },
+    request: Pick<Rpc.personal_sign.Encoded, 'method' | 'params'>,
+  ) {
+    if (actions.signPersonalMessage) return await actions.signPersonalMessage(parameters, request)
+    if (instance.getAccount) return await signPersonalMessage(parameters)
+    unsupported('signPersonalMessage')
+  }
+
+  async function signTypedDataAction(
+    parameters: { address: Address.Address; data: string },
+    request: Pick<Rpc.eth_signTypedData_v4.Encoded, 'method' | 'params'>,
+  ) {
+    if (actions.signTypedData) return await actions.signTypedData(parameters, request)
+    if (instance.getAccount) return await signTypedData(parameters)
+    unsupported('signTypedData')
+  }
+
+  async function authorizeAccessKeyAction(
+    parameters: Adapter.authorizeAccessKey.Parameters,
+    request: Pick<Rpc.wallet_authorizeAccessKey.Encoded, 'method' | 'params'>,
+  ) {
+    if (actions.authorizeAccessKey) return await actions.authorizeAccessKey(parameters, request)
+    if (instance.getAccount) return await authorizeAccessKey(parameters)
+    unsupported('authorizeAccessKey')
+  }
+
+  async function revokeAccessKeyAction(
+    parameters: Adapter.revokeAccessKey.Parameters,
+    request: Pick<Rpc.wallet_revokeAccessKey.Encoded, 'method' | 'params'>,
+  ) {
+    if (actions.revokeAccessKey) return await actions.revokeAccessKey(parameters, request)
+    if (instance.getAccount) return await revokeAccessKey(parameters)
+    unsupported('revokeAccessKey')
+  }
+
   /** Returns accounts to persist. When `persistAccounts` is set, merges new accounts with existing ones. */
   function resolveAccounts(accounts: readonly Account.Store[]) {
     if (!instance.persistAccounts) return accounts
@@ -255,7 +722,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const calls =
                       decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
                     const state = store.getState()
-                    return (await actions.sendTransaction(
+                    return (await sendTransactionAction(
                       {
                         ...rest,
                         chainId: decoded.chainId ?? state.chainId,
@@ -341,7 +808,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const calls =
                       decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
                     const state = store.getState()
-                    return (await actions.signTransaction(
+                    return (await signTransactionAction(
                       {
                         ...rest,
                         chainId: decoded.chainId ?? state.chainId,
@@ -360,7 +827,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const calls =
                       decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
                     const state = store.getState()
-                    return (await actions.sendTransactionSync(
+                    return (await sendTransactionSyncAction(
                       {
                         ...rest,
                         chainId: decoded.chainId ?? state.chainId,
@@ -375,7 +842,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'eth_signTypedData_v4': {
                     assertConnected()
                     const [address, data] = request._decoded.params
-                    return (await actions.signTypedData(
+                    return (await signTypedDataAction(
                       {
                         address,
                         data,
@@ -387,7 +854,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'personal_sign': {
                     assertConnected()
                     const [data, address] = request._decoded.params
-                    return (await actions.signPersonalMessage(
+                    return (await signPersonalMessageAction(
                       {
                         address,
                         data,
@@ -413,7 +880,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         ...(feePayer ? { feePayer } : {}),
                       }
                       if (!sync) {
-                        const hash = await actions.sendTransaction(txRequest, {
+                        const hash = await sendTransactionAction(txRequest, {
                           method: 'eth_sendTransaction',
                           params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
                         })
@@ -421,7 +888,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         const id = Hex.concat(hash, Hex.padLeft(chainId, 32), sendCallsMagic)
                         return { capabilities: { sync }, id }
                       }
-                      const receipt = await actions.sendTransactionSync(txRequest as never, {
+                      const receipt = await sendTransactionSyncAction(txRequest as never, {
                         method: 'eth_sendTransactionSync',
                         params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
                       })
@@ -582,9 +1049,14 @@ export function create(options: create.Options = {}): create.ReturnType {
                           '`auth` and `personalSign` cannot both be set on `wallet_connect`.',
                       })
 
+                    const accessKey = authorizeAccessKey
+                      ? await prepareAuthorizeAccessKey(authorizeAccessKey, chainId)
+                      : undefined
+
                     // Patch the raw request so forwarding adapters carry the
-                    // absolutized auth URLs downstream.
-                    if (auth_request)
+                    // absolutized auth URLs and prepared access-key material
+                    // downstream.
+                    if (auth_request || accessKey)
                       request = {
                         ...request,
                         params: [
@@ -592,7 +1064,15 @@ export function create(options: create.Options = {}): create.ReturnType {
                             ...request.params?.[0],
                             capabilities: {
                               ...request.params?.[0]?.capabilities,
-                              auth: auth_request,
+                              ...(auth_request ? { auth: auth_request } : {}),
+                              ...(accessKey
+                                ? {
+                                    authorizeAccessKey: z.encode(
+                                      Rpc.wallet_connect.authorizeAccessKey,
+                                      accessKey.parameters,
+                                    ),
+                                  }
+                                : {}),
                             },
                           },
                         ] as never,
@@ -636,7 +1116,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                             {
                               credentialId: existing.credential?.id,
                               digest: capabilities.digest,
-                              authorizeAccessKey,
+                              authorizeAccessKey: accessKey?.parameters,
                               ...(personalSign_request
                                 ? { personalSign: personalSign_request }
                                 : {}),
@@ -649,7 +1129,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         return await actions.createAccount(
                           {
                             digest: capabilities.digest,
-                            authorizeAccessKey,
+                            authorizeAccessKey: accessKey?.parameters,
                             name: capabilities.name ?? 'default',
                             ...(capabilities.showDeposit !== undefined
                               ? { showDeposit: capabilities.showDeposit }
@@ -664,7 +1144,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         {
                           credentialId: capabilities?.credentialId,
                           digest: capabilities?.digest,
-                          authorizeAccessKey,
+                          authorizeAccessKey: accessKey?.parameters,
                           selectAccount: capabilities?.selectAccount,
                           ...(personalSign_request ? { personalSign: personalSign_request } : {}),
                           ...(capabilities?.showDeposit !== undefined
@@ -690,6 +1170,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                     })
 
                     const accountAddress = accounts[0]?.address
+                    await savePreparedAccessKey({
+                      accessKey,
+                      account: accountAddress,
+                      keyAuthorization,
+                    })
 
                     // Server Authentication verify: POST the signed SIWE message
                     // to the verify endpoint. Skipped when the auth capability
@@ -787,22 +1272,13 @@ export function create(options: create.Options = {}): create.ReturnType {
                         credentials: 'include',
                       }).catch(() => {})
                     await actions.disconnect?.()
-                    store.setState({
-                      accessKeys: [],
-                      accounts: [],
-                      activeAccount: 0,
-                      auth: undefined,
-                    })
+                    store.disconnect()
                     return
                   }
 
                   case 'wallet_authorizeAccessKey': {
-                    if (!actions.authorizeAccessKey)
-                      throw new ox_Provider.UnsupportedMethodError({
-                        message: '`authorizeAccessKey` not supported by adapter.',
-                      })
                     const decoded = request._decoded.params[0]
-                    const result = await actions.authorizeAccessKey(decoded, request)
+                    const result = await authorizeAccessKeyAction(decoded, request)
                     return {
                       keyAuthorization: {
                         ...result.keyAuthorization,
@@ -814,17 +1290,8 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                   case 'wallet_revokeAccessKey': {
                     assertConnected()
-                    if (!actions.revokeAccessKey)
-                      throw new ox_Provider.UnsupportedMethodError({
-                        message: '`revokeAccessKey` not supported by adapter.',
-                      })
                     const [decoded] = request._decoded.params
-                    await actions.revokeAccessKey(
-                      {
-                        ...decoded,
-                      },
-                      request,
-                    )
+                    await revokeAccessKeyAction({ ...decoded }, request)
                     return
                   }
 
@@ -926,7 +1393,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                       from: signerAddress,
                       ...(resolvedFeePayer !== undefined ? { feePayer: resolvedFeePayer } : {}),
                     }
-                    const receipt = await actions.sendTransactionSync(txRequest, {
+                    const receipt = await sendTransactionSyncAction(txRequest, {
                       method: 'eth_sendTransactionSync',
                       params: [z.encode(Rpc.transactionRequest, txRequest)] as const,
                     })
@@ -1016,13 +1483,12 @@ export function create(options: create.Options = {}): create.ReturnType {
         if (!address) return 'missing'
         const chainId = options.chainId ?? state.chainId
         const { accessKey, calls } = options
-        return await AccessKey.getStatus({
+        return await store.accessKeys.getStatus({
           account: address,
           ...(accessKey ? { accessKey } : {}),
           ...(calls ? { calls } : {}),
           chainId,
           client: provider.getClient({ chainId }),
-          store,
         })
       },
       getClient(options: { chainId?: number | undefined; feePayer?: string | undefined } = {}) {
@@ -1112,8 +1578,9 @@ export declare namespace create {
      * Default access key parameters for `wallet_connect`.
      *
      * When set, `wallet_connect` will automatically authorize an access key.
+     * Return `undefined` to skip authorization for the current request.
      */
-    authorizeAccessKey?: (() => Adapter.authorizeAccessKey.Parameters) | undefined
+    authorizeAccessKey?: (() => Adapter.authorizeAccessKey.Parameters | undefined) | undefined
     /**
      * Supported chains. First chain is the default.
      * @default [tempo, tempoModerato, tempoDevnet]

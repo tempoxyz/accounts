@@ -1,14 +1,12 @@
 import { Provider as ox_Provider, type WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { type Chain, hashMessage } from 'viem'
-import { prepareTransactionRequest } from 'viem/actions'
-import { Account as TempoAccount, Actions, Hardfork } from 'viem/tempo'
+import { Account as TempoAccount, Hardfork } from 'viem/tempo'
 import * as z from 'zod/mini'
 
 import * as AccessKey from '../AccessKey.js'
 import * as Account from '../Account.js'
 import * as Adapter from '../Adapter.js'
-import * as AccessKeyTransaction from '../internal/AccessKeyTransaction.js'
 import * as u from '../zod/utils.js'
 
 const secp256k1Schema = z.object({
@@ -90,69 +88,6 @@ export function local(options: local.Options): Adapter.Adapter {
   return Adapter.define(
     { icon, name, rdns, schema: signableSchema },
     ({ getAccount, getClient, store }) => {
-      async function prepareTransaction(parameters: Adapter.signTransaction.Parameters) {
-        const { feePayer, ...rest } = parameters
-        const client = getClient({
-          chainId: parameters.chainId,
-          feePayer: (() => {
-            if (feePayer === false) return false
-            if (typeof feePayer === 'string') return feePayer
-            return undefined
-          })(),
-        })
-        const request = {
-          ...rest,
-          ...(feePayer ? { feePayer: true as const } : {}),
-        }
-        const state = store.getState()
-        const address = parameters.from ?? state.accounts[state.activeAccount]?.address
-        const transaction = address
-          ? await AccessKeyTransaction.create({
-              address,
-              calls: parameters.calls,
-              chainId: parameters.chainId ?? state.chainId,
-              client,
-              store,
-            })
-          : undefined
-        if (transaction) {
-          try {
-            return await transaction.prepare(request)
-          } catch {}
-        }
-
-        const account = getAccount({
-          address: parameters.from,
-          signable: true,
-        })
-        const prepared = await prepareTransactionRequest(client, {
-          account,
-          ...request,
-          type: 'tempo',
-        })
-        async function sign() {
-          return await account.signTransaction(prepared as never)
-        }
-        return {
-          request: prepared,
-          sign,
-          async send() {
-            const signed = await sign()
-            return (await client.request({
-              method: 'eth_sendRawTransaction' as never,
-              params: [signed],
-            })) as Adapter.sendTransaction.ReturnType
-          },
-          async sendSync() {
-            const signed = await sign()
-            return (await client.request({
-              method: 'eth_sendRawTransactionSync' as never,
-              params: [signed],
-            })) as Adapter.sendTransactionSync.ReturnType
-          },
-        }
-      }
-
       return {
         actions: {
           async createAccount(parameters) {
@@ -222,13 +157,15 @@ export function local(options: local.Options): Adapter.Adapter {
                       keyAuthorization_unsigned.keyAuthorization,
                       { signature: SignatureEnvelope.from(signature_) },
                     )
-                    AccessKey.add({
+                    store.accessKeys.add({
                       account: account.address,
                       authorization: signed,
                       ...(keyAuthorization_unsigned.keyPair
                         ? { keyPair: keyAuthorization_unsigned.keyPair }
                         : {}),
-                      store,
+                      ...(keyAuthorization_unsigned.privateKey
+                        ? { privateKey: keyAuthorization_unsigned.privateKey }
+                        : {}),
                     })
                     return signed
                   })()
@@ -239,11 +176,10 @@ export function local(options: local.Options): Adapter.Adapter {
               if (!grantOptions) return undefined
               // Non-witness fallback: sign the key authorization on its own
               // (a second ceremony when `personalSign` claimed the first).
-              return await AccessKey.authorize({
+              return await store.accessKeys.authorize({
                 account,
                 chainId: getClient().chain.id,
                 parameters: grantOptions,
-                store,
               })
             })()
 
@@ -264,16 +200,6 @@ export function local(options: local.Options): Adapter.Adapter {
                   }
                 : {}),
             }
-          },
-          async authorizeAccessKey(parameters) {
-            const account = getAccount({ signable: true })
-            const keyAuthorization = await AccessKey.authorize({
-              account,
-              chainId: getClient().chain.id,
-              parameters,
-              store,
-            })
-            return { keyAuthorization, rootAddress: account.address }
           },
           async loadAccounts(parameters) {
             const { authorizeAccessKey, personalSign, ...rest } =
@@ -365,13 +291,15 @@ export function local(options: local.Options): Adapter.Adapter {
                   signature: SignatureEnvelope.from(signature_keyAuthorization),
                 },
               )
-              AccessKey.add({
+              store.accessKeys.add({
                 account: account.address,
                 authorization: keyAuthorization,
                 ...(keyAuthorization_unsigned.keyPair
                   ? { keyPair: keyAuthorization_unsigned.keyPair }
                   : {}),
-                store,
+                ...(keyAuthorization_unsigned.privateKey
+                  ? { privateKey: keyAuthorization_unsigned.privateKey }
+                  : {}),
               })
               return keyAuthorization
             })()
@@ -401,50 +329,9 @@ export function local(options: local.Options): Adapter.Adapter {
                 : {}),
             }
           },
-          async revokeAccessKey(parameters) {
-            const account = getAccount({ signable: true })
-            const client = getClient()
-            try {
-              await Actions.accessKey.revoke(client, {
-                account,
-                accessKey: parameters.accessKeyAddress,
-              })
-            } catch (error) {
-              if (!AccessKey.isUnavailableError(error)) throw error
-            }
-            AccessKey.remove({
-              accessKey: parameters.accessKeyAddress,
-              account: account.address,
-              chainId: client.chain.id,
-              store,
-            })
-          },
-          async signPersonalMessage({ data, address }) {
-            const account = getAccount({ address, signable: true })
-            return await account.signMessage({ message: { raw: data } })
-          },
-          async signTransaction(parameters) {
-            const prepared = await prepareTransaction(parameters)
-            return await prepared.sign()
-          },
-          async signTypedData({ data, address }) {
-            const account = getAccount({ address, signable: true })
-            const parsed = JSON.parse(data) as {
-              domain: Record<string, unknown>
-              message: Record<string, unknown>
-              primaryType: string
-              types: Record<string, unknown>
-            }
-            return await account.signTypedData(parsed)
-          },
-          async sendTransaction(parameters) {
-            const prepared = await prepareTransaction(parameters)
-            return await prepared.send()
-          },
-          async sendTransactionSync(parameters) {
-            const prepared = await prepareTransaction(parameters)
-            return await prepared.sendSync()
-          },
+        },
+        getAccount(options = {}) {
+          return { account: getAccount({ address: options.address, signable: true }) }
         },
       }
     },
