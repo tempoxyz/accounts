@@ -1,6 +1,7 @@
-import { mkdtemp } from 'node:fs/promises'
+import { chmod, mkdtemp, open, stat, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { describe, expect, expectTypeOf, test } from 'vp/test'
 
 import type * as CoreStorage from '../core/Storage.js'
@@ -32,6 +33,47 @@ describe('filesystem', () => {
     `)
   })
 
+  test('behavior: tightens directory and file permissions', async () => {
+    const path = await createPath()
+    const storage = Storage.filesystem({ key: 'test', path })
+
+    await chmod(dirname(path), 0o755)
+    await writeFile(path, '{}', { encoding: 'utf8', mode: 0o644 })
+    await chmod(path, 0o644)
+    await storage.setItem('store', { state: { chainId: 1 }, version: 0 })
+
+    if (process.platform === 'win32') return
+
+    expect({
+      directory: ((await stat(dirname(path))).mode & 0o777).toString(8),
+      file: ((await stat(path)).mode & 0o777).toString(8),
+    }).toMatchInlineSnapshot(`
+      {
+        "directory": "700",
+        "file": "600",
+      }
+    `)
+  })
+
+  test('behavior: wraps malformed JSON errors with the storage path', async () => {
+    const path = await createPath()
+    const storage = Storage.filesystem({ key: 'test', path })
+
+    await writeFile(path, '{', 'utf8')
+
+    await expect(
+      Promise.resolve(storage.getItem('store')).catch((error: Error) => ({
+        message: error.message.replace(path, '<path>'),
+        name: error.name,
+      })),
+    ).resolves.toMatchInlineSnapshot(`
+      {
+        "message": "Failed to parse CLI storage file at <path>. The file is not valid JSON.",
+        "name": "FilesystemStorageError",
+      }
+    `)
+  })
+
   test('behavior: scopes values by storage key', async () => {
     const path = await createPath()
     const a = Storage.filesystem({ key: 'a', path })
@@ -40,6 +82,27 @@ describe('filesystem', () => {
     await a.setItem('store', { state: { chainId: 1 }, version: 0 })
 
     await expect(b.getItem('store')).resolves.toMatchInlineSnapshot(`null`)
+  })
+
+  test('behavior: waits for an external lock file', async () => {
+    const path = await createPath()
+    const storage = Storage.filesystem({ key: 'test', path })
+    const lock = await open(`${path}.lock`, 'wx', 0o600)
+
+    const write = storage.setItem('store', { state: { chainId: 1 }, version: 0 })
+    await sleep(50)
+    await lock.close()
+    await unlink(`${path}.lock`)
+    await write
+
+    await expect(storage.getItem('store')).resolves.toMatchInlineSnapshot(`
+      {
+        "state": {
+          "chainId": 1,
+        },
+        "version": 0,
+      }
+    `)
   })
 
   test('behavior: serializes concurrent file writes', async () => {

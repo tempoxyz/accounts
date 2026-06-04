@@ -599,7 +599,7 @@ describe('Provider.create', () => {
     }
   })
 
-  test('behavior: generates, persists, and uses a managed key during wallet_connect', async () => {
+  test('behavior: generates, persists, and reuses a managed key during wallet_connect', async () => {
     const handler = createHandler()
     const server = await createServer(handler.listener)
     const storagePath = await createStoragePath()
@@ -631,9 +631,30 @@ describe('Provider.create', () => {
         method: 'eth_sendTransactionSync',
         params: [{ calls: [transferCall] }],
       })
+      const storage_2 = Storage.filesystem({ path: storagePath })
+      const provider_2 = Provider.create({
+        chains: [chain],
+        open() {
+          throw new Error('Unexpected browser open.')
+        },
+        host: `${server.url}/cli-auth`,
+        storage: storage_2,
+      })
+      const receipt_2 = await provider_2.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
       const [entry] = await readAccessKeys(storage)
 
-      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+      expect({
+        initial: receipt.status,
+        restored: receipt_2.status,
+      }).toMatchInlineSnapshot(`
+        {
+          "initial": "0x1",
+          "restored": "0x1",
+        }
+      `)
       expect({
         access: entry!.access,
         address: entry!.address.toLowerCase(),
