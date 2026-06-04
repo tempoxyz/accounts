@@ -1,6 +1,7 @@
-import type { Hex } from 'viem'
+import { KeyAuthorization } from 'ox/tempo'
+import type { Chain, Hex } from 'viem'
 import { hashMessage, verifyMessage } from 'viem'
-import { tempoLocalnet } from 'viem/tempo/chains'
+import { tempo, tempoLocalnet, tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 
 import {
@@ -140,11 +141,16 @@ describe('local', () => {
       ).toBe(true)
     })
 
-    test('default: personalSign + authorizeAccessKey produces two distinct signatures', async () => {
+    test('default: personalSign + authorizeAccessKey binds the message via TIP-1053 witness (one ceremony)', async () => {
       const captured: { digest: Hex | undefined }[] = []
-      const { adapter } = setup({
-        loadAccounts: makeLoadAccounts(0, captured),
-      })
+      // tempoModerato is at the T5 hardfork, which introduces TIP-1053 witness
+      // binding (tempoLocalnet/tempoDevnet are still on T3).
+      const { adapter } = setup(
+        {
+          loadAccounts: makeLoadAccounts(0, captured),
+        },
+        { chain: tempoModerato },
+      )
 
       const result = await adapter.actions.loadAccounts(
         {
@@ -154,8 +160,40 @@ describe('local', () => {
         { method: 'wallet_connect', params: undefined },
       )
 
-      // loadAccounts saw the personalSign digest, NOT the keyAuth digest.
+      // A single ceremony ran, and its digest is the key-auth digest (which
+      // commits to the witness) — NOT the bare personalSign digest.
+      expect(captured).toHaveLength(1)
+      expect(captured[0]!.digest).not.toBe(hashMessage('hello'))
+
+      // The SIWT proof is the signed key authorization, surfaced as `keyAuthorization`.
+      const keyAuthorization = result.personalSign?.keyAuthorization
+      expect(keyAuthorization).toBeDefined()
+
+      // The bound witness equals hashMessage(message), and the single ceremony
+      // signature is reused for both the key auth and the top-level signature.
+      const decoded = KeyAuthorization.deserialize(keyAuthorization!)
+      expect(decoded.witness).toBe(hashMessage('hello'))
+      expect(captured[0]!.digest).toBe(KeyAuthorization.getSignPayload(decoded))
+      expect(result.keyAuthorization?.signature).toBeDefined()
+    })
+
+    test('behavior: personalSign + authorizeAccessKey on a non-witness chain produces two distinct signatures', async () => {
+      const captured: { digest: Hex | undefined }[] = []
+      // tempo mainnet does not support TIP-1053 yet — fall back to two prompts.
+      const { adapter } = setup({ loadAccounts: makeLoadAccounts(0, captured) }, { chain: tempo })
+
+      const result = await adapter.actions.loadAccounts(
+        {
+          personalSign: { message: 'hello' },
+          authorizeAccessKey: { expiry: 0, chainId: BigInt(tempo.id) },
+        },
+        { method: 'wallet_connect', params: undefined },
+      )
+
+      // loadAccounts saw the personalSign digest, NOT the keyAuthorization digest.
       expect(captured[0]!.digest).toBe(hashMessage('hello'))
+      // No witness binding on the fallback path.
+      expect(result.personalSign).toEqual({ message: 'hello' })
 
       // The personalSign signature is a real EIP-191 signature over 'hello'.
       expect(
@@ -311,9 +349,10 @@ function makeLoadAccounts(
   }
 }
 
-function setup(overrides: Partial<local.Options> = {}) {
+function setup(overrides: Partial<local.Options> = {}, options: { chain?: Chain } = {}) {
+  const chain = options.chain ?? tempoLocalnet
   const storage = Storage.memory()
-  const store = Store.create({ chainId: tempoLocalnet.id, storage })
+  const store = Store.create({ chainId: chain.id, storage })
   const adapter = local({
     loadAccounts: async () => ({
       accounts: [
@@ -329,7 +368,7 @@ function setup(overrides: Partial<local.Options> = {}) {
     ...overrides,
   })({
     getAccount: (options) => Account.find({ ...options, signable: true, store }),
-    getClient: () => getClient({ chain: tempoLocalnet }) as never,
+    getClient: () => getClient({ chain }) as never,
     storage,
     store,
   })

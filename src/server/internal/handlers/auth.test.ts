@@ -1,4 +1,7 @@
 import { Hono } from 'hono'
+import { Secp256k1 } from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
+import { hashMessage } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { parseSiweMessage } from 'viem/siwe'
 import { describe, expect, test } from 'vp/test'
@@ -7,12 +10,36 @@ import * as Handler from '../../Handler.js'
 import * as Kv from '../../Kv.js'
 import { auth } from './auth.js'
 
-const account = privateKeyToAccount(
-  '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
-)
+const privateKey = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
+const account = privateKeyToAccount(privateKey)
 const otherAccount = privateKeyToAccount(
   '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba',
 )
+
+/**
+ * Builds a TIP-1053 witness-bound key authorization signed (secp256k1) by
+ * `privateKey`, mirroring what the SDK produces on the witness path. Returns
+ * the RLP-serialized signed key authorization for the verify `keyAuthorization` field.
+ */
+function signWitnessKeyAuth(options: {
+  chainId: number
+  message: string
+  signWith?: `0x${string}`
+  witness?: `0x${string}`
+}) {
+  const unsigned = KeyAuthorization.from({
+    address: otherAccount.address,
+    chainId: BigInt(options.chainId),
+    expiry: 0,
+    type: 'secp256k1',
+    witness: options.witness ?? hashMessage(options.message),
+  })
+  const signature = Secp256k1.sign({
+    payload: KeyAuthorization.getSignPayload(unsigned),
+    privateKey: options.signWith ?? privateKey,
+  })
+  return KeyAuthorization.serialize(KeyAuthorization.from(unsigned, { signature }))
+}
 
 describe('challenge', () => {
   test('error: requires pinned origin or domain', () => {
@@ -858,6 +885,102 @@ describe('Handler.compose integration', () => {
   })
 })
 
+describe('verify (TIP-1053 witness)', () => {
+  test('default: verifies witness-bound key authorization and issues a session', async () => {
+    const store = Kv.memory()
+    const { app } = setup({ store })
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const keyAuthorization = signWitnessKeyAuth({ chainId: 1, message })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature: await account.signMessage({ message }),
+      keyAuthorization,
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchInlineSnapshot(`{}`)
+  })
+
+  test('error: rejects when witness does not match hashMessage(message)', async () => {
+    const { app } = setup()
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const keyAuthorization = signWitnessKeyAuth({
+      chainId: 1,
+      message,
+      witness: hashMessage('different message'),
+    })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature: await account.signMessage({ message }),
+      keyAuthorization,
+    })
+
+    expect(res.status).toBe(401)
+    expect(await res.json()).toMatchInlineSnapshot(`
+      {
+        "error": "witness mismatch",
+      }
+    `)
+  })
+
+  test('error: rejects when the key authorization was signed by another account', async () => {
+    const { app } = setup()
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    // Bind the correct witness but sign with a different key.
+    const keyAuthorization = signWitnessKeyAuth({
+      chainId: 1,
+      message,
+      signWith: '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba',
+    })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature: await account.signMessage({ message }),
+      keyAuthorization,
+    })
+
+    expect(res.status).toBe(401)
+    expect(await res.json()).toMatchInlineSnapshot(`
+      {
+        "error": "signature does not match address",
+      }
+    `)
+  })
+
+  test('error: rejects when the key authorization chain differs from the challenge', async () => {
+    const { app } = setup()
+
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const keyAuthorization = signWitnessKeyAuth({ chainId: 2, message })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature: await account.signMessage({ message }),
+      keyAuthorization,
+    })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchInlineSnapshot(`
+      {
+        "error": "chainId mismatch",
+      }
+    `)
+  })
+})
+
 function setup(options: Parameters<typeof auth>[0] = {}) {
   const handler = auth({ domain: 'wallet.example', ...options })
   // Mount under '/' so tests hit /challenge, /, /logout directly.
@@ -880,7 +1003,8 @@ async function postVerify(
   body: {
     address: string
     message: string
-    signature: string
+    signature?: string
+    keyAuthorization?: string
     returnToken?: boolean
   },
 ) {

@@ -712,6 +712,13 @@ export function create(options: create.Options = {}): create.ReturnType {
                             address: accountAddress,
                             message: verifyMessage,
                             signature,
+                            // TIP-1053 witness path: the SIWT proof is the signed
+                            // key authorization, so the verifier checks
+                            // `witness == hashMessage(message)` and recovers over
+                            // the authorization digest instead of the message.
+                            ...(personalSign?.keyAuthorization
+                              ? { keyAuthorization: personalSign.keyAuthorization }
+                              : {}),
                           })
                         : undefined
 
@@ -738,7 +745,14 @@ export function create(options: create.Options = {}): create.ReturnType {
                                   ? { auth: auth_result ?? auth_capability }
                                   : {}),
                                 ...(personalSign
-                                  ? { personalSign: { message: personalSign.message } }
+                                  ? {
+                                      personalSign: {
+                                        message: personalSign.message,
+                                        ...(personalSign.keyAuthorization
+                                          ? { keyAuthorization: personalSign.keyAuthorization }
+                                          : {}),
+                                      },
+                                    }
                                   : {}),
                               }
                             : {},
@@ -1410,7 +1424,12 @@ async function fetchAuthChallenge(
  */
 async function verifyAuthMessage(
   auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
-  body: { address: Address.Address; message: string; signature: Hex.Hex },
+  body: {
+    address: Address.Address
+    message: string
+    signature: Hex.Hex
+    keyAuthorization?: Hex.Hex | undefined
+  },
 ): Promise<{ token?: string }> {
   const url = typeof auth === 'object' ? auth.verify! : resolveAuthEndpoint(auth, 'verify')
   // Auto-request the token in environments without a cookie jar (React

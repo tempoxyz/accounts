@@ -1,8 +1,8 @@
 import { Provider as ox_Provider, type WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
-import { hashMessage } from 'viem'
+import { type Chain, hashMessage } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
-import { Account as TempoAccount, Actions } from 'viem/tempo'
+import { Account as TempoAccount, Actions, Hardfork } from 'viem/tempo'
 import * as z from 'zod/mini'
 
 import * as AccessKey from '../AccessKey.js'
@@ -171,8 +171,32 @@ export function local(options: local.Options): Adapter.Adapter {
                 '`digest` and `personalSign` cannot both be set on `wallet_connect`.',
               )
 
-            const peronsalSign_digest = personalSign ? hashMessage(personalSign.message) : undefined
-            const digest = peronsalSign_digest ?? rest.digest
+            const client = getClient(
+              grantOptions?.chainId ? { chainId: Number(grantOptions.chainId) } : undefined,
+            )
+            const chainId = grantOptions?.chainId ?? client.chain.id
+
+            // TIP-1053 witness binding (see `loadAccounts`): fold the SIWT
+            // message into the access-key authorization and sign both in the
+            // single create-account ceremony when the chain supports it.
+            const witness =
+              personalSign && grantOptions && supportsWitness(client.chain)
+                ? hashMessage(personalSign.message)
+                : undefined
+
+            const peronsalSign_digest =
+              personalSign && !witness ? hashMessage(personalSign.message) : undefined
+
+            const keyAuthorization_unsigned =
+              witness && grantOptions
+                ? await AccessKey.prepareAuthorization({ ...grantOptions, chainId, witness })
+                : undefined
+
+            const keyAuthorization_digest = keyAuthorization_unsigned
+              ? KeyAuthorization.getSignPayload(keyAuthorization_unsigned.keyAuthorization)
+              : undefined
+
+            const digest = peronsalSign_digest ?? keyAuthorization_digest ?? rest.digest
 
             const { accounts, email, signature, username } = await createAccount({
               ...rest,
@@ -189,8 +213,32 @@ export function local(options: local.Options): Adapter.Adapter {
             const signature_ =
               digest && !signature ? await account.sign({ hash: digest }) : signature
 
+            // Witness path: the ceremony already signed the witness-bearing
+            // key-auth digest, so reuse that signature instead of a 2nd prompt.
+            const keyAuthorization_signed =
+              witness && keyAuthorization_unsigned && signature_
+                ? await (async () => {
+                    const signed = KeyAuthorization.from(
+                      keyAuthorization_unsigned.keyAuthorization,
+                      { signature: SignatureEnvelope.from(signature_) },
+                    )
+                    AccessKey.add({
+                      account: account.address,
+                      authorization: signed,
+                      ...(keyAuthorization_unsigned.keyPair
+                        ? { keyPair: keyAuthorization_unsigned.keyPair }
+                        : {}),
+                      store,
+                    })
+                    return signed
+                  })()
+                : undefined
+
             const keyAuthorization = await (async () => {
+              if (keyAuthorization_signed) return KeyAuthorization.toRpc(keyAuthorization_signed)
               if (!grantOptions) return undefined
+              // Non-witness fallback: sign the key authorization on its own
+              // (a second ceremony when `personalSign` claimed the first).
               return await AccessKey.authorize({
                 account,
                 chainId: getClient().chain.id,
@@ -205,7 +253,16 @@ export function local(options: local.Options): Adapter.Adapter {
               keyAuthorization,
               signature: signature_,
               username,
-              ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
+              ...(personalSign
+                ? {
+                    personalSign: {
+                      message: personalSign.message,
+                      ...(witness && keyAuthorization_signed
+                        ? { keyAuthorization: KeyAuthorization.serialize(keyAuthorization_signed) }
+                        : {}),
+                    },
+                  }
+                : {}),
             }
           },
           async authorizeAccessKey(parameters) {
@@ -231,12 +288,34 @@ export function local(options: local.Options): Adapter.Adapter {
                 '`digest` and `personalSign` cannot both be set on `wallet_connect`.',
               )
 
-            const peronsalSign_digest = personalSign ? hashMessage(personalSign.message) : undefined
+            const client = getClient(
+              authorizeAccessKey?.chainId
+                ? { chainId: Number(authorizeAccessKey.chainId) }
+                : undefined,
+            )
+            const chainId = authorizeAccessKey?.chainId ?? client.chain.id
+
+            // TIP-1053 witness binding: when both a `personalSign` challenge and
+            // an `authorizeAccessKey` are requested on a witness-capable chain,
+            // bind the message into the key authorization's `witness` and sign
+            // both in ONE ceremony. The signed key authorization doubles as the
+            // SIWT proof. Otherwise fall back to the two-ceremony path below.
+            const witness =
+              personalSign && authorizeAccessKey && supportsWitness(client.chain)
+                ? hashMessage(personalSign.message)
+                : undefined
+
+            // Only claim the ceremony slot with the `personalSign` digest when
+            // NOT binding via witness — the witness path signs the key-auth
+            // digest (which already commits to the message) instead.
+            const peronsalSign_digest =
+              personalSign && !witness ? hashMessage(personalSign.message) : undefined
 
             const keyAuthorization_unsigned = authorizeAccessKey
               ? await AccessKey.prepareAuthorization({
                   ...authorizeAccessKey,
-                  chainId: authorizeAccessKey.chainId ?? getClient().chain.id,
+                  chainId,
+                  ...(witness ? { witness } : {}),
                 })
               : undefined
 
@@ -245,13 +324,13 @@ export function local(options: local.Options): Adapter.Adapter {
               : undefined
 
             // Slot allocation:
-            //   1. `personalSign` digest, if present.
-            //   2. Else unsigned key-auth digest (existing 1-prompt fold for `authorizeAccessKey`).
+            //   1. `personalSign` digest, if present (non-witness path).
+            //   2. Else unsigned key-auth digest (1-prompt fold for
+            //      `authorizeAccessKey`, including the witness path).
             //   3. Else caller's `rest.digest`.
-            // When BOTH `personalSign` and `authorizeAccessKey` are present,
-            // `personalSign` wins the load-accounts ceremony and the key
-            // authorization gets its own follow-up `account.sign` ceremony
-            // (2 prompts total).
+            // When BOTH `personalSign` and `authorizeAccessKey` are present on a
+            // non-witness chain, `personalSign` wins the ceremony and the key
+            // authorization gets a follow-up `account.sign` (2 prompts total).
             const digest = peronsalSign_digest ?? keyAuthorization_digest ?? rest.digest
 
             // Pass the prepared digest (or the caller's) into loadAccounts so
@@ -270,9 +349,11 @@ export function local(options: local.Options): Adapter.Adapter {
 
             // Key auth signing path:
             //   - If `personalSign` took the ceremony slot AND `authorizeAccessKey`
-            //     is set, we need a SECOND ceremony to sign the key-auth digest.
-            //   - Else (key-auth digest took the slot), reuse `signature_`.
-            const keyAuthorization = await (async () => {
+            //     is set (non-witness), we need a SECOND ceremony to sign the
+            //     key-auth digest.
+            //   - Else (key-auth digest took the slot — witness path or
+            //     `authorizeAccessKey`-only), reuse `signature_`.
+            const keyAuthorization_signed = await (async () => {
               if (!keyAuthorization_unsigned || !account) return undefined
               const signature_keyAuthorization =
                 peronsalSign_digest || !signature_
@@ -292,8 +373,12 @@ export function local(options: local.Options): Adapter.Adapter {
                   : {}),
                 store,
               })
-              return KeyAuthorization.toRpc(keyAuthorization)
+              return keyAuthorization
             })()
+
+            const keyAuthorization = keyAuthorization_signed
+              ? KeyAuthorization.toRpc(keyAuthorization_signed)
+              : undefined
 
             return {
               accounts,
@@ -301,7 +386,19 @@ export function local(options: local.Options): Adapter.Adapter {
               keyAuthorization,
               signature: signature_,
               username,
-              ...(personalSign ? { personalSign: { message: personalSign.message } } : {}),
+              ...(personalSign
+                ? {
+                    personalSign: {
+                      message: personalSign.message,
+                      // On the witness path the SIWT proof IS the signed key
+                      // authorization; surface it so the verifier can run the
+                      // TIP-1053 check.
+                      ...(witness && keyAuthorization_signed
+                        ? { keyAuthorization: KeyAuthorization.serialize(keyAuthorization_signed) }
+                        : {}),
+                    },
+                  }
+                : {}),
             }
           },
           async revokeAccessKey(parameters) {
@@ -371,4 +468,17 @@ export declare namespace local {
     /** Reverse DNS identifier. @default `com.{lowercase name}` */
     rdns?: string | undefined
   }
+}
+
+/**
+ * Returns whether the given chain supports TIP-1053 witness binding, which
+ * lets the wallet collapse access-key authorization and the SIWT proof into a
+ * single passkey ceremony. Witness binding ships in the T5 hardfork, so a
+ * chain qualifies only once it is at T5 or later.
+ *
+ * @param chain - Chain to check (reads its `hardfork`).
+ * @returns `true` when the chain supports witness binding.
+ */
+function supportsWitness(chain: Chain & { hardfork?: Hardfork.Hardfork | undefined }) {
+  return Boolean(chain.hardfork && !Hardfork.lt(chain.hardfork, 't5'))
 }
