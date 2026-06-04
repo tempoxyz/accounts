@@ -10,7 +10,6 @@ import type { StoreApi } from 'zustand'
 
 import type { OneOf } from '../internal/types.js'
 import * as ExecutionError from './ExecutionError.js'
-import type * as Storage from './Storage.js'
 import type * as Store from './Store.js'
 
 const status = {
@@ -118,20 +117,7 @@ type ListQuery = {
 type ManagerOptions = {
   /** Zustand store containing access-key metadata. */
   state: Pick<StoreApi<Store.State>, 'getState' | 'setState'>
-  /** Storage for locally signable key material. */
-  keyMaterialStorage?: Storage.Storage | undefined
 }
-
-/** Locally signable access-key material. */
-type Material =
-  | {
-      /** The exported private key backing the access key. */
-      privateKey: Hex.Hex
-    }
-  | {
-      /** The WebCrypto key pair backing the access key. */
-      keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>
-    }
 
 /** Access-key identity. */
 type Key = {
@@ -149,7 +135,7 @@ type Manager = {
   add: (options: Omit<add.Options, 'store'>) => Promise<add.ReturnType>
   /** Prepares, signs, and saves an access key authorization. */
   authorize: (options: Omit<authorize.Options, 'store'>) => Promise<authorize.ReturnType>
-  /** Clears all access-key records and locally signable material. */
+  /** Clears all access-key records. */
   clear: () => Promise<void>
   /** Returns publication status for a stored or on-chain access key. */
   getStatus: (options: Omit<StatusQuery, 'store'>) => Promise<Status>
@@ -486,7 +472,6 @@ export async function add(options: add.Options): Promise<add.ReturnType> {
       ),
     ],
   }))
-  await saveMaterial(record, store)
   return record
 }
 
@@ -544,20 +529,9 @@ declare namespace updateAuthorization {
 /** Removes an access key record. */
 export async function remove(options: remove.Options): Promise<void> {
   const { store, ...key } = options
-  const records = list({ ...key, store })
   store.state.setState((state) => ({
     accessKeys: state.accessKeys.filter((record) => !matches(record, key)),
   }))
-  await Promise.allSettled(
-    records.map((record) =>
-      removeMaterial({
-        accessKey: record.address,
-        account: record.access,
-        chainId: record.chainId,
-        store,
-      }),
-    ),
-  )
 }
 
 export declare namespace remove {
@@ -571,18 +545,7 @@ export declare namespace remove {
 /** Clears all access-key records. */
 async function clear(options: { store: ManagerOptions }): Promise<void> {
   const { store } = options
-  const records = store.state.getState().accessKeys
   store.state.setState({ accessKeys: [] })
-  await Promise.allSettled(
-    records.map((record) =>
-      removeMaterial({
-        accessKey: record.address,
-        account: record.access,
-        chainId: record.chainId,
-        store,
-      }),
-    ),
-  )
 }
 
 /** Returns whether an error means an access key is already unavailable on-chain. */
@@ -660,49 +623,27 @@ async function hydrate(
   accessKey: AccessKey,
   store: ManagerOptions,
 ): Promise<TempoAccount.AccessKeyAccount | undefined> {
-  const material = await loadMaterial(accessKey, store)
-  const hydrated = material ? ({ ...accessKey, ...material } as AccessKey) : accessKey
   const keyAuthorizationManager = createKeyAuthorizationManager(store)
-  if ('keyPair' in hydrated && hydrated.keyPair)
-    return TempoAccount.fromWebCryptoP256(hydrated.keyPair, {
-      access: hydrated.access,
+  if ('keyPair' in accessKey && accessKey.keyPair)
+    return TempoAccount.fromWebCryptoP256(accessKey.keyPair, {
+      access: accessKey.access,
       keyAuthorizationManager,
     }) as TempoAccount.AccessKeyAccount
-  if ('privateKey' in hydrated && hydrated.privateKey) {
-    switch (hydrated.keyType) {
+  if ('privateKey' in accessKey && accessKey.privateKey) {
+    switch (accessKey.keyType) {
       case 'secp256k1':
-        return TempoAccount.fromSecp256k1(hydrated.privateKey, {
-          access: hydrated.access,
+        return TempoAccount.fromSecp256k1(accessKey.privateKey, {
+          access: accessKey.access,
           keyAuthorizationManager,
         }) as TempoAccount.AccessKeyAccount
       case 'p256':
-        return TempoAccount.fromP256(hydrated.privateKey, {
-          access: hydrated.access,
+        return TempoAccount.fromP256(accessKey.privateKey, {
+          access: accessKey.access,
           keyAuthorizationManager,
         }) as TempoAccount.AccessKeyAccount
     }
   }
   return undefined
-}
-
-async function loadMaterial(
-  accessKey: AccessKey,
-  store: ManagerOptions,
-): Promise<Material | undefined> {
-  if ('privateKey' in accessKey && accessKey.privateKey) return { privateKey: accessKey.privateKey }
-  if ('keyPair' in accessKey && accessKey.keyPair) return { keyPair: accessKey.keyPair }
-  const material = await loadStoredMaterial(accessKey, store)
-  if (!material) return undefined
-  patchRecord(
-    store,
-    {
-      account: accessKey.access,
-      accessKey: accessKey.address,
-      chainId: accessKey.chainId,
-    },
-    material as Partial<AccessKey>,
-  )
-  return material
 }
 
 function isExpired(expiry: number | undefined, now: number): boolean {
@@ -738,49 +679,7 @@ async function patch(
   options: Key & { patch: Partial<AccessKey>; store: ManagerOptions },
 ): Promise<void> {
   const { patch, store, ...key } = options
-  const nextRecord = patchRecord(store, key, patch)
-  if (
-    nextRecord &&
-    (('privateKey' in patch && patch.privateKey) || ('keyPair' in patch && patch.keyPair))
-  )
-    await saveMaterial(nextRecord, store)
-}
-
-async function loadStoredMaterial(
-  accessKey: AccessKey,
-  store: ManagerOptions,
-): Promise<Material | undefined> {
-  const material = await store.keyMaterialStorage?.getItem<Material>(materialKey(accessKey))
-  if (!material) return undefined
-  if ('keyPair' in material) return undefined
-  return material
-}
-
-async function saveMaterial(accessKey: AccessKey, store: ManagerOptions): Promise<void> {
-  if (!store.keyMaterialStorage) return
-  const material = getMaterial(accessKey)
-  if (!material || 'keyPair' in material) {
-    await store.keyMaterialStorage.removeItem(materialKey(accessKey))
-    return
-  }
-  await store.keyMaterialStorage.setItem(materialKey(accessKey), material)
-}
-
-async function removeMaterial(key: Key & { store: ManagerOptions }): Promise<void> {
-  const { store, ...rest } = key
-  await store.keyMaterialStorage?.removeItem(materialKey(rest))
-}
-
-function getMaterial(accessKey: AccessKey): Material | undefined {
-  if ('privateKey' in accessKey && accessKey.privateKey) return { privateKey: accessKey.privateKey }
-  if ('keyPair' in accessKey && accessKey.keyPair) return { keyPair: accessKey.keyPair }
-  return undefined
-}
-
-function materialKey(key: AccessKey | Key): string {
-  const account = 'account' in key ? key.account : key.access
-  const accessKey = 'accessKey' in key ? key.accessKey : key.address
-  return `accessKeyMaterial.${account.toLowerCase()}.${key.chainId}.${accessKey.toLowerCase()}`
+  patchRecord(store, key, patch)
 }
 
 function patchRecord(

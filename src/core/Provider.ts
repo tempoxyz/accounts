@@ -94,7 +94,6 @@ export function create(options: create.Options = {}): create.ReturnType {
     chains = [tempo, tempoModerato, tempoDevnet],
     maxAccounts,
     persistCredentials,
-    keyMaterialStorage,
     relay,
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
@@ -128,7 +127,6 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const store = Store.create({
     chainId: defaultChain.id,
-    keyMaterialStorage,
     maxAccounts,
     persistCredentials,
     schema: adapter.schema,
@@ -1576,8 +1574,6 @@ export declare namespace create {
     mpp?: boolean | mpp.Options | undefined
     /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
     persistCredentials?: boolean | undefined
-    /** Storage adapter for exported access-key material. */
-    keyMaterialStorage?: Storage.Storage | undefined
     /**
      * Base URL for a wallet relay endpoint. When set, every chain's transport
      * defaults to `http(`${relay}/${chainId}`)` — a single endpoint that

@@ -188,7 +188,7 @@ You can also pre-derive the access key locally by passing `publicKey` or `addres
 
 For `keyType: 'secp256k1'`, generate and store the private key in your app or backend, then pass either the derived `address` or the `publicKey` in `authorizeAccessKey`.
 
-Alternatively, pass `privateKey` to let the SDK derive `publicKey` and store the private key through [`keyMaterialStorage`](#keymaterialstorage). Dialog-style adapters do not forward `privateKey` to the wallet approval surface.
+Alternatively, pass `privateKey` to let the SDK derive `publicKey` and persist the private key through the configured [`storage`](#storage). Dialog-style adapters do not forward `privateKey` to the wallet approval surface.
 
 ```ts twoslash
 // @noErrors
@@ -339,24 +339,6 @@ import { Provider, Storage } from 'accounts'
 
 const provider = Provider.create({
   storage: Storage.memory(), // [!code focus]
-})
-```
-
-### keyMaterialStorage
-
-- **Type:** `Storage`
-- **Default:** `undefined`
-
-Optional storage for exported access-key material. When provided, access-key metadata is persisted in `storage` and private key material is persisted separately in `keyMaterialStorage`.
-
-```ts twoslash
-import { Provider, Storage } from 'accounts'
-
-declare const secureStorage: Storage.Storage
-
-const provider = Provider.create({
-  storage: Storage.localStorage(),
-  keyMaterialStorage: secureStorage, // [!code focus]
 })
 ```
 

@@ -144,9 +144,7 @@ describe('add', () => {
   })
 
   test('behavior: saves locally signable material', async () => {
-    const storage = Storage.memory()
-    const keyMaterialStorage = Storage.memory()
-    const store = Store.create({ chainId: 1, keyMaterialStorage, storage })
+    const store = createStore()
     const keyAuthorization = createKeyAuthorization(accounts[1]!.address, {
       keyType: 'secp256k1',
     })
@@ -157,10 +155,7 @@ describe('add', () => {
       privateKey: privateKeys[1],
     })
 
-    const store2 = Store.create({ chainId: 1, keyMaterialStorage, storage })
-    await Store.waitForHydration(store2)
-
-    const account = await store2.accessKeys.get({
+    const account = await store.accessKeys.get({
       accessKey: accounts[1]!.address,
       account: rootAddress,
       chainId: 1,
@@ -170,22 +165,12 @@ describe('add', () => {
     )
   })
 
-  test('behavior: skips material storage when credential persistence is disabled', async () => {
-    const calls: unknown[] = []
-    const keyMaterialStorage = {
-      getItem() {
-        return null
-      },
-      async removeItem() {},
-      async setItem(_: string, value: unknown) {
-        calls.push(value)
-      },
-    } satisfies Storage.Storage
+  test('behavior: skips locally signable material when credential persistence is disabled', async () => {
+    const storage = Storage.memory()
     const store = Store.create({
       chainId: 1,
-      keyMaterialStorage,
       persistCredentials: false,
-      storage: Storage.memory(),
+      storage,
     })
     const keyAuthorization = createKeyAuthorization(accounts[1]!.address, {
       keyType: 'secp256k1',
@@ -197,7 +182,16 @@ describe('add', () => {
       privateKey: privateKeys[1],
     })
 
-    expect(calls).toMatchInlineSnapshot(`[]`)
+    const store2 = Store.create({ chainId: 1, storage })
+    await Store.waitForHydration(store2)
+
+    await expect(
+      store2.accessKeys.get({
+        accessKey: accounts[1]!.address,
+        account: rootAddress,
+        chainId: 1,
+      }),
+    ).resolves.toMatchInlineSnapshot(`undefined`)
   })
 })
 

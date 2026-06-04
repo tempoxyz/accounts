@@ -1,5 +1,4 @@
 import { WebCryptoP256 } from 'ox'
-import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
@@ -17,7 +16,6 @@ const account = '0x0000000000000000000000000000000000000001'
 const account2 = '0x0000000000000000000000000000000000000002'
 const accessKey = '0x0000000000000000000000000000000000000099'
 const privateKey = '0x1234'
-const privateKey_signer = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
 
 async function setup(options: Omit<Store.Options, 'chainId'> = {}) {
   const storage = options.storage ?? Storage.memory()
@@ -44,17 +42,6 @@ function createJsonStorage() {
       items.set(name, value)
     },
   })
-}
-
-function createAuthorization() {
-  return KeyAuthorization.from(
-    {
-      address: accessKey,
-      chainId: 123n,
-      type: 'secp256k1',
-    },
-    { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
-  )
 }
 
 describe('create', () => {
@@ -292,35 +279,8 @@ describe('persistence', () => {
     `)
   })
 
-  test('behavior: skips access key material storage when credential persistence is disabled', async () => {
-    const writes: string[] = []
-    const keyMaterialStorage = {
-      getItem() {
-        return null
-      },
-      removeItem() {},
-      setItem(name: string) {
-        writes.push(name)
-      },
-    } satisfies Storage.Storage
-    const { store } = await setup({
-      keyMaterialStorage,
-      persistCredentials: false,
-    })
-
-    await store.accessKeys.add({
-      account,
-      authorization: createAuthorization(),
-      privateKey: privateKey_signer,
-    })
-
-    expect(writes).toMatchInlineSnapshot(`[]`)
-  })
-
-  test('behavior: strips material when key material storage is split out', async () => {
-    const { storage, store } = await setup({
-      keyMaterialStorage: Storage.memory(),
-    })
+  test('behavior: persists private key material inline', async () => {
+    const { storage, store } = await setup()
 
     store.setState({
       accessKeys: [
@@ -341,6 +301,7 @@ describe('persistence', () => {
           "address": "0x0000000000000000000000000000000000000099",
           "chainId": 123,
           "keyType": "secp256k1",
+          "privateKey": "0x1234",
         },
       ]
     `)
@@ -395,28 +356,6 @@ describe('persistence', () => {
     expect('keyPair' in accessKeys[0]!).toMatchInlineSnapshot(`true`)
   })
 
-  test('behavior: keeps WebCrypto key pairs inline when key material storage is present', async () => {
-    const keyPair = await WebCryptoP256.createKeyPair()
-    const { storage, store } = await setup({
-      keyMaterialStorage: Storage.memory(),
-    })
-
-    store.setState({
-      accessKeys: [
-        {
-          access: account,
-          address: accessKey,
-          chainId: 123,
-          keyPair,
-          keyType: 'webCrypto',
-        },
-      ],
-    })
-
-    const accessKeys = (await getPersistedState(storage))?.accessKeys as Record<string, unknown>[]
-    expect('keyPair' in accessKeys[0]!).toMatchInlineSnapshot(`true`)
-  })
-
   test('behavior: drops legacy access key without chain context', async () => {
     const storage = Storage.memory()
     storage.setItem('store', {
@@ -438,62 +377,8 @@ describe('persistence', () => {
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
   })
 
-  test('behavior: disconnect clears accounts, auth, and access key material', async () => {
-    const removed: string[] = []
-    const keyMaterialStorage = {
-      getItem() {
-        return null
-      },
-      async removeItem(name: string) {
-        removed.push(name)
-      },
-      async setItem() {},
-    } satisfies Storage.Storage
-    const { store } = await setup({
-      keyMaterialStorage,
-      storage: Storage.memory(),
-    })
-
-    store.setState({
-      accounts: [{ address: account }],
-      accessKeys: [
-        {
-          address: accessKey,
-          access: account,
-          chainId: 123,
-          keyType: 'secp256k1',
-          privateKey,
-        },
-      ],
-      auth: { logout: 'https://example.com/logout' },
-    })
-
-    await store.disconnect()
-
-    expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
-    expect(store.getState().accounts).toMatchInlineSnapshot(`[]`)
-    expect(store.getState().auth).toMatchInlineSnapshot(`undefined`)
-    expect(removed).toMatchInlineSnapshot(`
-      [
-        "accessKeyMaterial.0x0000000000000000000000000000000000000001.123.0x0000000000000000000000000000000000000099",
-      ]
-    `)
-  })
-
-  test('behavior: disconnect clears account state when key material removal fails', async () => {
-    const keyMaterialStorage = {
-      getItem() {
-        return null
-      },
-      async removeItem() {
-        throw new Error('remove failed')
-      },
-      async setItem() {},
-    } satisfies Storage.Storage
-    const { store } = await setup({
-      keyMaterialStorage,
-      storage: Storage.memory(),
-    })
+  test('behavior: disconnect clears accounts, auth, and access keys', async () => {
+    const { store } = await setup({ storage: Storage.memory() })
 
     store.setState({
       accounts: [{ address: account }],
@@ -523,34 +408,6 @@ describe('persistence', () => {
     store.setState({ chainId: 789 })
 
     expect((await getPersistedState(storage))?.chainId).toMatchInlineSnapshot(`789`)
-  })
-
-  test('behavior: custom storage key scopes access key material', async () => {
-    const material = Storage.memory()
-    const storage = Storage.memory()
-    const storageA = Storage.from(material, { key: 'a' })
-    const storageB = Storage.from(material, { key: 'b' })
-    const { store: storeA } = await setup({
-      keyMaterialStorage: storageA,
-      storage,
-    })
-
-    await storeA.accessKeys.add({
-      account,
-      authorization: createAuthorization(),
-      privateKey: privateKey_signer,
-    })
-
-    const { store: storeA2 } = await setup({ keyMaterialStorage: storageA, storage })
-    const { store: storeB } = await setup({ keyMaterialStorage: storageB, storage })
-
-    const key = {
-      accessKey,
-      account,
-      chainId: 123,
-    } as const
-    expect(typeof (await storeA2.accessKeys.get(key))?.sign).toMatchInlineSnapshot(`"function"`)
-    expect(await storeB.accessKeys.get(key)).toMatchInlineSnapshot(`undefined`)
   })
 })
 

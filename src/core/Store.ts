@@ -83,8 +83,6 @@ export type Options = {
   maxAccounts?: number | undefined
   /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
   persistCredentials?: boolean | undefined
-  /** Storage adapter for exported access-key material. */
-  keyMaterialStorage?: Storage.Storage | undefined
   /** Storage adapter for persistence. */
   storage?: Storage.Storage | undefined
 }
@@ -97,13 +95,11 @@ export function create(options: Options): Store {
     chainId,
     maxAccounts,
     persistCredentials = true,
-    keyMaterialStorage,
     schema,
     storage = typeof window !== 'undefined'
       ? Storage.idb({ key: 'tempo' })
       : Storage.memory({ key: 'tempo' }),
   } = options
-  const storage_keyMaterial = persistCredentials ? keyMaterialStorage : undefined
 
   const state = createStore(
     subscribeWithSelector(
@@ -121,7 +117,6 @@ export function create(options: Options): Store {
             serialize(state, {
               maxAccounts,
               persistCredentials,
-              splitKeyMaterial: Boolean(storage_keyMaterial),
               structuredClone: canStructuredClone(storage),
             }),
           storage,
@@ -131,11 +126,7 @@ export function create(options: Options): Store {
     ),
   ) as ZustandStore
   const store = state as Store
-  const options_accessKey = {
-    keyMaterialStorage: storage_keyMaterial,
-    state,
-  }
-  store.accessKeys = core_AccessKey.createManager(options_accessKey)
+  store.accessKeys = core_AccessKey.createManager({ state })
   store.disconnect = async () => {
     const clear = store.accessKeys.clear()
     state.setState({ accounts: [], activeAccount: 0, auth: undefined })
@@ -146,12 +137,7 @@ export function create(options: Options): Store {
 
 /** Converts runtime provider state into the persisted refresh snapshot. */
 function serialize(state: State, options: serialize.Options = {}): Persisted {
-  const {
-    maxAccounts,
-    persistCredentials = true,
-    splitKeyMaterial = false,
-    structuredClone = false,
-  } = options
+  const { maxAccounts, persistCredentials = true, structuredClone = false } = options
   const accounts =
     maxAccounts && state.accounts.length > maxAccounts
       ? state.accounts.slice(0, maxAccounts)
@@ -162,7 +148,7 @@ function serialize(state: State, options: serialize.Options = {}): Persisted {
     ...(persistCredentials
       ? {
           accessKeys: state.accessKeys.map((accessKey) =>
-            serializeAccessKey(accessKey, { splitKeyMaterial, structuredClone }),
+            serializeAccessKey(accessKey, { structuredClone }),
           ),
         }
       : {}),
@@ -178,8 +164,6 @@ declare namespace serialize {
     maxAccounts?: number | undefined
     /** Whether to persist credentials and access keys to storage. @default true */
     persistCredentials?: boolean | undefined
-    /** Whether locally signable material is stored outside provider state. @default false */
-    splitKeyMaterial?: boolean | undefined
     /** Whether provider state can persist structured-clone values like WebCrypto key pairs. @default false */
     structuredClone?: boolean | undefined
   }
@@ -255,14 +239,11 @@ function isStoredAccount(account: unknown): account is Account {
 
 function serializeAccessKey(
   accessKey: core_AccessKey.AccessKey,
-  options: { splitKeyMaterial: boolean; structuredClone: boolean },
+  options: { structuredClone: boolean },
 ): core_AccessKey.AccessKey {
-  const { privateKey: _privateKey, ...withoutPrivateKey } =
-    accessKey as core_AccessKey.AccessKey & { privateKey?: unknown }
-  const state = options.splitKeyMaterial ? withoutPrivateKey : accessKey
   // WebCrypto key pairs are opaque/non-extractable, so structured-clone stores can keep them inline.
-  if (options.structuredClone) return state as core_AccessKey.AccessKey
-  const { keyPair: _keyPair, ...metadata } = state as core_AccessKey.AccessKey & {
+  if (options.structuredClone) return accessKey
+  const { keyPair: _keyPair, ...metadata } = accessKey as core_AccessKey.AccessKey & {
     keyPair?: unknown
   }
   return metadata as core_AccessKey.AccessKey
