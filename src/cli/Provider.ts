@@ -1,5 +1,6 @@
 import * as CoreProvider from '../core/Provider.js'
 import { cli } from './adapter.js'
+import * as Storage from './storage.js'
 
 /**
  * Creates a provider that bootstraps access-key authorization through the CLI
@@ -8,9 +9,9 @@ import { cli } from './adapter.js'
 export function create(options: create.Options): create.ReturnType {
   const {
     host = 'https://wallet.tempo.xyz/api/auth/cli',
-    keysPath,
     open,
     pollIntervalMs,
+    storage = Storage.filesystem(),
     timeoutMs,
     ...rest
   } = options
@@ -26,12 +27,12 @@ export function create(options: create.Options): create.ReturnType {
     ...rest,
     adapter: cli({
       host,
-      ...(keysPath ? { keysPath } : {}),
       ...(open ? { open } : {}),
       ...(typeof pollIntervalMs !== 'undefined' ? { pollIntervalMs } : {}),
       ...(typeof timeoutMs !== 'undefined' ? { timeoutMs } : {}),
     }),
     ...(mpp ? { mpp } : {}),
+    storage,
   })
 }
 
