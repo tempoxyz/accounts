@@ -89,10 +89,7 @@ type AuthorizeAccessKeyCapability = {
     /** Window length in seconds. Omit for an absolute cap. */
     period?: number
   }[]
-  /**
-   * Private key material to keep in SDK storage. The SDK derives `publicKey`
-   * before forwarding the request to a wallet approval surface.
-   */
+  /** Private key material to keep in SDK storage. It is not forwarded to wallets over JSON-RPC. */
   privateKey?: Hex
   publicKey?: Hex
   scopes?: {

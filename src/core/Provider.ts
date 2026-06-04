@@ -450,15 +450,21 @@ export function create(options: create.Options = {}): create.ReturnType {
   async function prepareAuthorizeAccessKey(
     parameters: Adapter.authorizeAccessKey.Parameters,
     chainId: number | undefined,
-  ) {
+  ): Promise<{
+    keyPair?: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
+    parameters: Adapter.authorizeAccessKey.Parameters
+    privateKey?: Hex.Hex | undefined
+  }> {
     const chainId_ = parameters.chainId ?? chainId ?? getClient().chain.id
-    if (parameters.address || parameters.publicKey) {
+    if (parameters.privateKey || parameters.address || parameters.publicKey) {
       const prepared = await AccessKey.prepareAuthorization({
         ...parameters,
         chainId: chainId_,
       })
       return {
+        ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
         parameters: toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
+        ...(prepared.privateKey ? { privateKey: prepared.privateKey } : {}),
       }
     }
 
@@ -489,8 +495,10 @@ export function create(options: create.Options = {}): create.ReturnType {
       ReturnType<typeof AccessKey.prepareAuthorization>
     >['keyAuthorization'],
   ) {
+    const parameters_rpc = { ...parameters }
+    delete parameters_rpc.privateKey
     return {
-      ...parameters,
+      ...parameters_rpc,
       address: keyAuthorization.address,
       chainId: keyAuthorization.chainId,
       keyType: keyAuthorization.type,
