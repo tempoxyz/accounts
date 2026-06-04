@@ -2,7 +2,7 @@ import { Json } from 'ox'
 
 import * as Storage from '../core/Storage.js'
 
-/** Creates a storage adapter backed by `expo-secure-store`. For private key material. */
+/** Creates a storage adapter backed by `expo-secure-store`. */
 export function secureStorage(options: secureStorage.Options = {}): Storage.Storage {
   return Storage.from(
     {
