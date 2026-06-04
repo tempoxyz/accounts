@@ -1564,8 +1564,9 @@ export declare namespace create {
      * Default access key parameters for `wallet_connect`.
      *
      * When set, `wallet_connect` will automatically authorize an access key.
+     * Return `undefined` to skip authorization for the current request.
      */
-    authorizeAccessKey?: (() => Adapter.authorizeAccessKey.Parameters) | undefined
+    authorizeAccessKey?: (() => Adapter.authorizeAccessKey.Parameters | undefined) | undefined
     /**
      * Supported chains. First chain is the default.
      * @default [tempo, tempoModerato, tempoDevnet]
