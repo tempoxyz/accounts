@@ -69,7 +69,6 @@ minimumReleaseAgeExclude:
   - viem
   - vite-plus
   - wagmi
-  - wata
 
 nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=DeprecationWarning'
 
@@ -97,13 +96,6 @@ overrides:
   'uuid@<11.1.1': '11.1.1'
   vite-plus: 'catalog:'
   vp: 'catalog:'
-  'wata>@hono/node-server': ^1.13.7
-  'wata>@noble/ciphers': ^2.2.0
-  'wata>@noble/hashes': ^2.2.0
-  'wata>hono': ^4.6.14
-  'wata>ox': ~0.14.20
-  'wata>rettime': ^0.11.11
-  'wata>zod': ^4.4.3
   'ws@>=8.0.0 <8.20.1': '8.20.1'
   wrangler: 'catalog:'
 

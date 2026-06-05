@@ -78,13 +78,6 @@ overrides:
   uuid@<11.1.1: 11.1.1
   vite-plus: ~0.1.18
   vp: npm:vite-plus@~0.1.18
-  wata>@hono/node-server: ^1.13.7
-  wata>@noble/ciphers: ^2.2.0
-  wata>@noble/hashes: ^2.2.0
-  wata>hono: ^4.6.14
-  wata>ox: ~0.14.20
-  wata>rettime: ^0.11.11
-  wata>zod: ^4.4.3
   ws@>=8.0.0 <8.20.1: 8.20.1
   wrangler: ^4.90.1
 
@@ -114,8 +107,8 @@ importers:
         specifier: 0.14.29
         version: 0.14.29(typescript@5.9.3)(zod@4.3.6)
       wata:
-        specifier: git+https://github.com/wevm/wata.git#a79d660252690a848a73a98003ea3c4ed7656239
-        version: git+https://git@github.com:wevm/wata.git#a79d660252690a848a73a98003ea3c4ed7656239(typescript@5.9.3)
+        specifier: https://pkg.pr.new/wevm/wata/wata@a79d660252690a848a73a98003ea3c4ed7656239
+        version: https://pkg.pr.new/wevm/wata/wata@a79d660252690a848a73a98003ea3c4ed7656239(typescript@5.9.3)
       webauthx:
         specifier: ~0.1.1
         version: 0.1.1(typescript@5.9.3)(zod@4.3.6)
@@ -11361,8 +11354,8 @@ packages:
   warn-once@0.1.1:
     resolution: {integrity: sha512-VkQZJbO8zVImzYFteBXvBOZEl1qL175WH8VmZcxF2fZAoudNhNDvHi+doCaAEdU2l2vtcIwa2zn0QK5+I1HQ3Q==}
 
-  wata@git+https://git@github.com:wevm/wata.git#a79d660252690a848a73a98003ea3c4ed7656239:
-    resolution: {commit: a79d660252690a848a73a98003ea3c4ed7656239, repo: git@github.com:wevm/wata.git, type: git}
+  wata@https://pkg.pr.new/wevm/wata/wata@a79d660252690a848a73a98003ea3c4ed7656239:
+    resolution: {integrity: sha512-W4AyexeOInib1RYbRFtAFqgnDfYq0Y1jTv4dk3qA7mlMNYDHHhQuzSKy+UxoNQBDzfZ/+2Z/DobsK0OzbQNzuQ==, tarball: https://pkg.pr.new/wevm/wata/wata@a79d660252690a848a73a98003ea3c4ed7656239}
     version: 0.0.0
 
   watchpack@2.5.1:
@@ -26393,7 +26386,7 @@ snapshots:
 
   warn-once@0.1.1: {}
 
-  wata@git+https://git@github.com:wevm/wata.git#a79d660252690a848a73a98003ea3c4ed7656239(typescript@5.9.3):
+  wata@https://pkg.pr.new/wevm/wata/wata@a79d660252690a848a73a98003ea3c4ed7656239(typescript@5.9.3):
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.23)
       '@noble/ciphers': 2.2.0
