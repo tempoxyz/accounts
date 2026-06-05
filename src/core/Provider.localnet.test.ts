@@ -2229,6 +2229,128 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
     })
 
+    test('behavior: sendTransactionSync authorizes matching default access key just-in-time', async () => {
+      let authorize = false
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        authorizeAccessKey: () => {
+          if (!authorize) return undefined
+          return {
+            expiry: Expiry.days(1),
+            scopes: [{ address: Addresses.pathUsd, selector: 'transfer(address,uint256)' }],
+          }
+        },
+      })
+      const address = await connect(provider)
+      await fund(address)
+      const initialAccessKeys = provider.store.getState().accessKeys.length
+      authorize = true
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      expect({
+        initialAccessKeys,
+        storedAccessKeys: provider.store.getState().accessKeys.length,
+        status: receipt.status,
+      }).toMatchInlineSnapshot(`
+        {
+          "initialAccessKeys": 0,
+          "status": "0x1",
+          "storedAccessKeys": 1,
+        }
+      `)
+    })
+
+    test('behavior: sendTransactionSync skips default access key when scopes do not cover transaction', async () => {
+      let authorize = false
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        authorizeAccessKey: () => {
+          if (!authorize) return undefined
+          return {
+            expiry: Expiry.days(1),
+            scopes: [
+              {
+                address: '0x0000000000000000000000000000000000000099',
+                selector: 'transfer(address,uint256)',
+              },
+            ],
+          }
+        },
+      })
+      const address = await connect(provider)
+      await fund(address)
+      const initialAccessKeys = provider.store.getState().accessKeys.length
+      authorize = true
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      expect({
+        fromRoot: receipt.from.toLowerCase() === address.toLowerCase(),
+        initialAccessKeys,
+        storedAccessKeys: provider.store.getState().accessKeys.length,
+        status: receipt.status,
+      }).toMatchInlineSnapshot(`
+        {
+          "fromRoot": true,
+          "initialAccessKeys": 0,
+          "status": "0x1",
+          "storedAccessKeys": 0,
+        }
+      `)
+    })
+
+    test('behavior: wallet_sendCalls authorizes matching default access key just-in-time', async () => {
+      let authorize = false
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        authorizeAccessKey: () => {
+          if (!authorize) return undefined
+          return {
+            expiry: Expiry.days(1),
+            scopes: [{ address: Addresses.pathUsd, selector: 'transfer(address,uint256)' }],
+          }
+        },
+      })
+      const address = await connect(provider)
+      await fund(address)
+      const initialAccessKeys = provider.store.getState().accessKeys.length
+      authorize = true
+
+      const result = await provider.request({
+        method: 'wallet_sendCalls',
+        params: [
+          {
+            calls: [transferCall],
+            capabilities: { sync: true },
+          },
+        ],
+      })
+
+      expect({
+        initialAccessKeys,
+        status: result.status,
+        storedAccessKeys: provider.store.getState().accessKeys.length,
+        sync: result.capabilities?.sync,
+      }).toMatchInlineSnapshot(`
+        {
+          "initialAccessKeys": 0,
+          "status": 200,
+          "storedAccessKeys": 1,
+          "sync": true,
+        }
+      `)
+    })
+
     test('behavior: explicit authorizeAccessKey overrides default', async () => {
       const expiry = Math.floor(Date.now() / 1000) + 3600
       const provider = Provider.create({
