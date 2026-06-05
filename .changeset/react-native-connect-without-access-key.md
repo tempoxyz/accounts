@@ -2,4 +2,4 @@
 "accounts": patch
 ---
 
-Let the React Native adapter connect without requesting an access key.
+Allowed the React Native adapter to connect without requesting an access key.
