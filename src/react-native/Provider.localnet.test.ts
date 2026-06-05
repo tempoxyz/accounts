@@ -5,9 +5,10 @@ import { Actions, Addresses } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
 import { accounts, chain, getClient } from '../../test/config.js'
+import * as Provider from '../core/Provider.js'
 import * as Storage from '../core/Storage.js'
 import * as Store from '../core/Store.js'
-import * as Provider from './Provider.js'
+import { reactNative } from './adapter.js'
 
 const root = accounts[0]!
 const transferCall = Actions.token.transfer.call({
@@ -119,7 +120,7 @@ describe('create', () => {
   test('behavior: persists managed access keys through provider storage', async () => {
     const storage = asyncJsonStorage({ key: 'react-native-managed-key' })
     const browser = createOpen()
-    const provider1 = Provider.create({
+    const provider1 = create({
       authorizeAccessKey: () => ({
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
@@ -138,7 +139,7 @@ describe('create', () => {
 
     await fund(root.address)
 
-    const provider2 = Provider.create({
+    const provider2 = create({
       chains: [chain],
       host: 'https://wallet.tempo.xyz',
       open: browser.open,
@@ -157,7 +158,7 @@ describe('create', () => {
 
   test('behavior: wallet_connect does not require authorizeAccessKey capability', async () => {
     const browser = createOpen()
-    const provider = Provider.create({
+    const provider = create({
       chains: [chain],
       host: 'https://wallet.tempo.xyz',
       open: browser.open,
@@ -178,7 +179,7 @@ describe('create', () => {
 
   test('behavior: forwards showDeposit boolean to the mobile auth URL for registration', async () => {
     const browser = createOpen()
-    const provider = Provider.create({
+    const provider = create({
       authorizeAccessKey: () => ({
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
@@ -202,7 +203,7 @@ describe('create', () => {
 
   test('behavior: forwards showDeposit boolean to the mobile auth URL for login', async () => {
     const browser = createOpen()
-    const provider = Provider.create({
+    const provider = create({
       authorizeAccessKey: () => ({
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
@@ -225,7 +226,7 @@ describe('create', () => {
 
   test('behavior: forwards showDeposit params to the mobile auth URL for registration', async () => {
     const browser = createOpen()
-    const provider = Provider.create({
+    const provider = create({
       authorizeAccessKey: () => ({
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
@@ -266,7 +267,7 @@ describe('create', () => {
 
   test('behavior: forwards showDeposit params to the mobile auth URL for wallet_authorizeAccessKey', async () => {
     const browser = createOpen()
-    const provider = Provider.create({
+    const provider = create({
       authorizeAccessKey: () => ({
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
@@ -306,7 +307,7 @@ describe('create', () => {
 
   test('behavior: forwards personalSign to the mobile auth URL and returns signature', async () => {
     const browser = createOpen()
-    const provider = Provider.create({
+    const provider = create({
       authorizeAccessKey: () => ({
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
@@ -331,7 +332,7 @@ describe('create', () => {
 
   test('behavior: forwards digest to the mobile auth URL and returns signature', async () => {
     const browser = createOpen()
-    const provider = Provider.create({
+    const provider = create({
       authorizeAccessKey: () => ({
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
@@ -354,3 +355,20 @@ describe('create', () => {
     expect(result.accounts[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)
   })
 })
+
+function create(options: create.Options): create.ReturnType {
+  const { host, open, redirectUri, ...rest } = options
+  return Provider.create({
+    ...rest,
+    adapter: reactNative({
+      host,
+      ...(open ? { open } : {}),
+      redirectUri,
+    }),
+  })
+}
+
+declare namespace create {
+  type Options = Omit<Provider.create.Options, 'adapter'> & reactNative.Options
+  type ReturnType = Provider.create.ReturnType
+}
