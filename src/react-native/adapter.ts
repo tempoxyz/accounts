@@ -1,11 +1,7 @@
 import { Hex, P256, Provider as core_Provider, RpcResponse } from 'ox'
 import { custom } from 'viem'
 import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
-import {
-  mobileWebAuth,
-  type Options as MobileWebAuthOptions,
-} from 'wata/consumer/transports/mobileWebAuth'
-import * as Wata from 'wata/Wata'
+import { Wata, mobileWebAuth, type MobileWebAuth } from 'wata'
 
 import * as Adapter from '../core/Adapter.js'
 import * as Rpc from '../core/zod/rpc.js'
@@ -140,9 +136,9 @@ export declare namespace reactNative {
     /** Public HTTPS origin that hosts this app's Wata consumer discovery document. */
     baseUrl: string
     /** Override the Wata discovery `fetch` implementation. */
-    fetch?: MobileWebAuthOptions['fetch'] | undefined
+    fetch?: MobileWebAuth.Options['fetch'] | undefined
     /** Host discovery origin or preloaded Wata host document. @default "https://wallet.tempo.xyz" */
-    host?: MobileWebAuthOptions['host'] | undefined
+    host?: MobileWebAuth.Options['host'] | undefined
     /** Provider display name. @default "Tempo Mobile" */
     name?: string | undefined
     /**
@@ -151,7 +147,7 @@ export declare namespace reactNative {
      */
     open?: ((url: string, redirectUri: string) => Promise<string | null>) | undefined
     /** Wata browser auth-session override. */
-    openAuthSession?: MobileWebAuthOptions['openAuthSession'] | undefined
+    openAuthSession?: MobileWebAuth.Options['openAuthSession'] | undefined
     /** Redirect URI for the auth callback (e.g. your app's deep link scheme). */
     redirectUri: string
     /** Reverse-DNS provider identifier. @default "xyz.tempo.mobile" */
