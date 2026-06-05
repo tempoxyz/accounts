@@ -74,6 +74,10 @@ const announced = new Set<string>()
 
 type TransactionParameters = Adapter.ActionRequest<typeof Rpc.eth_sendTransaction.schema>
 
+type WalletConnectCapabilities = NonNullable<
+  NonNullable<Rpc.wallet_connect.Decoded['params']>[number]['capabilities']
+>
+
 function isBrowserWebCrypto() {
   return typeof document !== 'undefined' && !!globalThis.crypto?.subtle
 }
@@ -657,6 +661,76 @@ export function create(options: create.Options = {}): create.ReturnType {
     return url
   }
 
+  function stripAuthorizeAccessKey(
+    parameters: create.AuthorizeAccessKeyParameters,
+  ): Adapter.authorizeAccessKey.Parameters {
+    const { reuse: _reuse, ...rest } = parameters
+    return rest
+  }
+
+  async function defaultAuthorizeAccessKeyForConnect(options_: {
+    capabilities: WalletConnectCapabilities | undefined
+    chainId: number
+  }): Promise<Adapter.authorizeAccessKey.Parameters | undefined> {
+    const parameters = options.authorizeAccessKey?.()
+    if (!parameters) return undefined
+    const address = reusableConnectAccount(options_.capabilities)
+    if (
+      address &&
+      (await AccessKey.hasReusableAuthorization({
+        account: address,
+        chainId: Number(parameters.chainId ?? options_.chainId),
+        parameters,
+        store: { state: store },
+      }))
+    )
+      return undefined
+    return stripAuthorizeAccessKey(parameters)
+  }
+
+  function reusableConnectAccount(
+    capabilities: WalletConnectCapabilities | undefined,
+  ): Address.Address | undefined {
+    const state = store.getState()
+    if (state.accounts.length === 0) return undefined
+    if (capabilities && 'selectAccount' in capabilities && capabilities.selectAccount)
+      return undefined
+    if (capabilities && 'credentialId' in capabilities && capabilities.credentialId) {
+      const account = state.accounts.find(
+        (a) => 'credential' in a && a.credential?.id === capabilities.credentialId,
+      )
+      return account?.address
+    }
+    if (capabilities?.method === 'register' && capabilities.name) {
+      const account = state.accounts.find(
+        (a) => 'credential' in a && a.label?.toLowerCase() === capabilities.name!.toLowerCase(),
+      )
+      return account?.address
+    }
+    return state.accounts[state.activeAccount]?.address ?? state.accounts[0]?.address
+  }
+
+  async function authorizeDefaultAccessKeyForTransaction(options_: {
+    address: Address.Address
+    calls?: readonly AccessKey.Call[] | undefined
+    chainId: number
+  }): Promise<void> {
+    const parameters = options.authorizeAccessKey?.()
+    if (!parameters) return
+    const existing = await store.accessKeys.select({
+      account: options_.address,
+      ...(options_.calls ? { calls: options_.calls } : {}),
+      chainId: Number(parameters.chainId ?? options_.chainId),
+    })
+    if (existing) return
+    if (!AccessKey.canAuthorizeCalls({ parameters, calls: options_.calls })) return
+    const decoded = stripAuthorizeAccessKey(parameters)
+    await authorizeAccessKeyAction(decoded, {
+      method: 'wallet_authorizeAccessKey',
+      params: [z.encode(Rpc.wallet_authorizeAccessKey.parameters, decoded)!],
+    })
+  }
+
   const provider = Object.assign(
     ox_Provider.from(
       {
@@ -722,11 +796,19 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const calls =
                       decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
                     const state = store.getState()
+                    const chainId = decoded.chainId ?? state.chainId
+                    const from = decoded.from ?? state.accounts[state.activeAccount]?.address
+                    if (from)
+                      await authorizeDefaultAccessKeyForTransaction({
+                        address: from,
+                        ...(calls ? { calls } : {}),
+                        chainId,
+                      })
                     return (await sendTransactionAction(
                       {
                         ...rest,
-                        chainId: decoded.chainId ?? state.chainId,
-                        from: decoded.from ?? state.accounts[state.activeAccount]?.address,
+                        chainId,
+                        from,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
@@ -827,11 +909,19 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const calls =
                       decoded.calls ?? (to ? [{ to, data, value: decoded.value }] : undefined)
                     const state = store.getState()
+                    const chainId = decoded.chainId ?? state.chainId
+                    const from = decoded.from ?? state.accounts[state.activeAccount]?.address
+                    if (from)
+                      await authorizeDefaultAccessKeyForTransaction({
+                        address: from,
+                        ...(calls ? { calls } : {}),
+                        chainId,
+                      })
                     return (await sendTransactionSyncAction(
                       {
                         ...rest,
-                        chainId: decoded.chainId ?? state.chainId,
-                        from: decoded.from ?? state.accounts[state.activeAccount]?.address,
+                        chainId,
+                        from,
                         ...(calls ? { calls } : {}),
                         feePayer: resolveFeePayer(decoded.feePayer),
                       },
@@ -873,10 +963,17 @@ export function create(options: create.Options = {}): create.ReturnType {
                         capabilities?.feePayer ?? (feePayerConfig ? true : undefined),
                       )
                       const state = store.getState()
+                      const from_ = from ?? state.accounts[state.activeAccount]?.address
+                      if (from_)
+                        await authorizeDefaultAccessKeyForTransaction({
+                          address: from_,
+                          calls,
+                          chainId: chainId ?? state.chainId,
+                        })
                       const txRequest = {
                         calls,
                         chainId,
-                        from: from ?? state.accounts[state.activeAccount]?.address,
+                        from: from_,
                         ...(feePayer ? { feePayer } : {}),
                       }
                       if (!sync) {
@@ -1021,7 +1118,11 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                     const capabilities = request._decoded.params?.[0]?.capabilities
                     const authorizeAccessKey =
-                      capabilities?.authorizeAccessKey ?? options.authorizeAccessKey?.()
+                      capabilities?.authorizeAccessKey ??
+                      (await defaultAuthorizeAccessKeyForConnect({
+                        capabilities,
+                        chainId: chainId ?? store.getState().chainId,
+                      }))
 
                     // Server Authentication: pre-resolve `auth` URLs against
                     // this dapp-side Provider's `window.location.origin`. The
@@ -1573,10 +1674,11 @@ export declare namespace create {
     /**
      * Default access key parameters for `wallet_connect`.
      *
-     * When set, `wallet_connect` will automatically authorize an access key.
-     * Return `undefined` to skip authorization for the current request.
+     * When set, `wallet_connect` and send transaction requests will authorize
+     * an access key only when no reusable local key is available. Return
+     * `undefined` to skip authorization for the current request.
      */
-    authorizeAccessKey?: (() => Adapter.authorizeAccessKey.Parameters | undefined) | undefined
+    authorizeAccessKey?: (() => AuthorizeAccessKeyParameters | undefined) | undefined
     /**
      * Supported chains. First chain is the default.
      * @default [tempo, tempoModerato, tempoDevnet]
@@ -1635,6 +1737,12 @@ export declare namespace create {
      * ```
      */
     transports?: Record<number, Transport> | undefined
+  }
+
+  /** Default access-key authorization parameters with SDK-only reuse policy. */
+  type AuthorizeAccessKeyParameters = Adapter.authorizeAccessKey.Parameters & {
+    /** SDK-only policy for deciding whether a stored local key can be reused. */
+    reuse?: AccessKey.ReusePolicy | undefined
   }
   type ReturnType = Provider
 }

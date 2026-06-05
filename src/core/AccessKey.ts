@@ -64,7 +64,7 @@ export type AccessKey = {
 >
 
 /** Calls used to match access key scopes. */
-type Call = {
+export type Call = {
   /** Contract address being called. */
   to?: Address.Address | undefined
   /** Calldata being sent. */
@@ -101,6 +101,44 @@ type SelectQuery = {
   now?: number | undefined
   /** Access-key manager options. */
   store: ManagerOptions
+}
+
+/** Access key authorization reuse policy. */
+export type ReusePolicy = {
+  /** Minimum Unix timestamp a reusable key must be valid through. */
+  minExpiry?: number | undefined
+  /** Minimum spending limits a reusable key must satisfy. */
+  minLimits?: readonly KeyAuthorization.TokenLimit[] | undefined
+}
+
+/** Access key authorization parameters plus SDK-only reuse policy. */
+export type ReusableAuthorization = Omit<prepareAuthorization.Options, 'chainId'> & {
+  /** Chain ID the key authorization is scoped to. */
+  chainId?: bigint | number | undefined
+  /** SDK-only reuse policy. Not sent over RPC. */
+  reuse?: ReusePolicy | undefined
+}
+
+type ReusableQuery = {
+  /** Root account address. */
+  account: Address.Address
+  /** Calls the access key must be able to sign. */
+  calls?: readonly Call[] | undefined
+  /** Chain ID the access key must be authorized on. */
+  chainId: number
+  /** Current Unix timestamp in seconds. Defaults to `Date.now() / 1000`. */
+  now?: number | undefined
+  /** Access key authorization parameters with optional reuse policy. */
+  parameters: ReusableAuthorization
+  /** Access-key manager options. */
+  store: ManagerOptions
+}
+
+type CallsQuery = {
+  /** Calls the authorization must be able to sign. */
+  calls?: readonly Call[] | undefined
+  /** Access key authorization parameters. */
+  parameters: Pick<ReusableAuthorization, 'scopes'>
 }
 
 type ListQuery = {
@@ -324,13 +362,34 @@ export declare namespace authorize {
   type ReturnType = KeyAuthorization.Rpc
 }
 
+/** Returns whether a local access key satisfies reusable authorization parameters. */
+export async function hasReusableAuthorization(options: ReusableQuery): Promise<boolean> {
+  const { account, calls, chainId, parameters, store } = options
+  const now = options.now ?? Date.now() / 1000
+  const records = list({ account, chainId, store })
+
+  for (const record of records) {
+    if (isExpired(record.expiry, now)) continue
+    if (!authorizationMatches(record, parameters)) continue
+    if (calls && !recordScopesMatch(record, { calls })) continue
+    if (!(await hydrate(record, store))) continue
+    return true
+  }
+  return false
+}
+
+/** Returns whether an authorization request could sign the provided calls. */
+export function canAuthorizeCalls(options: CallsQuery): boolean {
+  return scopesMatch(options.parameters.scopes, { calls: options.calls })
+}
+
 /** Returns publication status for a stored or on-chain access key. */
 export async function getStatus(options: StatusQuery): Promise<Status> {
   const { accessKey, account, calls, chainId, client } = options
   const { store } = options
   const now = options.now ?? Date.now() / 1000
   const local = list({ account, accessKey, chainId, store }).find((key) =>
-    scopesMatch(key, { calls }),
+    recordScopesMatch(key, { calls }),
   )
 
   if (local) {
@@ -366,7 +425,7 @@ export async function select(
   const records = list({ account, chainId, store })
 
   for (const record of records) {
-    if (!scopesMatch(record, { calls })) continue
+    if (!recordScopesMatch(record, { calls })) continue
     if (isExpired(record.expiry, now)) {
       await remove({
         accessKey: record.address,
@@ -572,13 +631,21 @@ export function isUnavailableError(error: unknown): boolean {
   return unavailableErrorNames.has(ExecutionError.parse(error).errorName)
 }
 
-function scopesMatch(
+function recordScopesMatch(
   key: AccessKey,
   options: {
     calls?: readonly Call[] | undefined
   },
 ): boolean {
-  const scopes = key.scopes
+  return scopesMatch(key.scopes, options)
+}
+
+function scopesMatch(
+  scopes: readonly NonNullable<AccessKey['scopes']>[number][] | undefined,
+  options: {
+    calls?: readonly Call[] | undefined
+  },
+): boolean {
   if (typeof scopes === 'undefined') return true
   if (!Array.isArray(scopes)) return false
   if (!options.calls) return false
@@ -591,17 +658,7 @@ function scopesMatch(
       if (scope.address.toLowerCase() !== callTo) return false
       const selector = scope.selector
       if (!selector) return scope.recipients ? scope.recipients.length === 0 : true
-      const scopeSelector = (() => {
-        try {
-          return (
-            selector.startsWith('0x') && selector.length === 10
-              ? selector
-              : AbiFunction.getSelector(selector)
-          ).toLowerCase()
-        } catch {
-          return undefined
-        }
-      })()
+      const scopeSelector = normalizeSelector(selector)
       if (!scopeSelector || callSelector !== scopeSelector) return false
       if (!scope.recipients || scope.recipients.length === 0) return true
       if (!call.data || call.data.length < 74) return false
@@ -610,6 +667,82 @@ function scopesMatch(
       return scope.recipients.some((address) => address.toLowerCase() === recipient.toLowerCase())
     })
   })
+}
+
+function authorizationMatches(key: AccessKey, parameters: ReusableAuthorization): boolean {
+  if (!scopesCover(key.scopes, parameters.scopes)) return false
+  if (
+    typeof parameters.reuse?.minExpiry === 'number' &&
+    key.expiry &&
+    key.expiry < parameters.reuse.minExpiry
+  )
+    return false
+  if (!limitsCover(key.limits, parameters.reuse?.minLimits)) return false
+  return true
+}
+
+function scopesCover(
+  existing: AccessKey['scopes'],
+  requested: ReusableAuthorization['scopes'],
+): boolean {
+  if (!requested) return true
+  if (!existing) return true
+  return requested.every((scope) => existing.some((candidate) => scopeCovers(candidate, scope)))
+}
+
+function scopeCovers(
+  existing: NonNullable<AccessKey['scopes']>[number],
+  requested: NonNullable<ReusableAuthorization['scopes']>[number],
+): boolean {
+  if (!isScope(existing) || !isScope(requested)) return false
+  if (existing.address.toLowerCase() !== requested.address.toLowerCase()) return false
+  if (!selectorCovers(existing.selector, requested.selector)) return false
+  return recipientsCover(existing.recipients, requested.recipients)
+}
+
+function selectorCovers(existing: string | undefined, requested: string | undefined): boolean {
+  if (!existing) return true
+  if (!requested) return false
+  const selector_existing = normalizeSelector(existing)
+  const selector_requested = normalizeSelector(requested)
+  return !!selector_existing && selector_existing === selector_requested
+}
+
+function normalizeSelector(value: string): string | undefined {
+  try {
+    return (
+      value.startsWith('0x') && value.length === 10 ? value : AbiFunction.getSelector(value)
+    ).toLowerCase()
+  } catch {
+    return undefined
+  }
+}
+
+function recipientsCover(
+  existing: readonly Address.Address[] | undefined,
+  requested: readonly Address.Address[] | undefined,
+): boolean {
+  if (!existing || existing.length === 0) return true
+  if (!requested || requested.length === 0) return false
+  return requested.every((address) =>
+    existing.some((candidate) => candidate.toLowerCase() === address.toLowerCase()),
+  )
+}
+
+function limitsCover(
+  existing: AccessKey['limits'],
+  requested: readonly KeyAuthorization.TokenLimit[] | undefined,
+): boolean {
+  if (!requested) return true
+  if (!existing) return true
+  return requested.every((limit) =>
+    existing.some(
+      (candidate) =>
+        candidate.token.toLowerCase() === limit.token.toLowerCase() &&
+        Number(candidate.period ?? 0) === Number(limit.period ?? 0) &&
+        BigInt(candidate.limit) >= BigInt(limit.limit),
+    ),
+  )
 }
 
 function isScope(scope: unknown): scope is NonNullable<AccessKey['scopes']>[number] {

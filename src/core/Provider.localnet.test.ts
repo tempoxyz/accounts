@@ -2228,7 +2228,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(result.accounts[0]!.capabilities.keyAuthorization!.expiry).toBe(Hex.fromNumber(expiry))
     })
 
-    test('behavior: login auto-authorizes access key', async () => {
+    test('behavior: login reuses matching default access key', async () => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
@@ -2237,7 +2237,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       await connect(provider)
       const result = await provider.request({ method: 'wallet_connect' })
-      expect(result.accounts[0]!.capabilities.keyAuthorization).toBeDefined()
+      expect(result.accounts[0]!.capabilities.keyAuthorization).toMatchInlineSnapshot(`undefined`)
     })
 
     test('behavior: without option, wallet_connect does not auto-authorize', async () => {
