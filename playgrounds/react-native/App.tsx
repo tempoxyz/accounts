@@ -18,7 +18,9 @@ import { formatUnits, parseUnits, type Address, type Hex as viem_Hex } from 'vie
 import { Actions } from 'viem/tempo'
 import { tempoModerato } from 'viem/tempo/chains'
 
-import { Provider } from '../../dist/react-native/index.js'
+import { Provider } from '../../dist/index.js'
+import { reactNative } from '../../dist/react-native/index.js'
+import { secureStorage } from '../../dist/react-native/secure-storage.js'
 
 const chain = tempoModerato
 
@@ -30,7 +32,10 @@ const tokens = {
 const redirectUri = Linking.createURL('auth')
 
 const provider = Provider.create({
-  redirectUri,
+  adapter: reactNative({
+    host: 'https://wallet.tempo.xyz',
+    redirectUri,
+  }),
   authorizeAccessKey: () => ({
     expiry: Math.floor(Date.now() / 1000) + 60 * 5,
     limits: [
@@ -47,6 +52,7 @@ const provider = Provider.create({
       },
     ],
   }),
+  storage: secureStorage(),
 })
 
 const getBackgroundColor = (colorScheme: ColorSchemeName) => {
