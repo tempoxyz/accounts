@@ -1,5 +1,5 @@
 ---
-"accounts": minor
+"accounts": patch
 ---
 
 Add provider-owned RPC action handling for adapters that expose a viem account with `getAccount`.
