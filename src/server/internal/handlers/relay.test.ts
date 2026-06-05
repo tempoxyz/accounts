@@ -136,6 +136,19 @@ describe('behavior: with multisig', () => {
       submittedHash,
     })
 
+    const retried = await client.sendTransaction({
+      ...request,
+      signatures: [signature_2],
+    } as never)
+
+    expect(retried).toBe(submittedHash)
+    expect(upstreamRequests.map(({ method }) => method)).toMatchInlineSnapshot(`
+      [
+        "eth_fillTransaction",
+        "eth_sendRawTransactionSync",
+      ]
+    `)
+
     await expect(
       client.request({
         method: 'eth_getTransactionByHash',

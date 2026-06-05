@@ -74,6 +74,16 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     signatures,
     config,
   })
+  if (pending?.submittedHash)
+    return {
+      broadcastResult: pending.submittedHash,
+      status: toResult({
+        entry: pending,
+        approvals,
+        status: 'submitted',
+      }),
+    }
+
   const now = Date.now()
   const entry = {
     account: input.account,
