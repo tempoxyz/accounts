@@ -1,10 +1,10 @@
-import * as Linking from 'expo-linking'
 import { StatusBar } from 'expo-status-bar'
 import { Hex } from 'ox'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
   ColorSchemeName,
+  Linking,
   ScrollView,
   StyleProp,
   Text,
@@ -19,7 +19,7 @@ import { Actions } from 'viem/tempo'
 import { tempoModerato } from 'viem/tempo/chains'
 
 import { Provider } from '../../dist/index.js'
-import { reactNative } from '../../dist/react-native/index.js'
+import { tempoWallet } from '../../dist/react-native/index.js'
 import { secureStorage } from '../../dist/react-native/secure-storage.js'
 
 const chain = tempoModerato
@@ -29,11 +29,59 @@ const tokens = {
   'USDC.e': '0x20c0000000000000000000009e8d7eb59b783726' as Address,
 }
 
-const redirectUri = Linking.createURL('auth')
+const callbackBridge = process.env.EXPO_PUBLIC_CALLBACK_BRIDGE
+const redirectUri = callbackBridge
+  ? `${callbackBridge}/auth`
+  : 'xyz.tempo.accounts.playground:/auth'
+const walletOrigin = process.env.EXPO_PUBLIC_WALLET_ORIGIN ?? 'https://wallet.tempo.xyz'
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function openBridgeAuthUrl(url: string): Promise<string | null> {
+  if (!callbackBridge) return null
+  await fetch(`${callbackBridge}/session`, {
+    body: JSON.stringify({ url }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  })
+  const expires = Date.now() + 120_000
+  while (Date.now() < expires) {
+    const response = await fetch(`${callbackBridge}/callback`)
+    const body = (await response.json()) as { url?: string | undefined }
+    if (body.url) return body.url
+    await sleep(500)
+  }
+  return null
+}
+
+async function openAuthUrl(url: string, callback: string): Promise<string | null> {
+  if (callbackBridge) return await openBridgeAuthUrl(url)
+  return new Promise((resolve) => {
+    let settled = false
+    const timeout = setTimeout(() => finish(null), 120_000)
+    const subscription = Linking.addEventListener('url', (event) => {
+      if (event.url.startsWith(callback)) finish(event.url)
+    })
+
+    function finish(value: string | null) {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      subscription.remove()
+      resolve(value)
+    }
+
+    Linking.openURL(url).catch(() => finish(null))
+  })
+}
 
 const provider = Provider.create({
-  adapter: reactNative({
-    host: 'https://wallet.tempo.xyz',
+  adapter: tempoWallet({
+    baseUrl: walletOrigin,
+    host: walletOrigin,
+    open: openAuthUrl,
     redirectUri,
   }),
   authorizeAccessKey: () => ({
@@ -250,6 +298,9 @@ export default function App() {
         <ThemedText style={{ fontFamily: 'monospace', fontSize: 12 }}>{address}</ThemedText>
       )}
       <ThemedText style={{ marginTop: 16, fontWeight: 'bold' }}>Network: {network}</ThemedText>
+      <ThemedText>
+        Bridge: {callbackBridge ? callbackBridge : 'off'} / Wallet: {walletOrigin}
+      </ThemedText>
       <Button title="Switch Network" onPress={() => switchNetwork('moderato')} />
 
       <View style={{ marginTop: 16 }}>

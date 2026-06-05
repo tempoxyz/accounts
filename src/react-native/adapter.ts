@@ -1,27 +1,42 @@
-import {
-  Address as core_Address,
-  Base64,
-  Hex,
-  P256,
-  Provider as core_Provider,
-  RpcResponse,
-} from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { Hex, P256, Provider as core_Provider, RpcResponse } from 'ox'
 import { custom } from 'viem'
 import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
-import * as z from 'zod/mini'
+import { Wata, mobileWebAuth as core_mobileWebAuth, type MobileWebAuth } from 'wata'
+import { z } from 'zod/mini'
 
 import * as Adapter from '../core/Adapter.js'
 import * as Rpc from '../core/zod/rpc.js'
 
+type MobileRequest =
+  | Pick<Rpc.eth_fillTransaction.Encoded, 'method' | 'params'>
+  | Pick<Rpc.eth_sendTransaction.Encoded, 'method' | 'params'>
+  | Pick<Rpc.eth_sendTransactionSync.Encoded, 'method' | 'params'>
+  | Pick<Rpc.eth_signTransaction.Encoded, 'method' | 'params'>
+  | Pick<Rpc.eth_signTypedData_v4.Encoded, 'method' | 'params'>
+  | Pick<Rpc.personal_sign.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_authorizeAccessKey.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_connect.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_deposit.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_depositZone.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_disconnect.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_getBalances.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_getCallsStatus.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_getCapabilities.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_revokeAccessKey.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_sendCalls.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_swap.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_switchEthereumChain.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_transfer.Encoded, 'method' | 'params'>
+  | Pick<Rpc.wallet_withdrawZone.Encoded, 'method' | 'params'>
+
 /**
- * Creates a React Native adapter that authorizes access keys via the system browser.
+ * Creates a mobile web auth adapter that forwards wallet RPC through Wata.
  *
- * Authentication opens a browser session and completes via a redirect callback
- * that returns the signed key authorization.
+ * Authentication opens a browser session and completes via an encrypted app-link
+ * callback carrying the wallet RPC response.
  */
-export function reactNative(options: reactNative.Options): Adapter.Adapter {
-  const { name = 'Tempo Mobile', rdns = 'xyz.tempo.mobile' } = options
+export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
+  const { baseUrl, fetch, host, name, open, openAuthSession, rdns, redirectUri } = options
 
   return Adapter.define({ name, rdns }, ({ getAccount, store }) => {
     function generateAccessKey(
@@ -43,23 +58,25 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       }
     }
 
-    async function openMobileAuth(parameters: Omit<buildAuthUrl.Parameters, 'callback' | 'state'>) {
-      const { host, redirectUri, open = defaultOpen } = options
-      const state = Base64.fromBytes(Hex.toBytes(Hex.random(16)), { pad: false, url: true })
-      const authUrl = buildAuthUrl(host, {
-        callback: redirectUri,
-        ...parameters,
-        state,
+    async function requestMobile(request: MobileRequest): Promise<unknown> {
+      const session = Wata.create({
+        baseUrl,
+        meta: { name },
+        transports: [
+          core_mobileWebAuth({
+            callback: redirectUri,
+            host,
+            openAuthSession:
+              openAuthSession ??
+              (async ({ authorizationUrl, callback }) => {
+                const result = await (open ?? defaultOpen)(authorizationUrl, callback)
+                return result ?? undefined
+              }),
+            ...(fetch !== undefined ? { fetch } : {}),
+          }),
+        ],
       })
-
-      const callbackUrl = await open(authUrl, redirectUri)
-      if (!callbackUrl) throw new AuthCancelledError()
-
-      const params = new URL(callbackUrl).searchParams
-      const returnedState = params.get('state')
-      if (returnedState !== state) throw new StateMismatchError()
-
-      return params
+      return (await session.send({ method: request.method, params: request.params ?? [] })).result
     }
 
     const provider = core_Provider.from({
@@ -67,112 +84,27 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
         switch (request.method) {
           case 'eth_chainId':
             return Hex.fromNumber(store.getState().chainId)
-          case 'wallet_authorizeAccessKey': {
-            const [parameters] = z.decode(
-              Rpc.wallet_authorizeAccessKey.schema.params!,
-              request.params as never,
-            )
-            const publicKey = parameters.publicKey
-            if (!publicKey)
-              throw new RpcResponse.InvalidParamsError({
-                message:
-                  '`wallet_authorizeAccessKey` on the React Native adapter requires key parameters.',
-              })
-
-            const params = await openMobileAuth({
-              chainId: Number(parameters.chainId ?? store.getState().chainId),
-              ...(typeof parameters.expiry !== 'undefined' ? { expiry: parameters.expiry } : {}),
-              ...(parameters.keyType ? { keyType: parameters.keyType } : {}),
-              ...(parameters.limits
-                ? { limits: parameters.limits.map((l) => ({ ...l, limit: String(l.limit) })) }
-                : {}),
-              pubKey: publicKey,
-              ...(parameters.showDeposit !== undefined
-                ? { showDeposit: parameters.showDeposit }
-                : {}),
-            })
-            const accountAddress = params.get('accountAddress')
-            if (!accountAddress) throw new Error('Missing accountAddress in callback.')
-
-            const value = params.get('keyAuthorization')
-            if (!value) throw new Error('Missing keyAuthorization in callback.')
-            const keyAuthorization = KeyAuthorization.deserialize(value as Hex.Hex)
-            if (!keyAuthorization.signature)
-              throw new Error('Key authorization in callback is missing a signature.')
-
-            return {
-              keyAuthorization: KeyAuthorization.toRpc(keyAuthorization as KeyAuthorization.Signed),
-              rootAddress: accountAddress as core_Address.Address,
-            } satisfies Rpc.wallet_authorizeAccessKey.Encoded['returns']
-          }
-          case 'wallet_connect': {
-            const [parameters] =
-              z.decode(Rpc.wallet_connect.schema.params!, request.params as never) ?? []
-            const capabilities = parameters?.capabilities
-            const authorizeAccessKey = capabilities?.authorizeAccessKey
-            const publicKey = authorizeAccessKey?.publicKey
-            if (authorizeAccessKey && !publicKey)
-              throw new RpcResponse.InvalidParamsError({
-                message:
-                  '`wallet_connect` on the React Native adapter requires key parameters when `capabilities.authorizeAccessKey` is set.',
-              })
-
-            const params = await openMobileAuth({
-              chainId: Number(authorizeAccessKey?.chainId ?? store.getState().chainId),
-              ...(typeof authorizeAccessKey?.expiry !== 'undefined'
-                ? { expiry: authorizeAccessKey.expiry }
-                : {}),
-              ...(authorizeAccessKey?.keyType ? { keyType: authorizeAccessKey.keyType } : {}),
-              ...(authorizeAccessKey?.limits
-                ? {
-                    limits: authorizeAccessKey.limits.map((l) => ({
-                      ...l,
-                      limit: String(l.limit),
-                    })),
-                  }
-                : {}),
-              ...(capabilities?.digest ? { digest: capabilities.digest } : {}),
-              ...(capabilities?.personalSign ? { personalSign: capabilities.personalSign } : {}),
-              ...(publicKey ? { pubKey: publicKey } : {}),
-              ...(capabilities?.showDeposit !== undefined
-                ? { showDeposit: capabilities.showDeposit }
-                : {}),
-            })
-
-            const accountAddress = params.get('accountAddress')
-            if (!accountAddress) throw new Error('Missing accountAddress in callback.')
-
-            const keyAuthorization = (() => {
-              const value = params.get('keyAuthorization')
-              if (!value) return undefined
-              const keyAuthorization = KeyAuthorization.deserialize(value as Hex.Hex)
-              if (!keyAuthorization.signature)
-                throw new Error('Key authorization in callback is missing a signature.')
-              return keyAuthorization as KeyAuthorization.Signed
-            })()
-            if (publicKey && !keyAuthorization)
-              throw new Error('Missing keyAuthorization in callback.')
-
-            const signature = params.get('signature') as Hex.Hex | null
-            const personalSignMessage = params.get('personalSignMessage')
-
-            return {
-              accounts: [
-                {
-                  address: accountAddress as core_Address.Address,
-                  capabilities: {
-                    ...(keyAuthorization
-                      ? { keyAuthorization: KeyAuthorization.toRpc(keyAuthorization) }
-                      : {}),
-                    ...(personalSignMessage
-                      ? { personalSign: { message: personalSignMessage } }
-                      : {}),
-                    ...(signature ? { signature } : {}),
-                  },
-                },
-              ],
-            } satisfies Rpc.wallet_connect.Encoded['returns']
-          }
+          case 'eth_fillTransaction':
+          case 'eth_sendTransaction':
+          case 'eth_sendTransactionSync':
+          case 'eth_signTransaction':
+          case 'eth_signTypedData_v4':
+          case 'personal_sign':
+          case 'wallet_authorizeAccessKey':
+          case 'wallet_connect':
+          case 'wallet_deposit':
+          case 'wallet_depositZone':
+          case 'wallet_disconnect':
+          case 'wallet_getBalances':
+          case 'wallet_getCallsStatus':
+          case 'wallet_getCapabilities':
+          case 'wallet_revokeAccessKey':
+          case 'wallet_sendCalls':
+          case 'wallet_swap':
+          case 'wallet_switchEthereumChain':
+          case 'wallet_transfer':
+          case 'wallet_withdrawZone':
+            return await requestMobile(request as never)
           default:
             throw unsupported(`\`${request.method}\` not supported by React Native adapter.`)
         }
@@ -203,8 +135,38 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
             (await provider.request(request)) as Rpc.wallet_connect.Encoded['returns'],
           )
         },
-        async revokeAccessKey() {
-          throw unsupported('`wallet_revokeAccessKey` not supported by React Native adapter.')
+        async deposit(_parameters, request) {
+          return (await provider.request(request)) as Rpc.wallet_deposit.Encoded['returns']
+        },
+        async depositZone(parameters, request) {
+          return (await provider.request({
+            ...request,
+            params: [z.encode(Rpc.wallet_depositZone.parameters, parameters)] as const,
+          })) as Rpc.wallet_depositZone.Encoded['returns']
+        },
+        async disconnect() {
+          await provider.request({ method: 'wallet_disconnect' })
+        },
+        async swap(_parameters, request) {
+          return (await provider.request(request)) as Rpc.wallet_swap.Encoded['returns']
+        },
+        async switchChain(parameters) {
+          await provider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: Hex.fromNumber(parameters.chainId) }],
+          })
+        },
+        async transfer(parameters, request) {
+          return (await provider.request({
+            ...request,
+            params: [z.encode(Rpc.wallet_transfer.parameters, parameters)] as const,
+          })) as Rpc.wallet_transfer.Encoded['returns']
+        },
+        async withdrawZone(parameters, request) {
+          return (await provider.request({
+            ...request,
+            params: [z.encode(Rpc.wallet_withdrawZone.parameters, parameters)] as const,
+          })) as Rpc.wallet_withdrawZone.Encoded['returns']
         },
       },
       generateAccessKey,
@@ -221,35 +183,54 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
   })
 }
 
-export declare namespace reactNative {
+/** Creates the Tempo Wallet React Native adapter using Wata mobile web auth. */
+export function tempoWallet(options: tempoWallet.Options): Adapter.Adapter {
+  const {
+    baseUrl = 'https://wallet.tempo.xyz',
+    host = 'https://wallet.tempo.xyz',
+    name = 'Tempo Wallet',
+    rdns = 'xyz.tempo',
+    ...rest
+  } = options
+  return mobileWebAuth({ ...rest, baseUrl, host, name, rdns })
+}
+
+export declare namespace mobileWebAuth {
+  /** Options for {@link mobileWebAuth}. */
   export type Options = {
-    /** Host URL for the mobile auth page. @default "https://wallet.tempo.xyz" */
-    host: string
-    /** Provider display name. @default "Tempo Mobile" */
-    name?: string | undefined
+    /** Public HTTPS origin that hosts this app's Wata consumer discovery document. */
+    baseUrl: string
+    /** Override the Wata discovery `fetch` implementation. */
+    fetch?: MobileWebAuth.Options['fetch'] | undefined
+    /** Host discovery origin or preloaded Wata host document. */
+    host: MobileWebAuth.Options['host']
+    /** Provider display name. */
+    name: string
     /**
      * Browser opener override. Opens the auth URL and returns the callback URL.
      * @default Uses `expo-web-browser`'s `openAuthSessionAsync`.
      */
     open?: ((url: string, redirectUri: string) => Promise<string | null>) | undefined
+    /** Wata browser auth-session override. */
+    openAuthSession?: MobileWebAuth.Options['openAuthSession'] | undefined
     /** Redirect URI for the auth callback (e.g. your app's deep link scheme). */
     redirectUri: string
-    /** Reverse-DNS provider identifier. @default "xyz.tempo.mobile" */
-    rdns?: string | undefined
+    /** Reverse-DNS provider identifier. */
+    rdns: string
   }
 }
 
-class AuthCancelledError extends Error {
-  constructor() {
-    super('Authentication was cancelled by the user.')
-    this.name = 'AuthCancelledError'
-  }
-}
-
-class StateMismatchError extends Error {
-  constructor() {
-    super('State parameter mismatch — possible CSRF attack.')
-    this.name = 'StateMismatchError'
+export declare namespace tempoWallet {
+  /** Options for {@link tempoWallet}. */
+  export type Options = Omit<mobileWebAuth.Options, 'baseUrl' | 'host' | 'name' | 'rdns'> & {
+    /** Consumer discovery origin. @default "https://wallet.tempo.xyz" */
+    baseUrl?: mobileWebAuth.Options['baseUrl'] | undefined
+    /** Tempo Wallet discovery origin or preloaded Wata host document. @default "https://wallet.tempo.xyz" */
+    host?: mobileWebAuth.Options['host'] | undefined
+    /** Provider display name. @default "Tempo Wallet" */
+    name?: mobileWebAuth.Options['name'] | undefined
+    /** Reverse-DNS provider identifier. @default "xyz.tempo" */
+    rdns?: mobileWebAuth.Options['rdns'] | undefined
   }
 }
 
@@ -258,39 +239,6 @@ async function defaultOpen(url: string, redirectUri: string): Promise<string | n
   const result = await openAuthSessionAsync(url, redirectUri)
   if (result.type !== 'success') return null
   return result.url
-}
-
-function buildAuthUrl(host: string, params: buildAuthUrl.Parameters): string {
-  const url = new URL('/remote/auth/mobile', host)
-  if (params.pubKey) url.searchParams.set('pubKey', params.pubKey)
-  if (params.keyType) url.searchParams.set('keyType', params.keyType)
-  url.searchParams.set('chainId', Hex.fromNumber(params.chainId))
-  if (params.digest) url.searchParams.set('digest', params.digest)
-  if (typeof params.expiry !== 'undefined')
-    url.searchParams.set('expiry', Hex.fromNumber(params.expiry))
-  if (params.limits) url.searchParams.set('limits', JSON.stringify(params.limits))
-  if (params.personalSign) url.searchParams.set('personalSign', JSON.stringify(params.personalSign))
-  if (params.showDeposit === true) url.searchParams.set('showDeposit', 'true')
-  else if (params.showDeposit)
-    url.searchParams.set('showDeposit', JSON.stringify(params.showDeposit))
-  url.searchParams.set('callback', params.callback)
-  url.searchParams.set('state', params.state)
-  return url.toString()
-}
-
-declare namespace buildAuthUrl {
-  type Parameters = {
-    callback: string
-    chainId: number
-    digest?: Hex.Hex | undefined
-    expiry?: number | undefined
-    keyType?: string | undefined
-    limits?: readonly { token: string; limit: string }[] | undefined
-    personalSign?: { message: string } | undefined
-    pubKey?: Hex.Hex | undefined
-    showDeposit?: Adapter.createAccount.Parameters['showDeposit'] | undefined
-    state: string
-  }
 }
 
 function unsupported(message: string) {
