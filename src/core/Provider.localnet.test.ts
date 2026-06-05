@@ -2192,6 +2192,22 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(result.accounts[0]!.capabilities.keyAuthorization!.keyId).toMatch(/^0x[0-9a-f]{40}$/i)
     })
 
+    test('default: wallet_connect auto-authorizes access key from literal option', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        authorizeAccessKey: { expiry: Expiry.days(1) },
+      })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { method: 'register' } }],
+      })
+      expect(result.accounts.length).toBeGreaterThanOrEqual(1)
+      expect(result.accounts[0]!.capabilities.keyAuthorization).toBeDefined()
+      expect(result.accounts[0]!.capabilities.keyAuthorization!.keyId).toMatch(/^0x[0-9a-f]{40}$/i)
+    })
+
     test('behavior: auto-authorized access key can send transactions', async () => {
       const provider = Provider.create({
         adapter: adapter(),

@@ -60,10 +60,10 @@ export const config = createConfig({
 
 ### authorizeAccessKey
 
-- **Type:** `() => { address?: Address; chainId?: bigint; expiry: number; keyType?: 'secp256k1' | 'p256' | 'webAuthn'; limits?: { token: Address; limit: bigint; period?: number }[]; privateKey?: Hex; publicKey?: Hex; scopes?: { address: Address; recipients?: Address[]; selector?: Hex | string }[] } | undefined`
+- **Type:** `{ address?: Address; chainId?: bigint; expiry: number; keyType?: 'secp256k1' | 'p256' | 'webAuthn'; limits?: { token: Address; limit: bigint; period?: number }[]; privateKey?: Hex; publicKey?: Hex; scopes?: { address: Address; recipients?: Address[]; selector?: Hex | string }[] } | (() => { ... } | undefined)`
 - **Optional**
 
-Default access key parameters for `wallet_connect`. Return `undefined` to skip authorization for the current request.
+Default access key parameters for `wallet_connect`. Pass an object to use the same policy for every applicable request, or a function to compute it dynamically. Return `undefined` from the function to skip authorization for the current request.
 
 This matches [`Provider.authorizeAccessKey`](/docs/api/provider#authorizeaccesskey).
 
@@ -81,7 +81,7 @@ export const config = createConfig({
   connectors: [
     webAuthn({
       authUrl: '/auth',
-      authorizeAccessKey: () => ({ // [!code focus]
+      authorizeAccessKey: { // [!code focus]
         expiry: Expiry.days(7), // [!code focus]
         limits: [{ // [!code focus]
           token: '0x20c0000000000000000000000000000000000001', // [!code focus]
@@ -91,7 +91,7 @@ export const config = createConfig({
           address: '0x20c0000000000000000000000000000000000001', // [!code focus]
           selector: 'transfer(address,uint256)', // [!code focus]
         }], // [!code focus]
-      }), // [!code focus]
+      }, // [!code focus]
     }),
   ],
   transports: { [tempo.id]: http() },

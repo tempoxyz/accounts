@@ -668,11 +668,17 @@ export function create(options: create.Options = {}): create.ReturnType {
     return rest
   }
 
+  function resolveDefaultAuthorizeAccessKey(): create.AuthorizeAccessKeyParameters | undefined {
+    const authorizeAccessKey = options.authorizeAccessKey
+    if (typeof authorizeAccessKey === 'function') return authorizeAccessKey()
+    return authorizeAccessKey
+  }
+
   async function defaultAuthorizeAccessKeyForConnect(options_: {
     capabilities: WalletConnectCapabilities | undefined
     chainId: number
   }): Promise<Adapter.authorizeAccessKey.Parameters | undefined> {
-    const parameters = options.authorizeAccessKey?.()
+    const parameters = resolveDefaultAuthorizeAccessKey()
     if (!parameters) return undefined
     const address = reusableConnectAccount(options_.capabilities)
     if (
@@ -715,7 +721,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     calls?: readonly AccessKey.Call[] | undefined
     chainId: number
   }): Promise<void> {
-    const parameters = options.authorizeAccessKey?.()
+    const parameters = resolveDefaultAuthorizeAccessKey()
     if (!parameters) return
     const existing = await store.accessKeys.select({
       account: options_.address,
@@ -1674,11 +1680,13 @@ export declare namespace create {
     /**
      * Default access key parameters for `wallet_connect`.
      *
-     * When set, `wallet_connect` and send transaction requests will authorize
-     * an access key only when no reusable local key is available. Return
-     * `undefined` to skip authorization for the current request.
+     * Pass an object to use the same access-key policy for every applicable
+     * request, or a function to compute it dynamically. When set,
+     * `wallet_connect` and send transaction requests will authorize an access
+     * key only when no reusable local key is available. Return `undefined`
+     * from the function to skip authorization for the current request.
      */
-    authorizeAccessKey?: (() => AuthorizeAccessKeyParameters | undefined) | undefined
+    authorizeAccessKey?: AuthorizeAccessKey | undefined
     /**
      * Supported chains. First chain is the default.
      * @default [tempo, tempoModerato, tempoDevnet]
@@ -1744,6 +1752,10 @@ export declare namespace create {
     /** SDK-only policy for deciding whether a stored local key can be reused. */
     reuse?: AccessKey.ReusePolicy | undefined
   }
+  /** Static or dynamic default access-key authorization policy. */
+  type AuthorizeAccessKey =
+    | AuthorizeAccessKeyParameters
+    | (() => AuthorizeAccessKeyParameters | undefined)
   type ReturnType = Provider
 }
 

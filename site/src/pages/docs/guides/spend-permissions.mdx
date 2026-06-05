@@ -43,7 +43,7 @@ Follow the [Connect Accounts](/docs/guides/connect-accounts) guide to set up Wag
 
 ### Define the Spend Policy
 
-Add `authorizeAccessKey` to the connector. The callback returns the permission the user will approve when a matching local key is not already available.
+Add `authorizeAccessKey` to the connector. The object describes the permission the user will approve when a matching local key is not already available. Pass a function instead when the policy needs to be computed dynamically.
 
 ```tsx twoslash [src/config.ts]
 // @noErrors
@@ -60,7 +60,7 @@ export const config = createConfig({
   connectors: [
     tempoWallet({
       testnet: true,
-      authorizeAccessKey: () => ({ // [!code focus]
+      authorizeAccessKey: { // [!code focus]
         expiry: Expiry.days(1), // [!code focus]
         limits: [ // [!code focus]
           { token: pathUsd, limit: parseUnits('100', 6) }, // [!code focus]
@@ -74,7 +74,7 @@ export const config = createConfig({
             { token: pathUsd, limit: parseUnits('10', 6) }, // [!code focus]
           ], // [!code focus]
         }, // [!code focus]
-      }), // [!code focus]
+      }, // [!code focus]
     }),
   ],
   multiInjectedProviderDiscovery: false,
