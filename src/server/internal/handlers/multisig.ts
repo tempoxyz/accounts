@@ -1,7 +1,6 @@
 import { Hex, RpcResponse } from 'ox'
 import { MultisigConfig, SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import type { Address, Client } from 'viem'
-import { keccak256 } from 'viem'
 import { Transaction } from 'viem/tempo'
 
 /** Returns whether a raw transaction carries a native multisig signature. */
@@ -363,7 +362,11 @@ function parse(serialized: Hex.Hex) {
   const { signature: _, ...unsigned } = transaction
   const payload = TxEnvelopeTempo.getSignPayload(TxEnvelopeTempo.from(unsigned as never))
   const chainId = Number(transaction.chainId)
-  const id = keccak256(Hex.concat(payload, signature.account, signature.genesisConfigId))
+  const id = MultisigConfig.getSignPayload({
+    account: signature.account,
+    genesisConfigId: signature.genesisConfigId,
+    payload,
+  })
   const init = signature.init ? MultisigConfig.from(signature.init) : undefined
 
   return {
