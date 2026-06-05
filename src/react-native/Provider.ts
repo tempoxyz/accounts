@@ -3,17 +3,28 @@ import * as Storage from '../core/Storage.js'
 import { reactNative } from './adapter.js'
 import { secureStorage } from './storage.js'
 
-/** Creates a provider for React Native apps using system browser authentication. */
+/** Creates a provider for React Native apps using Wata mobile web auth. */
 export function create(options: create.Options): create.ReturnType {
-  const { host = 'https://wallet.tempo.xyz', redirectUri, open, ...rest } = options
+  const {
+    baseUrl,
+    fetch,
+    host = 'https://wallet.tempo.xyz',
+    open,
+    openAuthSession,
+    redirectUri,
+    ...rest
+  } = options
 
   return CoreProvider.create({
     storage: defaultStorage(),
     ...rest,
     adapter: reactNative({
+      baseUrl,
+      ...(fetch ? { fetch } : {}),
       host,
-      redirectUri,
       ...(open ? { open } : {}),
+      ...(openAuthSession ? { openAuthSession } : {}),
+      redirectUri,
     }),
   })
 }
@@ -29,8 +40,8 @@ export declare namespace create {
     CoreProvider.create.Options & reactNative.Options,
     'adapter' | 'host'
   > & {
-    /** Host URL for the mobile auth page. @default "https://wallet.tempo.xyz" */
-    host?: string | undefined
+    /** Host discovery origin or preloaded Wata host document. @default "https://wallet.tempo.xyz" */
+    host?: reactNative.Options['host'] | undefined
   }
   export type ReturnType = CoreProvider.create.ReturnType
 }

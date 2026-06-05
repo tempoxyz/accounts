@@ -4,7 +4,7 @@
     "slug": "accounts-rn-playground",
     "version": "0.0.0",
     "orientation": "portrait",
-    "scheme": "accounts-playground",
+    "scheme": "xyz.tempo.accounts.playground",
     "platforms": ["ios", "android"],
     "ios": {
       "bundleIdentifier": "xyz.tempo.accounts.playground"

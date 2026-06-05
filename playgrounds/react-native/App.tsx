@@ -30,6 +30,7 @@ const tokens = {
 const redirectUri = Linking.createURL('auth')
 
 const provider = Provider.create({
+  baseUrl: 'https://accounts-react-native.example',
   redirectUri,
   authorizeAccessKey: () => ({
     expiry: Math.floor(Date.now() / 1000) + 60 * 5,
