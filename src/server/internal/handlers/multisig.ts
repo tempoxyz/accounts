@@ -1,11 +1,14 @@
-import { Hex, RpcResponse } from 'ox'
+import { Hex, RpcResponse, Signature } from 'ox'
 import { MultisigConfig, SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import type { Address, Client } from 'viem'
+import type { LocalAccount } from 'viem/accounts'
 import { Transaction } from 'viem/tempo'
+
+import * as Sponsorship from './sponsorship.js'
 
 /** Returns whether a raw transaction carries a native multisig signature. */
 export function isMultisigTransaction(serialized: Hex.Hex) {
-  if (!serialized.startsWith('0x76')) return false
+  if (!serialized.startsWith('0x76') && !serialized.startsWith('0x78')) return false
   try {
     const transaction = Transaction.deserialize(serialized as never)
     return isMultisigSignature((transaction as { signature?: unknown }).signature)
@@ -37,12 +40,16 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     method,
     request,
     resolveConfig = ({ init }) => init,
+    sponsor,
     store,
   } = options
   const serialized = request.params?.[0]
-  if (typeof serialized !== 'string' || !serialized.startsWith('0x76'))
+  if (
+    typeof serialized !== 'string' ||
+    (!serialized.startsWith('0x76') && !serialized.startsWith('0x78'))
+  )
     throw new RpcResponse.InvalidParamsError({
-      message: 'Only Tempo (0x76) transactions are supported.',
+      message: 'Only Tempo (0x76/0x78) transactions are supported.',
     })
 
   const input = parse(serialized as Hex.Hex)
@@ -93,13 +100,28 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     signatures: approvals.signatures,
     transaction: input.transaction,
   })
-  const result = await client.request({
-    method:
-      method === 'eth_sendRawTransaction' && finalize === 'sync'
-        ? 'eth_sendRawTransactionSync'
-        : method,
-    params: [final],
-  } as never)
+  const broadcastMethod =
+    method === 'eth_sendRawTransaction' && finalize === 'sync'
+      ? 'eth_sendRawTransactionSync'
+      : method
+  const shouldSponsor =
+    sponsor &&
+    (Sponsorship.requestsRawSponsorship(final as `0x${string}`) ||
+      (sponsor.feeToken && hasSignedFeePayer(final as Hex.Hex)))
+  const result = shouldSponsor
+    ? await Sponsorship.handleRawTransaction({
+        account: sponsor.account,
+        feeToken: sponsor.feeToken,
+        getClient,
+        method: broadcastMethod,
+        request: { params: [final] },
+        sender: input.account,
+        validate: sponsor.validate,
+      })
+    : await client.request({
+        method: broadcastMethod,
+        params: [final],
+      } as never)
   const hash = getTransactionHash(result)
   const submitted = {
     ...entry,
@@ -165,6 +187,17 @@ declare namespace collect {
     request: { params?: readonly unknown[] | undefined }
     /** Resolves the genesis multisig config for quorum checks. */
     resolveConfig?: Options_multisig['resolveConfig']
+    /** Optional fee payer used to sponsor finalized multisig transactions. */
+    sponsor?:
+      | {
+          /** Account used as the fee payer. */
+          account: LocalAccount
+          /** Fee token to set before fee payer signing. */
+          feeToken?: Address | undefined
+          /** Optional sponsorship approval callback. */
+          validate?: Sponsorship.handleRawTransaction.Options['validate']
+        }
+      | undefined
     /** Pending multisig operation store. */
     store: Store
   }
@@ -354,10 +387,6 @@ function parse(serialized: Hex.Hex) {
     throw new RpcResponse.InvalidParamsError({
       message: 'Transaction does not contain a native multisig signature.',
     })
-  if (transaction.feePayerSignature)
-    throw new RpcResponse.InvalidParamsError({
-      message: 'Native multisig fee payer transactions are not supported yet.',
-    })
 
   const { signature: _, ...unsigned } = transaction
   const payload = TxEnvelopeTempo.getSignPayload(TxEnvelopeTempo.from(unsigned as never))
@@ -455,11 +484,40 @@ async function serializeFinal(options: {
   transaction: Record<string, unknown>
 }) {
   const { signature: _, ...transaction } = options.transaction
-  return await Transaction.serialize({
+  const envelope = TxEnvelopeTempo.from({
     ...transaction,
-    multisig: options.config,
-    signatures: options.signatures,
+    feePayerSignature: normalizeFeePayerSignature(transaction.feePayerSignature),
   } as never)
+  const payload = TxEnvelopeTempo.getSignPayload(envelope)
+  const signatures = options.signatures.map((approval) => SignatureEnvelope.from(approval))
+  const sorted = SignatureEnvelope.sortMultisigApprovals({
+    genesisConfig: options.config,
+    payload,
+    signatures,
+  })
+  const signature = SignatureEnvelope.from({
+    genesisConfig: options.config,
+    signatures: sorted,
+    ...((transaction.nonce as number | bigint | undefined) ? {} : { init: true }),
+  })
+  return TxEnvelopeTempo.serialize(envelope, {
+    feePayerSignature: undefined,
+    signature,
+  })
+}
+
+function normalizeFeePayerSignature(value: unknown) {
+  if (!value) return value
+  return Signature.from(value as never)
+}
+
+function hasSignedFeePayer(serialized: Hex.Hex) {
+  try {
+    const transaction = Transaction.deserialize(serialized as never) as Record<string, unknown>
+    return 'feePayerSignature' in transaction && transaction.feePayerSignature != null
+  } catch {
+    return false
+  }
 }
 
 function getTransactionHash(result: unknown) {

@@ -532,6 +532,13 @@ export function relay(options: relay.Options = {}): Handler {
               method: request.method,
               request: { params: 'params' in request ? request.params : undefined },
               resolveConfig: multisigOptions.resolveConfig,
+              sponsor: feePayerOptions
+                ? {
+                    account: feePayerOptions.account,
+                    feeToken: feePayerOptions.feeToken,
+                    validate: feePayerOptions.validate,
+                  }
+                : undefined,
               store: multisigOptions.store,
             })
             return RpcResponse.from({ result } as never, { request } as never)

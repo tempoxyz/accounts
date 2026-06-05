@@ -113,7 +113,7 @@ export declare namespace sign {
 
 /** Handles `eth_signRawTransaction` and broadcast methods for sponsored Tempo transactions. */
 export async function handleRawTransaction(options: handleRawTransaction.Options) {
-  const { account, getClient, method, request, validate } = options
+  const { account, feeToken, getClient, method, request, sender: sender_, validate } = options
   const serialized = request.params?.[0] as `0x76${string}` | undefined
 
   if (!serialized?.startsWith('0x76') && !serialized?.startsWith('0x78'))
@@ -122,13 +122,20 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     })
 
   const transaction = Transaction.deserialize(serialized)
+  const sender = transaction.from ?? sender_
 
-  if (!transaction.signature || !transaction.from)
+  if (!transaction.signature || !sender)
     throw new RpcResponse.InvalidParamsError({
       message: 'Transaction must be signed by the sender before fee payer signing.',
     })
 
-  if (validate && !(await validate(transaction as Transaction.TransactionRequest)))
+  const transaction_request = {
+    ...transaction,
+    from: sender,
+    ...(feeToken ? { feeToken } : {}),
+  }
+
+  if (validate && !(await validate(transaction_request as Transaction.TransactionRequest)))
     throw new RpcResponse.InvalidParamsError({
       message: 'Sponsorship rejected.',
     })
@@ -136,7 +143,7 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
   const client = getClient(transaction.chainId)
   const serializedTransaction = toSerializedTransaction(
     await signTransaction(client, {
-      ...transaction,
+      ...transaction_request,
       account,
       feePayer: account,
     } as never),
@@ -153,12 +160,16 @@ export declare namespace handleRawTransaction {
   type Options = {
     /** Account used as the fee payer. */
     account: LocalAccount
+    /** Fee token to set before fee payer signing. */
+    feeToken?: Address | undefined
     /** Client resolver keyed by transaction `chainId`. */
     getClient: (chainId?: number | undefined) => Client
     /** Raw transaction method to handle. */
     method: 'eth_signRawTransaction' | 'eth_sendRawTransaction' | 'eth_sendRawTransactionSync'
     /** Incoming JSON-RPC request. */
     request: { params?: readonly unknown[] | undefined }
+    /** Sender address to use if it cannot be recovered from the raw envelope. */
+    sender?: Address | undefined
     /** Optional sponsorship approval callback. */
     validate?: ((request: Transaction.TransactionRequest) => boolean | Promise<boolean>) | undefined
   }
