@@ -128,10 +128,12 @@ const provider = Provider.create({
 
 ### authorizeAccessKey
 
-- **Type:** `() => Adapter.authorizeAccessKey.Parameters | undefined`
+- **Type:** `Provider.create.AuthorizeAccessKeyParameters | (() => Provider.create.AuthorizeAccessKeyParameters | undefined)`
 - **Optional**
 
-Default access key parameters for `wallet_connect`. When set, `wallet_connect` will automatically authorize an access key. Return `undefined` to skip authorization for the current request.
+Default access key parameters for `wallet_connect` and transaction sends. Pass an object to use the same policy for every applicable request, or a function to compute it dynamically. When set, the provider first checks stored local access keys. If one can satisfy the request, the provider reuses it. If none can, `wallet_connect` includes `capabilities.authorizeAccessKey`, and send requests authorize the key immediately before sending when the requested scopes cover the transaction calls. Return `undefined` from the function to skip authorization for the current request.
+
+The optional `reuse` object is SDK-only. It is never sent to the wallet RPC. Use it to make reuse stricter than the default scope check.
 
 Tempo Wallet-hosted approval pages require at least one `limits` entry and one `scopes` entry. Local adapters accept unbounded keys, but production apps should pass both so local and wallet-hosted flows use the same policy.
 
@@ -158,6 +160,13 @@ declare function authorizeAccessKey(): {
   scopes?:
     | { address: Address; recipients?: readonly Address[]; selector?: Hex | string }[]
     | undefined
+  /** SDK-only reuse policy. Omitted before `wallet_connect` or `wallet_authorizeAccessKey` RPCs. */
+  reuse?: {
+    /** Minimum Unix timestamp (seconds) a stored key must be valid through. */
+    minExpiry?: number | undefined
+    /** Minimum spending limits a stored key must satisfy. */
+    minLimits?: { limit: bigint; period?: number; token: Address }[] | undefined
+  } | undefined
 } | undefined
 ```
 
@@ -166,7 +175,7 @@ import { parseUnits } from 'viem'
 import { Expiry, Provider } from 'accounts'
 
 const provider = Provider.create({
-  authorizeAccessKey: () => ({ // [!code focus]
+  authorizeAccessKey: { // [!code focus]
     expiry: Expiry.days(7), // [!code focus]
     limits: [{ // [!code focus]
       token: '0x20c0000000000000000000000000000000000001', // [!code focus]
@@ -177,9 +186,19 @@ const provider = Provider.create({
       address: '0x20c0000000000000000000000000000000000001', // [!code focus]
       selector: 'transfer(address,uint256)', // [!code focus]
     }], // [!code focus]
-  }), // [!code focus]
+    reuse: { // [!code focus]
+      minExpiry: Expiry.hours(1), // [!code focus]
+      minLimits: [{ // [!code focus]
+        token: '0x20c0000000000000000000000000000000000001', // [!code focus]
+        limit: parseUnits('50', 6), // [!code focus]
+        period: 60 * 60 * 24, // [!code focus]
+      }], // [!code focus]
+    }, // [!code focus]
+  }, // [!code focus]
 })
 ```
+
+If `reuse` is omitted, the provider reuses any unexpired locally signable key whose scopes cover the requested scopes and transaction calls. Add `reuse.minExpiry` or `reuse.minLimits` when a stored key must also be valid long enough or have enough remaining policy capacity for your app's workflow.
 
 You can also pre-derive the access key locally by passing `publicKey` or `address` with `keyType`. The wallet still authorizes that key during `wallet_connect`; the app keeps the signing material.
 
@@ -192,11 +211,11 @@ Alternatively, pass `privateKey` to let the SDK derive the access-key address an
 import { Expiry, Provider } from 'accounts'
 
 const provider = Provider.create({
-  authorizeAccessKey: () => ({ // [!code focus]
+  authorizeAccessKey: { // [!code focus]
     expiry: Expiry.days(7), // [!code focus]
     keyType: 'p256', // [!code focus]
     publicKey: '0x1234', // [!code focus]
-  }), // [!code focus]
+  }, // [!code focus]
 })
 ```
 

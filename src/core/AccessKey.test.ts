@@ -22,7 +22,7 @@ function createKeyAuthorization(
     chainId?: bigint | undefined
     expiry?: number | undefined
     keyType?: KeyAuthorization.KeyAuthorization['type'] | undefined
-    limits?: { token: `0x${string}`; limit: bigint }[] | undefined
+    limits?: { token: `0x${string}`; limit: bigint; period?: number | undefined }[] | undefined
     scopes?: KeyAuthorization.Scope[] | undefined
   } = {},
 ) {
@@ -612,6 +612,120 @@ describe('select', () => {
     })
 
     expect({ match: !!match, miss: !!miss }).toMatchInlineSnapshot(`
+      {
+        "match": true,
+        "miss": false,
+      }
+    `)
+  })
+})
+
+describe('hasReusableAuthorization', () => {
+  test('behavior: matches scopes and optional reuse policy', async () => {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const merchant = '0x0000000000000000000000000000000000000def' as const
+    addAuthorization({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(accessKey.accessKeyAddress, {
+        expiry: 200,
+        limits: [{ token, limit: 100n, period: 86_400 }],
+        scopes: [
+          {
+            address: token,
+            recipients: [merchant],
+            selector: 'transfer(address,uint256)',
+          },
+        ],
+      }),
+      keyPair,
+      store,
+    })
+
+    const match = await AccessKey.hasReusableAuthorization({
+      account: rootAddress,
+      chainId: 1,
+      now: 100,
+      parameters: {
+        expiry: 300,
+        reuse: {
+          minExpiry: 150,
+          minLimits: [{ token, limit: 10n, period: 86_400 }],
+        },
+        scopes: [
+          {
+            address: token,
+            recipients: [merchant],
+            selector: 'transfer(address,uint256)',
+          },
+        ],
+      },
+      store: { state: store },
+    })
+    const miss = await AccessKey.hasReusableAuthorization({
+      account: rootAddress,
+      chainId: 1,
+      now: 100,
+      parameters: {
+        expiry: 300,
+        reuse: {
+          minExpiry: 250,
+        },
+        scopes: [
+          {
+            address: token,
+            recipients: [merchant],
+            selector: 'transfer(address,uint256)',
+          },
+        ],
+      },
+      store: { state: store },
+    })
+
+    expect({ match, miss }).toMatchInlineSnapshot(`
+      {
+        "match": true,
+        "miss": false,
+      }
+    `)
+  })
+})
+
+describe('canAuthorizeCalls', () => {
+  test('behavior: checks whether requested scopes cover calls', () => {
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    const merchant = '0x0000000000000000000000000000000000000def' as const
+    const data =
+      `0xa9059cbb000000000000000000000000${merchant.slice(2)}0000000000000000000000000000000000000000000000000000000000000001` as const
+
+    const match = AccessKey.canAuthorizeCalls({
+      calls: [{ data, to: token }],
+      parameters: {
+        scopes: [
+          {
+            address: token,
+            recipients: [merchant],
+            selector: 'transfer(address,uint256)',
+          },
+        ],
+      },
+    })
+    const miss = AccessKey.canAuthorizeCalls({
+      calls: [{ data, to: token }],
+      parameters: {
+        scopes: [
+          {
+            address: token,
+            recipients: ['0x0000000000000000000000000000000000000099'],
+            selector: 'transfer(address,uint256)',
+          },
+        ],
+      },
+    })
+
+    expect({ match, miss }).toMatchInlineSnapshot(`
       {
         "match": true,
         "miss": false,

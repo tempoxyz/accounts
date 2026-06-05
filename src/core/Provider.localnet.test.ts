@@ -2192,6 +2192,22 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(result.accounts[0]!.capabilities.keyAuthorization!.keyId).toMatch(/^0x[0-9a-f]{40}$/i)
     })
 
+    test('default: wallet_connect auto-authorizes access key from literal option', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        authorizeAccessKey: { expiry: Expiry.days(1) },
+      })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { method: 'register' } }],
+      })
+      expect(result.accounts.length).toBeGreaterThanOrEqual(1)
+      expect(result.accounts[0]!.capabilities.keyAuthorization).toBeDefined()
+      expect(result.accounts[0]!.capabilities.keyAuthorization!.keyId).toMatch(/^0x[0-9a-f]{40}$/i)
+    })
+
     test('behavior: auto-authorized access key can send transactions', async () => {
       const provider = Provider.create({
         adapter: adapter(),
@@ -2213,6 +2229,128 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
     })
 
+    test('behavior: sendTransactionSync authorizes matching default access key just-in-time', async () => {
+      let authorize = false
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        authorizeAccessKey: () => {
+          if (!authorize) return undefined
+          return {
+            expiry: Expiry.days(1),
+            scopes: [{ address: Addresses.pathUsd, selector: 'transfer(address,uint256)' }],
+          }
+        },
+      })
+      const address = await connect(provider)
+      await fund(address)
+      const initialAccessKeys = provider.store.getState().accessKeys.length
+      authorize = true
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      expect({
+        initialAccessKeys,
+        storedAccessKeys: provider.store.getState().accessKeys.length,
+        status: receipt.status,
+      }).toMatchInlineSnapshot(`
+        {
+          "initialAccessKeys": 0,
+          "status": "0x1",
+          "storedAccessKeys": 1,
+        }
+      `)
+    })
+
+    test('behavior: sendTransactionSync skips default access key when scopes do not cover transaction', async () => {
+      let authorize = false
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        authorizeAccessKey: () => {
+          if (!authorize) return undefined
+          return {
+            expiry: Expiry.days(1),
+            scopes: [
+              {
+                address: '0x0000000000000000000000000000000000000099',
+                selector: 'transfer(address,uint256)',
+              },
+            ],
+          }
+        },
+      })
+      const address = await connect(provider)
+      await fund(address)
+      const initialAccessKeys = provider.store.getState().accessKeys.length
+      authorize = true
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      expect({
+        fromRoot: receipt.from.toLowerCase() === address.toLowerCase(),
+        initialAccessKeys,
+        storedAccessKeys: provider.store.getState().accessKeys.length,
+        status: receipt.status,
+      }).toMatchInlineSnapshot(`
+        {
+          "fromRoot": true,
+          "initialAccessKeys": 0,
+          "status": "0x1",
+          "storedAccessKeys": 0,
+        }
+      `)
+    })
+
+    test('behavior: wallet_sendCalls authorizes matching default access key just-in-time', async () => {
+      let authorize = false
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        authorizeAccessKey: () => {
+          if (!authorize) return undefined
+          return {
+            expiry: Expiry.days(1),
+            scopes: [{ address: Addresses.pathUsd, selector: 'transfer(address,uint256)' }],
+          }
+        },
+      })
+      const address = await connect(provider)
+      await fund(address)
+      const initialAccessKeys = provider.store.getState().accessKeys.length
+      authorize = true
+
+      const result = await provider.request({
+        method: 'wallet_sendCalls',
+        params: [
+          {
+            calls: [transferCall],
+            capabilities: { sync: true },
+          },
+        ],
+      })
+
+      expect({
+        initialAccessKeys,
+        status: result.status,
+        storedAccessKeys: provider.store.getState().accessKeys.length,
+        sync: result.capabilities?.sync,
+      }).toMatchInlineSnapshot(`
+        {
+          "initialAccessKeys": 0,
+          "status": 200,
+          "storedAccessKeys": 1,
+          "sync": true,
+        }
+      `)
+    })
+
     test('behavior: explicit authorizeAccessKey overrides default', async () => {
       const expiry = Math.floor(Date.now() / 1000) + 3600
       const provider = Provider.create({
@@ -2228,7 +2366,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(result.accounts[0]!.capabilities.keyAuthorization!.expiry).toBe(Hex.fromNumber(expiry))
     })
 
-    test('behavior: login auto-authorizes access key', async () => {
+    test('behavior: login reuses matching default access key', async () => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
@@ -2237,7 +2375,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
       await connect(provider)
       const result = await provider.request({ method: 'wallet_connect' })
-      expect(result.accounts[0]!.capabilities.keyAuthorization).toBeDefined()
+      expect(result.accounts[0]!.capabilities.keyAuthorization).toMatchInlineSnapshot(`undefined`)
     })
 
     test('behavior: without option, wallet_connect does not auto-authorize', async () => {

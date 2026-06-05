@@ -43,7 +43,7 @@ Follow the [Connect Accounts](/docs/guides/connect-accounts) guide to set up Wag
 
 ### Define the Spend Policy
 
-Add `authorizeAccessKey` to the connector. The callback returns the permission the user will approve during `wallet_connect`.
+Add `authorizeAccessKey` to the connector. The object describes the permission the user will approve when a matching local key is not already available. Pass a function instead when the policy needs to be computed dynamically.
 
 ```tsx twoslash [src/config.ts]
 // @noErrors
@@ -60,7 +60,7 @@ export const config = createConfig({
   connectors: [
     tempoWallet({
       testnet: true,
-      authorizeAccessKey: () => ({ // [!code focus]
+      authorizeAccessKey: { // [!code focus]
         expiry: Expiry.days(1), // [!code focus]
         limits: [ // [!code focus]
           { token: pathUsd, limit: parseUnits('100', 6) }, // [!code focus]
@@ -68,7 +68,13 @@ export const config = createConfig({
         scopes: [ // [!code focus]
           { address: pathUsd, selector: 'transfer(address,uint256)' }, // [!code focus]
         ], // [!code focus]
-      }), // [!code focus]
+        reuse: { // [!code focus]
+          minExpiry: Expiry.hours(1), // [!code focus]
+          minLimits: [ // [!code focus]
+            { token: pathUsd, limit: parseUnits('10', 6) }, // [!code focus]
+          ], // [!code focus]
+        }, // [!code focus]
+      }, // [!code focus]
     }),
   ],
   multiInjectedProviderDiscovery: false,
@@ -89,7 +95,7 @@ Local adapters may accept broader keys, but production apps should keep the same
 
 ### Sign In with the Policy
 
-Use the same sign-in button from the Connect Accounts guide. When the user approves the connection, Tempo Wallet also signs the access key authorization returned by `authorizeAccessKey`.
+Use the same sign-in button from the Connect Accounts guide. If the SDK already has a stored access key that matches the scopes and optional `reuse` policy, sign-in continues without a new access key prompt. Otherwise Tempo Wallet signs the access key authorization returned by `authorizeAccessKey`.
 
 ```tsx twoslash [src/Connect.tsx]
 // @noErrors
@@ -113,6 +119,8 @@ export function Connect() {
 ### Send Within the Permission
 
 Submit calls that match the approved scopes. The SDK selects the access key when the transfer fits the spend policy; otherwise it falls back to the connected account's normal signing path.
+
+If no matching key exists at send time, the SDK checks whether the configured `authorizeAccessKey` scopes would cover the transaction. When they do, it requests the access key first, stores it, then sends the transaction with that key. When they do not, it skips the access key request and uses the normal signing path.
 
 ```tsx twoslash [src/Transfer.tsx]
 // @noErrors
@@ -159,8 +167,14 @@ const spendPermission = {
   scopes: [
     { address: pathUsd, selector: 'transfer(address,uint256)' },
   ],
+  reuse: {
+    minExpiry: Expiry.hours(1),
+    minLimits: [{ token: pathUsd, limit: parseUnits('10', 6) }],
+  },
 }
 ```
+
+The top-level `expiry`, `limits`, and `scopes` define the new key to create when needed. `reuse.minExpiry` and `reuse.minLimits` only decide whether an existing stored key is acceptable to reuse.
 
 ### Keep Expiry Short
 
