@@ -56,11 +56,11 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       const publicKey = authorizeAccessKey?.publicKey
       const keyType = authorizeAccessKey?.keyType
 
-      if (!publicKey)
+      if (!publicKey && (method === 'wallet_authorizeAccessKey' || authorizeAccessKey))
         throw new RpcResponse.InvalidParamsError({
           message:
             method === 'wallet_connect'
-              ? '`wallet_connect` on the React Native adapter requires `capabilities.authorizeAccessKey`.'
+              ? '`wallet_connect` on the React Native adapter requires key parameters when `capabilities.authorizeAccessKey` is set.'
               : '`wallet_authorizeAccessKey` on the React Native adapter requires key parameters.',
         })
 
@@ -77,7 +77,7 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
           : {}),
         ...(digest ? { digest } : {}),
         ...(personalSign ? { personalSign } : {}),
-        pubKey: publicKey,
+        ...(publicKey ? { pubKey: publicKey } : {}),
         ...(showDeposit !== undefined ? { showDeposit } : {}),
         state,
       })
@@ -92,19 +92,22 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
       const accountAddress = params.get('accountAddress')
       if (!accountAddress) throw new Error('Missing accountAddress in callback.')
 
-      const keyAuthorizationHex = params.get('keyAuthorization')
-      if (!keyAuthorizationHex) throw new Error('Missing keyAuthorization in callback.')
+      const keyAuthorization = (() => {
+        const value = params.get('keyAuthorization')
+        if (!value) return undefined
+        const keyAuthorization = KeyAuthorization.deserialize(value as Hex.Hex)
+        if (!keyAuthorization.signature)
+          throw new Error('Key authorization in callback is missing a signature.')
+        return keyAuthorization as KeyAuthorization.Signed
+      })()
+      if (publicKey && !keyAuthorization) throw new Error('Missing keyAuthorization in callback.')
 
-      const keyAuthorization = KeyAuthorization.deserialize(keyAuthorizationHex as Hex.Hex)
-      if (!keyAuthorization.signature)
-        throw new Error('Key authorization in callback is missing a signature.')
-      const signed = keyAuthorization as KeyAuthorization.Signed
       const signature = params.get('signature') as Hex.Hex | null
       const personalSignMessage = params.get('personalSignMessage')
 
       return {
         accountAddress: accountAddress as core_Address.Address,
-        keyAuthorization: signed,
+        ...(keyAuthorization ? { keyAuthorization } : {}),
         ...(personalSignMessage ? { personalSign: { message: personalSignMessage } } : {}),
         ...(signature ? { signature } : {}),
       }
@@ -119,6 +122,7 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
         method: 'wallet_authorizeAccessKey',
         ...(parameters.showDeposit !== undefined ? { showDeposit: parameters.showDeposit } : {}),
       })
+      if (!result.keyAuthorization) throw new Error('Missing keyAuthorization in callback.')
 
       return {
         keyAuthorization: KeyAuthorization.toRpc(result.keyAuthorization),
@@ -147,7 +151,9 @@ export function reactNative(options: reactNative.Options): Adapter.Adapter {
           {
             address: result.accountAddress,
             capabilities: {
-              keyAuthorization: KeyAuthorization.toRpc(result.keyAuthorization),
+              ...(result.keyAuthorization
+                ? { keyAuthorization: KeyAuthorization.toRpc(result.keyAuthorization) }
+                : {}),
               ...(result.personalSign ? { personalSign: result.personalSign } : {}),
               ...(result.signature ? { signature: result.signature } : {}),
             },
@@ -262,18 +268,18 @@ function buildAuthUrl(
     keyType?: string | undefined
     limits?: readonly { token: string; limit: string }[] | undefined
     personalSign?: { message: string } | undefined
-    pubKey: Hex.Hex
+    pubKey?: Hex.Hex | undefined
     showDeposit?: Adapter.createAccount.Parameters['showDeposit'] | undefined
     state: string
   },
 ): string {
   const url = new URL('/remote/auth/mobile', host)
-  url.searchParams.set('pubKey', params.pubKey)
+  if (params.pubKey) url.searchParams.set('pubKey', params.pubKey)
   if (params.keyType) url.searchParams.set('keyType', params.keyType)
-  url.searchParams.set('chainId', `0x${params.chainId.toString(16)}`)
+  url.searchParams.set('chainId', Hex.fromNumber(params.chainId))
   if (params.digest) url.searchParams.set('digest', params.digest)
   if (typeof params.expiry !== 'undefined')
-    url.searchParams.set('expiry', `0x${params.expiry.toString(16)}`)
+    url.searchParams.set('expiry', Hex.fromNumber(params.expiry))
   if (params.limits) url.searchParams.set('limits', JSON.stringify(params.limits))
   if (params.personalSign) url.searchParams.set('personalSign', JSON.stringify(params.personalSign))
   if (params.showDeposit === true) url.searchParams.set('showDeposit', 'true')
