@@ -536,6 +536,7 @@ export function relay(options: relay.Options = {}): Handler {
                 ? {
                     account: feePayerOptions.account,
                     feeToken: feePayerOptions.feeToken,
+                    resolveFeeToken: async (chainId) => (await getTokens(chainId))[0],
                     validate: feePayerOptions.validate,
                   }
                 : undefined,
@@ -575,9 +576,11 @@ export function relay(options: relay.Options = {}): Handler {
 
           const result = await Sponsorship.handleRawTransaction({
             account: feePayerOptions.account,
+            feeToken: feePayerOptions.feeToken,
             getClient,
             method: request.method as Sponsorship.handleRawTransaction.Options['method'],
             request: { params: 'params' in request ? request.params : undefined },
+            resolveFeeToken: async (chainId) => (await getTokens(chainId))[0],
             validate: feePayerOptions.validate,
           })
           return RpcResponse.from({ result } as never, { request } as never)

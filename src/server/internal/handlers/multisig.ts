@@ -104,17 +104,27 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     method === 'eth_sendRawTransaction' && finalize === 'sync'
       ? 'eth_sendRawTransactionSync'
       : method
+  const feePayerState = getFeePayerState(final as Hex.Hex)
+  const sponsorFeeToken =
+    sponsor &&
+    (sponsor.feeToken ||
+      feePayerState.signature === null ||
+      (feePayerState.signature != null && !feePayerState.feeToken))
+      ? (sponsor.feeToken ?? (await sponsor.resolveFeeToken?.(input.chainId)))
+      : undefined
   const shouldSponsor =
     sponsor &&
-    (Sponsorship.requestsRawSponsorship(final as `0x${string}`) ||
-      (sponsor.feeToken && hasSignedFeePayer(final as Hex.Hex)))
+    (feePayerState.signature === null ||
+      (feePayerState.signature != null &&
+        (sponsor.feeToken || (!feePayerState.feeToken && sponsorFeeToken))))
   const result = shouldSponsor
     ? await Sponsorship.handleRawTransaction({
         account: sponsor.account,
-        feeToken: sponsor.feeToken,
+        feeToken: sponsorFeeToken,
         getClient,
         method: broadcastMethod,
         request: { params: [final] },
+        resolveFeeToken: sponsor.resolveFeeToken,
         sender: input.account,
         validate: sponsor.validate,
       })
@@ -194,6 +204,10 @@ declare namespace collect {
           account: LocalAccount
           /** Fee token to set before fee payer signing. */
           feeToken?: Address | undefined
+          /** Resolves the default fee token for raw sponsorship. */
+          resolveFeeToken?:
+            | ((chainId: number) => Address | Promise<Address | undefined> | undefined)
+            | undefined
           /** Optional sponsorship approval callback. */
           validate?: Sponsorship.handleRawTransaction.Options['validate']
         }
@@ -511,12 +525,17 @@ function normalizeFeePayerSignature(value: unknown) {
   return Signature.from(value as never)
 }
 
-function hasSignedFeePayer(serialized: Hex.Hex) {
+function getFeePayerState(serialized: Hex.Hex) {
   try {
     const transaction = Transaction.deserialize(serialized as never) as Record<string, unknown>
-    return 'feePayerSignature' in transaction && transaction.feePayerSignature != null
+    if (!('feePayerSignature' in transaction)) return {}
+    return {
+      feeToken:
+        typeof transaction.feeToken === 'string' ? (transaction.feeToken as Address) : undefined,
+      signature: transaction.feePayerSignature,
+    }
   } catch {
-    return false
+    return {}
   }
 }
 

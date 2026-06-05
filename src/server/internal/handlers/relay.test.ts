@@ -190,7 +190,6 @@ describe('behavior: with multisig and feePayer', () => {
         chains: [tempoDevnet],
         feePayer: {
           account: feePayer as never,
-          feeToken,
         },
         multisig: { store },
         resolveTokens: async () => [
@@ -239,7 +238,7 @@ describe('behavior: with multisig and feePayer', () => {
     server.close()
   })
 
-  test('behavior: broadcasts finalized multisig transactions with feePayerSignature', async () => {
+  test('behavior: broadcasts finalized multisig transactions with feePayerSignature and default feeToken', async () => {
     const owner_1 = Account.fromSecp256k1(privateKey_1)
     const owner_2 = Account.fromSecp256k1(privateKey_2)
     const account = Account.fromMultisig({

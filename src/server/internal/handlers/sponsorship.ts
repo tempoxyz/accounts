@@ -113,7 +113,16 @@ export declare namespace sign {
 
 /** Handles `eth_signRawTransaction` and broadcast methods for sponsored Tempo transactions. */
 export async function handleRawTransaction(options: handleRawTransaction.Options) {
-  const { account, feeToken, getClient, method, request, sender: sender_, validate } = options
+  const {
+    account,
+    feeToken,
+    getClient,
+    method,
+    request,
+    resolveFeeToken,
+    sender: sender_,
+    validate,
+  } = options
   const serialized = request.params?.[0] as `0x76${string}` | undefined
 
   if (!serialized?.startsWith('0x76') && !serialized?.startsWith('0x78'))
@@ -129,10 +138,11 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
       message: 'Transaction must be signed by the sender before fee payer signing.',
     })
 
+  const feeToken_resolved = feeToken ?? (await resolveFeeToken?.(transaction.chainId))
   const transaction_request = {
     ...transaction,
     from: sender,
-    ...(feeToken ? { feeToken } : {}),
+    ...(feeToken_resolved ? { feeToken: feeToken_resolved } : {}),
   }
 
   if (validate && !(await validate(transaction_request as Transaction.TransactionRequest)))
@@ -168,6 +178,10 @@ export declare namespace handleRawTransaction {
     method: 'eth_signRawTransaction' | 'eth_sendRawTransaction' | 'eth_sendRawTransactionSync'
     /** Incoming JSON-RPC request. */
     request: { params?: readonly unknown[] | undefined }
+    /** Resolves the default fee token for raw sponsorship. */
+    resolveFeeToken?:
+      | ((chainId: number) => Address | Promise<Address | undefined> | undefined)
+      | undefined
     /** Sender address to use if it cannot be recovered from the raw envelope. */
     sender?: Address | undefined
     /** Optional sponsorship approval callback. */
