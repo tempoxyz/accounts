@@ -63,40 +63,44 @@ function createOpen() {
       const pubKey = authUrl.searchParams.get('pubKey')
       const state = authUrl.searchParams.get('state')
 
-      if (!callback || !chainId || !pubKey || !state)
-        throw new Error('Expected callback, chainId, pubKey, and state in auth URL.')
-
-      const limits = authUrl.searchParams.get('limits')
-      const keyType = authUrl.searchParams.get('keyType')
-      if (keyType !== 'p256' && keyType !== 'secp256k1')
-        throw new Error('Expected a managed key type in auth URL.')
-
-      const keyAuthorization = await root.signKeyAuthorization(
-        {
-          accessKeyAddress: Address.fromPublicKey(PublicKey.fromHex(pubKey as Hex.Hex)),
-          keyType,
-        },
-        {
-          chainId: BigInt(chainId),
-          ...(authUrl.searchParams.get('expiry')
-            ? { expiry: Number(authUrl.searchParams.get('expiry')) }
-            : {}),
-          ...(limits
-            ? {
-                limits: (JSON.parse(limits) as { token: `0x${string}`; limit: string }[]).map(
-                  (x) => ({
-                    limit: BigInt(x.limit),
-                    token: x.token,
-                  }),
-                ),
-              }
-            : {}),
-        },
-      )
+      if (!callback || !chainId || !state)
+        throw new Error('Expected callback, chainId, and state in auth URL.')
 
       const callbackUrl = new URL(callback)
       callbackUrl.searchParams.set('accountAddress', root.address)
-      callbackUrl.searchParams.set('keyAuthorization', KeyAuthorization.serialize(keyAuthorization))
+      if (pubKey) {
+        const limits = authUrl.searchParams.get('limits')
+        const keyType = authUrl.searchParams.get('keyType')
+        if (keyType !== 'p256' && keyType !== 'secp256k1')
+          throw new Error('Expected a managed key type in auth URL.')
+
+        const keyAuthorization = await root.signKeyAuthorization(
+          {
+            accessKeyAddress: Address.fromPublicKey(PublicKey.fromHex(pubKey as Hex.Hex)),
+            keyType,
+          },
+          {
+            chainId: BigInt(chainId),
+            ...(authUrl.searchParams.get('expiry')
+              ? { expiry: Number(authUrl.searchParams.get('expiry')) }
+              : {}),
+            ...(limits
+              ? {
+                  limits: (JSON.parse(limits) as { token: `0x${string}`; limit: string }[]).map(
+                    (x) => ({
+                      limit: BigInt(x.limit),
+                      token: x.token,
+                    }),
+                  ),
+                }
+              : {}),
+          },
+        )
+        callbackUrl.searchParams.set(
+          'keyAuthorization',
+          KeyAuthorization.serialize(keyAuthorization),
+        )
+      }
       const personalSign = authUrl.searchParams.get('personalSign')
       if (personalSign) {
         const { message } = JSON.parse(personalSign) as { message: string }
@@ -149,6 +153,27 @@ describe('create', () => {
     })
     expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
     expect(browser.calls()).toMatchInlineSnapshot(`1`)
+  })
+
+  test('behavior: wallet_connect does not require authorizeAccessKey capability', async () => {
+    const browser = createOpen()
+    const provider = Provider.create({
+      chains: [chain],
+      host: 'https://wallet.tempo.xyz',
+      open: browser.open,
+      redirectUri: 'accounts-playground://auth',
+      storage: Storage.memory(),
+    })
+
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login', showDeposit: true } }],
+    })
+    const url = new URL(browser.urls()[0]!)
+
+    expect(url.searchParams.get('pubKey')).toMatchInlineSnapshot(`null`)
+    expect(url.searchParams.get('showDeposit')).toMatchInlineSnapshot(`"true"`)
+    expect(result.accounts[0]!.capabilities).toMatchInlineSnapshot(`{}`)
   })
 
   test('behavior: forwards showDeposit boolean to the mobile auth URL for registration', async () => {
