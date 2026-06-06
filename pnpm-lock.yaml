@@ -107,8 +107,8 @@ importers:
         specifier: 0.14.29
         version: 0.14.29(typescript@5.9.3)(zod@4.3.6)
       wata:
-        specifier: https://pkg.pr.new/wevm/wata/wata@a79d660252690a848a73a98003ea3c4ed7656239
-        version: https://pkg.pr.new/wevm/wata/wata@a79d660252690a848a73a98003ea3c4ed7656239(typescript@5.9.3)
+        specifier: https://pkg.pr.new/wevm/wata/wata@41c81f9c14a99f8c3a4e82609d29de21665a78a2
+        version: https://pkg.pr.new/wevm/wata/wata@41c81f9c14a99f8c3a4e82609d29de21665a78a2(typescript@5.9.3)
       webauthx:
         specifier: ~0.1.1
         version: 0.1.1(typescript@5.9.3)(zod@4.3.6)
@@ -11354,8 +11354,8 @@ packages:
   warn-once@0.1.1:
     resolution: {integrity: sha512-VkQZJbO8zVImzYFteBXvBOZEl1qL175WH8VmZcxF2fZAoudNhNDvHi+doCaAEdU2l2vtcIwa2zn0QK5+I1HQ3Q==}
 
-  wata@https://pkg.pr.new/wevm/wata/wata@a79d660252690a848a73a98003ea3c4ed7656239:
-    resolution: {integrity: sha512-W4AyexeOInib1RYbRFtAFqgnDfYq0Y1jTv4dk3qA7mlMNYDHHhQuzSKy+UxoNQBDzfZ/+2Z/DobsK0OzbQNzuQ==, tarball: https://pkg.pr.new/wevm/wata/wata@a79d660252690a848a73a98003ea3c4ed7656239}
+  wata@https://pkg.pr.new/wevm/wata/wata@41c81f9c14a99f8c3a4e82609d29de21665a78a2:
+    resolution: {integrity: sha512-7fcgNB01pkq1C4cAhVn7vlhhp1Ex0eLoQJgDyLb0itTvd6oFy6QnhTY/L9Vc70CT8bHILAV2Y5glZRSvI/FnGA==, tarball: https://pkg.pr.new/wevm/wata/wata@41c81f9c14a99f8c3a4e82609d29de21665a78a2}
     version: 0.0.0
 
   watchpack@2.5.1:
@@ -26386,7 +26386,7 @@ snapshots:
 
   warn-once@0.1.1: {}
 
-  wata@https://pkg.pr.new/wevm/wata/wata@a79d660252690a848a73a98003ea3c4ed7656239(typescript@5.9.3):
+  wata@https://pkg.pr.new/wevm/wata/wata@41c81f9c14a99f8c3a4e82609d29de21665a78a2(typescript@5.9.3):
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.23)
       '@noble/ciphers': 2.2.0

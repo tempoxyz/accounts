@@ -47,6 +47,7 @@ const config: Config = defineConfig({
           { text: 'Authentication', link: '/docs/guides/authentication' },
           { text: 'Transfers', link: '/docs/guides/transfers' },
           { text: 'Spend Permissions', link: '/docs/guides/spend-permissions' },
+          { text: 'React Native', link: '/docs/guides/react-native' },
           { text: 'Subscriptions', link: '/docs/guides/subscriptions' },
           { text: 'Fee Sponsorship', link: '/docs/guides/fee-sponsorship' },
           { text: 'Deposits', link: '/docs/guides/deposits' },
