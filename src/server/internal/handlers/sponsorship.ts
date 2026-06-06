@@ -60,8 +60,8 @@ export declare namespace shouldSponsor {
 
 /** Returns whether a raw Tempo transaction is explicitly requesting sponsorship. */
 export function requestsRawSponsorship(serialized: `0x${string}`) {
-  if (!serialized.startsWith('0x76') && !serialized.startsWith('0x78')) return false
-  const transaction = Transaction.deserialize(serialized as `0x76${string}`)
+  if (!Utils.isSerializedTempoTransaction(serialized)) return false
+  const transaction = Transaction.deserialize(serialized)
   return 'feePayerSignature' in transaction && transaction.feePayerSignature === null
 }
 
@@ -123,11 +123,11 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     sender: sender_,
     validate,
   } = options
-  const serialized = request.params?.[0] as `0x76${string}` | undefined
+  const serialized = request.params?.[0]
 
-  if (!serialized?.startsWith('0x76') && !serialized?.startsWith('0x78'))
+  if (!Utils.isSerializedTempoTransaction(serialized))
     throw new RpcResponse.InvalidParamsError({
-      message: 'Only Tempo (0x76/0x78) transactions are supported.',
+      message: 'Only Tempo transactions (0x76 or fee-payer 0x78) are supported.',
     })
 
   const transaction = Transaction.deserialize(serialized)

@@ -1,13 +1,28 @@
 import type { RpcRequest } from 'ox'
 import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import { parseUnits, type Address, type BaseError } from 'viem'
-import { fillTransaction, sendTransactionSync } from 'viem/actions'
-import { Actions, Addresses, Capabilities, Tick, Transaction, VirtualAddress } from 'viem/tempo'
+import {
+  fillTransaction,
+  prepareTransactionRequest,
+  sendTransaction,
+  sendTransactionSync,
+  waitForTransactionReceipt,
+} from 'viem/actions'
+import {
+  Account,
+  Actions,
+  Addresses,
+  Capabilities,
+  Tick,
+  Transaction,
+  VirtualAddress,
+} from 'viem/tempo'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 
 import { accounts, addresses, chain, getClient, http } from '../../../../test/config.js'
 import { createServer, type Server } from '../../../../test/utils.js'
+import * as Multisig from './multisig.js'
 import { relay } from './relay.js'
 
 const userAccount = accounts[9]!
@@ -374,6 +389,87 @@ describe('behavior: with feePayer.feeToken', () => {
 
     expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
     expect(receipt.feeToken?.toLowerCase()).toBe(sponsorFeeToken)
+  })
+})
+
+describe('behavior: with native multisig', () => {
+  test('behavior: collects approvals and broadcasts bootstrap transaction', async () => {
+    const store = memoryStore()
+    const owner_1 = accounts[1]!
+    const owner_2 = accounts[2]!
+    const account = Account.fromMultisig({
+      threshold: 2,
+      owners: [
+        { owner: owner_1.address, weight: 1 },
+        { owner: owner_2.address, weight: 1 },
+      ],
+    })
+    const rpc = getClient()
+    await Actions.token.transferSync(rpc, {
+      account: feePayerAccount,
+      feeToken: Addresses.pathUsd,
+      token: Addresses.pathUsd,
+      amount: parseUnits('10', 6),
+      to: account.address,
+    })
+
+    const server = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+        multisig: { store },
+      }).listener,
+    )
+    const client = getClient({ transport: http(server.url) })
+
+    try {
+      const request = {
+        ...(await prepareTransactionRequest(client, {
+          account,
+          calls: [
+            {
+              to: recipient.address,
+              value: 0n,
+            },
+          ],
+          feeToken: Addresses.pathUsd,
+        } as never)),
+        gas: 500_000n,
+      }
+      const signature_1 = await owner_1.signTransaction({
+        ...request,
+        account: owner_1,
+      } as never)
+      const signature_2 = await owner_2.signTransaction({
+        ...request,
+        account: owner_2,
+      } as never)
+
+      const id = await sendTransaction(client, {
+        ...request,
+        signatures: [signature_1],
+      } as never)
+      const status = await Multisig.getStatus({ id, store })
+
+      expect(status).toMatchObject({
+        account: account.address.toLowerCase(),
+        signatures: 1,
+        status: 'pending',
+      })
+
+      const hash = await sendTransaction(client, {
+        ...request,
+        signatures: [signature_2],
+      } as never)
+      const receipt = await waitForTransactionReceipt(rpc, { hash })
+
+      expect(receipt).toMatchObject({
+        from: account.address.toLowerCase(),
+        status: 'success',
+      })
+    } finally {
+      await server.closeAsync()
+    }
   })
 })
 
@@ -1886,10 +1982,6 @@ describe('behavior: error capabilities', () => {
   })
 })
 
-function isRpcError(e: unknown): boolean {
-  return typeof e === 'object' && e !== null && 'code' in e && (e as { code: unknown }).code === 3
-}
-
 describe('behavior: mainnet autoSwap with USDC.e → PathUSD', () => {
   let server: Server
   let mainnetClient: ReturnType<typeof getClient<typeof tempo>>
@@ -1941,3 +2033,27 @@ describe('behavior: mainnet autoSwap with USDC.e → PathUSD', () => {
     expect((capabilities as Record<string, unknown>)?.requireFunds).toBeUndefined()
   })
 })
+
+function memoryStore(): Multisig.Store {
+  const entries = new Map<string, Multisig.Entry>()
+  return {
+    async delete(id) {
+      entries.delete(id)
+    },
+    async get(id) {
+      return entries.get(id)
+    },
+    async listPendingByAddress(address) {
+      return [...entries.values()].filter(
+        (entry) => !entry.submittedHash && entry.account.toLowerCase() === address.toLowerCase(),
+      )
+    },
+    async set(entry) {
+      entries.set(entry.id, entry)
+    },
+  }
+}
+
+function isRpcError(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && 'code' in e && (e as { code: unknown }).code === 3
+}

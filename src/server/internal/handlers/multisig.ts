@@ -5,10 +5,11 @@ import type { LocalAccount } from 'viem/accounts'
 import { Transaction } from 'viem/tempo'
 
 import * as Sponsorship from './sponsorship.js'
+import * as Utils from './utils.js'
 
 /** Returns whether a raw transaction carries a native multisig signature. */
 export function isMultisigTransaction(serialized: Hex.Hex) {
-  if (!serialized.startsWith('0x76') && !serialized.startsWith('0x78')) return false
+  if (!Utils.isSerializedTempoTransaction(serialized)) return false
   try {
     const transaction = Transaction.deserialize(serialized as never)
     return isMultisigSignature((transaction as { signature?: unknown }).signature)
@@ -44,20 +45,20 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     store,
   } = options
   const serialized = request.params?.[0]
-  if (
-    typeof serialized !== 'string' ||
-    (!serialized.startsWith('0x76') && !serialized.startsWith('0x78'))
-  )
+  if (!Utils.isSerializedTempoTransaction(serialized))
     throw new RpcResponse.InvalidParamsError({
-      message: 'Only Tempo (0x76/0x78) transactions are supported.',
+      message: 'Only Tempo transactions (0x76 or fee-payer 0x78) are supported.',
     })
 
-  const input = parse(serialized as Hex.Hex)
-  const config = await resolveConfig({
+  const input = parse(serialized)
+  const pending = await store.get(input.id)
+  const config = await resolveValidatedConfig({
     account: input.account,
     chainId: input.chainId,
     genesisConfigId: input.genesisConfigId,
     init: input.init,
+    pending,
+    resolveConfig,
   })
   if (!config)
     throw new RpcResponse.InvalidParamsError({
@@ -65,7 +66,6 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
         'Multisig config is required to collect approvals. Provide it in the bootstrap transaction or configure `multisig.resolveConfig`.',
     })
 
-  const pending = await store.get(input.id)
   const signatures = mergeSignatures([...(pending?.signatures ?? []), ...input.signatures])
   const approvals = getApprovals({
     account: input.account,
@@ -90,6 +90,7 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     chainId: input.chainId,
     createdAt: pending?.createdAt ?? now,
     genesisConfigId: input.genesisConfigId,
+    config,
     id: input.id,
     payload: input.payload,
     signatures: approvals.signatures,
@@ -161,7 +162,7 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   }
 }
 
-/** Resolves a fake multisig operation hash for standard transaction lookup methods. */
+/** Resolves a multisig operation id for standard transaction lookup methods. */
 export async function handleGetTransaction(
   options: handleGetTransaction.Options,
 ): Promise<handleGetTransaction.ReturnType> {
@@ -238,10 +239,12 @@ declare namespace collect {
 export async function getStatus(options: getStatus.Options): Promise<Status | null> {
   const entry = await options.store.get(options.id)
   if (!entry) return null
-  const config = await options.resolveConfig?.({
+  const config = await resolveValidatedConfig({
     account: entry.account,
     chainId: entry.chainId,
     genesisConfigId: entry.genesisConfigId,
+    pending: entry,
+    resolveConfig: options.resolveConfig,
   })
   if (!config)
     return {
@@ -283,10 +286,12 @@ export async function listStatuses(options: listStatuses.Options): Promise<reado
   const entries = await options.store.listPendingByAddress(options.account)
   return await Promise.all(
     entries.map(async (entry) => {
-      const config = await options.resolveConfig?.({
+      const config = await resolveValidatedConfig({
         account: entry.account,
         chainId: entry.chainId,
         genesisConfigId: entry.genesisConfigId,
+        pending: entry,
+        resolveConfig: options.resolveConfig,
       })
       if (!config)
         return {
@@ -347,6 +352,8 @@ export type Entry = {
   createdAt: number
   /** Permanent genesis config id. */
   genesisConfigId: Hex.Hex
+  /** Resolved genesis config used for approval checks. */
+  config?: MultisigConfig.Config | undefined
   /** Deterministic operation id. */
   id: Hex.Hex
   /** Unsigned Tempo transaction sign payload. */
@@ -443,6 +450,37 @@ function isMultisigSignature(value: unknown): value is SignatureEnvelope.Multisi
     typeof (value as { genesisConfigId?: unknown }).genesisConfigId === 'string' &&
     Array.isArray((value as { signatures?: unknown }).signatures)
   )
+}
+
+async function resolveValidatedConfig(options: {
+  account: Address
+  chainId: number
+  genesisConfigId: Hex.Hex
+  init?: MultisigConfig.Config | undefined
+  pending?: Entry | undefined
+  resolveConfig?: Options_multisig['resolveConfig']
+}) {
+  const { account, chainId, genesisConfigId, init, pending, resolveConfig } = options
+  const config =
+    (await resolveConfig?.({
+      account,
+      chainId,
+      genesisConfigId,
+      init,
+    })) ?? pending?.config
+  if (!config) return undefined
+
+  const normalized = MultisigConfig.from(config)
+  const account_expected = MultisigConfig.getAddress(normalized)
+  const id_expected = MultisigConfig.toId(normalized)
+  if (
+    account_expected.toLowerCase() !== account.toLowerCase() ||
+    id_expected.toLowerCase() !== genesisConfigId.toLowerCase()
+  )
+    throw new RpcResponse.InvalidParamsError({
+      message: 'Resolved multisig config does not match account or genesis config id.',
+    })
+  return normalized
 }
 
 function mergeSignatures(signatures: readonly Hex.Hex[]) {
