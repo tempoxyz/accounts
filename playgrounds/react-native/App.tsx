@@ -28,9 +28,10 @@ const tokens = {
 }
 
 const redirectUri = Linking.createURL('auth')
+const walletOrigin = process.env.EXPO_PUBLIC_WALLET_ORIGIN
 
 const provider = Provider.create({
-  baseUrl: 'https://accounts-react-native.example',
+  baseUrl: walletOrigin ?? 'https://accounts-react-native.example',
   redirectUri,
   authorizeAccessKey: () => ({
     expiry: Math.floor(Date.now() / 1000) + 60 * 5,

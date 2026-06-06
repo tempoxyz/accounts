@@ -54,6 +54,7 @@ type Page =
 | { path: '/docs/guides/connect-accounts'; render: 'static' }
 | { path: '/docs/guides/deposits'; render: 'static' }
 | { path: '/docs/guides/fee-sponsorship'; render: 'static' }
+| { path: '/docs/guides/react-native'; render: 'static' }
 | { path: '/docs/guides/spend-permissions'; render: 'static' }
 | { path: '/docs/guides/subscriptions'; render: 'static' }
 | { path: '/docs/guides/swaps'; render: 'static' }
