@@ -28,10 +28,11 @@ const tokens = {
 }
 
 const redirectUri = Linking.createURL('auth')
-const walletOrigin = process.env.EXPO_PUBLIC_WALLET_ORIGIN
+const walletOrigin = process.env.EXPO_PUBLIC_WALLET_ORIGIN ?? 'https://wallet.tempo.xyz'
 
 const provider = Provider.create({
-  baseUrl: walletOrigin ?? 'https://accounts-react-native.example',
+  baseUrl: walletOrigin,
+  host: walletOrigin,
   redirectUri,
   authorizeAccessKey: () => ({
     expiry: Math.floor(Date.now() / 1000) + 60 * 5,
