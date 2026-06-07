@@ -1,1 +1,1 @@
-export { reactNative } from './adapter.js'
+export { mobileWebAuth, tempoWallet } from './adapter.js'

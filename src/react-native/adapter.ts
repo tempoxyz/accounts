@@ -7,28 +7,6 @@ import { z } from 'zod/mini'
 import * as Adapter from '../core/Adapter.js'
 import * as Rpc from '../core/zod/rpc.js'
 
-type MobileRequest =
-  | Pick<Rpc.eth_fillTransaction.Encoded, 'method' | 'params'>
-  | Pick<Rpc.eth_sendTransaction.Encoded, 'method' | 'params'>
-  | Pick<Rpc.eth_sendTransactionSync.Encoded, 'method' | 'params'>
-  | Pick<Rpc.eth_signTransaction.Encoded, 'method' | 'params'>
-  | Pick<Rpc.eth_signTypedData_v4.Encoded, 'method' | 'params'>
-  | Pick<Rpc.personal_sign.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_authorizeAccessKey.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_connect.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_deposit.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_depositZone.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_disconnect.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_getBalances.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_getCallsStatus.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_getCapabilities.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_revokeAccessKey.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_sendCalls.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_swap.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_switchEthereumChain.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_transfer.Encoded, 'method' | 'params'>
-  | Pick<Rpc.wallet_withdrawZone.Encoded, 'method' | 'params'>
-
 /**
  * Creates a mobile web auth adapter that forwards wallet RPC through Wata.
  *
@@ -58,7 +36,10 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
       }
     }
 
-    async function requestMobile(request: MobileRequest): Promise<unknown> {
+    async function requestMobile(request: {
+      method: string
+      params?: readonly unknown[] | undefined
+    }): Promise<unknown> {
       const session = Wata.create({
         baseUrl,
         meta: { name },
@@ -81,33 +62,11 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
 
     const provider = core_Provider.from({
       async request(request) {
-        switch (request.method) {
-          case 'eth_chainId':
-            return Hex.fromNumber(store.getState().chainId)
-          case 'eth_fillTransaction':
-          case 'eth_sendTransaction':
-          case 'eth_sendTransactionSync':
-          case 'eth_signTransaction':
-          case 'eth_signTypedData_v4':
-          case 'personal_sign':
-          case 'wallet_authorizeAccessKey':
-          case 'wallet_connect':
-          case 'wallet_deposit':
-          case 'wallet_depositZone':
-          case 'wallet_disconnect':
-          case 'wallet_getBalances':
-          case 'wallet_getCallsStatus':
-          case 'wallet_getCapabilities':
-          case 'wallet_revokeAccessKey':
-          case 'wallet_sendCalls':
-          case 'wallet_swap':
-          case 'wallet_switchEthereumChain':
-          case 'wallet_transfer':
-          case 'wallet_withdrawZone':
-            return await requestMobile(request as never)
-          default:
-            throw unsupported(`\`${request.method}\` not supported by React Native adapter.`)
-        }
+        if (request.method === 'eth_chainId') return Hex.fromNumber(store.getState().chainId)
+        return await requestMobile({
+          method: request.method,
+          params: request.params as readonly unknown[] | undefined,
+        })
       },
     })
 
@@ -239,8 +198,4 @@ async function defaultOpen(url: string, redirectUri: string): Promise<string | n
   const result = await openAuthSessionAsync(url, redirectUri)
   if (result.type !== 'success') return null
   return result.url
-}
-
-function unsupported(message: string) {
-  return new core_Provider.UnsupportedMethodError({ message })
 }

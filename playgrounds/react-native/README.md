@@ -21,10 +21,11 @@ playground callback scheme.
 ```
 
 To run against a different origin, set `EXPO_PUBLIC_WALLET_ORIGIN`. The custom
-origin must serve both Wata discovery documents for the app and wallet roles.
+origin must serve both Wata discovery documents for the app and wallet roles,
+and its consumer document must allow the playground callback scheme.
 
 ```
 pnpm install
 cd playgrounds/react-native
-EXPO_PUBLIC_WALLET_ORIGIN=https://wallet-81e1.tempo.local npx expo start
+EXPO_PUBLIC_WALLET_ORIGIN=http://localhost:5176 npx expo start
 ```

@@ -29,35 +29,10 @@ const tokens = {
   'USDC.e': '0x20c0000000000000000000009e8d7eb59b783726' as Address,
 }
 
-const callbackBridge = process.env.EXPO_PUBLIC_CALLBACK_BRIDGE
-const redirectUri = callbackBridge
-  ? `${callbackBridge}/auth`
-  : 'xyz.tempo.accounts.playground:/auth'
+const redirectUri = 'xyz.tempo.accounts.playground:/auth'
 const walletOrigin = process.env.EXPO_PUBLIC_WALLET_ORIGIN ?? 'https://wallet.tempo.xyz'
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-async function openBridgeAuthUrl(url: string): Promise<string | null> {
-  if (!callbackBridge) return null
-  await fetch(`${callbackBridge}/session`, {
-    body: JSON.stringify({ url }),
-    headers: { 'content-type': 'application/json' },
-    method: 'POST',
-  })
-  const expires = Date.now() + 120_000
-  while (Date.now() < expires) {
-    const response = await fetch(`${callbackBridge}/callback`)
-    const body = (await response.json()) as { url?: string | undefined }
-    if (body.url) return body.url
-    await sleep(500)
-  }
-  return null
-}
-
 async function openAuthUrl(url: string, callback: string): Promise<string | null> {
-  if (callbackBridge) return await openBridgeAuthUrl(url)
   return new Promise((resolve) => {
     let settled = false
     const timeout = setTimeout(() => finish(null), 120_000)
@@ -298,9 +273,7 @@ export default function App() {
         <ThemedText style={{ fontFamily: 'monospace', fontSize: 12 }}>{address}</ThemedText>
       )}
       <ThemedText style={{ marginTop: 16, fontWeight: 'bold' }}>Network: {network}</ThemedText>
-      <ThemedText>
-        Bridge: {callbackBridge ? callbackBridge : 'off'} / Wallet: {walletOrigin}
-      </ThemedText>
+      <ThemedText>Wallet: {walletOrigin}</ThemedText>
       <Button title="Switch Network" onPress={() => switchNetwork('moderato')} />
 
       <View style={{ marginTop: 16 }}>

@@ -816,9 +816,6 @@ importers:
       expo:
         specifier: ~55.0.12
         version: 55.0.15(@babel/core@7.29.7)(@expo/dom-webview@55.0.5)(bufferutil@4.1.0)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
-      expo-linking:
-        specifier: ~55.0.11
-        version: 55.0.13(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)
       expo-secure-store:
         specifier: ~55.0.12
         version: 55.0.13(expo@55.0.15)
@@ -5520,9 +5517,6 @@ packages:
     peerDependencies:
       typescript: '*'
 
-  '@ungap/structured-clone@1.3.0':
-    resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
-
   '@ungap/structured-clone@1.3.1':
     resolution: {integrity: sha512-mUFwbeTqrVgDQxFveS+df2yfap6iuP20NAKAsBt5jDEoOTDew+zwLAOilHCeQJOVSvmgCX4ogqIrA0mnyr08yQ==}
 
@@ -7585,12 +7579,6 @@ packages:
       react: ^19.2.5
       react-native: '*'
 
-  expo-constants@55.0.14:
-    resolution: {integrity: sha512-l23QVQCYBPKT5zbxxZdJeuhiunadvWdjcQ9+GC8h+02jCoLmWRk20064nCINnQTP3Hf+uLPteUiwYrJd0e446w==}
-    peerDependencies:
-      expo: '*'
-      react-native: '*'
-
   expo-constants@55.0.15:
     resolution: {integrity: sha512-w394fcZLJjeKN+9ZnJzL/HiarE1nwZFDa+3S9frevh6Ur+MAAs9QDrcXhDrV8T3xqRzzYaqsP6Z8TFZ4efWN1A==}
     peerDependencies:
@@ -7615,12 +7603,6 @@ packages:
     peerDependencies:
       expo: '*'
       react: ^19.2.5
-
-  expo-linking@55.0.13:
-    resolution: {integrity: sha512-xbOqNWQCC5RGtXSW83ZCKOjRivyxO2zBouRYy/hgbsyrHUJhztMAjlq8RKYDUL8D6QVsH9Q81SNoq4Zhcn+4HQ==}
-    peerDependencies:
-      react: ^19.2.5
-      react-native: '*'
 
   expo-modules-autolinking@55.0.17:
     resolution: {integrity: sha512-VhlEVGnP+xBjfSKDKNN7GAPKN2whIfV08jsZvNj7UGyJWpZYiO6Emx1FLP5xd1+JZVpIrt/kxR641kdcPo7Ehw==}
@@ -10609,11 +10591,6 @@ packages:
       uglify-js:
         optional: true
 
-  terser@5.46.2:
-    resolution: {integrity: sha512-uxfo9fPcSgLDYob/w1FuL0c99MWiJDnv+5qXSQc5+Ki5NjVNsYi66INnMFBjf6uFz6OnX12piJQPF4IpjJTNTw==}
-    engines: {node: '>=10'}
-    hasBin: true
-
   terser@5.48.0:
     resolution: {integrity: sha512-J/9An6vs9Us6wKRriSFXBWdRZapREHqFzdNUKk0pmu804EMR6dr6winwo7e5JDxN4xahxQsuysyYFwlwj4XN/Q==}
     engines: {node: '>=10'}
@@ -11355,7 +11332,7 @@ packages:
     resolution: {integrity: sha512-VkQZJbO8zVImzYFteBXvBOZEl1qL175WH8VmZcxF2fZAoudNhNDvHi+doCaAEdU2l2vtcIwa2zn0QK5+I1HQ3Q==}
 
   wata@https://pkg.pr.new/wevm/wata/wata@41c81f9c14a99f8c3a4e82609d29de21665a78a2:
-    resolution: {integrity: sha512-7fcgNB01pkq1C4cAhVn7vlhhp1Ex0eLoQJgDyLb0itTvd6oFy6QnhTY/L9Vc70CT8bHILAV2Y5glZRSvI/FnGA==, tarball: https://pkg.pr.new/wevm/wata/wata@41c81f9c14a99f8c3a4e82609d29de21665a78a2}
+    resolution: {tarball: https://pkg.pr.new/wevm/wata/wata@41c81f9c14a99f8c3a4e82609d29de21665a78a2}
     version: 0.0.0
 
   watchpack@2.5.1:
@@ -11744,7 +11721,7 @@ snapshots:
 
   '@babel/helper-annotate-as-pure@7.27.3':
     dependencies:
-      '@babel/types': 7.29.0
+      '@babel/types': 7.29.7
 
   '@babel/helper-compilation-targets@7.28.6':
     dependencies:
@@ -11770,7 +11747,7 @@ snapshots:
       '@babel/helper-optimise-call-expression': 7.27.1
       '@babel/helper-replace-supers': 7.28.6(@babel/core@7.29.7)
       '@babel/helper-skip-transparent-expression-wrappers': 7.27.1
-      '@babel/traverse': 7.29.0
+      '@babel/traverse': 7.29.7
       semver: 6.3.1
     transitivePeerDependencies:
       - supports-color
@@ -11785,7 +11762,7 @@ snapshots:
   '@babel/helper-define-polyfill-provider@0.6.8(@babel/core@7.29.7)':
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/helper-compilation-targets': 7.28.6
+      '@babel/helper-compilation-targets': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
       debug: 4.4.3(supports-color@10.2.2)
       lodash.debounce: 4.0.8
@@ -11799,8 +11776,8 @@ snapshots:
 
   '@babel/helper-member-expression-to-functions@7.28.5':
     dependencies:
-      '@babel/traverse': 7.29.0
-      '@babel/types': 7.29.0
+      '@babel/traverse': 7.29.7
+      '@babel/types': 7.29.7
     transitivePeerDependencies:
       - supports-color
 
@@ -11827,15 +11804,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/helper-module-transforms@7.28.6(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-module-imports': 7.28.6
-      '@babel/helper-validator-identifier': 7.28.5
-      '@babel/traverse': 7.29.0
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/helper-module-transforms@7.29.7(@babel/core@7.29.7)':
     dependencies:
       '@babel/core': 7.29.7
@@ -11847,7 +11815,7 @@ snapshots:
 
   '@babel/helper-optimise-call-expression@7.27.1':
     dependencies:
-      '@babel/types': 7.29.0
+      '@babel/types': 7.29.7
 
   '@babel/helper-plugin-utils@7.28.6': {}
 
@@ -11856,7 +11824,7 @@ snapshots:
       '@babel/core': 7.29.7
       '@babel/helper-annotate-as-pure': 7.27.3
       '@babel/helper-wrap-function': 7.28.6
-      '@babel/traverse': 7.29.0
+      '@babel/traverse': 7.29.7
     transitivePeerDependencies:
       - supports-color
 
@@ -11865,14 +11833,14 @@ snapshots:
       '@babel/core': 7.29.7
       '@babel/helper-member-expression-to-functions': 7.28.5
       '@babel/helper-optimise-call-expression': 7.27.1
-      '@babel/traverse': 7.29.0
+      '@babel/traverse': 7.29.7
     transitivePeerDependencies:
       - supports-color
 
   '@babel/helper-skip-transparent-expression-wrappers@7.27.1':
     dependencies:
-      '@babel/traverse': 7.29.0
-      '@babel/types': 7.29.0
+      '@babel/traverse': 7.29.7
+      '@babel/types': 7.29.7
     transitivePeerDependencies:
       - supports-color
 
@@ -11890,9 +11858,9 @@ snapshots:
 
   '@babel/helper-wrap-function@7.28.6':
     dependencies:
-      '@babel/template': 7.28.6
-      '@babel/traverse': 7.29.0
-      '@babel/types': 7.29.0
+      '@babel/template': 7.29.7
+      '@babel/traverse': 7.29.7
+      '@babel/types': 7.29.7
     transitivePeerDependencies:
       - supports-color
 
@@ -11988,14 +11956,14 @@ snapshots:
       '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
       '@babel/helper-remap-async-to-generator': 7.27.1(@babel/core@7.29.7)
-      '@babel/traverse': 7.29.0
+      '@babel/traverse': 7.29.7
     transitivePeerDependencies:
       - supports-color
 
   '@babel/plugin-transform-async-to-generator@7.28.6(@babel/core@7.29.7)':
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/helper-module-imports': 7.28.6
+      '@babel/helper-module-imports': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
       '@babel/helper-remap-async-to-generator': 7.27.1(@babel/core@7.29.7)
     transitivePeerDependencies:
@@ -12026,11 +11994,11 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.7
       '@babel/helper-annotate-as-pure': 7.27.3
-      '@babel/helper-compilation-targets': 7.28.6
-      '@babel/helper-globals': 7.28.0
+      '@babel/helper-compilation-targets': 7.29.7
+      '@babel/helper-globals': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
       '@babel/helper-replace-supers': 7.28.6(@babel/core@7.29.7)
-      '@babel/traverse': 7.29.0
+      '@babel/traverse': 7.29.7
     transitivePeerDependencies:
       - supports-color
 
@@ -12038,13 +12006,13 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
-      '@babel/template': 7.28.6
+      '@babel/template': 7.29.7
 
   '@babel/plugin-transform-destructuring@7.28.5(@babel/core@7.29.7)':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
-      '@babel/traverse': 7.29.0
+      '@babel/traverse': 7.29.7
     transitivePeerDependencies:
       - supports-color
 
@@ -12070,9 +12038,9 @@ snapshots:
   '@babel/plugin-transform-function-name@7.27.1(@babel/core@7.29.7)':
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/helper-compilation-targets': 7.28.6
+      '@babel/helper-compilation-targets': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
-      '@babel/traverse': 7.29.0
+      '@babel/traverse': 7.29.7
     transitivePeerDependencies:
       - supports-color
 
@@ -12086,18 +12054,10 @@ snapshots:
       '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
 
-  '@babel/plugin-transform-modules-commonjs@7.28.6(@babel/core@7.29.0)':
-    dependencies:
-      '@babel/core': 7.29.0
-      '@babel/helper-module-transforms': 7.28.6(@babel/core@7.29.0)
-      '@babel/helper-plugin-utils': 7.28.6
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/plugin-transform-modules-commonjs@7.28.6(@babel/core@7.29.7)':
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/helper-module-transforms': 7.28.6(@babel/core@7.29.7)
+      '@babel/helper-module-transforms': 7.29.7(@babel/core@7.29.7)
       '@babel/helper-plugin-utils': 7.28.6
     transitivePeerDependencies:
       - supports-color
@@ -12121,11 +12081,11 @@ snapshots:
   '@babel/plugin-transform-object-rest-spread@7.28.6(@babel/core@7.29.7)':
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/helper-compilation-targets': 7.28.6
+      '@babel/helper-compilation-targets': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
       '@babel/plugin-transform-destructuring': 7.28.5(@babel/core@7.29.7)
       '@babel/plugin-transform-parameters': 7.27.7(@babel/core@7.29.7)
-      '@babel/traverse': 7.29.0
+      '@babel/traverse': 7.29.7
     transitivePeerDependencies:
       - supports-color
 
@@ -12200,10 +12160,10 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.7
       '@babel/helper-annotate-as-pure': 7.27.3
-      '@babel/helper-module-imports': 7.28.6
+      '@babel/helper-module-imports': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
       '@babel/plugin-syntax-jsx': 7.28.6(@babel/core@7.29.7)
-      '@babel/types': 7.29.0
+      '@babel/types': 7.29.7
     transitivePeerDependencies:
       - supports-color
 
@@ -12221,7 +12181,7 @@ snapshots:
   '@babel/plugin-transform-runtime@7.29.0(@babel/core@7.29.7)':
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/helper-module-imports': 7.28.6
+      '@babel/helper-module-imports': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
       babel-plugin-polyfill-corejs2: 0.4.17(@babel/core@7.29.7)
       babel-plugin-polyfill-corejs3: 0.13.0(@babel/core@7.29.7)
@@ -12269,7 +12229,7 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
-      '@babel/helper-validator-option': 7.27.1
+      '@babel/helper-validator-option': 7.29.7
       '@babel/plugin-transform-react-display-name': 7.28.0(@babel/core@7.29.7)
       '@babel/plugin-transform-react-jsx': 7.28.6(@babel/core@7.29.7)
       '@babel/plugin-transform-react-jsx-development': 7.27.1(@babel/core@7.29.7)
@@ -12281,7 +12241,7 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.28.6
-      '@babel/helper-validator-option': 7.27.1
+      '@babel/helper-validator-option': 7.29.7
       '@babel/plugin-syntax-jsx': 7.28.6(@babel/core@7.29.7)
       '@babel/plugin-transform-modules-commonjs': 7.28.6(@babel/core@7.29.7)
       '@babel/plugin-transform-typescript': 7.28.6(@babel/core@7.29.7)
@@ -13351,7 +13311,7 @@ snapshots:
 
   '@expo/json-file@10.0.13':
     dependencies:
-      '@babel/code-frame': 7.29.0
+      '@babel/code-frame': 7.29.7
       json5: 2.2.3
 
   '@expo/local-build-cache-provider@55.0.11(typescript@5.9.3)':
@@ -13373,9 +13333,9 @@ snapshots:
 
   '@expo/metro-config@55.0.16(bufferutil@4.1.0)(expo@55.0.15)(typescript@5.9.3)(utf-8-validate@5.0.10)':
     dependencies:
-      '@babel/code-frame': 7.29.0
-      '@babel/core': 7.29.0
-      '@babel/generator': 7.29.1
+      '@babel/code-frame': 7.29.7
+      '@babel/core': 7.29.7
+      '@babel/generator': 7.29.7
       '@expo/config': 55.0.15(typescript@5.9.3)
       '@expo/env': 2.1.1
       '@expo/json-file': 10.0.13
@@ -13459,9 +13419,9 @@ snapshots:
 
   '@expo/require-utils@55.0.4(typescript@5.9.3)':
     dependencies:
-      '@babel/code-frame': 7.29.0
-      '@babel/core': 7.29.0
-      '@babel/plugin-transform-modules-commonjs': 7.28.6(@babel/core@7.29.0)
+      '@babel/code-frame': 7.29.7
+      '@babel/core': 7.29.7
+      '@babel/plugin-transform-modules-commonjs': 7.28.6(@babel/core@7.29.7)
     optionalDependencies:
       typescript: 5.9.3
     transitivePeerDependencies:
@@ -13501,7 +13461,7 @@ snapshots:
 
   '@expo/xcpretty@4.4.3':
     dependencies:
-      '@babel/code-frame': 7.29.0
+      '@babel/code-frame': 7.29.7
       chalk: 4.1.2
       js-yaml: 4.1.1
 
@@ -14946,7 +14906,7 @@ snapshots:
 
   '@react-native/babel-plugin-codegen@0.83.6(@babel/core@7.29.7)':
     dependencies:
-      '@babel/traverse': 7.29.0
+      '@babel/traverse': 7.29.7
       '@react-native/codegen': 0.83.6(@babel/core@7.29.7)
     transitivePeerDependencies:
       - '@babel/core'
@@ -14994,7 +14954,7 @@ snapshots:
       '@babel/plugin-transform-sticky-regex': 7.27.1(@babel/core@7.29.7)
       '@babel/plugin-transform-typescript': 7.28.6(@babel/core@7.29.7)
       '@babel/plugin-transform-unicode-regex': 7.27.1(@babel/core@7.29.7)
-      '@babel/template': 7.28.6
+      '@babel/template': 7.29.7
       '@react-native/babel-plugin-codegen': 0.83.6(@babel/core@7.29.7)
       babel-plugin-syntax-hermes-parser: 0.32.0
       babel-plugin-transform-flow-enums: 0.0.2(@babel/core@7.29.7)
@@ -15005,7 +14965,7 @@ snapshots:
   '@react-native/codegen@0.83.6(@babel/core@7.29.7)':
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/parser': 7.29.2
+      '@babel/parser': 7.29.7
       glob: 7.2.3
       hermes-parser: 0.32.0
       invariant: 2.2.4
@@ -17517,8 +17477,6 @@ snapshots:
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
-
-  '@ungap/structured-clone@1.3.0': {}
 
   '@ungap/structured-clone@1.3.1': {}
 
@@ -20091,7 +20049,7 @@ snapshots:
 
   babel-plugin-polyfill-corejs2@0.4.17(@babel/core@7.29.7):
     dependencies:
-      '@babel/compat-data': 7.29.0
+      '@babel/compat-data': 7.29.7
       '@babel/core': 7.29.7
       '@babel/helper-define-polyfill-provider': 0.6.8(@babel/core@7.29.7)
       semver: 6.3.1
@@ -20115,7 +20073,7 @@ snapshots:
 
   babel-plugin-react-compiler@1.0.0:
     dependencies:
-      '@babel/types': 7.29.0
+      '@babel/types': 7.29.7
 
   babel-plugin-react-native-web@0.21.2: {}
 
@@ -20137,10 +20095,10 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
 
-  babel-preset-expo@55.0.18(@babel/core@7.29.7)(@babel/runtime@7.29.2)(expo@55.0.15)(react-refresh@0.14.2):
+  babel-preset-expo@55.0.18(@babel/core@7.29.7)(@babel/runtime@7.29.7)(expo@55.0.15)(react-refresh@0.14.2):
     dependencies:
-      '@babel/generator': 7.29.1
-      '@babel/helper-module-imports': 7.28.6
+      '@babel/generator': 7.29.7
+      '@babel/helper-module-imports': 7.29.7
       '@babel/plugin-proposal-decorators': 7.29.0(@babel/core@7.29.7)
       '@babel/plugin-proposal-export-default-from': 7.27.1(@babel/core@7.29.7)
       '@babel/plugin-syntax-export-default-from': 7.28.6(@babel/core@7.29.7)
@@ -20164,7 +20122,7 @@ snapshots:
       react-refresh: 0.14.2
       resolve-from: 5.0.0
     optionalDependencies:
-      '@babel/runtime': 7.29.2
+      '@babel/runtime': 7.29.7
       expo: 55.0.15(@babel/core@7.29.7)(@expo/dom-webview@55.0.5)(bufferutil@4.1.0)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
     transitivePeerDependencies:
       - '@babel/core'
@@ -21397,16 +21355,6 @@ snapshots:
       - supports-color
       - typescript
 
-  expo-constants@55.0.14(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(typescript@5.9.3):
-    dependencies:
-      '@expo/config': 55.0.15(typescript@5.9.3)
-      '@expo/env': 2.1.1
-      expo: 55.0.15(@babel/core@7.29.7)(@expo/dom-webview@55.0.5)(bufferutil@4.1.0)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
-      react-native: 0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10)
-    transitivePeerDependencies:
-      - supports-color
-      - typescript
-
   expo-constants@55.0.15(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10)):
     dependencies:
       '@expo/env': 2.1.1
@@ -21431,17 +21379,6 @@ snapshots:
     dependencies:
       expo: 55.0.15(@babel/core@7.29.7)(@expo/dom-webview@55.0.5)(bufferutil@4.1.0)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
       react: 19.2.5
-
-  expo-linking@55.0.13(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3):
-    dependencies:
-      expo-constants: 55.0.14(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(typescript@5.9.3)
-      invariant: 2.2.4
-      react: 19.2.5
-      react-native: 0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10)
-    transitivePeerDependencies:
-      - expo
-      - supports-color
-      - typescript
 
   expo-modules-autolinking@55.0.17(typescript@5.9.3):
     dependencies:
@@ -21478,7 +21415,7 @@ snapshots:
 
   expo@55.0.15(@babel/core@7.29.7)(@expo/dom-webview@55.0.5)(bufferutil@4.1.0)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10):
     dependencies:
-      '@babel/runtime': 7.29.2
+      '@babel/runtime': 7.29.7
       '@expo/cli': 55.0.24(@expo/dom-webview@55.0.5)(bufferutil@4.1.0)(expo-constants@55.0.15(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10)))(expo-font@55.0.6(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5))(expo@55.0.15)(react-dom@19.2.5(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react-server-dom-webpack@19.2.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.106.2(esbuild@0.27.7)))(react@19.2.5)(typescript@5.9.3)(utf-8-validate@5.0.10)
       '@expo/config': 55.0.15(typescript@5.9.3)
       '@expo/config-plugins': 55.0.8
@@ -21489,8 +21426,8 @@ snapshots:
       '@expo/metro': 55.0.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       '@expo/metro-config': 55.0.16(bufferutil@4.1.0)(expo@55.0.15)(typescript@5.9.3)(utf-8-validate@5.0.10)
       '@expo/vector-icons': 15.1.1(expo-font@55.0.6(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5))(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)
-      '@ungap/structured-clone': 1.3.0
-      babel-preset-expo: 55.0.18(@babel/core@7.29.7)(@babel/runtime@7.29.2)(expo@55.0.15)(react-refresh@0.14.2)
+      '@ungap/structured-clone': 1.3.1
+      babel-preset-expo: 55.0.18(@babel/core@7.29.7)(@babel/runtime@7.29.7)(expo@55.0.15)(react-refresh@0.14.2)
       expo-asset: 55.0.16(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))(react@19.2.5)(typescript@5.9.3)
       expo-constants: 55.0.15(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))
       expo-file-system: 55.0.17(expo@55.0.15)(react-native@0.85.1(@babel/core@7.29.7)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.5)(utf-8-validate@5.0.10))
@@ -22689,7 +22626,7 @@ snapshots:
 
   metro-babel-transformer@0.83.5:
     dependencies:
-      '@babel/core': 7.29.0
+      '@babel/core': 7.29.7
       flow-enums-runtime: 0.0.6
       hermes-parser: 0.33.3
       nullthrows: 1.1.1
@@ -22698,7 +22635,7 @@ snapshots:
 
   metro-babel-transformer@0.84.3:
     dependencies:
-      '@babel/core': 7.29.0
+      '@babel/core': 7.29.7
       flow-enums-runtime: 0.0.6
       hermes-parser: 0.35.0
       metro-cache-key: 0.84.3
@@ -22741,7 +22678,7 @@ snapshots:
       metro-cache: 0.83.5
       metro-core: 0.83.5
       metro-runtime: 0.83.5
-      yaml: 2.8.3
+      yaml: 2.9.0
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -22805,12 +22742,12 @@ snapshots:
   metro-minify-terser@0.83.5:
     dependencies:
       flow-enums-runtime: 0.0.6
-      terser: 5.46.2
+      terser: 5.48.0
 
   metro-minify-terser@0.84.3:
     dependencies:
       flow-enums-runtime: 0.0.6
-      terser: 5.46.2
+      terser: 5.48.0
 
   metro-resolver@0.83.5:
     dependencies:
@@ -22822,7 +22759,7 @@ snapshots:
 
   metro-runtime@0.83.5:
     dependencies:
-      '@babel/runtime': 7.29.2
+      '@babel/runtime': 7.29.7
       flow-enums-runtime: 0.0.6
 
   metro-runtime@0.84.3:
@@ -22832,8 +22769,8 @@ snapshots:
 
   metro-source-map@0.83.5:
     dependencies:
-      '@babel/traverse': 7.29.0
-      '@babel/types': 7.29.0
+      '@babel/traverse': 7.29.7
+      '@babel/types': 7.29.7
       flow-enums-runtime: 0.0.6
       invariant: 2.2.4
       metro-symbolicate: 0.83.5
@@ -22882,10 +22819,10 @@ snapshots:
 
   metro-transform-plugins@0.83.5:
     dependencies:
-      '@babel/core': 7.29.0
-      '@babel/generator': 7.29.1
-      '@babel/template': 7.28.6
-      '@babel/traverse': 7.29.0
+      '@babel/core': 7.29.7
+      '@babel/generator': 7.29.7
+      '@babel/template': 7.29.7
+      '@babel/traverse': 7.29.7
       flow-enums-runtime: 0.0.6
       nullthrows: 1.1.1
     transitivePeerDependencies:
@@ -22893,8 +22830,8 @@ snapshots:
 
   metro-transform-plugins@0.84.3:
     dependencies:
-      '@babel/core': 7.29.0
-      '@babel/generator': 7.29.1
+      '@babel/core': 7.29.7
+      '@babel/generator': 7.29.7
       '@babel/template': 7.28.6
       '@babel/traverse': 7.29.0
       flow-enums-runtime: 0.0.6
@@ -22904,10 +22841,10 @@ snapshots:
 
   metro-transform-worker@0.83.5(bufferutil@4.1.0)(utf-8-validate@5.0.10):
     dependencies:
-      '@babel/core': 7.29.0
-      '@babel/generator': 7.29.1
-      '@babel/parser': 7.29.2
-      '@babel/types': 7.29.0
+      '@babel/core': 7.29.7
+      '@babel/generator': 7.29.7
+      '@babel/parser': 7.29.7
+      '@babel/types': 7.29.7
       flow-enums-runtime: 0.0.6
       metro: 0.83.5(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       metro-babel-transformer: 0.83.5
@@ -22924,8 +22861,8 @@ snapshots:
 
   metro-transform-worker@0.84.3(bufferutil@4.1.0)(utf-8-validate@5.0.10):
     dependencies:
-      '@babel/core': 7.29.0
-      '@babel/generator': 7.29.1
+      '@babel/core': 7.29.7
+      '@babel/generator': 7.29.7
       '@babel/parser': 7.29.2
       '@babel/types': 7.29.0
       flow-enums-runtime: 0.0.6
@@ -22944,13 +22881,13 @@ snapshots:
 
   metro@0.83.5(bufferutil@4.1.0)(utf-8-validate@5.0.10):
     dependencies:
-      '@babel/code-frame': 7.29.0
-      '@babel/core': 7.29.0
-      '@babel/generator': 7.29.1
-      '@babel/parser': 7.29.2
-      '@babel/template': 7.28.6
-      '@babel/traverse': 7.29.0
-      '@babel/types': 7.29.0
+      '@babel/code-frame': 7.29.7
+      '@babel/core': 7.29.7
+      '@babel/generator': 7.29.7
+      '@babel/parser': 7.29.7
+      '@babel/template': 7.29.7
+      '@babel/traverse': 7.29.7
+      '@babel/types': 7.29.7
       accepts: 2.0.0
       chalk: 4.1.2
       ci-info: 2.0.0
@@ -23816,7 +23753,7 @@ snapshots:
 
   parse-json@5.2.0:
     dependencies:
-      '@babel/code-frame': 7.29.0
+      '@babel/code-frame': 7.29.7
       error-ex: 1.3.4
       json-parse-even-better-errors: 2.3.1
       lines-and-columns: 1.2.4
@@ -25350,13 +25287,6 @@ snapshots:
       webpack: 5.106.2(esbuild@0.27.7)
     optionalDependencies:
       esbuild: 0.27.7
-
-  terser@5.46.2:
-    dependencies:
-      '@jridgewell/source-map': 0.3.11
-      acorn: 8.16.0
-      commander: 2.20.3
-      source-map-support: 0.5.21
 
   terser@5.48.0:
     dependencies:
