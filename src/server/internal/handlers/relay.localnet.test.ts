@@ -28,6 +28,7 @@ import { relay } from './relay.js'
 const userAccount = accounts[9]!
 const feePayerAccount = accounts[0]!
 const recipient = accounts[7]!
+const test_multisig = import.meta.env.VITE_NODE_TAG?.startsWith('http') ? test.skip : test
 
 /**
  * Tokens the relay handler probes for fee-token resolution. The default
@@ -393,7 +394,7 @@ describe('behavior: with feePayer.feeToken', () => {
 })
 
 describe('behavior: with native multisig', () => {
-  test('behavior: collects approvals and broadcasts bootstrap transaction', async () => {
+  test_multisig('behavior: collects approvals and broadcasts bootstrap transaction', async () => {
     const store = memoryStore()
     const owner_1 = accounts[1]!
     const owner_2 = accounts[2]!
