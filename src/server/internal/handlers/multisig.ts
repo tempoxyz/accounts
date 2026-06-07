@@ -570,7 +570,29 @@ async function serializeFinal(options: {
 
 function normalizeFeePayerSignature(value: unknown) {
   if (!value) return value
+  if (typeof value === 'object' && 'r' in value && 's' in value) {
+    const signature = value as {
+      r: bigint | number | string
+      s: bigint | number | string
+      v?: bigint | number | string | undefined
+      yParity?: bigint | number | string | undefined
+    }
+    const yParity = normalizeYParity(signature.yParity ?? signature.v)
+    if (typeof yParity === 'number')
+      return Signature.from({
+        r: BigInt(signature.r),
+        s: BigInt(signature.s),
+        yParity,
+      })
+  }
   return Signature.from(value as never)
+}
+
+function normalizeYParity(value: bigint | number | string | undefined) {
+  if (typeof value === 'undefined') return undefined
+  const number = Number(value)
+  if (number === 27 || number === 28) return number - 27
+  return number
 }
 
 function getFeePayerState(serialized: Hex.Hex) {
