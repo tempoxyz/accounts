@@ -178,3 +178,21 @@ const { accounts } = await provider.request({
   method: 'wallet_connect',
 })
 ```
+
+### Requesting a verified email
+
+Set `capabilities.identity.email` to `true` to ask for the account's verified
+email. The wallet runs an in-flow approval after the connect ceremony: if the
+account already has a verified email it shows a consent prompt; otherwise it
+collects and verifies an email (one-time code) before sharing it. The user can
+decline — `wallet_connect` still succeeds, just without `identity`.
+
+```ts
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
+  params: [{ capabilities: { identity: { email: true } } }],
+})
+
+// Present only if the user approved sharing; set on the authenticated account.
+const email = accounts[0]?.capabilities?.identity?.email
+```
