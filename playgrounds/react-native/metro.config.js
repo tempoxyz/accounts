@@ -4,15 +4,12 @@ const path = require('node:path')
 const { getDefaultConfig } = require('expo/metro-config')
 
 const config = getDefaultConfig(__dirname)
-const nodeServerShim = path.resolve(__dirname, './node-server-shim.js')
 const resolveRequest =
   config.resolver.resolveRequest ??
   ((context, moduleName, platform) => context.resolveRequest(context, moduleName, platform))
 const src = path.resolve(__dirname, '../../src')
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName === '@hono/node-server') return { filePath: nodeServerShim, type: 'sourceFile' }
-
   if (
     moduleName.startsWith('.') &&
     moduleName.endsWith('.js') &&

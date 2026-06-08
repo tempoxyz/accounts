@@ -6,18 +6,23 @@ description: Connect React Native apps with Tempo Wallet.
 # React Native
 
 React Native apps use `accounts/react-native`. The provider opens Tempo Wallet in a system browser session, then receives an app-link callback with the encrypted response.
+Each mobile web auth request is a single exchange: one browser auth URL carries one RPC request, and one callback URL carries one RPC response.
 
 ```ts twoslash
-import * as Linking from 'expo-linking'
 import { Provider } from 'accounts'
 import { tempoWallet } from 'accounts/react-native'
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
 
-const redirectUri = Linking.createURL('auth')
+const redirectUri = 'com.example.app:/auth'
 
 const provider = Provider.create({
-  adapter: tempoWallet({ redirectUri }),
+  adapter: tempoWallet({ openAuthSession, redirectUri }),
 })
 ```
+
+`accounts/react-native/expo-web-browser` uses Expo WebBrowser for the native
+system auth session. It is an optional subpath so apps that use another browser
+primitive do not install Expo WebBrowser.
 
 ## Consumer Discovery
 
@@ -41,24 +46,25 @@ Using the same origin is valid when the mobile app and wallet are owned by the s
 }
 ```
 
-For Expo apps, log `Linking.createURL('auth')` from the same build you are testing and publish that value in the consumer document.
+Use a development build with a reverse-DNS private-use callback URI. Expo Go-style callback URLs are not valid mobile web auth callbacks. Publish the exact callback URI you pass to `tempoWallet()` in the consumer document.
 
 ## Custom Wata Hosts
 
 Use `mobileWebAuth()` directly when the app origin, wallet host, or provider identity differs from Tempo Wallet.
 
 ```ts twoslash
-import * as Linking from 'expo-linking'
 import { Provider } from 'accounts'
 import { mobileWebAuth } from 'accounts/react-native'
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
 
-const redirectUri = Linking.createURL('auth')
+const redirectUri = 'com.example.app:/auth'
 
 const provider = Provider.create({
   adapter: mobileWebAuth({
     baseUrl: 'https://app.example',
     host: 'https://wallet.example',
     name: 'Example Wallet',
+    openAuthSession,
     rdns: 'com.example.wallet',
     redirectUri,
   }),
@@ -69,7 +75,7 @@ const provider = Provider.create({
 
 ### tempoWallet
 
-`tempoWallet()` accepts `redirectUri`, `fetch`, `open`, and `openAuthSession`, plus optional overrides for `baseUrl`, `host`, `name`, and `rdns`.
+`tempoWallet()` accepts `redirectUri` and either `open` or `openAuthSession`, plus `fetch` and optional overrides for `baseUrl`, `host`, `name`, and `rdns`.
 
 ### baseUrl
 
@@ -111,7 +117,7 @@ Tempo Wallet discovery origin, or a preloaded Wata host document.
 - **Type:** `({ authorizationUrl, callback }) => string | undefined | Promise<string | undefined>`
 - **Optional**
 
-Override for the browser auth-session primitive. By default the adapter uses `expo-web-browser`.
+Override for the browser auth-session primitive. Provide either `openAuthSession` or `open`.
 
 ### mobileWebAuth
 

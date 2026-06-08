@@ -27,5 +27,5 @@ and its consumer document must allow the playground callback scheme.
 ```
 pnpm install
 cd playgrounds/react-native
-EXPO_PUBLIC_WALLET_ORIGIN=http://localhost:5176 npx expo start
+EXPO_PUBLIC_WALLET_ORIGIN=http://localhost:5176 pnpm ios
 ```

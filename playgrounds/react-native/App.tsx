@@ -1,10 +1,13 @@
+import { Provider } from 'accounts'
+import { tempoWallet } from 'accounts/react-native'
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
+import { secureStorage } from 'accounts/react-native/secure-storage'
 import { StatusBar } from 'expo-status-bar'
 import { Hex } from 'ox'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
   ColorSchemeName,
-  Linking,
   ScrollView,
   StyleProp,
   Text,
@@ -18,10 +21,6 @@ import { formatUnits, parseUnits, type Address, type Hex as viem_Hex } from 'vie
 import { Actions } from 'viem/tempo'
 import { tempoModerato } from 'viem/tempo/chains'
 
-import { Provider } from '../../dist/index.js'
-import { tempoWallet } from '../../dist/react-native/index.js'
-import { secureStorage } from '../../dist/react-native/secure-storage.js'
-
 const chain = tempoModerato
 
 const tokens = {
@@ -32,31 +31,11 @@ const tokens = {
 const redirectUri = 'xyz.tempo.accounts.playground:/auth'
 const walletOrigin = process.env.EXPO_PUBLIC_WALLET_ORIGIN ?? 'https://wallet.tempo.xyz'
 
-async function openAuthUrl(url: string, callback: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    let settled = false
-    const timeout = setTimeout(() => finish(null), 120_000)
-    const subscription = Linking.addEventListener('url', (event) => {
-      if (event.url.startsWith(callback)) finish(event.url)
-    })
-
-    function finish(value: string | null) {
-      if (settled) return
-      settled = true
-      clearTimeout(timeout)
-      subscription.remove()
-      resolve(value)
-    }
-
-    Linking.openURL(url).catch(() => finish(null))
-  })
-}
-
 const provider = Provider.create({
   adapter: tempoWallet({
     baseUrl: walletOrigin,
     host: walletOrigin,
-    open: openAuthUrl,
+    openAuthSession,
     redirectUri,
   }),
   authorizeAccessKey: () => ({

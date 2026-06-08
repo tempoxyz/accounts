@@ -40,6 +40,19 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
       method: string
       params?: readonly unknown[] | undefined
     }): Promise<unknown> {
+      const authSession =
+        openAuthSession ??
+        (async ({
+          authorizationUrl,
+          callback,
+        }: Parameters<NonNullable<MobileWebAuth.Options['openAuthSession']>>[0]) => {
+          if (!open) throw new Error('`mobileWebAuth` requires `open` or `openAuthSession`.')
+          const result = await open(authorizationUrl, callback)
+          return result ?? undefined
+        })
+
+      // Mobile web auth is single-exchange: one authorization URL carries one
+      // RPC request envelope, and one callback URL carries one response.
       const session = Wata.create({
         baseUrl,
         meta: { name },
@@ -47,12 +60,7 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
           core_mobileWebAuth({
             callback: redirectUri,
             host,
-            openAuthSession:
-              openAuthSession ??
-              (async ({ authorizationUrl, callback }) => {
-                const result = await (open ?? defaultOpen)(authorizationUrl, callback)
-                return result ?? undefined
-              }),
+            openAuthSession: authSession,
             ...(fetch !== undefined ? { fetch } : {}),
           }),
         ],
@@ -155,8 +163,24 @@ export function tempoWallet(options: tempoWallet.Options): Adapter.Adapter {
 }
 
 export declare namespace mobileWebAuth {
-  /** Options for {@link mobileWebAuth}. */
-  export type Options = {
+  /** Browser opener override. Opens the auth URL and returns the callback URL. */
+  export type Open = (url: string, redirectUri: string) => Promise<string | null>
+  /** Platform opener options for mobile web auth. */
+  export type OpenOptions =
+    | {
+        /** Browser opener override. Opens the auth URL and returns the callback URL. */
+        open: Open
+        /** Wata browser auth-session override. */
+        openAuthSession?: MobileWebAuth.Options['openAuthSession'] | undefined
+      }
+    | {
+        /** Browser opener override. Opens the auth URL and returns the callback URL. */
+        open?: undefined
+        /** Wata browser auth-session override. */
+        openAuthSession: MobileWebAuth.Options['openAuthSession']
+      }
+  /** Base options for {@link mobileWebAuth}. */
+  export type BaseOptions = {
     /** Public HTTPS origin that hosts this app's Wata consumer discovery document. */
     baseUrl: string
     /** Override the Wata discovery `fetch` implementation. */
@@ -165,37 +189,26 @@ export declare namespace mobileWebAuth {
     host: MobileWebAuth.Options['host']
     /** Provider display name. */
     name: string
-    /**
-     * Browser opener override. Opens the auth URL and returns the callback URL.
-     * @default Uses `expo-web-browser`'s `openAuthSessionAsync`.
-     */
-    open?: ((url: string, redirectUri: string) => Promise<string | null>) | undefined
-    /** Wata browser auth-session override. */
-    openAuthSession?: MobileWebAuth.Options['openAuthSession'] | undefined
     /** Redirect URI for the auth callback (e.g. your app's deep link scheme). */
     redirectUri: string
     /** Reverse-DNS provider identifier. */
     rdns: string
   }
+  /** Options for {@link mobileWebAuth}. */
+  export type Options = BaseOptions & OpenOptions
 }
 
 export declare namespace tempoWallet {
   /** Options for {@link tempoWallet}. */
-  export type Options = Omit<mobileWebAuth.Options, 'baseUrl' | 'host' | 'name' | 'rdns'> & {
-    /** Consumer discovery origin. @default "https://wallet.tempo.xyz" */
-    baseUrl?: mobileWebAuth.Options['baseUrl'] | undefined
-    /** Tempo Wallet discovery origin or preloaded Wata host document. @default "https://wallet.tempo.xyz" */
-    host?: mobileWebAuth.Options['host'] | undefined
-    /** Provider display name. @default "Tempo Wallet" */
-    name?: mobileWebAuth.Options['name'] | undefined
-    /** Reverse-DNS provider identifier. @default "xyz.tempo" */
-    rdns?: mobileWebAuth.Options['rdns'] | undefined
-  }
-}
-
-async function defaultOpen(url: string, redirectUri: string): Promise<string | null> {
-  const { openAuthSessionAsync } = await import('expo-web-browser')
-  const result = await openAuthSessionAsync(url, redirectUri)
-  if (result.type !== 'success') return null
-  return result.url
+  export type Options = Omit<mobileWebAuth.BaseOptions, 'baseUrl' | 'host' | 'name' | 'rdns'> &
+    mobileWebAuth.OpenOptions & {
+      /** Consumer discovery origin. @default "https://wallet.tempo.xyz" */
+      baseUrl?: mobileWebAuth.Options['baseUrl'] | undefined
+      /** Tempo Wallet discovery origin or preloaded Wata host document. @default "https://wallet.tempo.xyz" */
+      host?: mobileWebAuth.Options['host'] | undefined
+      /** Provider display name. @default "Tempo Wallet" */
+      name?: mobileWebAuth.Options['name'] | undefined
+      /** Reverse-DNS provider identifier. @default "xyz.tempo" */
+      rdns?: mobileWebAuth.Options['rdns'] | undefined
+    }
 }

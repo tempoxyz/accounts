@@ -3,6 +3,7 @@ import { KeyAuthorization } from 'ox/tempo'
 import { parseUnits, type Address as viem_Address } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
+import { Identity } from 'wata'
 import { Wata as HostWata, mobileWebAuth as hostMobileWebAuth } from 'wata/host'
 import * as z from 'zod/mini'
 
@@ -94,8 +95,10 @@ function createWallet() {
 function createHost(requests: { method: string; params: unknown }[]) {
   const host = HostWata.create({
     baseUrl: hostOrigin,
+    identity: Identity.fromPrivateKey(
+      '0x2222222222222222222222222222222222222222222222222222222222222222',
+    ),
     meta: { name: 'Tempo Wallet' },
-    privateKey: '0x2222222222222222222222222222222222222222222222222222222222222222',
     transports: [
       hostMobileWebAuth({
         fetch: async (input): Promise<Response> => {

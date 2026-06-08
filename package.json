@@ -77,7 +77,7 @@
     "mipd": "^0.0.7",
     "mppx": "catalog:",
     "ox": "~0.14.20",
-    "wata": "https://pkg.pr.new/wevm/wata/wata@41c81f9c14a99f8c3a4e82609d29de21665a78a2",
+    "wata": "https://pkg.pr.new/wevm/wata/wata@8aad3ae31a99c8ed19ce2b16ecdf21113de4ba0f",
     "webauthx": "~0.1.1",
     "zod": "^4.3.6",
     "zustand": "^5.0.12"
@@ -105,10 +105,10 @@
     "viem": {
       "optional": true
     },
-    "expo-web-browser": {
+    "expo-secure-store": {
       "optional": true
     },
-    "expo-secure-store": {
+    "expo-web-browser": {
       "optional": true
     },
     "@react-native-async-storage/async-storage": {
@@ -180,6 +180,12 @@
       "react-native": "./dist/react-native/secureStorage.js",
       "src": "./src/react-native/secureStorage.ts",
       "default": "./dist/react-native/secureStorage.js"
+    },
+    "./react-native/expo-web-browser": {
+      "types": "./dist/react-native/expoWebBrowser.d.ts",
+      "react-native": "./dist/react-native/expoWebBrowser.js",
+      "src": "./src/react-native/expoWebBrowser.ts",
+      "default": "./dist/react-native/expoWebBrowser.js"
     }
   }
 }
