@@ -386,6 +386,54 @@ describe('wallet_connect.capabilities.result: auth + personalSign', () => {
   })
 })
 
+describe('wallet_connect.capabilities.result: identity', () => {
+  test('accepts identity with verified email', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.result, {
+        identity: { email: 'alice@example.com' },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {
+          "email": "alice@example.com",
+        },
+      }
+    `)
+  })
+
+  test('accepts identity with null email', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.result, {
+        identity: { email: null },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {
+          "email": null,
+        },
+      }
+    `)
+  })
+
+  test('accepts empty identity object', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.result, { identity: {} }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {},
+      }
+    `)
+  })
+
+  test('rejects identity.email as number', () => {
+    expect(() =>
+      z.parse(Rpc.wallet_connect.capabilities.result, {
+        identity: { email: 42 },
+      }),
+    ).toThrow()
+  })
+})
+
 describe('wallet_connect.capabilities.request: showDeposit', () => {
   test('accepts true on the register branch', () => {
     expect(

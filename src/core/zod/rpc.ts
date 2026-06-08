@@ -663,6 +663,18 @@ export namespace wallet_connect {
       ]),
     ),
     result: z.object({
+      /**
+       * Consented identity claims, populated only when the request set the
+       * matching `capabilities.identity.*` flag AND the user approved sharing.
+       * Omitted entirely when nothing was requested or approved. Present only
+       * on the account the user authenticated with during this connect.
+       */
+      identity: z.optional(
+        z.object({
+          /** Verified email address, if requested and approved. */
+          email: z.optional(z.nullable(z.string())),
+        }),
+      ),
       keyAuthorization: z.optional(keyAuthorization),
       /**
        * Echo of the `personalSign` request, present iff the caller set

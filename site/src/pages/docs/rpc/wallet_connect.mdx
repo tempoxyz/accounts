@@ -134,6 +134,15 @@ type Response = {
   accounts: {
     address: Address
     capabilities: {
+      /**
+       * Consented identity claims, present only when requested via
+       * `capabilities.identity` AND approved by the user. Omitted entirely
+       * otherwise. Only set on the authenticated account.
+       */
+      identity?: {
+        /** Verified email address, if requested and approved. May be `null`. */
+        email?: string | null
+      }
       /** Authorized access key, if `authorizeAccessKey` was requested. */
       keyAuthorization?: KeyAuthorization
       /**
