@@ -169,6 +169,24 @@
       "src": "./src/react-native/index.ts",
       "default": "./dist/react-native/index.js"
     },
+    "./mobileWebAuth": {
+      "types": "./dist/mobileWebAuth/index.d.ts",
+      "react-native": "./dist/mobileWebAuth/index.js",
+      "src": "./src/mobileWebAuth/index.ts",
+      "default": "./dist/mobileWebAuth/index.js"
+    },
+    "./mobileWebAuth/tempoWallet": {
+      "types": "./dist/mobileWebAuth/tempoWallet.d.ts",
+      "react-native": "./dist/mobileWebAuth/tempoWallet.js",
+      "src": "./src/mobileWebAuth/tempoWallet.ts",
+      "default": "./dist/mobileWebAuth/tempoWallet.js"
+    },
+    "./mobileWebAuth/expoWebBrowser": {
+      "types": "./dist/mobileWebAuth/expoWebBrowser.d.ts",
+      "react-native": "./dist/mobileWebAuth/expoWebBrowser.js",
+      "src": "./src/mobileWebAuth/expoWebBrowser.ts",
+      "default": "./dist/mobileWebAuth/expoWebBrowser.js"
+    },
     "./react-native/async-storage": {
       "types": "./dist/react-native/asyncStorage.d.ts",
       "react-native": "./dist/react-native/asyncStorage.js",
@@ -180,12 +198,6 @@
       "react-native": "./dist/react-native/secureStorage.js",
       "src": "./src/react-native/secureStorage.ts",
       "default": "./dist/react-native/secureStorage.js"
-    },
-    "./react-native/expo-web-browser": {
-      "types": "./dist/react-native/expoWebBrowser.d.ts",
-      "react-native": "./dist/react-native/expoWebBrowser.js",
-      "src": "./src/react-native/expoWebBrowser.ts",
-      "default": "./dist/react-native/expoWebBrowser.js"
     }
   }
 }

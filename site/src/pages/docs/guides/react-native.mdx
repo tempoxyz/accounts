@@ -5,13 +5,13 @@ description: Connect React Native apps with Tempo Wallet.
 
 # React Native
 
-React Native apps use `accounts/react-native`. The provider opens Tempo Wallet in a system browser session, then receives an app-link callback with the encrypted response.
+React Native apps use the `accounts/mobileWebAuth` adapters. The provider opens Tempo Wallet in a system browser session, then receives an app-link callback with the encrypted response.
 Each mobile web auth request is a single exchange: one browser auth URL carries one RPC request, and one callback URL carries one RPC response.
 
 ```ts twoslash
 import { Provider } from 'accounts'
-import { tempoWallet } from 'accounts/react-native'
-import { openAuthSession } from 'accounts/react-native/expo-web-browser'
+import { openAuthSession } from 'accounts/mobileWebAuth/expoWebBrowser'
+import { tempoWallet } from 'accounts/mobileWebAuth/tempoWallet'
 
 const redirectUri = 'com.example.app:/auth'
 
@@ -20,13 +20,13 @@ const provider = Provider.create({
 })
 ```
 
-`accounts/react-native/expo-web-browser` uses Expo WebBrowser for the native
+`accounts/mobileWebAuth/expoWebBrowser` uses Expo WebBrowser for the native
 system auth session. It is an optional subpath so apps that use another browser
 primitive do not install Expo WebBrowser.
 
 ## Consumer Discovery
 
-The React Native `tempoWallet()` adapter uses `https://wallet.tempo.xyz` for both Wata roles by default:
+The mobile web auth `tempoWallet()` adapter uses `https://wallet.tempo.xyz` for both Wata roles by default:
 
 - `baseUrl`: consumer discovery origin serving `/.well-known/urpc/consumer.json`
 - `host`: wallet discovery origin serving `/.well-known/urpc/host.json`
@@ -54,8 +54,8 @@ Use `mobileWebAuth()` directly when the app origin, wallet host, or provider ide
 
 ```ts twoslash
 import { Provider } from 'accounts'
-import { mobileWebAuth } from 'accounts/react-native'
-import { openAuthSession } from 'accounts/react-native/expo-web-browser'
+import { mobileWebAuth } from 'accounts/mobileWebAuth'
+import { openAuthSession } from 'accounts/mobileWebAuth/expoWebBrowser'
 
 const redirectUri = 'com.example.app:/auth'
 

@@ -1,7 +1,7 @@
 # React Native Playground
 
-The playground uses Wata mobile web auth through the React Native
-`tempoWallet()` adapter. By default, both the wallet host discovery origin and
+The playground uses Wata mobile web auth through the
+`accounts/mobileWebAuth/tempoWallet` adapter. By default, both the wallet host discovery origin and
 the consumer discovery origin are `https://wallet.tempo.xyz`.
 
 The default wallet origin must serve a consumer document that allows the
