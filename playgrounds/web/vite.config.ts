@@ -1,10 +1,21 @@
 import { cloudflare } from '@cloudflare/vite-plugin'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
 import regen from 'regen-ui/vite'
 import icons from 'unplugin-icons/vite'
 import { defineConfig } from 'vp'
 
+const privyReactAuth = fileURLToPath(
+  new URL('./node_modules/@privy-io/react-auth/dist/esm/index.mjs', import.meta.url),
+)
+
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@privy-io/react-auth': privyReactAuth,
+    },
+    dedupe: ['@privy-io/react-auth', 'react', 'react-dom'],
+  },
   build: {
     rollupOptions: {
       output: {
