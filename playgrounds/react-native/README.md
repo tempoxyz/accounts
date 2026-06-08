@@ -29,3 +29,12 @@ pnpm install
 cd playgrounds/react-native
 EXPO_PUBLIC_WALLET_ORIGIN=http://localhost:5176 pnpm ios
 ```
+
+To use different origins for the app consumer document and the wallet host
+document, set `EXPO_PUBLIC_WALLET_BASE_URL` and `EXPO_PUBLIC_WALLET_HOST`.
+
+```
+EXPO_PUBLIC_WALLET_BASE_URL=https://app.example \
+EXPO_PUBLIC_WALLET_HOST=http://localhost:5176 \
+pnpm ios
+```

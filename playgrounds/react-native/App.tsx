@@ -30,11 +30,13 @@ const tokens = {
 
 const redirectUri = 'xyz.tempo.accounts.playground:/auth'
 const walletOrigin = process.env.EXPO_PUBLIC_WALLET_ORIGIN ?? 'https://wallet.tempo.xyz'
+const walletBaseUrl = process.env.EXPO_PUBLIC_WALLET_BASE_URL ?? walletOrigin
+const walletHost = process.env.EXPO_PUBLIC_WALLET_HOST ?? walletOrigin
 
 const provider = Provider.create({
   adapter: tempoWallet({
-    baseUrl: walletOrigin,
-    host: walletOrigin,
+    baseUrl: walletBaseUrl,
+    host: walletHost,
     openAuthSession,
     redirectUri,
   }),
