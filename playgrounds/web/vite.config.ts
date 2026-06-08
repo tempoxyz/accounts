@@ -5,6 +5,15 @@ import icons from 'unplugin-icons/vite'
 import { defineConfig } from 'vp'
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('/node_modules/@privy-io/react-auth/')) return 'privy-react'
+        },
+      },
+    },
+  },
   server: {
     host: process.env.VITE_HOST ?? 'localhost',
     port: Number(process.env.PORT ?? 5173),
