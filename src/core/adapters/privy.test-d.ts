@@ -63,6 +63,10 @@ describe('privy', () => {
     }>()
   })
 
+  test('account selection accepts embedded wallet address subsets', () => {
+    expectTypeOf<readonly [`0x${string}`]>().toMatchTypeOf<privy.AccountSelection>()
+  })
+
   test('options require client and loadAccounts; createAccount is optional', () => {
     expectTypeOf<privy.Options>().toMatchTypeOf<{
       client: privy.Client

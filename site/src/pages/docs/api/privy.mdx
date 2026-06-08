@@ -1,54 +1,42 @@
 ---
 title: privy
-description: Adapter backed by Privy core SDK sessions and embedded wallets.
+description: React adapter backed by Privy sessions and embedded Ethereum wallets.
 ---
 
 # `privy`
 
-Creates a Privy adapter backed by `@privy-io/js-sdk-core` sessions and embedded Ethereum wallets.
+Creates a Privy adapter for React apps using `@privy-io/react-auth`.
 
-The adapter owns silent reconnect, session cleanup, embedded wallet loading, and provider signing. Apps provide UI-bearing auth through [`loadAccounts`](#loadaccounts), and optionally [`createAccount`](#createaccount).
+Import it from `accounts/react/privy`. The adapter opens Privy's login UI through a React boundary, reads Privy's hook state, and returns embedded Ethereum wallets to the Accounts SDK. Privy does not expose secp256k1 public keys for embedded Ethereum wallets, so the adapter signs Tempo payloads through Privy's embedded provider with `secp256k1_sign`.
 
 ## Usage
 
 ```ts
-import { Provider, privy } from 'accounts'
-
-import { createPrivyClient } from './privy-client.js'
-import { signInWithPrivyEmail } from './privy-email.js'
-
-const client = createPrivyClient({ appId, clientId })
+import { Provider } from 'accounts'
+import { privy } from 'accounts/react/privy'
 
 export const provider = Provider.create({
-  adapter: privy({
-    client,
-    loadAccounts: async ({ client }) => {
-      if (!(await client.getAccessToken().catch(() => null)))
-        await signInWithPrivyEmail(client.auth)
-    },
-  }),
+  adapter: privy(),
 })
 ```
+
+The helper expects `PrivyAccountsBridge` under `PrivyProvider`:
+
+```tsx
+import { PrivyProvider } from '@privy-io/react-auth'
+import { PrivyAccountsBridge } from 'accounts/react/privy'
+
+root.render(
+  <PrivyProvider appId={appId}>
+    <PrivyAccountsBridge />
+    <App />
+  </PrivyProvider>,
+)
+```
+
+The bridge resolves connect requests with Privy's embedded Ethereum wallets.
 
 ## Parameters
-
-### client
-
-- **Type:** `privy.Client`
-- **Required**
-
-Existing Privy core SDK client, such as `Privy` from `@privy-io/js-sdk-core`. The adapter calls `initialize?.()` once on first use, and uses `getAccessToken`, `user.get`, `embeddedWallet.getEthereumProvider`, and `auth.logout` for the rest of the lifecycle.
-
-```ts
-import { Provider, privy } from 'accounts'
-
-const provider = Provider.create({
-  adapter: privy({
-    client, // [!code focus]
-    loadAccounts: async ({ client }) => { /* ... */ },
-  }),
-})
-```
 
 ### icon
 
@@ -58,77 +46,12 @@ const provider = Provider.create({
 Data URI of the provider icon.
 
 ```ts
-import { Provider, privy } from 'accounts'
+import { Provider } from 'accounts'
+import { privy } from 'accounts/react/privy'
 
 const provider = Provider.create({
   adapter: privy({
-    client,
-    loadAccounts: async () => { /* ... */ },
     icon: 'data:image/svg+xml,...', // [!code focus]
-  }),
-})
-```
-
-### loadAccounts
-
-- **Type:** `(params: { client; parameters? }) => Promise<readonly Address[] | void>`
-- **Required**
-
-Runs the Privy login UI in response to a user-initiated `wallet_connect`. After this callback completes, the adapter loads embedded Ethereum wallets from Privy SDK state with `client.user.get()` and `client.embeddedWallet.getEthereumProvider(...)`.
-
-By default all the user's embedded Ethereum wallets will be connected. Return `Address[]` to select and order those wallets. The first returned address is active by default, matching `eth_requestAccounts`.
-
-When `createAccount` is omitted, register requests call `loadAccounts` too. This fits email and social auth flows where the same Privy ceremony can sign in an existing user or create one.
-
-```ts
-import { Provider, privy } from 'accounts'
-
-const provider = Provider.create({
-  adapter: privy({
-    client,
-    loadAccounts: async ({ client }) => { // [!code focus]
-      await signInWithPrivyEmail(client.auth) // [!code focus]
-    }, // [!code focus]
-  }),
-})
-```
-
-```ts
-import { Provider, privy } from 'accounts'
-
-const provider = Provider.create({
-  adapter: privy({
-    client,
-    loadAccounts: async ({ client }) => {
-      await signInWithPrivyEmail(client.auth)
-      return [selectedAddress] // [!code focus]
-    },
-  }),
-})
-```
-
-### createAccount
-
-- **Type:** `(params: { client; parameters }) => Promise<readonly Address[] | void>`
-- **Optional**
-- **Default:** `loadAccounts`
-
-Runs the Privy registration UI when registration needs a separate flow. The callback must leave the Privy client authenticated and ensure new users get an embedded Ethereum wallet.
-
-Receives the initialized Privy `client` and the provider create-account `parameters` (display name, optional `digest`, `personalSign`, `userId`, etc.). After this callback completes, the adapter loads embedded Ethereum wallets from Privy SDK state.
-
-Like `loadAccounts`, by default all the user's embedded Ethereum wallets will be connected. Return `Address[]` to choose the returned accounts. The first address is active by default.
-
-```ts
-import { Provider, privy } from 'accounts'
-
-const provider = Provider.create({
-  adapter: privy({
-    client,
-    createAccount: async ({ client }) => { // [!code focus]
-      await signInWithPrivyEmail(client.auth) // [!code focus]
-    }, // [!code focus]
-    loadAccounts: async ({ client }) => { /* ... */ },
   }),
 })
 ```
@@ -141,12 +64,11 @@ const provider = Provider.create({
 Display name of the provider.
 
 ```ts
-import { Provider, privy } from 'accounts'
+import { Provider } from 'accounts'
+import { privy } from 'accounts/react/privy'
 
 const provider = Provider.create({
   adapter: privy({
-    client,
-    loadAccounts: async () => { /* ... */ },
     name: 'My Wallet', // [!code focus]
   }),
 })
@@ -160,47 +82,26 @@ const provider = Provider.create({
 Reverse DNS identifier.
 
 ```ts
-import { Provider, privy } from 'accounts'
+import { Provider } from 'accounts'
+import { privy } from 'accounts/react/privy'
 
 const provider = Provider.create({
   adapter: privy({
-    client,
-    loadAccounts: async () => { /* ... */ },
     rdns: 'com.example.wallet', // [!code focus]
   }),
 })
 ```
 
-## AccountSelection
+## PrivyAccountsBridge
 
-- **Type:** `readonly Address[] | void`
+`PrivyAccountsBridge` is a null-rendering React component. Mount it under `PrivyProvider` and inside the same React tree as the app that creates or uses the Accounts SDK provider.
 
-Optional selected addresses returned from a Privy login or sign-up callback. When omitted, all embedded Ethereum wallets loaded from Privy are used. When provided, the returned addresses select and order the wallets exposed through the provider.
+It exists because Privy's `usePrivy`, `useWallets`, and `useLogin` hooks can only run inside `PrivyProvider`, while the Accounts SDK provider is plain TypeScript.
 
-Callbacks should not return `{ address, provider }` objects. The adapter materializes provider handles internally from the Privy client.
+## Account Behavior
 
-## Client Shape
+The public React adapter connects all embedded Ethereum wallets returned by Privy. During connect, the bridge returns those wallet addresses to the internal adapter.
 
-`privy.Client` is a structural type satisfied by `Privy` from `@privy-io/js-sdk-core`. The adapter uses this surface:
+The internal adapter materializes each embedded wallet provider with Privy's SDK and signs with `provider.request({ method: 'secp256k1_sign', params: [hash] })`.
 
-```ts
-import { privy } from 'accounts'
-
-type Client = {
-  auth: {
-    logout: (parameters?: { userId: string } | undefined) => Promise<void> | void
-  }
-  embeddedWallet: {
-    getEthereumProvider(parameters: {
-      wallet: privy.LinkedAccount
-      entropyId: string
-      entropyIdVerifier: string
-    }): Promise<privy.EthereumProvider> | privy.EthereumProvider
-  }
-  getAccessToken: () => Promise<string | null>
-  initialize?: (() => Promise<void> | void) | undefined
-  user: {
-    get: () => Promise<{ user: privy.User }>
-  }
-}
-```
+Because Privy does not expose the Ethereum wallet public key, the adapter does not construct a `viem/tempo` `Account` directly from the connected Privy account.

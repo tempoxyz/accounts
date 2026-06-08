@@ -5,7 +5,7 @@ description: Enterprise notes for integrating Privy-backed auth with the Tempo A
 
 # Privy
 
-Use the built-in [Privy adapter](/docs/adapters/privy) when Privy owns authentication, session state, and embedded wallets while the app still wants Tempo account features through the Tempo Accounts SDK.
+Use the built-in [Privy adapter](/docs/adapters/privy) when Privy owns authentication, session state, and embedded wallets while the app still wants Tempo account features through the Accounts SDK. Use `privy` and `PrivyAccountsBridge` from `accounts/react/privy`.
 
 ## Demo
 
@@ -19,6 +19,7 @@ Start with the [Privy adapter guide](/docs/adapters/privy) and the [`privy` API 
 
 - Confirm which Privy login methods your app supports.
 - Ensure new users receive embedded Ethereum wallets during signup.
+- Use the `accounts/react/privy` helper unless you need a custom account-selection bridge.
 - Decide whether account selection should expose every embedded wallet or a selected subset.
 - Run the connect and payment guides through the Privy adapter.
 

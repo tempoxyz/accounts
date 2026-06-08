@@ -33,6 +33,7 @@
   "devDependencies": {
     "@changesets/changelog-github": "^0.6.0",
     "@changesets/cli": "^2.31.0",
+    "@privy-io/react-auth": "3.25.0",
     "@remix-run/route-pattern": "^0.20.0",
     "@types/express": "^5.0.6",
     "@types/http-proxy": "^1.17.17",
@@ -81,6 +82,7 @@
     "zustand": "^5.0.12"
   },
   "peerDependencies": {
+    "@privy-io/react-auth": ">=3.25.0",
     "@react-native-async-storage/async-storage": "^3.0.2",
     "@wagmi/core": ">=3.4.3",
     "expo-secure-store": "^55.0.12",
@@ -90,6 +92,9 @@
     "wagmi": ">=0.0.0"
   },
   "peerDependenciesMeta": {
+    "@privy-io/react-auth": {
+      "optional": true
+    },
     "@wagmi/core": {
       "optional": true
     },
@@ -146,6 +151,11 @@
       "types": "./dist/react/index.d.ts",
       "src": "./src/react/index.ts",
       "default": "./dist/react/index.js"
+    },
+    "./react/privy": {
+      "types": "./dist/react/privy.d.ts",
+      "src": "./src/react/privy.ts",
+      "default": "./dist/react/privy.js"
     },
     "./wagmi": {
       "types": "./dist/wagmi/index.d.ts",

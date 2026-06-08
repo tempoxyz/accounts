@@ -194,7 +194,7 @@ describe('privy', () => {
     `)
   })
 
-  test('default: signs transactions with a materialized Privy account', async () => {
+  test('default: signs transactions with the provider-backed Privy account', async () => {
     const { adapter, client, store } = setup()
     await connect({ adapter, store })
 

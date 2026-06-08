@@ -11,7 +11,7 @@
     "preview": "vp preview"
   },
   "dependencies": {
-    "@privy-io/js-sdk-core": "^0.61.3",
+    "@privy-io/react-auth": "3.25.0",
     "@turnkey/core": "1.13.0",
     "accounts": "workspace:*",
     "mppx": "catalog:",

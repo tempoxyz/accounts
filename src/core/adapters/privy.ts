@@ -1,7 +1,7 @@
 import { Address as core_Address, Hex, Provider as ox_Provider, Secp256k1, Signature } from 'ox'
 import { SignatureEnvelope } from 'ox/tempo'
 import { hashMessage, hashTypedData, isAddressEqual, keccak256 } from 'viem'
-import type { Address, LocalAccount } from 'viem/accounts'
+import type { Address } from 'viem/accounts'
 import { prepareTransactionRequest } from 'viem/actions'
 import { Actions, Transaction as TempoTransaction } from 'viem/tempo'
 
@@ -26,8 +26,7 @@ const privySessionErrorCodes = new Set([
 ])
 
 /**
- * Creates a Privy adapter backed by `@privy-io/js-sdk-core` Privy sessions and embedded
- * Ethereum wallets.
+ * Creates a Privy adapter backed by Privy sessions and embedded Ethereum wallets.
  *
  * The adapter owns silent reconnect, session-expiry cleanup, and signing. Apps supply
  * the UI-bearing login flow via `loadAccounts` (and optionally a distinct `createAccount`
@@ -38,25 +37,17 @@ const privySessionErrorCodes = new Set([
  * (`client.user.get` + `client.embeddedWallet.getEthereumProvider`), so apps don't
  * need to re-run the login UI when the user returns with a still-valid Privy session.
  *
- * Callbacks only run the Privy auth UI. They may optionally return a subset of
- * embedded wallet addresses to expose; if omitted, the adapter exposes every
- * embedded wallet on the resulting Privy user.
+ * React apps can use `accounts/react/privy` to supply the UI-bearing login flow.
+ * Core JS integrations may still return a subset of embedded wallet addresses; if
+ * omitted, the adapter exposes every embedded wallet on the resulting Privy user.
  *
  * @example
  * ```ts
- * import Privy from '@privy-io/js-sdk-core'
- *
- * const client = new Privy({ appId: import.meta.env.VITE_PRIVY_APP_ID })
- *
  * const provider = Provider.create({
  *   adapter: privy({
  *     client,
- *     // Optional: omit to route registration through `loadAccounts`.
- *     createAccount: async ({ client }) => {
- *       await myPrivyRegisterUI(client)
- *     },
  *     loadAccounts: async ({ client }) => {
- *       await myPrivyLoginUI(client)
+ *       await signInWithPrivyEmail(client.auth)
  *     },
  *   }),
  * })
@@ -87,7 +78,11 @@ export function privy<const client extends privy.Client>(
       }
     }
 
-    function toTempoAccount(account: privy.EmbeddedWallet) {
+    // Privy embedded Ethereum wallets do not expose their secp256k1 public key.
+    // Without that key, we cannot construct a proper viem/tempo `TempoAccount`
+    // directly from the connected Privy account. Instead, this account routes
+    // Tempo signing through Privy's raw `secp256k1_sign` provider method.
+    function toSigningAccount(account: privy.EmbeddedWallet) {
       const address = core_Address.from(account.address)
 
       async function sign(parameters: { hash: Hex.Hex }) {
@@ -177,11 +172,11 @@ export function privy<const client extends privy.Client>(
 
     function selectWalletAccounts(
       accounts: readonly privy.EmbeddedWallet[],
-      addresses: privy.AccountSelection,
+      selection: privy.AccountSelection,
     ): readonly privy.EmbeddedWallet[] {
-      if (!addresses) return accounts
+      if (!selection) return accounts
 
-      return addresses.map((address) => {
+      return selection.map((address) => {
         const address_ = core_Address.from(address)
         const account = accounts.find((account) =>
           isAddressEqual(core_Address.from(account.address), address_),
@@ -252,7 +247,7 @@ export function privy<const client extends privy.Client>(
       throw new ox_Provider.DisconnectedError({ message: 'Privy session expired.' })
     }
 
-    async function getTempoAccount(address: Address | undefined) {
+    async function getSigningAccount(address: Address | undefined) {
       await restore()
       await requireSession()
 
@@ -272,7 +267,7 @@ export function privy<const client extends privy.Client>(
       const account = (walletAccounts ?? []).find((account) =>
         isAddressEqual(core_Address.from(account.address), address_),
       )
-      if (account) return toTempoAccount(account)
+      if (account) return toSigningAccount(account)
 
       throw new ox_Provider.DisconnectedError({
         message: 'Privy session no longer matches persisted accounts.',
@@ -329,7 +324,7 @@ export function privy<const client extends privy.Client>(
     }
 
     async function signTransaction(parameters: Adapter.signTransaction.Parameters) {
-      const account = await getTempoAccount(parameters.from)
+      const account = await getSigningAccount(parameters.from)
       const { feePayer, ...rest } = parameters
       const viemClient = getClient({
         chainId: parameters.chainId,
@@ -341,7 +336,7 @@ export function privy<const client extends privy.Client>(
         ...(feePayer ? { feePayer: true } : {}),
         type: 'tempo',
       } as never)
-      return await account.signTransaction(prepared)
+      return await account.signTransaction(prepared as never)
     }
 
     async function privySignTransaction(parameters: {
@@ -369,7 +364,7 @@ export function privy<const client extends privy.Client>(
     }
 
     async function connectAccounts(parameters: {
-      addresses: privy.AccountSelection
+      selection: privy.AccountSelection
       authorizeAccessKey?: Adapter.authorizeAccessKey.Parameters | undefined
       digest?: Hex.Hex | undefined
       label?: string | undefined
@@ -377,12 +372,12 @@ export function privy<const client extends privy.Client>(
       personalSign?: { message: string } | undefined
       privyClient: privy.Client
     }) {
-      const { addresses, authorizeAccessKey, label, personalSign, privyClient } = parameters
+      const { authorizeAccessKey, label, personalSign, privyClient, selection } = parameters
       await requireSession()
       const wallets = await loadEthereumWallets(privyClient)
-      const selected = selectWalletAccounts(wallets, addresses)
+      const selected = selectWalletAccounts(wallets, selection)
 
-      const account = selected[0] ? toTempoAccount(selected[0]) : undefined
+      const account = selected[0] ? toSigningAccount(selected[0]) : undefined
       if (!account && parameters.noAccountsMessage)
         throw new ox_Provider.DisconnectedError({
           message: parameters.noAccountsMessage,
@@ -399,7 +394,7 @@ export function privy<const client extends privy.Client>(
           : undefined
 
       const signature = digest && account ? await account.sign({ hash: digest }) : undefined
-      walletAccounts = wallets
+      walletAccounts = selected
       restore_promise = undefined
 
       return {
@@ -525,7 +520,7 @@ export function privy<const client extends privy.Client>(
             )
 
           const privyClient = await getPrivyClient()
-          const addresses = options.createAccount
+          const selection = options.createAccount
             ? await options.createAccount({ client: privyClient, parameters })
             : await options.loadAccounts({
                 client: privyClient,
@@ -536,13 +531,13 @@ export function privy<const client extends privy.Client>(
                 },
               })
           return await connectAccounts({
-            addresses,
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
             ...(parameters.digest ? { digest: parameters.digest } : {}),
             label: parameters.name,
             ...(personalSign ? { personalSign } : {}),
             privyClient,
             noAccountsMessage: 'Privy returned no wallet.',
+            selection,
           })
         },
         async loadAccounts(parameters) {
@@ -555,17 +550,17 @@ export function privy<const client extends privy.Client>(
             )
 
           const privyClient = await getPrivyClient()
-          const addresses = await options.loadAccounts({ client: privyClient, parameters })
+          const selection = await options.loadAccounts({ client: privyClient, parameters })
           return await connectAccounts({
-            addresses,
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
             ...(parameters?.digest ? { digest: parameters.digest } : {}),
             ...(personalSign ? { personalSign } : {}),
             privyClient,
+            selection,
           })
         },
         async authorizeAccessKey(parameters) {
-          const account = await getTempoAccount(undefined)
+          const account = await getSigningAccount(undefined)
           const keyAuthorization = await store.accessKeys.authorize({
             account,
             chainId: getClient().chain.id,
@@ -574,10 +569,10 @@ export function privy<const client extends privy.Client>(
           return { keyAuthorization, rootAddress: account.address }
         },
         async revokeAccessKey(parameters) {
-          const account = await getTempoAccount(parameters.address)
+          const account = await getSigningAccount(parameters.address)
           try {
             await Actions.accessKey.revoke(getClient(), {
-              account: account as LocalAccount<'privy'>,
+              account: account as never,
               accessKey: parameters.accessKeyAddress,
             })
           } catch (error) {
@@ -591,7 +586,7 @@ export function privy<const client extends privy.Client>(
         },
         async signPersonalMessage(parameters) {
           return await (
-            await getTempoAccount(parameters.address)
+            await getSigningAccount(parameters.address)
           ).sign({
             hash: hashMessage({ raw: parameters.data }),
           })
@@ -607,7 +602,7 @@ export function privy<const client extends privy.Client>(
             types: Record<string, unknown>
           }
           return await (
-            await getTempoAccount(parameters.address)
+            await getSigningAccount(parameters.address)
           ).sign({
             hash: hashTypedData(typedData as never),
           })
@@ -638,7 +633,7 @@ export function privy<const client extends privy.Client>(
 export declare namespace privy {
   /** Options for {@link privy}. */
   type Options<client extends Client = Client> = {
-    /** Existing Privy client, such as `Privy` from `@privy-io/js-sdk-core`. */
+    /** Existing structural Privy client, such as `Privy` from Core JS or a React hook-backed shim. */
     client: client
     /**
      * Runs the Privy registration UI. May optionally return a subset of the user's
@@ -646,7 +641,7 @@ export declare namespace privy {
      * exposes every embedded wallet on the resulting Privy user.
      *
      * The adapter materializes EIP-1193 providers internally via
-     * `client.embeddedWallet.getEthereumProvider` — callbacks should not.
+     * `client.embeddedWallet.getEthereumProvider`, so callbacks don't need to.
      *
      * Defaults to `loadAccounts` — apps that don't distinguish register vs login
      * can omit this.
@@ -663,9 +658,9 @@ export declare namespace privy {
     icon?: `data:image/${string}` | undefined
     /**
      * Runs the Privy login UI in response to a user-initiated `wallet_connect`.
-     * May optionally return a subset of the user's embedded wallet addresses to
-     * expose to the provider; if omitted, the adapter exposes every embedded
-     * wallet on the Privy user.
+     * May optionally return a subset of the user's embedded wallet addresses to expose
+     * to the provider; if omitted, the adapter exposes every embedded wallet on the
+     * Privy user.
      *
      * Silent restore on page reload pulls wallets directly from the Privy SDK
      * (`client.user.get` + `client.embeddedWallet.getEthereumProvider`) and does
@@ -694,9 +689,9 @@ export declare namespace privy {
    * silent restore, and disconnect. User-initiated `wallet_connect`/registration
    * is delegated to the app's `loadAccounts` / `createAccount` callbacks.
    *
-   * Satisfied by `Privy` from `@privy-io/js-sdk-core` — apps pass the SDK instance
-   * directly. The adapter never imports `@privy-io/js-sdk-core` itself; the structural
-   * shape keeps the dependency one-way.
+   * Satisfied by `Privy` from `@privy-io/js-sdk-core` and by hook-backed shims around
+   * `@privy-io/react-auth`. The adapter never imports either Privy SDK itself; the
+   * structural shape keeps the dependency one-way.
    */
   type Client = {
     /** Auth API; the adapter only needs `logout`. */
@@ -735,11 +730,17 @@ export declare namespace privy {
 
   /** Minimal Privy linked account shape used by the adapter for silent restore. */
   type LinkedAccount = {
+    /** Embedded wallet address. */
     address?: string | undefined
+    /** Privy wallet chain type. */
     chain_type?: string | undefined
+    /** Privy wallet connector type. */
     connector_type?: string | undefined
+    /** Privy linked account type. */
     type?: string | undefined
+    /** Privy wallet client type. */
     wallet_client_type?: string | undefined
+    /** Privy embedded wallet index. */
     wallet_index?: number | undefined
   }
 
@@ -758,7 +759,9 @@ export declare namespace privy {
    * `provider.request({ method: 'secp256k1_sign', params: [hash] })` for signing.
    */
   type EmbeddedWallet = {
+    /** Embedded Ethereum wallet address. */
     address: string
+    /** EIP-1193 provider used for `secp256k1_sign` fallback signing. */
     provider: EthereumProvider
   }
 }
