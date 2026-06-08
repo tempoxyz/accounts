@@ -291,6 +291,63 @@ describe('wallet_connect.capabilities.request: auth', () => {
   })
 })
 
+describe('wallet_connect.capabilities.request: identity', () => {
+  test('accepts identity.email on login branch', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'login',
+        identity: { email: true },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {
+          "email": true,
+        },
+        "method": "login",
+      }
+    `)
+  })
+
+  test('accepts identity.email on register branch', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'register',
+        identity: { email: true },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {
+          "email": true,
+        },
+        "method": "register",
+      }
+    `)
+  })
+
+  test('accepts empty identity object', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'login',
+        identity: {},
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {},
+        "method": "login",
+      }
+    `)
+  })
+
+  test('rejects identity.email as string', () => {
+    expect(() =>
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'login',
+        identity: { email: 'yes' },
+      }),
+    ).toThrow()
+  })
+})
+
 describe('wallet_connect.capabilities.result: auth + personalSign', () => {
   test('accepts auth with token + personalSign echo + root signature', () => {
     expect(

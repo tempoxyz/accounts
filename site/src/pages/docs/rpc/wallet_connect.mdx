@@ -15,7 +15,7 @@ connected account on the active connect chain.
 
 `capabilities` is a discriminated union over `method` — `'register'` or
 `'login'`. Both branches share the `digest`, `authorizeAccessKey`, `auth`,
-`personalSign`, and `showDeposit` fields.
+`identity`, `personalSign`, and `showDeposit` fields.
 
 ```ts
 type Request = {
@@ -37,6 +37,8 @@ type ConnectRegisterCapabilities = {
   authorizeAccessKey?: AuthorizeAccessKeyCapability
   /** SIWE round-trip configuration. See `Auth` below. */
   auth?: Auth
+  /** Request consented identity claims (e.g. a verified email). See `Identity` below. */
+  identity?: Identity
   /** Display name to associate with the new account. */
   name?: string
   /** Sign an EIP-191 message in the same passkey ceremony. */
@@ -57,12 +59,22 @@ type ConnectLoginCapabilities = {
   authorizeAccessKey?: AuthorizeAccessKeyCapability
   /** SIWE round-trip configuration. See `Auth` below. */
   auth?: Auth
+  /** Request consented identity claims (e.g. a verified email). See `Identity` below. */
+  identity?: Identity
   /** Sign an EIP-191 message in the same passkey ceremony. */
   personalSign?: { message: string }
   /** Show an optional deposit prompt after the account connects. */
   showDeposit?: ShowDeposit
   /** Show an account picker before authenticating. */
   selectAccount?: boolean
+}
+
+type Identity = {
+  /**
+   * Request the account's verified email address. The wallet shows an
+   * approval prompt and only returns it after the user consents.
+   */
+  email?: boolean
 }
 
 type ShowDeposit = boolean | {
