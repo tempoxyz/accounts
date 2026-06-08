@@ -291,8 +291,6 @@ export declare namespace createAccount {
   }
   type ReturnType = {
     accounts: readonly Store.Account[]
-    /** Email associated with the account. */
-    email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Server Authentication result, if the auth capability was requested. */
@@ -362,8 +360,6 @@ export declare namespace loadAccounts {
   type ReturnType = {
     /** Loaded accounts. */
     accounts: readonly Store.Account[]
-    /** Email associated with the account. */
-    email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Server Authentication result, if the auth capability was requested. */

@@ -122,8 +122,6 @@ type Response = {
   accounts: {
     address: Address
     capabilities: {
-      /** Authenticated email address, if available. May be `null`. */
-      email?: string | null
       /** Authorized access key, if `authorizeAccessKey` was requested. */
       keyAuthorization?: KeyAuthorization
       /**

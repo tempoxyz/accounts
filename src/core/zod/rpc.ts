@@ -648,7 +648,6 @@ export namespace wallet_connect {
       ]),
     ),
     result: z.object({
-      email: z.optional(z.nullable(z.string())),
       keyAuthorization: z.optional(keyAuthorization),
       /**
        * Echo of the `personalSign` request, present iff the caller set
