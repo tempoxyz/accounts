@@ -75,12 +75,16 @@ const provider = Provider.create({
 
 ### tempoWallet
 
-`tempoWallet()` accepts `redirectUri` and either `open` or `openAuthSession`, plus `fetch` and optional overrides for `baseUrl`, `host`, `name`, and `rdns`.
+`tempoWallet()` accepts `redirectUri` and either `open` or `openAuthSession`, plus `fetch`. It uses Tempo Wallet metadata and discovery origins.
+
+### mobileWebAuth
+
+`mobileWebAuth()` is the lower-level Wata adapter. It requires `baseUrl`, `host`, `name`, `rdns`, and `redirectUri` so custom integrations do not inherit Tempo Wallet metadata accidentally.
 
 ### baseUrl
 
 - **Type:** `string`
-- **Default:** `'https://wallet.tempo.xyz'`
+- **Required by:** `mobileWebAuth()`
 
 Public origin serving the Wata consumer discovery document.
 
@@ -94,21 +98,21 @@ Deep-link URI watched by the system browser auth session.
 ### name
 
 - **Type:** `string`
-- **Default:** `'Tempo Wallet'`
+- **Required by:** `mobileWebAuth()`
 
 Display name sent to Tempo Wallet during mobile web auth.
 
 ### rdns
 
 - **Type:** `string`
-- **Default:** `'xyz.tempo'`
+- **Required by:** `mobileWebAuth()`
 
 Reverse-DNS app identifier sent to Tempo Wallet during mobile web auth.
 
 ### host
 
 - **Type:** `string | HostDocument`
-- **Default:** `'https://wallet.tempo.xyz'`
+- **Required by:** `mobileWebAuth()`
 
 Tempo Wallet discovery origin, or a preloaded Wata host document.
 
@@ -118,7 +122,3 @@ Tempo Wallet discovery origin, or a preloaded Wata host document.
 - **Optional**
 
 Override for the browser auth-session primitive. Provide either `openAuthSession` or `open`.
-
-### mobileWebAuth
-
-`mobileWebAuth()` is the lower-level Wata adapter. It requires `baseUrl`, `host`, `name`, `rdns`, and `redirectUri` so custom integrations do not inherit Tempo Wallet metadata accidentally.

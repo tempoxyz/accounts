@@ -1,4 +1,5 @@
 import { Provider } from 'accounts'
+import { mobileWebAuth } from 'accounts/mobileWebAuth'
 import { openAuthSession } from 'accounts/mobileWebAuth/expoWebBrowser'
 import { tempoWallet } from 'accounts/mobileWebAuth/tempoWallet'
 import { secureStorage } from 'accounts/react-native/secure-storage'
@@ -29,17 +30,22 @@ const tokens = {
 }
 
 const redirectUri = 'xyz.tempo.accounts.playground:/auth'
-const walletOrigin = process.env.EXPO_PUBLIC_WALLET_ORIGIN ?? 'https://wallet.tempo.xyz'
+const walletOrigin = process.env.EXPO_PUBLIC_WALLET_ORIGIN
 const walletBaseUrl = process.env.EXPO_PUBLIC_WALLET_BASE_URL ?? walletOrigin
 const walletHost = process.env.EXPO_PUBLIC_WALLET_HOST ?? walletOrigin
 
 const provider = Provider.create({
-  adapter: tempoWallet({
-    baseUrl: walletBaseUrl,
-    host: walletHost,
-    openAuthSession,
-    redirectUri,
-  }),
+  adapter:
+    walletBaseUrl || walletHost
+      ? mobileWebAuth({
+          baseUrl: walletBaseUrl ?? 'https://wallet.tempo.xyz',
+          host: walletHost ?? 'https://wallet.tempo.xyz',
+          name: 'Tempo Wallet',
+          openAuthSession,
+          rdns: 'xyz.tempo',
+          redirectUri,
+        })
+      : tempoWallet({ openAuthSession, redirectUri }),
   authorizeAccessKey: () => ({
     expiry: Math.floor(Date.now() / 1000) + 60 * 5,
     limits: [

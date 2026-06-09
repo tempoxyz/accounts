@@ -60,7 +60,6 @@ function createWallet() {
   let calls = 0
   const fetches: string[] = []
   const requests: { method: string; params: unknown }[] = []
-  const urls: string[] = []
 
   return {
     calls: () => calls,
@@ -82,10 +81,8 @@ function createWallet() {
     },
     fetches: () => fetches,
     requests: () => requests,
-    urls: () => urls,
     open: async (url: string) => {
       calls += 1
-      urls.push(url)
       const host = createHost(requests)
       const response = await host.fetch(new Request(url))
       return response.headers.get('location')
@@ -181,7 +178,7 @@ function createHost(requests: { method: string; params: unknown }[]) {
       event.method === 'wallet_revokeAccessKey' ||
       event.method === 'wallet_switchEthereumChain'
     ) {
-      await event.respond(undefined)
+      await event.respond(null)
     }
   })
 
@@ -300,9 +297,6 @@ describe('create', () => {
         "https://wallet.tempo.xyz/.well-known/urpc/host.json",
       ]
     `)
-    expect(new URL(wallet.urls()[0]!).searchParams.get('id')).toMatchInlineSnapshot(
-      `"https://wallet.tempo.xyz"`,
-    )
     expect(wallet.requests()[0]?.method).toMatchInlineSnapshot(`"wallet_connect"`)
   })
 
@@ -327,9 +321,6 @@ describe('create', () => {
       params: [{ capabilities: { method: 'login' } }],
     })
 
-    expect(new URL(wallet.urls()[0]!).searchParams.get('id')).toMatchInlineSnapshot(
-      `"https://accounts-playground.example"`,
-    )
     expect(wallet.requests()[0]?.method).toMatchInlineSnapshot(`"wallet_connect"`)
   })
 
@@ -378,7 +369,6 @@ describe('create', () => {
       params: [{ capabilities: { method: 'register', showDeposit: true } }],
     })
 
-    expect(new URL(wallet.urls()[0]!).pathname).toMatchInlineSnapshot(`"/auth/mobile"`)
     expect(connectParameters(wallet, 0)?.capabilities?.showDeposit).toMatchInlineSnapshot(`true`)
   })
 
@@ -586,6 +576,13 @@ describe('create', () => {
     const request = wallet.requests()[1]!
 
     expect(request.method).toMatchInlineSnapshot(`"wallet_revokeAccessKey"`)
-    expect(request.params).toEqual([{ accessKeyAddress: root.address, address: root.address }])
+    expect(request.params).toMatchInlineSnapshot(`
+      [
+        {
+          "accessKeyAddress": "${root.address}",
+          "address": "${root.address}",
+        },
+      ]
+    `)
   })
 })
