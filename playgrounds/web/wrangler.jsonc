@@ -4,7 +4,7 @@
   "compatibility_date": "2026-03-09",
   "compatibility_flags": ["nodejs_compat"],
   "main": "./worker/index.ts",
-  "kv_namespaces": [{ "binding": "NONCE_KV", "id": "5da9137e853d4009954fab6f689ca61b" }],
+  "kv_namespaces": [{ "binding": "NONCE_KV", "id": "5c4651ee1bf344cf9ccafa91981423b8" }],
   "assets": {
     "not_found_handling": "single-page-application",
     "run_worker_first": [
