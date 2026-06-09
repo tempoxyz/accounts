@@ -1,4 +1,4 @@
-import { expectTypeOf, test } from 'vitest'
+import { expectTypeOf, test } from 'vp/test'
 
 import { type Handler } from '../../Handler.js'
 import { oidcProvider } from './oidcProvider.js'
