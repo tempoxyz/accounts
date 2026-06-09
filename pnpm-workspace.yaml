@@ -62,6 +62,7 @@ minimumReleaseAgeExclude:
   - mermaid
   - mppx
   - ox
+  - wata
   - regen-ui
   - secretlint
   - tmp
