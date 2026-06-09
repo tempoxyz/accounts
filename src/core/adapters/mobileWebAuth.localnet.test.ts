@@ -7,13 +7,12 @@ import { Identity, type MobileWebAuth } from 'wata'
 import { Wata as HostWata, mobileWebAuth as hostMobileWebAuth } from 'wata/host'
 import * as z from 'zod/mini'
 
-import { accounts, chain, getClient } from '../../test/config.js'
-import * as Provider from '../core/Provider.js'
-import * as Storage from '../core/Storage.js'
-import * as Store from '../core/Store.js'
-import * as Rpc from '../core/zod/rpc.js'
-import { mobileWebAuth } from './adapter.js'
-import { tempoWallet } from './tempoWallet.js'
+import { accounts, chain, getClient } from '../../../test/config.js'
+import * as Provider from '../Provider.js'
+import * as Storage from '../Storage.js'
+import * as Store from '../Store.js'
+import * as Rpc from '../zod/rpc.js'
+import { mobileWebAuth, tempoWallet } from './mobileWebAuth.js'
 
 const callback = 'xyz.tempo.accounts.playground:/auth'
 const consumerOrigin = 'https://accounts-playground.example'
@@ -278,10 +277,11 @@ function createProvider(
 }
 
 describe('create', () => {
-  test('behavior: tempoWallet defaults both Wata origins to wallet host', async () => {
+  test('behavior: tempoWallet defaults host to the Tempo Wallet origin', async () => {
     const wallet = createWallet()
     const provider = Provider.create({
       adapter: tempoWallet({
+        baseUrl: consumerOrigin,
         fetch: wallet.fetch,
         openAuthSession: wallet.openAuthSession,
         redirectUri: callback,
@@ -300,7 +300,7 @@ describe('create', () => {
         "https://wallet.tempo.xyz/.well-known/urpc/host.json",
       ]
     `)
-    expect(wallet.requests()[0]?.method).toMatchInlineSnapshot(`"wallet_connect"`)
+    expect(wallet.requests()[0]?.method).toBe('wallet_connect')
   })
 
   test('behavior: accepts explicit mobile web auth adapter', async () => {
@@ -324,7 +324,7 @@ describe('create', () => {
       params: [{ capabilities: { method: 'login' } }],
     })
 
-    expect(wallet.requests()[0]?.method).toMatchInlineSnapshot(`"wallet_connect"`)
+    expect(wallet.requests()[0]?.method).toBe('wallet_connect')
   })
 
   test('behavior: persists managed access keys through provider storage', async () => {
@@ -354,8 +354,8 @@ describe('create', () => {
       method: 'eth_sendTransactionSync',
       params: [{ calls: [transferCall], feeToken: Addresses.pathUsd }],
     })
-    expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
-    expect(wallet.calls()).toMatchInlineSnapshot(`1`)
+    expect(receipt.status).toBe('0x1')
+    expect(wallet.calls()).toBe(1)
   })
 
   test('behavior: forwards showDeposit boolean through wallet_connect for registration', async () => {
@@ -372,7 +372,7 @@ describe('create', () => {
       params: [{ capabilities: { method: 'register', showDeposit: true } }],
     })
 
-    expect(connectParameters(wallet, 0)?.capabilities?.showDeposit).toMatchInlineSnapshot(`true`)
+    expect(connectParameters(wallet, 0)?.capabilities?.showDeposit).toBe(true)
   })
 
   test('behavior: forwards showDeposit boolean through wallet_connect for login', async () => {
@@ -389,7 +389,7 @@ describe('create', () => {
       params: [{ capabilities: { method: 'login', showDeposit: true } }],
     })
 
-    expect(connectParameters(wallet, 0)?.capabilities?.showDeposit).toMatchInlineSnapshot(`true`)
+    expect(connectParameters(wallet, 0)?.capabilities?.showDeposit).toBe(true)
   })
 
   test('behavior: forwards showDeposit params through wallet_connect for registration', async () => {
@@ -528,7 +528,7 @@ describe('create', () => {
     const forwarded = personalSignParameters(wallet, 1)
 
     expect(forwarded.address).toBe(root.address)
-    expect(forwarded.data).toMatchInlineSnapshot(`"0x68656c6c6f"`)
+    expect(forwarded.data).toBe(data)
     expect(signature).toMatch(/^0x[0-9a-f]+$/)
   })
 
@@ -578,7 +578,7 @@ describe('create', () => {
     })
     const request = wallet.requests()[1]!
 
-    expect(request.method).toMatchInlineSnapshot(`"wallet_revokeAccessKey"`)
+    expect(request.method).toBe('wallet_revokeAccessKey')
     expect(request.params).toMatchInlineSnapshot(`
       [
         {

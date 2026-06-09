@@ -1,2 +1,1 @@
-export { mobileWebAuth } from './adapter.js'
-export { tempoWallet } from './tempoWallet.js'
+export { mobileWebAuth, tempoWallet } from '../core/adapters/mobileWebAuth.js'

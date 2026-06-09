@@ -4,8 +4,8 @@ import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 import { Wata, mobileWebAuth as core_mobileWebAuth, type MobileWebAuth } from 'wata'
 import { z } from 'zod/mini'
 
-import * as Adapter from '../core/Adapter.js'
-import * as Rpc from '../core/zod/rpc.js'
+import * as Adapter from '../Adapter.js'
+import * as Rpc from '../zod/rpc.js'
 
 /**
  * Creates a mobile web auth adapter that forwards wallet RPC through Wata.
@@ -42,9 +42,10 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
     }): Promise<unknown> {
       // Mobile web auth is single-exchange: one authorization URL carries one
       // RPC request envelope, and one callback URL carries one response.
+      // The wallet learns this app's identity from the consumer discovery
+      // document served at `baseUrl`, not from session metadata.
       const session = Wata.create({
         baseUrl,
-        meta: { name },
         transports: [
           core_mobileWebAuth({
             callback: redirectUri,
@@ -67,6 +68,8 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
       },
     })
 
+    // Connect capabilities are read from the first account only: mobile web
+    // auth connects a single wallet account per exchange.
     function toConnectReturn(result: Rpc.wallet_connect.Encoded['returns']) {
       const capabilities = result.accounts[0]?.capabilities
       return {
@@ -159,4 +162,19 @@ export declare namespace mobileWebAuth {
   }
   /** Options for {@link mobileWebAuth}. */
   export type Options = BaseOptions
+}
+
+/** Creates the Tempo Wallet adapter using Wata mobile web auth. */
+export function tempoWallet(options: tempoWallet.Options): Adapter.Adapter {
+  return mobileWebAuth({
+    ...options,
+    host: 'https://wallet.tempo.xyz',
+    name: 'Tempo Wallet',
+    rdns: 'xyz.tempo',
+  })
+}
+
+export declare namespace tempoWallet {
+  /** Options for {@link tempoWallet}. */
+  export type Options = Omit<mobileWebAuth.BaseOptions, 'host' | 'name' | 'rdns'>
 }
