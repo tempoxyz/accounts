@@ -2,8 +2,8 @@
 "accounts": patch
 ---
 
-Added Wata mobile web auth adapters under `accounts/mobileWebAuth`.
+Added mobile web auth adapters under `accounts/mobileWebAuth`.
 
-Added the `tempoWallet()` template and `mobileWebAuth()` for custom Wata host, provider identity, and app-provided browser openers.
+Added the `tempoWallet()` template and `mobileWebAuth()` for custom wallet hosts, provider identity, and app-provided browser openers.
 
-Added `accounts/mobileWebAuth/expoWebBrowser` for Expo auth sessions.
+Added `accounts/react-native/expo-web-browser` for Expo auth sessions.

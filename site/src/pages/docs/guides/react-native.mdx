@@ -5,13 +5,13 @@ description: Connect React Native apps with Tempo Wallet.
 
 # React Native
 
-React Native apps use the `accounts/mobileWebAuth` adapters. The provider opens Tempo Wallet in a system browser session, then receives an app-link callback with the encrypted response.
+React Native apps can connect to Tempo Wallet with mobile web auth. The provider opens Tempo Wallet in a system browser session, then receives an app-link callback with the encrypted response.
 Each mobile web auth request is a single exchange: one browser auth URL carries one RPC request, and one callback URL carries one RPC response.
 
 ```ts twoslash
 import { Provider } from 'accounts'
-import { openAuthSession } from 'accounts/mobileWebAuth/expoWebBrowser'
 import { tempoWallet } from 'accounts/mobileWebAuth/tempoWallet'
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
 
 const redirectUri = 'com.example.app:/auth'
 
@@ -20,13 +20,13 @@ const provider = Provider.create({
 })
 ```
 
-`accounts/mobileWebAuth/expoWebBrowser` uses Expo WebBrowser for the native
-system auth session. It is an optional subpath so apps that use another browser
-primitive do not install Expo WebBrowser.
+`accounts/react-native/expo-web-browser` uses Expo WebBrowser for the native
+system auth session. It is an optional React Native subpath so apps that use
+another browser primitive do not install Expo WebBrowser.
 
 ## Consumer Discovery
 
-The mobile web auth `tempoWallet()` adapter uses `https://wallet.tempo.xyz` for both Wata roles by default:
+The mobile web auth `tempoWallet()` adapter uses `https://wallet.tempo.xyz` for both discovery origins by default:
 
 - `baseUrl`: consumer discovery origin serving `/.well-known/urpc/consumer.json`
 - `host`: wallet discovery origin serving `/.well-known/urpc/host.json`
@@ -48,14 +48,14 @@ Using the same origin is valid when the mobile app and wallet are owned by the s
 
 Use a development build with a reverse-DNS private-use callback URI. Expo Go-style callback URLs are not valid mobile web auth callbacks. Publish the exact callback URI you pass to `tempoWallet()` in the consumer document.
 
-## Custom Wata Hosts
+## Custom Wallet Hosts
 
 Use `mobileWebAuth()` directly when the app origin, wallet host, or provider identity differs from Tempo Wallet.
 
 ```ts twoslash
 import { Provider } from 'accounts'
 import { mobileWebAuth } from 'accounts/mobileWebAuth'
-import { openAuthSession } from 'accounts/mobileWebAuth/expoWebBrowser'
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
 
 const redirectUri = 'com.example.app:/auth'
 
@@ -79,14 +79,14 @@ const provider = Provider.create({
 
 ### mobileWebAuth
 
-`mobileWebAuth()` is the lower-level Wata adapter. It requires `baseUrl`, `host`, `name`, `rdns`, and `redirectUri` so custom integrations do not inherit Tempo Wallet metadata accidentally.
+`mobileWebAuth()` is the lower-level mobile web auth adapter. It requires `baseUrl`, `host`, `name`, `rdns`, and `redirectUri` so custom integrations do not inherit Tempo Wallet metadata accidentally.
 
 ### baseUrl
 
 - **Type:** `string`
 - **Required by:** `mobileWebAuth()`
 
-Public origin serving the Wata consumer discovery document.
+Public origin serving the consumer discovery document.
 
 ### redirectUri
 
@@ -114,7 +114,7 @@ Reverse-DNS app identifier sent to Tempo Wallet during mobile web auth.
 - **Type:** `string | HostDocument`
 - **Required by:** `mobileWebAuth()`
 
-Tempo Wallet discovery origin, or a preloaded Wata host document.
+Tempo Wallet discovery origin, or a preloaded host document.
 
 ### openAuthSession
 

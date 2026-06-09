@@ -1,7 +1,7 @@
 import * as WebBrowser from 'expo-web-browser'
 import type { MobileWebAuth } from 'wata'
 
-/** Opens Wata mobile web auth requests with Expo WebBrowser. */
+/** Opens mobile web auth requests with Expo WebBrowser. */
 export const openAuthSession: NonNullable<MobileWebAuth.Options['openAuthSession']> = async ({
   authorizationUrl,
   callback,

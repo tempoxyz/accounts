@@ -1,7 +1,7 @@
 import { Provider } from 'accounts'
 import { mobileWebAuth } from 'accounts/mobileWebAuth'
-import { openAuthSession } from 'accounts/mobileWebAuth/expoWebBrowser'
 import { tempoWallet } from 'accounts/mobileWebAuth/tempoWallet'
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
 import { secureStorage } from 'accounts/react-native/secure-storage'
 import { StatusBar } from 'expo-status-bar'
 import { Hex } from 'ox'
