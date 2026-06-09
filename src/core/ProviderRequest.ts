@@ -42,7 +42,7 @@ export function parse(value: unknown, options: parse.Options = {}): ProviderRequ
       `Method mismatch: expected "${options.method}" but got "${request.method}".`,
     )
 
-  validateParameters(request)
+  if (options.strict ?? true) validateParameters(request)
 
   return {
     ...request,
@@ -55,6 +55,8 @@ export declare namespace parse {
   type Options = {
     /** Expected RPC method. */
     method?: Schema.Request['method'] | undefined
+    /** Enforce wallet-only parameter policy, such as access-key limits. */
+    strict?: boolean | undefined
   }
 
   /** Options for {@link parse} when narrowing to a specific method. */

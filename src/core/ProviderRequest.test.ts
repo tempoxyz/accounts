@@ -44,6 +44,32 @@ describe('parse', () => {
     `)
   })
 
+  test('default: allows schema-only parsing without strict mode', () => {
+    const request = ProviderRequest.parse(
+      {
+        method: 'wallet_connect',
+        params: [{ capabilities: { authorizeAccessKey: { expiry: 1 }, method: 'register' } }],
+      },
+      { strict: false },
+    )
+
+    expect(request).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_connect",
+        "params": [
+          {
+            "capabilities": {
+              "authorizeAccessKey": {
+                "expiry": 1,
+              },
+              "method": "register",
+            },
+          },
+        ],
+      }
+    `)
+  })
+
   test('error: rejects method mismatch', () => {
     expect(() =>
       ProviderRequest.parse(
