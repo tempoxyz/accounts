@@ -41,6 +41,35 @@ describe('wallet_connect', () => {
     )
     expect(generateAccessKey.mock.calls).toMatchInlineSnapshot(`[]`)
   })
+
+  test('behavior: forwards identity.email + identity.idToken onto the authenticated account', async () => {
+    const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+      actions: {
+        async createAccount() {
+          return { accounts: [{ address }] }
+        },
+        async loadAccounts() {
+          return {
+            accounts: [{ address }],
+            identity: { email: 'alice@example.com', idToken: 'eyJhbG.payload.sig' },
+          }
+        },
+      },
+    }))
+    const provider = Provider.create({ adapter, storage: Storage.memory() })
+
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { identity: { email: true } } }],
+    })
+
+    expect(result.accounts[0]?.capabilities?.identity).toMatchInlineSnapshot(`
+      {
+        "email": "alice@example.com",
+        "idToken": "eyJhbG.payload.sig",
+      }
+    `)
+  })
 })
 
 describe('adapter actions', () => {
