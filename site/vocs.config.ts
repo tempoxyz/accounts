@@ -190,6 +190,11 @@ const config: Config = defineConfig({
               },
               { text: 'hc', link: '/docs/server/hc' },
               {
+                text: 'Identity',
+                collapsed: true,
+                items: [{ text: '.verify', link: '/docs/server/identity.verify' }],
+              },
+              {
                 text: 'Kv',
                 collapsed: true,
                 items: [
