@@ -4,8 +4,9 @@ import { KeyAuthorization } from 'ox/tempo'
 import { hashMessage } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { parseSiweMessage } from 'viem/siwe'
-import { describe, expect, test } from 'vp/test'
+import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 
+import { createServer } from '../../../../test/utils.js'
 import * as Handler from '../../Handler.js'
 import * as Kv from '../../Kv.js'
 import { auth } from './auth.js'
@@ -981,6 +982,183 @@ describe('verify (TIP-1053 witness)', () => {
   })
 })
 
+describe('verify (identity / OIDC)', () => {
+  // Ed25519 keypair for the issuer (JWK strings).
+  const signingKey = JSON.stringify({
+    alg: 'Ed25519',
+    crv: 'Ed25519',
+    d: 'tx-s_Aj4ltT_rpY_AIEKexmitq2eyWMkuuIy5JMzmn4',
+    x: 'eZEsf-38KiwfrWnn88cokaJmAoOVgTocC1TndJsz_uQ',
+    kty: 'OKP',
+  })
+  const publicKey = JSON.stringify({
+    alg: 'Ed25519',
+    crv: 'Ed25519',
+    x: 'eZEsf-38KiwfrWnn88cokaJmAoOVgTocC1TndJsz_uQ',
+    kty: 'OKP',
+  })
+
+  // The resolved verify-request origin (host `wallet.example`, http) — the
+  // audience the wallet must bind the token to.
+  const audience = 'http://wallet.example'
+
+  /** Spins up a real `Handler.oidcProvider` so verify can fetch its JWKS. */
+  async function startIssuer(
+    getClaims: Parameters<typeof Handler.oidcProvider>[0]['getClaims'] = () => ({
+      email: 'alice@example.com',
+      email_verified: true,
+    }),
+  ) {
+    let listener: Parameters<typeof createServer>[0] | undefined
+    const server = await createServer((req, res) => {
+      if (!listener) {
+        const oidc = Handler.oidcProvider({
+          claimsSupported: ['iss', 'aud', 'sub', 'iat', 'exp', 'nonce', 'email', 'email_verified'],
+          getClaims,
+          issuer: `${server.url}/oidc`,
+          kid: 'test-1',
+          path: '/oidc',
+          publicKey,
+          signingKey,
+        })
+        listener = oidc.listener
+      }
+      return listener(req, res)
+    })
+    return Object.assign(server, { issuer: `${server.url}/oidc` })
+  }
+
+  /** Mints an id token via a running issuer's `/token` endpoint. */
+  async function mint(issuer: string, body: { audience: string; nonce: string; subject: string }) {
+    const res = await fetch(`${issuer}/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const { idToken } = (await res.json()) as { idToken: string }
+    return idToken
+  }
+
+  /** Runs a full SIWE verify carrying an id token; returns the verify Response. */
+  async function connect(
+    app: Hono,
+    options: { issuer: string; audience?: string; nonce?: string; subject?: string },
+  ) {
+    const { body } = await getChallenge(app, { chainId: 1 })
+    const message = body.message!
+    const nonce = parseSiweMessage(message).nonce!
+    const signature = await account.signMessage({ message })
+    const idToken = await mint(options.issuer, {
+      audience: options.audience ?? audience,
+      nonce: options.nonce ?? nonce,
+      subject: options.subject ?? account.address,
+    })
+    return postVerify(app, {
+      address: account.address,
+      idToken,
+      message,
+      returnToken: true,
+      signature,
+    })
+  }
+
+  /** Reads the session for a bearer token issued by `setup().handler`. */
+  function getSession(handler: ReturnType<typeof setup>['handler'], token: string) {
+    return handler.getSession(
+      new Request('http://wallet.example/', { headers: { authorization: `Bearer ${token}` } }),
+    )
+  }
+
+  let server: Awaited<ReturnType<typeof startIssuer>>
+  beforeAll(async () => {
+    server = await startIssuer()
+  })
+  afterAll(() => server.close())
+
+  test('default: valid idToken folds the verified email onto the session', async () => {
+    const { handler, app } = setup({ identity: { issuer: server.issuer } })
+
+    const res = await connect(app, { issuer: server.issuer })
+    expect(res.status).toBe(200)
+
+    const { token } = (await res.json()) as { token: string }
+    const session = await getSession(handler, token)
+    expect(session?.address).toBe(account.address)
+    expect(session?.email).toBe('alice@example.com')
+  })
+
+  test('error: audience mismatch rejects with 401', async () => {
+    const { app } = setup({ identity: { issuer: server.issuer } })
+
+    const res = await connect(app, { audience: 'http://evil.example', issuer: server.issuer })
+    expect(res.status).toBe(401)
+  })
+
+  test('error: nonce mismatch rejects with 401', async () => {
+    const { app } = setup({ identity: { issuer: server.issuer } })
+
+    const res = await connect(app, { issuer: server.issuer, nonce: 'not-the-siwe-nonce' })
+    expect(res.status).toBe(401)
+  })
+
+  test('error: subject (address) mismatch rejects with 401', async () => {
+    const { app } = setup({ identity: { issuer: server.issuer } })
+
+    const res = await connect(app, { issuer: server.issuer, subject: otherAccount.address })
+    expect(res.status).toBe(401)
+  })
+
+  test('error: email_verified=false rejects with 401', async () => {
+    const issuer = await startIssuer(() => ({ email: 'x@example.com', email_verified: false }))
+    try {
+      const { app } = setup({ identity: { issuer: issuer.issuer } })
+      const res = await connect(app, { issuer: issuer.issuer })
+      expect(res.status).toBe(401)
+    } finally {
+      issuer.close()
+    }
+  })
+
+  test('default: no idToken (not required) issues a session without email', async () => {
+    const { handler, app } = setup({ identity: { issuer: server.issuer } })
+
+    const { body } = await getChallenge(app, { chainId: 1 })
+    const message = body.message!
+    const signature = await account.signMessage({ message })
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      returnToken: true,
+      signature,
+    })
+    expect(res.status).toBe(200)
+
+    const { token } = (await res.json()) as { token: string }
+    const session = await getSession(handler, token)
+    expect(session?.email).toBeUndefined()
+  })
+
+  test('error: required identity but no idToken rejects with 400', async () => {
+    const { app } = setup({ identity: { issuer: server.issuer, required: true } })
+
+    const { body } = await getChallenge(app, { chainId: 1 })
+    const message = body.message!
+    const signature = await account.signMessage({ message })
+    const res = await postVerify(app, { address: account.address, message, signature })
+    expect(res.status).toBe(400)
+  })
+
+  test('default: identity is verified against the default issuer when not configured', async () => {
+    // Identity is on by default: with no `identity` option the issuer defaults
+    // to the Tempo wallet's OIDC mount, so a token from a different issuer is
+    // rejected rather than silently ignored.
+    const { app } = setup()
+
+    const res = await connect(app, { issuer: server.issuer })
+    expect(res.status).toBe(401)
+  })
+})
+
 function setup(options: Parameters<typeof auth>[0] = {}) {
   const handler = auth({ domain: 'wallet.example', ...options })
   // Mount under '/' so tests hit /challenge, /, /logout directly.
@@ -1002,6 +1180,7 @@ async function postVerify(
   app: Hono,
   body: {
     address: string
+    idToken?: string
     message: string
     signature?: string
     keyAuthorization?: string
