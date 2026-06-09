@@ -1930,7 +1930,7 @@ function WalletAuthorizeAccessKey() {
             }))
           if (scopeSelector && filledLimits[0])
             params.scopes = [{ address: filledLimits[0].token, selector: scopeSelector }]
-          if (showDepositEnabled) params.showDeposit = true
+          if (showDepositEnabled) params.showDeposit = buildShowDeposit(form)
 
           execute(() =>
             provider.request({
@@ -2030,6 +2030,31 @@ function WalletAuthorizeAccessKey() {
               Show Deposit
             </label>
           </legend>
+          {showDepositEnabled && (
+            <div
+              style={{
+                display: 'grid',
+                gap: 12,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+              }}
+            >
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Amount</span>
+                <input name="showDepositAmount" placeholder="50" />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span>Token</span>
+                <select name="showDepositToken" defaultValue="">
+                  <option value="" />
+                  {tokenlist.map((t) => (
+                    <option key={t.address} value={t.address}>
+                      {t.symbol}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
         </fieldset>
         <Button type="submit">Authorize</Button>
       </form>
