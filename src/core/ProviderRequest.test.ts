@@ -44,29 +44,6 @@ describe('parse', () => {
     `)
   })
 
-  test('default: allows loose provider params without strict mode', () => {
-    const request = ProviderRequest.parse({
-      method: 'wallet_connect',
-      params: [{ capabilities: { authorizeAccessKey: { expiry: 1 }, method: 'register' } }],
-    })
-
-    expect(request).toMatchInlineSnapshot(`
-      {
-        "method": "wallet_connect",
-        "params": [
-          {
-            "capabilities": {
-              "authorizeAccessKey": {
-                "expiry": 1,
-              },
-              "method": "register",
-            },
-          },
-        ],
-      }
-    `)
-  })
-
   test('error: rejects method mismatch', () => {
     expect(() =>
       ProviderRequest.parse(
@@ -89,15 +66,12 @@ describe('parse', () => {
     ).toThrowErrorMatchingInlineSnapshot(`[ProviderRpcError: Invalid request: id: Expected string]`)
   })
 
-  test('error: rejects strict params', () => {
+  test('error: rejects invalid wallet params', () => {
     expect(() =>
-      ProviderRequest.parse(
-        {
-          method: 'wallet_connect',
-          params: [{ capabilities: { authorizeAccessKey: { expiry: 1 }, method: 'register' } }],
-        },
-        { strict: true },
-      ),
+      ProviderRequest.parse({
+        method: 'wallet_connect',
+        params: [{ capabilities: { authorizeAccessKey: { expiry: 1 }, method: 'register' } }],
+      }),
     ).toThrowErrorMatchingInlineSnapshot(
       `[ProviderRpcError: Invalid params: capabilities.authorizeAccessKey.limits: Expected array, capabilities.authorizeAccessKey.scopes: Expected array]`,
     )

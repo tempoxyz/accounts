@@ -42,7 +42,7 @@ export function parse(value: unknown, options: parse.Options = {}): ProviderRequ
       `Method mismatch: expected "${options.method}" but got "${request.method}".`,
     )
 
-  if (options.strict) validateStrict(request)
+  validateParameters(request)
 
   return {
     ...request,
@@ -55,8 +55,6 @@ export declare namespace parse {
   type Options = {
     /** Expected RPC method. */
     method?: Schema.Request['method'] | undefined
-    /** Apply wallet-surface strict parameter validation. */
-    strict?: boolean | undefined
   }
 
   /** Options for {@link parse} when narrowing to a specific method. */
@@ -82,7 +80,7 @@ function parseMetadata(value: unknown): Metadata {
   }
 }
 
-function validateStrict(request: Schema.Request) {
+function validateParameters(request: Schema.Request) {
   const schema = Rpc.strictParameters[request.method as keyof typeof Rpc.strictParameters]
   if (!schema || !('params' in request) || !request.params?.[0]) return
 
