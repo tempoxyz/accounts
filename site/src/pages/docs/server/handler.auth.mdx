@@ -85,6 +85,11 @@ type SessionPayload = {
   address: Address
   /** Chain ID echoed into the challenge message. */
   chainId: number
+  /**
+   * Verified email, set when the verify request included a valid identity
+   * token and [`identity`](#identity) is configured. Omitted otherwise.
+   */
+  email?: string | undefined
   /** Unix timestamp (seconds) when the session was issued. */
   issuedAt: number
   /** Unix timestamp (seconds) when the session expires. */
@@ -139,6 +144,37 @@ const handler = Handler.auth({
   domain: 'app.example.com', // [!code focus]
 })
 ```
+
+### identity
+
+- **Type:** `{ issuer: string; required?: boolean | undefined }`
+- **Optional**
+
+Opt into verified-email identity. When set, a verify request carrying an
+`idToken` (minted by the wallet during [`wallet_connect`](/docs/rpc/wallet_connect#requesting-a-verified-email))
+is verified against the issuer's JWKS, with `aud` pinned to this request's
+resolved origin, `sub` cross-checked against the signed-in address, and `nonce`
+matched to the SIWE nonce. On success the verified email is folded onto the
+session as [`SessionPayload.email`](#sessionpayload).
+
+Reusing the SIWE nonce as the token nonce means the single-use challenge store
+covers replay protection for both the signature and the token, so your app needs
+no separate nonce plumbing.
+
+- `issuer` — the wallet's identity issuer URL (whose JWKS signs the token).
+- `required` — when `true`, reject the verify if no valid token is supplied (defaults to `false`, attach the email when present and proceed otherwise).
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth({
+  identity: { issuer: 'https://wallet.example' }, // [!code focus]
+})
+```
+
+For verifying a token outside of `Handler.auth` (for example when minting your
+own session in [`onAuthenticate`](#onauthenticate) with `session: false`), use
+[`Handler.verifyIdentityToken`](#verifyidentitytoken).
 
 ### onAuthenticate
 
@@ -307,3 +343,55 @@ Inherited from [`from.Options`](/docs/server/handler.compose#optionscors). CORS 
 - **Optional**
 
 Inherited from [`from.Options`](/docs/server/handler.compose#optionsheaders). Additional headers merged onto every response.
+
+## `verifyIdentityToken`
+
+Verifies a wallet-issued identity token (JWT) against an issuer's JWKS and
+returns its claims. Use it when you handle the SIWE round-trip yourself (for
+example, minting your own session in [`onAuthenticate`](#onauthenticate)) instead
+of letting the [`identity`](#identity) option fold the email onto the session.
+
+It asserts the signature, `iss`, `aud`, and `exp`, plus `email_verified === true`.
+Pass `subject` and/or `nonce` to additionally cross-check the token's `sub`
+(account address) and `nonce`. Throws on any failure.
+
+```ts twoslash
+// @noErrors
+import { Handler } from 'accounts/server'
+
+const claims = await Handler.verifyIdentityToken(idToken, {
+  audience: 'https://app.example.com', // your app origin (token `aud`)
+  issuer: 'https://wallet.example',    // the wallet's identity issuer
+  subject: address,                    // the signed-in account address
+})
+
+claims.email // verified email
+```
+
+### Parameters
+
+```ts
+type Options = {
+  /** Expected audience (`aud`) — your app's origin. */
+  audience: string
+  /** Issuer (IdP) URL whose JWKS signs the token. */
+  issuer: string
+  /** When set, require the token's `nonce` to equal this value. */
+  nonce?: string | undefined
+  /** When set, require the token's `sub` to equal this address (case-insensitive). */
+  subject?: string | undefined
+}
+```
+
+### Return Type
+
+```ts
+type Claims = {
+  /** Verified email, if present. */
+  email: string | undefined
+  /** OIDC nonce echoed in the token, if present. */
+  nonce: string | undefined
+  /** Token subject (`sub`) — the account address. */
+  subject: string
+}
+```

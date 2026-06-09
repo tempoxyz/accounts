@@ -292,6 +292,33 @@ function Connect() {
 }
 ```
 
+The plain `email` string is convenient for display, but anyone can put any string there. To trust the email on your server, verify the signed token that ships alongside it.
+
+### Verify the Email Server-Side
+
+Alongside the plain `email`, the wallet returns a signed identity token bound to your app origin and the connected account. Configure your auth handler with [`identity`](/docs/server/handler.auth#identity) and the SDK forwards that token on the same verify round-trip. The handler checks it against the wallet's keys and folds the verified email onto the session.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Handler, Kv } from 'accounts/server'
+import { env } from 'cloudflare:workers'
+
+const auth = Handler.auth({
+  path: '/auth',
+  store: Kv.durableObject(env.NONCE_DO),
+  identity: { issuer: 'https://wallet.tempo.xyz' }, // [!code focus]
+})
+
+// In an authenticated route, the verified email is on the session.
+app.get('/me', async (c) => {
+  const session = await auth.getSession(c.req.raw)
+  if (!session) return c.json({ error: 'unauthenticated' }, 401)
+  return c.json({ address: session.address, email: session.email }) // [!code focus]
+})
+```
+
+The token reuses the SIWE challenge nonce, so the single-use challenge store protects both the signature and the email against replay — no extra nonce plumbing. If you mint your own session (for example in [`onAuthenticate`](/docs/server/handler.auth#onauthenticate) with `session: false`), verify the token directly with [`Handler.verifyIdentityToken`](/docs/server/handler.auth#verifyidentitytoken).
+
 ## Notes & Gotchas
 
 ### Cookies are issued by your origin
