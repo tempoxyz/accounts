@@ -174,6 +174,43 @@ When you're ready to go live, follow the [Deploying to Production](/docs/product
 
 ::::
 
+## Recipes
+
+### Request a Verified Email
+
+Pass the `identity` capability to request the account's verified email during connect.
+
+Set `withCapabilities: true` so the connect result includes per-account `capabilities`, then read the email from the authenticated account.
+
+```tsx twoslash [Example.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
+
+export function Example() {
+  const connect = useConnect()
+  const [connector] = useConnectors()
+
+  return (
+    <button
+      onClick={async () => {
+        const result = await connect.connectAsync({
+          connector,
+          withCapabilities: true, // [!code focus]
+          capabilities: { // [!code focus]
+            identity: { email: true }, // [!code focus]
+          }, // [!code focus]
+        })
+
+        // Present only if the user approved sharing. // [!code focus]
+        const email = result.accounts[0]?.capabilities?.identity?.email // [!code focus]
+      }}
+    >
+      Sign in
+    </button>
+  )
+}
+```
+
 ## Best Practices
 
 ### Deposit Funds

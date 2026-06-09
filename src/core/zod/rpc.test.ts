@@ -291,6 +291,63 @@ describe('wallet_connect.capabilities.request: auth', () => {
   })
 })
 
+describe('wallet_connect.capabilities.request: identity', () => {
+  test('accepts identity.email on login branch', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'login',
+        identity: { email: true },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {
+          "email": true,
+        },
+        "method": "login",
+      }
+    `)
+  })
+
+  test('accepts identity.email on register branch', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'register',
+        identity: { email: true },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {
+          "email": true,
+        },
+        "method": "register",
+      }
+    `)
+  })
+
+  test('accepts empty identity object', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'login',
+        identity: {},
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {},
+        "method": "login",
+      }
+    `)
+  })
+
+  test('rejects identity.email as string', () => {
+    expect(() =>
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'login',
+        identity: { email: 'yes' },
+      }),
+    ).toThrow()
+  })
+})
+
 describe('wallet_connect.capabilities.result: auth + personalSign', () => {
   test('accepts auth with token + personalSign echo + root signature', () => {
     expect(
@@ -326,6 +383,54 @@ describe('wallet_connect.capabilities.result: auth + personalSign', () => {
 
   test('accepts result without auth/personalSign', () => {
     expect(z.parse(Rpc.wallet_connect.capabilities.result, {})).toMatchInlineSnapshot(`{}`)
+  })
+})
+
+describe('wallet_connect.capabilities.result: identity', () => {
+  test('accepts identity with verified email', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.result, {
+        identity: { email: 'alice@example.com' },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {
+          "email": "alice@example.com",
+        },
+      }
+    `)
+  })
+
+  test('accepts identity with null email', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.result, {
+        identity: { email: null },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {
+          "email": null,
+        },
+      }
+    `)
+  })
+
+  test('accepts empty identity object', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.result, { identity: {} }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {},
+      }
+    `)
+  })
+
+  test('rejects identity.email as number', () => {
+    expect(() =>
+      z.parse(Rpc.wallet_connect.capabilities.result, {
+        identity: { email: 42 },
+      }),
+    ).toThrow()
   })
 })
 

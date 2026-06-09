@@ -291,12 +291,15 @@ export declare namespace createAccount {
   }
   type ReturnType = {
     accounts: readonly Store.Account[]
-    /** Email associated with the account. */
-    email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Server Authentication result, if the auth capability was requested. */
     auth?: { token?: string | undefined } | undefined
+    /**
+     * Consented identity claims (e.g. verified email), if the `identity`
+     * capability was requested and the user approved sharing.
+     */
+    identity?: { email?: string | null | undefined } | undefined
     /**
      * Echo of the `personalSign` request, present iff the caller supplied
      * `personalSign`. The signature lives on the top-level `signature`
@@ -362,12 +365,15 @@ export declare namespace loadAccounts {
   type ReturnType = {
     /** Loaded accounts. */
     accounts: readonly Store.Account[]
-    /** Email associated with the account. */
-    email?: string | null | undefined
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Server Authentication result, if the auth capability was requested. */
     auth?: { token?: string | undefined } | undefined
+    /**
+     * Consented identity claims (e.g. verified email), if the `identity`
+     * capability was requested and the user approved sharing.
+     */
+    identity?: { email?: string | null | undefined } | undefined
     /**
      * Echo of the `personalSign` request, present iff the caller supplied
      * `personalSign`. The signature lives on the top-level `signature`

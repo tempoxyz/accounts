@@ -740,6 +740,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
   const [scopeSelector, setScopeSelector] = useState('transfer(address,uint256)')
   const [authEnabled, setAuthEnabled] = useState(false)
   const [showDepositEnabled, setShowDepositEnabled] = useState(false)
+  const [identityEmailEnabled, setIdentityEmailEnabled] = useState(false)
   const turnkey = adapterType === 'turnkey'
 
   // Once the tokenlist resolves, hydrate any unselected limit row with the first token.
@@ -792,6 +793,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
     // the dapp's origin before forwarding to the wallet host.
     const auth = authEnabled ? '/auth' : undefined
     const showDeposit = showDepositEnabled ? buildShowDeposit(form) : undefined
+    const identity = identityEmailEnabled ? { email: true } : undefined
 
     const capabilities =
       method === 'register'
@@ -801,12 +803,14 @@ function WalletConnect(props: { adapterType: AdapterType }) {
             ...(digest ? { digest } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
             ...(auth ? { auth } : {}),
+            ...(identity ? { identity } : {}),
             ...(showDeposit ? { showDeposit } : {}),
           } as const)
         : {
             ...(digest ? { digest } : {}),
             ...(authorizeAccessKey ? { authorizeAccessKey } : {}),
             ...(auth ? { auth } : {}),
+            ...(identity ? { identity } : {}),
             ...(showDeposit ? { showDeposit } : {}),
           }
 
@@ -967,6 +971,18 @@ function WalletConnect(props: { adapterType: AdapterType }) {
                 type="checkbox"
               />{' '}
               Authenticate with Server
+            </label>
+          </legend>
+        </fieldset>
+        <fieldset style={{ marginBottom: 8 }}>
+          <legend>
+            <label>
+              <input
+                checked={identityEmailEnabled}
+                onChange={(e) => setIdentityEmailEnabled(e.target.checked)}
+                type="checkbox"
+              />{' '}
+              Request Verified Email
             </label>
           </legend>
         </fieldset>

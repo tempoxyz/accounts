@@ -47,8 +47,6 @@ export declare namespace verifyRegistration {
     credentialId: string
     /** The credential's public key (uncompressed P256, hex-encoded). */
     publicKey: Hex
-    /** Email associated with the account. */
-    email?: string | null | undefined
     /** Username associated with the account. */
     username?: string | null | undefined
   }
@@ -76,8 +74,6 @@ export declare namespace verifyAuthentication {
     publicKey: Hex
     /** User identifier from the authenticator's `userHandle` (discoverable/conditional flows). */
     userId?: string | undefined
-    /** Email associated with the account. */
-    email?: string | null | undefined
     /** Username associated with the account. */
     username?: string | null | undefined
   }

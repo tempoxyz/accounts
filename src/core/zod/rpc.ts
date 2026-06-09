@@ -622,6 +622,19 @@ export namespace wallet_connect {
     }),
   )
 
+  /**
+   * Request consented identity claims during `wallet_connect` (OAuth-like).
+   * Each claim is opt-in: the wallet only returns it after explicit user
+   * approval, and `wallet_connect` still succeeds (without the claim) if the
+   * user declines or none is available.
+   */
+  export const identity = z.optional(
+    z.object({
+      /** Request the account's verified email address. */
+      email: z.optional(z.boolean()),
+    }),
+  )
+
   export const capabilities = {
     request: z.optional(
       z.union([
@@ -629,6 +642,7 @@ export namespace wallet_connect {
           digest: z.optional(u.hex()),
           authorizeAccessKey,
           auth,
+          identity,
           method: z.literal('register'),
           name: z.optional(z.string()),
           personalSign,
@@ -640,6 +654,7 @@ export namespace wallet_connect {
           credentialId: z.optional(z.string()),
           authorizeAccessKey,
           auth,
+          identity,
           method: z.optional(z.literal('login')),
           personalSign,
           selectAccount: z.optional(z.boolean()),
@@ -648,7 +663,18 @@ export namespace wallet_connect {
       ]),
     ),
     result: z.object({
-      email: z.optional(z.nullable(z.string())),
+      /**
+       * Consented identity claims, populated only when the request set the
+       * matching `capabilities.identity.*` flag AND the user approved sharing.
+       * Omitted entirely when nothing was requested or approved. Present only
+       * on the account the user authenticated with during this connect.
+       */
+      identity: z.optional(
+        z.object({
+          /** Verified email address, if requested and approved. */
+          email: z.optional(z.nullable(z.string())),
+        }),
+      ),
       keyAuthorization: z.optional(keyAuthorization),
       /**
        * Echo of the `personalSign` request, present iff the caller set
@@ -715,6 +741,7 @@ export namespace wallet_connect_strict {
     z.omit(wallet_authorizeAccessKey_strict.parameters, { showDeposit: true }),
   )
   const auth = wallet_connect.auth
+  const identity = wallet_connect.identity
   const personalSign = wallet_connect.personalSign
   const showDeposit = wallet_connect.showDeposit
 
@@ -725,6 +752,7 @@ export namespace wallet_connect_strict {
           digest: z.optional(u.hex()),
           authorizeAccessKey,
           auth,
+          identity,
           method: z.literal('register'),
           name: z.optional(z.string()),
           personalSign,
@@ -736,6 +764,7 @@ export namespace wallet_connect_strict {
           credentialId: z.optional(z.string()),
           authorizeAccessKey,
           auth,
+          identity,
           method: z.optional(z.literal('login')),
           personalSign,
           selectAccount: z.optional(z.boolean()),
