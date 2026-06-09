@@ -48,8 +48,7 @@ import * as Tokenlist from './Tokenlist.js'
 import * as Request from './zod/request.js'
 import * as Rpc from './zod/rpc.js'
 
-export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
-  ox_Provider.Emitter & {
+export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }, true> & {
     /** Configured chains. */
     chains: readonly [Chain, ...Chain[]]
     /** Returns the active root account as a viem account. */
