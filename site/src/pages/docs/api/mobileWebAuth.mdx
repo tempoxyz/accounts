@@ -9,6 +9,8 @@ Creates an adapter that sends provider RPC requests from a mobile to a web host 
 
 The wallet identifies the app through the consumer discovery document served at `baseUrl`; `name` and `rdns` only describe the provider identity announced to the app.
 
+Both adapters are exported from the root entry — `mobileWebAuth` and `tempoWalletMobileWebAuth` — for bundlers that tree-shake. React Native (Metro) apps should import from the `accounts/mobileWebAuth` subpath instead, since Metro does not tree-shake unused root exports.
+
 ## Usage
 
 ```ts twoslash

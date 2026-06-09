@@ -4,8 +4,8 @@ import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 import { Wata, mobileWebAuth as core_mobileWebAuth, type MobileWebAuth } from 'wata'
 import { z } from 'zod/mini'
 
-import * as Adapter from '../Adapter.js'
-import * as Rpc from '../zod/rpc.js'
+import * as Adapter from '../../Adapter.js'
+import * as Rpc from '../../zod/rpc.js'
 
 /**
  * Creates a mobile web auth adapter that forwards wallet RPC through Wata.
@@ -160,19 +160,4 @@ export declare namespace mobileWebAuth {
   }
   /** Options for {@link mobileWebAuth}. */
   export type Options = BaseOptions
-}
-
-/** Creates the Tempo Wallet adapter using Wata mobile web auth. */
-export function tempoWallet(options: tempoWallet.Options): Adapter.Adapter {
-  return mobileWebAuth({
-    ...options,
-    host: 'https://wallet.tempo.xyz',
-    name: 'Tempo Wallet',
-    rdns: 'xyz.tempo',
-  })
-}
-
-export declare namespace tempoWallet {
-  /** Options for {@link tempoWallet}. */
-  export type Options = Omit<mobileWebAuth.BaseOptions, 'host' | 'name' | 'rdns'>
 }

@@ -170,16 +170,10 @@
       "default": "./dist/react-native/index.js"
     },
     "./mobileWebAuth": {
-      "types": "./dist/mobileWebAuth/index.d.ts",
-      "src": "./src/mobileWebAuth/index.ts",
-      "react-native": "./dist/mobileWebAuth/index.js",
-      "default": "./dist/mobileWebAuth/index.js"
-    },
-    "./mobileWebAuth/tempoWallet": {
-      "types": "./dist/mobileWebAuth/tempoWallet.d.ts",
-      "src": "./src/mobileWebAuth/tempoWallet.ts",
-      "react-native": "./dist/mobileWebAuth/tempoWallet.js",
-      "default": "./dist/mobileWebAuth/tempoWallet.js"
+      "types": "./dist/core/adapters/mobileWebAuth/index.d.ts",
+      "src": "./src/core/adapters/mobileWebAuth/index.ts",
+      "react-native": "./dist/core/adapters/mobileWebAuth/index.js",
+      "default": "./dist/core/adapters/mobileWebAuth/index.js"
     },
     "./react-native/async-storage": {
       "types": "./dist/react-native/asyncStorage.d.ts",
