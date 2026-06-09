@@ -1,6 +1,6 @@
 ---
 title: OIDC Identity Tokens
-description: Verify a connected account's email on your server with the wallet's OIDC identity token.
+description: Verify a connected account's email on your server with an OIDC identity token.
 ---
 
 # OIDC Identity Tokens
@@ -25,28 +25,62 @@ The wallet runs a verify-only OIDC issuer. Anyone can fetch its public signing k
 - Discovery: `https://wallet.tempo.xyz/api/oidc/.well-known/openid-configuration`
 - JWKS: `https://wallet.tempo.xyz/api/oidc/.well-known/jwks.json`
 
-Tokens are signed with EdDSA (Ed25519) and carry these claims:
+## Walkthrough
 
-```ts
-type Claims = {
-  iss: string // issuer (the wallet's OIDC URL)
-  aud: string // your app origin
-  sub: string // the account address
-  iat: number // issued-at (unix seconds)
-  exp: number // expiry (unix seconds)
-  nonce?: string // echoed nonce, when one was supplied
-  email: string // the account's email
-  email_verified: true // only verified emails are issued
+There are two ways to verify, depending on how you manage sessions. Both start by requesting the email on the client with Wagmi.
+
+### Automatic Verification (recommended)
+
+If you authenticate accounts with [`Handler.auth`](/docs/guides/authentication), verification is automatic — the SDK forwards the signed token on the same `verify` round-trip, and the handler adds the verified email to the session.
+
+::::steps
+
+#### Connect
+
+Request the `identity` capability in the Wagmi `connect` call. Your connector is already wired to your auth endpoint (see [Authentication](/docs/guides/authentication#configure-the-connector)), so the SDK forwards the signed token to your server during the connect ceremony — no client-side token handling.
+
+```tsx twoslash [src/App.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
+
+function Connect() {
+  const { connectAsync } = useConnect()
+  const [connector] = useConnectors()
+
+  return (
+    <button
+      onClick={() =>
+        connectAsync({
+          connector,
+          capabilities: { identity: { email: true } }, // [!code focus]
+        })
+      }
+    >
+      Sign in
+    </button>
+  )
 }
 ```
 
-## Verify on Your Server
+:::info[Without Wagmi]
+Using the [`Provider`](/docs/api/provider) directly, request the capability on [`wallet_connect`](/docs/rpc/wallet_connect#requesting-a-verified-email):
 
-There are two ways to verify, depending on how you manage sessions.
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
 
-### With `Handler.auth` (recommended)
+const provider = Provider.create()
 
-If you authenticate accounts with [`Handler.auth`](/docs/guides/authentication), verification is automatic. The SDK forwards the token on the same `verify` round-trip, and the handler checks the signature and adds the verified email to the session — **no extra configuration**.
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
+  params: [{ capabilities: { identity: { email: true } } }], // [!code focus]
+})
+```
+:::
+
+#### Read Email from Session
+
+The verified email is on the session — read it from any authenticated route with `getSession`.
 
 ```ts twoslash [worker/index.ts]
 // @noErrors
@@ -59,34 +93,95 @@ const auth = Handler.auth({
 })
 
 app.get('/me', async (c) => {
-  const session = await auth.getSession(c.req.raw)
+  const session = await auth.getSession(c.req.raw) // [!code focus]
   if (!session) return c.json({ error: 'unauthenticated' }, 401)
   return c.json({ address: session.address, email: session.email }) // [!code focus]
 })
 ```
 
-The handler reuses the SIWE challenge nonce as the token nonce, so the single-use challenge store protects both the signature and the email against replay — your app needs no separate nonce plumbing.
+The handler reuses the SIWE challenge nonce as the token nonce, so the single-use challenge store protects both the signature and the email against replay — no separate nonce plumbing. Set the [`identity`](/docs/server/handler.auth#identity) option only to require an email (`required: true`) or to point at your own wallet (`issuer`).
 
-Use the [`identity`](/docs/server/handler.auth#identity) option only to require an email (`required: true`) or to point at your own wallet (`issuer`).
+::::
 
-### With `Identity.verify`
+### Manual Verification
 
-If you mint your own session (for example in [`onAuthenticate`](/docs/server/handler.auth#onauthenticate) with `session: false`) or verify the token in a separate service, call [`Identity.verify`](/docs/server/identity.verify) directly.
+If you mint your own session (for example in [`onAuthenticate`](/docs/server/handler.auth#onauthenticate) with `session: false`) or verify the token in a separate service, read the token on the client and verify it yourself with [`Identity.verify`](/docs/server/identity.verify).
+
+::::steps
+
+#### Read Token and Send to Server
+
+Request the `identity` capability, read the signed `idToken` off the connected account, and POST it to your own endpoint.
+
+```tsx twoslash [src/App.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
+
+function Connect() {
+  const { connectAsync } = useConnect()
+  const [connector] = useConnectors()
+
+  return (
+    <button
+      onClick={async () => {
+        const result = await connectAsync({
+          connector,
+          capabilities: { identity: { email: true } },
+          withCapabilities: true,
+        })
+
+        const idToken = result.accounts[0]?.capabilities?.identity?.idToken // [!code focus]
+        await fetch('/verify-email', { // [!code focus]
+          method: 'POST', // [!code focus]
+          body: JSON.stringify({ idToken }), // [!code focus]
+        }) // [!code focus]
+      }}
+    >
+      Sign in
+    </button>
+  )
+}
+```
+
+:::info[Without Wagmi]
+Using the [`Provider`](/docs/api/provider) directly, read the signed `idToken` off the connected account:
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+
+const provider = Provider.create()
+
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
+  params: [{ capabilities: { identity: { email: true } } }],
+})
+
+const idToken = accounts[0]?.capabilities?.identity?.idToken // [!code focus]
+```
+:::
+
+#### Verify Token on Server
+
+Verify the token with `Identity.verify`. It fetches the issuer's JWKS, then asserts the signature, `iss`, `aud`, `exp`, and `email_verified === true`. Pass `subject` and/or `nonce` to also cross-check the token's `sub` and `nonce`. It throws on any failure.
 
 ```ts twoslash [worker/index.ts]
 // @noErrors
 import { Identity } from 'accounts/server'
 
-const claims = await Identity.verify(idToken, {
-  audience: 'https://app.example.com', // your app origin (token `aud`)
-  issuer: 'https://wallet.tempo.xyz/api/oidc', // the wallet's OIDC issuer
-  subject: address, // the signed-in account address
-})
+app.post('/verify-email', async (c) => {
+  const { idToken } = await c.req.json()
 
-claims.email // verified email
+  const claims = await Identity.verify(idToken, { // [!code focus]
+    audience: 'https://app.example.com', // your app origin (token `aud`) // [!code focus]
+    issuer: 'https://wallet.tempo.xyz/api/oidc', // the wallet's OIDC issuer // [!code focus]
+  }) // [!code focus]
+
+  return c.json({ email: claims.email }) // verified email // [!code focus]
+})
 ```
 
-`Identity.verify` fetches the issuer's JWKS, then asserts the signature, `iss`, `aud`, `exp`, and `email_verified === true`. Pass `subject` and/or `nonce` to also cross-check the token's `sub` and `nonce`. It throws on any failure.
+::::
 
 ## Verify From Any Stack
 
