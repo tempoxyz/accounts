@@ -296,7 +296,7 @@ The plain `email` string is convenient for display, but anyone can put any strin
 
 ### Verify the Email Server-Side
 
-Alongside the plain `email`, the wallet returns a signed identity token bound to your app origin and the connected account. Configure your auth handler with [`identity`](/docs/server/handler.auth#identity) and the SDK forwards that token on the same verify round-trip. The handler checks it against the wallet's keys and folds the verified email onto the session.
+Alongside the plain `email`, the wallet returns a signed identity token bound to your app origin and the connected account, which the SDK forwards on the same verify round-trip. Your auth handler verifies it against the wallet's keys and folds the verified email onto the session with no extra configuration — use [`identity`](/docs/server/handler.auth#identity) only to point at a self-hosted wallet or to require a verified email.
 
 ```ts twoslash [worker/index.ts]
 // @noErrors
