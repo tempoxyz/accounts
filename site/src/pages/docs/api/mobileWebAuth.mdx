@@ -58,17 +58,10 @@ Wallet discovery origin, or a preloaded host document.
 
 Provider display name.
 
-### open
-
-- **Type:** `(url: string, redirectUri: string) => Promise<string | null>`
-- **Required when:** `openAuthSession` is omitted
-
-Opens the auth URL and returns the callback URL. Prefer `openAuthSession` when the platform exposes a native auth-session primitive.
-
 ### openAuthSession
 
 - **Type:** `({ authorizationUrl, callback }) => string | undefined | Promise<string | undefined>`
-- **Required when:** `open` is omitted
+- **Required**
 
 Opens the auth URL with a native browser auth session and returns the callback URL.
 

@@ -14,6 +14,5 @@ export function tempoWallet(options: tempoWallet.Options): Adapter.Adapter {
 
 export declare namespace tempoWallet {
   /** Options for {@link tempoWallet}. */
-  export type Options = Omit<mobileWebAuth.BaseOptions, 'baseUrl' | 'host' | 'name' | 'rdns'> &
-    mobileWebAuth.OpenOptions
+  export type Options = Omit<mobileWebAuth.BaseOptions, 'baseUrl' | 'host' | 'name' | 'rdns'>
 }

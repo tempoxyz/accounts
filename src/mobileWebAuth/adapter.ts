@@ -14,7 +14,7 @@ import * as Rpc from '../core/zod/rpc.js'
  * callback carrying the wallet RPC response.
  */
 export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
-  const { baseUrl, fetch, host, name, open, openAuthSession, rdns, redirectUri } = options
+  const { baseUrl, fetch, host, name, openAuthSession, rdns, redirectUri } = options
 
   return Adapter.define({ name, rdns }, ({ getAccount, store }) => {
     function generateAccessKey(
@@ -40,17 +40,6 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
       method: string
       params?: readonly unknown[] | undefined
     }): Promise<unknown> {
-      const authSession =
-        openAuthSession ??
-        (async ({
-          authorizationUrl,
-          callback,
-        }: Parameters<NonNullable<MobileWebAuth.Options['openAuthSession']>>[0]) => {
-          if (!open) throw new Error('`mobileWebAuth` requires `open` or `openAuthSession`.')
-          const result = await open(authorizationUrl, callback)
-          return result ?? undefined
-        })
-
       // Mobile web auth is single-exchange: one authorization URL carries one
       // RPC request envelope, and one callback URL carries one response.
       const session = Wata.create({
@@ -60,7 +49,7 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
           core_mobileWebAuth({
             callback: redirectUri,
             host,
-            openAuthSession: authSession,
+            openAuthSession,
             ...(fetch !== undefined ? { fetch } : {}),
           }),
         ],
@@ -151,22 +140,6 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
 }
 
 export declare namespace mobileWebAuth {
-  /** Browser opener override. Opens the auth URL and returns the callback URL. */
-  export type Open = (url: string, redirectUri: string) => Promise<string | null>
-  /** Platform opener options for mobile web auth. */
-  export type OpenOptions =
-    | {
-        /** Browser opener override. Opens the auth URL and returns the callback URL. */
-        open: Open
-        /** Wata browser auth-session override. */
-        openAuthSession?: MobileWebAuth.Options['openAuthSession'] | undefined
-      }
-    | {
-        /** Browser opener override. Opens the auth URL and returns the callback URL. */
-        open?: undefined
-        /** Wata browser auth-session override. */
-        openAuthSession: MobileWebAuth.Options['openAuthSession']
-      }
   /** Base options for {@link mobileWebAuth}. */
   export type BaseOptions = {
     /** Public HTTPS origin that hosts this app's Wata consumer discovery document. */
@@ -177,11 +150,13 @@ export declare namespace mobileWebAuth {
     host: MobileWebAuth.Options['host']
     /** Provider display name. */
     name: string
+    /** Opens the browser auth session and returns the callback URL. */
+    openAuthSession: NonNullable<MobileWebAuth.Options['openAuthSession']>
     /** Redirect URI for the auth callback (e.g. your app's deep link scheme). */
     redirectUri: string
     /** Reverse-DNS provider identifier. */
     rdns: string
   }
   /** Options for {@link mobileWebAuth}. */
-  export type Options = BaseOptions & OpenOptions
+  export type Options = BaseOptions
 }

@@ -3,7 +3,7 @@ import { KeyAuthorization } from 'ox/tempo'
 import { parseUnits, type Address as viem_Address } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
-import { Identity } from 'wata'
+import { Identity, type MobileWebAuth } from 'wata'
 import { Wata as HostWata, mobileWebAuth as hostMobileWebAuth } from 'wata/host'
 import * as z from 'zod/mini'
 
@@ -81,12 +81,12 @@ function createWallet() {
     },
     fetches: () => fetches,
     requests: () => requests,
-    open: async (url: string) => {
+    openAuthSession: (async ({ authorizationUrl }) => {
       calls += 1
       const host = createHost(requests)
-      const response = await host.fetch(new Request(url))
-      return response.headers.get('location')
-    },
+      const response = await host.fetch(new Request(authorizationUrl))
+      return response.headers.get('location') ?? undefined
+    }) satisfies NonNullable<MobileWebAuth.Options['openAuthSession']>,
   }
 }
 
@@ -247,14 +247,17 @@ function createProvider(
   wallet: ReturnType<typeof createWallet>,
   options: Omit<Provider.create.Options, 'adapter' | 'chains'> &
     Partial<
-      Pick<mobileWebAuth.Options, 'baseUrl' | 'host' | 'name' | 'open' | 'rdns' | 'redirectUri'>
+      Pick<
+        mobileWebAuth.Options,
+        'baseUrl' | 'host' | 'name' | 'openAuthSession' | 'rdns' | 'redirectUri'
+      >
     > = {},
 ) {
   const {
     baseUrl = consumerOrigin,
     host = hostOrigin,
     name = 'Accounts RN Test',
-    open = wallet.open,
+    openAuthSession = wallet.openAuthSession,
     rdns = 'xyz.tempo.accounts.playground',
     redirectUri = callback,
     ...rest
@@ -267,7 +270,7 @@ function createProvider(
       fetch: wallet.fetch,
       host,
       name,
-      open,
+      openAuthSession,
       rdns,
       redirectUri,
     }),
@@ -280,7 +283,7 @@ describe('create', () => {
     const provider = Provider.create({
       adapter: tempoWallet({
         fetch: wallet.fetch,
-        open: wallet.open,
+        openAuthSession: wallet.openAuthSession,
         redirectUri: callback,
       }),
       chains: [chain],
@@ -308,7 +311,7 @@ describe('create', () => {
         fetch: wallet.fetch,
         host: hostOrigin,
         name: 'Custom Mobile App',
-        open: wallet.open,
+        openAuthSession: wallet.openAuthSession,
         rdns: 'xyz.tempo.custom',
         redirectUri: callback,
       }),

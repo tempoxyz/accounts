@@ -75,11 +75,11 @@ const provider = Provider.create({
 
 ### tempoWallet
 
-`tempoWallet()` accepts `redirectUri` and either `open` or `openAuthSession`, plus `fetch`. It uses Tempo Wallet metadata and discovery origins.
+`tempoWallet()` accepts `redirectUri`, `openAuthSession`, and optional `fetch`. It uses Tempo Wallet metadata and discovery origins.
 
 ### mobileWebAuth
 
-`mobileWebAuth()` is the lower-level mobile web auth adapter. It requires `baseUrl`, `host`, `name`, `rdns`, and `redirectUri` so custom integrations do not inherit Tempo Wallet metadata accidentally.
+`mobileWebAuth()` is the lower-level mobile web auth adapter. It requires `baseUrl`, `host`, `name`, `openAuthSession`, `rdns`, and `redirectUri` so custom integrations do not inherit Tempo Wallet metadata accidentally.
 
 ### baseUrl
 
@@ -119,6 +119,6 @@ Tempo Wallet discovery origin, or a preloaded host document.
 ### openAuthSession
 
 - **Type:** `({ authorizationUrl, callback }) => string | undefined | Promise<string | undefined>`
-- **Optional**
+- **Required**
 
-Override for the browser auth-session primitive. Provide either `openAuthSession` or `open`.
+Browser auth-session primitive. Use `accounts/react-native/expo-web-browser` for Expo apps, or pass the equivalent native auth-session integration for another platform.
