@@ -49,25 +49,25 @@ import * as Request from './zod/request.js'
 import * as Rpc from './zod/rpc.js'
 
 export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }, true> & {
-    /** Configured chains. */
-    chains: readonly [Chain, ...Chain[]]
-    /** Returns the active root account as a viem account. */
-    getAccount(
-      options: Omit<Account.find.Options, 'store'> & { signable: true },
-    ): TempoAccount.Account
-    getAccount(options?: Omit<Account.find.Options, 'store'>): JsonRpcAccount
-    /** Returns local or on-chain publication status for an access key. */
-    getAccessKeyStatus(
-      options?: getAccessKeyStatus.Options | undefined,
-    ): Promise<getAccessKeyStatus.ReturnType>
-    /** Returns a viem Client for the given (or current) chain ID. */
-    getClient(options?: {
-      chainId?: number | undefined
-      feePayer?: string | undefined
-    }): ViemClient<Transport, typeof tempo>
-    /** Reactive state store. */
-    store: Store.Store
-  }
+  /** Configured chains. */
+  chains: readonly [Chain, ...Chain[]]
+  /** Returns the active root account as a viem account. */
+  getAccount(
+    options: Omit<Account.find.Options, 'store'> & { signable: true },
+  ): TempoAccount.Account
+  getAccount(options?: Omit<Account.find.Options, 'store'>): JsonRpcAccount
+  /** Returns local or on-chain publication status for an access key. */
+  getAccessKeyStatus(
+    options?: getAccessKeyStatus.Options | undefined,
+  ): Promise<getAccessKeyStatus.ReturnType>
+  /** Returns a viem Client for the given (or current) chain ID. */
+  getClient(options?: {
+    chainId?: number | undefined
+    feePayer?: string | undefined
+  }): ViemClient<Transport, typeof tempo>
+  /** Reactive state store. */
+  store: Store.Store
+}
 
 const announced = new Set<string>()
 
