@@ -150,7 +150,7 @@ const handler = Handler.auth({
 - **Type:** `{ issuer?: string | undefined; required?: boolean | undefined }`
 - **Optional**
 
-Verified-email identity ([OIDC](/docs/guides/oidc)), **enabled by default**. A
+Verified-email identity (OIDC), **enabled by default**. A
 verify request carrying an `idToken` (minted by the wallet during
 [`wallet_connect`](/docs/rpc/wallet_connect#requesting-a-verified-email)) is
 verified against the issuer's JWKS, with `aud` pinned to this request's resolved
