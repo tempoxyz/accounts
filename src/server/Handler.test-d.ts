@@ -40,6 +40,28 @@ describe('codeAuth options', () => {
   })
 })
 
+describe('auth identity (OIDC)', () => {
+  test('Options.identity opts into issuer-based verification', () => {
+    expectTypeOf<Handler.auth.Options>().toMatchTypeOf<{
+      identity?:
+        | {
+            issuer: string
+            required?: boolean | undefined
+          }
+        | undefined
+    }>()
+  })
+
+  test('verifyIdentityToken resolves the verified claims', () => {
+    expectTypeOf(Handler.verifyIdentityToken).toBeFunction()
+    expectTypeOf(Handler.verifyIdentityToken).returns.resolves.toMatchTypeOf<{
+      email: string | undefined
+      nonce: string | undefined
+      subject: string
+    }>()
+  })
+})
+
 describe('compose', () => {
   // Two ad-hoc schema-typed handlers to exercise schema merging.
   function makeAlpha() {

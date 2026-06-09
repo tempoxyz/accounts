@@ -1,3 +1,4 @@
+import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { Hex } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import type { Address, Transport } from 'viem'
@@ -31,6 +32,11 @@ export type SessionPayload = {
   address: Address
   /** Chain ID echoed into the challenge message. */
   chainId: number
+  /**
+   * Verified email, set when the verify request included a valid `idToken`
+   * (see `auth({ identity })`). Omitted when no identity token was supplied.
+   */
+  email?: string | undefined
   /** Unix timestamp (seconds) when the session was issued. */
   issuedAt: number
   /** Unix timestamp (seconds) when the session expires. */
@@ -92,6 +98,13 @@ export namespace schema {
        */
       keyAuthorization: z.optional(u.hex()),
       /**
+       * OIDC identity token (JWT) minted by the wallet, asserting the account's
+       * verified email. When `auth({ identity })` is configured, the server
+       * verifies it against the issuer's JWKS, cross-checks `sub`/`nonce`
+       * against this request, and folds the email onto the session.
+       */
+      idToken: z.optional(z.string()),
+      /**
        * When `true`, the server returns the issued session token in the
        * response body as `{ token }` and does NOT set a session cookie.
        * The caller is responsible for sending it as
@@ -128,6 +141,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     cookie = true,
     cookieName = defaults.cookieName,
     domain,
+    identity,
     onAuthenticate,
     path = '/',
     origin: origin_option,
@@ -212,7 +226,8 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
   })
 
   router.post(verifyPath, Hono.validate('json', schema.verify.parameters), async (c) => {
-    const { address, message, signature, keyAuthorization, returnToken } = c.req.valid('json')
+    const { address, idToken, message, signature, keyAuthorization, returnToken } =
+      c.req.valid('json')
 
     const parsed = parseSiweMessage(message)
     if (!parsed.nonce) return c.json({ error: 'message missing `nonce`' }, 400)
@@ -273,12 +288,40 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     }
     if (!valid) return c.json({ error: 'signature does not match address' }, 401)
 
+    // Optional OIDC identity (verified email). The SIWE signature above proves
+    // address ownership; the id token proves the email↔address binding. We
+    // cross-check `sub` against the SIWE-verified address and reuse the SIWE
+    // nonce as the OIDC nonce, so the single-use challenge store covers replay
+    // protection for both — the app needs no separate nonce plumbing.
+    let email: string | undefined
+    if (identity) {
+      if (idToken) {
+        try {
+          const claims = await verifyIdentityToken(idToken, {
+            audience: `${protocol}//${reqHost}`,
+            issuer: identity.issuer,
+            nonce: parsed.nonce,
+            subject: address,
+          })
+          email = claims.email
+        } catch (error) {
+          return c.json(
+            { error: error instanceof Error ? error.message : 'invalid identity token' },
+            401,
+          )
+        }
+      } else if (identity.required) {
+        return c.json({ error: 'identity token required' }, 400)
+      }
+    }
+
     const issuedAt = Math.floor(now / 1000)
     const payload: SessionPayload = {
       address,
       chainId: parsed.chainId,
       issuedAt,
       expiresAt: issuedAt + sessionTtl,
+      ...(email ? { email } : {}),
     }
 
     // Hook for side effects (e.g. user provisioning, analytics). Returning
@@ -394,6 +437,22 @@ export declare namespace auth {
     /** Domain echoed into challenge messages. @default request `Host` header */
     domain?: string | undefined
     /**
+     * Opt into OIDC identity verification (verified email). When set, a verify
+     * request carrying an `idToken` is checked against the issuer's JWKS, with
+     * `aud` pinned to this request's resolved origin, `sub` cross-checked
+     * against the SIWE-verified address, and `nonce` matched to the SIWE nonce.
+     * On success the verified email is folded onto the session
+     * (`SessionPayload.email`).
+     */
+    identity?:
+      | {
+          /** Issuer (IdP) URL whose JWKS signs the id token (e.g. the wallet's OIDC mount). */
+          issuer: string
+          /** Reject the verify when no (or an invalid) `idToken` is supplied. @default false */
+          required?: boolean | undefined
+        }
+      | undefined
+    /**
      * Hook invoked after the SIWE signature is verified but before the
      * session token is issued. Use to provision a user record, emit
      * analytics, or apply application-level allow/deny rules. Throwing
@@ -458,6 +517,82 @@ export declare namespace auth {
         }
       | undefined
   }
+}
+
+/** Cache of remote JWKS sets keyed by issuer, so verification reuses fetched keys. */
+const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>()
+
+/**
+ * Verifies an OIDC identity token (JWT) against an issuer's JWKS and returns its
+ * claims. Asserts the signature, `iss`, `aud`, and `exp` (via `jose`), plus
+ * `email_verified === true`. Optionally cross-checks `sub` (the account address)
+ * and `nonce` when provided. Throws on any failure.
+ *
+ * Standalone counterpart to `auth({ identity })` — use it when minting your own
+ * session inside `onAuthenticate` with `session: false`.
+ */
+export async function verifyIdentityToken(
+  idToken: string,
+  options: verifyIdentityToken.Options,
+): Promise<verifyIdentityToken.Claims> {
+  const { audience, issuer, nonce, subject } = options
+
+  let jwks = jwksCache.get(issuer)
+  if (!jwks) {
+    // Discover the JWKS endpoint (standard OIDC), falling back to the
+    // conventional path when the issuer omits the discovery document.
+    const discovery = await fetch(`${trimTrailingSlash(issuer)}/.well-known/openid-configuration`)
+      .then((res) => (res.ok ? (res.json() as Promise<{ jwks_uri?: string }>) : null))
+      .catch(() => null)
+    const jwksUri = discovery?.jwks_uri ?? `${trimTrailingSlash(issuer)}/.well-known/jwks.json`
+    jwks = createRemoteJWKSet(new URL(jwksUri))
+    jwksCache.set(issuer, jwks)
+  }
+
+  const { payload } = await jwtVerify(idToken, jwks, {
+    algorithms: ['EdDSA'],
+    audience,
+    issuer,
+  })
+
+  if (payload.email_verified !== true) throw new Error('email not verified')
+  if (subject && String(payload.sub).toLowerCase() !== subject.toLowerCase())
+    throw new Error('identity token subject mismatch')
+  if (nonce !== undefined && payload.nonce !== nonce)
+    throw new Error('identity token nonce mismatch')
+
+  return {
+    email: typeof payload.email === 'string' ? payload.email : undefined,
+    nonce: typeof payload.nonce === 'string' ? payload.nonce : undefined,
+    subject: String(payload.sub),
+  }
+}
+
+export declare namespace verifyIdentityToken {
+  type Options = {
+    /** Expected audience (`aud`) — the relying party's origin. */
+    audience: string
+    /** Issuer (IdP) URL whose JWKS signs the token. */
+    issuer: string
+    /** When set, require the token's `nonce` to equal this value. */
+    nonce?: string | undefined
+    /** When set, require the token's `sub` to equal this address (case-insensitive). */
+    subject?: string | undefined
+  }
+
+  type Claims = {
+    /** Verified email, if present. */
+    email: string | undefined
+    /** OIDC nonce echoed in the token, if present. */
+    nonce: string | undefined
+    /** Token subject (`sub`) — the account address. */
+    subject: string
+  }
+}
+
+/** Strips a single trailing slash so issuer-relative URLs join cleanly. */
+function trimTrailingSlash(value: string): string {
+  return value.endsWith('/') ? value.slice(0, -1) : value
 }
 
 /**
