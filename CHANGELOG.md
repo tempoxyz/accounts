@@ -1,5 +1,22 @@
 # accounts
 
+## 0.14.7
+
+### Patch Changes
+
+- 8a9564b: Persist CLI access keys in filesystem-backed provider storage.
+- edab403: Allow `Provider.create({ authorizeAccessKey })` to return `undefined` to skip access-key authorization for the current `wallet_connect`.
+- df1615e: Persist access keys through provider storage.
+- 1478791: Add provider-owned RPC action handling for adapters that expose a viem account with `getAccount`.
+
+  Adapters can now implement `getAccount` and optional `generateAccessKey` instead of duplicating transaction, signing, and access-key RPC actions.
+
+- ad48834: Allowed the React Native adapter to connect without requesting an access key.
+- 648df76: Make `accounts/react-native` adapter-only and move React Native storage adapters behind explicit subpaths.
+- 694e022: Added a React Privy adapter at `accounts/react/privy`, backed Privy Ethereum signing with `secp256k1_sign`, and stopped exporting the lower-level Core JS Privy adapter from the root package entrypoint.
+- b1a3a69: Added ability to batch key authorization + server auth into one digest.
+- 18052eb: Added opt-in `identity.email` request capability to `wallet_connect`.
+
 ## 0.14.6
 
 ### Patch Changes

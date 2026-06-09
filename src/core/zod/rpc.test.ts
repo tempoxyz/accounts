@@ -416,9 +416,8 @@ describe('wallet_connect.capabilities.result: identity', () => {
   })
 
   test('accepts empty identity object', () => {
-    expect(
-      z.parse(Rpc.wallet_connect.capabilities.result, { identity: {} }),
-    ).toMatchInlineSnapshot(`
+    expect(z.parse(Rpc.wallet_connect.capabilities.result, { identity: {} }))
+      .toMatchInlineSnapshot(`
       {
         "identity": {},
       }
