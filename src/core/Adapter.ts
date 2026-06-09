@@ -296,6 +296,11 @@ export declare namespace createAccount {
     /** Server Authentication result, if the auth capability was requested. */
     auth?: { token?: string | undefined } | undefined
     /**
+     * Consented identity claims (e.g. verified email), if the `identity`
+     * capability was requested and the user approved sharing.
+     */
+    identity?: { email?: string | null | undefined } | undefined
+    /**
      * Echo of the `personalSign` request, present iff the caller supplied
      * `personalSign`. The signature lives on the top-level `signature`
      * field — the message is echoed so consumers can verify locally
@@ -364,6 +369,11 @@ export declare namespace loadAccounts {
     keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Server Authentication result, if the auth capability was requested. */
     auth?: { token?: string | undefined } | undefined
+    /**
+     * Consented identity claims (e.g. verified email), if the `identity`
+     * capability was requested and the user approved sharing.
+     */
+    identity?: { email?: string | null | undefined } | undefined
     /**
      * Echo of the `personalSign` request, present iff the caller supplied
      * `personalSign`. The signature lives on the top-level `signature`

@@ -7,6 +7,7 @@
     "module": "ESNext",
     "types": ["vp/client", "node"],
     "skipLibCheck": true,
+    "customConditions": ["src"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",

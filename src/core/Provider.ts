@@ -1200,6 +1200,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const {
                       accounts,
                       auth: auth_capability,
+                      identity,
                       keyAuthorization,
                       personalSign,
                       signature,
@@ -1330,6 +1331,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                                 ...((auth_result ?? auth_capability)
                                   ? { auth: auth_result ?? auth_capability }
                                   : {}),
+                                ...(identity ? { identity } : {}),
                                 ...(personalSign
                                   ? {
                                       personalSign: {

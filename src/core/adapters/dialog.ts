@@ -84,6 +84,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           return {
             accounts: accounts.map((a) => ({ address: a.address })),
             ...(capabilities?.auth ? { auth: capabilities.auth } : {}),
+            ...(capabilities?.identity ? { identity: capabilities.identity } : {}),
             ...(keyAuthorization ? { keyAuthorization } : {}),
             ...(capabilities?.signature ? { signature: capabilities.signature } : {}),
             ...(capabilities?.personalSign ? { personalSign: capabilities.personalSign } : {}),
@@ -101,6 +102,7 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           return {
             accounts: accounts.map((a) => ({ address: a.address })),
             ...(capabilities?.auth ? { auth: capabilities.auth } : {}),
+            ...(capabilities?.identity ? { identity: capabilities.identity } : {}),
             ...(keyAuthorization ? { keyAuthorization } : {}),
             ...(capabilities?.signature ? { signature: capabilities.signature } : {}),
             ...(capabilities?.personalSign ? { personalSign: capabilities.personalSign } : {}),
