@@ -45,7 +45,7 @@ function signWitnessKeyAuth(options: {
 describe('challenge', () => {
   test('error: requires pinned origin or domain', () => {
     expect(() => auth()).toThrowErrorMatchingInlineSnapshot(
-      `[Error: \`auth()\` requires \`origin\` or \`domain\` to pin SIWE domain binding.]`,
+      `[Error: \`auth()\` requires \`origin\` or \`domain\` to pin SIWE domain binding (or explicit \`trustProxy: true\`).]`,
     )
   })
 

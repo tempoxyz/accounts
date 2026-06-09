@@ -167,11 +167,10 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     ...rest
   } = options
 
-  // Explicit `trustProxy: true` is an acceptable alternative to pinning:
-  // the operator vouches that a proxy in front sets `x-forwarded-*`
-  // honestly (e.g. local dev behind OrbStack/vite on per-checkout hosts).
   if (!origin_option && !domain && !options.trustProxy)
-    throw new Error('`auth()` requires `origin` or `domain` to pin SIWE domain binding.')
+    throw new Error(
+      '`auth()` requires `origin` or `domain` to pin SIWE domain binding (or explicit `trustProxy: true`).',
+    )
 
   async function take(key: string): Promise<ChallengePayload | undefined> {
     if (store.take) return store.take<ChallengePayload>(key)
@@ -520,6 +519,10 @@ export declare namespace auth {
      * `false`, forwarded headers are ignored to prevent spoofing on
      * deployments that expose the origin server directly. Ignored when
      * `origin` is set.
+     *
+     * Explicitly passing `true` also satisfies the `origin`/`domain`
+     * requirement. Only do so behind a proxy that overwrites (not appends)
+     * `x-forwarded-host` and is the only way to reach the server.
      * @default `true` on Cloudflare Workers (always edge-fronted), `false` elsewhere.
      */
     trustProxy?: boolean | undefined
