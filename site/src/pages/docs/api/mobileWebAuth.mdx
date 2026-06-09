@@ -1,0 +1,128 @@
+---
+title: mobileWebAuth
+description: Mobile web auth adapter for browser-session wallet requests.
+---
+
+# `mobileWebAuth`
+
+Creates an adapter that sends provider RPC requests from a mobile to a web host using the [uRPC Mobile Web Auth transport](https://github.com/tempoxyz/urpc/blob/main/specs/transport-mobile-web-auth.md). Each request is a single exchange: one auth URL carries one RPC request, and one callback URL carries one RPC response.
+
+The wallet identifies the app through the consumer discovery document served at `baseUrl`; `name` and `rdns` only describe the provider identity announced to the app.
+
+Both adapters are exported from the root entry — `mobileWebAuth` and `tempoWalletMobileWebAuth` — for bundlers that tree-shake. React Native (Metro) apps should import from the `accounts/mobileWebAuth` subpath instead, since Metro does not tree-shake unused root exports.
+
+## Usage
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { mobileWebAuth } from 'accounts/mobileWebAuth'
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
+
+const provider = Provider.create({
+  adapter: mobileWebAuth({
+    baseUrl: 'https://app.example',
+    host: 'https://wallet.example',
+    name: 'Example Wallet',
+    openAuthSession,
+    rdns: 'com.example.wallet',
+    redirectUri: 'com.example.app:/auth',
+  }),
+})
+```
+
+## tempoWallet
+
+`tempoWallet()` is a template over `mobileWebAuth()` preconfigured with the Tempo Wallet host and provider identity. It accepts `baseUrl`, `redirectUri`, `openAuthSession`, and optional `fetch`.
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { tempoWallet } from 'accounts/mobileWebAuth'
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
+
+const provider = Provider.create({
+  adapter: tempoWallet({
+    baseUrl: 'https://app.example',
+    openAuthSession,
+    redirectUri: 'com.example.app:/auth',
+  }),
+})
+```
+
+## Consumer Discovery
+
+Mobile web auth uses two discovery origins:
+
+- `baseUrl`: consumer discovery origin serving `/.well-known/urpc/consumer.json` — your app's origin
+- `host`: wallet discovery origin serving `/.well-known/urpc/host.json`
+
+The wallet identifies your app through the consumer document served at `baseUrl`, and the document must list the exact `redirectUri` passed to the adapter.
+
+```json
+{
+  "callback_urls": [
+    "com.example.app:/auth",
+    "com.example.app://auth"
+  ],
+  "id": "app.example",
+  "name": "Example App",
+  "origin": "https://app.example",
+  "version": "1.0"
+}
+```
+
+Use a reverse-DNS private-use callback URI registered to your app. Browser-managed callback URLs — such as those issued by Expo Go — are not valid mobile web auth callbacks.
+
+## Parameters
+
+### baseUrl
+
+- **Type:** `string`
+- **Required**
+
+Public HTTPS origin that serves your app's [consumer discovery document](#consumer-discovery).
+
+### fetch
+
+- **Type:** `typeof fetch`
+- **Optional**
+
+Override the fetch implementation used for discovery and auth-session requests.
+
+### host
+
+- **Type:** `string | object`
+- **Required by:** `mobileWebAuth`
+
+Wallet discovery origin, or a preloaded host document.
+
+### name
+
+- **Type:** `string`
+- **Required by:** `mobileWebAuth`
+
+Provider display name.
+
+### openAuthSession
+
+- **Type:** `({ authorizationUrl, callback }) => string | undefined | Promise<string | undefined>`
+- **Required**
+
+Opens the auth URL with a native browser auth session and returns the callback URL.
+
+```ts twoslash
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
+```
+
+### rdns
+
+- **Type:** `string`
+- **Required by:** `mobileWebAuth`
+
+Reverse-DNS provider identifier.
+
+### redirectUri
+
+- **Type:** `string`
+- **Required**
+
+Callback URI watched by the auth session. Publish the exact URI in the [consumer discovery document](#consumer-discovery).

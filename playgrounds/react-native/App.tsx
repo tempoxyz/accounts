@@ -1,4 +1,7 @@
-import * as Linking from 'expo-linking'
+import { Provider } from 'accounts'
+import { mobileWebAuth, tempoWallet } from 'accounts/mobileWebAuth'
+import { secureStorage } from 'accounts/react-native/expo-secure-store'
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
 import { StatusBar } from 'expo-status-bar'
 import { Hex } from 'ox'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -18,10 +21,6 @@ import { formatUnits, parseUnits, type Address, type Hex as viem_Hex } from 'vie
 import { Actions } from 'viem/tempo'
 import { tempoModerato } from 'viem/tempo/chains'
 
-import { Provider } from '../../dist/index.js'
-import { reactNative } from '../../dist/react-native/index.js'
-import { secureStorage } from '../../dist/react-native/secure-storage.js'
-
 const chain = tempoModerato
 
 const tokens = {
@@ -29,13 +28,23 @@ const tokens = {
   'USDC.e': '0x20c0000000000000000000009e8d7eb59b783726' as Address,
 }
 
-const redirectUri = Linking.createURL('auth')
+const redirectUri = 'xyz.tempo.accounts.playground:/auth'
+const walletDefaultUrl = 'https://wallet.tempo.xyz'
+const walletConsumerUrl = process.env.EXPO_PUBLIC_WALLET_CONSUMER_URL
+const walletHost = process.env.EXPO_PUBLIC_WALLET_HOST
 
 const provider = Provider.create({
-  adapter: reactNative({
-    host: 'https://wallet.tempo.xyz',
-    redirectUri,
-  }),
+  adapter:
+    walletConsumerUrl || walletHost
+      ? mobileWebAuth({
+          baseUrl: walletConsumerUrl ?? walletDefaultUrl,
+          host: walletHost ?? walletDefaultUrl,
+          name: 'Tempo Wallet',
+          openAuthSession,
+          rdns: 'xyz.tempo',
+          redirectUri,
+        })
+      : tempoWallet({ baseUrl: walletDefaultUrl, openAuthSession, redirectUri }),
   authorizeAccessKey: () => ({
     expiry: Math.floor(Date.now() / 1000) + 60 * 5,
     limits: [
@@ -250,6 +259,8 @@ export default function App() {
         <ThemedText style={{ fontFamily: 'monospace', fontSize: 12 }}>{address}</ThemedText>
       )}
       <ThemedText style={{ marginTop: 16, fontWeight: 'bold' }}>Network: {network}</ThemedText>
+      <ThemedText>Wallet host: {walletHost ?? walletDefaultUrl}</ThemedText>
+      <ThemedText>Consumer: {walletConsumerUrl ?? walletDefaultUrl}</ThemedText>
       <Button title="Switch Network" onPress={() => switchNetwork('moderato')} />
 
       <View style={{ marginTop: 16 }}>
