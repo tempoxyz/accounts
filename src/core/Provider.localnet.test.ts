@@ -1,3 +1,4 @@
+import { verify } from 'hono/jwt'
 import { Hex, Provider as core_Provider, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { type Address, createClient, createWalletClient, custom, parseUnits } from 'viem'
@@ -732,6 +733,114 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         // Unauthenticated request is rejected.
         const anon = await fetch(`${server.url}/me`)
         expect(anon.status).toBe(401)
+      })
+    })
+
+    describe('identity (OIDC)', () => {
+      let server: Server
+      let issuer: string
+
+      // Ed25519 keypair for the issuer (JWK strings).
+      const signingKey = JSON.stringify({
+        alg: 'Ed25519',
+        crv: 'Ed25519',
+        d: 'tx-s_Aj4ltT_rpY_AIEKexmitq2eyWMkuuIy5JMzmn4',
+        x: 'eZEsf-38KiwfrWnn88cokaJmAoOVgTocC1TndJsz_uQ',
+        kty: 'OKP',
+      })
+      const publicKey = JSON.stringify({
+        alg: 'Ed25519',
+        crv: 'Ed25519',
+        x: 'eZEsf-38KiwfrWnn88cokaJmAoOVgTocC1TndJsz_uQ',
+        kty: 'OKP',
+      })
+      // Sentinel account the issuer treats as having no verified email.
+      const unverified = '0x000000000000000000000000000000000000dead'
+
+      beforeAll(async () => {
+        // Mount `Handler.oidcProvider` on a real server, exactly as the wallet
+        // worker does, so the SDK app mints + verifies tokens over HTTP. Lazy
+        // init so the issuer can reference the resolved `server.url`.
+        let listener: Parameters<typeof createServer>[0] | undefined
+        server = await createServer((req, res) => {
+          if (!listener) {
+            const oidc = Handler.oidcProvider({
+              claimsSupported: [
+                'iss',
+                'aud',
+                'sub',
+                'iat',
+                'exp',
+                'nonce',
+                'email',
+                'email_verified',
+              ],
+              getClaims({ subject }) {
+                // Mirror the wallet policy: only mint when a verified email exists.
+                if (subject.toLowerCase() === unverified) throw new Error('No verified email.')
+                return { email: 'alice@tempo.xyz', email_verified: true }
+              },
+              issuer: `${server.url}/oidc`,
+              kid: 'test-1',
+              path: '/oidc',
+              publicKey,
+              signingKey,
+            })
+            listener = oidc.listener
+          }
+          return listener(req, res)
+        })
+        issuer = `${server.url}/oidc`
+      })
+
+      afterAll(() => server.close())
+
+      test('end-to-end: connect → mint verified-email id_token → verify via discovery + JWKS', async () => {
+        const provider = Provider.create({ adapter: adapter() })
+        const address = await connect(provider)
+
+        const audience = 'https://app.example.com'
+        const nonce = 'n-localnet'
+        // The dialog's mint step: issue a token for the connected account.
+        const minted = await fetch(`${issuer}/token`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ audience, nonce, subject: address }),
+        })
+        expect(minted.status).toBe(200)
+        const { idToken } = (await minted.json()) as { idToken: string }
+
+        // Relying-party verification path: discovery → JWKS → verify signature.
+        const discovery = (await fetch(`${issuer}/.well-known/openid-configuration`).then((r) =>
+          r.json(),
+        )) as { issuer: string; jwks_uri: string }
+        expect(discovery.issuer).toBe(issuer)
+        const { keys } = (await fetch(discovery.jwks_uri).then((r) => r.json())) as {
+          keys: JsonWebKey[]
+        }
+        const claims = (await verify(idToken, { ...keys[0]!, alg: 'EdDSA' }, 'EdDSA')) as Record<
+          string,
+          unknown
+        >
+        const { exp, iat, ...rest } = claims
+        expect(exp).toBe((iat as number) + 300)
+        expect(rest).toEqual({
+          aud: audience,
+          email: 'alice@tempo.xyz',
+          email_verified: true,
+          iss: issuer,
+          nonce,
+          sub: address,
+        })
+      })
+
+      test('error: issuer rejects when no verified email is available (400)', async () => {
+        const res = await fetch(`${issuer}/token`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ audience: 'https://app.example.com', subject: unverified }),
+        })
+        expect(res.status).toBe(400)
       })
     })
   })

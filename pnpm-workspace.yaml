@@ -90,8 +90,8 @@ overrides:
   qs: '6.15.2'
   # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
   reselect: '5.1.0'
-  # GHSA-w7jw-789q-3m8p — transitive via react-native > react-devtools-core.
-  'shell-quote@<1.8.4': '1.8.4'
+  # GHSA-w7jw-789q-3m8p: dev-tooling-only transitive (vite/react-native devtools).
+  'shell-quote@>=1.1.0 <=1.8.3': '1.8.4'
   react: 'catalog:'
   react-dom: 'catalog:'
   tar: '7.5.15'

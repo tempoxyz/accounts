@@ -630,8 +630,26 @@ export namespace wallet_connect {
    */
   export const identity = z.optional(
     z.object({
-      /** Request the account's verified email address. */
-      email: z.optional(z.boolean()),
+      /**
+       * Request the account's verified email. Returned on the connected
+       * account as `capabilities.identity.email` (a plain string, for
+       * client-side UX) and `capabilities.identity.idToken` (a signed JWT, for
+       * server-side verification).
+       *
+       * - `true` — request the email; the wallet auto-issues the signed token,
+       *   reusing the `auth` (SIWE) challenge nonce when present.
+       * - `{ nonce }` — same, with an explicit nonce baked into the token
+       *   (for standalone use without the `auth` capability).
+       */
+      email: z.optional(
+        z.union([
+          z.boolean(),
+          z.object({
+            /** Nonce to bind into the issued identity token (replay protection). */
+            nonce: z.optional(z.string()),
+          }),
+        ]),
+      ),
     }),
   )
 
@@ -673,6 +691,14 @@ export namespace wallet_connect {
         z.object({
           /** Verified email address, if requested and approved. */
           email: z.optional(z.nullable(z.string())),
+          /**
+           * Signed identity token (JWT) asserting the verified email, bound to
+           * the requesting app origin (`aud`) and the connected account
+           * (`sub`). Verify it server-side against the wallet's JWKS. Present
+           * only when `identity.email` was requested and a verified email is
+           * available.
+           */
+          idToken: z.optional(z.string()),
         }),
       ),
       keyAuthorization: z.optional(keyAuthorization),

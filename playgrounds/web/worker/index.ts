@@ -90,7 +90,16 @@ const payment = Mppx.create({
 
 payment.onPaymentSuccess(recordInspection)
 
-const auth = Handler.auth({ origin: process.env.ORIGIN, path: '/auth' })
+const walletOrigin = process.env.VITE_WALLET_HOST
+  ? new URL(process.env.VITE_WALLET_HOST).origin
+  : undefined
+const auth = Handler.auth({
+  origin: process.env.ORIGIN,
+  path: '/auth',
+  // Opt into OIDC identity verification. `issuer` defaults to the Tempo wallet's
+  // production OIDC mount; override it for local dev (or a self-hosted wallet).
+  identity: walletOrigin ? { issuer: `${walletOrigin}/api/oidc` } : {},
+})
 
 const handler = Handler.compose([
   Handler.webAuthn({
@@ -212,7 +221,11 @@ export default {
     if (url.pathname === '/me') {
       const session = await auth.getSession(request)
       if (!session) return Response.json({ error: 'unauthenticated' }, { status: 401 })
-      return Response.json({ address: session.address, chainId: session.chainId })
+      return Response.json({
+        address: session.address,
+        chainId: session.chainId,
+        email: session.email,
+      })
     }
 
     return handler.fetch(request)

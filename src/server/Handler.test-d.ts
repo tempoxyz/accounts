@@ -40,6 +40,19 @@ describe('codeAuth options', () => {
   })
 })
 
+describe('auth identity (OIDC)', () => {
+  test('Options.identity opts into issuer-based verification', () => {
+    expectTypeOf<Handler.auth.Options>().toMatchTypeOf<{
+      identity?:
+        | {
+            issuer?: string | undefined
+            required?: boolean | undefined
+          }
+        | undefined
+    }>()
+  })
+})
+
 describe('compose', () => {
   // Two ad-hoc schema-typed handlers to exercise schema merging.
   function makeAlpha() {
