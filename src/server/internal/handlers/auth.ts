@@ -300,8 +300,9 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     // cross-check `sub` against the SIWE-verified address and reuse the SIWE
     // nonce as the OIDC nonce, so the single-use challenge store covers replay
     // protection for both — the app needs no separate nonce plumbing.
-    let email: string | undefined
-    if (idToken) {
+    const email = await (async () => {
+      if (!idToken)
+        return identity.required ? c.json({ error: 'identity token required' }, 400) : undefined
       try {
         const claims = await Identity.verify(idToken, {
           audience: `${protocol}//${reqHost}`,
@@ -309,16 +310,15 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
           nonce: parsed.nonce,
           subject: address,
         })
-        email = claims.email
+        return claims.email
       } catch (error) {
         return c.json(
           { error: error instanceof Error ? error.message : 'invalid identity token' },
           401,
         )
       }
-    } else if (identity.required) {
-      return c.json({ error: 'identity token required' }, 400)
-    }
+    })()
+    if (email instanceof Response) return email
 
     const issuedAt = Math.floor(now / 1000)
     const payload: SessionPayload = {
