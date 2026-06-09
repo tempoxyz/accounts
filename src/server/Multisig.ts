@@ -572,12 +572,8 @@ async function resolveValidatedConfig(options: {
   if (!config) return undefined
 
   const normalized = MultisigConfig.from(config)
-  const account_expected = MultisigConfig.getAddress(normalized)
-  const id_expected = MultisigConfig.toId(normalized)
-  if (
-    account_expected.toLowerCase() !== account.toLowerCase() ||
-    id_expected.toLowerCase() !== genesisConfigId.toLowerCase()
-  )
+  const account_expected = MultisigConfig.getAddress({ genesisConfigId })
+  if (account_expected.toLowerCase() !== account.toLowerCase())
     throw new RpcResponse.InvalidParamsError({
       message: 'Resolved multisig config does not match account or genesis config id.',
     })

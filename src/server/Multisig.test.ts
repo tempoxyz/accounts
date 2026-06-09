@@ -368,8 +368,52 @@ describe('config resolution', () => {
         store: Multisig.memoryStore(),
       }),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[RpcResponse.InvalidParamsError: Resolved multisig config does not match account or genesis config id.]`,
+      `[RpcResponse.InvalidParamsError: Signature from non-owner 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266.]`,
     )
+  })
+
+  test('behavior: accepts current configs for updated multisig signer sets', async () => {
+    const owner_1 = Account.fromSecp256k1(privateKey_1)
+    const owner_2 = Account.fromSecp256k1(privateKey_2)
+    const account = Account.fromMultisig({
+      threshold: 1,
+      owners: [{ owner: owner_1.address, weight: 1 }],
+    })
+    const current = MultisigConfig.from({
+      owners: [
+        { owner: owner_1.address, weight: 1 },
+        { owner: owner_2.address, weight: 1 },
+      ],
+      threshold: 1,
+    })
+    const transaction = {
+      calls: [{ to: '0xcafebabecafebabecafebabecafebabecafebabe', value: 1n }],
+      chainId: tempoDevnet.id,
+      gas: 21_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 0n,
+      multisig: account.config,
+      nonce: 1n,
+    }
+    const signature = await owner_2.signTransaction(transaction as never)
+    const serialized = withoutInit(
+      await account.signTransaction({
+        ...transaction,
+        signatures: [signature],
+      } as never),
+    )
+
+    const hash = await Multisig.handleRawTransaction({
+      getClient: (() => ({
+        request: async ({ params }: { params: unknown }) => hashRawTransaction(params),
+      })) as never,
+      method: 'eth_sendRawTransaction',
+      request: { params: [serialized] },
+      resolveConfig: () => current,
+      store: Multisig.memoryStore(),
+    })
+
+    expect(hash).toMatchInlineSnapshot(`"${hash}"`)
   })
 })
 
