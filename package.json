@@ -134,8 +134,8 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "react-native": "./dist/index.js",
       "src": "./src/index.ts",
+      "react-native": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./server": {
@@ -165,20 +165,20 @@
     },
     "./react-native": {
       "types": "./dist/react-native/index.d.ts",
-      "react-native": "./dist/react-native/index.js",
       "src": "./src/react-native/index.ts",
+      "react-native": "./dist/react-native/index.js",
       "default": "./dist/react-native/index.js"
     },
     "./react-native/async-storage": {
       "types": "./dist/react-native/asyncStorage.d.ts",
-      "react-native": "./dist/react-native/asyncStorage.js",
       "src": "./src/react-native/asyncStorage.ts",
+      "react-native": "./dist/react-native/asyncStorage.js",
       "default": "./dist/react-native/asyncStorage.js"
     },
     "./react-native/secure-storage": {
       "types": "./dist/react-native/secureStorage.d.ts",
-      "react-native": "./dist/react-native/secureStorage.js",
       "src": "./src/react-native/secureStorage.ts",
+      "react-native": "./dist/react-native/secureStorage.js",
       "default": "./dist/react-native/secureStorage.js"
     }
   }

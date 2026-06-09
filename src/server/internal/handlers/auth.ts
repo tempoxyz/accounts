@@ -167,7 +167,10 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     ...rest
   } = options
 
-  if (!origin_option && !domain)
+  // Explicit `trustProxy: true` is an acceptable alternative to pinning:
+  // the operator vouches that a proxy in front sets `x-forwarded-*`
+  // honestly (e.g. local dev behind OrbStack/vite on per-checkout hosts).
+  if (!origin_option && !domain && !options.trustProxy)
     throw new Error('`auth()` requires `origin` or `domain` to pin SIWE domain binding.')
 
   async function take(key: string): Promise<ChallengePayload | undefined> {

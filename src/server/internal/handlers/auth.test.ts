@@ -49,6 +49,25 @@ describe('challenge', () => {
     )
   })
 
+  test('explicit trustProxy substitutes for a pinned origin', async () => {
+    const app = new Hono().route('/', auth({ trustProxy: true }))
+
+    const res = await app.request('/challenge', {
+      body: JSON.stringify({ chainId: 1 }),
+      headers: {
+        'content-type': 'application/json',
+        host: 'internal.upstream',
+        'x-forwarded-host': 'app.example.com',
+        'x-forwarded-proto': 'https',
+      },
+      method: 'POST',
+    })
+
+    expect(res.status).toBe(200)
+    const { message } = (await res.json()) as { message: string }
+    expect(parseSiweMessage(message).domain).toBe('app.example.com')
+  })
+
   test('returns challenge message with chainId, nonce, zero-address placeholder', async () => {
     const { app } = setup()
 

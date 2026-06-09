@@ -102,8 +102,12 @@ let handlers: ReturnType<typeof createHandlers> | undefined
 function createHandlers(env: Cloudflare.Env) {
   const store = Kv.cloudflare(env.NONCE_KV)
   const auth = Handler.auth({
-    origin: process.env.ORIGIN,
+    // Local dev serves the playground behind trusted proxies (OrbStack
+    // domains, vite) on per-checkout hostnames, so derive the SIWE binding
+    // from forwarded headers; deployments pin the canonical origin via `ORIGIN`.
+    origin: process.env.ORIGIN || undefined,
     path: '/auth',
+    trustProxy: true,
     // Opt into OIDC identity verification. `issuer` defaults to the Tempo wallet's
     // production OIDC mount; override it for local dev (or a self-hosted wallet).
     identity: walletOrigin ? { issuer: `${walletOrigin}/api/oidc` } : {},
