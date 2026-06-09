@@ -1,0 +1,57 @@
+---
+title: Identity.verify
+description: Verify a wallet-issued identity token (verified email) against an issuer's JWKS.
+---
+
+# `Identity.verify`
+
+Verifies a wallet-issued identity token (JWT) against an issuer's JWKS and
+returns its claims. Use it when you handle the sign-in round-trip yourself (for
+example, minting your own session in [`onAuthenticate`](/docs/server/handler.auth#onauthenticate))
+instead of letting the [`Handler.auth({ identity })`](/docs/server/handler.auth#identity)
+option fold the email onto the session.
+
+It asserts the signature, `iss`, `aud`, and `exp`, plus `email_verified === true`.
+Pass `subject` and/or `nonce` to additionally cross-check the token's `sub`
+(account address) and `nonce`. Throws on any failure.
+
+```ts twoslash
+// @noErrors
+import { Identity } from 'accounts/server'
+
+const claims = await Identity.verify(idToken, {
+  audience: 'https://app.example.com', // your app origin (token `aud`)
+  issuer: 'https://wallet.tempo.xyz',  // the wallet's identity issuer
+  subject: address,                    // the signed-in account address
+})
+
+claims.email // verified email
+```
+
+## Parameters
+
+```ts
+type Options = {
+  /** Expected audience (`aud`) — your app's origin. */
+  audience: string
+  /** Issuer (IdP) URL whose JWKS signs the token. */
+  issuer: string
+  /** When set, require the token's `nonce` to equal this value. */
+  nonce?: string | undefined
+  /** When set, require the token's `sub` to equal this address (case-insensitive). */
+  subject?: string | undefined
+}
+```
+
+## Return Type
+
+```ts
+type Claims = {
+  /** Verified email, if present. */
+  email: string | undefined
+  /** OIDC nonce echoed in the token, if present. */
+  nonce: string | undefined
+  /** Token subject (`sub`) — the account address. */
+  subject: string
+}
+```

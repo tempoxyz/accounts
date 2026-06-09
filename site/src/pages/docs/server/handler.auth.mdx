@@ -174,7 +174,7 @@ const handler = Handler.auth({
 
 For verifying a token outside of `Handler.auth` (for example when minting your
 own session in [`onAuthenticate`](#onauthenticate) with `session: false`), use
-[`Handler.verifyIdentityToken`](#verifyidentitytoken).
+[`Identity.verify`](/docs/server/identity.verify).
 
 ### onAuthenticate
 
@@ -343,55 +343,3 @@ Inherited from [`from.Options`](/docs/server/handler.compose#optionscors). CORS 
 - **Optional**
 
 Inherited from [`from.Options`](/docs/server/handler.compose#optionsheaders). Additional headers merged onto every response.
-
-## `verifyIdentityToken`
-
-Verifies a wallet-issued identity token (JWT) against an issuer's JWKS and
-returns its claims. Use it when you handle the SIWE round-trip yourself (for
-example, minting your own session in [`onAuthenticate`](#onauthenticate)) instead
-of letting the [`identity`](#identity) option fold the email onto the session.
-
-It asserts the signature, `iss`, `aud`, and `exp`, plus `email_verified === true`.
-Pass `subject` and/or `nonce` to additionally cross-check the token's `sub`
-(account address) and `nonce`. Throws on any failure.
-
-```ts twoslash
-// @noErrors
-import { Handler } from 'accounts/server'
-
-const claims = await Handler.verifyIdentityToken(idToken, {
-  audience: 'https://app.example.com', // your app origin (token `aud`)
-  issuer: 'https://wallet.example',    // the wallet's identity issuer
-  subject: address,                    // the signed-in account address
-})
-
-claims.email // verified email
-```
-
-### Parameters
-
-```ts
-type Options = {
-  /** Expected audience (`aud`) — your app's origin. */
-  audience: string
-  /** Issuer (IdP) URL whose JWKS signs the token. */
-  issuer: string
-  /** When set, require the token's `nonce` to equal this value. */
-  nonce?: string | undefined
-  /** When set, require the token's `sub` to equal this address (case-insensitive). */
-  subject?: string | undefined
-}
-```
-
-### Return Type
-
-```ts
-type Claims = {
-  /** Verified email, if present. */
-  email: string | undefined
-  /** OIDC nonce echoed in the token, if present. */
-  nonce: string | undefined
-  /** Token subject (`sub`) — the account address. */
-  subject: string
-}
-```

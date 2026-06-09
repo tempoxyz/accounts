@@ -224,4 +224,4 @@ const { email, idToken } = identity ?? {}
 
 The token is a standard OIDC ID token (JWT) bound to your app origin (`aud`) and
 the connected account address (`sub`). Verify it with any OIDC-aware library, or
-with [`Handler.verifyIdentityToken`](/docs/guides/authentication#verify-the-email-server-side).
+with [`Identity.verify`](/docs/server/identity.verify).

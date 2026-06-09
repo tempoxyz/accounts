@@ -51,15 +51,6 @@ describe('auth identity (OIDC)', () => {
         | undefined
     }>()
   })
-
-  test('verifyIdentityToken resolves the verified claims', () => {
-    expectTypeOf(Handler.verifyIdentityToken).toBeFunction()
-    expectTypeOf(Handler.verifyIdentityToken).returns.resolves.toMatchTypeOf<{
-      email: string | undefined
-      nonce: string | undefined
-      subject: string
-    }>()
-  })
 })
 
 describe('compose', () => {
