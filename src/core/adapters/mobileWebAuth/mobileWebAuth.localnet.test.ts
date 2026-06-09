@@ -109,14 +109,6 @@ function createHost(requests: { method: string; params: unknown }[]) {
               origin: consumerOrigin,
               version: '1.0',
             })
-          if (url === `${hostOrigin}/.well-known/urpc/consumer.json`)
-            return Response.json({
-              callback_urls: [callback],
-              id: 'wallet.tempo.xyz',
-              name: 'Tempo Wallet',
-              origin: hostOrigin,
-              version: '1.0',
-            })
           throw new Error(`unexpected fetch to ${url}`)
         },
         html: {

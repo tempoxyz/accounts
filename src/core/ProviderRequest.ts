@@ -1,6 +1,7 @@
 import { Provider } from 'ox'
 import * as z from 'zod/mini'
 
+import { type ZodIssue, flattenIssues } from './internal/zodIssues.js'
 import * as Schema from './Schema.js'
 import * as Request from './zod/request.js'
 import * as Rpc from './zod/rpc.js'
@@ -74,12 +75,7 @@ function parseMetadata(value: unknown): Metadata {
       `Invalid request: ${formatIssues(result.error.issues)}`,
     )
 
-  const parsed = result.data
-  return {
-    ...('id' in parsed ? { id: parsed.id } : {}),
-    ...('jsonrpc' in parsed ? { jsonrpc: parsed.jsonrpc } : {}),
-    ...('origin' in parsed ? { origin: parsed.origin } : {}),
-  }
+  return result.data
 }
 
 function validateParameters(request: Schema.Request) {
@@ -98,55 +94,4 @@ function formatIssues(issues: readonly ZodIssue[]): string {
   return flattenIssues(issues)
     .map((issue) => `${issue.path.map(String).join('.')}: ${issue.message}`)
     .join(', ')
-}
-
-type ZodIssue = {
-  path: readonly PropertyKey[]
-  code: string
-  message: string
-  expected?: string | undefined
-  errors?: readonly (readonly ZodIssue[])[] | undefined
-}
-
-function flattenIssues(
-  issues: readonly ZodIssue[],
-): { path: readonly PropertyKey[]; message: string }[] {
-  const result: { path: readonly PropertyKey[]; message: string }[] = []
-  for (const issue of issues) {
-    if (issue.errors?.length) {
-      const merged = mergeUnionTypes(issue.errors)
-      if (merged) {
-        result.push({ path: issue.path, message: merged })
-        continue
-      }
-      const best = issue.errors.reduce((a, b) => (a.length <= b.length ? a : b))
-      for (const nested of flattenIssues(best))
-        result.push({ path: [...issue.path, ...nested.path], message: nested.message })
-    } else {
-      let message = issue.message
-      if (issue.code === 'invalid_type' && issue.expected) message = `Expected ${issue.expected}`
-      else if (issue.code === 'invalid_value') message = 'Invalid value'
-      result.push({ path: issue.path, message })
-    }
-  }
-  return result
-}
-
-/** Merges union branches that each failed on type alone into `Expected a | b | c`. */
-function mergeUnionTypes(branches: readonly (readonly ZodIssue[])[]): string | undefined {
-  const expected: string[] = []
-  for (const branch of branches) {
-    const issue = branch[0]
-    if (
-      branch.length !== 1 ||
-      !issue ||
-      issue.code !== 'invalid_type' ||
-      !issue.expected ||
-      issue.path.length > 0
-    )
-      return undefined
-    if (!expected.includes(issue.expected)) expected.push(issue.expected)
-  }
-  if (expected.length < 2) return undefined
-  return `Expected ${expected.join(' | ')}`
 }

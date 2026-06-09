@@ -1,7 +1,7 @@
 import { Hex, P256, Provider as core_Provider, RpcResponse } from 'ox'
 import { custom } from 'viem'
 import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
-import { Wata, mobileWebAuth as core_mobileWebAuth, type MobileWebAuth } from 'wata'
+import { Discovery, Wata, mobileWebAuth as core_mobileWebAuth, type MobileWebAuth } from 'wata'
 import { z } from 'zod/mini'
 
 import * as Adapter from '../../Adapter.js'
@@ -36,6 +36,21 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
       }
     }
 
+    // The host discovery document is fetched once and reused for the
+    // adapter's lifetime; a wallet rotating its document requires a new
+    // adapter instance to pick up.
+    let hostDocument: Promise<Discovery.HostDocument> | undefined
+    function resolveHost() {
+      if (typeof host !== 'string') return host
+      hostDocument ??= Discovery.fetchHost(host, fetch !== undefined ? { fetch } : {}).catch(
+        (error) => {
+          hostDocument = undefined
+          throw error
+        },
+      )
+      return hostDocument
+    }
+
     async function requestMobile(request: {
       method: string
       params?: readonly unknown[] | undefined
@@ -49,7 +64,7 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
         transports: [
           core_mobileWebAuth({
             callback: redirectUri,
-            host,
+            host: await resolveHost(),
             openAuthSession,
             ...(fetch !== undefined ? { fetch } : {}),
           }),
