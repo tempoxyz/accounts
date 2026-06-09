@@ -84,7 +84,7 @@ function parseMetadata(value: unknown): Metadata {
 
 function validateParameters(request: Schema.Request) {
   const schema = Rpc.strictParameters[request.method as keyof typeof Rpc.strictParameters]
-  if (!schema || !('params' in request) || !request.params?.[0]) return
+  if (!schema || !('params' in request) || request.params?.[0] == null) return
 
   const result = z.safeParse(schema, request.params[0])
   if (result.error)
@@ -114,6 +114,11 @@ function flattenIssues(
   const result: { path: readonly PropertyKey[]; message: string }[] = []
   for (const issue of issues) {
     if (issue.errors?.length) {
+      const merged = mergeUnionTypes(issue.errors)
+      if (merged) {
+        result.push({ path: issue.path, message: merged })
+        continue
+      }
       const best = issue.errors.reduce((a, b) => (a.length <= b.length ? a : b))
       for (const nested of flattenIssues(best))
         result.push({ path: [...issue.path, ...nested.path], message: nested.message })
@@ -125,4 +130,23 @@ function flattenIssues(
     }
   }
   return result
+}
+
+/** Merges union branches that each failed on type alone into `Expected a | b | c`. */
+function mergeUnionTypes(branches: readonly (readonly ZodIssue[])[]): string | undefined {
+  const expected: string[] = []
+  for (const branch of branches) {
+    const issue = branch[0]
+    if (
+      branch.length !== 1 ||
+      !issue ||
+      issue.code !== 'invalid_type' ||
+      !issue.expected ||
+      issue.path.length > 0
+    )
+      return undefined
+    if (!expected.includes(issue.expected)) expected.push(issue.expected)
+  }
+  if (expected.length < 2) return undefined
+  return `Expected ${expected.join(' | ')}`
 }

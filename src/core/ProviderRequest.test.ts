@@ -89,7 +89,9 @@ describe('parse', () => {
         id: {},
         method: 'eth_accounts',
       }),
-    ).toThrowErrorMatchingInlineSnapshot(`[ProviderRpcError: Invalid request: id: Expected string]`)
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[ProviderRpcError: Invalid request: id: Expected string | number | null]`,
+    )
   })
 
   test('error: rejects invalid wallet params', () => {
