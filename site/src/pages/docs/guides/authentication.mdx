@@ -130,6 +130,7 @@ app.use(c => auth.fetch(c.req.raw))      // Hono
 export const GET = auth.fetch            // Next.js
 export const POST = auth.fetch           // Next.js
 ```
+
 :::
 
 ### Configure the Connector
@@ -166,6 +167,7 @@ tempoWallet({
   },
 })
 ```
+
 :::
 
 ### Display the Sign-In Button
@@ -252,6 +254,43 @@ const auth = Handler.auth({
 ```
 
 ::::
+
+## Recipes
+
+### Request a Verified Email
+
+Alongside the authentication session, you can request the account's verified email via the `identity` capability.
+
+Set `withCapabilities: true` so the connect result includes per-account `capabilities`, then read the email from the authenticated account.
+
+```tsx twoslash [src/App.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
+
+function Connect() {
+  const { connectAsync } = useConnect()
+  const [connector] = useConnectors()
+
+  return (
+    <button
+      onClick={async () => {
+        const result = await connectAsync({
+          connector,
+          capabilities: { // [!code focus]
+            identity: { email: true }, // [!code focus]
+          }, // [!code focus]
+          withCapabilities: true, // [!code focus]
+        })
+
+        // Present only if the user approved sharing. // [!code focus]
+        const email = result.accounts[0]?.capabilities?.identity?.email // [!code focus]
+      }}
+    >
+      Sign in
+    </button>
+  )
+}
+```
 
 ## Notes & Gotchas
 
