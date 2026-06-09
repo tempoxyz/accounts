@@ -9,9 +9,9 @@ import * as z from 'zod/mini'
 
 import * as u from '../../../core/zod/utils.js'
 import { type Handler, from } from '../../Handler.js'
+import * as Identity from '../../Identity.js'
 import * as Kv from '../../Kv.js'
 import * as Hono from '../hono.js'
-import * as Identity from './identity.js'
 import * as Session from './session.js'
 
 const defaults = {
