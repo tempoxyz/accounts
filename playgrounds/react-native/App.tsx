@@ -1,8 +1,8 @@
 import { Provider } from 'accounts'
 import { mobileWebAuth } from 'accounts/mobileWebAuth'
 import { tempoWallet } from 'accounts/mobileWebAuth/tempoWallet'
+import { secureStorage } from 'accounts/react-native/expo-secure-store'
 import { openAuthSession } from 'accounts/react-native/expo-web-browser'
-import { secureStorage } from 'accounts/react-native/secure-storage'
 import { StatusBar } from 'expo-status-bar'
 import { Hex } from 'ox'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -31,21 +31,21 @@ const tokens = {
 
 const redirectUri = 'xyz.tempo.accounts.playground:/auth'
 const walletDefaultUrl = 'https://wallet.tempo.xyz'
-const walletBaseUrl = process.env.EXPO_PUBLIC_WALLET_CONSUMER_URL
+const walletConsumerUrl = process.env.EXPO_PUBLIC_WALLET_CONSUMER_URL
 const walletHost = process.env.EXPO_PUBLIC_WALLET_HOST
 
 const provider = Provider.create({
   adapter:
-    walletBaseUrl || walletHost
+    walletConsumerUrl || walletHost
       ? mobileWebAuth({
-          baseUrl: walletBaseUrl ?? walletDefaultUrl,
+          baseUrl: walletConsumerUrl ?? walletDefaultUrl,
           host: walletHost ?? walletDefaultUrl,
           name: 'Tempo Wallet',
           openAuthSession,
           rdns: 'xyz.tempo',
           redirectUri,
         })
-      : tempoWallet({ openAuthSession, redirectUri }),
+      : tempoWallet({ baseUrl: walletDefaultUrl, openAuthSession, redirectUri }),
   authorizeAccessKey: () => ({
     expiry: Math.floor(Date.now() / 1000) + 60 * 5,
     limits: [
@@ -261,7 +261,7 @@ export default function App() {
       )}
       <ThemedText style={{ marginTop: 16, fontWeight: 'bold' }}>Network: {network}</ThemedText>
       <ThemedText>Wallet host: {walletHost ?? walletDefaultUrl}</ThemedText>
-      <ThemedText>Consumer: {walletBaseUrl ?? walletDefaultUrl}</ThemedText>
+      <ThemedText>Consumer: {walletConsumerUrl ?? walletDefaultUrl}</ThemedText>
       <Button title="Switch Network" onPress={() => switchNetwork('moderato')} />
 
       <View style={{ marginTop: 16 }}>

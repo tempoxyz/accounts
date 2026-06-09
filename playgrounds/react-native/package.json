@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "main": "./index.js",
   "scripts": {
-    "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo run:ios"
+    "android": "node scripts/expo.mjs run:android",
+    "consumer": "node scripts/consumer-server.mjs",
+    "ios": "node scripts/expo.mjs run:ios",
+    "start": "node scripts/expo.mjs start"
   },
   "dependencies": {
     "accounts": "workspace:*",
