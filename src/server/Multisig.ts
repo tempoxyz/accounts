@@ -84,6 +84,7 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     createdAt: pending?.createdAt ?? now,
     genesisConfigId: input.genesisConfigId,
     id: input.id,
+    init: pending?.init ?? !!input.init,
     payload: input.payload,
     signatures: mergeSignatures([...(pending?.signatures ?? []), ...input.signatures]),
     status: pending?.status === 'submitted' ? 'submitted' : 'pending',
@@ -132,6 +133,7 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   const client = getClient(operation.chainId)
   const final = await serializeFinal({
     config,
+    init: operation.init,
     signatures: approvals.signatures,
     transaction: input.transaction,
   })
@@ -481,6 +483,8 @@ export type Operation = {
   genesisConfigId: Hex.Hex
   /** Deterministic operation id. */
   id: Hex.Hex
+  /** Whether the finalized transaction must carry the genesis init config. */
+  init?: boolean | undefined
   /** Unsigned Tempo transaction sign payload. */
   payload: Hex.Hex
   /** Collected owner approval signatures. */
@@ -629,6 +633,7 @@ function getApprovals(options: {
 
 async function serializeFinal(options: {
   config: MultisigConfig.Config
+  init?: boolean | undefined
   signatures: readonly Hex.Hex[]
   transaction: Record<string, unknown>
 }) {
@@ -647,7 +652,7 @@ async function serializeFinal(options: {
   const signature = SignatureEnvelope.from({
     genesisConfig: options.config,
     signatures: sorted,
-    ...((transaction.nonce as number | bigint | undefined) ? {} : { init: true }),
+    ...(options.init ? { init: true } : {}),
   })
   return TxEnvelopeTempo.serialize(envelope, { feePayerSignature: undefined, signature })
 }
