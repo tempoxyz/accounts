@@ -132,7 +132,9 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   })
   const client = getClient(operation.chainId)
   const final = await serializeFinal({
+    account: operation.account,
     config,
+    genesisConfigId: operation.genesisConfigId,
     init: operation.init,
     signatures: approvals.signatures,
     transaction: input.transaction,
@@ -632,7 +634,9 @@ function getApprovals(options: {
 }
 
 async function serializeFinal(options: {
+  account: Address
   config: MultisigConfig.Config
+  genesisConfigId: Hex.Hex
   init?: boolean | undefined
   signatures: readonly Hex.Hex[]
   transaction: Record<string, unknown>
@@ -645,14 +649,16 @@ async function serializeFinal(options: {
   const payload = TxEnvelopeTempo.getSignPayload(envelope)
   const signatures = options.signatures.map((approval) => SignatureEnvelope.from(approval))
   const sorted = SignatureEnvelope.sortMultisigApprovals({
-    genesisConfig: options.config,
+    account: options.account,
+    genesisConfigId: options.genesisConfigId,
     payload,
     signatures,
   })
   const signature = SignatureEnvelope.from({
-    genesisConfig: options.config,
+    account: options.account,
+    genesisConfigId: options.genesisConfigId,
     signatures: sorted,
-    ...(options.init ? { init: true } : {}),
+    ...(options.init ? { init: options.config } : {}),
   })
   return TxEnvelopeTempo.serialize(envelope, { feePayerSignature: undefined, signature })
 }

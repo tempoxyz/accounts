@@ -402,10 +402,14 @@ describe('config resolution', () => {
         signatures: [signature],
       } as never),
     )
+    let submitted: `0x${string}` | undefined
 
     const hash = await Multisig.handleRawTransaction({
       getClient: (() => ({
-        request: async ({ params }: { params: unknown }) => hashRawTransaction(params),
+        request: async ({ params }: { params: unknown }) => {
+          submitted = Array.isArray(params) ? (params[0] as `0x${string}`) : undefined
+          return hashRawTransaction(params)
+        },
       })) as never,
       method: 'eth_sendRawTransaction',
       request: { params: [serialized] },
@@ -413,7 +417,20 @@ describe('config resolution', () => {
       store: Multisig.memoryStore(),
     })
 
-    expect(hash).toMatchInlineSnapshot(`"${hash}"`)
+    const transaction_submitted = Transaction.deserialize(submitted! as never) as {
+      signature: SignatureEnvelope.Multisig
+    }
+    expect({
+      hash,
+      init: transaction_submitted.signature.init,
+      genesisConfigId: transaction_submitted.signature.genesisConfigId,
+    }).toMatchInlineSnapshot(`
+      {
+        "genesisConfigId": "${MultisigConfig.toId(account.config)}",
+        "hash": "${hash}",
+        "init": undefined,
+      }
+    `)
   })
 })
 
