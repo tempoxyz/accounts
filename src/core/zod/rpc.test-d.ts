@@ -12,7 +12,9 @@ describe('wallet_connect.identity', () => {
   test('register request capability exposes identity', () => {
     type Capabilities = NonNullable<z.output<typeof Rpc.wallet_connect.capabilities.request>>
     type Register = Extract<Capabilities, { method: 'register' }>
-    expectTypeOf<Register['identity']>().toEqualTypeOf<{ email?: boolean | undefined } | undefined>()
+    expectTypeOf<Register['identity']>().toEqualTypeOf<
+      { email?: boolean | undefined } | undefined
+    >()
   })
 
   test('login request capability exposes identity', () => {
