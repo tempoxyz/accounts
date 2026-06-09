@@ -299,9 +299,7 @@ export declare namespace createAccount {
      * Consented identity claims (e.g. verified email), if the `identity`
      * capability was requested and the user approved sharing.
      */
-    identity?:
-      | { email?: string | null | undefined; idToken?: string | undefined }
-      | undefined
+    identity?: { email?: string | null | undefined; idToken?: string | undefined } | undefined
     /**
      * Echo of the `personalSign` request, present iff the caller supplied
      * `personalSign`. The signature lives on the top-level `signature`
@@ -375,9 +373,7 @@ export declare namespace loadAccounts {
      * Consented identity claims (e.g. verified email), if the `identity`
      * capability was requested and the user approved sharing.
      */
-    identity?:
-      | { email?: string | null | undefined; idToken?: string | undefined }
-      | undefined
+    identity?: { email?: string | null | undefined; idToken?: string | undefined } | undefined
     /**
      * Echo of the `personalSign` request, present iff the caller supplied
      * `personalSign`. The signature lives on the top-level `signature`
