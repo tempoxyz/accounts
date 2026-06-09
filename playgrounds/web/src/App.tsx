@@ -982,7 +982,7 @@ function WalletConnect(props: { adapterType: AdapterType }) {
                 onChange={(e) => setIdentityEmailEnabled(e.target.checked)}
                 type="checkbox"
               />{' '}
-              Request Verified Email
+              Request Identity (Email)
             </label>
           </legend>
         </fieldset>
