@@ -7,7 +7,7 @@ description: Mobile web auth adapter for browser-session wallet requests.
 
 Creates an adapter that sends provider RPC requests from a mobile to a web host using the [uRPC Mobile Web Auth transport](https://github.com/tempoxyz/urpc/blob/main/specs/transport-mobile-web-auth.md). Each request is a single exchange: one auth URL carries one RPC request, and one callback URL carries one RPC response.
 
-This 
+The wallet identifies the app through the consumer discovery document served at `baseUrl`; `name` and `rdns` only describe the provider identity announced to the app.
 
 ## Usage
 
@@ -28,14 +28,56 @@ const provider = Provider.create({
 })
 ```
 
+## tempoWallet
+
+`tempoWallet()` is a template over `mobileWebAuth()` preconfigured with the Tempo Wallet host and provider identity. It accepts `baseUrl`, `redirectUri`, `openAuthSession`, and optional `fetch`.
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { tempoWallet } from 'accounts/mobileWebAuth'
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
+
+const provider = Provider.create({
+  adapter: tempoWallet({
+    baseUrl: 'https://app.example',
+    openAuthSession,
+    redirectUri: 'com.example.app:/auth',
+  }),
+})
+```
+
+## Consumer Discovery
+
+Mobile web auth uses two discovery origins:
+
+- `baseUrl`: consumer discovery origin serving `/.well-known/urpc/consumer.json` — your app's origin
+- `host`: wallet discovery origin serving `/.well-known/urpc/host.json`
+
+The wallet identifies your app through the consumer document served at `baseUrl`, and the document must list the exact `redirectUri` passed to the adapter.
+
+```json
+{
+  "callback_urls": [
+    "com.example.app:/auth",
+    "com.example.app://auth"
+  ],
+  "id": "app.example",
+  "name": "Example App",
+  "origin": "https://app.example",
+  "version": "1.0"
+}
+```
+
+Use a reverse-DNS private-use callback URI registered to your app. Browser-managed callback URLs — such as those issued by Expo Go — are not valid mobile web auth callbacks.
+
 ## Parameters
 
 ### baseUrl
 
 - **Type:** `string`
-- **Required by:** `mobileWebAuth`
+- **Required**
 
-Public HTTPS origin that serves the consumer discovery document.
+Public HTTPS origin that serves your app's [consumer discovery document](#consumer-discovery).
 
 ### fetch
 
@@ -81,4 +123,4 @@ Reverse-DNS provider identifier.
 - **Type:** `string`
 - **Required**
 
-Callback URI watched by the auth session. Use a development build with a private-use app scheme, and publish the exact URI in the consumer discovery document.
+Callback URI watched by the auth session. Publish the exact URI in the [consumer discovery document](#consumer-discovery).

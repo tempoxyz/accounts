@@ -1,124 +1,87 @@
 ---
 title: React Native
-description: Connect React Native apps with Tempo Wallet.
+description: Set up Tempo Accounts in a React Native app.
 ---
 
 # React Native
 
-React Native apps can connect to Tempo Wallet with mobile web auth. The provider opens Tempo Wallet in a system browser session, then receives an app-link callback with the encrypted response.
-Each mobile web auth request is a single exchange: one browser auth URL carries one RPC request, and one callback URL carries one RPC response.
+React Native apps connect to a wallet through [mobile web auth](/docs/api/mobileWebAuth): the provider opens the wallet in a system browser session, then receives an app-link callback with the encrypted response.
+
+This guide covers the platform setup. For choosing and configuring the adapter itself, see the [Tempo Wallet adapter](/docs/adapters/tempo-wallet) or the [mobileWebAuth reference](/docs/api/mobileWebAuth).
+
+## Install
+
+```sh
+npx expo install expo-web-browser expo-secure-store react-native-get-random-values
+```
+
+## Connect
 
 ```ts twoslash
 import { Provider } from 'accounts'
-import { tempoWallet } from 'accounts/mobileWebAuth/tempoWallet'
+import { tempoWallet } from 'accounts/mobileWebAuth'
+import { secureStorage } from 'accounts/react-native/expo-secure-store'
 import { openAuthSession } from 'accounts/react-native/expo-web-browser'
 
-const redirectUri = 'com.example.app:/auth'
-
 const provider = Provider.create({
-  adapter: tempoWallet({ openAuthSession, redirectUri }),
+  adapter: tempoWallet({
+    baseUrl: 'https://app.example',
+    openAuthSession,
+    redirectUri: 'com.example.app:/auth',
+  }),
+  storage: secureStorage(),
 })
 ```
 
-`accounts/react-native/expo-web-browser` uses Expo WebBrowser for the native
-system auth session. It is an optional React Native subpath so apps that use
-another browser primitive do not install Expo WebBrowser.
+## Development Builds
 
-## Consumer Discovery
+Use a development build with a reverse-DNS private-use callback URI (e.g. `com.example.app:/auth`). Expo Go-style callback URLs are not valid mobile web auth callbacks. The exact callback URI must be published in your app's [consumer discovery document](/docs/api/mobileWebAuth#consumer-discovery).
 
-The mobile web auth `tempoWallet()` adapter uses `https://wallet.tempo.xyz` for both discovery origins by default:
+```sh
+expo run:ios
+```
 
-- `baseUrl`: consumer discovery origin serving `/.well-known/urpc/consumer.json`
-- `host`: wallet discovery origin serving `/.well-known/urpc/host.json`
+## Polyfills
 
-Using the same origin is valid when the mobile app and wallet are owned by the same domain. The consumer document must include the exact `redirectUri` passed to `tempoWallet()`.
+Import polyfills before the SDK so module-scope code finds them:
 
-```json
-{
-  "callback_urls": [
-    "xyz.tempo.accounts.playground:/auth",
-    "xyz.tempo.accounts.playground://auth"
-  ],
-  "id": "wallet.tempo.xyz",
-  "name": "Tempo Wallet",
-  "origin": "https://wallet.tempo.xyz",
-  "version": "1.0"
+```js
+// index.js
+import './polyfills'
+```
+
+```js
+// polyfills.js
+import 'react-native-get-random-values'
+
+if (typeof globalThis.MessageEvent === 'undefined') {
+  globalThis.MessageEvent = class MessageEvent {
+    constructor(type, options = {}) {
+      this.data = options.data ?? null
+      this.origin = options.origin ?? ''
+      this.type = type
+    }
+  }
 }
 ```
 
-Use a development build with a reverse-DNS private-use callback URI. Expo Go-style callback URLs are not valid mobile web auth callbacks. Publish the exact callback URI you pass to `tempoWallet()` in the consumer document.
+`react-native-get-random-values` provides `crypto.getRandomValues` for key generation. Hermes does not provide `MessageEvent`, which the SDK references at module scope.
 
-## Custom Wallet Hosts
+## Browser Sessions
 
-Use `mobileWebAuth()` directly when the app origin, wallet host, or provider identity differs from Tempo Wallet.
+`accounts/react-native/expo-web-browser` opens auth sessions with Expo WebBrowser. It is an optional subpath so apps that use another browser primitive do not install Expo WebBrowser — pass your own `openAuthSession` that opens the authorization URL and resolves with the callback URL instead.
 
 ```ts twoslash
-import { Provider } from 'accounts'
-import { mobileWebAuth } from 'accounts/mobileWebAuth'
 import { openAuthSession } from 'accounts/react-native/expo-web-browser'
-
-const redirectUri = 'com.example.app:/auth'
-
-const provider = Provider.create({
-  adapter: mobileWebAuth({
-    baseUrl: 'https://app.example',
-    host: 'https://wallet.example',
-    name: 'Example Wallet',
-    openAuthSession,
-    rdns: 'com.example.wallet',
-    redirectUri,
-  }),
-})
 ```
 
-## Options
+## Storage
 
-### tempoWallet
+Provider state persists through a storage adapter. Two React Native adapters ship as optional subpaths:
 
-`tempoWallet()` accepts `redirectUri`, `openAuthSession`, and optional `fetch`. It uses Tempo Wallet metadata and discovery origins.
+```ts twoslash
+import { asyncStorage } from 'accounts/react-native/async-storage'
+import { secureStorage } from 'accounts/react-native/expo-secure-store'
+```
 
-### mobileWebAuth
-
-`mobileWebAuth()` is the lower-level mobile web auth adapter. It requires `baseUrl`, `host`, `name`, `openAuthSession`, `rdns`, and `redirectUri` so custom integrations do not inherit Tempo Wallet metadata accidentally.
-
-### baseUrl
-
-- **Type:** `string`
-- **Required by:** `mobileWebAuth()`
-
-Public origin serving the consumer discovery document.
-
-### redirectUri
-
-- **Type:** `string`
-- **Required**
-
-Deep-link URI watched by the system browser auth session.
-
-### name
-
-- **Type:** `string`
-- **Required by:** `mobileWebAuth()`
-
-Display name sent to Tempo Wallet during mobile web auth.
-
-### rdns
-
-- **Type:** `string`
-- **Required by:** `mobileWebAuth()`
-
-Reverse-DNS app identifier sent to Tempo Wallet during mobile web auth.
-
-### host
-
-- **Type:** `string | HostDocument`
-- **Required by:** `mobileWebAuth()`
-
-Tempo Wallet discovery origin, or a preloaded host document.
-
-### openAuthSession
-
-- **Type:** `({ authorizationUrl, callback }) => string | undefined | Promise<string | undefined>`
-- **Required**
-
-Browser auth-session primitive. Use `accounts/react-native/expo-web-browser` for Expo apps, or pass the equivalent native auth-session integration for another platform.
+Use `secureStorage` (backed by `expo-secure-store`, stored in the device Keychain/Keystore) when the provider manages access keys. Use `asyncStorage` (backed by `@react-native-async-storage/async-storage`) for non-sensitive state.

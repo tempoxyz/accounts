@@ -42,6 +42,20 @@ const provider = Provider.create({
 })
 ```
 
+```ts twoslash [React Native]
+import { Provider } from 'accounts'
+import { tempoWallet } from 'accounts/mobileWebAuth'
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
+
+const provider = Provider.create({
+  adapter: tempoWallet({
+    baseUrl: 'https://app.example',
+    openAuthSession,
+    redirectUri: 'com.example.app:/auth',
+  }),
+})
+```
+
 ```ts twoslash [CLI]
 import { Provider } from 'accounts/cli'
 
@@ -49,6 +63,12 @@ const provider = Provider.create()
 ```
 
 :::
+
+## Mobile
+
+On mobile there is no embedded dialog. The adapter connects through [mobile web auth](/docs/api/mobileWebAuth): each request opens Tempo Wallet in a system browser session and completes via an app-link callback to `redirectUri`.
+
+Tempo Wallet identifies your app through the consumer discovery document served at `baseUrl`, and that document must list the exact `redirectUri`. See [Consumer Discovery](/docs/api/mobileWebAuth#consumer-discovery) for the document format, and the [React Native guide](/docs/guides/react-native) for platform setup.
 
 ## Next Steps
 
@@ -76,5 +96,11 @@ const provider = Provider.create()
     icon="lucide:book"
     to="/docs/api/dialog"
     title="tempoWallet reference"
+  />
+  <Card
+    description="Mobile web auth reference for connecting from React Native and other mobile clients."
+    icon="lucide:smartphone"
+    to="/docs/api/mobileWebAuth"
+    title="mobileWebAuth reference"
   />
 </Cards>
