@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vp/test'
+import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Adapter from './Adapter.js'
 import * as Provider from './Provider.js'
@@ -69,6 +69,72 @@ describe('wallet_connect', () => {
         "idToken": "eyJhbG.payload.sig",
       }
     `)
+  })
+
+  describe('identity + auth', () => {
+    afterEach(() => vi.unstubAllGlobals())
+
+    test('behavior: forwards identity.idToken into the auth verify request body', async () => {
+      // Capture the body POSTed to the verify endpoint. The challenge endpoint
+      // echoes the SDK-sent chainId into a valid SIWE message so the SDK's
+      // challenge validation (domain/uri/chainId/nonce) passes.
+      let verifyBody: Record<string, unknown> | undefined
+      vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/auth/challenge')) {
+          const { chainId } = JSON.parse(String(init?.body)) as { chainId: number }
+          const message = [
+            'app.example.com wants you to sign in with your Ethereum account:',
+            address,
+            '',
+            '',
+            'URI: https://app.example.com',
+            'Version: 1',
+            `Chain ID: ${chainId}`,
+            'Nonce: deadbeef00',
+            'Issued At: 2025-01-01T00:00:00Z',
+          ].join('\n')
+          return new Response(JSON.stringify({ message }), { status: 200 })
+        }
+        if (url === 'https://app.example.com/auth') {
+          verifyBody = JSON.parse(String(init?.body))
+          return new Response(JSON.stringify({ token: 'session' }), { status: 200 })
+        }
+        throw new Error(`unexpected fetch: ${url}`)
+      })
+
+      const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address }] }
+          },
+          async loadAccounts() {
+            // Wallet host minted the token during the ceremony, reusing the
+            // SIWE nonce; it surfaces on the connect result's identity.
+            return {
+              accounts: [{ address }],
+              identity: { email: 'alice@example.com', idToken: 'eyJhbG.payload.sig' },
+              signature: '0xabc',
+            }
+          },
+        },
+      }))
+      const provider = Provider.create({ adapter, storage: Storage.memory() })
+
+      await provider.request({
+        method: 'wallet_connect',
+        params: [
+          {
+            capabilities: {
+              auth: { url: 'https://app.example.com/auth' },
+              identity: { email: true },
+            },
+          },
+        ],
+      })
+
+      expect(verifyBody?.idToken).toBe('eyJhbG.payload.sig')
+    })
   })
 })
 
