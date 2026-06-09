@@ -19,21 +19,26 @@ const rootAddress = accounts[0]!.address
 function createKeyAuthorization(
   address: `0x${string}`,
   options: {
+    account?: `0x${string}` | undefined
     chainId?: bigint | undefined
     expiry?: number | undefined
+    isAdmin?: boolean | undefined
     keyType?: KeyAuthorization.KeyAuthorization['type'] | undefined
     limits?: { token: `0x${string}`; limit: bigint; period?: number | undefined }[] | undefined
     scopes?: KeyAuthorization.Scope[] | undefined
+    witness?: Hex.Hex | undefined
   } = {},
 ) {
   return KeyAuthorization.from(
     {
+      ...(options.account ? { account: options.account, isAdmin: options.isAdmin ?? false } : {}),
       address,
       chainId: options.chainId ?? 1n,
       expiry: options.expiry,
       limits: options.limits,
       scopes: options.scopes,
       type: options.keyType ?? 'p256',
+      ...(options.witness ? { witness: options.witness } : {}),
     },
     { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
   )
@@ -324,10 +329,13 @@ describe('prepareAuthorization', () => {
   })
 
   test('behavior: prepares external key authorization from address', async () => {
+    const witness = `0x${'11'.repeat(32)}` as const
     const result = await AccessKey.prepareAuthorization({
+      account: rootAddress,
       address: accounts[1]!.address,
       chainId: 123n,
       expiry: 456,
+      isAdmin: false,
       keyType: 'webAuthn',
       limits: [
         {
@@ -343,14 +351,17 @@ describe('prepareAuthorization', () => {
           selector: 'transfer(address,uint256)',
         },
       ],
+      witness,
     })
 
     expect(result.keyPair).toBeUndefined()
     expect(result.keyAuthorization).toMatchInlineSnapshot(`
       {
+        "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
         "address": "${accounts[1]!.address}",
         "chainId": 123n,
         "expiry": 456,
+        "isAdmin": false,
         "limits": [
           {
             "limit": 1000n,
@@ -368,6 +379,7 @@ describe('prepareAuthorization', () => {
           },
         ],
         "type": "webAuthn",
+        "witness": "0x1111111111111111111111111111111111111111111111111111111111111111",
       }
     `)
   })
@@ -425,6 +437,30 @@ describe('prepareAuthorization', () => {
     })
 
     expect(result.keyAuthorization.type).toMatchInlineSnapshot(`"secp256k1"`)
+  })
+
+  test('behavior: explicit false admin flag is a no-op without account', async () => {
+    const result = await AccessKey.prepareAuthorization({
+      address: accounts[1]!.address,
+      chainId: 1,
+      expiry: 123,
+      isAdmin: false,
+    })
+
+    expect('isAdmin' in result.keyAuthorization).toMatchInlineSnapshot(`false`)
+  })
+
+  test('error: rejects admin authorization without account', async () => {
+    await expect(
+      AccessKey.prepareAuthorization({
+        address: accounts[1]!.address,
+        chainId: 1,
+        expiry: 123,
+        isAdmin: true,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: \`isAdmin\` requires \`account\`.]`,
+    )
   })
 })
 
@@ -688,6 +724,82 @@ describe('hasReusableAuthorization', () => {
       {
         "match": true,
         "miss": false,
+      }
+    `)
+  })
+
+  test('behavior: requires exact account and admin parameters', async () => {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    addAuthorization({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(accessKey.accessKeyAddress, {
+        account: rootAddress,
+        isAdmin: true,
+      }),
+      keyPair,
+      store,
+    })
+
+    const match = await AccessKey.hasReusableAuthorization({
+      account: rootAddress,
+      chainId: 1,
+      parameters: { account: rootAddress, expiry: 300, isAdmin: true },
+      store: { state: store },
+    })
+    const miss_admin = await AccessKey.hasReusableAuthorization({
+      account: rootAddress,
+      chainId: 1,
+      parameters: { account: rootAddress, expiry: 300, isAdmin: false },
+      store: { state: store },
+    })
+    const miss_account = await AccessKey.hasReusableAuthorization({
+      account: rootAddress,
+      chainId: 1,
+      parameters: { expiry: 300 },
+      store: { state: store },
+    })
+
+    expect({ match, miss_account, miss_admin }).toMatchInlineSnapshot(`
+      {
+        "match": true,
+        "miss_account": false,
+        "miss_admin": false,
+      }
+    `)
+  })
+
+  test('behavior: never reuses witness-bound authorizations', async () => {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    addAuthorization({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(accessKey.accessKeyAddress, {
+        witness: `0x${'11'.repeat(32)}`,
+      }),
+      keyPair,
+      store,
+    })
+
+    const stored = await AccessKey.hasReusableAuthorization({
+      account: rootAddress,
+      chainId: 1,
+      parameters: { expiry: 300 },
+      store: { state: store },
+    })
+    const requested = await AccessKey.hasReusableAuthorization({
+      account: rootAddress,
+      chainId: 1,
+      parameters: { expiry: 300, witness: `0x${'22'.repeat(32)}` },
+      store: { state: store },
+    })
+
+    expect({ requested, stored }).toMatchInlineSnapshot(`
+      {
+        "requested": false,
+        "stored": false,
       }
     `)
   })

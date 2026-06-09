@@ -226,6 +226,50 @@ describe('local', () => {
         `[ProviderRpcError: \`digest\` and \`personalSign\` cannot both be set on \`wallet_connect\`.]`,
       )
     })
+
+    test('error: rejects when personalSign and explicit witness both need the ceremony witness slot', async () => {
+      const { adapter } = setup({}, { chain: tempoModerato })
+
+      await expect(
+        adapter.actions.loadAccounts(
+          {
+            authorizeAccessKey: {
+              expiry: 0,
+              witness: `0x${'11'.repeat(32)}`,
+            },
+            personalSign: { message: 'hello' },
+          },
+          { method: 'wallet_connect', params: undefined },
+        ),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[ProviderRpcError: \`personalSign\` and \`authorizeAccessKey.witness\` cannot both be set on \`wallet_connect\` for witness-capable chains.]`,
+      )
+    })
+
+    test('error: rejects lossy non-admin account-bound serialized proof', async () => {
+      const { adapter } = setup(
+        {
+          loadAccounts: makeLoadAccounts(0, []),
+        },
+        { chain: tempoModerato },
+      )
+
+      await expect(
+        adapter.actions.loadAccounts(
+          {
+            authorizeAccessKey: {
+              account: core_accounts[0]!.address,
+              expiry: 0,
+              isAdmin: false,
+            },
+            personalSign: { message: 'hello' },
+          },
+          { method: 'wallet_connect', params: undefined },
+        ),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[ProviderRpcError: \`personalSign\` with a non-admin account-bound \`authorizeAccessKey\` cannot be serialized as a key authorization proof.]`,
+      )
+    })
   })
 
   describe('createAccount', () => {

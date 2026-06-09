@@ -9,6 +9,7 @@ const accessKey = '0x0000000000000000000000000000000000000002'
 const token = '0x20c0000000000000000000000000000000000001'
 const recipient = '0x0000000000000000000000000000000000000003'
 const contract = '0x0000000000000000000000000000000000000004'
+const witness = `0x${'11'.repeat(32)}` as const
 
 describe('transactionRequest.keyAuthorization', () => {
   test('decodes rpc key authorizations into ox key authorizations', () => {
@@ -129,6 +130,70 @@ describe('transactionRequest.keyAuthorization', () => {
         },
       }
     `)
+  })
+
+  test('preserves T5 account authorization fields', () => {
+    const authorization = KeyAuthorization.from(
+      {
+        account,
+        address: accessKey,
+        chainId: 1n,
+        expiry: 123,
+        isAdmin: true,
+        type: 'p256',
+        witness,
+      },
+      { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
+    )
+    const rpc = KeyAuthorization.toRpc(authorization)
+
+    expect(
+      z.decode(Rpc.transactionRequest, {
+        from: account,
+        keyAuthorization: { ...rpc, address: rpc.keyId },
+      }).keyAuthorization,
+    ).toMatchObject({
+      account,
+      isAdmin: true,
+      witness,
+    })
+
+    expect(
+      z.encode(Rpc.transactionRequest, {
+        from: account,
+        keyAuthorization: authorization,
+      }).keyAuthorization,
+    ).toMatchObject({
+      account,
+      isAdmin: true,
+      witness,
+    })
+  })
+
+  test('decodes account without isAdmin as explicit non-admin binding', () => {
+    const authorization = KeyAuthorization.from(
+      {
+        account,
+        address: accessKey,
+        chainId: 1n,
+        expiry: 123,
+        isAdmin: false,
+        type: 'p256',
+      },
+      { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
+    )
+    const rpc = KeyAuthorization.toRpc(authorization)
+    const { isAdmin: _isAdmin, ...rpc_withoutAdmin } = rpc
+
+    expect(
+      z.decode(Rpc.transactionRequest, {
+        from: account,
+        keyAuthorization: { ...rpc_withoutAdmin, address: rpc.keyId },
+      }).keyAuthorization,
+    ).toMatchObject({
+      account,
+      isAdmin: false,
+    })
   })
 })
 
@@ -609,6 +674,26 @@ describe('wallet_authorizeAccessKey.parameters: showDeposit', () => {
   })
 })
 
+describe('wallet_authorizeAccessKey.parameters: T5 fields', () => {
+  test('accepts account authorization fields', () => {
+    expect(
+      z.parse(Rpc.wallet_authorizeAccessKey.parameters, {
+        account,
+        expiry: 123,
+        isAdmin: true,
+        witness,
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "account": "0x0000000000000000000000000000000000000001",
+        "expiry": 123,
+        "isAdmin": true,
+        "witness": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      }
+    `)
+  })
+})
+
 describe('wallet_authorizeAccessKey_strict.parameters: showDeposit', () => {
   test('accepts showDeposit with required access-key policy', () => {
     expect(
@@ -633,6 +718,39 @@ describe('wallet_authorizeAccessKey_strict.parameters: showDeposit', () => {
           },
         ],
         "showDeposit": true,
+      }
+    `)
+  })
+})
+
+describe('wallet_authorizeAccessKey_strict.parameters: T5 fields', () => {
+  test('accepts account authorization fields with required access-key policy', () => {
+    expect(
+      z.parse(Rpc.wallet_authorizeAccessKey_strict.parameters, {
+        account,
+        expiry: 123,
+        isAdmin: true,
+        limits: [{ limit: 1n, token: '0x0000000000000000000000000000000000000001' }],
+        scopes: [{ address: '0x0000000000000000000000000000000000000001' }],
+        witness,
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "account": "0x0000000000000000000000000000000000000001",
+        "expiry": 123,
+        "isAdmin": true,
+        "limits": [
+          {
+            "limit": 1n,
+            "token": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "scopes": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "witness": "0x1111111111111111111111111111111111111111111111111111111111111111",
       }
     `)
   })

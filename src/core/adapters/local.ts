@@ -1,4 +1,4 @@
-import { Provider as ox_Provider, type WebCryptoP256 } from 'ox'
+import { Provider as ox_Provider, type Hex, type WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { type Chain, hashMessage } from 'viem'
 import { Account as TempoAccount, Hardfork } from 'viem/tempo'
@@ -110,6 +110,11 @@ export function local(options: local.Options): Adapter.Adapter {
               grantOptions?.chainId ? { chainId: Number(grantOptions.chainId) } : undefined,
             )
             const chainId = grantOptions?.chainId ?? client.chain.id
+            if (personalSign && grantOptions?.witness && supportsWitness(client.chain))
+              throw new ox_Provider.ProviderRpcError(
+                -32602,
+                '`personalSign` and `authorizeAccessKey.witness` cannot both be set on `wallet_connect` for witness-capable chains.',
+              )
 
             // TIP-1053 witness binding (see `loadAccounts`): fold the auth
             // message into the access-key authorization and sign both in the
@@ -193,7 +198,7 @@ export function local(options: local.Options): Adapter.Adapter {
                     personalSign: {
                       message: personalSign.message,
                       ...(witness && keyAuthorization_signed
-                        ? { keyAuthorization: KeyAuthorization.serialize(keyAuthorization_signed) }
+                        ? { keyAuthorization: serializePersonalSignProof(keyAuthorization_signed) }
                         : {}),
                     },
                   }
@@ -219,6 +224,11 @@ export function local(options: local.Options): Adapter.Adapter {
                 : undefined,
             )
             const chainId = authorizeAccessKey?.chainId ?? client.chain.id
+            if (personalSign && authorizeAccessKey?.witness && supportsWitness(client.chain))
+              throw new ox_Provider.ProviderRpcError(
+                -32602,
+                '`personalSign` and `authorizeAccessKey.witness` cannot both be set on `wallet_connect` for witness-capable chains.',
+              )
 
             // TIP-1053 witness binding: when both a `personalSign` challenge and
             // an `authorizeAccessKey` are requested on a witness-capable chain,
@@ -320,7 +330,7 @@ export function local(options: local.Options): Adapter.Adapter {
                       // authorization; surface it so the verifier can run the
                       // TIP-1053 check.
                       ...(witness && keyAuthorization_signed
-                        ? { keyAuthorization: KeyAuthorization.serialize(keyAuthorization_signed) }
+                        ? { keyAuthorization: serializePersonalSignProof(keyAuthorization_signed) }
                         : {}),
                     },
                   }
@@ -334,6 +344,15 @@ export function local(options: local.Options): Adapter.Adapter {
       }
     },
   )
+}
+
+function serializePersonalSignProof(authorization: KeyAuthorization.Signed): Hex.Hex {
+  if (authorization.account && !authorization.isAdmin)
+    throw new ox_Provider.ProviderRpcError(
+      -32602,
+      '`personalSign` with a non-admin account-bound `authorizeAccessKey` cannot be serialized as a key authorization proof.',
+    )
+  return KeyAuthorization.serialize(authorization)
 }
 
 export declare namespace local {

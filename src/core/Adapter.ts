@@ -418,12 +418,16 @@ export declare namespace authorizeAccessKey {
   >[number]['showDeposit']
 
   type Parameters = {
+    /** Account this authorization targets. */
+    account?: Address | undefined
     /** Access key address. Alternative to `publicKey` when the caller already knows the derived address. */
     address?: Address | undefined
     /** Chain ID the key authorization is scoped to. Defaults to the active chain. */
     chainId?: bigint | undefined
     /** Unix timestamp (seconds) when the key expires. */
     expiry: number
+    /** Whether this authorization grants admin key privileges. */
+    isAdmin?: boolean | undefined
     /** External key type. Defaults to `secp256k1` for external keys. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
@@ -442,6 +446,8 @@ export declare namespace authorizeAccessKey {
       | undefined
     /** Show the deposit flow after the access-key authorization succeeds. */
     showDeposit?: ShowDeposit | undefined
+    /** TIP-1053 witness to bind into the key authorization. */
+    witness?: Hex | undefined
   }
 
   type ReturnType = {

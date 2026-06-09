@@ -81,8 +81,10 @@ const keyAuthorizationRpc = z.object({
     ),
   ),
   address: z.optional(u.address()),
+  account: z.optional(u.address()),
   chainId: u.bigint(),
   expiry: z.union([u.number(), z.null(), z.undefined()]),
+  isAdmin: z.optional(z.boolean()),
   keyId: u.address(),
   keyType,
   limits: z.optional(
@@ -91,6 +93,7 @@ const keyAuthorizationRpc = z.object({
     ),
   ),
   signature: signatureEnvelope,
+  witness: z.optional(u.hex()),
 }) as z.ZodMiniType<
   KeyAuthorizationRpcDecoded,
   KeyAuthorization.Rpc & { address?: KeyAuthorization.Rpc['keyId'] | undefined }
@@ -103,6 +106,7 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
       expiry: value.expiry == null ? null : Hex.fromNumber(value.expiry),
       keyId: value.keyId,
       keyType: value.keyType,
+      ...(value.account ? { account: value.account, isAdmin: value.isAdmin ?? false } : {}),
       limits: value.limits?.map(({ limit, period, token }) => ({
         token,
         limit: Hex.fromNumber(limit),
@@ -124,8 +128,12 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
             })),
           }
         : {}),
+      ...(value.witness ? { witness: value.witness } : {}),
     } satisfies KeyAuthorization.Rpc
-    return KeyAuthorization.fromRpc(authorization)
+    const decoded = KeyAuthorization.fromRpc(authorization)
+    if (value.account)
+      return { ...decoded, account: value.account, isAdmin: value.isAdmin ?? false }
+    return decoded
   },
   encode(value) {
     const keyAuthorization = KeyAuthorization.toRpc(value)
@@ -134,6 +142,10 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
       expiry: keyAuthorization.expiry == null ? null : Hex.toNumber(keyAuthorization.expiry),
       keyId: keyAuthorization.keyId,
       keyType: keyAuthorization.keyType,
+      ...(keyAuthorization.account ? { account: keyAuthorization.account } : {}),
+      ...(typeof keyAuthorization.isAdmin === 'boolean'
+        ? { isAdmin: keyAuthorization.isAdmin }
+        : {}),
       limits: keyAuthorization.limits?.map(({ limit, period, token }) => ({
         token,
         limit: Hex.toBigInt(limit),
@@ -156,6 +168,7 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
             })),
           }
         : {}),
+      ...(keyAuthorization.witness ? { witness: keyAuthorization.witness } : {}),
     }
   },
 })
@@ -473,8 +486,10 @@ export namespace wallet_authorizeAccessKey {
 
   export const parameters = z.object({
     address: z.optional(u.address()),
+    account: z.optional(u.address()),
     chainId: z.optional(u.bigint()),
     expiry: z.number(),
+    isAdmin: z.optional(z.boolean()),
     keyType: z.optional(keyType),
     limits: z.optional(
       z.readonly(
@@ -496,6 +511,7 @@ export namespace wallet_authorizeAccessKey {
       ),
     ),
     showDeposit,
+    witness: z.optional(u.hex()),
   })
 
   export const returns = z.object({
@@ -515,7 +531,9 @@ export namespace wallet_authorizeAccessKey {
 export namespace wallet_authorizeAccessKey_strict {
   export const parameters = z.object({
     address: z.optional(u.address()),
+    account: z.optional(u.address()),
     expiry: z.number(),
+    isAdmin: z.optional(z.boolean()),
     keyType: z.optional(keyType),
     limits: z.readonly(
       z
@@ -535,6 +553,7 @@ export namespace wallet_authorizeAccessKey_strict {
         .check(z.minLength(1)),
     ),
     showDeposit: wallet_authorizeAccessKey.showDeposit,
+    witness: z.optional(u.hex()),
   })
 }
 

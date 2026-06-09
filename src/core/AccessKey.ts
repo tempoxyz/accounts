@@ -29,6 +29,8 @@ type Status = (typeof status)[keyof typeof status]
 
 /** Access key entry stored alongside accounts. */
 export type AccessKey = {
+  /** Account this authorization targets. */
+  account?: Address.Address | undefined
   /** Access key address. */
   address: Address.Address
   /** Owner of the access key. */
@@ -41,6 +43,8 @@ export type AccessKey = {
   keyAuthorization?: KeyAuthorization.Signed | undefined
   /** Key type. */
   keyType: 'secp256k1' | 'p256' | 'webAuthn' | 'webCrypto'
+  /** Whether this authorization grants admin key privileges. */
+  isAdmin?: boolean | undefined
   /** TIP-20 spending limits for the access key. */
   limits?: { token: Address.Address; limit: bigint; period?: number | undefined }[] | undefined
   /** Call scopes restricting which contracts/selectors this key can call. */
@@ -51,6 +55,8 @@ export type AccessKey = {
         recipients?: readonly Address.Address[] | undefined
       }[]
     | undefined
+  /** TIP-1053 witness bound into the key authorization. */
+  witness?: Hex.Hex | undefined
 } & OneOf<
   | {}
   | {
@@ -215,8 +221,20 @@ export declare namespace createManager {
 export async function prepareAuthorization(
   options: prepareAuthorization.Options,
 ): Promise<prepareAuthorization.ReturnType> {
-  const { address, chainId, expiry, keyType, limits, privateKey, publicKey, scopes, witness } =
-    options
+  const {
+    account,
+    address,
+    chainId,
+    expiry,
+    isAdmin,
+    keyType,
+    limits,
+    privateKey,
+    publicKey,
+    scopes,
+    witness,
+  } = options
+  const accountOptions = getAccountOptions({ account, isAdmin })
 
   if (privateKey) {
     const type = keyType ?? 'secp256k1'
@@ -236,6 +254,7 @@ export async function prepareAuthorization(
       address: accessKey.address,
       chainId: BigInt(chainId),
       expiry,
+      ...accountOptions,
       limits,
       scopes,
       type,
@@ -249,6 +268,7 @@ export async function prepareAuthorization(
       address: address ?? Address.fromPublicKey(PublicKey.from(publicKey!)),
       chainId: BigInt(chainId),
       expiry,
+      ...accountOptions,
       limits,
       scopes,
       type: keyType ?? 'secp256k1',
@@ -271,6 +291,7 @@ export async function prepareAuthorization(
     address: Address.fromPublicKey(PublicKey.from(keyPair.publicKey)),
     chainId: BigInt(chainId),
     expiry,
+    ...accountOptions,
     limits,
     scopes,
     type: 'p256',
@@ -279,15 +300,29 @@ export async function prepareAuthorization(
   return { keyAuthorization, keyPair }
 }
 
+function getAccountOptions(options: {
+  account?: Address.Address | undefined
+  isAdmin?: boolean | undefined
+}) {
+  const { account, isAdmin } = options
+  if (isAdmin && !account)
+    throw new RpcResponse.InvalidParamsError({ message: '`isAdmin` requires `account`.' })
+  return account ? ({ account, isAdmin: isAdmin ?? false } as const) : {}
+}
+
 export declare namespace prepareAuthorization {
   /** Options for {@link prepareAuthorization}. */
   type Options = {
+    /** Account this authorization targets. */
+    account?: Address.Address | undefined
     /** External access key address. Alternative to `publicKey`. */
     address?: Address.Address | undefined
     /** Chain ID the key authorization is scoped to. */
     chainId: bigint | number
     /** Unix timestamp when the key expires. */
     expiry: number
+    /** Whether this authorization grants admin key privileges. */
+    isAdmin?: boolean | undefined
     /** External key type. Defaults to `secp256k1` for external keys. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
@@ -519,11 +554,14 @@ export function add(options: add.Options): add.ReturnType {
     address: authorization.address,
     access: account,
     chainId: Number(authorization.chainId),
-    expiry: authorization.expiry ?? undefined,
+    ...(authorization.account ? { account: authorization.account } : {}),
+    ...(authorization.expiry !== undefined ? { expiry: authorization.expiry } : {}),
     keyAuthorization: authorization,
     keyType: authorization.type,
+    ...(authorization.isAdmin !== undefined ? { isAdmin: authorization.isAdmin } : {}),
     limits: authorization.limits as AccessKey['limits'],
     scopes: authorization.scopes as AccessKey['scopes'],
+    ...(authorization.witness ? { witness: authorization.witness } : {}),
   }
   const record = (
     privateKey ? { ...base, privateKey } : keyPair ? { ...base, keyPair } : base
@@ -670,6 +708,12 @@ function scopesMatch(
 }
 
 function authorizationMatches(key: AccessKey, parameters: ReusableAuthorization): boolean {
+  if (key.witness || parameters.witness) return false
+  if (parameters.account) {
+    if (!key.account) return false
+    if (key.account.toLowerCase() !== parameters.account.toLowerCase()) return false
+    if ((key.isAdmin ?? false) !== (parameters.isAdmin ?? false)) return false
+  } else if (parameters.isAdmin || key.account) return false
   if (!scopesCover(key.scopes, parameters.scopes)) return false
   if (
     typeof parameters.reuse?.minExpiry === 'number' &&
