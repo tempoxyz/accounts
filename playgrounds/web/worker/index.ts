@@ -101,15 +101,10 @@ const walletOrigin = process.env.VITE_WALLET_HOST
 let handlers: ReturnType<typeof createHandlers> | undefined
 function createHandlers(env: Cloudflare.Env) {
   const store = Kv.cloudflare(env.NONCE_KV)
-  const origin = process.env.ORIGIN || undefined
   const auth = Handler.auth({
-    origin,
+    origin: process.env.ORIGIN || undefined,
     path: '/auth',
-    // Local dev only: with no `ORIGIN` pinned, derive the SIWE binding from
-    // forwarded headers — the playground sits behind trusted proxies
-    // (OrbStack domains, vite) on per-checkout hostnames. Deployments pin
-    // `ORIGIN` instead.
-    trustProxy: !origin,
+    trustProxy: process.env.TRUST_PROXY === 'true',
     // Opt into OIDC identity verification. `issuer` defaults to the Tempo wallet's
     // production OIDC mount; override it for local dev (or a self-hosted wallet).
     identity: walletOrigin ? { issuer: `${walletOrigin}/api/oidc` } : {},
