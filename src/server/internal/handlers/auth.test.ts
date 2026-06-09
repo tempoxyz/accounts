@@ -1148,15 +1148,14 @@ describe('verify (identity / OIDC)', () => {
     expect(res.status).toBe(400)
   })
 
-  test('default: idToken is ignored when identity is not configured', async () => {
-    const { handler, app } = setup()
+  test('default: identity is verified against the default issuer when not configured', async () => {
+    // Identity is on by default: with no `identity` option the issuer defaults
+    // to the Tempo wallet's OIDC mount, so a token from a different issuer is
+    // rejected rather than silently ignored.
+    const { app } = setup()
 
     const res = await connect(app, { issuer: server.issuer })
-    expect(res.status).toBe(200)
-
-    const { token } = (await res.json()) as { token: string }
-    const session = await getSession(handler, token)
-    expect(session?.email).toBeUndefined()
+    expect(res.status).toBe(401)
   })
 })
 

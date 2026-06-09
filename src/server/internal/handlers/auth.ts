@@ -148,7 +148,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     cookie = true,
     cookieName = defaults.cookieName,
     domain,
-    identity,
+    identity = {},
     onAuthenticate,
     path = '/',
     origin: origin_option,
@@ -301,25 +301,23 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     // nonce as the OIDC nonce, so the single-use challenge store covers replay
     // protection for both — the app needs no separate nonce plumbing.
     let email: string | undefined
-    if (identity) {
-      if (idToken) {
-        try {
-          const claims = await Identity.verify(idToken, {
-            audience: `${protocol}//${reqHost}`,
-            issuer: identity.issuer ?? defaultIssuer,
-            nonce: parsed.nonce,
-            subject: address,
-          })
-          email = claims.email
-        } catch (error) {
-          return c.json(
-            { error: error instanceof Error ? error.message : 'invalid identity token' },
-            401,
-          )
-        }
-      } else if (identity.required) {
-        return c.json({ error: 'identity token required' }, 400)
+    if (idToken) {
+      try {
+        const claims = await Identity.verify(idToken, {
+          audience: `${protocol}//${reqHost}`,
+          issuer: identity.issuer ?? defaultIssuer,
+          nonce: parsed.nonce,
+          subject: address,
+        })
+        email = claims.email
+      } catch (error) {
+        return c.json(
+          { error: error instanceof Error ? error.message : 'invalid identity token' },
+          401,
+        )
       }
+    } else if (identity.required) {
+      return c.json({ error: 'identity token required' }, 400)
     }
 
     const issuedAt = Math.floor(now / 1000)
@@ -444,12 +442,15 @@ export declare namespace auth {
     /** Domain echoed into challenge messages. @default request `Host` header */
     domain?: string | undefined
     /**
-     * Opt into OIDC identity verification (verified email). When set, a verify
+     * OIDC identity verification (verified email), enabled by default. A verify
      * request carrying an `idToken` is checked against the issuer's JWKS, with
      * `aud` pinned to this request's resolved origin, `sub` cross-checked
      * against the SIWE-verified address, and `nonce` matched to the SIWE nonce.
      * On success the verified email is folded onto the session
-     * (`SessionPayload.email`).
+     * (`SessionPayload.email`). The wallet only mints id tokens when the app
+     * requests identity via `wallet_connect`, so requests without one are
+     * unaffected. Override `issuer` for self-hosted wallets, or set `required`
+     * to reject verifies that omit a valid token.
      */
     identity?:
       | {
