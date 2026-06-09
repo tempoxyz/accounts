@@ -78,6 +78,7 @@ const config: Config = defineConfig({
               { text: 'Overview', link: '/docs/api/adapters' },
               { text: 'dialog', link: '/docs/api/dialog' },
               { text: 'local', link: '/docs/api/local' },
+              { text: 'mobileWebAuth', link: '/docs/api/mobileWebAuth' },
               { text: 'privy', link: '/docs/api/privy' },
               { text: 'secp256k1', link: '/docs/api/secp256k1' },
               { text: 'turnkey', link: '/docs/api/turnkey' },

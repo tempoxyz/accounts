@@ -1,0 +1,91 @@
+---
+title: mobileWebAuth
+description: Mobile web auth adapter for browser-session wallet requests.
+---
+
+# `mobileWebAuth`
+
+Creates an adapter that sends provider RPC requests from a mobile to a web host using the [uRPC Mobile Web Auth transport](https://github.com/tempoxyz/urpc/blob/main/specs/transport-mobile-web-auth.md). Each request is a single exchange: one auth URL carries one RPC request, and one callback URL carries one RPC response.
+
+This 
+
+## Usage
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { mobileWebAuth } from 'accounts/mobileWebAuth'
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
+
+const provider = Provider.create({
+  adapter: mobileWebAuth({
+    baseUrl: 'https://app.example',
+    host: 'https://wallet.example',
+    name: 'Example Wallet',
+    openAuthSession,
+    rdns: 'com.example.wallet',
+    redirectUri: 'com.example.app:/auth',
+  }),
+})
+```
+
+## Parameters
+
+### baseUrl
+
+- **Type:** `string`
+- **Required by:** `mobileWebAuth`
+
+Public HTTPS origin that serves the consumer discovery document.
+
+### fetch
+
+- **Type:** `typeof fetch`
+- **Optional**
+
+Override the fetch implementation used for discovery and auth-session requests.
+
+### host
+
+- **Type:** `string | object`
+- **Required by:** `mobileWebAuth`
+
+Wallet discovery origin, or a preloaded host document.
+
+### name
+
+- **Type:** `string`
+- **Required by:** `mobileWebAuth`
+
+Provider display name.
+
+### open
+
+- **Type:** `(url: string, redirectUri: string) => Promise<string | null>`
+- **Required when:** `openAuthSession` is omitted
+
+Opens the auth URL and returns the callback URL. Prefer `openAuthSession` when the platform exposes a native auth-session primitive.
+
+### openAuthSession
+
+- **Type:** `({ authorizationUrl, callback }) => string | undefined | Promise<string | undefined>`
+- **Required when:** `open` is omitted
+
+Opens the auth URL with a native browser auth session and returns the callback URL.
+
+```ts twoslash
+import { openAuthSession } from 'accounts/react-native/expo-web-browser'
+```
+
+### rdns
+
+- **Type:** `string`
+- **Required by:** `mobileWebAuth`
+
+Reverse-DNS provider identifier.
+
+### redirectUri
+
+- **Type:** `string`
+- **Required**
+
+Callback URI watched by the auth session. Use a development build with a private-use app scheme, and publish the exact URI in the consumer discovery document.

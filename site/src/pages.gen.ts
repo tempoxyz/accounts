@@ -74,6 +74,7 @@ type Page =
 | { path: '/docs/api/dialogs'; render: 'static' }
 | { path: '/docs/api/expiry'; render: 'static' }
 | { path: '/docs/api/local'; render: 'static' }
+| { path: '/docs/api/mobileWebAuth'; render: 'static' }
 | { path: '/docs/api/privy'; render: 'static' }
 | { path: '/docs/api/provider'; render: 'static' }
 | { path: '/docs/api/remote.create'; render: 'static' }
