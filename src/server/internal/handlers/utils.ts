@@ -1,5 +1,5 @@
 import { Hex, RpcRequest, RpcResponse } from 'ox'
-import { Transaction as core_Transaction, KeyAuthorization } from 'ox/tempo'
+import { KeyAuthorization, Transaction as core_Transaction, TxEnvelopeTempo } from 'ox/tempo'
 import { type Client, BaseError } from 'viem'
 import * as z from 'zod/mini'
 
@@ -59,6 +59,18 @@ function normalizeKeyAuthorization(value: unknown) {
 function normalizeFillValue(value: unknown) {
   if (typeof value !== 'string' || !value.startsWith('0x')) return value
   return BigInt(value === '0x' ? '0x0' : value)
+}
+
+/** Returns whether a raw transaction uses a Tempo sender or fee-payer wire prefix. */
+export function isSerializedTempoTransaction(
+  value: unknown,
+): value is `0x76${string}` | `0x78${string}` {
+  if (typeof value !== 'string') return false
+  // `0x78` is Tempo's fee-payer handoff magic, not a separate EIP-2718 type.
+  return (
+    value.startsWith(TxEnvelopeTempo.serializedType) ||
+    value.startsWith(TxEnvelopeTempo.feePayerMagic)
+  )
 }
 
 export function normalizeTempoTransaction(value: Record<string, unknown> | undefined) {

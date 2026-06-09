@@ -6,6 +6,7 @@ import { describe, expectTypeOf, test } from 'vp/test'
 
 import * as CliAuth from './CliAuth.js'
 import * as Handler from './Handler.js'
+import * as Multisig from './Multisig.js'
 
 describe('codeAuth options', () => {
   test('supports chain-agnostic chains/transports configuration', () => {
@@ -37,6 +38,20 @@ describe('codeAuth options', () => {
         return request.headers.get('x-forwarded-for') ?? 'unknown'
       },
     })
+  })
+})
+
+describe('relay options', () => {
+  test('accepts public multisig store options', () => {
+    void Handler.relay({
+      multisig: {
+        claimTtl: 30_000,
+        store: Multisig.memoryStore(),
+      },
+    })
+    expectTypeOf<Multisig.Store>().toMatchTypeOf<
+      NonNullable<Handler.relay.Options['multisig']>['store']
+    >()
   })
 })
 
