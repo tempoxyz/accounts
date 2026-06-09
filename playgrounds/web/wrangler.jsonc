@@ -4,10 +4,6 @@
   "compatibility_date": "2026-03-09",
   "compatibility_flags": ["nodejs_compat"],
   "main": "./worker/index.ts",
-  // KV backs the single-use SIWE/WebAuthn challenge store. The default in-memory
-  // store is isolate-local, so a challenge written on `/auth/challenge` is missing
-  // when `/auth` verify lands on a different isolate → `409 invalid or replayed
-  // nonce`. A shared store fixes that.
   "kv_namespaces": [{ "binding": "NONCE_KV", "id": "5da9137e853d4009954fab6f689ca61b" }],
   "assets": {
     "not_found_handling": "single-page-application",
