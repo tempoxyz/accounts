@@ -1,4 +1,5 @@
 import { type Provider as ox_Provider } from 'ox'
+import { TxEnvelopeTempo } from 'ox/tempo'
 import {
   type Chain,
   createClient,
@@ -149,9 +150,14 @@ function feePayerTransport(
           const serialized = args?.[0]
           if (
             typeof serialized === 'string' &&
-            (serialized.startsWith('0x76') || serialized.startsWith('0x78'))
+            (serialized.startsWith(TxEnvelopeTempo.serializedType) ||
+              serialized.startsWith(TxEnvelopeTempo.feePayerMagic))
           ) {
-            const deserialized = Transaction.deserialize(serialized as `0x76${string}`)
+            const deserialized = Transaction.deserialize(
+              serialized as
+                | Transaction.TransactionSerializedTempo
+                | Transaction.TransactionSerializedFeePayer,
+            )
             if ('feePayerSignature' in deserialized && deserialized.feePayerSignature === null) {
               const signed = await sponsor.request({
                 method: 'eth_signRawTransaction',
