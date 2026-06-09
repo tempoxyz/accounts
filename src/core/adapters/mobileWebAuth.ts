@@ -74,6 +74,8 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
       const capabilities = result.accounts[0]?.capabilities
       return {
         accounts: result.accounts.map((account) => ({ address: account.address })),
+        ...(capabilities?.auth ? { auth: capabilities.auth } : {}),
+        ...(capabilities?.identity ? { identity: capabilities.identity } : {}),
         ...(capabilities?.keyAuthorization
           ? { keyAuthorization: capabilities.keyAuthorization }
           : {}),
@@ -83,6 +85,7 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
     }
 
     return {
+      forwardsAuth: true,
       actions: {
         async createAccount(_parameters, request) {
           return toConnectReturn(
@@ -103,17 +106,12 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
             params: [z.encode(Rpc.wallet_depositZone.parameters, parameters)] as const,
           })) as Rpc.wallet_depositZone.Encoded['returns']
         },
-        async disconnect() {
-          await provider.request({ method: 'wallet_disconnect' })
-        },
+        // No `disconnect`/`switchChain` actions: both are local state
+        // changes the provider handles itself, and mobile web auth has no
+        // persistent wallet-side session to clean up. Forwarding them would
+        // open a browser auth session for nothing.
         async swap(_parameters, request) {
           return (await provider.request(request)) as Rpc.wallet_swap.Encoded['returns']
-        },
-        async switchChain(parameters) {
-          await provider.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: Hex.fromNumber(parameters.chainId) }],
-          })
         },
         async transfer(parameters, request) {
           return (await provider.request({

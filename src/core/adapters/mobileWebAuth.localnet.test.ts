@@ -172,11 +172,7 @@ function createHost(requests: { method: string; params: unknown }[]) {
       await event.respond({ receipts: [] })
       return
     }
-    if (
-      event.method === 'wallet_disconnect' ||
-      event.method === 'wallet_revokeAccessKey' ||
-      event.method === 'wallet_switchEthereumChain'
-    ) {
+    if (event.method === 'wallet_revokeAccessKey') {
       await event.respond(null)
     }
   })
@@ -559,6 +555,39 @@ describe('create', () => {
         "receipts": [],
       }
     `)
+  })
+
+  test('behavior: disconnects locally without opening an auth session', async () => {
+    const wallet = createWallet()
+    const provider = createProvider(wallet, {
+      storage: Storage.memory(),
+    })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    expect(provider.store.getState().accounts).toHaveLength(1)
+
+    await provider.request({ method: 'wallet_disconnect' })
+
+    expect(provider.store.getState().accounts).toHaveLength(0)
+    expect(wallet.calls()).toBe(1)
+  })
+
+  test('behavior: switches chains locally without opening an auth session', async () => {
+    const wallet = createWallet()
+    const provider = createProvider(wallet, {
+      storage: Storage.memory(),
+    })
+
+    await provider.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: Hex.fromNumber(chain.id) }],
+    })
+
+    expect(await provider.request({ method: 'eth_chainId' })).toBe(Hex.fromNumber(chain.id))
+    expect(wallet.calls()).toBe(0)
   })
 
   test('behavior: forwards wallet_revokeAccessKey through mobile web auth', async () => {
