@@ -306,18 +306,15 @@ import { env } from 'cloudflare:workers'
 const auth = Handler.auth({
   path: '/auth',
   store: Kv.durableObject(env.NONCE_DO),
-  identity: { issuer: 'https://wallet.tempo.xyz' }, // [!code focus]
 })
 
-// In an authenticated route, the verified email is on the session.
-app.get('/me', async (c) => {
-  const session = await auth.getSession(c.req.raw)
+// In an authenticated route, the verified email is on the session. // [!code focus]
+app.get('/me', async (c) => { // [!code focus]
+  const session = await auth.getSession(c.req.raw) // [!code focus]
   if (!session) return c.json({ error: 'unauthenticated' }, 401)
-  return c.json({ address: session.address, email: session.email }) // [!code focus]
+  return c.json({ address: session.address, email: session.email })
 })
 ```
-
-The token reuses the SIWE challenge nonce, so the single-use challenge store protects both the signature and the email against replay — no extra nonce plumbing. If you mint your own session (for example in [`onAuthenticate`](/docs/server/handler.auth#onauthenticate) with `session: false`), verify the token directly with [`Handler.verifyIdentityToken`](/docs/server/handler.auth#verifyidentitytoken).
 
 ## Notes & Gotchas
 

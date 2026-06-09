@@ -96,7 +96,9 @@ const walletOrigin = process.env.VITE_WALLET_HOST
 const auth = Handler.auth({
   origin: process.env.ORIGIN,
   path: '/auth',
-  ...(walletOrigin ? { identity: { issuer: `${walletOrigin}/api/oidc` } } : {}),
+  // Opt into OIDC identity verification. `issuer` defaults to the Tempo wallet's
+  // production OIDC mount; override it for local dev (or a self-hosted wallet).
+  identity: walletOrigin ? { issuer: `${walletOrigin}/api/oidc` } : {},
 })
 
 const handler = Handler.compose([

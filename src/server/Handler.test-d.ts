@@ -45,7 +45,7 @@ describe('auth identity (OIDC)', () => {
     expectTypeOf<Handler.auth.Options>().toMatchTypeOf<{
       identity?:
         | {
-            issuer: string
+            issuer?: string | undefined
             required?: boolean | undefined
           }
         | undefined

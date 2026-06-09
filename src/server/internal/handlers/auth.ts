@@ -23,6 +23,13 @@ const defaults = {
 } as const
 
 /**
+ * Default OIDC issuer — the Tempo wallet's production OIDC mount. Apps that opt
+ * into `identity` without pinning an `issuer` verify tokens minted by the Tempo
+ * wallet. Override `issuer` for self-hosted or non-production wallets.
+ */
+const defaultIssuer = 'https://wallet.tempo.xyz/api/oidc'
+
+/**
  * Session payload persisted in the session store and surfaced via
  * `getSession`. `address` is the account address that signed the
  * authentication challenge; `chainId` is the chain echoed in the message.
@@ -299,7 +306,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
         try {
           const claims = await Identity.verify(idToken, {
             audience: `${protocol}//${reqHost}`,
-            issuer: identity.issuer,
+            issuer: identity.issuer ?? defaultIssuer,
             nonce: parsed.nonce,
             subject: address,
           })
@@ -446,8 +453,13 @@ export declare namespace auth {
      */
     identity?:
       | {
-          /** Issuer (IdP) URL whose JWKS signs the id token (e.g. the wallet's OIDC mount). */
-          issuer: string
+          /**
+           * Issuer (IdP) URL whose JWKS signs the id token (the wallet's OIDC
+           * mount). Defaults to the Tempo wallet's production OIDC issuer;
+           * override for self-hosted or non-production wallets.
+           * @default "https://wallet.tempo.xyz/api/oidc"
+           */
+          issuer?: string | undefined
           /** Reject the verify when no (or an invalid) `idToken` is supplied. @default false */
           required?: boolean | undefined
         }
