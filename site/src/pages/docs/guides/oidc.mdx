@@ -1,0 +1,119 @@
+---
+title: OIDC Identity Tokens
+description: Verify a connected account's email on your server with the wallet's OIDC identity token.
+---
+
+# OIDC Identity Tokens
+
+When you request a verified email during [`wallet_connect`](/docs/rpc/wallet_connect#requesting-a-verified-email), the wallet returns two things on the connected account:
+
+- `capabilities.identity.email` — a plain string, handy for display.
+- `capabilities.identity.idToken` — a signed [OpenID Connect](https://openid.net/developers/how-connect-works/) ID token (a JWT) that **proves** the email belongs to the account.
+
+The plain string is convenient, but anyone can put any value there. To trust the email on your server, verify the token.
+
+## How It Works
+
+The token is a standard OIDC ID token signed by the wallet's keys. It is bound to:
+
+- your app's origin (the `aud` claim), so a token issued for another app can't be replayed against yours, and
+- the connected account (the `sub` claim), so it can't be reused for a different address.
+
+The wallet runs a verify-only OIDC issuer. Anyone can fetch its public signing keys to check a token's signature:
+
+- Issuer: `https://wallet.tempo.xyz/api/oidc`
+- Discovery: `https://wallet.tempo.xyz/api/oidc/.well-known/openid-configuration`
+- JWKS: `https://wallet.tempo.xyz/api/oidc/.well-known/jwks.json`
+
+Tokens are signed with EdDSA (Ed25519) and carry these claims:
+
+```ts
+type Claims = {
+  iss: string // issuer (the wallet's OIDC URL)
+  aud: string // your app origin
+  sub: string // the account address
+  iat: number // issued-at (unix seconds)
+  exp: number // expiry (unix seconds)
+  nonce?: string // echoed nonce, when one was supplied
+  email: string // the account's email
+  email_verified: true // only verified emails are issued
+}
+```
+
+## Verify on Your Server
+
+There are two ways to verify, depending on how you manage sessions.
+
+### With `Handler.auth` (recommended)
+
+If you authenticate accounts with [`Handler.auth`](/docs/guides/authentication), verification is automatic. The SDK forwards the token on the same `verify` round-trip, and the handler checks the signature and adds the verified email to the session — **no extra configuration**.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Handler, Kv } from 'accounts/server'
+import { env } from 'cloudflare:workers'
+
+const auth = Handler.auth({
+  path: '/auth',
+  store: Kv.durableObject(env.NONCE_DO),
+})
+
+app.get('/me', async (c) => {
+  const session = await auth.getSession(c.req.raw)
+  if (!session) return c.json({ error: 'unauthenticated' }, 401)
+  return c.json({ address: session.address, email: session.email }) // [!code focus]
+})
+```
+
+The handler reuses the SIWE challenge nonce as the token nonce, so the single-use challenge store protects both the signature and the email against replay — your app needs no separate nonce plumbing.
+
+Use the [`identity`](/docs/server/handler.auth#identity) option only to require an email (`required: true`) or to point at your own wallet (`issuer`).
+
+### With `Identity.verify`
+
+If you mint your own session (for example in [`onAuthenticate`](/docs/server/handler.auth#onauthenticate) with `session: false`) or verify the token in a separate service, call [`Identity.verify`](/docs/server/identity.verify) directly.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Identity } from 'accounts/server'
+
+const claims = await Identity.verify(idToken, {
+  audience: 'https://app.example.com', // your app origin (token `aud`)
+  issuer: 'https://wallet.tempo.xyz/api/oidc', // the wallet's OIDC issuer
+  subject: address, // the signed-in account address
+})
+
+claims.email // verified email
+```
+
+`Identity.verify` fetches the issuer's JWKS, then asserts the signature, `iss`, `aud`, `exp`, and `email_verified === true`. Pass `subject` and/or `nonce` to also cross-check the token's `sub` and `nonce`. It throws on any failure.
+
+## Verify From Any Stack
+
+The token is a standard OIDC ID token, so any JWT/OIDC library can verify it against the JWKS above — you don't need the Accounts SDK. For example, with [`jose`](https://github.com/panva/jose):
+
+```ts twoslash
+// @noErrors
+import { createRemoteJWKSet, jwtVerify } from 'jose'
+
+const jwks = createRemoteJWKSet(
+  new URL('https://wallet.tempo.xyz/api/oidc/.well-known/jwks.json'),
+)
+
+const { payload } = await jwtVerify(idToken, jwks, {
+  issuer: 'https://wallet.tempo.xyz/api/oidc',
+  audience: 'https://app.example.com',
+})
+
+if (payload.email_verified !== true) throw new Error('email not verified')
+payload.email // verified email
+```
+
+Always check `email_verified === true`, and cross-check `sub` against the address you expect.
+
+## Custom Wallets
+
+If you run your own wallet, point verification at its OIDC issuer instead:
+
+- `Handler.auth({ identity: { issuer: 'https://wallet.example.com/api/oidc' } })`, or
+- `Identity.verify(idToken, { issuer: 'https://wallet.example.com/api/oidc', ... })`.

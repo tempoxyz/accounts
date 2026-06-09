@@ -45,6 +45,7 @@ const config: Config = defineConfig({
         items: [
           { text: 'Connect Accounts', link: '/docs/guides/connect-accounts' },
           { text: 'Authentication', link: '/docs/guides/authentication' },
+          { text: 'OIDC Identity Tokens', link: '/docs/guides/oidc' },
           { text: 'Transfers', link: '/docs/guides/transfers' },
           { text: 'Spend Permissions', link: '/docs/guides/spend-permissions' },
           { text: 'Subscriptions', link: '/docs/guides/subscriptions' },

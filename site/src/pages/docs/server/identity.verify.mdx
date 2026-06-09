@@ -20,9 +20,9 @@ Pass `subject` and/or `nonce` to additionally cross-check the token's `sub`
 import { Identity } from 'accounts/server'
 
 const claims = await Identity.verify(idToken, {
-  audience: 'https://app.example.com', // your app origin (token `aud`)
-  issuer: 'https://wallet.tempo.xyz',  // the wallet's identity issuer
-  subject: address,                    // the signed-in account address
+  audience: 'https://app.example.com',         // your app origin (token `aud`)
+  issuer: 'https://wallet.tempo.xyz/api/oidc',  // the wallet's identity issuer
+  subject: address,                            // the signed-in account address
 })
 
 claims.email // verified email

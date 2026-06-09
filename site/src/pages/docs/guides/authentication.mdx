@@ -296,7 +296,7 @@ The plain `email` string is convenient for display, but anyone can put any strin
 
 ### Verify the Email Server-Side
 
-Alongside the plain `email`, the wallet returns a signed token proving the email belongs to the account. Your auth handler checks the signature and adds the verified email to the session automatically — set [`identity`](/docs/server/handler.auth#identity) only to require an email or use your own wallet.
+Alongside the plain `email`, the wallet returns a signed token proving the email belongs to the account. Your auth handler checks the signature and adds the verified email to the session automatically — set [`identity`](/docs/server/handler.auth#identity) only to require an email or use your own wallet. See the [OIDC Identity Tokens](/docs/guides/oidc) guide for the token format and how to verify it from any stack.
 
 ```ts twoslash [worker/index.ts]
 // @noErrors
