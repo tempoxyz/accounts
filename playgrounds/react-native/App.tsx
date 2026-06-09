@@ -30,16 +30,16 @@ const tokens = {
 }
 
 const redirectUri = 'xyz.tempo.accounts.playground:/auth'
-const walletOrigin = process.env.EXPO_PUBLIC_WALLET_ORIGIN
-const walletBaseUrl = process.env.EXPO_PUBLIC_WALLET_BASE_URL ?? walletOrigin
-const walletHost = process.env.EXPO_PUBLIC_WALLET_HOST ?? walletOrigin
+const walletDefaultUrl = 'https://wallet.tempo.xyz'
+const walletBaseUrl = process.env.EXPO_PUBLIC_WALLET_CONSUMER_URL
+const walletHost = process.env.EXPO_PUBLIC_WALLET_HOST
 
 const provider = Provider.create({
   adapter:
     walletBaseUrl || walletHost
       ? mobileWebAuth({
-          baseUrl: walletBaseUrl ?? 'https://wallet.tempo.xyz',
-          host: walletHost ?? 'https://wallet.tempo.xyz',
+          baseUrl: walletBaseUrl ?? walletDefaultUrl,
+          host: walletHost ?? walletDefaultUrl,
           name: 'Tempo Wallet',
           openAuthSession,
           rdns: 'xyz.tempo',
@@ -260,7 +260,8 @@ export default function App() {
         <ThemedText style={{ fontFamily: 'monospace', fontSize: 12 }}>{address}</ThemedText>
       )}
       <ThemedText style={{ marginTop: 16, fontWeight: 'bold' }}>Network: {network}</ThemedText>
-      <ThemedText>Wallet: {walletOrigin}</ThemedText>
+      <ThemedText>Wallet host: {walletHost ?? walletDefaultUrl}</ThemedText>
+      <ThemedText>Consumer: {walletBaseUrl ?? walletDefaultUrl}</ThemedText>
       <Button title="Switch Network" onPress={() => switchNetwork('moderato')} />
 
       <View style={{ marginTop: 16 }}>

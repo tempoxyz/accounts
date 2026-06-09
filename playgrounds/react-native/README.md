@@ -1,41 +1,26 @@
 # React Native Playground
 
-The playground uses Wata mobile web auth through
-`accounts/mobileWebAuth/tempoWallet` by default. Both the wallet host discovery
-origin and the consumer discovery origin are `https://wallet.tempo.xyz`.
+Run with the default Tempo Wallet:
 
-The default wallet origin must serve a consumer document that allows the
-playground callback scheme.
-
-```json
-{
-  "callback_urls": [
-    "xyz.tempo.accounts.playground:/auth",
-    "xyz.tempo.accounts.playground://auth"
-  ],
-  "id": "wallet.tempo.xyz",
-  "name": "Tempo Wallet",
-  "origin": "https://wallet.tempo.xyz",
-  "version": "1.0"
-}
-```
-
-To run against a different origin, set `EXPO_PUBLIC_WALLET_ORIGIN`. The
-playground switches to `accounts/mobileWebAuth` for custom origins. The custom
-origin must serve both Wata discovery documents for the app and wallet roles,
-and its consumer document must allow the playground callback scheme.
-
-```
+```sh
 pnpm install
 cd playgrounds/react-native
-EXPO_PUBLIC_WALLET_ORIGIN=http://localhost:5176 pnpm ios
+pnpm ios
 ```
 
-To use different origins for the app consumer document and the wallet host
-document, set `EXPO_PUBLIC_WALLET_BASE_URL` and `EXPO_PUBLIC_WALLET_HOST`.
+Run against another wallet origin:
 
-```
-EXPO_PUBLIC_WALLET_BASE_URL=https://app.example \
+```sh
+EXPO_PUBLIC_WALLET_CONSUMER_URL=http://localhost:5176 \
 EXPO_PUBLIC_WALLET_HOST=http://localhost:5176 \
 pnpm ios
+```
+
+Use `EXPO_PUBLIC_WALLET_CONSUMER_URL` for the origin that serves this app's
+consumer config. Use `EXPO_PUBLIC_WALLET_HOST` for the wallet web app origin.
+
+The wallet must allow the playground callback URI:
+
+```txt
+xyz.tempo.accounts.playground:/auth
 ```
