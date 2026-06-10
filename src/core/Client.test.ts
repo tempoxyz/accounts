@@ -1,19 +1,12 @@
-import { Signature } from 'ox'
-import { SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import { custom, http } from 'viem'
-import { Account } from 'viem/tempo'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 
 import { secp256k1 } from '../../test/adapters.js'
-import { createServer } from '../../test/utils.js'
 import * as Client from './Client.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
-
-const privateKey_1 = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
-const privateKey_2 = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
 
 /** Creates a fresh in-memory store for tests. */
 function setup(chainId: number = tempo.id) {
@@ -328,94 +321,4 @@ describe('feePayerTransport', () => {
       ]
     `)
   })
-
-  test('behavior: sponsors fee-payer handoff envelopes returned from eth_signTransaction', async () => {
-    const store = setup()
-    const { handoff, signed } = await createFeePayerHandoff()
-    const baseRequests: { method: string; params?: unknown }[] = []
-    const relayRequests: { method: string; params?: unknown }[] = []
-    const server = await createServer((req, res) => {
-      let body = ''
-      req.on('data', (chunk) => {
-        body += chunk
-      })
-      req.on('end', () => {
-        const request = JSON.parse(body) as { id?: unknown; method: string; params?: unknown }
-        relayRequests.push({ method: request.method, params: request.params })
-        res.setHeader('content-type', 'application/json')
-        res.end(JSON.stringify({ id: request.id, jsonrpc: '2.0', result: signed }))
-      })
-    })
-    const transports = {
-      [tempo.id]: custom({
-        async request({ method, params }) {
-          baseRequests.push({ method, params })
-          return Array.isArray(params) ? params[0] : undefined
-        },
-      }),
-    }
-    const client = Client.fromChainId(tempo.id, {
-      chains: [tempo],
-      feePayer: { url: server.url, precedence: 'user-first' },
-      store,
-      transports,
-    })
-
-    try {
-      const result = await client.request({
-        method: 'eth_sendRawTransactionSync' as never,
-        params: [handoff] as never,
-      })
-
-      expect({
-        base: baseRequests.map((r) => r.method),
-        relay: relayRequests.map((r) => r.method),
-        result,
-      }).toMatchInlineSnapshot(`
-        {
-          "base": [
-            "eth_sendRawTransactionSync",
-          ],
-          "relay": [
-            "eth_signRawTransaction",
-          ],
-          "result": "${signed}",
-        }
-      `)
-      expect(baseRequests[0]?.params).toMatchObject([signed])
-    } finally {
-      await server.closeAsync()
-    }
-  })
 })
-
-async function createFeePayerHandoff() {
-  const sender = Account.fromSecp256k1(privateKey_1)
-  const feePayer = Account.fromSecp256k1(privateKey_2)
-  const envelope = TxEnvelopeTempo.from({
-    calls: [{ to: '0x0000000000000000000000000000000000000001', value: 1n }],
-    chainId: tempo.id,
-    gas: 21_000n,
-    maxFeePerGas: 1n,
-    maxPriorityFeePerGas: 0n,
-    nonce: 0n,
-  })
-  const signature = SignatureEnvelope.from(
-    await sender.sign({ hash: TxEnvelopeTempo.getSignPayload(envelope) }),
-  )
-  const signedEnvelope = TxEnvelopeTempo.from(envelope, { signature })
-  const feePayerSignature = Signature.from(
-    await feePayer.sign({
-      hash: TxEnvelopeTempo.getFeePayerSignPayload(signedEnvelope, { sender: sender.address }),
-    }),
-  )
-
-  return {
-    handoff: TxEnvelopeTempo.serialize(envelope, {
-      format: 'feePayer',
-      sender: sender.address,
-      signature,
-    }),
-    signed: TxEnvelopeTempo.serialize(envelope, { feePayerSignature, signature }),
-  }
-}

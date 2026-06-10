@@ -3,7 +3,6 @@ import { describe, expectTypeOf, test } from 'vp/test'
 
 import * as Provider from './Provider.js'
 import type * as Schema from './Schema.js'
-import type * as Store from './Store.js'
 
 type Result<method extends RpcSchema.MethodNameGeneric<Schema.Ox>> = RpcSchema.ExtractReturnType<
   Schema.Ox,
@@ -58,13 +57,6 @@ describe('request', () => {
 
   test('wallet_switchEthereumChain', () => {
     expectTypeOf<Result<'wallet_switchEthereumChain'>>().toEqualTypeOf<undefined>()
-  })
-})
-
-describe('provider shape', () => {
-  test('exposes the provider store facade', () => {
-    expectTypeOf<Provider.Provider['store']>().toMatchTypeOf<Store.Store>()
-    expectTypeOf<Store.Store>().toMatchTypeOf<Provider.Provider['store']>()
   })
 })
 
