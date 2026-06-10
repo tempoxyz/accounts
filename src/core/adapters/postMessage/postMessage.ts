@@ -20,11 +20,13 @@ import * as Mount from './mount.js'
  * popup; the adapter remounts and re-sends the in-flight request there.
  */
 export function postMessage(options: postMessage.Options): Adapter.Adapter {
-  const { close, host, name, rdns, target } = options
+  const { close, host, icon, name, rdns, target } = options
 
   let mount: Mount.Mount | undefined
   let pending = 0
   let queue: Promise<unknown> = Promise.resolve()
+  /** Rejects the in-flight send when the user dismisses the mount UI. */
+  let reject_inflight: ((error: Error) => void) | undefined
   let resend = false
   let session: ReturnType<typeof create> | undefined
   /** The wallet asked to continue in a popup; stick to it for this provider. */
@@ -93,9 +95,15 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     await session_old?.close()
   }
 
-  /** Dismissal from the mount UI — asks the wallet to reject, then hides. */
+  /**
+   * Dismissal from the mount UI. Rejects the in-flight request locally
+   * right away — a wedged iframe has no closed-window poll, so waiting for
+   * the wallet's response could hang forever — while still notifying the
+   * wallet so it tears down its own pending request and returns to idle.
+   */
   function cancel() {
     void session?.notify({ method: 'dialog_cancel', params: [] })
+    reject_inflight?.(new core_Provider.UserRejectedRequestError())
     mount?.hide()
   }
 
@@ -103,8 +111,15 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     for (;;) {
       const wata = ensure()
       mount?.show()
+      const cancelled = new Promise<never>((_, reject) => {
+        reject_inflight = reject
+      })
       try {
-        return (await wata.send({ method: request.method, params: request.params ?? [] })).result
+        const sent = wata.send({ method: request.method, params: request.params ?? [] })
+        // Once `cancelled` wins the race, the wallet's eventual answer is
+        // ignored; swallow it so it never surfaces as an unhandled rejection.
+        void sent.catch(() => {})
+        return (await Promise.race([sent, cancelled])).result
       } catch (error) {
         if (error instanceof Transport.ClosedError) {
           // The wallet asked to continue in a popup — replay there.
@@ -116,6 +131,8 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
           throw new core_Provider.UserRejectedRequestError()
         }
         throw error
+      } finally {
+        reject_inflight = undefined
       }
     }
   }
@@ -128,6 +145,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
   }
 
   return fromRequest({
+    ...(icon ? { icon } : {}),
     name,
     rdns,
     async close() {
@@ -165,6 +183,8 @@ export declare namespace postMessage {
     close?: ((handle: Window | MessagePort) => void | Promise<void>) | undefined
     /** URL of the wallet's post-message page. */
     host: string
+    /** Data URI of the provider icon, announced via EIP-6963. */
+    icon?: Adapter.Meta['icon'] | undefined
     /**
      * Where the wallet page lives and how it surfaces for requests.
      * @default `Mount.auto()` — an overlay iframe, or a popup where

@@ -720,6 +720,35 @@ describe('mount', () => {
     await vi.waitFor(() => expect(events.at(-1)).toBe('hide'))
   })
 
+  test('behavior: dismissing rejects locally even when the wallet ignores the cancel', async () => {
+    const { consumerRealm } = installBrowser()
+    const events: string[] = []
+    // Wallet accepts the request but never answers and ignores notifications
+    // (a wedged iframe). Dismiss must still reject — there is no closed poll.
+    const scripted = scriptedMount(events, consumerRealm, (host) => host.on('request', () => {}))
+
+    const provider = Provider.create({
+      adapter: postMessage({
+        host: `${walletOrigin}/post-message`,
+        mount: scripted.factory,
+        name: 'Accounts Web Test',
+        rdns: 'xyz.tempo.accounts.playground',
+      }),
+      chains: [chain],
+      storage: Storage.memory(),
+    })
+
+    const denied = provider.request({
+      method: 'wallet_deposit',
+      params: [{ amount: '25', token: 'USDC' }],
+    })
+    await vi.waitFor(() => expect(events).toContain('show'))
+
+    scripted.dismiss()
+    await expect(denied).rejects.toMatchObject({ code: 4001 })
+    await vi.waitFor(() => expect(events.at(-1)).toBe('hide'))
+  })
+
   test('behavior: switch notification remounts in a popup and replays the request', async () => {
     const { consumerRealm, opened } = installBrowser()
     const events: string[] = []
