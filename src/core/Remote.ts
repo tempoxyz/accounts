@@ -435,4 +435,3 @@ function formatZodErrors(method: string, error: { issues: readonly ZodIssue[] })
     .join('\n')
   return `Invalid params for "${method}":\n${issues}`
 }
-
