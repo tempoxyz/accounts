@@ -11,8 +11,9 @@ import { relay } from './relay.js'
 const owner_1 = accounts[1]!
 const owner_2 = accounts[2]!
 const feePayer = accounts[0]!
+const tag = import.meta.env.VITE_NODE_TAG || 'sha-3da8342'
 
-describe('relay multisig', () => {
+describe.skipIf(!tag.startsWith('sha-'))('relay multisig', () => {
   const store = Multisig.memoryStore()
   let client: ReturnType<typeof getClient<typeof chain>>
   let server: Server
