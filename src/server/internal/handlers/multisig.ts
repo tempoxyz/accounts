@@ -156,33 +156,49 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
       return {}
     }
   })()
-  const sponsorFeeToken =
-    sponsor &&
-    (sponsor.feeToken ||
-      feePayerState.signature === null ||
-      (feePayerState.signature != null && !feePayerState.feeToken))
-      ? (sponsor.feeToken ?? (await sponsor.resolveFeeToken?.(operation.chainId)))
-      : undefined
-  const shouldSponsor =
-    sponsor &&
-    (feePayerState.signature === null ||
-      (feePayerState.signature != null &&
-        (sponsor.feeToken || (!feePayerState.feeToken && sponsorFeeToken))))
-  const result = shouldSponsor
-    ? await Sponsorship.handleRawTransaction({
-        account: sponsor.account,
-        feeToken: sponsorFeeToken,
-        getClient,
-        method: broadcastMethod,
-        request: { params: [final] },
-        resolveFeeToken: sponsor.resolveFeeToken,
-        sender: operation.account,
-        validate: sponsor.validate,
-      })
-    : await client.request({
-        method: broadcastMethod,
-        params: [final],
-      } as never)
+  const sponsorFeeToken = await (async () => {
+    // No sponsor is configured, so the finalized multisig transaction broadcasts as-is.
+    if (!sponsor) return undefined
+    // An explicit relay fee token always wins over transaction-derived fee-token state.
+    if (sponsor.feeToken) return sponsor.feeToken
+    // `null` is the transaction-level request for the relay to add a fee-payer signature.
+    if (feePayerState.signature === null) return await sponsor.resolveFeeToken?.(operation.chainId)
+    // A pre-sponsored transaction without a fee token can use the relay default fee token.
+    if (feePayerState.signature != null && !feePayerState.feeToken)
+      return await sponsor.resolveFeeToken?.(operation.chainId)
+    // Otherwise, there is no fee token for the sponsorship path to add.
+    return undefined
+  })()
+  const shouldSponsor = (() => {
+    // No sponsor is configured, so there is no sponsorship path to take.
+    if (!sponsor) return false
+    // `null` is the transaction-level request for the relay to add a fee-payer signature.
+    if (feePayerState.signature === null) return true
+    // Missing fee-payer state means this is a plain multisig transaction.
+    if (feePayerState.signature == null) return false
+    // An explicit relay fee token means the relay should sponsor with that token.
+    if (sponsor.feeToken) return true
+    // A pre-sponsored transaction without a fee token can be completed if one was resolved.
+    if (!feePayerState.feeToken && sponsorFeeToken) return true
+    // Otherwise, keep the finalized transaction unchanged and broadcast directly.
+    return false
+  })()
+  const result =
+    shouldSponsor && sponsor
+      ? await Sponsorship.handleRawTransaction({
+          account: sponsor.account,
+          feeToken: sponsorFeeToken,
+          getClient,
+          method: broadcastMethod,
+          request: { params: [final] },
+          resolveFeeToken: sponsor.resolveFeeToken,
+          sender: operation.account,
+          validate: sponsor.validate,
+        })
+      : await client.request({
+          method: broadcastMethod,
+          params: [final],
+        } as never)
   const submittedHash = (() => {
     if (typeof result === 'string') return result as Hex.Hex
     if (result && typeof result === 'object' && 'transactionHash' in result) {

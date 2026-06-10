@@ -30,7 +30,7 @@ export async function setupServer({ port }: { port: number }) {
   const server = Server.create({
     instance: TestContainers.Instance.tempo({
       ...args,
-      image: `docker.io/tempoxyz/tempo:${tag}`,
+      image: `ghcr.io/tempoxyz/tempo:${tag}`,
     }),
     port,
   })
