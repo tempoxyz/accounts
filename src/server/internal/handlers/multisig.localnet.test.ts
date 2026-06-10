@@ -1,5 +1,5 @@
 import { MultisigConfig, SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
-import { fillTransaction } from 'viem/actions'
+import { fillTransaction, getTransactionReceipt, sendRawTransactionSync } from 'viem/actions'
 import { Account } from 'viem/tempo'
 import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 
@@ -97,20 +97,19 @@ describe.skipIf(!tag.startsWith('sha-'))('relay multisig', () => {
       client.request({ method: 'eth_getTransactionReceipt', params: [id] }),
     ).resolves.toMatchInlineSnapshot(`null`)
 
-    const receipt = (await client.request({
-      method: 'eth_sendRawTransactionSync',
-      params: [serializeTransaction({ account, envelope, signatures: [signature_2] })],
-    } as never)) as { status?: string | undefined; transactionHash?: `0x${string}` | undefined }
+    const receipt = await sendRawTransactionSync(client, {
+      serializedTransaction: serializeTransaction({ account, envelope, signatures: [signature_2] }),
+    })
     const hash = receipt.transactionHash
     if (!hash) throw new Error('Expected multisig transaction hash.')
 
     expect(hash === id).toMatchInlineSnapshot(`false`)
     expect(receipt).toMatchObject({
-      status: '0x1',
+      status: 'success',
     })
-    await expect(
-      client.request({ method: 'eth_getTransactionReceipt', params: [id] }),
-    ).resolves.toMatchObject({ transactionHash: hash })
+    await expect(getTransactionReceipt(client, { hash: id })).resolves.toMatchObject({
+      transactionHash: hash,
+    })
   })
 })
 
