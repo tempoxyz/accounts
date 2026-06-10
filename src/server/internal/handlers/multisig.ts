@@ -146,48 +146,48 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   const feePayerState = (() => {
     try {
       const transaction = Transaction.deserialize(final as never) as Record<string, unknown>
-      // No fee-payer field means this finalized transaction does not request sponsorship.
+      // No fee-payer field means finalized transaction does not request sponsorship.
       if (!('feePayerSignature' in transaction)) return {}
-      // Preserve the transaction's fee-token/signature marker so sponsorship can decide below.
+      // Preserve fee-token/signature marker for sponsorship decision below.
       return {
         feeToken:
           typeof transaction.feeToken === 'string' ? (transaction.feeToken as Address) : undefined,
         signature: transaction.feePayerSignature,
       }
     } catch {
-      // If decoding fails, fall back to direct broadcast instead of applying sponsorship policy.
+      // Decode failure falls back to direct broadcast.
       return {}
     }
   })()
   const sponsorFeeToken = await (async () => {
-    // No sponsor is configured, so the finalized multisig transaction broadcasts as-is.
+    // No sponsor configured, so finalized multisig transaction broadcasts as-is.
     if (!sponsor) return undefined
-    // An explicit relay fee token always wins over transaction-derived fee-token state.
+    // Explicit relay fee token wins over transaction-derived fee-token state.
     if (sponsor.feeToken) return sponsor.feeToken
-    // `null` is the transaction-level request for the relay to add a fee-payer signature.
+    // `null` requests relay-added fee-payer signature.
     if (feePayerState.signature === null) return await sponsor.resolveFeeToken?.(operation.chainId)
-    // A pre-sponsored transaction without a fee token can use the relay default fee token.
+    // Pre-sponsored transaction without fee token can use relay default fee token.
     if (feePayerState.signature != null && !feePayerState.feeToken)
       return await sponsor.resolveFeeToken?.(operation.chainId)
-    // Otherwise, there is no fee token for the sponsorship path to add.
+    // Otherwise, sponsorship path has no fee token to add.
     return undefined
   })()
   const shouldSponsor = (() => {
-    // No sponsor is configured, so there is no sponsorship path to take.
+    // No sponsor configured, so no sponsorship path to take.
     if (!sponsor) return false
-    // `null` is the transaction-level request for the relay to add a fee-payer signature.
+    // `null` requests relay-added fee-payer signature.
     if (feePayerState.signature === null) return true
-    // Missing fee-payer state means this is a plain multisig transaction.
+    // Missing fee-payer state means plain multisig transaction.
     if (feePayerState.signature == null) return false
-    // An explicit relay fee token means the relay should sponsor with that token.
+    // Explicit relay fee token means relay should sponsor with that token.
     if (sponsor.feeToken) return true
-    // A pre-sponsored transaction without a fee token can be completed if one was resolved.
+    // Pre-sponsored transaction without fee token can complete if one was resolved.
     if (!feePayerState.feeToken && sponsorFeeToken) return true
-    // Otherwise, keep the finalized transaction unchanged and broadcast directly.
+    // Otherwise, keep finalized transaction unchanged and broadcast directly.
     return false
   })()
   const result = await (async () => {
-    // Sponsorship is enabled for this finalized transaction, so let the sponsor add/sign fee-payer fields.
+    // Sponsorship enabled, so sponsor adds/signs fee-payer fields.
     if (shouldSponsor && sponsor)
       return await Sponsorship.handleRawTransaction({
         account: sponsor.account,
@@ -199,7 +199,7 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
         sender: operation.account,
         validate: sponsor.validate,
       })
-    // Otherwise, the multisig transaction is already final and can be broadcast directly.
+    // Otherwise, multisig transaction is final and can broadcast directly.
     return await client.request({
       method: broadcastMethod,
       params: [final],
@@ -687,9 +687,9 @@ async function serializeFinal(options: {
     ...transaction,
     feePayerSignature: (() => {
       const value = transaction.feePayerSignature
-      // Preserve missing/null fee-payer markers so sponsorship can add a signature later.
+      // Preserve missing/null fee-payer markers so sponsorship can add signature later.
       if (!value) return value
-      // Normalize RPC-shaped signatures before rebuilding the final transaction envelope.
+      // Normalize RPC-shaped signatures before rebuilding final transaction envelope.
       if (typeof value === 'object' && 'r' in value && 's' in value) {
         const signature = value as {
           r: bigint | number | string
@@ -702,7 +702,7 @@ async function serializeFinal(options: {
           // Some signature shapes omit parity until later normalization.
           if (typeof value === 'undefined') return undefined
           const number = Number(value)
-          // RPC signatures may carry Ethereum's 27/28 `v`; `ox` expects 0/1 parity.
+          // RPC signatures may carry Ethereum 27/28 `v`; `ox` expects 0/1 parity.
           if (number === 27 || number === 28) return number - 27
           return number
         })()
