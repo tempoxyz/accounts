@@ -7,7 +7,7 @@ import { fetchOptions, getClient } from './config.js'
 export async function setupServer({ port }: { port: number }) {
   const tag = await (async () => {
     if (!import.meta.env.VITE_NODE_TAG?.startsWith('http'))
-      return import.meta.env.VITE_NODE_TAG || 'latest'
+      return import.meta.env.VITE_NODE_TAG || 'sha-3da8342'
 
     const client = getClient({
       transport: http(import.meta.env.VITE_NODE_TAG, {
@@ -30,7 +30,7 @@ export async function setupServer({ port }: { port: number }) {
   const server = Server.create({
     instance: TestContainers.Instance.tempo({
       ...args,
-      image: `ghcr.io/tempoxyz/tempo:${tag}`,
+      image: `docker.io/tempoxyz/tempo:${tag}`,
     }),
     port,
   })
