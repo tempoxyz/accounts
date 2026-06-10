@@ -1,11 +1,13 @@
 ---
 title: postMessage
-description: PostMessage adapter for popup-based wallet requests.
+description: PostMessage adapter for wallet-window sessions.
 ---
 
 # `postMessage`
 
-Creates an adapter that sends provider RPC requests to a wallet web page over a [uRPC postMessage session](https://github.com/tempoxyz/urpc/blob/main/specs/transport-window.md). Each request opens the wallet's post-message page — a centered popup by default — and resolves with the wallet's response. The page closes once the response flushes back; closing it without answering rejects the request.
+Creates an adapter that sends provider RPC requests to a wallet web page over a [uRPC postMessage session](https://github.com/tempoxyz/urpc/blob/main/specs/transport-window.md).
+
+One provider holds one session to one wallet window. The wallet page — a centered popup by default — mounts on the first request and stays bound to the session: sequential requests reuse the open window, navigating it from one approval to the next. Closing the window rejects the in-flight request, and the next request mounts a fresh one. `wallet_disconnect` tears the session down.
 
 The wallet identifies the app by its browser-verified window origin, so no discovery document is required; `name` and `rdns` only describe the provider identity announced to the app.
 
@@ -39,7 +41,38 @@ const provider = Provider.create({
 })
 ```
 
+## Mounting in an iframe
+
+The adapter owns the wire; the app owns the mount. Pass `target` to mount the wallet page somewhere other than a popup — for example an iframe the app shows while requests are pending. Passkey ceremonies inside a cross-origin iframe require the `publickey-credentials-*` permissions in the frame's `allow` attribute.
+
+```ts twoslash
+import { postMessage } from 'accounts/postMessage'
+
+let frame: HTMLIFrameElement | undefined
+
+const adapter = postMessage({
+  host: 'https://wallet.example/post-message',
+  name: 'Example Wallet',
+  rdns: 'com.example.wallet',
+  target: ({ host }) => {
+    frame = document.createElement('iframe')
+    frame.allow = 'publickey-credentials-create *; publickey-credentials-get *'
+    frame.src = host!
+    document.body.appendChild(frame)
+    return frame.contentWindow
+  },
+  close: () => frame?.remove(),
+})
+```
+
 ## Parameters
+
+### close
+
+- **Type:** `(handle: Window | MessagePort) => void | Promise<void>`
+- **Optional**
+
+Cleanup for the mounted handle, called when the session closes. Defaults to `handle.close()`, which closes a popup the adapter opened.
 
 ### host
 
@@ -67,15 +100,4 @@ Reverse-DNS provider identifier.
 - **Type:** `({ host }) => Window | MessagePort | null | Promise<Window | MessagePort | null>`
 - **Optional**
 
-Override how the wallet page is mounted. Receives the page URL and returns a `Window` or `MessagePort` handle for the session. Defaults to opening a centered popup window.
-
-```ts twoslash
-import { postMessage } from 'accounts/postMessage'
-
-const adapter = postMessage({
-  host: 'https://wallet.example/post-message',
-  name: 'Example Wallet',
-  rdns: 'com.example.wallet',
-  target: ({ host }) => window.open(host!, '_blank', 'popup=1,width=360,height=440'),
-})
-```
+Override how the wallet page is mounted. Called when the session (re-)opens; receives the page URL and returns a `Window` or `MessagePort` handle. A nullish handle (e.g. a blocked `window.open`) rejects the request with `PostMessage.PopupBlockedError`. Defaults to opening a centered popup window.

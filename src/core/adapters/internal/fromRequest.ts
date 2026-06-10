@@ -16,7 +16,7 @@ import * as Rpc from '../../zod/rpc.js'
  * `request`.
  */
 export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
-  const { name, rdns, request: requestRemote } = options
+  const { close, name, rdns, request: requestRemote } = options
 
   return Adapter.define({ name, rdns }, ({ getAccount, store }) => {
     function generateAccessKey(
@@ -86,10 +86,11 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
             params: [z.encode(Rpc.wallet_depositZone.parameters, parameters)] as const,
           })) as Rpc.wallet_depositZone.Encoded['returns']
         },
-        // No `disconnect`/`switchChain` actions: both are local state
-        // changes the provider handles itself, and the remote wallet has no
-        // persistent session to clean up. Forwarding them would open a
-        // wallet session for nothing.
+        // `disconnect` (when `close` is set) only tears down the local
+        // wallet session — it is never forwarded. No `switchChain` action:
+        // chain selection is local state the provider handles itself, and
+        // forwarding it would open a wallet session for nothing.
+        ...(close ? { disconnect: close } : {}),
         async swap(_parameters, request) {
           return (await provider.request(request)) as Rpc.wallet_swap.Encoded['returns']
         },
@@ -106,6 +107,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
           })) as Rpc.wallet_withdrawZone.Encoded['returns']
         },
       },
+      ...(close ? { cleanup: () => void close() } : {}),
       generateAccessKey,
       getAccount(parameters = {}) {
         return {
@@ -123,6 +125,12 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
 export declare namespace fromRequest {
   /** Options for {@link fromRequest}. */
   export type Options = {
+    /**
+     * Tears down the adapter's wallet session. Wired to the `disconnect`
+     * action and instance cleanup; never forwarded to the remote wallet.
+     * Omit for single-exchange transports with no session to clean up.
+     */
+    close?: (() => Promise<void>) | undefined
     /** Provider display name. */
     name: string
     /** Reverse-DNS provider identifier. */

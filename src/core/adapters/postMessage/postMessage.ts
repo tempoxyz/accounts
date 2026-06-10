@@ -8,43 +8,63 @@ import { fromRequest } from '../internal/fromRequest.js'
  * Creates a postMessage adapter that forwards wallet RPC through a Wata
  * postMessage session.
  *
- * Each request opens the wallet's post-message page (a centered popup by
- * default), delivers the request over `postMessage`, and resolves with the
- * wallet's response. The page closes once the response flushes back;
- * closing it without answering rejects the request.
+ * One provider holds one session to one wallet window. The wallet page (a
+ * centered popup by default) mounts on the first request and stays bound to
+ * the session: sequential requests reuse the open window, navigating it
+ * from one approval to the next. Closing the window rejects the in-flight
+ * request; the next request mounts a fresh one. `wallet_disconnect` tears
+ * the session down.
  */
 export function postMessage(options: postMessage.Options): Adapter.Adapter {
-  const { host, name, rdns, target } = options
+  const { close, host, name, rdns, target } = options
+
+  let handle: Window | undefined
+  let queue: Promise<unknown> = Promise.resolve()
+  let session: ReturnType<typeof create> | undefined
+
+  function create() {
+    return Wata.create({
+      transports: [
+        core_postMessage({
+          host: hostUrl(host),
+          ...(close ? { close } : {}),
+          async target(parameters) {
+            const acquired = await (target ?? popup)(parameters)
+            if (!acquired)
+              throw new PostMessage.PopupBlockedError('the wallet page popup was blocked')
+            handle = focusable(acquired) ? acquired : undefined
+            return acquired
+          },
+        }),
+      ],
+    })
+  }
+
+  async function send(request: { method: string; params?: readonly unknown[] | undefined }) {
+    session ??= create()
+    // Surface the already-open wallet window so the new request is seen.
+    if (handle && !handle.closed) handle.focus()
+    try {
+      return (await session.send({ method: request.method, params: request.params ?? [] })).result
+    } catch (error) {
+      // The wallet window closing without an answer is the user backing out.
+      if (error instanceof Transport.ClosedError) throw new core_Provider.UserRejectedRequestError()
+      throw error
+    }
+  }
 
   return fromRequest({
     name,
     rdns,
-    async request(request) {
-      // One session per request: the wallet page opens for approval and
-      // closes once the response (or rejection) flushes back.
-      const session = Wata.create({
-        transports: [
-          core_postMessage({
-            host: hostUrl(host),
-            async target(parameters) {
-              const handle = await (target ?? popup)(parameters)
-              if (!handle)
-                throw new PostMessage.PopupBlockedError('the wallet page popup was blocked')
-              return handle
-            },
-          }),
-        ],
-      })
-      try {
-        return (await session.send({ method: request.method, params: request.params ?? [] })).result
-      } catch (error) {
-        // The wallet page closing without an answer is the user backing out.
-        if (error instanceof Transport.ClosedError)
-          throw new core_Provider.UserRejectedRequestError()
-        throw error
-      } finally {
-        await session.close()
-      }
+    async close() {
+      await session?.close()
+    },
+    request(request) {
+      // The wallet window shows one approval at a time, so overlapping
+      // calls wait for the previous request to settle.
+      const result = queue.then(() => send(request))
+      queue = result.catch(() => undefined)
+      return result
     },
   })
 }
@@ -52,6 +72,11 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
 export declare namespace postMessage {
   /** Options for {@link postMessage}. */
   export type Options = {
+    /**
+     * Cleanup for the mounted handle, called when the session closes.
+     * @default `handle.close()`
+     */
+    close?: ((handle: Window | MessagePort) => void | Promise<void>) | undefined
     /** URL of the wallet's post-message page. */
     host: string
     /** Provider display name. */
@@ -59,10 +84,10 @@ export declare namespace postMessage {
     /** Reverse-DNS provider identifier. */
     rdns: string
     /**
-     * Override how the wallet page is mounted. Receives the page URL and
-     * returns a `Window` or `MessagePort` handle for the session. A nullish
-     * handle (e.g. a blocked `window.open`) rejects the request with
-     * `PostMessage.PopupBlockedError`.
+     * Override how the wallet page is mounted. Called when the session
+     * (re-)opens; receives the page URL and returns a `Window` or
+     * `MessagePort` handle. A nullish handle (e.g. a blocked `window.open`)
+     * rejects the request with `PostMessage.PopupBlockedError`.
      * @default Opens a centered popup window.
      */
     target?:
@@ -92,6 +117,10 @@ function hostUrl(host: string): string {
   const url = new URL(host)
   url.searchParams.set('origin', window.location.origin)
   return url.toString()
+}
+
+function focusable(value: PostMessage.Target): value is Window {
+  return 'closed' in value && typeof (value as Window).focus === 'function'
 }
 
 const size = { height: 440, width: 360 }

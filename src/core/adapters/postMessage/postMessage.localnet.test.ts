@@ -59,9 +59,10 @@ function asyncJsonStorage(options: Storage.from.Options = {}) {
 }
 
 /**
- * In-process wallet endpoint. Each adapter request opens a fresh session, so
- * `target` mints a new `MessageChannel` per call and parks a wata host on the
- * far port — the port-pair stand-in for the popup the adapter would open.
+ * In-process wallet endpoint. `target` is called whenever the adapter
+ * (re-)opens its session: it mints a fresh `MessageChannel` and parks a wata
+ * host on the far port — the port-pair stand-in for the wallet window. The
+ * `opened` log therefore counts session mounts, not requests.
  */
 function createWallet() {
   const opened: string[] = []
@@ -300,6 +301,84 @@ describe('create', () => {
     })
     expect(receipt.status).toBe('0x1')
     expect(wallet.opened()).toHaveLength(1)
+  })
+
+  test('behavior: reuses one wallet page session for sequential requests', async () => {
+    const wallet = createWallet()
+    const provider = createProvider(wallet, { storage: Storage.memory() })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    await provider.request({
+      method: 'personal_sign',
+      params: [Hex.fromString('hello'), root.address],
+    })
+    await provider.request({
+      method: 'wallet_deposit',
+      params: [{ amount: '25', token: 'USDC' }],
+    })
+
+    expect(wallet.requests().map((request) => request.method)).toMatchInlineSnapshot(`
+      [
+        "wallet_connect",
+        "personal_sign",
+        "wallet_deposit",
+      ]
+    `)
+    expect(wallet.opened()).toHaveLength(1)
+  })
+
+  test('behavior: reopens the wallet page after disconnect', async () => {
+    const wallet = createWallet()
+    const provider = createProvider(wallet, { storage: Storage.memory() })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    await provider.request({ method: 'wallet_disconnect' })
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+
+    expect(wallet.opened()).toHaveLength(2)
+  })
+
+  test('behavior: serializes overlapping requests over one session', async () => {
+    const wallet = createWallet()
+    const provider = createProvider(wallet, { storage: Storage.memory() })
+
+    const [result, deposit] = await Promise.all([
+      provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { method: 'login' } }],
+      }),
+      provider.request({ method: 'wallet_deposit', params: [{ amount: '25', token: 'USDC' }] }),
+    ])
+
+    expect(result.accounts[0]!.address).toBe(root.address)
+    expect(deposit).toMatchInlineSnapshot(`
+      {
+        "receipts": [],
+      }
+    `)
+    expect(wallet.opened()).toHaveLength(1)
+    // Arrival order at the adapter is not defined for overlapping calls —
+    // only that both round-trip through the single session.
+    expect(
+      wallet
+        .requests()
+        .map((request) => request.method)
+        .sort(),
+    ).toMatchInlineSnapshot(`
+      [
+        "wallet_connect",
+        "wallet_deposit",
+      ]
+    `)
   })
 
   test('behavior: forwards personal_sign through the wallet page', async () => {
