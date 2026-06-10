@@ -1304,6 +1304,12 @@ export function create(options: create.Options = {}): create.ReturnType {
                             address: accountAddress,
                             message: verifyMessage,
                             signature,
+                            // Forward the verified-email id token so a
+                            // `Handler.auth({ identity })` can verify it and fold
+                            // the email onto the session in the same round-trip.
+                            // The wallet minted it reusing this SIWE nonce, so
+                            // the handler's nonce check passes.
+                            ...(identity?.idToken ? { idToken: identity.idToken } : {}),
                             ...(personalSign?.keyAuthorization
                               ? { keyAuthorization: personalSign.keyAuthorization }
                               : {}),
@@ -2009,6 +2015,7 @@ async function verifyAuthMessage(
   auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
   body: {
     address: Address.Address
+    idToken?: string | undefined
     message: string
     signature: Hex.Hex
     keyAuthorization?: Hex.Hex | undefined

@@ -90,28 +90,49 @@ const payment = Mppx.create({
 
 payment.onPaymentSuccess(recordInspection)
 
-const auth = Handler.auth({ origin: process.env.ORIGIN, path: '/auth' })
+const walletOrigin = process.env.VITE_WALLET_HOST
+  ? new URL(process.env.VITE_WALLET_HOST).origin
+  : undefined
 
-const handler = Handler.compose([
-  Handler.webAuthn({
-    kv: Kv.memory(),
-    origin: process.env.ORIGIN,
-    path: '/webauthn',
-    rpId: process.env.RP_ID,
-  }),
-  Handler.relay({
-    feePayer: {
-      account,
-      name: 'Playground',
-      url: 'https://playground.tempo.xyz',
-    },
-    path: '/relay',
-  }),
-  auth,
-])
+// `Handler.auth`/`Handler.webAuthn` need the KV binding from `env`, so build them
+// lazily on first request and memoize. The default in-memory store is
+// isolate-local and loses challenges across isolates, causing `409` on verify;
+// a shared KV store fixes that.
+let handlers: ReturnType<typeof createHandlers> | undefined
+function createHandlers(env: Cloudflare.Env) {
+  const store = Kv.cloudflare(env.NONCE_KV)
+  const auth = Handler.auth({
+    origin: process.env.ORIGIN || undefined,
+    path: '/auth',
+    trustProxy: process.env.TRUST_PROXY === 'true',
+    // Opt into OIDC identity verification. `issuer` defaults to the Tempo wallet's
+    // production OIDC mount; override it for local dev (or a self-hosted wallet).
+    identity: walletOrigin ? { issuer: `${walletOrigin}/api/oidc` } : {},
+    store,
+  })
+  const handler = Handler.compose([
+    Handler.webAuthn({
+      kv: store,
+      origin: process.env.ORIGIN,
+      path: '/webauthn',
+      rpId: process.env.RP_ID,
+    }),
+    Handler.relay({
+      feePayer: {
+        account,
+        name: 'Playground',
+        url: 'https://playground.tempo.xyz',
+      },
+      path: '/relay',
+    }),
+    auth,
+  ])
+  return { auth, handler }
+}
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
+    const { auth, handler } = (handlers ??= createHandlers(env))
     const url = new URL(request.url)
 
     if (url.pathname === '/mpp/inspect') {
@@ -212,7 +233,11 @@ export default {
     if (url.pathname === '/me') {
       const session = await auth.getSession(request)
       if (!session) return Response.json({ error: 'unauthenticated' }, { status: 401 })
-      return Response.json({ address: session.address, chainId: session.chainId })
+      return Response.json({
+        address: session.address,
+        chainId: session.chainId,
+        email: session.email,
+      })
     }
 
     return handler.fetch(request)

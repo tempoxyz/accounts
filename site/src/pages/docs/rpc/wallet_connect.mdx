@@ -71,10 +71,17 @@ type ConnectLoginCapabilities = {
 
 type Identity = {
   /**
-   * Request the account's verified email address. The wallet shows an
-   * approval prompt and only returns it after the user consents.
+   * Request the account's verified email. Returned on the connected account
+   * as `capabilities.identity.email` (a plain string, for client-side use)
+   * and `capabilities.identity.idToken` (a signed token, for server-side
+   * verification).
+   *
+   * - `true` — request the email; the wallet auto-issues the signed token,
+   *   reusing the `auth` (SIWE) challenge nonce when present.
+   * - `{ nonce }` — same, with an explicit nonce baked into the token (for
+   *   standalone use without the `auth` capability).
    */
-  email?: boolean
+  email?: boolean | { nonce?: string }
 }
 
 type ShowDeposit = boolean | {
@@ -142,6 +149,13 @@ type Response = {
       identity?: {
         /** Verified email address, if requested and approved. May be `null`. */
         email?: string | null
+        /**
+         * Signed identity token (JWT) asserting the verified email, bound to
+         * the requesting app origin (`aud`) and the connected account (`sub`).
+         * Verify it server-side against the wallet's JWKS. Present only when
+         * `identity.email` was requested and a verified email is available.
+         */
+        idToken?: string
       }
       /** Authorized access key, if `authorizeAccessKey` was requested. */
       keyAuthorization?: KeyAuthorization
@@ -196,3 +210,18 @@ const { accounts } = await provider.request({
 // Present only if the user approved sharing; set on the authenticated account.
 const email = accounts[0]?.capabilities?.identity?.email
 ```
+
+The response also carries a signed `idToken` alongside the plain `email`. The
+plain string is convenient for client-side display, but it can be set by anyone.
+Forward the `idToken` to your backend and verify it against the wallet's JWKS to
+trust the email server-side.
+
+```ts
+const identity = accounts[0]?.capabilities?.identity
+// `email` for display; `idToken` to prove the email to your backend.
+const { email, idToken } = identity ?? {}
+```
+
+The token is a standard OIDC ID token (JWT) bound to your app origin (`aud`) and
+the connected account address (`sub`). Verify it with any OIDC-aware library, or
+with [`Identity.verify`](/docs/server/identity.verify).

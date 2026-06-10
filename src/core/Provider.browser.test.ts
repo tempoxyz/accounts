@@ -1,3 +1,4 @@
+import { verify } from 'hono/jwt'
 import { requestProviders } from 'mipd'
 import { Hex } from 'ox'
 import { type Address, parseUnits } from 'viem'
@@ -7,6 +8,8 @@ import { describe, expect, test } from 'vp/test'
 
 import { accounts, chain, getClient } from '../../test/config.js'
 import { url as webauthnUrl } from '../../test/webauthn.constants.js'
+import * as Handler from '../server/Handler.js'
+import * as Adapter from './Adapter.js'
 import { webAuthn } from './adapters/webAuthn.js'
 import * as Expiry from './Expiry.js'
 import * as Provider from './Provider.js'
@@ -750,6 +753,89 @@ describe('eip-6963', () => {
     expect(info.icon).toMatch(/^data:image\/svg\+xml,/)
 
     unsubscribe?.()
+  })
+})
+
+describe('wallet_connect identity (OIDC)', () => {
+  // Reusable Ed25519 keypair for the in-memory issuer (JWK strings).
+  const signingKey = JSON.stringify({
+    alg: 'Ed25519',
+    crv: 'Ed25519',
+    d: 'tx-s_Aj4ltT_rpY_AIEKexmitq2eyWMkuuIy5JMzmn4',
+    x: 'eZEsf-38KiwfrWnn88cokaJmAoOVgTocC1TndJsz_uQ',
+    kty: 'OKP',
+  })
+  const publicKey = JSON.stringify({
+    alg: 'Ed25519',
+    crv: 'Ed25519',
+    x: 'eZEsf-38KiwfrWnn88cokaJmAoOVgTocC1TndJsz_uQ',
+    kty: 'OKP',
+  })
+
+  // `Handler.oidcProvider` is the issuer the wallet mounts in production. The
+  // test drives it in-memory (no HTTP server) so it runs in the browser pool.
+  function issuer() {
+    return Handler.oidcProvider({
+      claimsSupported: ['iss', 'aud', 'sub', 'iat', 'exp', 'nonce', 'email', 'email_verified'],
+      getClaims: () => ({ email: 'alice@example.com', email_verified: true }),
+      issuer: 'https://wallet.example.com/oidc',
+      kid: 'test-1',
+      path: '/oidc',
+      publicKey,
+      signingKey,
+    })
+  }
+
+  test('forwards a verifiable identity idToken minted for the connecting account', async () => {
+    const oidc = issuer()
+    const address = '0x00000000000000000000000000000000000000ab' as const
+    const audience = 'https://app.example.com'
+    const nonce = 'n-abc123'
+
+    // Adapter standing in for the wallet dialog: on connect it mints the
+    // verified-email id token via the issuer (as the real dialog does) and
+    // returns it under `identity`, which the provider must forward verbatim.
+    const adapter = Adapter.define({ name: 'Mint Wallet', rdns: 'com.example.mint' }, () => ({
+      actions: {
+        async createAccount() {
+          return { accounts: [{ address }] }
+        },
+        async loadAccounts() {
+          const res = await oidc.request('/oidc/token', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ audience, nonce, subject: address }),
+          })
+          const { idToken } = (await res.json()) as { idToken: string }
+          return { accounts: [{ address }], identity: { email: 'alice@example.com', idToken } }
+        },
+      },
+    }))
+
+    const provider = Provider.create({ adapter, storage: Storage.memory() })
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { identity: { email: true } } }],
+    })
+
+    const identity = result.accounts[0]!.capabilities.identity!
+    expect(identity.email).toBe('alice@example.com')
+    expect(identity.idToken).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/)
+
+    // Verify the token the way a relying party would: against the issuer's JWKS.
+    const jwksRes = await oidc.request('/oidc/.well-known/jwks.json')
+    const { keys } = (await jwksRes.json()) as { keys: JsonWebKey[] }
+    const claims = (await verify(
+      identity.idToken!,
+      { ...keys[0]!, alg: 'EdDSA' },
+      'EdDSA',
+    )) as Record<string, unknown>
+    expect(claims.iss).toBe('https://wallet.example.com/oidc')
+    expect(claims.aud).toBe(audience)
+    expect(claims.sub).toBe(address)
+    expect(claims.nonce).toBe(nonce)
+    expect(claims.email).toBe('alice@example.com')
+    expect(claims.email_verified).toBe(true)
   })
 })
 

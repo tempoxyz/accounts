@@ -211,6 +211,10 @@ export function Example() {
 }
 ```
 
+:::warn
+The plain `email` string is fine for client-side display, but anyone can set it. The result also carries a signed `idToken` that your server can verify to trust the email. See [Verify the Email Server-Side](/docs/guides/authentication#verify-the-email-server-side).
+:::
+
 ## Best Practices
 
 ### Deposit Funds

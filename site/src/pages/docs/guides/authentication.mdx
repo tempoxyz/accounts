@@ -292,6 +292,32 @@ function Connect() {
 }
 ```
 
+:::warn
+The plain `email` string is fine for client-side display, but anyone can set it. The result also carries a signed `idToken` that your server can verify to trust the email. See [Verify the Email Server-Side](#verify-the-email-server-side).
+:::
+
+#### Verify the Email Server-Side
+
+Alongside the plain `email`, the wallet returns a signed token proving the email belongs to the account. Your auth handler checks the signature and adds the verified email to the session automatically — set [`identity`](/docs/server/handler.auth#identity) only to require an email or use your own wallet.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Handler, Kv } from 'accounts/server'
+import { env } from 'cloudflare:workers'
+
+const auth = Handler.auth({
+  path: '/auth',
+  store: Kv.durableObject(env.NONCE_DO),
+})
+
+// In an authenticated route, the verified email is on the session. // [!code focus]
+app.get('/me', async (c) => { // [!code focus]
+  const session = await auth.getSession(c.req.raw) // [!code focus]
+  if (!session) return c.json({ error: 'unauthenticated' }, 401)
+  return c.json({ address: session.address, email: session.email }) // [!code focus]
+})
+```
+
 ## Notes & Gotchas
 
 ### Cookies are issued by your origin
