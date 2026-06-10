@@ -74,6 +74,13 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
       message:
         'Multisig config is required to collect approvals. Provide it in the bootstrap transaction or configure `multisig.resolveConfig`.',
     })
+  const initConfig = resolveInitConfig({
+    config,
+    genesisConfigId: input.genesisConfigId,
+    init: input.init,
+    nonce: input.nonce,
+    pending,
+  })
 
   const now = Date.now()
   let operation: Operation = {
@@ -84,7 +91,8 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     createdAt: pending?.createdAt ?? now,
     genesisConfigId: input.genesisConfigId,
     id: input.id,
-    init: pending?.init ?? !!input.init,
+    init: pending?.init || !!initConfig,
+    initConfig,
     payload: input.payload,
     signatures: mergeSignatures([...(pending?.signatures ?? []), ...input.signatures]),
     status: pending?.status === 'submitted' ? 'submitted' : 'pending',
@@ -133,9 +141,8 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   const client = getClient(operation.chainId)
   const final = await serializeFinal({
     account: operation.account,
-    config,
     genesisConfigId: operation.genesisConfigId,
-    init: operation.init,
+    init: operation.initConfig,
     signatures: approvals.signatures,
     transaction: input.transaction,
   })
@@ -162,28 +169,19 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   const sponsorFeeToken = await (async () => {
     // No sponsor configured, so finalized multisig transaction broadcasts as-is.
     if (!sponsor) return undefined
-    // Explicit relay fee token wins over transaction-derived fee-token state.
+    // Already fee-payer signed transactions must not be rewritten by this relay.
+    if (feePayerState.signature !== null) return undefined
+    // Explicit relay fee token wins when the transaction requests sponsorship.
     if (sponsor.feeToken) return sponsor.feeToken
     // `null` requests relay-added fee-payer signature.
-    if (feePayerState.signature === null) return await sponsor.resolveFeeToken?.(operation.chainId)
-    // Pre-sponsored transaction without fee token can use relay default fee token.
-    if (feePayerState.signature != null && !feePayerState.feeToken)
-      return await sponsor.resolveFeeToken?.(operation.chainId)
-    // Otherwise, sponsorship path has no fee token to add.
-    return undefined
+    return await sponsor.resolveFeeToken?.(operation.chainId)
   })()
   const shouldSponsor = (() => {
     // No sponsor configured, so no sponsorship path to take.
     if (!sponsor) return false
     // `null` requests relay-added fee-payer signature.
     if (feePayerState.signature === null) return true
-    // Missing fee-payer state means plain multisig transaction.
-    if (feePayerState.signature == null) return false
-    // Explicit relay fee token means relay should sponsor with that token.
-    if (sponsor.feeToken) return true
-    // Pre-sponsored transaction without fee token can complete if one was resolved.
-    if (!feePayerState.feeToken && sponsorFeeToken) return true
-    // Otherwise, keep finalized transaction unchanged and broadcast directly.
+    // Missing or already-present fee-payer signatures broadcast unchanged.
     return false
   })()
   const result = await (async () => {
@@ -528,6 +526,8 @@ export type Operation = {
   id: Hex.Hex
   /** Whether the finalized transaction must carry the genesis init config. */
   init?: boolean | undefined
+  /** Genesis init config to attach when finalizing a bootstrap transaction. */
+  initConfig?: MultisigConfig.Config | undefined
   /** Unsigned Tempo transaction sign payload. */
   payload: Hex.Hex
   /** Collected owner approval signatures. */
@@ -581,6 +581,7 @@ function parse(serialized: Hex.Hex) {
     payload,
   })
   const init = signature.init ? MultisigConfig.from(signature.init) : undefined
+  const nonce = typeof transaction.nonce === 'number' ? transaction.nonce : undefined
 
   return {
     account: signature.account,
@@ -588,6 +589,7 @@ function parse(serialized: Hex.Hex) {
     genesisConfigId: signature.genesisConfigId,
     id,
     init,
+    nonce,
     payload,
     signatures: signature.signatures.map((value) => SignatureEnvelope.serialize(value)),
     transaction,
@@ -618,6 +620,11 @@ async function resolveValidatedConfig(options: {
     (await resolveConfig?.({ account, chainId, genesisConfigId, init })) ?? pending?.config ?? init
   if (!config) return undefined
 
+  if (init && !isGenesisConfig(init, genesisConfigId))
+    throw new RpcResponse.InvalidParamsError({
+      message: 'Bootstrap multisig init config does not match genesis config id.',
+    })
+
   const normalized = MultisigConfig.from(config)
   const account_expected = MultisigConfig.getAddress({ genesisConfigId })
   if (account_expected.toLowerCase() !== account.toLowerCase())
@@ -625,6 +632,26 @@ async function resolveValidatedConfig(options: {
       message: 'Resolved multisig config does not match account or genesis config id.',
     })
   return normalized
+}
+
+function resolveInitConfig(options: {
+  config: MultisigConfig.Config
+  genesisConfigId: Hex.Hex
+  init?: MultisigConfig.Config | undefined
+  nonce?: number | undefined
+  pending?: Operation | undefined
+}) {
+  const { config, genesisConfigId, init, nonce, pending } = options
+  if (pending?.initConfig) return pending.initConfig
+  if (pending?.init && pending.config && isGenesisConfig(pending.config, genesisConfigId))
+    return pending.config
+  if (init) return init
+  if (nonce === 0 && isGenesisConfig(config, genesisConfigId)) return config
+  return undefined
+}
+
+function isGenesisConfig(config: MultisigConfig.Config, genesisConfigId: Hex.Hex) {
+  return MultisigConfig.toId(config).toLowerCase() === genesisConfigId.toLowerCase()
 }
 
 function mergeSignatures(signatures: readonly Hex.Hex[]) {
@@ -666,6 +693,17 @@ function getApprovals(options: {
     if (!configured)
       throw new RpcResponse.InvalidParamsError({ message: `Signature from non-owner ${owner}.` })
     if (seen.has(key)) continue
+    const valid = (() => {
+      try {
+        return SignatureEnvelope.verify(signature, { payload: digest, address: configured.address })
+      } catch {
+        return false
+      }
+    })()
+    if (!valid)
+      throw new RpcResponse.InvalidParamsError({
+        message: `Invalid signature from owner ${configured.address}.`,
+      })
     seen.add(key)
     signatures.push(SignatureEnvelope.serialize(signature))
     weight += configured.weight
@@ -676,9 +714,8 @@ function getApprovals(options: {
 
 async function serializeFinal(options: {
   account: Address
-  config: MultisigConfig.Config
   genesisConfigId: Hex.Hex
-  init?: boolean | undefined
+  init?: MultisigConfig.Config | undefined
   signatures: readonly Hex.Hex[]
   transaction: Record<string, unknown>
 }) {
@@ -725,7 +762,7 @@ async function serializeFinal(options: {
     account: options.account,
     genesisConfigId: options.genesisConfigId,
     signatures: sorted,
-    ...(options.init ? { init: options.config } : {}),
+    ...(options.init ? { init: options.init } : {}),
   })
   return TxEnvelopeTempo.serialize(envelope, { feePayerSignature: undefined, signature })
 }
@@ -740,6 +777,8 @@ function mergeOperation(
     ...existing,
     ...patch,
     config: operation.config ?? existing?.config,
+    init: existing?.init || operation.init,
+    initConfig: existing?.initConfig ?? operation.initConfig,
     signatures: mergeSignatures([...(existing?.signatures ?? []), ...operation.signatures]),
     transaction: operation.transaction,
   } satisfies Operation

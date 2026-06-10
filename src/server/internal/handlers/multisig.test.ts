@@ -1,4 +1,4 @@
-import { Hex } from 'ox'
+import { Address, Hex, P256 } from 'ox'
 import { MultisigConfig, SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import { createClient, custom } from 'viem'
 import { Account, Transaction } from 'viem/tempo'
@@ -189,6 +189,139 @@ describe('config resolution', () => {
     expect(hash).toMatchInlineSnapshot(`"${hash}"`)
   })
 
+  test('behavior: preserves bootstrap init when it arrives after a resolver-backed pending approval', async () => {
+    const store = Multisig.memoryStore()
+    const owner_1 = Account.fromSecp256k1(privateKey_1)
+    const owner_2 = Account.fromSecp256k1(privateKey_2)
+    const account = Account.fromMultisig({
+      threshold: 2,
+      owners: [
+        { owner: owner_1.address, weight: 1 },
+        { owner: owner_2.address, weight: 1 },
+      ],
+    })
+    const transaction = {
+      calls: [{ to: '0xcafebabecafebabecafebabecafebabecafebabe', value: 1n }],
+      chainId: tempoDevnet.id,
+      gas: 21_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 0n,
+      multisig: account.config,
+      nonce: 0n,
+    }
+    const signature_1 = await owner_1.signTransaction(transaction as never)
+    const signature_2 = await owner_2.signTransaction(transaction as never)
+    const first = withoutInit(
+      await account.signTransaction({ ...transaction, signatures: [signature_1] } as never),
+    )
+    const second = await account.signTransaction({
+      ...transaction,
+      signatures: [signature_2],
+    } as never)
+    let submitted: `0x${string}` | undefined
+
+    await Multisig.handleRawTransaction({
+      getClient: (() => undefined) as never,
+      method: 'eth_sendRawTransaction',
+      request: { params: [first] },
+      resolveConfig: () => account.config,
+      store,
+    })
+    const hash = await Multisig.handleRawTransaction({
+      getClient: (() => ({
+        request: async ({ params }: { params: unknown }) => {
+          submitted = Array.isArray(params) ? (params[0] as `0x${string}`) : undefined
+          return hashRawTransaction(params)
+        },
+      })) as never,
+      method: 'eth_sendRawTransaction',
+      request: { params: [second] },
+      resolveConfig: () => account.config,
+      store,
+    })
+
+    const transaction_submitted = Transaction.deserialize(submitted! as never) as {
+      signature: SignatureEnvelope.Multisig
+    }
+    expect({
+      hash,
+      init: transaction_submitted.signature.init
+        ? MultisigConfig.toId(transaction_submitted.signature.init)
+        : undefined,
+    }).toMatchInlineSnapshot(`
+      {
+        "hash": "${hash}",
+        "init": "${MultisigConfig.toId(account.config)}",
+      }
+    `)
+  })
+
+  test('behavior: attaches resolver-provided bootstrap config when approvals omit init', async () => {
+    const store = Multisig.memoryStore()
+    const owner_1 = Account.fromSecp256k1(privateKey_1)
+    const owner_2 = Account.fromSecp256k1(privateKey_2)
+    const account = Account.fromMultisig({
+      threshold: 2,
+      owners: [
+        { owner: owner_1.address, weight: 1 },
+        { owner: owner_2.address, weight: 1 },
+      ],
+    })
+    const transaction = {
+      calls: [{ to: '0xcafebabecafebabecafebabecafebabecafebabe', value: 1n }],
+      chainId: tempoDevnet.id,
+      gas: 21_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 0n,
+      multisig: account.config,
+      nonce: 0n,
+    }
+    const signature_1 = await owner_1.signTransaction(transaction as never)
+    const signature_2 = await owner_2.signTransaction(transaction as never)
+    const first = withoutInit(
+      await account.signTransaction({ ...transaction, signatures: [signature_1] } as never),
+    )
+    const second = withoutInit(
+      await account.signTransaction({ ...transaction, signatures: [signature_2] } as never),
+    )
+    let submitted: `0x${string}` | undefined
+
+    await Multisig.handleRawTransaction({
+      getClient: (() => undefined) as never,
+      method: 'eth_sendRawTransaction',
+      request: { params: [first] },
+      resolveConfig: () => account.config,
+      store,
+    })
+    const hash = await Multisig.handleRawTransaction({
+      getClient: (() => ({
+        request: async ({ params }: { params: unknown }) => {
+          submitted = Array.isArray(params) ? (params[0] as `0x${string}`) : undefined
+          return hashRawTransaction(params)
+        },
+      })) as never,
+      method: 'eth_sendRawTransaction',
+      request: { params: [second] },
+      resolveConfig: () => account.config,
+      store,
+    })
+
+    const transaction_submitted = Transaction.deserialize(submitted! as never) as {
+      signature: SignatureEnvelope.Multisig
+    }
+    expect({
+      hash,
+      init: transaction_submitted.signature.init
+        ? MultisigConfig.toId(transaction_submitted.signature.init)
+        : undefined,
+    }).toMatchInlineSnapshot(`
+      {
+        "hash": "${hash}",
+        "init": "${MultisigConfig.toId(account.config)}",
+      }
+    `)
+  })
+
   test('behavior: rejects resolved configs that do not match the multisig account', async () => {
     const owner_1 = Account.fromSecp256k1(privateKey_1)
     const owner_2 = Account.fromSecp256k1(privateKey_2)
@@ -290,6 +423,51 @@ describe('config resolution', () => {
   })
 })
 
+describe('approval validation', () => {
+  test('behavior: rejects P256 approvals whose embedded owner key did not sign the operation', async () => {
+    const privateKey = P256.randomPrivateKey()
+    const publicKey = P256.getPublicKey({ privateKey })
+    const owner = Address.fromPublicKey(publicKey)
+    const account = Account.fromMultisig({
+      threshold: 1,
+      owners: [{ owner, weight: 1 }],
+    })
+    const transaction = {
+      calls: [{ to: '0xcafebabecafebabecafebabecafebabecafebabe', value: 1n }],
+      chainId: tempoDevnet.id,
+      gas: 21_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 0n,
+      multisig: account.config,
+      nonce: 0n,
+    }
+    const signature = SignatureEnvelope.serialize(
+      SignatureEnvelope.from({
+        publicKey,
+        signature: P256.sign({ payload: `0x${'44'.repeat(32)}`, privateKey }),
+        type: 'p256',
+      }),
+    )
+    const serialized = await account.signTransaction({
+      ...transaction,
+      signatures: [signature],
+    } as never)
+
+    await expect(
+      Multisig.handleRawTransaction({
+        getClient: (() => ({
+          request: async ({ params }: { params: unknown }) => hashRawTransaction(params),
+        })) as never,
+        method: 'eth_sendRawTransaction',
+        request: { params: [serialized] },
+        store: Multisig.memoryStore(),
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: Invalid signature from owner ${owner}.]`,
+    )
+  })
+})
+
 describe('handleRawTransaction with sponsor', () => {
   test('behavior: broadcasts finalized multisig transactions with feePayerSignature and default feeToken', async () => {
     const store = Multisig.memoryStore()
@@ -357,6 +535,91 @@ describe('handleRawTransaction with sponsor', () => {
     })
 
     const transaction_broadcasted = Transaction.deserialize(broadcasted[0] as never) as Record<
+      string,
+      unknown
+    >
+    expect({
+      feePayerSignature: Boolean(transaction_broadcasted.feePayerSignature),
+      feeToken: (transaction_broadcasted.feeToken as string).toLowerCase(),
+      hash,
+      signature: (transaction_broadcasted.signature as { type?: string }).type,
+    }).toMatchInlineSnapshot(`
+      {
+        "feePayerSignature": true,
+        "feeToken": "0x20c0000000000000000000000000000000000000",
+        "hash": "${hash}",
+        "signature": "multisig",
+      }
+    `)
+  })
+
+  test('behavior: broadcasts already sponsored multisig transactions without replacing fee payer', async () => {
+    const owner = Account.fromSecp256k1(privateKey_1)
+    const feePayer_original = Account.fromSecp256k1(privateKey_2)
+    const feePayer_relay = Account.fromSecp256k1(privateKey_3)
+    const account = Account.fromMultisig({
+      threshold: 1,
+      owners: [{ owner: owner.address, weight: 1 }],
+    })
+    const transaction = {
+      calls: [{ to: '0xcafebabecafebabecafebabecafebabecafebabe', value: 1n }],
+      chainId: tempoDevnet.id,
+      feePayerSignature: null,
+      gas: 21_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 0n,
+      multisig: account.config,
+      nonce: 0n,
+    }
+    const signature = await owner.signTransaction(transaction as never)
+    const serialized = await account.signTransaction({
+      ...transaction,
+      signatures: [signature],
+    } as never)
+    const sponsored: `0x${string}`[] = []
+
+    await Multisig.handleRawTransaction({
+      getClient: () =>
+        createClient({
+          chain: tempoDevnet,
+          transport: custom({
+            request: async ({ method, params }) => {
+              if (method === 'eth_chainId') return Hex.fromNumber(tempoDevnet.id)
+              sponsored.push((params as readonly `0x${string}`[])[0]!)
+              return hashRawTransaction(params)
+            },
+          }),
+        }),
+      method: 'eth_sendRawTransaction',
+      request: { params: [serialized] },
+      sponsor: {
+        account: feePayer_original as never,
+        resolveFeeToken: () => feeToken,
+      },
+      store: Multisig.memoryStore(),
+    })
+    const presponsored = sponsored[0]
+    if (!presponsored) throw new Error('Expected pre-sponsored transaction.')
+
+    let broadcasted: `0x${string}` | undefined
+    const hash = await Multisig.handleRawTransaction({
+      getClient: (() => ({
+        request: async ({ params }: { params: unknown }) => {
+          broadcasted = Array.isArray(params) ? (params[0] as `0x${string}`) : undefined
+          return hashRawTransaction(params)
+        },
+      })) as never,
+      method: 'eth_sendRawTransaction',
+      request: { params: [presponsored] },
+      sponsor: {
+        account: feePayer_relay as never,
+        feeToken,
+        validate: () => false,
+      },
+      store: Multisig.memoryStore(),
+    })
+
+    const transaction_broadcasted = Transaction.deserialize(broadcasted! as never) as Record<
       string,
       unknown
     >
