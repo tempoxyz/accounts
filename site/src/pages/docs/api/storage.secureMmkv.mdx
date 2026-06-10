@@ -1,0 +1,123 @@
+---
+title: secureMmkv
+description: Encrypted React Native Storage adapter backed by MMKV.
+---
+
+# `secureMmkv`
+
+Creates a [`Storage`](/docs/api/storage) adapter backed by an AES-256-encrypted [`react-native-mmkv`](https://github.com/mrousavy/react-native-mmkv) instance.
+
+Provider state can outgrow the device Keychain/Keystore (iOS limits SecureStore items to a few kilobytes), so `secureMmkv` stores the full snapshot in encrypted MMKV and keeps only the 32-byte encryption key in the Keychain/Keystore. Use it whenever the provider manages access keys.
+
+The adapter ships as an optional subpath — `accounts/react-native/secure-mmkv` — so apps that do not use it do not install MMKV:
+
+```sh
+npx expo install react-native-mmkv react-native-nitro-modules expo-secure-store
+```
+
+## Usage
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { secureMmkv } from 'accounts/react-native/secure-mmkv'
+
+const provider = Provider.create({
+  storage: secureMmkv(),
+})
+```
+
+## Encryption Key
+
+On first use the adapter loads its MMKV encryption key from Expo SecureStore, creating and persisting one when none exists. The key is stored with `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`: it is readable by background work once the device has been unlocked, but it never leaves the device — state does not restore onto a new device from a backup.
+
+The key helper is exported from `accounts/react-native/expo-secure-store` for apps that need a custom SecureStore item name or options:
+
+```ts twoslash
+import { getOrCreateMmkvEncryptionKey } from 'accounts/react-native/expo-secure-store'
+import { secureMmkv } from 'accounts/react-native/secure-mmkv'
+
+const storage = secureMmkv({
+  encryptionKey: await getOrCreateMmkvEncryptionKey({
+    name: 'my-app.mmkvEncryptionKey',
+    store: { keychainService: 'my-app' },
+  }),
+})
+```
+
+Create one `secureMmkv()` instance per MMKV `id`. Two instances racing to create the key on first launch can each persist a different key, leaving one instance's data unreadable on the next launch.
+
+## Parameters
+
+### options.key
+
+- **Type:** `string`
+- **Default:** `'tempo'`
+
+Key prefix applied to every entry written to the MMKV instance.
+
+### options.id
+
+- **Type:** `string`
+- **Default:** `'tempo-secure'`
+
+MMKV instance id. Use distinct ids to keep multiple MMKV instances separate.
+
+### options.encryptionKey
+
+- **Type:** `string`
+- **Default:** a key loaded from Expo SecureStore
+
+MMKV encryption key. Pass one to manage the key yourself — the adapter then never touches SecureStore. Keys can be at most 16 bytes with `AES-128` encryption and 32 bytes with `AES-256`.
+
+### options.encryptionType
+
+- **Type:** `'AES-128' | 'AES-256'`
+- **Default:** `'AES-256'`
+
+MMKV encryption algorithm.
+
+### options.path
+
+- **Type:** `string`
+- **Optional**
+
+MMKV root path. By default MMKV stores files inside the app's documents directory.
+
+### options.mode
+
+- **Type:** `'single-process' | 'multi-process'`
+- **Default:** `'single-process'`
+
+MMKV process mode. Use `multi-process` when the instance is shared with app extensions or background services.
+
+### options.readOnly
+
+- **Type:** `boolean`
+- **Default:** `false`
+
+Open the MMKV instance read-only.
+
+### options.compareBeforeSet
+
+- **Type:** `boolean`
+- **Default:** `false`
+
+Skip the file write when the new value equals what is already stored.
+
+## getOrCreateMmkvEncryptionKey
+
+Loads or creates the SecureStore-persisted encryption key used by `secureMmkv`. Returns the existing key when one is stored, otherwise generates a random 32-byte key and persists it.
+
+### options.name
+
+- **Type:** `string`
+- **Default:** `'tempo.mmkvEncryptionKey'`
+
+SecureStore item name the key is stored under.
+
+### options.store
+
+- **Type:** `SecureStore.SecureStoreOptions`
+- **Default:** `{ keychainAccessible: AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY }`
+
+SecureStore options used for both reading and writing the key.
