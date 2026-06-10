@@ -143,7 +143,19 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     method === 'eth_sendRawTransaction' && finalize === 'sync'
       ? 'eth_sendRawTransactionSync'
       : method
-  const feePayerState = getFeePayerState(final as Hex.Hex)
+  const feePayerState = (() => {
+    try {
+      const transaction = Transaction.deserialize(final as never) as Record<string, unknown>
+      if (!('feePayerSignature' in transaction)) return {}
+      return {
+        feeToken:
+          typeof transaction.feeToken === 'string' ? (transaction.feeToken as Address) : undefined,
+        signature: transaction.feePayerSignature,
+      }
+    } catch {
+      return {}
+    }
+  })()
   const sponsorFeeToken =
     sponsor &&
     (sponsor.feeToken ||
@@ -171,7 +183,14 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
         method: broadcastMethod,
         params: [final],
       } as never)
-  const submittedHash = getTransactionHash(result)
+  const submittedHash = (() => {
+    if (typeof result === 'string') return result as Hex.Hex
+    if (result && typeof result === 'object' && 'transactionHash' in result) {
+      const response = result as { transactionHash?: unknown }
+      if (typeof response.transactionHash === 'string') return response.transactionHash as Hex.Hex
+    }
+    throw new Error('Expected transaction hash in multisig broadcast result.')
+  })()
   const submitted = await store.setSubmitted(operation.id, submittedHash)
 
   return {
@@ -644,7 +663,28 @@ async function serializeFinal(options: {
   const { signature: _, ...transaction } = options.transaction
   const envelope = TxEnvelopeTempo.from({
     ...transaction,
-    feePayerSignature: normalizeFeePayerSignature(transaction.feePayerSignature),
+    feePayerSignature: (() => {
+      const value = transaction.feePayerSignature
+      if (!value) return value
+      if (typeof value === 'object' && 'r' in value && 's' in value) {
+        const signature = value as {
+          r: bigint | number | string
+          s: bigint | number | string
+          v?: bigint | number | string | undefined
+          yParity?: bigint | number | string | undefined
+        }
+        const yParity = (() => {
+          const value = signature.yParity ?? signature.v
+          if (typeof value === 'undefined') return undefined
+          const number = Number(value)
+          if (number === 27 || number === 28) return number - 27
+          return number
+        })()
+        if (typeof yParity === 'number')
+          return Signature.from({ r: BigInt(signature.r), s: BigInt(signature.s), yParity })
+      }
+      return Signature.from(value as never)
+    })(),
   } as never)
   const payload = TxEnvelopeTempo.getSignPayload(envelope)
   const signatures = options.signatures.map((approval) => SignatureEnvelope.from(approval))
@@ -661,55 +701,6 @@ async function serializeFinal(options: {
     ...(options.init ? { init: options.config } : {}),
   })
   return TxEnvelopeTempo.serialize(envelope, { feePayerSignature: undefined, signature })
-}
-
-function normalizeFeePayerSignature(value: unknown) {
-  if (!value) return value
-  if (typeof value === 'object' && 'r' in value && 's' in value) {
-    const signature = value as {
-      r: bigint | number | string
-      s: bigint | number | string
-      v?: bigint | number | string | undefined
-      yParity?: bigint | number | string | undefined
-    }
-    const yParity = normalizeYParity(signature.yParity ?? signature.v)
-    if (typeof yParity === 'number')
-      return Signature.from({ r: BigInt(signature.r), s: BigInt(signature.s), yParity })
-  }
-  return Signature.from(value as never)
-}
-
-function normalizeYParity(value: bigint | number | string | undefined) {
-  if (typeof value === 'undefined') return undefined
-  const number = Number(value)
-  if (number === 27 || number === 28) return number - 27
-  return number
-}
-
-function getFeePayerState(serialized: Hex.Hex) {
-  try {
-    const transaction = Transaction.deserialize(serialized as never) as Record<string, unknown>
-    if (!('feePayerSignature' in transaction)) return {}
-    return {
-      feeToken:
-        typeof transaction.feeToken === 'string' ? (transaction.feeToken as Address) : undefined,
-      signature: transaction.feePayerSignature,
-    }
-  } catch {
-    return {}
-  }
-}
-
-function getTransactionHash(result: unknown) {
-  if (typeof result === 'string') return result as Hex.Hex
-  if (
-    result &&
-    typeof result === 'object' &&
-    'transactionHash' in result &&
-    typeof result.transactionHash === 'string'
-  )
-    return result.transactionHash as Hex.Hex
-  throw new Error('Expected transaction hash in multisig broadcast result.')
 }
 
 function mergeOperation(
