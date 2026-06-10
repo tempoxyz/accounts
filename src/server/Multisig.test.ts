@@ -159,6 +159,26 @@ describe('Handler.relay multisig', () => {
       threshold: 2,
       weight: 1,
     })
+    const statuses = await Multisig.listStatuses({ account: account.address, store })
+    expect(
+      statuses.map(({ id, signatures, status, threshold, weight }) => ({
+        id,
+        signatures,
+        status,
+        threshold,
+        weight,
+      })),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "${id}",
+          "signatures": 1,
+          "status": "pending",
+          "threshold": 2,
+          "weight": 1,
+        },
+      ]
+    `)
     await expect(
       client.request({ method: 'eth_getTransactionReceipt', params: [id] }),
     ).resolves.toMatchInlineSnapshot(`null`)
@@ -203,6 +223,8 @@ describe('Handler.relay multisig', () => {
       status: 'submitted',
       submittedHash: hash,
     })
+    await expect(Multisig.listStatuses({ account: account.address, store })).resolves
+      .toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: broadcasts immediately when one approval meets threshold', async () => {
@@ -276,6 +298,89 @@ describe('Handler.relay multisig', () => {
       {
         "methods": [],
         "result": "${id}",
+      }
+    `)
+  })
+})
+
+describe('handleRawTransaction', () => {
+  test('behavior: returns null status for unknown operations', async () => {
+    await expect(
+      Multisig.getStatus({ id: `0x${'ff'.repeat(32)}`, store: Multisig.memoryStore() }),
+    ).resolves.toMatchInlineSnapshot(`null`)
+  })
+
+  test('behavior: rejects first approvals when no config can be resolved', async () => {
+    const owner = Account.fromSecp256k1(privateKey_1)
+    const account = Account.fromMultisig({
+      threshold: 1,
+      owners: [{ owner: owner.address, weight: 1 }],
+    })
+    const transaction = {
+      calls: [{ to: '0xcafebabecafebabecafebabecafebabecafebabe', value: 1n }],
+      chainId: tempoDevnet.id,
+      gas: 21_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 0n,
+      multisig: account.config,
+      nonce: 0n,
+    }
+    const signature = await owner.signTransaction(transaction as never)
+    const serialized = withoutInit(
+      await account.signTransaction({ ...transaction, signatures: [signature] } as never),
+    )
+
+    await expect(
+      Multisig.handleRawTransaction({
+        getClient: (() => undefined) as never,
+        method: 'eth_sendRawTransaction',
+        request: { params: [serialized] },
+        store: Multisig.memoryStore(),
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: Multisig config is required to collect approvals. Provide it in the bootstrap transaction or configure \`multisig.resolveConfig\`.]`,
+    )
+  })
+
+  test('behavior: finalize submitted preserves async broadcast method', async () => {
+    const owner = Account.fromSecp256k1(privateKey_1)
+    const account = Account.fromMultisig({
+      threshold: 1,
+      owners: [{ owner: owner.address, weight: 1 }],
+    })
+    const transaction = {
+      calls: [{ to: '0xcafebabecafebabecafebabecafebabecafebabe', value: 1n }],
+      chainId: tempoDevnet.id,
+      gas: 21_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 0n,
+      multisig: account.config,
+      nonce: 0n,
+    }
+    const signature = await owner.signTransaction(transaction as never)
+    const serialized = await account.signTransaction({
+      ...transaction,
+      signatures: [signature],
+    } as never)
+    let broadcastMethod: string | undefined
+
+    const hash = await Multisig.handleRawTransaction({
+      finalize: 'submitted',
+      getClient: (() => ({
+        request: async ({ method, params }: { method: string; params: unknown }) => {
+          broadcastMethod = method
+          return hashRawTransaction(params)
+        },
+      })) as never,
+      method: 'eth_sendRawTransaction',
+      request: { params: [serialized] },
+      store: Multisig.memoryStore(),
+    })
+
+    expect({ broadcastMethod, hash }).toMatchInlineSnapshot(`
+      {
+        "broadcastMethod": "eth_sendRawTransaction",
+        "hash": "${hash}",
       }
     `)
   })
