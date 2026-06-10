@@ -24,9 +24,9 @@ import * as ExecutionError from '../../../core/ExecutionError.js'
 import * as Schema from '../../../core/Schema.js'
 import { type Handler, from } from '../../Handler.js'
 import * as Kv from '../../Kv.js'
-import * as Multisig from '../../Multisig.js'
 import { cached } from '../kv.js'
 import * as Tokenlist from '../tokenlist.js'
+import * as Multisig from './multisig.js'
 import * as Sponsorship from './sponsorship.js'
 import * as Utils from './utils.js'
 
@@ -577,11 +577,9 @@ export function relay(options: relay.Options = {}): Handler {
 
           const result = await Sponsorship.handleRawTransaction({
             account: feePayerOptions.account,
-            feeToken: feePayerOptions.feeToken,
             getClient,
             method: request.method as Sponsorship.handleRawTransaction.Options['method'],
             request: { params: 'params' in request ? request.params : undefined },
-            resolveFeeToken: async (chainId) => (await getTokens(chainId))[0],
             validate: feePayerOptions.validate,
           })
           return RpcResponse.from({ result } as never, { request } as never)
