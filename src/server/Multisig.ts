@@ -56,7 +56,7 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   const serialized = request.params?.[0]
   if (!Utils.isSerializedTempoTransaction(serialized))
     throw new RpcResponse.InvalidParamsError({
-      message: 'Only Tempo transactions (0x76 or fee-payer 0x78) are supported.',
+      message: 'Only Tempo (0x76/0x78) transactions are supported.',
     })
 
   const input = parse(serialized)

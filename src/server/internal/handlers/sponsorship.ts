@@ -126,7 +126,7 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
 
   if (!Utils.isSerializedTempoTransaction(serialized))
     throw new RpcResponse.InvalidParamsError({
-      message: 'Only Tempo transactions (0x76 or fee-payer 0x78) are supported.',
+      message: 'Only Tempo (0x76/0x78) transactions are supported.',
     })
 
   const transaction = Transaction.deserialize(serialized)
