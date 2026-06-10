@@ -176,6 +176,11 @@
       "react-native": "./dist/core/adapters/mobileWebAuth/index.js",
       "default": "./dist/core/adapters/mobileWebAuth/index.js"
     },
+    "./postMessage": {
+      "types": "./dist/core/adapters/postMessage/index.d.ts",
+      "src": "./src/core/adapters/postMessage/index.ts",
+      "default": "./dist/core/adapters/postMessage/index.js"
+    },
     "./react-native/async-storage": {
       "types": "./dist/react-native/asyncStorage.d.ts",
       "src": "./src/react-native/asyncStorage.ts",

@@ -17,6 +17,8 @@ export { dialog, dialog as tempoWallet } from './core/adapters/dialog.js'
 export { local } from './core/adapters/local.js'
 export { mobileWebAuth } from './core/adapters/mobileWebAuth/mobileWebAuth.js'
 export { tempoWallet as tempoWalletMobileWebAuth } from './core/adapters/mobileWebAuth/tempoWallet.js'
+export { postMessage } from './core/adapters/postMessage/postMessage.js'
+export { tempoWallet as tempoWalletPostMessage } from './core/adapters/postMessage/tempoWallet.js'
 export { turnkey } from './core/adapters/turnkey.js'
 export { webAuthn } from './core/adapters/webAuthn.js'
 export {

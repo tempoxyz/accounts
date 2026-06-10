@@ -1,0 +1,81 @@
+---
+title: postMessage
+description: PostMessage adapter for popup-based wallet requests.
+---
+
+# `postMessage`
+
+Creates an adapter that sends provider RPC requests to a wallet web page over a [uRPC postMessage session](https://github.com/tempoxyz/urpc/blob/main/specs/transport-window.md). Each request opens the wallet's post-message page — a centered popup by default — and resolves with the wallet's response. The page closes once the response flushes back; closing it without answering rejects the request.
+
+The wallet identifies the app by its browser-verified window origin, so no discovery document is required; `name` and `rdns` only describe the provider identity announced to the app.
+
+Both adapters are exported from the root entry — `postMessage` and `tempoWalletPostMessage` — and from the `accounts/postMessage` subpath as `postMessage` and `tempoWallet`.
+
+## Usage
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { postMessage } from 'accounts/postMessage'
+
+const provider = Provider.create({
+  adapter: postMessage({
+    host: 'https://wallet.example/post-message',
+    name: 'Example Wallet',
+    rdns: 'com.example.wallet',
+  }),
+})
+```
+
+## tempoWallet
+
+`tempoWallet()` is a template over `postMessage()` preconfigured with the Tempo Wallet post-message page and provider identity.
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { tempoWallet } from 'accounts/postMessage'
+
+const provider = Provider.create({
+  adapter: tempoWallet(),
+})
+```
+
+## Parameters
+
+### host
+
+- **Type:** `string`
+- **Required by:** `postMessage`
+
+URL of the wallet's post-message page. The adapter tags the URL with your app's origin so the wallet can pin its responses before the first frame arrives.
+
+### name
+
+- **Type:** `string`
+- **Required by:** `postMessage`
+
+Provider display name.
+
+### rdns
+
+- **Type:** `string`
+- **Required by:** `postMessage`
+
+Reverse-DNS provider identifier.
+
+### target
+
+- **Type:** `({ host }) => Window | MessagePort | null | Promise<Window | MessagePort | null>`
+- **Optional**
+
+Override how the wallet page is mounted. Receives the page URL and returns a `Window` or `MessagePort` handle for the session. Defaults to opening a centered popup window.
+
+```ts twoslash
+import { postMessage } from 'accounts/postMessage'
+
+const adapter = postMessage({
+  host: 'https://wallet.example/post-message',
+  name: 'Example Wallet',
+  rdns: 'com.example.wallet',
+  target: ({ host }) => window.open(host!, '_blank', 'popup=1,width=360,height=440'),
+})
+```

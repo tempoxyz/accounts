@@ -6,6 +6,7 @@ import {
   dialog,
   Dialog,
   local,
+  postMessage,
   Provider,
   turnkey,
   webAuthn,
@@ -23,6 +24,7 @@ export type AdapterType =
   | 'turnkey'
   | 'privy'
   | 'tempoWallet'
+  | 'tempoWalletPostMessage'
   | 'dialogRefImpl'
 export type Env = 'mainnet' | 'testnet' | 'devnet'
 export type DialogMode = 'iframe' | 'popup'
@@ -90,6 +92,17 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
         host,
         theme,
+      }),
+      mpp: mpp(),
+      testnet,
+    })
+
+  if (adapterType === 'tempoWalletPostMessage')
+    return Provider.create({
+      adapter: postMessage({
+        host: new URL('/post-message', host).toString(),
+        name: 'Tempo Wallet',
+        rdns: 'xyz.tempo',
       }),
       mpp: mpp(),
       testnet,

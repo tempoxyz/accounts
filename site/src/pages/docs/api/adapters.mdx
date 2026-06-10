@@ -13,6 +13,7 @@ Adapters control how accounts are created and managed. Pass an adapter to `Provi
 | -------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------- |
 | [`dialog`](/docs/api/dialog) (default)       | Hosted dialog                      | Apps wanting a universal account experience                                                         |
 | [`mobileWebAuth`](/docs/api/mobileWebAuth)   | Mobile browser auth session        | React Native apps and mobile clients connecting to a hosted wallet                                  |
+| [`postMessage`](/docs/api/postMessage)       | Wallet page popup                  | Web apps connecting to a hosted wallet through a popup session                                      |
 | [`webAuthn`](/docs/api/webAuthn)             | Domain-bound passkeys              | Wallets integrating Passkey accounts, or Apps wanting to host and manage their own Passkey accounts |
 | [`turnkey`](/docs/api/turnkey)               | `@turnkey/core` client sessions    | Apps using Turnkey-managed wallet accounts                                                          |
 | [`privy`](/docs/api/privy)                   | Privy React Auth                   | Apps using Privy auth and embedded wallets                                                          |
@@ -39,6 +40,12 @@ Adapters control how accounts are created and managed. Pass an adapter to `Provi
     icon="lucide:smartphone"
     to="/docs/api/mobileWebAuth"
     title="mobileWebAuth"
+  />
+  <Card
+    description="Uses a wallet page popup session for provider requests"
+    icon="lucide:app-window"
+    to="/docs/api/postMessage"
+    title="postMessage"
   />
   <Card
     description="Uses Turnkey-managed wallet accounts"
