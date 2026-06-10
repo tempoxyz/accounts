@@ -81,8 +81,7 @@ Provider state persists through a storage adapter. React Native adapters ship as
 
 ```ts twoslash
 import { asyncStorage } from 'accounts/react-native/async-storage'
-import { getOrCreateMmkvEncryptionKey } from 'accounts/react-native/expo-secure-store'
 import { secureMmkv } from 'accounts/react-native/secure-mmkv'
 ```
 
-Use `secureMmkv` when the provider manages access keys. It stores the larger SDK snapshot in encrypted MMKV and keeps only the small encryption key in the device Keychain/Keystore through `getOrCreateMmkvEncryptionKey`.
+Use [`secureMmkv`](/docs/api/storage.secureMmkv) when the provider manages access keys. It stores the larger SDK snapshot in encrypted MMKV and keeps only the small encryption key in the device Keychain/Keystore. Use [`asyncStorage`](/docs/api/storage.asyncStorage) for non-sensitive state. See the [Storage reference](/docs/api/storage) for all adapters and options.

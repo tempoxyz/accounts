@@ -103,19 +103,6 @@ const config: Config = defineConfig({
               { text: 'Provider', link: '/docs/api/provider' },
               { text: 'Rpc', link: '/docs/api/rpc' },
               { text: 'Schema', link: '/docs/api/schema' },
-              {
-                text: 'Storage',
-                collapsed: true,
-                items: [
-                  { text: 'Overview', link: '/docs/api/storage' },
-                  { text: '.combine', link: '/docs/api/storage.combine' },
-                  { text: '.cookie', link: '/docs/api/storage.cookie' },
-                  { text: '.from', link: '/docs/api/storage.from' },
-                  { text: '.idb', link: '/docs/api/storage.idb' },
-                  { text: '.localStorage', link: '/docs/api/storage.localStorage' },
-                  { text: '.memory', link: '/docs/api/storage.memory' },
-                ],
-              },
               { text: 'TrustedHosts', link: '/docs/api/trustedHosts' },
               {
                 text: 'WebAuthnCeremony',
@@ -206,6 +193,27 @@ const config: Config = defineConfig({
                   { text: '.durableObject', link: '/docs/server/kv.durableObject' },
                   { text: '.from', link: '/docs/server/kv.from' },
                   { text: '.memory', link: '/docs/server/kv.memory' },
+                ],
+              },
+            ],
+          },
+          {
+            text: 'Storage',
+            collapsed: true,
+            items: [
+              { text: 'Overview', link: '/docs/api/storage' },
+              { text: '.combine', link: '/docs/api/storage.combine' },
+              { text: '.cookie', link: '/docs/api/storage.cookie' },
+              { text: '.from', link: '/docs/api/storage.from' },
+              { text: '.idb', link: '/docs/api/storage.idb' },
+              { text: '.localStorage', link: '/docs/api/storage.localStorage' },
+              { text: '.memory', link: '/docs/api/storage.memory' },
+              {
+                text: 'React Native',
+                collapsed: true,
+                items: [
+                  { text: 'asyncStorage', link: '/docs/api/storage.asyncStorage' },
+                  { text: 'secureMmkv', link: '/docs/api/storage.secureMmkv' },
                 ],
               },
             ],
