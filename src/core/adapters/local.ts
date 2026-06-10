@@ -123,6 +123,7 @@ export function local(options: local.Options): Adapter.Adapter {
               personalSign && grantOptions && supportsWitness(client.chain)
                 ? hashMessage(personalSign.message)
                 : undefined
+            if (witness) validatePersonalSignProof(grantOptions)
 
             const peronsalSign_digest =
               personalSign && !witness ? hashMessage(personalSign.message) : undefined
@@ -239,6 +240,7 @@ export function local(options: local.Options): Adapter.Adapter {
               personalSign && authorizeAccessKey && supportsWitness(client.chain)
                 ? hashMessage(personalSign.message)
                 : undefined
+            if (witness) validatePersonalSignProof(authorizeAccessKey)
 
             // Only claim the ceremony slot with the `personalSign` digest when
             // NOT binding via witness — the witness path signs the key-auth
@@ -353,6 +355,16 @@ function serializePersonalSignProof(authorization: KeyAuthorization.Signed): Hex
       '`personalSign` with a non-admin account-bound `authorizeAccessKey` cannot be serialized as a key authorization proof.',
     )
   return KeyAuthorization.serialize(authorization)
+}
+
+function validatePersonalSignProof(
+  authorization: Adapter.authorizeAccessKey.Parameters | undefined,
+) {
+  if (authorization?.account && !authorization.isAdmin)
+    throw new ox_Provider.ProviderRpcError(
+      -32602,
+      '`personalSign` with a non-admin account-bound `authorizeAccessKey` cannot be serialized as a key authorization proof.',
+    )
 }
 
 export declare namespace local {

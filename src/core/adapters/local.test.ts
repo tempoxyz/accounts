@@ -247,7 +247,7 @@ describe('local', () => {
     })
 
     test('error: rejects lossy non-admin account-bound serialized proof', async () => {
-      const { adapter } = setup(
+      const { adapter, store } = setup(
         {
           loadAccounts: makeLoadAccounts(0, []),
         },
@@ -269,6 +269,7 @@ describe('local', () => {
       ).rejects.toThrowErrorMatchingInlineSnapshot(
         `[ProviderRpcError: \`personalSign\` with a non-admin account-bound \`authorizeAccessKey\` cannot be serialized as a key authorization proof.]`,
       )
+      expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
     })
   })
 
@@ -352,6 +353,41 @@ describe('local', () => {
       ).rejects.toThrowErrorMatchingInlineSnapshot(
         `[ProviderRpcError: \`digest\` and \`personalSign\` cannot both be set on \`wallet_connect\`.]`,
       )
+    })
+
+    test('error: createAccount rejects lossy non-admin account-bound serialized proof', async () => {
+      const { adapter, store } = setup(
+        {
+          createAccount: async () => ({
+            accounts: [
+              {
+                address: core_accounts[1].address,
+                keyType: 'secp256k1' as const,
+                privateKey: privateKeys[1]!,
+              },
+            ],
+          }),
+        },
+        { chain: tempoModerato },
+      )
+
+      await expect(
+        adapter.actions.createAccount(
+          {
+            authorizeAccessKey: {
+              account: core_accounts[1]!.address,
+              expiry: 0,
+              isAdmin: false,
+            },
+            name: 'test',
+            personalSign: { message: 'hello' },
+          },
+          { method: 'wallet_connect', params: undefined },
+        ),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[ProviderRpcError: \`personalSign\` with a non-admin account-bound \`authorizeAccessKey\` cannot be serialized as a key authorization proof.]`,
+      )
+      expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
     })
 
     test('error: throws when createAccount not configured', async () => {
