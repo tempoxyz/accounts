@@ -2,6 +2,7 @@ import { Provider as core_Provider } from 'ox'
 import { PostMessage, Transport, Wata, postMessage as core_postMessage } from 'wata'
 
 import type * as Adapter from '../../Adapter.js'
+import * as Store from '../../Store.js'
 import { fromRequest } from '../internal/fromRequest.js'
 import * as Mount from './mount.js'
 
@@ -79,7 +80,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
       // The wallet asserts its current accounts (e.g. on connect, or a
       // wallet-side logout) so the SDK can drop a stale persisted session.
       else if (event.method === 'accountsChanged')
-        reconcile?.((event.params ?? []) as readonly string[])
+        void reconcile?.((event.params ?? []) as readonly string[])
     })
     return wata
   }
@@ -159,7 +160,11 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
       // the cached accounts appear in the wallet's asserted list, disconnect
       // locally. Only acts when there is cached state to reconcile, and
       // never establishes a connection the app didn't ask for.
-      reconcile = (accounts) => {
+      reconcile = async (accounts) => {
+        // The wallet can assert before the store finishes rehydrating its
+        // persisted accounts; wait so we both see the cached account and
+        // win against the hydration that would otherwise re-add it.
+        await Store.waitForHydration(store)
         const cached = store.getState().accounts
         if (cached.length === 0) return
         const asserted = new Set(accounts.map((address) => address.toLowerCase()))
