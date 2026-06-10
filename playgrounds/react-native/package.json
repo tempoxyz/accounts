@@ -7,6 +7,7 @@
     "android": "node scripts/expo.mjs run:android",
     "consumer": "node scripts/consumer-server.mjs",
     "ios": "node scripts/expo.mjs run:ios",
+    "ios:prod": "TUNNEL=1 node scripts/expo.mjs run:ios",
     "start": "node scripts/expo.mjs start"
   },
   "dependencies": {
