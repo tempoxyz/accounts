@@ -214,6 +214,14 @@ describe('Encoded', () => {
               amount?: string | undefined
               chainId?: Hex | undefined
               displayName?: string | undefined
+              intent?:
+                | 'applePay'
+                | 'credits'
+                | 'crypto'
+                | 'faucet'
+                | 'referralCode'
+                | 'x'
+                | undefined
               token?: Hex | string | undefined
             },
           ]

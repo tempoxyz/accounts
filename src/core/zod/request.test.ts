@@ -122,6 +122,7 @@ describe('validate', () => {
         {
           amount: '50',
           displayName: 'DoorDash',
+          intent: 'credits',
           token: 'USDC',
         },
       ],
@@ -133,6 +134,7 @@ describe('validate', () => {
           {
             "amount": "50",
             "displayName": "DoorDash",
+            "intent": "credits",
             "token": "USDC",
           },
         ],

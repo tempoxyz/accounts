@@ -971,6 +971,9 @@ export namespace wallet_deposit {
             amount: z.optional(z.string()),
             chainId: z.optional(u.number()),
             displayName: z.optional(z.string()),
+            intent: z.optional(
+              z.enum(['applePay', 'credits', 'crypto', 'faucet', 'referralCode', 'x']),
+            ),
             /**
              * Token to pre-fill, accepted as either a contract address or a
              * supported deposit token symbol (case-insensitive, e.g. `"USDC"`).
