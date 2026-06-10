@@ -70,7 +70,9 @@ export function iframe(): Factory {
       const origin = new URL(host).origin
 
       const root = document.createElement('dialog')
-      root.dataset.tempoWallet = ''
+      // Distinct marker from the bespoke `Dialog.iframe` (`data-tempo-wallet`)
+      // so the two mount systems never collide in the DOM or in cleanup.
+      root.dataset.tempoWalletPostmessage = ''
       root.setAttribute('role', 'dialog')
       root.setAttribute('aria-closed', 'true')
       root.setAttribute('aria-label', 'Tempo Wallet')
@@ -84,7 +86,7 @@ export function iframe(): Factory {
       })
 
       const frame = document.createElement('iframe')
-      frame.dataset.testid = 'tempo-wallet'
+      frame.dataset.testid = 'tempo-wallet-postmessage'
       frame.setAttribute(
         'allow',
         [
@@ -111,7 +113,7 @@ export function iframe(): Factory {
 
       const style = document.createElement('style')
       style.innerHTML = `
-        dialog[data-tempo-wallet]::backdrop {
+        dialog[data-tempo-wallet-postmessage]::backdrop {
           background: transparent!important;
         }
       `

@@ -11,6 +11,7 @@ import {
   turnkey,
   webAuthn,
 } from 'accounts'
+import { Mount } from 'accounts/postMessage'
 import { privy } from 'accounts/react/privy'
 import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
@@ -101,6 +102,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     return Provider.create({
       adapter: postMessage({
         host: new URL('/post-message', host).toString(),
+        mount: dialogMode === 'popup' ? Mount.popup() : Mount.iframe(),
         name: 'Tempo Wallet',
         rdns: 'xyz.tempo',
       }),

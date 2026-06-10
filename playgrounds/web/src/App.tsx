@@ -189,7 +189,9 @@ function ConfigPanel(props: {
             <option value="secp256k1">secp256k1</option>
           </select>
         </label>
-        {(adapterType === 'tempoWallet' || adapterType === 'dialogRefImpl') && (
+        {(adapterType === 'tempoWallet' ||
+          adapterType === 'tempoWalletPostMessage' ||
+          adapterType === 'dialogRefImpl') && (
           <label>
             <span>Mode</span>
             <select

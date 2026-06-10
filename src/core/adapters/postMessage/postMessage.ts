@@ -143,10 +143,12 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
       pending += 1
       const result = queue.then(() => send(request))
       queue = result.catch(() => undefined)
-      void result.catch(() => undefined).finally(() => {
-        pending -= 1
-        if (pending === 0) mount?.hide()
-      })
+      void result
+        .catch(() => undefined)
+        .finally(() => {
+          pending -= 1
+          if (pending === 0) mount?.hide()
+        })
       return result
     },
   })
