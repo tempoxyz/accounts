@@ -122,13 +122,16 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     })
 
   const transaction = Transaction.deserialize(serialized)
+  // Prefer sender recovered from raw envelope; multisig finalize path supplies fallback sender.
   const sender = transaction.from ?? options.sender
 
+  // Sponsorship only applies after sender has signed original transaction.
   if (!transaction.signature || !sender)
     throw new RpcResponse.InvalidParamsError({
       message: 'Transaction must be signed by the sender before fee payer signing.',
     })
 
+  // Explicit fee token wins; otherwise use chain default when resolver is configured.
   const feeToken_resolved = feeToken ?? (await resolveFeeToken?.(transaction.chainId))
   const transaction_request = {
     ...transaction,
@@ -136,12 +139,14 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     ...(feeToken_resolved ? { feeToken: feeToken_resolved } : {}),
   } satisfies Transaction.TransactionRequest
 
+  // App validation sees final fee-payer signing request before relay sponsors it.
   if (validate && !(await validate(transaction_request)))
     throw new RpcResponse.InvalidParamsError({
       message: 'Sponsorship rejected.',
     })
 
   const client = getClient(transaction.chainId)
+  // Viem signs with fee payer and preserves sender signature already present on request.
   const serializedTransaction = toSerializedTransaction(
     await signTransaction(client, {
       ...transaction_request,
@@ -150,6 +155,7 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     } as never),
   )
 
+  // Raw-sign requests stop after fee-payer signature is added; send methods broadcast it.
   if (method === 'eth_signRawTransaction') return serializedTransaction
   return await client.request({
     method: method as never,
