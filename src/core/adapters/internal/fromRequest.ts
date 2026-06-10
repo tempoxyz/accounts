@@ -16,9 +16,9 @@ import * as Rpc from '../../zod/rpc.js'
  * `request`.
  */
 export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
-  const { cleanup, close, name, rdns, request: requestRemote } = options
+  const { cleanup, close, icon, name, rdns, request: requestRemote } = options
 
-  return Adapter.define({ name, rdns }, ({ getAccount, store }) => {
+  return Adapter.define({ ...(icon ? { icon } : {}), name, rdns }, ({ getAccount, store }) => {
     function generateAccessKey(
       parameters: Adapter.generateAccessKey.Options = {},
     ): Adapter.generateAccessKey.ReturnType {
@@ -130,6 +130,8 @@ export declare namespace fromRequest {
      * provider discards the adapter instance. @default `close`, when set.
      */
     cleanup?: (() => void) | undefined
+    /** Data URI of the provider icon, announced via EIP-6963. */
+    icon?: Adapter.Meta['icon'] | undefined
     /**
      * Tears down the adapter's wallet session. Wired to the `disconnect`
      * action and instance cleanup; never forwarded to the remote wallet.
