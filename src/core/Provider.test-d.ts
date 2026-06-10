@@ -39,6 +39,7 @@ describe('request', () => {
                 limits?: { token: `0x${string}`; limit: string }[] | undefined
               }
             | undefined
+          identity?: { email?: string | null | undefined; idToken?: string | undefined } | undefined
           signature?: `0x${string}` | undefined
         }
       }[]

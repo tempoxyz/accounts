@@ -45,8 +45,10 @@ const config: Config = defineConfig({
         items: [
           { text: 'Connect Accounts', link: '/docs/guides/connect-accounts' },
           { text: 'Authentication', link: '/docs/guides/authentication' },
+          { text: 'Identity', link: '/docs/guides/identity' },
           { text: 'Transfers', link: '/docs/guides/transfers' },
           { text: 'Spend Permissions', link: '/docs/guides/spend-permissions' },
+          { text: 'React Native', link: '/docs/guides/react-native' },
           { text: 'Subscriptions', link: '/docs/guides/subscriptions' },
           { text: 'Fee Sponsorship', link: '/docs/guides/fee-sponsorship' },
           { text: 'Deposits', link: '/docs/guides/deposits' },
@@ -77,6 +79,7 @@ const config: Config = defineConfig({
               { text: 'Overview', link: '/docs/api/adapters' },
               { text: 'dialog', link: '/docs/api/dialog' },
               { text: 'local', link: '/docs/api/local' },
+              { text: 'mobileWebAuth', link: '/docs/api/mobileWebAuth' },
               { text: 'privy', link: '/docs/api/privy' },
               { text: 'secp256k1', link: '/docs/api/secp256k1' },
               { text: 'turnkey', link: '/docs/api/turnkey' },
@@ -189,6 +192,11 @@ const config: Config = defineConfig({
                 ],
               },
               { text: 'hc', link: '/docs/server/hc' },
+              {
+                text: 'Identity',
+                collapsed: true,
+                items: [{ text: '.verify', link: '/docs/server/identity.verify' }],
+              },
               {
                 text: 'Kv',
                 collapsed: true,

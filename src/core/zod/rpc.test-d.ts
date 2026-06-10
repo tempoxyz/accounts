@@ -4,29 +4,29 @@ import type * as z from 'zod/mini'
 import type * as Rpc from './rpc.js'
 
 describe('wallet_connect.identity', () => {
-  test('infers email as boolean | undefined', () => {
+  type EmailRequest = boolean | { nonce?: string | undefined } | undefined
+
+  test('infers email as boolean | { nonce } | undefined', () => {
     type Identity = z.output<typeof Rpc.wallet_connect.identity>
-    expectTypeOf<Identity>().toEqualTypeOf<{ email?: boolean | undefined } | undefined>()
+    expectTypeOf<Identity>().toEqualTypeOf<{ email?: EmailRequest } | undefined>()
   })
 
   test('register request capability exposes identity', () => {
     type Capabilities = NonNullable<z.output<typeof Rpc.wallet_connect.capabilities.request>>
     type Register = Extract<Capabilities, { method: 'register' }>
-    expectTypeOf<Register['identity']>().toEqualTypeOf<
-      { email?: boolean | undefined } | undefined
-    >()
+    expectTypeOf<Register['identity']>().toEqualTypeOf<{ email?: EmailRequest } | undefined>()
   })
 
   test('login request capability exposes identity', () => {
     type Capabilities = NonNullable<z.output<typeof Rpc.wallet_connect.capabilities.request>>
     type Login = Extract<Capabilities, { method?: 'login' | undefined }>
-    expectTypeOf<Login['identity']>().toEqualTypeOf<{ email?: boolean | undefined } | undefined>()
+    expectTypeOf<Login['identity']>().toEqualTypeOf<{ email?: EmailRequest } | undefined>()
   })
 
-  test('result capability exposes identity.email claim', () => {
+  test('result capability exposes identity.email + identity.idToken claims', () => {
     type Result = z.output<typeof Rpc.wallet_connect.capabilities.result>
     expectTypeOf<Result['identity']>().toEqualTypeOf<
-      { email?: string | null | undefined } | undefined
+      { email?: string | null | undefined; idToken?: string | undefined } | undefined
     >()
   })
 })

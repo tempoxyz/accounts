@@ -9,6 +9,7 @@ import * as z from 'zod/mini'
 
 import * as u from '../../../core/zod/utils.js'
 import { type Handler, from } from '../../Handler.js'
+import * as Identity from '../../Identity.js'
 import * as Kv from '../../Kv.js'
 import * as Hono from '../hono.js'
 import * as Session from './session.js'
@@ -22,6 +23,13 @@ const defaults = {
 } as const
 
 /**
+ * Default OIDC issuer — the Tempo wallet's production OIDC mount. Apps that opt
+ * into `identity` without pinning an `issuer` verify tokens minted by the Tempo
+ * wallet. Override `issuer` for self-hosted or non-production wallets.
+ */
+const defaultIssuer = 'https://wallet.tempo.xyz/api/oidc'
+
+/**
  * Session payload persisted in the session store and surfaced via
  * `getSession`. `address` is the account address that signed the
  * authentication challenge; `chainId` is the chain echoed in the message.
@@ -31,6 +39,11 @@ export type SessionPayload = {
   address: Address
   /** Chain ID echoed into the challenge message. */
   chainId: number
+  /**
+   * Verified email, set when the verify request included a valid `idToken`
+   * (see `auth({ identity })`). Omitted when no identity token was supplied.
+   */
+  email?: string | undefined
   /** Unix timestamp (seconds) when the session was issued. */
   issuedAt: number
   /** Unix timestamp (seconds) when the session expires. */
@@ -92,6 +105,13 @@ export namespace schema {
        */
       keyAuthorization: z.optional(u.hex()),
       /**
+       * OIDC identity token (JWT) minted by the wallet, asserting the account's
+       * verified email. When `auth({ identity })` is configured, the server
+       * verifies it against the issuer's JWKS, cross-checks `sub`/`nonce`
+       * against this request, and folds the email onto the session.
+       */
+      idToken: z.optional(z.string()),
+      /**
        * When `true`, the server returns the issued session token in the
        * response body as `{ token }` and does NOT set a session cookie.
        * The caller is responsible for sending it as
@@ -128,6 +148,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     cookie = true,
     cookieName = defaults.cookieName,
     domain,
+    identity = {},
     onAuthenticate,
     path = '/',
     origin: origin_option,
@@ -146,8 +167,10 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     ...rest
   } = options
 
-  if (!origin_option && !domain)
-    throw new Error('`auth()` requires `origin` or `domain` to pin SIWE domain binding.')
+  if (!origin_option && !domain && !options.trustProxy)
+    throw new Error(
+      '`auth()` requires `origin` or `domain` to pin SIWE domain binding (or explicit `trustProxy: true`).',
+    )
 
   async function take(key: string): Promise<ChallengePayload | undefined> {
     if (store.take) return store.take<ChallengePayload>(key)
@@ -212,7 +235,8 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
   })
 
   router.post(verifyPath, Hono.validate('json', schema.verify.parameters), async (c) => {
-    const { address, message, signature, keyAuthorization, returnToken } = c.req.valid('json')
+    const { address, idToken, message, signature, keyAuthorization, returnToken } =
+      c.req.valid('json')
 
     const parsed = parseSiweMessage(message)
     if (!parsed.nonce) return c.json({ error: 'message missing `nonce`' }, 400)
@@ -273,12 +297,38 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     }
     if (!valid) return c.json({ error: 'signature does not match address' }, 401)
 
+    // Optional OIDC identity (verified email). The SIWE signature above proves
+    // address ownership; the id token proves the email↔address binding. We
+    // cross-check `sub` against the SIWE-verified address and reuse the SIWE
+    // nonce as the OIDC nonce, so the single-use challenge store covers replay
+    // protection for both — the app needs no separate nonce plumbing.
+    const email = await (async () => {
+      if (!idToken)
+        return identity.required ? c.json({ error: 'identity token required' }, 400) : undefined
+      try {
+        const claims = await Identity.verify(idToken, {
+          audience: `${protocol}//${reqHost}`,
+          issuer: identity.issuer ?? defaultIssuer,
+          nonce: parsed.nonce,
+          subject: address,
+        })
+        return claims.email
+      } catch (error) {
+        return c.json(
+          { error: error instanceof Error ? error.message : 'invalid identity token' },
+          401,
+        )
+      }
+    })()
+    if (email instanceof Response) return email
+
     const issuedAt = Math.floor(now / 1000)
     const payload: SessionPayload = {
       address,
       chainId: parsed.chainId,
       issuedAt,
       expiresAt: issuedAt + sessionTtl,
+      ...(email ? { email } : {}),
     }
 
     // Hook for side effects (e.g. user provisioning, analytics). Returning
@@ -394,6 +444,30 @@ export declare namespace auth {
     /** Domain echoed into challenge messages. @default request `Host` header */
     domain?: string | undefined
     /**
+     * OIDC identity verification (verified email), enabled by default. A verify
+     * request carrying an `idToken` is checked against the issuer's JWKS, with
+     * `aud` pinned to this request's resolved origin, `sub` cross-checked
+     * against the SIWE-verified address, and `nonce` matched to the SIWE nonce.
+     * On success the verified email is folded onto the session
+     * (`SessionPayload.email`). The wallet only mints id tokens when the app
+     * requests identity via `wallet_connect`, so requests without one are
+     * unaffected. Override `issuer` for self-hosted wallets, or set `required`
+     * to reject verifies that omit a valid token.
+     */
+    identity?:
+      | {
+          /**
+           * Issuer (IdP) URL whose JWKS signs the id token (the wallet's OIDC
+           * mount). Defaults to the Tempo wallet's production OIDC issuer;
+           * override for self-hosted or non-production wallets.
+           * @default "https://wallet.tempo.xyz/api/oidc"
+           */
+          issuer?: string | undefined
+          /** Reject the verify when no (or an invalid) `idToken` is supplied. @default false */
+          required?: boolean | undefined
+        }
+      | undefined
+    /**
      * Hook invoked after the SIWE signature is verified but before the
      * session token is issued. Use to provision a user record, emit
      * analytics, or apply application-level allow/deny rules. Throwing
@@ -445,6 +519,10 @@ export declare namespace auth {
      * `false`, forwarded headers are ignored to prevent spoofing on
      * deployments that expose the origin server directly. Ignored when
      * `origin` is set.
+     *
+     * Explicitly passing `true` also satisfies the `origin`/`domain`
+     * requirement. Only do so behind a proxy that overwrites (not appends)
+     * `x-forwarded-host` and is the only way to reach the server.
      * @default `true` on Cloudflare Workers (always edge-fronted), `false` elsewhere.
      */
     trustProxy?: boolean | undefined

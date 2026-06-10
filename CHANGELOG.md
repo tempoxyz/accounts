@@ -1,5 +1,11 @@
 # accounts
 
+## 0.14.8
+
+### Patch Changes
+
+- d0d3cea: Added OIDC identity-token support for verified email extraction.
+
 ## 0.14.7
 
 ### Patch Changes

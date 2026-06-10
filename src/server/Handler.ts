@@ -8,6 +8,7 @@ export { auth } from './internal/handlers/auth.js'
 export { type SessionRequest } from './internal/handlers/session.js'
 export { codeAuth } from './internal/handlers/codeAuth.js'
 export { exchange } from './internal/handlers/exchange.js'
+export { oidcProvider } from './internal/handlers/oidcProvider.js'
 export { relay } from './internal/handlers/relay.js'
 export { webAuthn } from './internal/handlers/webAuthn.js'
 

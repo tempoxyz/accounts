@@ -1,0 +1,212 @@
+---
+title: Identity
+description: Request and verify identity claims about a connected account, starting with a verified email.
+---
+
+# Identity
+
+The Accounts SDK lets an app request **identity claims** about a connected account and verify them on its own server. Claims are issued by the wallet through an [OpenID Connect](https://openid.net/developers/how-connect-works/) provider: the wallet signs each claim into a standard ID token (a JWT) that your backend checks against the wallet's public keys, so you can trust the claim without trusting your frontend.
+
+When you request a verified email during [`wallet_connect`](/docs/rpc/wallet_connect#requesting-a-verified-email), the wallet returns two things on the connected account:
+
+- `capabilities.identity.email`: a plain string, handy for display.
+- `capabilities.identity.idToken`: a signed identity token (a JWT) that **proves** the email belongs to the account.
+
+The plain string is convenient for client-side display, but anyone can put any value there. To trust the email on your server, verify the token.
+
+## How It Works
+
+The token is a standard [OpenID Connect](https://openid.net/developers/how-connect-works/) ID token signed by the wallet's keys. It is bound to:
+
+- your app's origin (the `aud` claim), so a token issued for another app cannot be replayed against yours, and
+- the connected account (the `sub` claim), so it cannot be reused for a different address.
+
+The wallet runs a verify-only identity issuer. Anyone can fetch its public signing keys to check a token's signature:
+
+- Issuer: `https://wallet.tempo.xyz/api/oidc`
+- Discovery: `https://wallet.tempo.xyz/api/oidc/.well-known/openid-configuration`
+- JWKS: `https://wallet.tempo.xyz/api/oidc/.well-known/jwks.json`
+
+## Automatic Verification
+
+If you authenticate accounts with [`built-in Authentication`](/docs/guides/authentication) with the `identity` capability, verification is automatic.
+
+::::steps
+
+### Connect
+
+Request the `identity` capability in the Wagmi `connect` call. Your connector is already wired to your auth endpoint (see [Authentication](/docs/guides/authentication#configure-the-connector)), so the SDK forwards the signed token to your server during the connect ceremony.
+
+```tsx twoslash [src/App.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
+
+function Connect() {
+  const { connectAsync } = useConnect()
+  const [connector] = useConnectors()
+
+  return (
+    <button
+      onClick={() =>
+        connectAsync({
+          connector,
+          capabilities: { identity: { email: true } }, // [!code focus]
+        })
+      }
+    >
+      Sign in
+    </button>
+  )
+}
+```
+
+:::info[Without Wagmi]
+Using the [`Provider`](/docs/api/provider) directly, request the capability on [`wallet_connect`](/docs/rpc/wallet_connect#requesting-a-verified-email):
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+
+const provider = Provider.create()
+
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
+  params: [{ capabilities: { identity: { email: true } } }], // [!code focus]
+})
+```
+
+:::
+
+### Read Email from Session
+
+The verified email is on the session. Read it from any authenticated route with `getSession`.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Handler, Kv } from 'accounts/server'
+import { env } from 'cloudflare:workers'
+
+const auth = Handler.auth({
+  path: '/auth',
+  store: Kv.durableObject(env.NONCE_DO),
+})
+
+app.get('/me', async (c) => {
+  const session = await auth.getSession(c.req.raw) // [!code focus]
+  if (!session) return c.json({ error: 'unauthenticated' }, 401)
+  return c.json({ address: session.address, email: session.email }) // [!code focus]
+})
+```
+
+::::
+
+## Manual Verification
+
+If you mint your own session (for example in [`onAuthenticate`](/docs/server/handler.auth#onauthenticate) with `session: false`) or verify the token in a separate service, read the token on the client and verify it yourself with [`Identity.verify`](/docs/server/identity.verify).
+
+::::steps
+
+### Read Token and Send to Server
+
+Request the `identity` capability, read the signed `idToken` off the connected account, and POST it to your own endpoint.
+
+```tsx twoslash [src/App.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
+
+function Connect() {
+  const { connectAsync } = useConnect()
+  const [connector] = useConnectors()
+
+  return (
+    <button
+      onClick={async () => {
+        const result = await connectAsync({
+          connector,
+          capabilities: { identity: { email: true } },
+          withCapabilities: true,
+        })
+
+        const idToken = result.accounts[0]?.capabilities?.identity?.idToken // [!code focus]
+        await fetch('/verify-email', { // [!code focus]
+          method: 'POST', // [!code focus]
+          body: JSON.stringify({ idToken }), // [!code focus]
+        }) // [!code focus]
+      }}
+    >
+      Sign in
+    </button>
+  )
+}
+```
+
+:::info[Without Wagmi]
+Using the [`Provider`](/docs/api/provider) directly, read the signed `idToken` off the connected account:
+
+```ts twoslash
+// @noErrors
+import { Provider } from 'accounts'
+
+const provider = Provider.create()
+
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
+  params: [{ capabilities: { identity: { email: true } } }],
+})
+
+const idToken = accounts[0]?.capabilities?.identity?.idToken // [!code focus]
+```
+
+:::
+
+### Verify Token on Server
+
+Verify the token with `Identity.verify`. It fetches the issuer's JWKS, then asserts the signature, `iss`, `aud`, `exp`, and `email_verified === true`. Pass `subject` and/or `nonce` to also cross-check the token's `sub` and `nonce`. It throws on any failure.
+
+```ts twoslash [worker/index.ts]
+// @noErrors
+import { Identity } from 'accounts/server'
+
+app.post('/verify-email', async (c) => {
+  const { idToken } = await c.req.json()
+
+  const claims = await Identity.verify(idToken, { // [!code focus]
+    audience: 'https://app.example.com', // your app origin (token `aud`) // [!code focus]
+    issuer: 'https://wallet.tempo.xyz/api/oidc', // the wallet's identity issuer // [!code focus]
+  }) // [!code focus]
+
+  return c.json({ email: claims.email }) // verified email // [!code focus]
+})
+```
+
+::::
+
+## Verify From Any Stack
+
+The token is a standard OIDC ID token, so any JWT/OIDC library can verify it against the JWKS above. You do not need the Accounts SDK. For example, with [`jose`](https://github.com/panva/jose):
+
+```ts twoslash
+// @noErrors
+import { createRemoteJWKSet, jwtVerify } from 'jose'
+
+const jwks = createRemoteJWKSet(
+  new URL('https://wallet.tempo.xyz/api/oidc/.well-known/jwks.json'),
+)
+
+const { payload } = await jwtVerify(idToken, jwks, {
+  issuer: 'https://wallet.tempo.xyz/api/oidc',
+  audience: 'https://app.example.com',
+})
+
+if (payload.email_verified !== true) throw new Error('email not verified')
+payload.email // verified email
+```
+
+Always check `email_verified === true`, and cross-check `sub` against the address you expect.
+
+## Custom Wallets
+
+If you run your own wallet, point verification at its identity issuer instead:
+
+- `Handler.auth({ identity: { issuer: 'https://wallet.example.com/api/oidc' } })`, or
+- `Identity.verify(idToken, { issuer: 'https://wallet.example.com/api/oidc', ... })`.

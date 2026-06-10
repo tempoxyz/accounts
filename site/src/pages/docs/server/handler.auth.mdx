@@ -85,6 +85,11 @@ type SessionPayload = {
   address: Address
   /** Chain ID echoed into the challenge message. */
   chainId: number
+  /**
+   * Verified email, set when the verify request included a valid identity
+   * token and [`identity`](#identity) is configured. Omitted otherwise.
+   */
+  email?: string | undefined
   /** Unix timestamp (seconds) when the session was issued. */
   issuedAt: number
   /** Unix timestamp (seconds) when the session expires. */
@@ -139,6 +144,42 @@ const handler = Handler.auth({
   domain: 'app.example.com', // [!code focus]
 })
 ```
+
+### identity
+
+- **Type:** `{ issuer?: string | undefined; required?: boolean | undefined }`
+- **Optional**
+
+Verified-email identity (OIDC), **enabled by default**. A
+verify request carrying an `idToken` (minted by the wallet during
+[`wallet_connect`](/docs/rpc/wallet_connect#requesting-a-verified-email)) is
+verified against the issuer's JWKS, with `aud` pinned to this request's resolved
+origin, `sub` cross-checked against the signed-in address, and `nonce` matched to
+the SIWE nonce. On success the verified email is folded onto the session as
+[`SessionPayload.email`](#sessionpayload).
+
+The wallet only mints tokens when the app requests identity, so requests without
+one are unaffected — they still issue a session, just without an email. You only
+need to set this option to customize the behavior below.
+
+Reusing the SIWE nonce as the token nonce means the single-use challenge store
+covers replay protection for both the signature and the token, so your app needs
+no separate nonce plumbing.
+
+- `issuer` — the wallet's identity issuer URL (whose JWKS signs the token). Defaults to `https://wallet.tempo.xyz/api/oidc`; override for a self-hosted wallet.
+- `required` — when `true`, reject the verify if no valid token is supplied (defaults to `false`, attach the email when present and proceed otherwise).
+
+```ts twoslash
+import { Handler } from 'accounts/server'
+
+const handler = Handler.auth({
+  identity: { required: true }, // [!code focus]
+})
+```
+
+For verifying a token outside of `Handler.auth` (for example when minting your
+own session in [`onAuthenticate`](#onauthenticate) with `session: false`), use
+[`Identity.verify`](/docs/server/identity.verify).
 
 ### onAuthenticate
 

@@ -4,6 +4,7 @@ import * as RpcResponse from 'ox/RpcResponse'
 import type { StoreApi } from 'zustand/vanilla'
 import { createStore } from 'zustand/vanilla'
 
+import { type ZodIssue, flattenIssues } from '../core/internal/zodIssues.js'
 import type * as Messenger from '../core/Messenger.js'
 import type * as CoreProvider from '../core/Provider.js'
 import * as Schema from '../core/Schema.js'
@@ -428,14 +429,6 @@ export declare namespace validateSearch {
   }
 }
 
-type ZodIssue = {
-  path: readonly PropertyKey[]
-  code: string
-  message: string
-  expected?: string | undefined
-  errors?: readonly (readonly ZodIssue[])[] | undefined
-}
-
 function formatZodErrors(method: string, error: { issues: readonly ZodIssue[] }) {
   const issues = flattenIssues(error.issues)
     .map((i) => `  - ${i.path.map(String).join('.')}: ${i.message}`)
@@ -443,21 +436,3 @@ function formatZodErrors(method: string, error: { issues: readonly ZodIssue[] })
   return `Invalid params for "${method}":\n${issues}`
 }
 
-function flattenIssues(
-  issues: readonly ZodIssue[],
-): { path: readonly PropertyKey[]; message: string }[] {
-  const result: { path: readonly PropertyKey[]; message: string }[] = []
-  for (const issue of issues) {
-    if (issue.errors?.length) {
-      const best = issue.errors.reduce((a, b) => (a.length <= b.length ? a : b))
-      for (const nested of flattenIssues(best))
-        result.push({ path: [...issue.path, ...nested.path], message: nested.message })
-    } else {
-      let message = issue.message
-      if (issue.code === 'invalid_type' && issue.expected) message = `Expected ${issue.expected}`
-      else if (issue.code === 'invalid_value') message = 'Invalid value'
-      result.push({ path: issue.path, message })
-    }
-  }
-  return result
-}

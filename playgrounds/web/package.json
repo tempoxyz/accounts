@@ -31,6 +31,6 @@
     "typescript": "catalog:default",
     "unplugin-icons": "^23.0.1",
     "vp": "catalog:",
-    "wrangler": "^4.85.0"
+    "wrangler": "catalog:"
   }
 }
