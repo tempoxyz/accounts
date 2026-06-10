@@ -33,11 +33,36 @@ export type Keystore = {
    *
    * Called lazily when a stored record is first used after hydration; the
    * SDK caches the result per record.
+   *
+   * Throw {@link KeyUnavailableError} when the key behind the handle is
+   * permanently gone (e.g. hardware key deleted) — the SDK evicts the record
+   * so callers fall back to authorizing a fresh key. Any other error is
+   * treated as transient (e.g. device locked): the record is kept and
+   * retried on next use.
    */
   toAccount: (
     record: toAccount.Record,
     context: toAccount.Context,
   ) => MaybePromise<TempoAccount.AccessKeyAccount>
+}
+
+/**
+ * Signals that the key behind a persisted handle is permanently gone
+ * (e.g. hardware key deleted, app keychain wiped). Thrown from
+ * {@link Keystore.toAccount}, it evicts the access-key record so callers
+ * fall back to authorizing a fresh key.
+ */
+export class KeyUnavailableError extends Error {
+  constructor(message?: string, options?: { cause?: unknown | undefined }) {
+    super(message ?? 'Keystore key material is permanently unavailable.', options)
+    this.name = 'Keystore.KeyUnavailableError'
+  }
+}
+
+/** Returns whether an error signals permanently unavailable key material. */
+export function isKeyUnavailableError(error: unknown): error is KeyUnavailableError {
+  if (error instanceof KeyUnavailableError) return true
+  return error instanceof Error && error.name === 'Keystore.KeyUnavailableError'
 }
 
 export declare namespace createKey {

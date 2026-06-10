@@ -8,7 +8,7 @@ import { accounts, privateKeys } from '../../test/config.js'
 import { createJsonStorage } from '../../test/utils.js'
 import * as AccessKey from './AccessKey.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
-import type * as Keystore from './Keystore.js'
+import * as Keystore from './Keystore.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
 
@@ -982,6 +982,31 @@ describe('keystore', () => {
     await expect(store.accessKeys.get(query)).resolves.toBeUndefined()
     await expect(store.accessKeys.get(query)).resolves.toBeUndefined()
     expect(calls).toBe(2)
+    // Transient failures keep the record so a recovered backend can retry.
+    expect(store.getState().accessKeys).toHaveLength(1)
+  })
+
+  test('behavior: permanently unavailable keys are evicted', async () => {
+    const keystore: Keystore.Keystore = {
+      async createKey() {
+        throw new Error('unused')
+      },
+      toAccount() {
+        throw new Keystore.KeyUnavailableError()
+      },
+    }
+    const store = Store.create({ chainId: 1, keystore })
+    store.accessKeys.add({
+      account: rootAddress,
+      authorization: createKeyAuthorization(accounts[1]!.address),
+      handle: { kind: 'test' },
+      publicKey: `0x${'11'.repeat(64)}`,
+    })
+
+    await expect(
+      store.accessKeys.get({ accessKey: accounts[1]!.address, account: rootAddress, chainId: 1 }),
+    ).resolves.toBeUndefined()
+    expect(store.getState().accessKeys).toHaveLength(0)
   })
 
   test('behavior: records round-trip the backend that created them', async () => {

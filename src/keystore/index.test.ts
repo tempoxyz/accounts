@@ -4,7 +4,7 @@ import { KeyAuthorizationManager } from 'viem/tempo'
 import { describe, expect, test, vi } from 'vp/test'
 
 import { accounts } from '../../test/config.js'
-import { webCryptoP256 } from './index.js'
+import { KeyUnavailableError, webCryptoP256 } from './index.js'
 
 const rootAddress = accounts[0]!.address
 
@@ -78,6 +78,21 @@ describe('webCryptoP256', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  test('error: corrupt key material signals permanent unavailability', async () => {
+    const keystore = webCryptoP256()
+    const key = await keystore.createKey({})
+    await expect(
+      keystore.toAccount(
+        {
+          handle: { jwk: { kty: 'EC' }, kind: 'webcrypto-p256' },
+          keyType: 'p256',
+          publicKey: key.publicKey,
+        },
+        toAccountContext(),
+      ),
+    ).rejects.toBeInstanceOf(KeyUnavailableError)
   })
 
   test('error: rejects handles written by another keystore', async () => {

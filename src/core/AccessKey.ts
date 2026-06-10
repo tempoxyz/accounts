@@ -10,7 +10,7 @@ import type { StoreApi } from 'zustand'
 
 import type { OneOf } from '../internal/types.js'
 import * as ExecutionError from './ExecutionError.js'
-import type * as Keystore from './Keystore.js'
+import * as Keystore from './Keystore.js'
 import type * as Store from './Store.js'
 
 const status = {
@@ -858,11 +858,19 @@ async function hydrate(
     }
     try {
       return await account
-    } catch {
-      // The backend can no longer materialize this key (e.g. hardware key
-      // gone) — treat the record as unusable so callers fall back to
-      // re-authorization. Uncached so transient failures can retry.
+    } catch (error) {
+      // The backend cannot materialize this key right now — treat the record
+      // as unusable so callers fall back to re-authorization. Uncached so
+      // transient failures (e.g. device locked) can retry; keystore-signaled
+      // permanent loss (e.g. hardware key deleted) evicts the record.
       keystoreAccounts.delete(accessKey)
+      if (Keystore.isKeyUnavailableError(error))
+        remove({
+          accessKey: accessKey.address,
+          account: accessKey.access,
+          chainId: accessKey.chainId,
+          store,
+        })
       return undefined
     }
   }

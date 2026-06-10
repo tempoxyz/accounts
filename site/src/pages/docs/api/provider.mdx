@@ -299,6 +299,12 @@ type Keystore = {
   /**
    * Turns a persisted key record back into a signing account.
    * Called once per launch; the SDK caches the result per record.
+   *
+   * Throw `KeyUnavailableError` (from `accounts/keystore`) when the key
+   * behind the handle is permanently gone (e.g. hardware key deleted) —
+   * the SDK evicts the record so callers re-authorize. Any other error is
+   * treated as transient (e.g. device locked): the record is kept and
+   * retried on next use.
    */
   toAccount(
     record: { keyType: string; publicKey: Hex; handle: unknown },

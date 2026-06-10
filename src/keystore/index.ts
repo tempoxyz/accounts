@@ -1,8 +1,9 @@
 import { PublicKey, WebCryptoP256 } from 'ox'
 import { Account as TempoAccount } from 'viem/tempo'
 
-import type * as Keystore from '../core/Keystore.js'
+import * as Keystore from '../core/Keystore.js'
 
+export { KeyUnavailableError, isKeyUnavailableError } from '../core/Keystore.js'
 export type { Keystore } from '../core/Keystore.js'
 
 /** Handle persisted by the {@link webCryptoP256} keystore. */
@@ -45,15 +46,18 @@ export function webCryptoP256(): Keystore.Keystore {
     },
     async toAccount(record, context) {
       const handle = record.handle as Partial<WebCryptoP256Handle> | undefined
+      // Not evicted: in a multi-backend setup the handle may belong to
+      // another keystore that is misrouting, not a lost key.
       if (handle?.kind !== 'webcrypto-p256' || !handle.jwk)
         throw new Error('Unrecognized `webCryptoP256` keystore handle.')
-      const privateKey = await globalThis.crypto.subtle.importKey(
-        'jwk',
-        handle.jwk,
-        { name: 'ECDSA', namedCurve: 'P-256' },
-        false,
-        ['sign'],
-      )
+      const privateKey = await globalThis.crypto.subtle
+        .importKey('jwk', handle.jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign'])
+        .catch((error) => {
+          throw new Keystore.KeyUnavailableError(
+            '`webCryptoP256` keystore handle holds unusable key material.',
+            { cause: error },
+          )
+        })
       return TempoAccount.fromWebCryptoP256(
         { privateKey, publicKey: PublicKey.fromHex(record.publicKey) },
         {
