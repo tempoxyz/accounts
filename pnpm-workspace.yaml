@@ -42,7 +42,7 @@ catalog:
   react-dom: ^19.2.5
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
-  typescript: ^5.9.3
+  typescript: ^6.0.3
   viem: 2.52.2
   vite: ^8.0.5
   vite-plus: ~0.1.18
