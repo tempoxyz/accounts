@@ -15,7 +15,7 @@
     "accounts": "workspace:*",
     "expo": "~55.0.12",
     "expo-secure-store": "~55.0.12",
-    "expo-status-bar": "~55.0.5",
+    "expo-status-bar": "~56.0.4",
     "expo-web-browser": "~55.0.13",
     "ox": "catalog:",
     "react": "catalog:",
