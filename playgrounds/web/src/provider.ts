@@ -98,10 +98,14 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       testnet,
     })
 
-  if (adapterType === 'tempoWalletPostMessage')
+  if (adapterType === 'tempoWalletPostMessage') {
+    const postMessageHost = new URL('/post-message', host)
+    if (theme?.accent) postMessageHost.searchParams.set('accent', theme.accent)
+    if (theme?.radius) postMessageHost.searchParams.set('radius', theme.radius)
+    if (theme?.scheme) postMessageHost.searchParams.set('scheme', theme.scheme)
     return Provider.create({
       adapter: postMessage({
-        host: new URL('/post-message', host).toString(),
+        host: postMessageHost.toString(),
         mount: dialogMode === 'popup' ? Mount.popup() : Mount.iframe(),
         name: 'Tempo Wallet',
         rdns: 'xyz.tempo',
@@ -109,6 +113,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       mpp: mpp(),
       testnet,
     })
+  }
 
   if (adapterType === 'dialogRefImpl')
     return Provider.create({

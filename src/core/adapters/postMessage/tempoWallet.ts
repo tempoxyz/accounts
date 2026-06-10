@@ -1,4 +1,5 @@
 import type * as Adapter from '../../Adapter.js'
+import type * as Dialog from '../../Dialog.js'
 import { postMessage } from './postMessage.js'
 
 const icon =
@@ -6,10 +7,18 @@ const icon =
 
 /** Creates the Tempo Wallet adapter using Wata postMessage. */
 export function tempoWallet(options: tempoWallet.Options = {}): Adapter.Adapter {
+  const { theme, ...rest } = options
+  // Theme is a wallet-presentation concern, so it rides the page URL as the
+  // wallet's `accent`/`radius`/`scheme` params — the generic `postMessage`
+  // adapter stays theme-agnostic.
+  const host = new URL('https://wallet.tempo.xyz/post-message')
+  if (theme?.accent) host.searchParams.set('accent', theme.accent)
+  if (theme?.radius) host.searchParams.set('radius', theme.radius)
+  if (theme?.scheme) host.searchParams.set('scheme', theme.scheme)
   return postMessage({
     icon,
-    ...options,
-    host: 'https://wallet.tempo.xyz/post-message',
+    ...rest,
+    host: host.toString(),
     name: 'Tempo Wallet',
     rdns: 'xyz.tempo',
   })
@@ -17,5 +26,8 @@ export function tempoWallet(options: tempoWallet.Options = {}): Adapter.Adapter 
 
 export declare namespace tempoWallet {
   /** Options for {@link tempoWallet}. */
-  export type Options = Omit<postMessage.Options, 'host' | 'name' | 'rdns'>
+  export type Options = Omit<postMessage.Options, 'host' | 'name' | 'rdns'> & {
+    /** Visual theme overrides for the wallet page (accent, radius, scheme). */
+    theme?: Dialog.Theme | undefined
+  }
 }

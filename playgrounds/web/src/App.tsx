@@ -207,7 +207,9 @@ function ConfigPanel(props: {
           </label>
         )}
       </div>
-      {(adapterType === 'tempoWallet' || adapterType === 'dialogRefImpl') && (
+      {(adapterType === 'tempoWallet' ||
+        adapterType === 'tempoWalletPostMessage' ||
+        adapterType === 'dialogRefImpl') && (
         <>
           <h3 className="control-panel-title">Theme</h3>
           <ThemeConfig adapterType={adapterType} rerender={rerender} />
