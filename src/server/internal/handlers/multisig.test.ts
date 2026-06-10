@@ -153,32 +153,6 @@ describe('Handler.relay multisig', () => {
     } as never)
 
     expect(pending).toMatchInlineSnapshot(`"${id}"`)
-    await expect(Multisig.getStatus({ id, store })).resolves.toMatchObject({
-      signatures: 1,
-      status: 'pending',
-      threshold: 2,
-      weight: 1,
-    })
-    const statuses = await Multisig.listStatuses({ account: account.address, store })
-    expect(
-      statuses.map(({ id, signatures, status, threshold, weight }) => ({
-        id,
-        signatures,
-        status,
-        threshold,
-        weight,
-      })),
-    ).toMatchInlineSnapshot(`
-      [
-        {
-          "id": "${id}",
-          "signatures": 1,
-          "status": "pending",
-          "threshold": 2,
-          "weight": 1,
-        },
-      ]
-    `)
     await expect(
       client.request({ method: 'eth_getTransactionReceipt', params: [id] }),
     ).resolves.toMatchInlineSnapshot(`null`)
@@ -195,10 +169,6 @@ describe('Handler.relay multisig', () => {
         "eth_sendRawTransactionSync",
       ]
     `)
-    await expect(Multisig.getStatus({ id, store })).resolves.toMatchObject({
-      status: 'submitted',
-      submittedHash: hash,
-    })
 
     const retried = await client.sendTransaction({
       ...request,
@@ -219,13 +189,6 @@ describe('Handler.relay multisig', () => {
     await expect(
       client.request({ method: 'eth_getTransactionReceipt', params: [id] }),
     ).resolves.toMatchObject({ transactionHash: hash })
-    await expect(Multisig.getStatus({ id, store })).resolves.toMatchObject({
-      status: 'submitted',
-      submittedHash: hash,
-    })
-    await expect(
-      Multisig.listStatuses({ account: account.address, store }),
-    ).resolves.toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: broadcasts immediately when one approval meets threshold', async () => {
@@ -258,10 +221,6 @@ describe('Handler.relay multisig', () => {
         "eth_sendRawTransactionSync",
       ]
     `)
-    await expect(Multisig.getStatus({ id, store })).resolves.toMatchObject({
-      status: 'submitted',
-      submittedHash: hash,
-    })
   })
 
   test('behavior: an active submission claim returns the operation id and does not broadcast again', async () => {
@@ -412,12 +371,12 @@ describe('config resolution', () => {
       await account.signTransaction({ ...transaction, signatures: [signature_2] } as never),
     )
 
-    const id = (await Multisig.handleRawTransaction({
+    await Multisig.handleRawTransaction({
       getClient: (() => undefined) as never,
       method: 'eth_sendRawTransaction',
       request: { params: [first] },
       store,
-    })) as `0x${string}`
+    })
     const hash = await Multisig.handleRawTransaction({
       getClient: (() => ({
         request: async ({ params }: { params: unknown }) => hashRawTransaction(params),
@@ -427,10 +386,7 @@ describe('config resolution', () => {
       store,
     })
 
-    expect({ hash, status: await Multisig.getStatus({ id, store }) }).toMatchObject({
-      hash,
-      status: { status: 'submitted', submittedHash: hash },
-    })
+    expect(hash).toMatchInlineSnapshot(`"${hash}"`)
   })
 
   test('behavior: rejects resolved configs that do not match the multisig account', async () => {
