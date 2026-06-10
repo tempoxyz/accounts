@@ -1,10 +1,11 @@
-import { Address, Hex, Json, P256, PublicKey, WebCryptoP256 } from 'ox'
+import { Address, Hex, P256, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { BaseError, encodeErrorResult, encodeFunctionResult } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
 import { accounts, privateKeys } from '../../test/config.js'
+import { createJsonStorage } from '../../test/utils.js'
 import * as AccessKey from './AccessKey.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import type * as Keystore from './Keystore.js'
@@ -854,24 +855,6 @@ describe('getStatus', () => {
 })
 
 describe('keystore', () => {
-  /** String-based storage adapter (values survive only as JSON strings). */
-  function jsonStorage() {
-    const data = new Map<string, string>()
-    return Storage.from({
-      getItem(name) {
-        const value = data.get(name)
-        if (!value) return null
-        return Json.parse(value) as never
-      },
-      setItem(name, value) {
-        data.set(name, Json.stringify(value))
-      },
-      removeItem(name) {
-        data.delete(name)
-      },
-    })
-  }
-
   /** P256 keystore holding key material privately, keyed by handle id. */
   function testKeystore(kind = 'test') {
     const keys = new Map<string, Hex.Hex>()
@@ -1058,7 +1041,7 @@ describe('keystore', () => {
 
   test('behavior: handle records survive a string-based storage adapter', async () => {
     const keystore = testKeystore()
-    const storage = jsonStorage()
+    const storage = createJsonStorage()
     const store = Store.create({ chainId: 1, keystore, storage })
 
     await store.accessKeys.authorize({

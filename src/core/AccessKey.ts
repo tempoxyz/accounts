@@ -567,15 +567,14 @@ export function add(options: add.Options): add.ReturnType {
     limits: authorization.limits as AccessKey['limits'],
     scopes: authorization.scopes as AccessKey['scopes'],
   }
-  const record = (
-    privateKey
-      ? { ...base, privateKey }
-      : keyPair
-        ? { ...base, keyPair }
-        : typeof handle !== 'undefined' && publicKey
-          ? { ...base, handle, publicKey }
-          : base
-  ) as AccessKey
+  const material = privateKey
+    ? { privateKey }
+    : keyPair
+      ? { keyPair }
+      : typeof handle !== 'undefined' && publicKey
+        ? { handle, publicKey }
+        : {}
+  const record = { ...base, ...material } as AccessKey
   store.state.setState((state) => ({
     accessKeys: [
       record,
@@ -844,9 +843,9 @@ async function hydrate(
   if ('handle' in accessKey && typeof accessKey.handle !== 'undefined' && accessKey.publicKey) {
     const { keystore } = store
     if (!keystore) return undefined
-    const account =
-      keystoreAccounts.get(accessKey) ??
-      (async () =>
+    let account = keystoreAccounts.get(accessKey)
+    if (!account) {
+      account = (async () =>
         await keystore.toAccount(
           {
             handle: accessKey.handle,
@@ -855,7 +854,8 @@ async function hydrate(
           },
           { access: accessKey.access, keyAuthorizationManager },
         ))()
-    keystoreAccounts.set(accessKey, account)
+      keystoreAccounts.set(accessKey, account)
+    }
     try {
       return await account
     } catch {

@@ -1,5 +1,5 @@
 import { verify } from 'hono/jwt'
-import { Hex, Json, Provider as core_Provider, Secp256k1, WebCryptoP256 } from 'ox'
+import { Hex, Provider as core_Provider, Secp256k1, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { type Address, createClient, createWalletClient, custom, parseUnits } from 'viem'
 import {
@@ -18,7 +18,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 
 import { headlessWebAuthn, secp256k1 } from '../../test/adapters.js'
 import { accounts, chain, getClient, http } from '../../test/config.js'
-import { createServer, type Server } from '../../test/utils.js'
+import { createJsonStorage, createServer, type Server } from '../../test/utils.js'
 import { webCryptoP256 } from '../keystore/index.js'
 import * as Handler from '../server/Handler.js'
 import * as Adapter from './Adapter.js'
@@ -2306,30 +2306,12 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
   })
 
   describe('Provider.create keystore option', () => {
-    /** String-based storage adapter (values survive only as JSON strings). */
-    function jsonStorage() {
-      const data = new Map<string, string>()
-      return Storage.from({
-        getItem(name) {
-          const value = data.get(name)
-          if (!value) return null
-          return Json.parse(value) as never
-        },
-        setItem(name, value) {
-          data.set(name, Json.stringify(value))
-        },
-        removeItem(name) {
-          data.delete(name)
-        },
-      })
-    }
-
     test('default: provisions a p256 access key backed by the keystore', async () => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
         keystore: webCryptoP256(),
-        storage: jsonStorage(),
+        storage: createJsonStorage(),
       })
       await connect(provider)
 
@@ -2352,7 +2334,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         adapter: adapter(),
         chains: [chain],
         keystore: webCryptoP256(),
-        storage: jsonStorage(),
+        storage: createJsonStorage(),
       })
       const address = await connect(provider)
       await fund(address)
@@ -2374,7 +2356,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
     })
 
     test('behavior: key survives reload through string-based storage without re-auth', async () => {
-      const storage = jsonStorage()
+      const storage = createJsonStorage()
 
       const provider1 = Provider.create({
         adapter: adapter(),
@@ -2453,7 +2435,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         adapter: jsonRpcAdapter,
         chains: [chain],
         keystore: webCryptoP256(),
-        storage: jsonStorage(),
+        storage: createJsonStorage(),
       })
       await provider.request({ method: 'wallet_connect' })
       await fund(root.address)

@@ -1,7 +1,8 @@
-import { Json, WebCryptoP256 } from 'ox'
+import { WebCryptoP256 } from 'ox'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
+import { createJsonStorage } from '../../test/utils.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
 import * as u from './zod/utils.js'
@@ -27,23 +28,6 @@ async function setup(options: Omit<Store.Options, 'chainId'> = {}) {
 async function getPersistedState(storage: Storage.Storage) {
   const persisted = await storage.getItem<{ state: Record<string, unknown> }>('store')
   return persisted?.state
-}
-
-function createJsonStorage() {
-  const items = new Map<string, string>()
-  return Storage.from({
-    getItem<value>(name: string) {
-      const value = items.get(name)
-      if (!value) return null
-      return Json.parse(value) as value
-    },
-    removeItem(name: string) {
-      items.delete(name)
-    },
-    setItem(name: string, value: unknown) {
-      items.set(name, Json.stringify(value))
-    },
-  })
 }
 
 describe('create', () => {

@@ -485,16 +485,20 @@ export function create(options: create.Options = {}): create.ReturnType {
     // A configured keystore takes precedence over the adapter's
     // `generateAccessKey` — the keystore owns the device's key capabilities.
     if (keystore && parameters.keyType !== 'webAuthn') {
-      const prepared = await AccessKey.prepareAuthorization({
+      const { key, keyAuthorization } = await AccessKey.prepareAuthorization({
         ...parameters,
         chainId: chainId_,
         keystore,
       })
+      if (!key)
+        throw new RpcResponse.InternalError({
+          message: 'Keystore did not produce access-key material.',
+        })
       return {
-        key: prepared.key,
+        key,
         parameters: {
-          ...toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
-          publicKey: prepared.key!.publicKey,
+          ...toAuthorizeAccessKeyParameters(parameters, keyAuthorization),
+          publicKey: key.publicKey,
         },
       }
     }
