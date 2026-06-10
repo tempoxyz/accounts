@@ -120,7 +120,6 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     method,
     request,
     resolveFeeToken,
-    sender: sender_,
     validate,
   } = options
   const serialized = request.params?.[0]
@@ -131,7 +130,7 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     })
 
   const transaction = Transaction.deserialize(serialized)
-  const sender = transaction.from ?? sender_
+  const sender = transaction.from ?? options.sender
 
   if (!transaction.signature || !sender)
     throw new RpcResponse.InvalidParamsError({
