@@ -70,15 +70,17 @@
   "name": "accounts",
   "description": "Tempo Accounts SDK",
   "type": "module",
-  "version": "0.14.7",
+  "version": "0.14.8",
   "dependencies": {
     "hono": "catalog:",
     "idb-keyval": "^6.2.2",
+    "jose": "^6.2.3",
     "mipd": "^0.0.7",
     "mppx": "catalog:",
     "ox": "~0.14.20",
+    "wata": "0.0.1",
     "webauthx": "~0.1.1",
-    "zod": "4.3.6",
+    "zod": "^4.3.6",
     "zustand": "^5.0.12"
   },
   "peerDependencies": {
@@ -133,8 +135,8 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "react-native": "./dist/index.js",
       "src": "./src/index.ts",
+      "react-native": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./server": {
@@ -164,21 +166,33 @@
     },
     "./react-native": {
       "types": "./dist/react-native/index.d.ts",
-      "react-native": "./dist/react-native/index.js",
       "src": "./src/react-native/index.ts",
+      "react-native": "./dist/react-native/index.js",
       "default": "./dist/react-native/index.js"
+    },
+    "./mobileWebAuth": {
+      "types": "./dist/core/adapters/mobileWebAuth/index.d.ts",
+      "src": "./src/core/adapters/mobileWebAuth/index.ts",
+      "react-native": "./dist/core/adapters/mobileWebAuth/index.js",
+      "default": "./dist/core/adapters/mobileWebAuth/index.js"
     },
     "./react-native/async-storage": {
       "types": "./dist/react-native/asyncStorage.d.ts",
-      "react-native": "./dist/react-native/asyncStorage.js",
       "src": "./src/react-native/asyncStorage.ts",
+      "react-native": "./dist/react-native/asyncStorage.js",
       "default": "./dist/react-native/asyncStorage.js"
     },
-    "./react-native/secure-storage": {
-      "types": "./dist/react-native/secureStorage.d.ts",
-      "react-native": "./dist/react-native/secureStorage.js",
-      "src": "./src/react-native/secureStorage.ts",
-      "default": "./dist/react-native/secureStorage.js"
+    "./react-native/expo-web-browser": {
+      "types": "./dist/react-native/expoWebBrowser.d.ts",
+      "src": "./src/react-native/expoWebBrowser.ts",
+      "react-native": "./dist/react-native/expoWebBrowser.js",
+      "default": "./dist/react-native/expoWebBrowser.js"
+    },
+    "./react-native/expo-secure-store": {
+      "types": "./dist/react-native/expoSecureStore.d.ts",
+      "src": "./src/react-native/expoSecureStore.ts",
+      "react-native": "./dist/react-native/expoSecureStore.js",
+      "default": "./dist/react-native/expoSecureStore.js"
     }
   }
 }
