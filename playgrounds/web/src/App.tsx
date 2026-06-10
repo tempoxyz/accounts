@@ -20,6 +20,7 @@ import {
   type DialogMode,
   type MppMode,
   dialogMode,
+  initialAdapter,
   provider,
   switchAdapter,
   switchDialogMode,
@@ -31,6 +32,13 @@ import {
   testnet,
   tokens,
 } from './provider.js'
+
+/** Persists a playground setting in the URL so a reload keeps it. */
+function setParam(key: string, value: string) {
+  const url = new URL(window.location.href)
+  url.searchParams.set(key, value)
+  window.history.replaceState(null, '', url)
+}
 import { TurnkeyEmailOtp } from './TurnkeyEmailOtp.js'
 
 const sectionLinks = [
@@ -51,12 +59,13 @@ const sectionLinks = [
 type SectionId = (typeof sectionLinks)[number]['id']
 
 export function App() {
-  const [adapterType, setAdapterType] = useState<AdapterType>('tempoWallet')
+  const [adapterType, setAdapterType] = useState<AdapterType>(initialAdapter)
   const [, rerender] = useState(0)
   const activeSection = useActiveSection()
   const network = useActiveNetwork()
 
   function onSwitch(type: AdapterType) {
+    setParam('adapter', type)
     switchAdapter(type)
     setAdapterType(type)
     rerender((n) => n + 1)
@@ -197,6 +206,7 @@ function ConfigPanel(props: {
             <select
               value={dialogMode}
               onChange={(e) => {
+                setParam('mode', e.target.value)
                 switchDialogMode(e.target.value as DialogMode, adapterType)
                 rerender()
               }}

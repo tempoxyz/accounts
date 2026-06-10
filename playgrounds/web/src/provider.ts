@@ -73,10 +73,26 @@ export const tokens =
 export const host =
   new URLSearchParams(window.location.search).get('host') ?? import.meta.env.VITE_WALLET_HOST
 
-export let dialogMode: DialogMode = 'iframe'
+/** Initial adapter, read from `?adapter=` so a reload keeps the selection. */
+export const initialAdapter: AdapterType = (() => {
+  const param = new URLSearchParams(window.location.search).get('adapter')
+  const adapters: readonly AdapterType[] = [
+    'secp256k1',
+    'webAuthn',
+    'turnkey',
+    'privy',
+    'tempoWallet',
+    'tempoWalletPostMessage',
+    'dialogRefImpl',
+  ]
+  return adapters.includes(param as AdapterType) ? (param as AdapterType) : 'tempoWallet'
+})()
+
+export let dialogMode: DialogMode =
+  new URLSearchParams(window.location.search).get('mode') === 'popup' ? 'popup' : 'iframe'
 export let mppMode: MppMode = 'push'
 export let theme: DialogNs.Theme | undefined
-export let provider: ProviderValue = createProvider('tempoWallet')
+export let provider: ProviderValue = createProvider(initialAdapter)
 let turnkeyClient: TurnkeyClient | undefined
 
 function mpp() {
