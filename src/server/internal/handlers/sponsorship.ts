@@ -129,6 +129,7 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     throw new RpcResponse.InvalidParamsError({
       message: 'Transaction must be signed by the sender before fee payer signing.',
     })
+  if (!account.sign) throw new Error('Fee payer account cannot sign transactions.')
 
   // Explicit fee token wins; otherwise use chain default when resolver is configured.
   const feeToken_resolved = feeToken ?? (await resolveFeeToken?.(transaction.chainId))
