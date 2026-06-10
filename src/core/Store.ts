@@ -6,6 +6,7 @@ import { createStore } from 'zustand/vanilla'
 
 import * as core_AccessKey from './AccessKey.js'
 import type { Store as Account } from './Account.js'
+import type * as Keystore from './Keystore.js'
 import * as Storage from './Storage.js'
 
 const supportsStructuredClone = Symbol.for('accounts.storage.supportsStructuredClone')
@@ -79,6 +80,8 @@ export type Options = {
   schema?: z.ZodMiniType | undefined
   /** Initial chain ID. */
   chainId: number
+  /** Keystore backing access-key records that carry an opaque `handle`. */
+  keystore?: Keystore.Keystore | undefined
   /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
   maxAccounts?: number | undefined
   /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
@@ -93,6 +96,7 @@ export type Options = {
 export function create(options: Options): Store {
   const {
     chainId,
+    keystore,
     maxAccounts,
     persistCredentials = true,
     schema,
@@ -126,7 +130,7 @@ export function create(options: Options): Store {
     ),
   ) as ZustandStore
   const store = state as Store
-  store.accessKeys = core_AccessKey.createManager({ state })
+  store.accessKeys = core_AccessKey.createManager({ keystore, state })
   store.disconnect = () =>
     state.setState({ accessKeys: [], accounts: [], activeAccount: 0, auth: undefined })
   return store

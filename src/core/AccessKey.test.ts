@@ -1,4 +1,4 @@
-import { Hex, WebCryptoP256 } from 'ox'
+import { Address, Hex, Json, P256, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { BaseError, encodeErrorResult, encodeFunctionResult } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
@@ -7,6 +7,7 @@ import { describe, expect, test } from 'vp/test'
 import { accounts, privateKeys } from '../../test/config.js'
 import * as AccessKey from './AccessKey.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
+import type * as Keystore from './Keystore.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
 
@@ -849,5 +850,236 @@ describe('getStatus', () => {
     })
 
     expect(result).toMatchInlineSnapshot(`"missing"`)
+  })
+})
+
+describe('keystore', () => {
+  /** String-based storage adapter (values survive only as JSON strings). */
+  function jsonStorage() {
+    const data = new Map<string, string>()
+    return Storage.from({
+      getItem(name) {
+        const value = data.get(name)
+        if (!value) return null
+        return Json.parse(value) as never
+      },
+      setItem(name, value) {
+        data.set(name, Json.stringify(value))
+      },
+      removeItem(name) {
+        data.delete(name)
+      },
+    })
+  }
+
+  /** P256 keystore holding key material privately, keyed by handle id. */
+  function testKeystore(kind = 'test') {
+    const keys = new Map<string, Hex.Hex>()
+    const stats = { toAccountCalls: 0 }
+    const keystore: Keystore.Keystore = {
+      async createKey(options) {
+        if (options.keyType && options.keyType !== 'p256')
+          throw new Error(`unsupported keyType: ${options.keyType}`)
+        const privateKey = P256.randomPrivateKey()
+        const id = `key-${keys.size}`
+        keys.set(id, privateKey)
+        return {
+          handle: { id, kind },
+          keyType: 'p256',
+          publicKey: PublicKey.toHex(P256.getPublicKey({ privateKey })),
+        }
+      },
+      toAccount(record, context) {
+        stats.toAccountCalls++
+        const { id } = record.handle as { id: string }
+        const privateKey = keys.get(id)
+        if (!privateKey) throw new Error(`unknown key: ${id}`)
+        return TempoAccount.fromP256(privateKey, {
+          access: context.access,
+          keyAuthorizationManager: context.keyAuthorizationManager,
+        })
+      },
+    }
+    return Object.assign(keystore, { stats })
+  }
+
+  function signStub() {
+    return {
+      ...accounts[0]!,
+      sign: async () => `0x${'11'.repeat(32)}${'22'.repeat(32)}1b` as const,
+    } as TempoAccount.Account
+  }
+
+  test('default: authorize provisions a handle-backed record', async () => {
+    const keystore = testKeystore()
+    const store = Store.create({ chainId: 1, keystore })
+
+    await store.accessKeys.authorize({
+      account: signStub(),
+      chainId: 1,
+      parameters: { expiry: Math.floor(Date.now() / 1000) + 3600 },
+    })
+
+    const record = store.getState().accessKeys[0]!
+    expect(record.keyType).toBe('p256')
+    expect(record.handle).toMatchObject({ kind: 'test' })
+    expect(record.publicKey).toMatch(/^0x[0-9a-f]+$/i)
+    expect(record.address).toBe(Address.fromPublicKey(PublicKey.fromHex(record.publicKey!)))
+    expect(record.privateKey).toBeUndefined()
+    expect(record.keyPair).toBeUndefined()
+
+    const hydrated = await store.accessKeys.get({
+      accessKey: record.address,
+      account: rootAddress,
+      chainId: 1,
+    })
+    expect(hydrated?.accessKeyAddress).toBe(record.address.toLowerCase())
+    expect(keystore.stats.toAccountCalls).toBe(1)
+  })
+
+  test('behavior: caches hydrated accounts per record', async () => {
+    const keystore = testKeystore()
+    const store = Store.create({ chainId: 1, keystore })
+    const key = await keystore.createKey({})
+    const address = Address.fromPublicKey(PublicKey.fromHex(key.publicKey))
+
+    store.accessKeys.add({
+      account: rootAddress,
+      authorization: createKeyAuthorization(address),
+      handle: key.handle,
+      publicKey: key.publicKey,
+    })
+
+    const query = { accessKey: address, account: rootAddress, chainId: 1 }
+    const first = await store.accessKeys.get(query)
+    const second = await store.accessKeys.get(query)
+    expect(first).toBeDefined()
+    expect(second).toBe(first)
+    expect(keystore.stats.toAccountCalls).toBe(1)
+  })
+
+  test('behavior: handle records are unusable without a keystore', async () => {
+    const keystore = testKeystore()
+    const key = await keystore.createKey({})
+    const address = Address.fromPublicKey(PublicKey.fromHex(key.publicKey))
+
+    const store = Store.create({ chainId: 1 })
+    store.accessKeys.add({
+      account: rootAddress,
+      authorization: createKeyAuthorization(address),
+      handle: key.handle,
+      publicKey: key.publicKey,
+    })
+
+    await expect(
+      store.accessKeys.get({ accessKey: address, account: rootAddress, chainId: 1 }),
+    ).resolves.toBeUndefined()
+  })
+
+  test('behavior: keystore failures are not cached', async () => {
+    let calls = 0
+    const keystore: Keystore.Keystore = {
+      async createKey() {
+        throw new Error('unused')
+      },
+      toAccount() {
+        calls++
+        throw new Error('hardware key unavailable')
+      },
+    }
+    const store = Store.create({ chainId: 1, keystore })
+    store.accessKeys.add({
+      account: rootAddress,
+      authorization: createKeyAuthorization(accounts[1]!.address),
+      handle: { kind: 'test' },
+      publicKey: `0x${'11'.repeat(64)}`,
+    })
+
+    const query = { accessKey: accounts[1]!.address, account: rootAddress, chainId: 1 }
+    await expect(store.accessKeys.get(query)).resolves.toBeUndefined()
+    await expect(store.accessKeys.get(query)).resolves.toBeUndefined()
+    expect(calls).toBe(2)
+  })
+
+  test('behavior: records round-trip the backend that created them', async () => {
+    const backendA = testKeystore('backend-a')
+    const backendB = testKeystore('backend-b')
+    const keystore: Keystore.Keystore = {
+      createKey: (options) => backendA.createKey(options),
+      toAccount(record, context) {
+        const handle = record.handle as { kind: string }
+        if (handle.kind === 'backend-a') return backendA.toAccount(record, context)
+        return backendB.toAccount(record, context)
+      },
+    }
+    const store = Store.create({ chainId: 1, keystore })
+
+    for (const backend of [backendA, backendB]) {
+      const key = await backend.createKey({})
+      store.accessKeys.add({
+        account: rootAddress,
+        authorization: createKeyAuthorization(
+          Address.fromPublicKey(PublicKey.fromHex(key.publicKey)),
+        ),
+        handle: key.handle,
+        publicKey: key.publicKey,
+      })
+    }
+
+    for (const record of store.getState().accessKeys) {
+      const hydrated = await store.accessKeys.get({
+        accessKey: record.address,
+        account: rootAddress,
+        chainId: 1,
+      })
+      expect(hydrated?.accessKeyAddress).toBe(record.address.toLowerCase())
+    }
+    expect(backendA.stats.toAccountCalls).toBe(1)
+    expect(backendB.stats.toAccountCalls).toBe(1)
+  })
+
+  test('behavior: privateKey records hydrate without consulting the keystore', async () => {
+    const keystore = testKeystore()
+    const store = Store.create({ chainId: 1, keystore })
+    store.accessKeys.add({
+      account: rootAddress,
+      authorization: createKeyAuthorization(accounts[1]!.address, { keyType: 'secp256k1' }),
+      privateKey: privateKeys[1],
+    })
+
+    const account = await store.accessKeys.get({
+      accessKey: accounts[1]!.address,
+      account: rootAddress,
+      chainId: 1,
+    })
+    expect(account?.accessKeyAddress).toBe(accounts[1]!.address.toLowerCase())
+    expect(keystore.stats.toAccountCalls).toBe(0)
+  })
+
+  test('behavior: handle records survive a string-based storage adapter', async () => {
+    const keystore = testKeystore()
+    const storage = jsonStorage()
+    const store = Store.create({ chainId: 1, keystore, storage })
+
+    await store.accessKeys.authorize({
+      account: signStub(),
+      chainId: 1,
+      parameters: { expiry: Math.floor(Date.now() / 1000) + 3600 },
+    })
+
+    const store2 = Store.create({ chainId: 1, keystore, storage })
+    await Store.waitForHydration(store2)
+
+    const record = store2.getState().accessKeys[0]!
+    expect(record.handle).toMatchObject({ kind: 'test' })
+    expect(record.privateKey).toBeUndefined()
+    expect(record.keyPair).toBeUndefined()
+
+    const hydrated = await store2.accessKeys.get({
+      accessKey: record.address,
+      account: rootAddress,
+      chainId: 1,
+    })
+    expect(hydrated?.accessKeyAddress).toBe(record.address.toLowerCase())
   })
 })

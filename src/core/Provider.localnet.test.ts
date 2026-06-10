@@ -1,5 +1,5 @@
 import { verify } from 'hono/jwt'
-import { Hex, Provider as core_Provider, WebCryptoP256 } from 'ox'
+import { Hex, Json, Provider as core_Provider, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { type Address, createClient, createWalletClient, custom, parseUnits } from 'viem'
 import {
@@ -19,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 import { headlessWebAuthn, secp256k1 } from '../../test/adapters.js'
 import { accounts, chain, getClient, http } from '../../test/config.js'
 import { createServer, type Server } from '../../test/utils.js'
+import { webCryptoP256 } from '../keystore/index.js'
 import * as Handler from '../server/Handler.js'
 import * as Adapter from './Adapter.js'
 import { local as core_local } from './adapters/local.js'
@@ -2301,6 +2302,115 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         ],
       })
       expect(result.tx.gas).toBeDefined()
+    })
+  })
+
+  describe('Provider.create keystore option', () => {
+    /** String-based storage adapter (values survive only as JSON strings). */
+    function jsonStorage() {
+      const data = new Map<string, string>()
+      return Storage.from({
+        getItem(name) {
+          const value = data.get(name)
+          if (!value) return null
+          return Json.parse(value) as never
+        },
+        setItem(name, value) {
+          data.set(name, Json.stringify(value))
+        },
+        removeItem(name) {
+          data.delete(name)
+        },
+      })
+    }
+
+    test('default: provisions a p256 access key backed by the keystore', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        keystore: webCryptoP256(),
+        storage: jsonStorage(),
+      })
+      await connect(provider)
+
+      const result = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      expect(result.keyAuthorization.keyType).toBe('p256')
+
+      const record = provider.store.getState().accessKeys[0]!
+      expect(record.keyType).toBe('p256')
+      expect(record.handle).toMatchObject({ kind: 'webcrypto-p256' })
+      expect(record.publicKey).toMatch(/^0x[0-9a-f]+$/i)
+      expect(record.privateKey).toBeUndefined()
+      expect(record.keyPair).toBeUndefined()
+    })
+
+    test('behavior: keystore-backed key signs transactions', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        keystore: webCryptoP256(),
+        storage: jsonStorage(),
+      })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      await expect(provider.getAccessKeyStatus()).resolves.toMatchInlineSnapshot(`"pending"`)
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+
+      // Published status proves the keystore-backed key signed the transaction.
+      await expect(provider.getAccessKeyStatus()).resolves.toMatchInlineSnapshot(`"published"`)
+    })
+
+    test('behavior: key survives reload through string-based storage without re-auth', async () => {
+      const storage = jsonStorage()
+
+      const provider1 = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        keystore: webCryptoP256(),
+        storage,
+      })
+      const address = await connect(provider1)
+      await fund(address)
+      await provider1.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      const accessKeyAddress = provider1.store.getState().accessKeys[0]!.address
+
+      // Simulate an app restart: fresh provider, same storage and keystore.
+      const provider2 = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        keystore: webCryptoP256(),
+        storage,
+      })
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      const record = provider2.store.getState().accessKeys[0]!
+      expect(record.address).toBe(accessKeyAddress)
+      expect(record.handle).toMatchObject({ kind: 'webcrypto-p256' })
+      expect(record.privateKey).toBeUndefined()
+      expect(record.keyPair).toBeUndefined()
+
+      const receipt = await provider2.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+      await expect(provider2.getAccessKeyStatus()).resolves.toMatchInlineSnapshot(`"published"`)
     })
   })
 

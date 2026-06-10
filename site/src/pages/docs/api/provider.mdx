@@ -263,6 +263,50 @@ const provider = Provider.create({
 })
 ```
 
+### keystore
+
+- **Type:** `Keystore.Keystore`
+- **Optional**
+
+Keystore backing locally generated access keys. When set, access-key material is created via `keystore.createKey()` — taking precedence over the adapter's `generateAccessKey` — and persisted as an opaque, JSON-serializable handle that `keystore.toAccount()` turns back into a signing account on hydration.
+
+The keystore is about the device's key capabilities: [`storage`](#storage) persists provider state, `keystore` holds key material. This enables hardware-backed access keys (e.g. Secure Enclave / Android Keystore) and other custom key backends. Existing records backed by `privateKey` or `keyPair` material hydrate unchanged.
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { webCryptoP256 } from 'accounts/keystore'
+
+const provider = Provider.create({
+  keystore: webCryptoP256(), // [!code focus]
+})
+```
+
+Apps with custom needs (own native module, HSM, remote signer) can implement the two-function interface themselves. The handle's schema is owned by whichever keystore wrote it:
+
+```ts
+type Keystore = {
+  /**
+   * Creates access-key material. `handle` is opaque, JSON-serializable,
+   * and persisted verbatim by the SDK. Must fail loudly when runtime
+   * prerequisites are missing (e.g. no Secure Enclave, no `crypto.subtle`)
+   * so provisioning errors surface at authorization time, not at first sign.
+   */
+  createKey(options: { keyType?: 'p256' | 'secp256k1' }): Promise<{
+    keyType: 'p256' | 'secp256k1'
+    publicKey: Hex
+    handle: unknown
+  }>
+  /**
+   * Turns a persisted key record back into a signing account.
+   * Called once per launch; the SDK caches the result per record.
+   */
+  toAccount(
+    record: { keyType: string; publicKey: Hex; handle: unknown },
+    context: { access: Address; keyAuthorizationManager: KeyAuthorizationManager },
+  ): Promise<Account> | Account
+}
+```
+
 ### maxAccounts
 
 - **Type:** `number`

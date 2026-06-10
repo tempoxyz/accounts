@@ -42,6 +42,7 @@ import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import { withDedupe } from './internal/withDedupe.js'
+import type * as Keystore from './Keystore.js'
 import * as Schema from './Schema.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
@@ -99,6 +100,7 @@ export function create(options: create.Options = {}): create.ReturnType {
   const {
     adapter = dialog(),
     chains = [tempo, tempoModerato, tempoDevnet],
+    keystore,
     maxAccounts,
     persistCredentials,
     relay,
@@ -134,6 +136,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const store = Store.create({
     chainId: defaultChain.id,
+    keystore,
     maxAccounts,
     persistCredentials,
     schema: adapter.schema,
@@ -461,6 +464,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     parameters: Adapter.authorizeAccessKey.Parameters,
     chainId: number | undefined,
   ): Promise<{
+    key?: { handle: unknown; publicKey: Hex.Hex } | undefined
     keyPair?: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
     parameters: Adapter.authorizeAccessKey.Parameters
     privateKey?: Hex.Hex | undefined
@@ -475,6 +479,23 @@ export function create(options: create.Options = {}): create.ReturnType {
         ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
         parameters: toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
         ...(prepared.privateKey ? { privateKey: prepared.privateKey } : {}),
+      }
+    }
+
+    // A configured keystore takes precedence over the adapter's
+    // `generateAccessKey` — the keystore owns the device's key capabilities.
+    if (keystore && parameters.keyType !== 'webAuthn') {
+      const prepared = await AccessKey.prepareAuthorization({
+        ...parameters,
+        chainId: chainId_,
+        keystore,
+      })
+      return {
+        key: prepared.key,
+        parameters: {
+          ...toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
+          publicKey: prepared.key!.publicKey,
+        },
       }
     }
 
@@ -538,8 +559,14 @@ export function create(options: create.Options = {}): create.ReturnType {
   }) {
     const { accessKey, account, keyAuthorization } = options
     if (!account || !keyAuthorization || !accessKey) return
-    const { keyPair, privateKey } = accessKey
-    const material = keyPair ? { keyPair } : privateKey ? { privateKey } : undefined
+    const { key, keyPair, privateKey } = accessKey
+    const material = key
+      ? { handle: key.handle, publicKey: key.publicKey }
+      : keyPair
+        ? { keyPair }
+        : privateKey
+          ? { privateKey }
+          : undefined
     if (!material) return
     store.accessKeys.add({
       account,
@@ -1821,6 +1848,25 @@ export declare namespace create {
     chains?: readonly [Chain, ...Chain[]] | undefined
     /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */
     feePayer?: Client.fromChainId.Options['feePayer']
+    /**
+     * Keystore backing locally generated access keys (e.g. Secure Enclave,
+     * WebCrypto). When set, access-key material is created via
+     * `keystore.createKey()` (taking precedence over the adapter's
+     * `generateAccessKey`) and persisted as an opaque `handle` that
+     * `keystore.toAccount()` turns back into a signing account on hydration.
+     *
+     * The keystore is about the device's key capabilities — `storage`
+     * persists provider state; `keystore` holds key material. Existing
+     * `privateKey`/`keyPair` records hydrate unchanged.
+     *
+     * @example
+     * ```ts
+     * import { webCryptoP256 } from 'accounts/keystore'
+     *
+     * const provider = Provider.create({ keystore: webCryptoP256() })
+     * ```
+     */
+    keystore?: Keystore.Keystore | undefined
     /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
     maxAccounts?: number | undefined
     /**

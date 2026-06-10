@@ -10,6 +10,7 @@ import type { StoreApi } from 'zustand'
 
 import type { OneOf } from '../internal/types.js'
 import * as ExecutionError from './ExecutionError.js'
+import type * as Keystore from './Keystore.js'
 import type * as Store from './Store.js'
 
 const status = {
@@ -60,6 +61,12 @@ export type AccessKey = {
   | {
       /** The WebCrypto key pair backing the access key. */
       keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>
+    }
+  | {
+      /** Opaque keystore handle backing the access key. Persisted verbatim; schema owned by the keystore that wrote it. */
+      handle: unknown
+      /** Public key backing the access key. */
+      publicKey: Hex.Hex
     }
 >
 
@@ -153,6 +160,8 @@ type ListQuery = {
 }
 
 type ManagerOptions = {
+  /** Keystore backing access-key records that carry an opaque `handle`. */
+  keystore?: Keystore.Keystore | undefined
   /** Zustand store containing access-key metadata. */
   state: Pick<StoreApi<Store.State>, 'getState' | 'setState'>
 }
@@ -215,8 +224,18 @@ export declare namespace createManager {
 export async function prepareAuthorization(
   options: prepareAuthorization.Options,
 ): Promise<prepareAuthorization.ReturnType> {
-  const { address, chainId, expiry, keyType, limits, privateKey, publicKey, scopes, witness } =
-    options
+  const {
+    address,
+    chainId,
+    expiry,
+    keystore,
+    keyType,
+    limits,
+    privateKey,
+    publicKey,
+    scopes,
+    witness,
+  } = options
 
   if (privateKey) {
     const type = keyType ?? 'secp256k1'
@@ -256,6 +275,20 @@ export async function prepareAuthorization(
     })
     return { keyAuthorization }
   }
+  if (keystore && keyType !== 'webAuthn') {
+    const key = await keystore.createKey(keyType ? { keyType } : {})
+    const keyAuthorization = KeyAuthorization.from({
+      address: Address.fromPublicKey(PublicKey.fromHex(key.publicKey)),
+      chainId: BigInt(chainId),
+      expiry,
+      limits,
+      scopes,
+      type: key.keyType,
+      ...(witness ? { witness } : {}),
+    })
+    return { key: { handle: key.handle, publicKey: key.publicKey }, keyAuthorization }
+  }
+
   if (keyType && keyType !== 'p256')
     throw new RpcResponse.InvalidParamsError({
       message: `\`keyType: "${keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
@@ -288,6 +321,11 @@ export declare namespace prepareAuthorization {
     chainId: bigint | number
     /** Unix timestamp when the key expires. */
     expiry: number
+    /**
+     * Keystore used to create key material when none is provided.
+     * Takes precedence over WebCrypto key-pair generation.
+     */
+    keystore?: Keystore.Keystore | undefined
     /** External key type. Defaults to `secp256k1` for external keys. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
@@ -308,6 +346,8 @@ export declare namespace prepareAuthorization {
 
   /** Prepared unsigned key authorization and optional local key material. */
   type ReturnType = {
+    /** Keystore-created key material reference. */
+    key?: { handle: unknown; publicKey: Hex.Hex } | undefined
     /** Unsigned key authorization to sign with the root account. */
     keyAuthorization: KeyAuthorization.KeyAuthorization<false>
     /** Generated WebCrypto key pair for local access keys. */
@@ -324,6 +364,7 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
   const prepared = await prepareAuthorization({
     ...parameters,
     chainId: parameters.chainId ?? chainId,
+    keystore: store.keystore,
   })
   const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
   const signature = await account.sign({ hash: digest })
@@ -334,6 +375,7 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
   add({
     account: account.address,
     authorization: keyAuthorization,
+    ...(prepared.key ? { handle: prepared.key.handle, publicKey: prepared.key.publicKey } : {}),
     ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
     ...(prepared.privateKey ? { privateKey: prepared.privateKey } : {}),
     store,
@@ -513,7 +555,7 @@ function createKeyAuthorizationManager(store: ManagerOptions) {
 
 /** Adds a signed access key authorization. */
 export function add(options: add.Options): add.ReturnType {
-  const { account, authorization, keyPair, privateKey } = options
+  const { account, authorization, handle, keyPair, privateKey, publicKey } = options
   const { store } = options
   const base = {
     address: authorization.address,
@@ -526,7 +568,13 @@ export function add(options: add.Options): add.ReturnType {
     scopes: authorization.scopes as AccessKey['scopes'],
   }
   const record = (
-    privateKey ? { ...base, privateKey } : keyPair ? { ...base, keyPair } : base
+    privateKey
+      ? { ...base, privateKey }
+      : keyPair
+        ? { ...base, keyPair }
+        : typeof handle !== 'undefined' && publicKey
+          ? { ...base, handle, publicKey }
+          : base
   ) as AccessKey
   store.state.setState((state) => ({
     accessKeys: [
@@ -551,10 +599,14 @@ export declare namespace add {
     account: Address.Address
     /** Signed key authorization for the access key. */
     authorization: KeyAuthorization.Signed
+    /** Opaque keystore handle backing the access key. Requires `publicKey`. */
+    handle?: unknown | undefined
     /** The exported private key backing the access key. */
     privateKey?: Hex.Hex | undefined
     /** The WebCrypto key pair backing the access key. */
     keyPair?: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
+    /** Public key backing a keystore-managed access key. */
+    publicKey?: Hex.Hex | undefined
     /** Reactive state store. */
     store: ManagerOptions
   }
@@ -762,6 +814,9 @@ function isScope(scope: unknown): scope is NonNullable<AccessKey['scopes']>[numb
   return true
 }
 
+/** Keystore accounts hydrated this launch, keyed by record identity. */
+const keystoreAccounts = new WeakMap<object, Promise<TempoAccount.AccessKeyAccount>>()
+
 async function hydrate(
   accessKey: AccessKey,
   store: ManagerOptions,
@@ -784,6 +839,31 @@ async function hydrate(
           access: accessKey.access,
           keyAuthorizationManager,
         }) as TempoAccount.AccessKeyAccount
+    }
+  }
+  if ('handle' in accessKey && typeof accessKey.handle !== 'undefined' && accessKey.publicKey) {
+    const { keystore } = store
+    if (!keystore) return undefined
+    const account =
+      keystoreAccounts.get(accessKey) ??
+      (async () =>
+        await keystore.toAccount(
+          {
+            handle: accessKey.handle,
+            keyType: accessKey.keyType,
+            publicKey: accessKey.publicKey!,
+          },
+          { access: accessKey.access, keyAuthorizationManager },
+        ))()
+    keystoreAccounts.set(accessKey, account)
+    try {
+      return await account
+    } catch {
+      // The backend can no longer materialize this key (e.g. hardware key
+      // gone) — treat the record as unusable so callers fall back to
+      // re-authorization. Uncached so transient failures can retry.
+      keystoreAccounts.delete(accessKey)
+      return undefined
     }
   }
   return undefined
