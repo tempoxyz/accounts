@@ -266,7 +266,7 @@ export default function App() {
           <ConnectForm chainId={chain.id} fallbackTokens={tokens} onConnect={connect} />
           {(connectReq.error || connectReq.result !== undefined) && (
             <Method error={connectReq.error} result={connectReq.result} title="wallet_connect">
-              {connectReq.pending && <ThemedText>Connecting...</ThemedText>}
+              {connectReq.pending && <ThemedText>Connecting…</ThemedText>}
             </Method>
           )}
         </Section>

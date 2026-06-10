@@ -57,7 +57,7 @@ export declare namespace secureMmkv {
     path?: string | undefined
     /** MMKV encryption key. Defaults to a key loaded from Expo SecureStore. */
     encryptionKey?: string | undefined
-    /** MMKV encryption type. @default "AES-256" when `encryptionKey` is set */
+    /** MMKV encryption type. @default "AES-256" */
     encryptionType?: Configuration['encryptionType'] | undefined
     /** MMKV process mode. */
     mode?: Configuration['mode'] | undefined

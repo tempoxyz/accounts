@@ -1,82 +1,62 @@
 import { vi } from 'vitest'
 import { beforeEach, describe, expect, test } from 'vp/test'
 
-type MmkvMock = {
-  instances: {
+const mmkv_mock = vi.hoisted(() => ({
+  instances: [] as {
     configuration: Record<string, unknown>
     store: Map<string, string>
-  }[]
-  stores: Map<string, Map<string, string>>
-}
+  }[],
+  stores: new Map<string, Map<string, string>>(),
+}))
 
-type SecureStoreMock = {
-  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: number
-  get_calls: unknown[][]
-  items: Map<string, string>
-  set_calls: unknown[][]
-}
+const secure_store_mock = vi.hoisted(() => ({
+  fail_once: false,
+  get_calls: [] as unknown[][],
+  items: new Map<string, string>(),
+  set_calls: [] as unknown[][],
+}))
 
-type Global = typeof globalThis & {
-  __tempo_mmkv_mock?: MmkvMock | undefined
-  __tempo_secure_store_mock?: SecureStoreMock | undefined
-}
+vi.mock('react-native-mmkv', () => ({
+  createMMKV(configuration: Record<string, unknown>) {
+    const id = String(configuration.id)
+    const store = mmkv_mock.stores.get(id) ?? new Map<string, string>()
+    mmkv_mock.stores.set(id, store)
+    mmkv_mock.instances.push({ configuration, store })
+    return {
+      getString: (name: string) => store.get(name),
+      remove: (name: string) => {
+        store.delete(name)
+      },
+      set: (name: string, value: string) => {
+        store.set(name, value)
+      },
+    }
+  },
+}))
 
-vi.mock('react-native-mmkv', () => {
-  const root = globalThis as Global
-  root.__tempo_mmkv_mock ??= {
-    instances: [],
-    stores: new Map<string, Map<string, string>>(),
-  }
-  return {
-    createMMKV(configuration: Record<string, unknown>) {
-      const id = String(configuration.id)
-      const store = root.__tempo_mmkv_mock!.stores.get(id) ?? new Map<string, string>()
-      root.__tempo_mmkv_mock!.stores.set(id, store)
-      root.__tempo_mmkv_mock!.instances.push({ configuration, store })
-      return {
-        getString: (name: string) => store.get(name),
-        remove: (name: string) => {
-          store.delete(name)
-        },
-        set: (name: string, value: string) => {
-          store.set(name, value)
-        },
-      }
-    },
-  }
-})
-
-vi.mock('expo-secure-store', () => {
-  const root = globalThis as Global
-  root.__tempo_secure_store_mock ??= {
-    AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 1,
-    get_calls: [],
-    items: new Map<string, string>(),
-    set_calls: [],
-  }
-  return {
-    AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY:
-      root.__tempo_secure_store_mock.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
-    getItemAsync(name: string, store: unknown) {
-      root.__tempo_secure_store_mock!.get_calls.push([name, store])
-      return Promise.resolve(root.__tempo_secure_store_mock!.items.get(name) ?? null)
-    },
-    setItemAsync(name: string, value: string, store: unknown) {
-      root.__tempo_secure_store_mock!.set_calls.push([name, value, store])
-      root.__tempo_secure_store_mock!.items.set(name, value)
-      return Promise.resolve()
-    },
-  }
-})
+vi.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 1,
+  getItemAsync(name: string, store: unknown) {
+    if (secure_store_mock.fail_once) {
+      secure_store_mock.fail_once = false
+      return Promise.reject(new Error('keychain unavailable'))
+    }
+    secure_store_mock.get_calls.push([name, store])
+    return Promise.resolve(secure_store_mock.items.get(name) ?? null)
+  },
+  setItemAsync(name: string, value: string, store: unknown) {
+    secure_store_mock.set_calls.push([name, value, store])
+    secure_store_mock.items.set(name, value)
+    return Promise.resolve()
+  },
+}))
 
 import { secureMmkv } from './secureMmkv.js'
-
-const mmkv_mock = (globalThis as Global).__tempo_mmkv_mock!
-const secure_store_mock = (globalThis as Global).__tempo_secure_store_mock!
 
 beforeEach(() => {
   mmkv_mock.instances.length = 0
   mmkv_mock.stores.clear()
+  secure_store_mock.fail_once = false
   secure_store_mock.get_calls.length = 0
   secure_store_mock.items.clear()
   secure_store_mock.set_calls.length = 0
@@ -96,7 +76,7 @@ describe('secureMmkv', () => {
 
     expect(mmkv_mock.instances[0]?.configuration).toMatchInlineSnapshot(`
       {
-        "encryptionKey": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef",
+        "encryptionKey": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYX",
         "encryptionType": "AES-256",
         "id": "tempo-secure",
       }
@@ -108,7 +88,7 @@ describe('secureMmkv', () => {
       [
         [
           "tempo.mmkvEncryptionKey",
-          "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef",
+          "AAECAwQFBgcICQoLDA0ODxAREhMUFRYX",
           {
             "keychainAccessible": 1,
           },
@@ -137,6 +117,20 @@ describe('secureMmkv', () => {
     mmkv_mock.instances[0]?.store.set('tempo.store', '{')
 
     expect(await storage.getItem('store')).toMatchInlineSnapshot(`null`)
+  })
+
+  test('behavior: retries MMKV creation after an encryption key failure', async () => {
+    const storage = secureMmkv()
+    secure_store_mock.fail_once = true
+
+    await expect(storage.getItem('store')).rejects.toThrow('keychain unavailable')
+
+    await storage.setItem('store', { ok: true })
+    expect(await storage.getItem('store')).toMatchInlineSnapshot(`
+      {
+        "ok": true,
+      }
+    `)
   })
 
   test('behavior: forwards custom MMKV options', async () => {

@@ -1,43 +1,26 @@
 import { vi } from 'vitest'
 import { beforeEach, describe, expect, test } from 'vp/test'
 
-type Mock = {
-  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: number
-  get_calls: unknown[][]
-  items: Map<string, string>
-  set_calls: unknown[][]
-}
+const mock = vi.hoisted(() => ({
+  get_calls: [] as unknown[][],
+  items: new Map<string, string>(),
+  set_calls: [] as unknown[][],
+}))
 
-type Global = typeof globalThis & {
-  __tempo_secure_store_mock?: Mock | undefined
-}
-
-vi.mock('expo-secure-store', () => {
-  const root = globalThis as Global
-  root.__tempo_secure_store_mock ??= {
-    AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 1,
-    get_calls: [],
-    items: new Map<string, string>(),
-    set_calls: [],
-  }
-  return {
-    AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY:
-      root.__tempo_secure_store_mock.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
-    getItemAsync(name: string, store: unknown) {
-      root.__tempo_secure_store_mock!.get_calls.push([name, store])
-      return Promise.resolve(root.__tempo_secure_store_mock!.items.get(name) ?? null)
-    },
-    setItemAsync(name: string, value: string, store: unknown) {
-      root.__tempo_secure_store_mock!.set_calls.push([name, value, store])
-      root.__tempo_secure_store_mock!.items.set(name, value)
-      return Promise.resolve()
-    },
-  }
-})
+vi.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 1,
+  getItemAsync(name: string, store: unknown) {
+    mock.get_calls.push([name, store])
+    return Promise.resolve(mock.items.get(name) ?? null)
+  },
+  setItemAsync(name: string, value: string, store: unknown) {
+    mock.set_calls.push([name, value, store])
+    mock.items.set(name, value)
+    return Promise.resolve()
+  },
+}))
 
 import { getOrCreateMmkvEncryptionKey } from './expoSecureStore.js'
-
-const mock = (globalThis as Global).__tempo_secure_store_mock!
 
 beforeEach(() => {
   mock.get_calls.length = 0
@@ -61,7 +44,7 @@ describe('getOrCreateMmkvEncryptionKey', () => {
 
   test('behavior: creates and stores a key when one does not exist', async () => {
     await expect(getOrCreateMmkvEncryptionKey()).resolves.toMatchInlineSnapshot(
-      `"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"`,
+      `"AAECAwQFBgcICQoLDA0ODxAREhMUFRYX"`,
     )
     expect(mock.get_calls).toMatchInlineSnapshot(`
       [
@@ -77,7 +60,7 @@ describe('getOrCreateMmkvEncryptionKey', () => {
       [
         [
           "tempo.mmkvEncryptionKey",
-          "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef",
+          "AAECAwQFBgcICQoLDA0ODxAREhMUFRYX",
           {
             "keychainAccessible": 1,
           },
