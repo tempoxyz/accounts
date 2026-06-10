@@ -53,9 +53,16 @@ describe.skipIf(!tag.startsWith('sha-'))('relay multisig', () => {
       feePayerSignature: null,
       gas: typeof gas === 'bigint' ? gas + 100_000n : gas,
     }
-    const signature_1 = await signApproval({ account, request, signer: owner_1 })
-    const signature_2 = await signApproval({ account, request, signer: owner_2 })
-    const id = getOperationId({ account, request })
+    const envelope = transactionEnvelope(request)
+    const payload = TxEnvelopeTempo.getSignPayload(envelope)
+    const genesisConfigId = MultisigConfig.toId(account.config)
+    const id = MultisigConfig.getSignPayload({
+      account: account.address,
+      genesisConfigId,
+      payload,
+    })
+    const signature_1 = await signApproval({ digest: id, signer: owner_1 })
+    const signature_2 = await signApproval({ digest: id, signer: owner_2 })
 
     const pending = await client.request({
       method: 'eth_sendRawTransactionSync',
@@ -84,13 +91,8 @@ describe.skipIf(!tag.startsWith('sha-'))('relay multisig', () => {
   })
 })
 
-async function signApproval(options: {
-  account: ReturnType<typeof Account.fromMultisig>
-  request: Record<string, unknown>
-  signer: typeof owner_1
-}) {
-  const { signer } = options
-  const digest = getOperationId(options)
+async function signApproval(options: { digest: `0x${string}`; signer: typeof owner_1 }) {
+  const { digest, signer } = options
   return SignatureEnvelope.serialize(SignatureEnvelope.from(await signer.sign({ hash: digest })))
 }
 
@@ -117,18 +119,6 @@ function serializeTransaction(options: {
       init: account.config,
       signatures,
     }),
-  })
-}
-
-function getOperationId(options: {
-  account: ReturnType<typeof Account.fromMultisig>
-  request: Record<string, unknown>
-}) {
-  const { account, request } = options
-  return MultisigConfig.getSignPayload({
-    account: account.address,
-    genesisConfigId: MultisigConfig.toId(account.config),
-    payload: TxEnvelopeTempo.getSignPayload(transactionEnvelope(request)),
   })
 }
 
