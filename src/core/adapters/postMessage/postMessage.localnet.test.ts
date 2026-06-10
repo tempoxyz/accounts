@@ -228,6 +228,29 @@ describe('create', () => {
     expect(wallet.requests()[0]?.method).toBe('wallet_connect')
   })
 
+  test('behavior: tempoWallet bakes theme onto the wallet page URL', async () => {
+    const wallet = createWallet()
+    const provider = Provider.create({
+      adapter: tempoWallet({
+        target: wallet.target,
+        theme: { accent: 'blue', radius: 'medium', scheme: 'dark' },
+      }),
+      chains: [chain],
+      storage: Storage.memory(),
+    })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+
+    expect(wallet.opened()).toMatchInlineSnapshot(`
+      [
+        "https://wallet.tempo.xyz/post-message?accent=blue&radius=medium&scheme=dark",
+      ]
+    `)
+  })
+
   test('behavior: accepts explicit postMessage adapter', async () => {
     const wallet = createWallet()
     const provider = Provider.create({
