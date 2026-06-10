@@ -350,4 +350,3 @@ export declare namespace local {
     rdns?: string | undefined
   }
 }
-
