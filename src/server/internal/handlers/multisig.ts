@@ -764,7 +764,12 @@ async function serializeFinal(options: {
     signatures: sorted,
     ...(options.init ? { init: options.init } : {}),
   })
-  return TxEnvelopeTempo.serialize(envelope, { feePayerSignature: undefined, signature })
+  return TxEnvelopeTempo.serialize(envelope, {
+    ...('feePayerSignature' in transaction
+      ? { feePayerSignature: transaction.feePayerSignature as never }
+      : {}),
+    signature,
+  })
 }
 
 function mergeOperation(
