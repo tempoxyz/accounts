@@ -48,12 +48,35 @@ describe.skipIf(!tag.startsWith('sha-'))('relay multisig', () => {
       value: 0n,
     } as never)
     const { account: _account, gas, ...filled } = transaction as Record<string, unknown>
-    const request = {
+    const request: Record<string, unknown> = {
       ...filled,
       feePayerSignature: null,
       gas: typeof gas === 'bigint' ? gas + 100_000n : gas,
     }
-    const envelope = transactionEnvelope(request)
+    const {
+      _capabilities,
+      account: _account_request,
+      data,
+      from: _from,
+      multisig: _multisig,
+      signature: _signature,
+      signatures: _signatures,
+      to,
+      value,
+      ...transaction_request
+    } = request
+    const calls = (() => {
+      if ('calls' in transaction_request) return transaction_request.calls
+      if (typeof to !== 'string') return undefined
+      return [
+        {
+          ...(typeof data === 'string' ? { data } : {}),
+          to,
+          value: typeof value === 'bigint' ? value : 0n,
+        },
+      ]
+    })()
+    const envelope = TxEnvelopeTempo.from({ ...transaction_request, calls } as never)
     const payload = TxEnvelopeTempo.getSignPayload(envelope)
     const genesisConfigId = MultisigConfig.toId(account.config)
     const id = MultisigConfig.getSignPayload({
@@ -66,7 +89,7 @@ describe.skipIf(!tag.startsWith('sha-'))('relay multisig', () => {
 
     const pending = await client.request({
       method: 'eth_sendRawTransactionSync',
-      params: [serializeTransaction({ account, request, signatures: [signature_1] })],
+      params: [serializeTransaction({ account, envelope, signatures: [signature_1] })],
     } as never)
 
     expect(pending).toMatchInlineSnapshot(`"${id}"`)
@@ -76,7 +99,7 @@ describe.skipIf(!tag.startsWith('sha-'))('relay multisig', () => {
 
     const receipt = (await client.request({
       method: 'eth_sendRawTransactionSync',
-      params: [serializeTransaction({ account, request, signatures: [signature_2] })],
+      params: [serializeTransaction({ account, envelope, signatures: [signature_2] })],
     } as never)) as { status?: string | undefined; transactionHash?: `0x${string}` | undefined }
     const hash = receipt.transactionHash
     if (!hash) throw new Error('Expected multisig transaction hash.')
@@ -98,11 +121,10 @@ async function signApproval(options: { digest: `0x${string}`; signer: typeof own
 
 function serializeTransaction(options: {
   account: ReturnType<typeof Account.fromMultisig>
-  request: Record<string, unknown>
+  envelope: ReturnType<typeof TxEnvelopeTempo.from>
   signatures: readonly `0x${string}`[]
 }) {
-  const { account, request } = options
-  const envelope = transactionEnvelope(request)
+  const { account, envelope } = options
   const payload = TxEnvelopeTempo.getSignPayload(envelope)
   const genesisConfigId = MultisigConfig.toId(account.config)
   const signatures = SignatureEnvelope.sortMultisigApprovals({
@@ -120,31 +142,4 @@ function serializeTransaction(options: {
       signatures,
     }),
   })
-}
-
-function transactionEnvelope(request: Record<string, unknown>) {
-  const {
-    _capabilities,
-    account: _account,
-    data,
-    from: _from,
-    multisig: _multisig,
-    signature: _signature,
-    signatures: _signatures,
-    to,
-    value,
-    ...transaction
-  } = request
-  const calls = (() => {
-    if ('calls' in transaction) return transaction.calls
-    if (typeof to !== 'string') return undefined
-    return [
-      {
-        ...(typeof data === 'string' ? { data } : {}),
-        to,
-        value: typeof value === 'bigint' ? value : 0n,
-      },
-    ]
-  })()
-  return TxEnvelopeTempo.from({ ...transaction, calls } as never)
 }
