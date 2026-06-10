@@ -1,7 +1,7 @@
 import { Provider } from 'accounts'
 import { mobileWebAuth, tempoWallet } from 'accounts/mobileWebAuth'
-import { secureStorage } from 'accounts/react-native/expo-secure-store'
 import { openAuthSession } from 'accounts/react-native/expo-web-browser'
+import { secureMmkv } from 'accounts/react-native/secure-mmkv'
 import { StatusBar } from 'expo-status-bar'
 import { Hex, Json } from 'ox'
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
@@ -63,7 +63,7 @@ const provider = Provider.create({
       },
     ],
   }),
-  storage: secureStorage(),
+  storage: secureMmkv(),
 })
 
 const text = (scheme: ColorSchemeName) => (scheme === 'dark' ? 'white' : 'black')

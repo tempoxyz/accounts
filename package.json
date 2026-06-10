@@ -51,6 +51,8 @@
     "prool": "catalog:",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-native-mmkv": "^4.3.1",
+    "react-native-nitro-modules": "^0.35.9",
     "simple-git-hooks": "^2.13.1",
     "testcontainers": "^11.14.0",
     "tsx": "^4.21.0",
@@ -90,6 +92,8 @@
     "expo-secure-store": "^55.0.12",
     "expo-web-browser": "^55.0.13",
     "react": ">=18",
+    "react-native-mmkv": "^4.3.1",
+    "react-native-nitro-modules": "^0.35.9",
     "viem": ">=2.50.4",
     "wagmi": ">=0.0.0"
   },
@@ -110,6 +114,12 @@
       "optional": true
     },
     "expo-secure-store": {
+      "optional": true
+    },
+    "react-native-mmkv": {
+      "optional": true
+    },
+    "react-native-nitro-modules": {
       "optional": true
     },
     "@react-native-async-storage/async-storage": {
@@ -193,6 +203,12 @@
       "src": "./src/react-native/expoSecureStore.ts",
       "react-native": "./dist/react-native/expoSecureStore.js",
       "default": "./dist/react-native/expoSecureStore.js"
+    },
+    "./react-native/secure-mmkv": {
+      "types": "./dist/react-native/secureMmkv.d.ts",
+      "src": "./src/react-native/secureMmkv.ts",
+      "react-native": "./dist/react-native/secureMmkv.js",
+      "default": "./dist/react-native/secureMmkv.js"
     }
   }
 }
