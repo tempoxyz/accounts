@@ -42,6 +42,8 @@ export function cli(options: cli.Options): Adapter.Adapter {
       } = options
       const { account, authorizeAccessKey, method } = request
 
+      rejectUnsupportedAuthorizeAccessKey(authorizeAccessKey)
+
       const generatedAccessKey =
         authorizeAccessKey && !authorizeAccessKey.publicKey && !authorizeAccessKey.address
           ? createAccessKey({ keyType: authorizeAccessKey.keyType })
@@ -321,6 +323,20 @@ async function post<
 
 function unsupported(message: string) {
   return new core_Provider.UnsupportedMethodError({ message })
+}
+
+function rejectUnsupportedAuthorizeAccessKey(
+  authorizeAccessKey: Adapter.authorizeAccessKey.Parameters | undefined,
+) {
+  if (
+    authorizeAccessKey?.account ||
+    typeof authorizeAccessKey?.isAdmin !== 'undefined' ||
+    authorizeAccessKey?.witness
+  )
+    throw new RpcResponse.InvalidParamsError({
+      message:
+        '`authorizeAccessKey.account`, `authorizeAccessKey.isAdmin`, and `authorizeAccessKey.witness` are not supported by the CLI adapter.',
+    })
 }
 
 function createAccessKey(
