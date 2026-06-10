@@ -1,5 +1,5 @@
 import { verify } from 'hono/jwt'
-import { Hex, Json, Provider as core_Provider, WebCryptoP256 } from 'ox'
+import { Hex, Json, Provider as core_Provider, Secp256k1, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { type Address, createClient, createWalletClient, custom, parseUnits } from 'viem'
 import {
@@ -2411,6 +2411,81 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       })
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
       await expect(provider2.getAccessKeyStatus()).resolves.toMatchInlineSnapshot(`"published"`)
+    })
+
+    test('behavior: json-rpc wallets provision through the keystore', async () => {
+      const root = TempoAccount.fromSecp256k1(Secp256k1.randomPrivateKey())
+      const forwarded: {
+        address: Hex.Hex
+        chainId: Hex.Hex
+        expiry: Hex.Hex
+        keyType: 'p256'
+        privateKey?: unknown
+        publicKey?: Hex.Hex
+      }[] = []
+
+      // Wallet-host stand-in: the dapp-side provider holds no root account and
+      // forwards `wallet_authorizeAccessKey` over a JSON-RPC transport.
+      const jsonRpcAdapter = Adapter.define({ name: 'JSON-RPC Test' }, () => ({
+        actions: {
+          createAccount: async () => ({ accounts: [{ address: root.address }] }),
+          loadAccounts: async () => ({ accounts: [{ address: root.address }] }),
+        },
+        getAccount: () => ({
+          account: { address: root.address, type: 'json-rpc' as const },
+          transport: custom({
+            async request({ method, params }: { method: string; params?: unknown[] }) {
+              if (method !== 'wallet_authorizeAccessKey')
+                throw new Error(`unexpected wallet method: ${method}`)
+              const [parameters] = params as [(typeof forwarded)[number]]
+              forwarded.push(parameters)
+              const signed = await root.signKeyAuthorization(
+                { address: parameters.address, type: parameters.keyType },
+                { chainId: BigInt(parameters.chainId), expiry: Number(parameters.expiry) },
+              )
+              return { keyAuthorization: KeyAuthorization.toRpc(signed), rootAddress: root.address }
+            },
+          }),
+        }),
+      }))
+
+      const provider = Provider.create({
+        adapter: jsonRpcAdapter,
+        chains: [chain],
+        keystore: webCryptoP256(),
+        storage: jsonStorage(),
+      })
+      await provider.request({ method: 'wallet_connect' })
+      await fund(root.address)
+
+      const result = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      expect(result.rootAddress).toBe(root.address)
+
+      // The wallet received only public key material.
+      expect(forwarded).toHaveLength(1)
+      expect(forwarded[0]!.publicKey).toMatch(/^0x[0-9a-f]+$/i)
+      expect(forwarded[0]!.privateKey).toBeUndefined()
+
+      const record = provider.store.getState().accessKeys[0]!
+      expect(record.access).toBe(root.address)
+      expect(record.keyType).toBe('p256')
+      expect(record.handle).toMatchObject({ kind: 'webcrypto-p256' })
+      expect(record.publicKey).toBe(forwarded[0]!.publicKey)
+      expect(record.privateKey).toBeUndefined()
+      expect(record.keyPair).toBeUndefined()
+
+      // The keystore-backed key signs without round-tripping the wallet.
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall], from: root.address }],
+      })
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+      await expect(
+        provider.getAccessKeyStatus({ address: root.address }),
+      ).resolves.toMatchInlineSnapshot(`"published"`)
     })
   })
 

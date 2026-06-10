@@ -119,7 +119,7 @@ export type ReusePolicy = {
 }
 
 /** Access key authorization parameters plus SDK-only reuse policy. */
-export type ReusableAuthorization = Omit<prepareAuthorization.Options, 'chainId'> & {
+export type ReusableAuthorization = Omit<prepareAuthorization.Options, 'chainId' | 'keystore'> & {
   /** Chain ID the key authorization is scoped to. */
   chainId?: bigint | number | undefined
   /** SDK-only reuse policy. Not sent over RPC. */
@@ -392,7 +392,7 @@ export declare namespace authorize {
     /** Default chain ID for the authorization when `parameters.chainId` is not set. */
     chainId: bigint | number
     /** Access key authorization parameters. */
-    parameters: Omit<prepareAuthorization.Options, 'chainId'> & {
+    parameters: Omit<prepareAuthorization.Options, 'chainId' | 'keystore'> & {
       /** Chain ID the key authorization is scoped to. */
       chainId?: bigint | number | undefined
     }
