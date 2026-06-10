@@ -5,10 +5,9 @@ import { Account, Transaction } from 'viem/tempo'
 import { tempoDevnet } from 'viem/tempo/chains'
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vp/test'
 
-import { createServer, type Server } from '../../test/utils.js'
-import * as Handler from './Handler.js'
-import * as MultisigInternal from './internal/handlers/multisig.js'
-import * as Multisig from './Multisig.js'
+import { createServer, type Server } from '../../../../test/utils.js'
+import * as Handler from '../../Handler.js'
+import * as Multisig from './multisig.js'
 
 const privateKey_1 = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
 const privateKey_2 = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
@@ -327,7 +326,7 @@ describe('handleRawTransaction', () => {
     )
 
     await expect(
-      MultisigInternal.handleRawTransaction({
+      Multisig.handleRawTransaction({
         getClient: (() => undefined) as never,
         method: 'eth_sendRawTransaction',
         request: { params: [serialized] },
@@ -360,7 +359,7 @@ describe('handleRawTransaction', () => {
     } as never)
     let broadcastMethod: string | undefined
 
-    const hash = await MultisigInternal.handleRawTransaction({
+    const hash = await Multisig.handleRawTransaction({
       finalize: 'submitted',
       getClient: (() => ({
         request: async ({ method, params }: { method: string; params: unknown }) => {
@@ -413,13 +412,13 @@ describe('config resolution', () => {
       await account.signTransaction({ ...transaction, signatures: [signature_2] } as never),
     )
 
-    const id = (await MultisigInternal.handleRawTransaction({
+    const id = (await Multisig.handleRawTransaction({
       getClient: (() => undefined) as never,
       method: 'eth_sendRawTransaction',
       request: { params: [first] },
       store,
     })) as `0x${string}`
-    const hash = await MultisigInternal.handleRawTransaction({
+    const hash = await Multisig.handleRawTransaction({
       getClient: (() => ({
         request: async ({ params }: { params: unknown }) => hashRawTransaction(params),
       })) as never,
@@ -461,7 +460,7 @@ describe('config resolution', () => {
     } as never)
 
     await expect(
-      MultisigInternal.handleRawTransaction({
+      Multisig.handleRawTransaction({
         getClient: (() => undefined) as never,
         method: 'eth_sendRawTransaction',
         request: { params: [serialized] },
@@ -505,7 +504,7 @@ describe('config resolution', () => {
     )
     let submitted: `0x${string}` | undefined
 
-    const hash = await MultisigInternal.handleRawTransaction({
+    const hash = await Multisig.handleRawTransaction({
       getClient: (() => ({
         request: async ({ params }: { params: unknown }) => {
           submitted = Array.isArray(params) ? (params[0] as `0x${string}`) : undefined
