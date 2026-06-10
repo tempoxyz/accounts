@@ -538,16 +538,19 @@ describe('handleRawTransaction with sponsor', () => {
       string,
       unknown
     >
+    const signature = transaction_broadcasted.signature as { init?: unknown; type?: string }
     expect({
       feePayerSignature: Boolean(transaction_broadcasted.feePayerSignature),
       feeToken: (transaction_broadcasted.feeToken as string).toLowerCase(),
       hash,
-      signature: (transaction_broadcasted.signature as { type?: string }).type,
+      init: Boolean(signature.init),
+      signature: signature.type,
     }).toMatchInlineSnapshot(`
       {
         "feePayerSignature": true,
         "feeToken": "0x20c0000000000000000000000000000000000000",
         "hash": "${hash}",
+        "init": true,
         "signature": "multisig",
       }
     `)

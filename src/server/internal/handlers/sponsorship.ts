@@ -2,7 +2,6 @@ import { RpcResponse, Signature } from 'ox'
 import { TxEnvelopeTempo } from 'ox/tempo'
 import type { Address, Client } from 'viem'
 import type { LocalAccount } from 'viem/accounts'
-import { signTransaction } from 'viem/actions'
 import { Transaction } from 'viem/tempo'
 
 import * as Utils from './utils.js'
@@ -146,14 +145,16 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     })
 
   const client = getClient(transaction.chainId)
-  // Viem signs with fee payer and preserves sender signature already present on request.
-  const serializedTransaction = toSerializedTransaction(
-    await signTransaction(client, {
-      ...transaction_request,
-      account,
-      feePayer: account,
-    } as never),
+  const envelope = TxEnvelopeTempo.from(transaction_request as never)
+  const feePayerSignature = Signature.from(
+    await account.sign({
+      hash: TxEnvelopeTempo.getFeePayerSignPayload(envelope, { sender }),
+    }),
   )
+  const serializedTransaction = TxEnvelopeTempo.serialize(envelope, {
+    feePayerSignature,
+    signature: transaction.signature,
+  })
 
   // Raw-sign requests stop after fee-payer signature is added; send methods broadcast it.
   if (method === 'eth_signRawTransaction') return serializedTransaction
@@ -184,11 +185,4 @@ export declare namespace handleRawTransaction {
     /** Optional sponsorship approval callback. */
     validate?: ((request: Transaction.TransactionRequest) => boolean | Promise<boolean>) | undefined
   }
-}
-
-function toSerializedTransaction(value: unknown) {
-  if (typeof value === 'string') return value
-  if (value && typeof value === 'object' && 'raw' in value && typeof value.raw === 'string')
-    return value.raw
-  throw new Error('Expected a serialized transaction result.')
 }
