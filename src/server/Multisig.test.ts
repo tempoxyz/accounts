@@ -223,8 +223,9 @@ describe('Handler.relay multisig', () => {
       status: 'submitted',
       submittedHash: hash,
     })
-    await expect(Multisig.listStatuses({ account: account.address, store })).resolves
-      .toMatchInlineSnapshot(`[]`)
+    await expect(
+      Multisig.listStatuses({ account: account.address, store }),
+    ).resolves.toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: broadcasts immediately when one approval meets threshold', async () => {
