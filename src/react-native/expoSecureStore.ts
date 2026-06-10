@@ -1,35 +1,37 @@
-import { Json } from 'ox'
+import * as SecureStore from 'expo-secure-store'
 
-import * as Storage from '../core/Storage.js'
+const key_name = 'tempo.mmkvEncryptionKey'
+const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 
-/** Creates a storage adapter backed by `expo-secure-store`. */
-export function secureStorage(options: secureStorage.Options = {}): Storage.Storage {
-  return Storage.from(
-    {
-      async getItem(name) {
-        const { getItemAsync } = await import('expo-secure-store')
-        const raw = await getItemAsync(name)
-        if (raw === null) return null
-        try {
-          return Json.parse(raw)
-        } catch {
-          return null
-        }
-      },
-      async setItem(name, value) {
-        const { setItemAsync } = await import('expo-secure-store')
-        await setItemAsync(name, Json.stringify(value))
-      },
-      async removeItem(name) {
-        const { deleteItemAsync } = await import('expo-secure-store')
-        await deleteItemAsync(name)
-      },
-    },
-    options,
-  )
+/** Loads or creates the key used to encrypt an MMKV-backed SDK storage instance. */
+export async function getOrCreateMmkvEncryptionKey(
+  options: getOrCreateMmkvEncryptionKey.Options = {},
+): Promise<string> {
+  const name = options.name ?? key_name
+  const store = options.store ?? {
+    keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+  }
+  const existing = await SecureStore.getItemAsync(name, store)
+  if (existing) return existing
+  const key = createKey()
+  await SecureStore.setItemAsync(name, key, store)
+  return key
 }
 
-export declare namespace secureStorage {
-  /** Options for `secureStorage`. */
-  type Options = Storage.from.Options
+export declare namespace getOrCreateMmkvEncryptionKey {
+  /** Options for `getOrCreateMmkvEncryptionKey`. */
+  type Options = {
+    /** SecureStore item name. @default "tempo.mmkvEncryptionKey" */
+    name?: string | undefined
+    /** SecureStore options used for reading and writing the key. */
+    store?: SecureStore.SecureStoreOptions | undefined
+  }
+}
+
+function createKey(): string {
+  const bytes = new Uint8Array(32)
+  globalThis.crypto.getRandomValues(bytes)
+  let out = ''
+  for (let i = 0; i < bytes.length; i++) out += charset[bytes[i]! % charset.length]
+  return out
 }
