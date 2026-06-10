@@ -21,7 +21,7 @@ const transferCall = Actions.token.transfer.call({
   amount: parseUnits('1', 6),
 })
 
-const hosts: ReturnType<typeof createHost>[] = []
+const hosts: { close: (cause?: Error) => Promise<void> }[] = []
 
 afterEach(async () => {
   vi.unstubAllGlobals()
@@ -501,5 +501,253 @@ describe('create', () => {
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       '[Provider.UserRejectedRequestError: The user rejected the request.]',
     )
+  })
+})
+
+describe('mount', () => {
+  const consumerOrigin = 'https://app.example'
+  const walletOrigin = 'https://wallet.tempo.xyz'
+
+  type RealmListener = (event: { data: unknown; origin: string }) => void
+
+  function realm() {
+    const listeners = new Set<RealmListener>()
+    return {
+      addEventListener: (_type: string, listener: RealmListener) => void listeners.add(listener),
+      deliver(data: unknown, origin: string) {
+        for (const listener of [...listeners]) listener({ data, origin })
+      },
+      removeEventListener: (_type: string, listener: RealmListener) =>
+        void listeners.delete(listener),
+    }
+  }
+
+  /**
+   * Fakes the browser side of a mount: a consumer realm installed as the
+   * global `window` (with `window.open` minting a fresh in-process wallet
+   * window per call) and a `document` stub for `Mount.popup()`'s overlay.
+   */
+  function installBrowser() {
+    const consumerRealm = realm()
+    const opened: string[] = []
+    const window_ = Object.assign(consumerRealm, {
+      innerWidth: 1024,
+      location: { origin: consumerOrigin },
+      open: (url: string) => {
+        opened.push(url)
+        return walletWindow(consumerRealm).handle
+      },
+      screenX: 0,
+      screenY: 0,
+    })
+    vi.stubGlobal('window', window_)
+    vi.stubGlobal('document', fakeDocument())
+    return { consumerRealm, opened }
+  }
+
+  /** Minimal DOM for `Mount.popup()`'s overlay. */
+  function fakeDocument() {
+    const element = () => ({
+      addEventListener() {},
+      appendChild() {},
+      remove() {},
+      style: {},
+      textContent: '',
+    })
+    return { body: element(), createElement: () => element() }
+  }
+
+  /**
+   * In-process wallet window: a wata host on its own realm, wired so frames
+   * cross between realms stamped with the sender's origin.
+   */
+  function walletWindow(consumerRealm: ReturnType<typeof realm>, wire = wireWallet) {
+    const walletRealm = realm()
+    const handle = {
+      addEventListener() {},
+      closed: false,
+      close() {
+        this.closed = true
+      },
+      focus() {},
+      postMessage: (data: unknown) => walletRealm.deliver(data, consumerOrigin),
+    }
+    const opener = {
+      addEventListener() {},
+      postMessage: (data: unknown) => consumerRealm.deliver(data, walletOrigin),
+    }
+    const host = createWalletHost(walletRealm, opener)
+    hosts.push(host)
+    wire(host)
+    return { handle, host }
+  }
+
+  function createWalletHost(
+    walletRealm: ReturnType<typeof realm>,
+    opener: { addEventListener: () => void; postMessage: (data: unknown) => void },
+  ) {
+    return HostWata.create({
+      transports: [
+        hostPostMessage({
+          source: walletRealm as never,
+          target: () => opener as unknown as Window,
+          targetOrigin: consumerOrigin,
+        }),
+      ],
+    })
+  }
+
+  type WalletHost = ReturnType<typeof createWalletHost>
+
+  /** Answers wallet RPC like the live endpoint, plus dialog notifications. */
+  function wireWallet(host: WalletHost) {
+    const live: { reject: (error: { code: number; message: string }) => Promise<void> }[] = []
+    host.on('request', async (event) => {
+      live.push(event)
+      if (event.method === 'wallet_connect') {
+        await event.respond({ accounts: [{ address: root.address, capabilities: {} }] })
+        return
+      }
+      if (event.method === 'personal_sign') {
+        const [data] = z.decode(Rpc.personal_sign.schema.params!, event.params as never)
+        await event.respond(await root.signMessage({ message: { raw: data } }))
+      }
+      // Other methods stay pending (e.g. awaiting a dialog_cancel).
+    })
+    host.on('notification', (event) => {
+      if (event.method !== 'dialog_cancel') return
+      for (const pending of live.splice(0))
+        void pending.reject({ code: 4001, message: 'User rejected the request.' }).catch(() => {})
+    })
+  }
+
+  function scriptedMount(
+    events: string[],
+    consumerRealm: ReturnType<typeof realm>,
+    wire = wireWallet,
+  ) {
+    let dismiss: (() => void) | undefined
+    const factory = Object.assign(
+      (parameters: { host: string; onDismiss: () => void }) => {
+        dismiss = parameters.onDismiss
+        events.push(`mount:${parameters.host}`)
+        const window_wallet = walletWindow(consumerRealm, wire)
+        return {
+          close: () => void events.push('close'),
+          destroy: () => void events.push('destroy'),
+          hide: () => void events.push('hide'),
+          mode: 'iframe' as const,
+          show: () => void events.push('show'),
+          target: () => {
+            events.push('target')
+            return window_wallet.handle as unknown as Window
+          },
+        }
+      },
+      { mode: 'iframe' as const },
+    )
+    return { dismiss: () => dismiss?.(), factory }
+  }
+
+  test('behavior: mounts eagerly and surfaces only while requests are pending', async () => {
+    const { consumerRealm } = installBrowser()
+    const events: string[] = []
+    const scripted = scriptedMount(events, consumerRealm)
+
+    const provider = Provider.create({
+      adapter: postMessage({
+        host: `${walletOrigin}/post-message`,
+        mount: scripted.factory,
+        name: 'Accounts Web Test',
+        rdns: 'xyz.tempo.accounts.playground',
+      }),
+      chains: [chain],
+      storage: Storage.memory(),
+    })
+
+    // Eager: the wallet page is mounted and the session handshake started
+    // before any request, but nothing is shown.
+    await vi.waitFor(() => expect(events).toContain('target'))
+    expect(events).not.toContain('show')
+    expect(events[0]).toMatchInlineSnapshot(
+      `"mount:https://wallet.tempo.xyz/post-message?origin=https%3A%2F%2Fapp.example&mode=iframe"`,
+    )
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    expect(events.filter((event) => event === 'show')).toHaveLength(1)
+    await vi.waitFor(() => expect(events.at(-1)).toBe('hide'))
+
+    await provider.request({
+      method: 'personal_sign',
+      params: [Hex.fromString('hello'), root.address],
+    })
+    expect(events.filter((event) => event === 'show')).toHaveLength(2)
+    await vi.waitFor(() => expect(events.at(-1)).toBe('hide'))
+    // One mount, one session for the provider's lifetime.
+    expect(events.filter((event) => event.startsWith('mount:'))).toHaveLength(1)
+    expect(events.filter((event) => event === 'target')).toHaveLength(1)
+  })
+
+  test('behavior: dismissing the mount cancels the in-flight request', async () => {
+    const { consumerRealm } = installBrowser()
+    const events: string[] = []
+    const scripted = scriptedMount(events, consumerRealm)
+
+    const provider = Provider.create({
+      adapter: postMessage({
+        host: `${walletOrigin}/post-message`,
+        mount: scripted.factory,
+        name: 'Accounts Web Test',
+        rdns: 'xyz.tempo.accounts.playground',
+      }),
+      chains: [chain],
+      storage: Storage.memory(),
+    })
+
+    // wallet_deposit stays pending wallet-side until cancelled.
+    const denied = provider.request({
+      method: 'wallet_deposit',
+      params: [{ amount: '25', token: 'USDC' }],
+    })
+    await vi.waitFor(() => expect(events).toContain('show'))
+    await vi.waitFor(() => expect(events).toContain('target'))
+
+    scripted.dismiss()
+    await expect(denied).rejects.toMatchObject({ code: 4001 })
+    await vi.waitFor(() => expect(events.at(-1)).toBe('hide'))
+  })
+
+  test('behavior: switch notification remounts in a popup and replays the request', async () => {
+    const { consumerRealm, opened } = installBrowser()
+    const events: string[] = []
+    // The iframe wallet asks to continue in a popup instead of answering.
+    const scripted = scriptedMount(events, consumerRealm, (host) =>
+      host.on('request', () => void host.notify({ method: 'dialog_switchMode', params: [] })),
+    )
+
+    const provider = Provider.create({
+      adapter: postMessage({
+        host: `${walletOrigin}/post-message`,
+        mount: scripted.factory,
+        name: 'Accounts Web Test',
+        rdns: 'xyz.tempo.accounts.playground',
+      }),
+      chains: [chain],
+      storage: Storage.memory(),
+    })
+
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+
+    expect(result.accounts[0]!.address).toBe(root.address)
+    // The iframe mount was destroyed and the popup (window.open) answered.
+    expect(events).toContain('destroy')
+    expect(opened).toHaveLength(1)
+    expect(opened[0]).toContain('mode=popup')
   })
 })

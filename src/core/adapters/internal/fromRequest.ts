@@ -16,7 +16,7 @@ import * as Rpc from '../../zod/rpc.js'
  * `request`.
  */
 export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
-  const { close, name, rdns, request: requestRemote } = options
+  const { cleanup, close, name, rdns, request: requestRemote } = options
 
   return Adapter.define({ name, rdns }, ({ getAccount, store }) => {
     function generateAccessKey(
@@ -107,7 +107,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
           })) as Rpc.wallet_withdrawZone.Encoded['returns']
         },
       },
-      ...(close ? { cleanup: () => void close() } : {}),
+      ...(cleanup ? { cleanup } : close ? { cleanup: () => void close() } : {}),
       generateAccessKey,
       getAccount(parameters = {}) {
         return {
@@ -125,6 +125,11 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
 export declare namespace fromRequest {
   /** Options for {@link fromRequest}. */
   export type Options = {
+    /**
+     * Tears down adapter-owned resources (sessions, mounted UI) when the
+     * provider discards the adapter instance. @default `close`, when set.
+     */
+    cleanup?: (() => void) | undefined
     /**
      * Tears down the adapter's wallet session. Wired to the `disconnect`
      * action and instance cleanup; never forwarded to the remote wallet.

@@ -3,54 +3,128 @@ import { PostMessage, Transport, Wata, postMessage as core_postMessage } from 'w
 
 import type * as Adapter from '../../Adapter.js'
 import { fromRequest } from '../internal/fromRequest.js'
+import * as Mount from './mount.js'
 
 /**
  * Creates a postMessage adapter that forwards wallet RPC through a Wata
  * postMessage session.
  *
- * One provider holds one session to one wallet window. The wallet page (a
- * centered popup by default) mounts on the first request and stays bound to
- * the session: sequential requests reuse the open window, navigating it
- * from one approval to the next. Closing the window rejects the in-flight
- * request; the next request mounts a fresh one. `wallet_disconnect` tears
- * the session down.
+ * One provider holds one session to one wallet window. The wallet page
+ * mounts in a hidden overlay iframe by default (a popup where iframes
+ * can't work — see {@link Mount.auto}), surfaces while requests are
+ * pending, and is put away once the queue drains: the iframe hides, a
+ * popup closes. Dismissing the UI or closing the window rejects the
+ * in-flight request; `wallet_disconnect` tears the session down.
+ *
+ * When the wallet detects its iframe is occluded it asks to continue in a
+ * popup; the adapter remounts and re-sends the in-flight request there.
  */
 export function postMessage(options: postMessage.Options): Adapter.Adapter {
   const { close, host, name, rdns, target } = options
 
-  let handle: Window | undefined
+  let mount: Mount.Mount | undefined
+  let pending = 0
   let queue: Promise<unknown> = Promise.resolve()
+  let resend = false
   let session: ReturnType<typeof create> | undefined
+  /** The wallet asked to continue in a popup; stick to it for this provider. */
+  let sticky_popup = false
 
-  function create() {
-    return Wata.create({
+  function ensure(): NonNullable<typeof session> {
+    if (session) return session
+    if (target) {
+      session = create({ close, host: hostUrl(host), target })
+      return session
+    }
+    const factory = sticky_popup ? Mount.popup() : (options.mount ?? Mount.auto())
+    const mount_ = factory({
+      host: hostUrl(host, factory.mode),
+      onDismiss: cancel,
+      onInvalidate: () => void session?.close(),
+    })
+    mount = mount_
+    session = create({
+      close: (handle) => mount_.close(handle),
+      host: hostUrl(host, mount_.mode),
+      target: () => mount_.target(),
+    })
+    return session
+  }
+
+  function create(transport: {
+    close: ((handle: Window | MessagePort) => void | Promise<void>) | undefined
+    host: string
+    target: NonNullable<postMessage.Options['target']>
+  }) {
+    const wata = Wata.create({
       transports: [
         core_postMessage({
-          host: hostUrl(host),
-          ...(close ? { close } : {}),
+          host: transport.host,
+          ...(transport.close ? { close: transport.close } : {}),
           async target(parameters) {
-            const acquired = await (target ?? popup)(parameters)
+            const acquired = await transport.target(parameters)
             if (!acquired)
               throw new PostMessage.PopupBlockedError('the wallet page popup was blocked')
-            handle = focusable(acquired) ? acquired : undefined
             return acquired
           },
         }),
       ],
     })
+    wata.on('notification', (event) => {
+      if (event.method === 'dialog_switchMode') void switchToPopup()
+    })
+    return wata
+  }
+
+  /**
+   * Remounts the session in a popup at the wallet's request (occluded
+   * iframe). Closing the old session rejects the in-flight send, which
+   * `send` then replays over the popup session.
+   */
+  async function switchToPopup() {
+    if (sticky_popup || target) return
+    sticky_popup = true
+    resend = pending > 0
+    const mount_old = mount
+    const session_old = session
+    mount = undefined
+    session = undefined
+    mount_old?.destroy()
+    await session_old?.close()
+  }
+
+  /** Dismissal from the mount UI — asks the wallet to reject, then hides. */
+  function cancel() {
+    void session?.notify({ method: 'dialog_cancel', params: [] })
+    mount?.hide()
   }
 
   async function send(request: { method: string; params?: readonly unknown[] | undefined }) {
-    session ??= create()
-    // Surface the already-open wallet window so the new request is seen.
-    if (handle && !handle.closed) handle.focus()
-    try {
-      return (await session.send({ method: request.method, params: request.params ?? [] })).result
-    } catch (error) {
-      // The wallet window closing without an answer is the user backing out.
-      if (error instanceof Transport.ClosedError) throw new core_Provider.UserRejectedRequestError()
-      throw error
+    for (;;) {
+      const wata = ensure()
+      mount?.show()
+      try {
+        return (await wata.send({ method: request.method, params: request.params ?? [] })).result
+      } catch (error) {
+        if (error instanceof Transport.ClosedError) {
+          // The wallet asked to continue in a popup — replay there.
+          if (resend) {
+            resend = false
+            continue
+          }
+          // Otherwise the wallet window closing is the user backing out.
+          throw new core_Provider.UserRejectedRequestError()
+        }
+        throw error
+      }
     }
+  }
+
+  // Warm the wallet page and wata handshake before the first request.
+  // Popups can't pre-open, so only iframe mounts start eagerly.
+  if (typeof window !== 'undefined' && !target && document.body) {
+    ensure()
+    if (mount?.mode === 'iframe') void session?.start().catch(() => {})
   }
 
   return fromRequest({
@@ -58,12 +132,21 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     rdns,
     async close() {
       await session?.close()
+      mount?.hide()
+    },
+    cleanup() {
+      void session?.close()
+      mount?.destroy()
+      mount = undefined
     },
     request(request) {
-      // The wallet window shows one approval at a time, so overlapping
-      // calls wait for the previous request to settle.
+      pending += 1
       const result = queue.then(() => send(request))
       queue = result.catch(() => undefined)
+      void result.catch(() => undefined).finally(() => {
+        pending -= 1
+        if (pending === 0) mount?.hide()
+      })
       return result
     },
   })
@@ -73,22 +156,28 @@ export declare namespace postMessage {
   /** Options for {@link postMessage}. */
   export type Options = {
     /**
-     * Cleanup for the mounted handle, called when the session closes.
-     * @default `handle.close()`
+     * Cleanup for a `target`-acquired handle, called when the session
+     * closes. Only used with {@link Options.target}; mounts own their
+     * handle cleanup. @default `handle.close()`
      */
     close?: ((handle: Window | MessagePort) => void | Promise<void>) | undefined
     /** URL of the wallet's post-message page. */
     host: string
+    /**
+     * Where the wallet page lives and how it surfaces for requests.
+     * @default `Mount.auto()` — an overlay iframe, or a popup where
+     * iframes can't work (insecure context, Safari, no IO v2).
+     */
+    mount?: Mount.Factory | undefined
     /** Provider display name. */
     name: string
     /** Reverse-DNS provider identifier. */
     rdns: string
     /**
-     * Override how the wallet page is mounted. Called when the session
-     * (re-)opens; receives the page URL and returns a `Window` or
-     * `MessagePort` handle. A nullish handle (e.g. a blocked `window.open`)
-     * rejects the request with `PostMessage.PopupBlockedError`.
-     * @default Opens a centered popup window.
+     * Low-level override for the session's window handle, bypassing
+     * mounts entirely (no UI is created). Receives the page URL and
+     * returns a `Window` or `MessagePort`. A nullish handle rejects the
+     * request with `PostMessage.PopupBlockedError`.
      */
     target?:
       | ((parameters: {
@@ -104,34 +193,19 @@ export declare namespace postMessage {
 }
 
 /**
- * Tags the wallet page URL with this app's origin so the wallet can pin its
- * `postMessage` responses before the first frame arrives. A page claiming a
- * foreign origin gains nothing: the wallet only honors frames whose event
- * origin matches the pinned value.
+ * Tags the wallet page URL with this app's origin — so the wallet can pin
+ * its `postMessage` responses before the first frame arrives — and the
+ * mount mode, so approvals render matching chrome from first paint. A page
+ * claiming a foreign origin gains nothing: the wallet only honors frames
+ * whose event origin matches the pinned value.
  *
  * Non-browser sessions (e.g. `MessagePort` targets in tests) carry no
  * origin, so the URL is passed through untouched.
  */
-function hostUrl(host: string): string {
+function hostUrl(host: string, mode?: 'iframe' | 'popup'): string {
   if (typeof window === 'undefined') return host
   const url = new URL(host)
   url.searchParams.set('origin', window.location.origin)
+  if (mode) url.searchParams.set('mode', mode)
   return url.toString()
-}
-
-function focusable(value: PostMessage.Target): value is Window {
-  return 'closed' in value && typeof (value as Window).focus === 'function'
-}
-
-const size = { height: 440, width: 360 }
-
-function popup({ host }: { host: string | undefined }): Window | null {
-  if (!host) throw new PostMessage.InvalidHostError('postMessage adapter requires a `host` URL')
-  const left = (window.innerWidth - size.width) / 2 + window.screenX
-  const top = window.screenY + 100
-  return window.open(
-    host,
-    '_blank',
-    `width=${size.width},height=${size.height},left=${left},top=${top}`,
-  )
 }

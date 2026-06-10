@@ -7,11 +7,13 @@ description: PostMessage adapter for wallet-window sessions.
 
 Creates an adapter that sends provider RPC requests to a wallet web page over a [uRPC postMessage session](https://github.com/tempoxyz/urpc/blob/main/specs/transport-window.md).
 
-One provider holds one session to one wallet window. The wallet page — a centered popup by default — mounts on the first request and stays bound to the session: sequential requests reuse the open window, navigating it from one approval to the next. Closing the window rejects the in-flight request, and the next request mounts a fresh one. `wallet_disconnect` tears the session down.
+One provider holds one session to one wallet window. The wallet page mounts in a hidden overlay iframe by default — or a popup where iframes can't work — surfaces while requests are pending, and is put away once the queue drains: the iframe hides, a popup closes. Dismissing the UI or closing the window rejects the in-flight request; `wallet_disconnect` tears the session down.
+
+When the wallet detects its iframe is occluded (a clickjacking risk), it asks to continue in a popup; the adapter remounts there and replays the in-flight request.
 
 The wallet identifies the app by its browser-verified window origin, so no discovery document is required; `name` and `rdns` only describe the provider identity announced to the app.
 
-Both adapters are exported from the root entry — `postMessage` and `tempoWalletPostMessage` — and from the `accounts/postMessage` subpath as `postMessage` and `tempoWallet`.
+Both adapters are exported from the root entry — `postMessage` and `tempoWalletPostMessage` — and from the `accounts/postMessage` subpath as `postMessage` and `tempoWallet` (alongside the `iframe`/`popup` mounts).
 
 ## Usage
 
@@ -41,45 +43,36 @@ const provider = Provider.create({
 })
 ```
 
-## Mounting in an iframe
+## Mounts
 
-The adapter owns the wire; the app owns the mount. Pass `target` to mount the wallet page somewhere other than a popup — for example an iframe the app shows while requests are pending. Passkey ceremonies inside a cross-origin iframe require the `publickey-credentials-*` permissions in the frame's `allow` attribute.
+The mount decides where the wallet page lives and how it surfaces for requests. By default the adapter picks for you: an overlay iframe, falling back to a popup in insecure contexts, in Safari (no WebAuthn in cross-origin iframes), or when the browser lacks IntersectionObserver v2 (the wallet can't run its occlusion defense). Pass a mount to pin one explicitly:
 
 ```ts twoslash
-import { postMessage } from 'accounts/postMessage'
-
-let frame: HTMLIFrameElement | undefined
+import { popup, postMessage } from 'accounts/postMessage'
 
 const adapter = postMessage({
   host: 'https://wallet.example/post-message',
+  mount: popup({ size: { height: 440, width: 360 } }),
   name: 'Example Wallet',
   rdns: 'com.example.wallet',
-  target: ({ host }) => {
-    frame = document.createElement('iframe')
-    frame.allow = 'publickey-credentials-create *; publickey-credentials-get *'
-    frame.src = host!
-    document.body.appendChild(frame)
-    return frame.contentWindow
-  },
-  close: () => frame?.remove(),
 })
 ```
 
 ## Parameters
-
-### close
-
-- **Type:** `(handle: Window | MessagePort) => void | Promise<void>`
-- **Optional**
-
-Cleanup for the mounted handle, called when the session closes. Defaults to `handle.close()`, which closes a popup the adapter opened.
 
 ### host
 
 - **Type:** `string`
 - **Required by:** `postMessage`
 
-URL of the wallet's post-message page. The adapter tags the URL with your app's origin so the wallet can pin its responses before the first frame arrives.
+URL of the wallet's post-message page. The adapter tags the URL with your app's origin — so the wallet can pin its responses before the first frame arrives — and the mount mode, so approvals render matching chrome.
+
+### mount
+
+- **Type:** `Mount.Factory`
+- **Optional**
+
+Where the wallet page lives and how it surfaces for requests. Defaults to `Mount.auto()` — an overlay iframe, or a popup where iframes can't work.
 
 ### name
 
@@ -100,4 +93,4 @@ Reverse-DNS provider identifier.
 - **Type:** `({ host }) => Window | MessagePort | null | Promise<Window | MessagePort | null>`
 - **Optional**
 
-Override how the wallet page is mounted. Called when the session (re-)opens; receives the page URL and returns a `Window` or `MessagePort` handle. A nullish handle (e.g. a blocked `window.open`) rejects the request with `PostMessage.PopupBlockedError`. Defaults to opening a centered popup window.
+Low-level override for the session's window handle, bypassing mounts entirely (no UI is created). A nullish handle (e.g. a blocked `window.open`) rejects the request with `PostMessage.PopupBlockedError`. Pair with `close` for handle cleanup.
