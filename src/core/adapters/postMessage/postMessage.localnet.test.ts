@@ -21,7 +21,7 @@ const transferCall = Actions.token.transfer.call({
   amount: parseUnits('1', 6),
 })
 
-const hosts: { close: (cause?: Error) => Promise<void> }[] = []
+const hosts: Pick<ReturnType<typeof createHost>, 'close' | 'notify'>[] = []
 
 afterEach(async () => {
   vi.unstubAllGlobals()
@@ -472,6 +472,38 @@ describe('create', () => {
 
     expect(provider.store.getState().accounts).toHaveLength(0)
     expect(wallet.opened()).toHaveLength(1)
+  })
+
+  test('behavior: reconciles disconnect when the wallet asserts no accounts', async () => {
+    const wallet = createWallet()
+    const provider = createProvider(wallet, { storage: Storage.memory() })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    expect(provider.store.getState().accounts).toHaveLength(1)
+
+    // The wallet reports the user is no longer connected (logout / revoke);
+    // the SDK drops the stale persisted session.
+    await hosts[0]!.notify({ method: 'accountsChanged', params: [] })
+
+    await vi.waitFor(() => expect(provider.store.getState().accounts).toHaveLength(0))
+  })
+
+  test('behavior: keeps the session when the wallet still asserts the account', async () => {
+    const wallet = createWallet()
+    const provider = createProvider(wallet, { storage: Storage.memory() })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+
+    await hosts[0]!.notify({ method: 'accountsChanged', params: [root.address] })
+    // The assertion still lists the account, so nothing is dropped.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(provider.store.getState().accounts).toHaveLength(1)
   })
 
   test('behavior: switches chains locally without opening the wallet page', async () => {

@@ -25,6 +25,8 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
   let mount: Mount.Mount | undefined
   let pending = 0
   let queue: Promise<unknown> = Promise.resolve()
+  /** Reconciles local connection state against the wallet's asserted accounts. */
+  let reconcile: ((accounts: readonly string[]) => void) | undefined
   /** Rejects the in-flight send when the user dismisses the mount UI. */
   let reject_inflight: ((error: Error) => void) | undefined
   let resend = false
@@ -74,6 +76,10 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     })
     wata.on('notification', (event) => {
       if (event.method === 'dialog_switchMode') void switchToPopup()
+      // The wallet asserts its current accounts (e.g. on connect, or a
+      // wallet-side logout) so the SDK can drop a stale persisted session.
+      else if (event.method === 'accountsChanged')
+        reconcile?.((event.params ?? []) as readonly string[])
     })
     return wata
   }
@@ -148,6 +154,19 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     ...(icon ? { icon } : {}),
     name,
     rdns,
+    bind({ store }) {
+      // Drop a persisted session the wallet no longer honors: if none of
+      // the cached accounts appear in the wallet's asserted list, disconnect
+      // locally. Only acts when there is cached state to reconcile, and
+      // never establishes a connection the app didn't ask for.
+      reconcile = (accounts) => {
+        const cached = store.getState().accounts
+        if (cached.length === 0) return
+        const asserted = new Set(accounts.map((address) => address.toLowerCase()))
+        if (cached.some((account) => asserted.has(account.address.toLowerCase()))) return
+        store.disconnect()
+      }
+    },
     async close() {
       await session?.close()
       mount?.hide()

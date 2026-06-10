@@ -16,9 +16,13 @@ import * as Rpc from '../../zod/rpc.js'
  * `request`.
  */
 export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
-  const { cleanup, close, icon, name, rdns, request: requestRemote } = options
+  const { bind, cleanup, close, icon, name, rdns, request: requestRemote } = options
 
   return Adapter.define({ ...(icon ? { icon } : {}), name, rdns }, ({ getAccount, store }) => {
+    // Late-bind the store so the request channel can reconcile local
+    // connection state (e.g. a wallet `accountsChanged` notification).
+    bind?.({ store })
+
     function generateAccessKey(
       parameters: Adapter.generateAccessKey.Options = {},
     ): Adapter.generateAccessKey.ReturnType {
@@ -125,6 +129,12 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
 export declare namespace fromRequest {
   /** Options for {@link fromRequest}. */
   export type Options = {
+    /**
+     * Called once during setup with the adapter's store, for late wiring
+     * that needs to mutate local state (e.g. reconciling connection state
+     * from a wallet `accountsChanged` notification on the request channel).
+     */
+    bind?: ((context: { store: Adapter.SetupFn.Parameters['store'] }) => void) | undefined
     /**
      * Tears down adapter-owned resources (sessions, mounted UI) when the
      * provider discards the adapter instance. @default `close`, when set.
