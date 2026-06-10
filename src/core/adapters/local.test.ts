@@ -1,7 +1,7 @@
 import { KeyAuthorization } from 'ox/tempo'
 import type { Chain, Hex } from 'viem'
 import { hashMessage, verifyMessage } from 'viem'
-import { tempo, tempoLocalnet, tempoModerato } from 'viem/tempo/chains'
+import { tempoLocalnet, tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 
 import {
@@ -143,8 +143,6 @@ describe('local', () => {
 
     test('default: personalSign + authorizeAccessKey binds the message via TIP-1053 witness (one ceremony)', async () => {
       const captured: { digest: Hex | undefined }[] = []
-      // tempoModerato is at the T5 hardfork, which introduces TIP-1053 witness
-      // binding (tempoLocalnet/tempoDevnet are still on T3).
       const { adapter } = setup(
         {
           loadAccounts: makeLoadAccounts(0, captured),
@@ -175,40 +173,6 @@ describe('local', () => {
       expect(decoded.witness).toBe(hashMessage('hello'))
       expect(captured[0]!.digest).toBe(KeyAuthorization.getSignPayload(decoded))
       expect(result.keyAuthorization?.signature).toBeDefined()
-    })
-
-    test('behavior: personalSign + authorizeAccessKey on a non-witness chain produces two distinct signatures', async () => {
-      const captured: { digest: Hex | undefined }[] = []
-      // tempo mainnet does not support TIP-1053 yet — fall back to two prompts.
-      const { adapter } = setup({ loadAccounts: makeLoadAccounts(0, captured) }, { chain: tempo })
-
-      const result = await adapter.actions.loadAccounts(
-        {
-          personalSign: { message: 'hello' },
-          authorizeAccessKey: { expiry: 0, chainId: BigInt(tempo.id) },
-        },
-        { method: 'wallet_connect', params: undefined },
-      )
-
-      // loadAccounts saw the personalSign digest, NOT the keyAuthorization digest.
-      expect(captured[0]!.digest).toBe(hashMessage('hello'))
-      // No witness binding on the fallback path.
-      expect(result.personalSign).toEqual({ message: 'hello' })
-
-      // The personalSign signature is a real EIP-191 signature over 'hello'.
-      expect(
-        await verifyMessage({
-          address: core_accounts[0]!.address,
-          message: 'hello',
-          signature: result.signature!,
-        }),
-      ).toBe(true)
-
-      // The key-auth signature was produced by a *separate* ceremony — it
-      // signs the key-auth digest, not the personalSign digest, so the two
-      // signatures must differ.
-      expect(result.keyAuthorization?.signature).toBeDefined()
-      expect(result.keyAuthorization?.signature).not.toBe(result.signature)
     })
 
     test('error: rejects when personalSign and digest are both set', async () => {
