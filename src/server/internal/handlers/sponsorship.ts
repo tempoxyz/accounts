@@ -113,15 +113,7 @@ export declare namespace sign {
 
 /** Handles `eth_signRawTransaction` and broadcast methods for sponsored Tempo transactions. */
 export async function handleRawTransaction(options: handleRawTransaction.Options) {
-  const {
-    account,
-    feeToken,
-    getClient,
-    method,
-    request,
-    resolveFeeToken,
-    validate,
-  } = options
+  const { account, feeToken, getClient, method, request, resolveFeeToken, validate } = options
   const serialized = request.params?.[0]
 
   if (!Utils.isSerializedTempoTransaction(serialized))
@@ -142,9 +134,9 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     ...transaction,
     from: sender,
     ...(feeToken_resolved ? { feeToken: feeToken_resolved } : {}),
-  }
+  } satisfies Transaction.TransactionRequest
 
-  if (validate && !(await validate(transaction_request as Transaction.TransactionRequest)))
+  if (validate && !(await validate(transaction_request)))
     throw new RpcResponse.InvalidParamsError({
       message: 'Sponsorship rejected.',
     })
