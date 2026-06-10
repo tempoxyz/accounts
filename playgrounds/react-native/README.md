@@ -1,27 +1,33 @@
 # React Native Playground
 
-Run with the default Tempo Wallet:
+## Production wallet
 
 ```sh
 pnpm install
 cd playgrounds/react-native
-pnpm ios
+pnpm ios:prod
 ```
 
-The playground starts a local consumer discovery server at
-`http://localhost:21261/.well-known/urpc/consumer.json` and points the app at it
-with `EXPO_PUBLIC_WALLET_CONSUMER_URL`.
+This targets the default Tempo Wallet (`https://wallet.tempo.xyz`) and publishes
+the local consumer discovery document through a Cloudflare quick tunnel
+(`cloudflared` must be installed) so the production wallet can verify it. The
+tunnel closes when the dev server exits.
 
-Run against another wallet origin:
+## Local wallet
 
 ```sh
 EXPO_PUBLIC_WALLET_HOST=http://localhost:21260 \
 pnpm ios
 ```
 
-Use `EXPO_PUBLIC_WALLET_HOST` for the wallet web app origin. Use
-`CONSUMER_PORT` or `EXPO_PUBLIC_WALLET_CONSUMER_URL` only when the wallet needs
-a different consumer origin, such as a tunnel URL.
+`pnpm ios` starts a local consumer discovery server at
+`http://localhost:21261/.well-known/urpc/consumer.json` and points the app at it
+with `EXPO_PUBLIC_WALLET_CONSUMER_URL`.
+
+Use `EXPO_PUBLIC_WALLET_HOST` for the wallet web app origin (defaults to
+`https://wallet.tempo.xyz`). Set `TUNNEL=1` to publish the consumer through a
+quick tunnel, or set `CONSUMER_PORT` / `EXPO_PUBLIC_WALLET_CONSUMER_URL`
+explicitly to supply your own consumer origin.
 
 The wallet must allow the playground callback URI:
 

@@ -12,7 +12,7 @@ This guide covers the platform setup. For choosing and configuring the adapter i
 ## Install
 
 ```sh
-npx expo install expo-web-browser expo-secure-store react-native-get-random-values
+npx expo install expo-web-browser expo-secure-store react-native-get-random-values react-native-mmkv react-native-nitro-modules
 ```
 
 ## Connect
@@ -20,8 +20,8 @@ npx expo install expo-web-browser expo-secure-store react-native-get-random-valu
 ```ts twoslash
 import { Provider } from 'accounts'
 import { tempoWallet } from 'accounts/mobileWebAuth'
-import { secureStorage } from 'accounts/react-native/expo-secure-store'
 import { openAuthSession } from 'accounts/react-native/expo-web-browser'
+import { secureMmkv } from 'accounts/react-native/secure-mmkv'
 
 const provider = Provider.create({
   adapter: tempoWallet({
@@ -29,7 +29,7 @@ const provider = Provider.create({
     openAuthSession,
     redirectUri: 'com.example.app:/auth',
   }),
-  storage: secureStorage(),
+  storage: secureMmkv(),
 })
 ```
 
@@ -77,11 +77,11 @@ import { openAuthSession } from 'accounts/react-native/expo-web-browser'
 
 ## Storage
 
-Provider state persists through a storage adapter. Two React Native adapters ship as optional subpaths:
+Provider state persists through a storage adapter. React Native adapters ship as optional subpaths:
 
 ```ts twoslash
 import { asyncStorage } from 'accounts/react-native/async-storage'
-import { secureStorage } from 'accounts/react-native/expo-secure-store'
+import { secureMmkv } from 'accounts/react-native/secure-mmkv'
 ```
 
-Use `secureStorage` (backed by `expo-secure-store`, stored in the device Keychain/Keystore) when the provider manages access keys. Use `asyncStorage` (backed by `@react-native-async-storage/async-storage`) for non-sensitive state.
+Use [`secureMmkv`](/docs/api/storage.secureMmkv) when the provider manages access keys. It stores the larger SDK snapshot in encrypted MMKV and keeps only the small encryption key in the device Keychain/Keystore. Use [`asyncStorage`](/docs/api/storage.asyncStorage) for non-sensitive state. See the [Storage reference](/docs/api/storage) for all adapters and options.

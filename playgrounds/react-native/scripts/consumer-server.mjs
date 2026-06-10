@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 
 const callback = 'xyz.tempo.accounts.playground:/auth'
@@ -8,6 +9,56 @@ let origin = process.env.EXPO_PUBLIC_WALLET_CONSUMER_URL
 
 export function getConsumerOrigin() {
   return origin
+}
+
+export function getConsumerPort() {
+  return port
+}
+
+/** Sets the origin advertised in the served discovery document. */
+export function setConsumerOrigin(value) {
+  origin = new URL(value).origin
+}
+
+/**
+ * Opens a Cloudflare quick tunnel to the local consumer server so a remote
+ * wallet (e.g. production) can fetch its discovery document. Resolves with the
+ * public `https://*.trycloudflare.com` origin and the tunnel child process.
+ */
+export function startTunnel(localPort) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      'cloudflared',
+      ['tunnel', '--no-autoupdate', '--url', `http://localhost:${localPort}`],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    )
+    const pattern = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/
+    let settled = false
+    const onData = (chunk) => {
+      const match = chunk.toString().match(pattern)
+      if (!match || settled) return
+      settled = true
+      resolve({ child, url: match[0] })
+    }
+    child.stdout.on('data', onData)
+    child.stderr.on('data', onData)
+    child.once('error', (error) => {
+      if (settled) return
+      settled = true
+      reject(error)
+    })
+    child.once('exit', (code) => {
+      if (settled) return
+      settled = true
+      reject(new Error(`cloudflared exited (${code}) before reporting a tunnel URL`))
+    })
+    setTimeout(() => {
+      if (settled) return
+      settled = true
+      child.kill()
+      reject(new Error('cloudflared tunnel timed out'))
+    }, 30_000)
+  })
 }
 
 export function createConsumerServer() {
