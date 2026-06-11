@@ -577,6 +577,8 @@ export function relay(options: relay.Options = {}): Handler {
 
           const result = await Sponsorship.handleRawTransaction({
             account: feePayerOptions.account,
+            feeToken: feePayerOptions.feeToken,
+            getFeeToken: async (chainId) => (await getTokens(chainId))[0],
             getClient,
             method: request.method as Sponsorship.handleRawTransaction.Options['method'],
             request: { params: 'params' in request ? request.params : undefined },

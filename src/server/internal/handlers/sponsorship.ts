@@ -112,8 +112,8 @@ export declare namespace sign {
 
 /** Handles `eth_signRawTransaction` and broadcast methods for sponsored Tempo transactions. */
 export async function handleRawTransaction(options: handleRawTransaction.Options) {
-  const { account, feeToken, getClient, method, request, resolveFeeToken, validate } = options
-  const serialized = request.params?.[0]
+  const { account, feeToken: sponsorFeeToken, getClient, method, request, validate } = options
+  const serialized = request.params?.[0] as `0x76${string}` | undefined
 
   if (!Utils.isSerializedTempoTransaction(serialized))
     throw new RpcResponse.InvalidParamsError({
@@ -131,22 +131,21 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     })
   if (!account.sign) throw new Error('Fee payer account cannot sign transactions.')
 
-  // Explicit fee token wins; otherwise use chain default when resolver is configured.
-  const feeToken_resolved = feeToken ?? (await resolveFeeToken?.(transaction.chainId))
-  const transaction_request = {
-    ...transaction,
-    from: sender,
-    ...(feeToken_resolved ? { feeToken: feeToken_resolved } : {}),
-  } satisfies Transaction.TransactionRequest
+  const client = getClient(transaction.chainId)
+  const feeToken_chain = (client.chain as { feeToken?: Address | undefined } | undefined)?.feeToken
+  const feeToken =
+    (transaction.feeToken as Address | null | undefined) ??
+    sponsorFeeToken ??
+    (await options.getFeeToken?.(transaction.chainId)) ??
+    feeToken_chain
+  const transaction_sponsored = feeToken ? { ...transaction, feeToken } : transaction
 
-  // App validation sees final fee-payer signing request before relay sponsors it.
-  if (validate && !(await validate(transaction_request)))
+  if (validate && !(await validate(transaction_sponsored as Transaction.TransactionRequest)))
     throw new RpcResponse.InvalidParamsError({
       message: 'Sponsorship rejected.',
     })
 
-  const client = getClient(transaction.chainId)
-  const envelope = TxEnvelopeTempo.from(transaction_request as never)
+  const envelope = TxEnvelopeTempo.from(transaction_sponsored as never)
   const feePayerSignature = Signature.from(
     await account.sign({
       hash: TxEnvelopeTempo.getFeePayerSignPayload(envelope, { sender }),
@@ -169,18 +168,16 @@ export declare namespace handleRawTransaction {
   type Options = {
     /** Account used as the fee payer. */
     account: LocalAccount
-    /** Fee token to set before fee payer signing. */
+    /** Optional token the fee payer prefers for sponsored raw transactions. */
     feeToken?: Address | undefined
+    /** Optional fee-token resolver used when the raw envelope omits `feeToken`. */
+    getFeeToken?: ((chainId: number) => Promise<Address | undefined>) | undefined
     /** Client resolver keyed by transaction `chainId`. */
     getClient: (chainId?: number | undefined) => Client
     /** Raw transaction method to handle. */
     method: 'eth_signRawTransaction' | 'eth_sendRawTransaction' | 'eth_sendRawTransactionSync'
     /** Incoming JSON-RPC request. */
     request: { params?: readonly unknown[] | undefined }
-    /** Resolves the default fee token for raw sponsorship. */
-    resolveFeeToken?:
-      | ((chainId: number) => Address | Promise<Address | undefined> | undefined)
-      | undefined
     /** Sender address to use if it cannot be recovered from the raw envelope. */
     sender?: Address | undefined
     /** Optional sponsorship approval callback. */

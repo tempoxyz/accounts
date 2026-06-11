@@ -190,10 +190,10 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
       return await Sponsorship.handleRawTransaction({
         account: sponsor.account,
         feeToken: sponsorFeeToken,
+        getFeeToken: sponsor.resolveFeeToken,
         getClient,
         method: broadcastMethod,
         request: { params: [final] },
-        resolveFeeToken: sponsor.resolveFeeToken,
         sender: operation.account,
         validate: sponsor.validate,
       })
