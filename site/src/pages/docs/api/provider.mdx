@@ -82,7 +82,7 @@ if (status === 'pending') {
 - **Type:** `{ authorize?: Provider.create.AuthorizeAccessKey; keystores?: Keystore.Keystores }`
 - **Optional**
 
-Access-key configuration: `authorize` is the default authorization policy (what to request and when a stored key can be reused), `keystores` is where access-key material lives.
+Access-key configuration: `authorize` automatically authorizes an access key when no stored key satisfies a request; `keystores` is where key material lives.
 
 #### accessKey.authorize
 
