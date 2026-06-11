@@ -1,11 +1,11 @@
-import { P256, PublicKey, Secp256k1, WebCryptoP256 } from 'ox'
 import type { Address, Hex } from 'ox'
-import {
+import type {
   Account as TempoAccount,
-  type KeyAuthorizationManager as TempoKeyAuthorizationManager,
+  KeyAuthorizationManager as TempoKeyAuthorizationManager,
 } from 'viem/tempo'
 
 import type { MaybePromise } from '../internal/types.js'
+import { webCryptoP256 } from './keystores/webCryptoP256.js'
 
 /**
  * Keystores backing locally generated access keys: one {@link Keystore} per
@@ -124,177 +124,9 @@ export function isKeyUnavailableError(error: unknown): error is KeyUnavailableEr
   return error instanceof Error && error.name === 'Keystore.KeyUnavailableError'
 }
 
-/** Handle persisted by the {@link webCryptoP256} keystore. */
-type WebCryptoP256Handle = {
-  kind: 'webcrypto-p256'
-} & (
-  | {
-      /** Live key pair (non-extractable). Requires structured-clone storage. */
-      keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>
-      jwk?: undefined
-    }
-  | {
-      /** Exported private key. At-rest protection is the host app's storage adapter. */
-      jwk: JsonWebKey
-      keyPair?: undefined
-    }
-)
-
-/**
- * WebCrypto P-256 keystore. The built-in default (see {@link defaults}).
- *
- * By default the key is generated non-extractable: the private key never has
- * a JS-visible encoding, and the handle holds the live `CryptoKey`, which
- * persists only through structured-clone storage (`Storage.idb`,
- * `Storage.memory`) — on string-based storage the key is session-only.
- *
- * Pass `extractable: true` for environments without structured-clone storage
- * where keys must survive restarts (e.g. React Native, Node, CLI): the
- * private key is exported once as a JWK (at-rest protection is the host
- * app's storage adapter) and re-imported non-extractable each session. In
- * browsers with IndexedDB storage, prefer the non-extractable default.
- *
- * @example
- * ```ts
- * import { Keystore, Provider } from 'accounts'
- *
- * const provider = Provider.create({
- *   accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
- * })
- * ```
- */
-export function webCryptoP256(options: webCryptoP256.Options = {}): Keystore {
-  const { extractable = false } = options
-  return {
-    requiresStructuredClone: !extractable,
-    async createKey() {
-      if (!globalThis.crypto?.subtle)
-        throw new Error('`webCryptoP256` keystore requires WebCrypto (`crypto.subtle`) support.')
-      const keyPair = await WebCryptoP256.createKeyPair({ extractable })
-      const publicKey = PublicKey.toHex(keyPair.publicKey)
-      if (!extractable)
-        return {
-          handle: { keyPair, kind: 'webcrypto-p256' } satisfies WebCryptoP256Handle,
-          publicKey,
-        }
-      const jwk = await globalThis.crypto.subtle.exportKey('jwk', keyPair.privateKey)
-      return { handle: { jwk, kind: 'webcrypto-p256' } satisfies WebCryptoP256Handle, publicKey }
-    },
-    async toAccount(record, context) {
-      const handle = record.handle as Partial<WebCryptoP256Handle> | undefined
-      if (handle?.kind !== 'webcrypto-p256')
-        throw new Error('Unrecognized `webCryptoP256` keystore handle.')
-      const account = {
-        access: context.access,
-        keyAuthorizationManager: context.keyAuthorizationManager,
-      }
-      if (handle.keyPair) {
-        // A live key pair serialized through non-structured-clone storage
-        // arrives mangled — the key is permanently gone.
-        if (!isCryptoKey(handle.keyPair.privateKey))
-          throw new KeyUnavailableError('`webCryptoP256` key material did not survive storage.')
-        return TempoAccount.fromWebCryptoP256(handle.keyPair, account)
-      }
-      if (handle.jwk) {
-        const privateKey = await globalThis.crypto.subtle
-          .importKey('jwk', handle.jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign'])
-          .catch((error) => {
-            throw new KeyUnavailableError(
-              '`webCryptoP256` keystore handle holds unusable key material.',
-              { cause: error },
-            )
-          })
-        return TempoAccount.fromWebCryptoP256(
-          { privateKey, publicKey: PublicKey.fromHex(record.publicKey) },
-          account,
-        )
-      }
-      throw new Error('Unrecognized `webCryptoP256` keystore handle.')
-    },
-  }
-}
-
-export declare namespace webCryptoP256 {
-  /** Options for {@link webCryptoP256}. */
-  type Options = {
-    /**
-     * Generate the key extractable and persist it as a JWK so it survives
-     * string-based storage adapters. When `false` (default), the key is
-     * non-extractable from creation and persists only through
-     * structured-clone storage.
-     *
-     * @default false
-     */
-    extractable?: boolean | undefined
-  }
-}
-
-/** Handle persisted by the {@link p256} and {@link secp256k1} keystores. */
-type HexKeyHandle = {
-  kind: 'p256' | 'secp256k1'
-  /** Exported private key. At-rest protection is the host app's storage adapter. */
-  privateKey: Hex.Hex
-}
-
-/**
- * Pure-JS P-256 keystore. The private key is held as hex in the handle and
- * signing runs in JavaScript — at-rest protection is the host app's storage
- * adapter, and the key is readable by anything with JS execution. Prefer
- * {@link webCryptoP256} (or a hardware keystore) where a WebCrypto
- * implementation is available; this exists chiefly as an adapter default
- * for environments without one.
- */
-export function p256(): Keystore {
-  return hexKeystore('p256')
-}
-
-/**
- * Pure-JS secp256k1 keystore. The private key is held as hex in the handle
- * and signing runs in JavaScript — at-rest protection is the host app's
- * storage adapter, and the key is readable by anything with JS execution.
- * secp256k1 signatures are the chain's cheapest envelope, making this the
- * economical default for environments without a WebCrypto implementation
- * (e.g. React Native, CLI).
- */
-export function secp256k1(): Keystore {
-  return hexKeystore('secp256k1')
-}
-
-function hexKeystore(kind: HexKeyHandle['kind']): Keystore {
-  const curve = kind === 'p256' ? P256 : Secp256k1
-  return {
-    async createKey() {
-      const privateKey = curve.randomPrivateKey()
-      return {
-        handle: { kind, privateKey } satisfies HexKeyHandle,
-        publicKey: PublicKey.toHex(curve.getPublicKey({ privateKey })),
-      }
-    },
-    toAccount(record, context) {
-      const handle = record.handle as Partial<HexKeyHandle> | undefined
-      if (handle?.kind !== kind || !handle.privateKey)
-        throw new Error(`Unrecognized \`${kind}\` keystore handle.`)
-      const account = {
-        access: context.access,
-        keyAuthorizationManager: context.keyAuthorizationManager,
-      }
-      return kind === 'p256'
-        ? TempoAccount.fromP256(handle.privateKey, account)
-        : TempoAccount.fromSecp256k1(handle.privateKey, account)
-    },
-  }
-}
+export { p256 } from './keystores/p256.js'
+export { secp256k1 } from './keystores/secp256k1.js'
+export { webCryptoP256 }
 
 /** Built-in default keystores used when none are configured. */
 export const defaults: Keystores = { p256: webCryptoP256() }
-
-function isCryptoKey(value: unknown): value is CryptoKey {
-  if (typeof CryptoKey !== 'undefined' && value instanceof CryptoKey) return true
-  // Cross-realm fallback (e.g. keys structured-cloned through IndexedDB).
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    'algorithm' in value &&
-    (value as CryptoKey).type === 'private'
-  )
-}

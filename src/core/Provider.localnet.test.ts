@@ -2558,7 +2558,6 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(record2.keyType).toBe('p256')
       expect(record2.handle).toMatchObject({ kind: 'webcrypto-p256' })
     })
-
   })
 
   describe('wallet_connect with authorizeAccessKey', () => {
