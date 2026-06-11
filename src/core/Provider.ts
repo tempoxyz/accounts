@@ -464,7 +464,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     parameters: Adapter.authorizeAccessKey.Parameters,
     chainId: number | undefined,
   ): Promise<{
-    key?: { handle: unknown; publicKey: Hex.Hex } | undefined
+    key?: { handle: Keystore.Handle; publicKey: Hex.Hex } | undefined
     parameters: Adapter.authorizeAccessKey.Parameters
     privateKey?: Hex.Hex | undefined
   }> {

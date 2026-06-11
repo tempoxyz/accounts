@@ -64,7 +64,7 @@ export type AccessKey = {
     }
   | {
       /** Opaque keystore handle backing the access key. Persisted verbatim; schema owned by the keystore that wrote it. */
-      handle: unknown
+      handle: Keystore.Handle
       /** Public key backing the access key. */
       publicKey: Hex.Hex
     }
@@ -338,7 +338,7 @@ export declare namespace prepareAuthorization {
   /** Prepared unsigned key authorization and optional local key material. */
   type ReturnType = {
     /** Keystore-created key material reference. */
-    key?: { handle: unknown; publicKey: Hex.Hex } | undefined
+    key?: { handle: Keystore.Handle; publicKey: Hex.Hex } | undefined
     /** Unsigned key authorization to sign with the root account. */
     keyAuthorization: KeyAuthorization.KeyAuthorization<false>
     /** Exported private key backing an external access key. */
@@ -587,7 +587,7 @@ export declare namespace add {
     /** Signed key authorization for the access key. */
     authorization: KeyAuthorization.Signed
     /** Opaque keystore handle backing the access key. Requires `publicKey`. */
-    handle?: unknown | undefined
+    handle?: Keystore.Handle | undefined
     /** The exported private key backing the access key. */
     privateKey?: Hex.Hex | undefined
     /** The WebCrypto key pair backing the access key. */

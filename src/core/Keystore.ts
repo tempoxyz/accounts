@@ -22,6 +22,13 @@ export type Keystores = {
 export type KeyType = keyof Keystores
 
 /**
+ * Opaque key reference persisted verbatim alongside the access-key record.
+ * `kind` marks which keystore wrote it; the remaining fields are owned by
+ * that keystore and must survive its declared persistence format.
+ */
+export type Handle = { kind: string; [key: string]: unknown }
+
+/**
  * Single-key-type access-key backend.
  *
  * A keystore owns access-key material end to end: `createKey` provisions a
@@ -77,7 +84,7 @@ export declare namespace createKey {
   /** Created access-key material. */
   type ReturnType = {
     /** Opaque handle for the created key. Persisted verbatim; schema owned by the keystore that wrote it. */
-    handle: unknown
+    handle: Handle
     /** Public key of the created key. */
     publicKey: Hex.Hex
   }
@@ -87,7 +94,7 @@ export declare namespace toAccount {
   /** Persisted access-key record fields passed to {@link Keystore.toAccount}. */
   type Record = {
     /** Opaque handle persisted by {@link Keystore.createKey}. */
-    handle: unknown
+    handle: Handle
     /** Key type. */
     keyType: string
     /** Public key backing the access key. */
