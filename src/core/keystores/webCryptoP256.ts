@@ -108,7 +108,6 @@ export declare namespace webCryptoP256 {
   }
 }
 
-
 function isCryptoKey(value: unknown): value is CryptoKey {
   if (typeof CryptoKey !== 'undefined' && value instanceof CryptoKey) return true
   // Cross-realm fallback (e.g. keys structured-cloned through IndexedDB).

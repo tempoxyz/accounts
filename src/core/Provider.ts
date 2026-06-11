@@ -1799,16 +1799,15 @@ export declare namespace create {
            */
           authorize?: AuthorizeAccessKey | undefined
           /**
-           * Keystores backing locally generated access keys: one per key
-           * type (e.g. Secure Enclave, WebCrypto). Access-key material is
-           * created via the keystore's `createKey()` and persisted as an opaque
-           * `handle` that the keystore's `toAccount()` turns back into a
-           * signing account on hydration.
+           * Keystores backing provider-generated access keys, one per key
+           * type. A keystore creates key material and turns persisted
+           * records back into signing accounts — see
+           * {@link Keystore.Keystore} for the contract.
            *
-           * Keystores hold key material — locally or remotely; `storage`
-           * persists provider state. App-level keystores override
-           * adapter-supplied defaults. Access keys created before a
-           * keystore was configured keep working.
+           * App-level keystores override adapter-supplied defaults.
+           * Keystores hold key material; `storage` persists provider state.
+           * Access keys created before a keystore was configured keep
+           * working.
            *
            * @default Keystore.defaults — `{ p256: Keystore.webCryptoP256() }`
            *
