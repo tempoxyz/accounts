@@ -2338,7 +2338,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
+        accessKey: { keystore: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage: createJsonStorage(),
       })
       await connect(provider)
@@ -2361,7 +2361,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
+        accessKey: { keystore: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage: createJsonStorage(),
       })
       const address = await connect(provider)
@@ -2389,7 +2389,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider1 = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
+        accessKey: { keystore: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage,
       })
       const address = await connect(provider1)
@@ -2404,7 +2404,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider2 = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
+        accessKey: { keystore: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage,
       })
       await new Promise((resolve) => setTimeout(resolve, 200))
@@ -2462,7 +2462,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: jsonRpcAdapter,
         chains: [chain],
-        keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
+        accessKey: { keystore: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage: createJsonStorage(),
       })
       await provider.request({ method: 'wallet_connect' })
@@ -2571,12 +2571,12 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
     })
   })
 
-  describe('Provider.create authorizeAccessKey option', () => {
+  describe('Provider.create accessKey.authorize option', () => {
     test('default: wallet_connect auto-authorizes access key', async () => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => ({ expiry: Expiry.days(1) }),
+        accessKey: { authorize: () => ({ expiry: Expiry.days(1) }) },
       })
 
       const result = await provider.request({
@@ -2588,7 +2588,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(result.accounts[0]!.capabilities.keyAuthorization!.keyId).toMatch(/^0x[0-9a-f]{40}$/i)
     })
 
-    test('default: wallet_connect auto-authorizes access key from literal option', async () => {
+    test('default: deprecated `authorizeAccessKey` alias still applies', async () => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
@@ -2608,7 +2608,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => ({ expiry: Expiry.days(1) }),
+        accessKey: { authorize: () => ({ expiry: Expiry.days(1) }) },
       })
 
       const result = await provider.request({
@@ -2630,12 +2630,14 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => {
-          if (!authorize) return undefined
-          return {
-            expiry: Expiry.days(1),
-            scopes: [{ address: Addresses.pathUsd, selector: 'transfer(address,uint256)' }],
-          }
+        accessKey: {
+          authorize: () => {
+            if (!authorize) return undefined
+            return {
+              expiry: Expiry.days(1),
+              scopes: [{ address: Addresses.pathUsd, selector: 'transfer(address,uint256)' }],
+            }
+          },
         },
       })
       const address = await connect(provider)
@@ -2666,17 +2668,19 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => {
-          if (!authorize) return undefined
-          return {
-            expiry: Expiry.days(1),
-            scopes: [
-              {
-                address: '0x0000000000000000000000000000000000000099',
-                selector: 'transfer(address,uint256)',
-              },
-            ],
-          }
+        accessKey: {
+          authorize: () => {
+            if (!authorize) return undefined
+            return {
+              expiry: Expiry.days(1),
+              scopes: [
+                {
+                  address: '0x0000000000000000000000000000000000000099',
+                  selector: 'transfer(address,uint256)',
+                },
+              ],
+            }
+          },
         },
       })
       const address = await connect(provider)
@@ -2709,12 +2713,14 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => {
-          if (!authorize) return undefined
-          return {
-            expiry: Expiry.days(1),
-            scopes: [{ address: Addresses.pathUsd, selector: 'transfer(address,uint256)' }],
-          }
+        accessKey: {
+          authorize: () => {
+            if (!authorize) return undefined
+            return {
+              expiry: Expiry.days(1),
+              scopes: [{ address: Addresses.pathUsd, selector: 'transfer(address,uint256)' }],
+            }
+          },
         },
       })
       const address = await connect(provider)
@@ -2752,7 +2758,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => ({ expiry: Expiry.days(7) }),
+        accessKey: { authorize: () => ({ expiry: Expiry.days(7) }) },
       })
 
       const result = await provider.request({
@@ -2766,7 +2772,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => ({ expiry: Expiry.days(1) }),
+        accessKey: { authorize: () => ({ expiry: Expiry.days(1) }) },
       })
 
       await connect(provider)

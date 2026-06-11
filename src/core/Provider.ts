@@ -99,13 +99,14 @@ export function create(options: create.Options = {}): create.ReturnType {
   const {
     adapter = dialog(),
     chains = [tempo, tempoModerato, tempoDevnet],
-    keystore,
     maxAccounts,
     persistCredentials,
     relay,
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
   } = options
+  const keystore = options.accessKey?.keystore
+  const authorizeAccessKey_default = options.accessKey?.authorize ?? options.authorizeAccessKey
 
   // Build per-chain transports from `relay` (if set), then layer caller-provided
   // `transports` on top so explicit per-chain overrides win.
@@ -723,9 +724,8 @@ export function create(options: create.Options = {}): create.ReturnType {
   }
 
   function resolveDefaultAuthorizeAccessKey(): create.AuthorizeAccessKeyParameters | undefined {
-    const authorizeAccessKey = options.authorizeAccessKey
-    if (typeof authorizeAccessKey === 'function') return authorizeAccessKey()
-    return authorizeAccessKey
+    if (typeof authorizeAccessKey_default === 'function') return authorizeAccessKey_default()
+    return authorizeAccessKey_default
   }
 
   async function defaultAuthorizeAccessKeyForConnect(options_: {
@@ -1806,6 +1806,48 @@ const sendCallsMagic = Hash.keccak256(Hex.fromString('TEMPO_5792'))
 
 export declare namespace create {
   type Options = {
+    /** Access-key configuration: authorization policy and key material. */
+    accessKey?:
+      | {
+          /**
+           * Default access key parameters for `wallet_connect`.
+           *
+           * Pass an object to use the same access-key policy for every
+           * applicable request, or a function to compute it dynamically. When
+           * set, `wallet_connect` and send transaction requests will authorize
+           * an access key only when no reusable local key is available. Return
+           * `undefined` from the function to skip authorization for the
+           * current request.
+           */
+          authorize?: AuthorizeAccessKey | undefined
+          /**
+           * Keystore backing locally generated access keys: one entry per key
+           * type (e.g. Secure Enclave, WebCrypto). Access-key material is
+           * created via the entry's `createKey()` (taking precedence over the
+           * adapter's `generateAccessKey`) and persisted as an opaque `handle`
+           * that the entry's `toAccount()` turns back into a signing account
+           * on hydration.
+           *
+           * The keystore is about the device's key capabilities — `storage`
+           * persists provider state; the keystore holds key material. Existing
+           * `privateKey`/`keyPair` records hydrate unchanged.
+           *
+           * @default Keystore.defaults — `{ p256: Keystore.webCryptoP256() }`
+           *
+           * @example
+           * ```ts
+           * import { Keystore, Provider } from 'accounts'
+           *
+           * const provider = Provider.create({
+           *   accessKey: {
+           *     keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
+           *   },
+           * })
+           * ```
+           */
+          keystore?: Keystore.Keystore | undefined
+        }
+      | undefined
     /** Adapter to use for account management. @default dialog() */
     adapter?: Adapter.Adapter | undefined
     /**
@@ -1816,15 +1858,7 @@ export declare namespace create {
      * `capabilities.auth` (per-call override).
      */
     auth?: z.input<typeof Rpc.wallet_connect.auth> | undefined
-    /**
-     * Default access key parameters for `wallet_connect`.
-     *
-     * Pass an object to use the same access-key policy for every applicable
-     * request, or a function to compute it dynamically. When set,
-     * `wallet_connect` and send transaction requests will authorize an access
-     * key only when no reusable local key is available. Return `undefined`
-     * from the function to skip authorization for the current request.
-     */
+    /** @deprecated Use `accessKey.authorize` instead. */
     authorizeAccessKey?: AuthorizeAccessKey | undefined
     /**
      * Supported chains. First chain is the default.
@@ -1833,29 +1867,6 @@ export declare namespace create {
     chains?: readonly [Chain, ...Chain[]] | undefined
     /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */
     feePayer?: Client.fromChainId.Options['feePayer']
-    /**
-     * Keystore backing locally generated access keys: one entry per key type
-     * (e.g. Secure Enclave, WebCrypto). Access-key material is created via
-     * the entry's `createKey()` (taking precedence over the adapter's
-     * `generateAccessKey`) and persisted as an opaque `handle` that the
-     * entry's `toAccount()` turns back into a signing account on hydration.
-     *
-     * The keystore is about the device's key capabilities — `storage`
-     * persists provider state; `keystore` holds key material. Existing
-     * `privateKey`/`keyPair` records hydrate unchanged.
-     *
-     * @default Keystore.defaults — `{ p256: Keystore.webCryptoP256() }`
-     *
-     * @example
-     * ```ts
-     * import { Keystore, Provider } from 'accounts'
-     *
-     * const provider = Provider.create({
-     *   keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
-     * })
-     * ```
-     */
-    keystore?: Keystore.Keystore | undefined
     /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
     maxAccounts?: number | undefined
     /**

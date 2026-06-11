@@ -34,7 +34,7 @@ Accepts all [`dialog`](/docs/api/dialog) adapter options, plus all [`Provider`](
 
 Default access key parameters for `wallet_connect`. Pass an object to use the same policy for every applicable request, or a function to compute it dynamically. Return `undefined` from the function to skip authorization for the current request.
 
-This matches [`Provider.authorizeAccessKey`](/docs/api/provider#authorizeaccesskey).
+This matches [`Provider.authorizeAccessKey`](/docs/api/provider#accesskeyauthorize).
 
 Tempo Wallet-hosted approval pages require at least one `limits` entry and one `scopes` entry. Local adapters accept unbounded keys, but production apps should pass both so local and wallet-hosted flows use the same policy.
 

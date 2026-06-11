@@ -47,22 +47,24 @@ const provider = Provider.create({
           redirectUri,
         })
       : tempoWallet({ baseUrl: walletDefaultUrl, openAuthSession, redirectUri }),
-  authorizeAccessKey: () => ({
-    expiry: Math.floor(Date.now() / 1000) + 60 * 5,
-    limits: [
-      {
-        token: tokens.pathUSD,
-        limit: parseUnits('5', 6),
-      },
-    ],
-    scopes: [
-      { address: tokens.pathUSD, selector: 'transfer(address,uint256)' },
-      {
-        address: tokens.pathUSD,
-        selector: 'transferWithMemo(address,uint256,bytes32)',
-      },
-    ],
-  }),
+  accessKey: {
+    authorize: () => ({
+      expiry: Math.floor(Date.now() / 1000) + 60 * 5,
+      limits: [
+        {
+          token: tokens.pathUSD,
+          limit: parseUnits('5', 6),
+        },
+      ],
+      scopes: [
+        { address: tokens.pathUSD, selector: 'transfer(address,uint256)' },
+        {
+          address: tokens.pathUSD,
+          selector: 'transferWithMemo(address,uint256,bytes32)',
+        },
+      ],
+    }),
+  },
   storage: secureMmkv(),
 })
 
