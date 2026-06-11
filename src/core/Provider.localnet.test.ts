@@ -19,7 +19,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 import { headlessWebAuthn, secp256k1 } from '../../test/adapters.js'
 import { accounts, chain, getClient, http } from '../../test/config.js'
 import { createJsonStorage, createServer, type Server } from '../../test/utils.js'
-import { webCryptoP256 } from '../keystore/index.js'
+import * as Keystore from './Keystore.js'
 import * as Handler from '../server/Handler.js'
 import * as Adapter from './Adapter.js'
 import { local as core_local } from './adapters/local.js'
@@ -2306,11 +2306,39 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
   })
 
   describe('Provider.create keystore option', () => {
+    test('default: the built-in keystore provisions handle-backed records', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        storage: Storage.memory(),
+      })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      const record = provider.store.getState().accessKeys[0]!
+      expect(record.keyType).toBe('p256')
+      expect(record.handle).toMatchObject({ kind: 'webcrypto-p256' })
+      expect(record.privateKey).toBeUndefined()
+      expect(record.keyPair).toBeUndefined()
+
+      // The non-extractable default signs transactions.
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+    })
+
     test('default: provisions a p256 access key backed by the keystore', async () => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        keystore: webCryptoP256(),
+        keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
         storage: createJsonStorage(),
       })
       await connect(provider)
@@ -2333,7 +2361,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        keystore: webCryptoP256(),
+        keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
         storage: createJsonStorage(),
       })
       const address = await connect(provider)
@@ -2361,7 +2389,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider1 = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        keystore: webCryptoP256(),
+        keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
         storage,
       })
       const address = await connect(provider1)
@@ -2376,7 +2404,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider2 = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        keystore: webCryptoP256(),
+        keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
         storage,
       })
       await new Promise((resolve) => setTimeout(resolve, 200))
@@ -2434,7 +2462,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: jsonRpcAdapter,
         chains: [chain],
-        keystore: webCryptoP256(),
+        keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
         storage: createJsonStorage(),
       })
       await provider.request({ method: 'wallet_connect' })

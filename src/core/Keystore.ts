@@ -1,33 +1,57 @@
+import { PublicKey, WebCryptoP256 } from 'ox'
 import type { Address, Hex } from 'ox'
-import type {
+import {
   Account as TempoAccount,
-  KeyAuthorizationManager as TempoKeyAuthorizationManager,
+  type KeyAuthorizationManager as TempoKeyAuthorizationManager,
 } from 'viem/tempo'
 
 import type { MaybePromise } from '../internal/types.js'
 
 /**
- * Pluggable access-key keystore.
+ * Pluggable access-key keystore: one {@link Entry} per key type it can create.
  *
- * A keystore owns access-key material end to end: `createKey` provisions a
- * key and returns an opaque, JSON-serializable `handle` that the SDK persists
- * verbatim alongside the access-key record; `toAccount` turns a persisted
- * record back into a signing account. The handle's schema is owned by
- * whichever keystore wrote it, so backends can be heterogeneous per device
- * (e.g. hardware-backed keys with a WebCrypto fallback).
+ * An entry owns access-key material end to end: `createKey` provisions a key
+ * and returns an opaque `handle` that the SDK persists verbatim alongside the
+ * access-key record; `toAccount` turns a persisted record back into a signing
+ * account. The handle's schema is owned by whichever entry wrote it, so
+ * backends can be heterogeneous per device (e.g. hardware-backed keys with a
+ * software fallback — see {@link fallback}).
  *
- * Records carrying `privateKey` or `keyPair` material continue to hydrate
- * without consulting the keystore.
+ * When no keystore is configured, {@link defaults} applies. Records carrying
+ * `privateKey` or `keyPair` material continue to hydrate without consulting
+ * the keystore.
  */
 export type Keystore = {
+  /** Entry used to create and rehydrate `p256` access keys. */
+  p256?: Entry | undefined
+  /** Entry used to create and rehydrate `secp256k1` access keys. */
+  secp256k1?: Entry | undefined
+}
+
+/** Key types a keystore can hold entries for. */
+export type KeyType = keyof Keystore
+
+/** Single-key-type keystore backend. */
+export type Entry = {
   /**
-   * Creates access-key material.
+   * What the handle is made of.
    *
-   * Must fail loudly when the keystore's runtime prerequisites are missing
+   * - `'json'` (default): survives JSON serialization — portable across all
+   *   storage adapters.
+   * - `'structured-clone'`: holds live objects (e.g. a `CryptoKey`) and
+   *   persists only through structured-clone storage (`Storage.idb`,
+   *   `Storage.memory`). On other storage the handle is stripped at persist
+   *   time, making the key session-only.
+   */
+  handle?: 'json' | 'structured-clone' | undefined
+  /**
+   * Creates access-key material. `handle` is opaque and persisted verbatim.
+   *
+   * Must fail loudly when the entry's runtime prerequisites are missing
    * (e.g. no Secure Enclave, no `crypto.subtle`) so provisioning errors
    * surface at authorization time, not at first sign.
    */
-  createKey: (options: createKey.Options) => Promise<createKey.ReturnType>
+  createKey: () => Promise<createKey.ReturnType>
   /**
    * Turns a persisted access-key record back into a signing account.
    *
@@ -36,9 +60,9 @@ export type Keystore = {
    *
    * Throw {@link KeyUnavailableError} when the key behind the handle is
    * permanently gone (e.g. hardware key deleted) — the SDK evicts the record
-   * so callers fall back to authorizing a fresh key. Any other error is
-   * treated as transient (e.g. device locked): the record is kept and
-   * retried on next use.
+   * so callers fall back to authorizing a fresh key. Throw any other error
+   * for handles the entry does not recognize or transient failures (e.g.
+   * device locked): the record is kept and retried on next use.
    */
   toAccount: (
     record: toAccount.Record,
@@ -46,11 +70,42 @@ export type Keystore = {
   ) => MaybePromise<TempoAccount.AccessKeyAccount>
 }
 
+export declare namespace createKey {
+  /** Created access-key material. */
+  type ReturnType = {
+    /** Opaque handle for the created key. Persisted verbatim; schema owned by the entry that wrote it. */
+    handle: unknown
+    /** Public key of the created key. */
+    publicKey: Hex.Hex
+  }
+}
+
+export declare namespace toAccount {
+  /** Persisted access-key record fields passed to {@link Entry.toAccount}. */
+  type Record = {
+    /** Opaque handle persisted by {@link Entry.createKey}. */
+    handle: unknown
+    /** Key type. */
+    keyType: string
+    /** Public key backing the access key. */
+    publicKey: Hex.Hex
+  }
+
+  /** Account construction context passed to {@link Entry.toAccount}. */
+  type Context = {
+    /** Root account address the access key signs for. */
+    access: Address.Address
+    /** Pending key authorization manager to thread into the account. */
+    keyAuthorizationManager: TempoKeyAuthorizationManager.KeyAuthorizationManager
+  }
+}
+
 /**
  * Signals that the key behind a persisted handle is permanently gone
  * (e.g. hardware key deleted, app keychain wiped). Thrown from
- * {@link Keystore.toAccount}, it evicts the access-key record so callers
- * fall back to authorizing a fresh key.
+ * {@link Entry.toAccount}, it evicts the access-key record so callers fall
+ * back to authorizing a fresh key. In a {@link fallback} composition it also
+ * claims ownership of the handle — later entries are not consulted.
  */
 export class KeyUnavailableError extends Error {
   constructor(message?: string, options?: { cause?: unknown | undefined }) {
@@ -65,44 +120,174 @@ export function isKeyUnavailableError(error: unknown): error is KeyUnavailableEr
   return error instanceof Error && error.name === 'Keystore.KeyUnavailableError'
 }
 
-export declare namespace createKey {
-  /** Options for {@link Keystore.createKey}. */
-  type Options = {
-    /** Requested key type. Defaults to keystore policy. */
-    keyType?: 'p256' | 'secp256k1' | undefined
-  }
-
-  /** Created access-key material. */
-  type ReturnType = {
-    /**
-     * Opaque handle for the created key. Persisted verbatim, so it must be
-     * JSON-serializable (and must not be `undefined`). Its schema is owned
-     * by the keystore that wrote it.
-     */
-    handle: unknown
-    /** Created key type. */
-    keyType: 'p256' | 'secp256k1'
-    /** Public key of the created key. */
-    publicKey: Hex.Hex
+/**
+ * Composes entries into one: the first entry that can provision wins, and
+ * hydration routes to whichever entry recognizes the handle.
+ *
+ * `createKey` tries entries in order, falling through on failure (e.g. no
+ * Secure Enclave on this device). `toAccount` tries entries in order,
+ * treating plain errors as "not my handle"; a {@link KeyUnavailableError}
+ * claims the handle and is rethrown immediately so the record is evicted
+ * rather than resurrected by another entry.
+ *
+ * @example
+ * ```ts
+ * import { Keystore, Provider } from 'accounts'
+ *
+ * const provider = Provider.create({
+ *   keystore: {
+ *     p256: Keystore.fallback(secureEnclave(), Keystore.webCryptoP256({ extractable: true })),
+ *   },
+ * })
+ * ```
+ */
+export function fallback(...entries: readonly Entry[]): Entry {
+  if (entries.length === 0) throw new Error('`fallback` requires at least one entry.')
+  return {
+    handle: entries.some((entry) => entry.handle === 'structured-clone')
+      ? 'structured-clone'
+      : 'json',
+    async createKey() {
+      const errors: unknown[] = []
+      for (const entry of entries) {
+        try {
+          return await entry.createKey()
+        } catch (error) {
+          errors.push(error)
+        }
+      }
+      throw new AggregateError(errors, 'No keystore entry could create key material.')
+    },
+    async toAccount(record, context) {
+      let error: unknown
+      for (const entry of entries) {
+        try {
+          return await entry.toAccount(record, context)
+        } catch (error_) {
+          if (isKeyUnavailableError(error_)) throw error_
+          error = error_
+        }
+      }
+      throw error ?? new Error('No keystore entry recognized the handle.')
+    },
   }
 }
 
-export declare namespace toAccount {
-  /** Persisted access-key record fields passed to {@link Keystore.toAccount}. */
-  type Record = {
-    /** Opaque handle persisted by {@link Keystore.createKey}. */
-    handle: unknown
-    /** Key type. */
-    keyType: string
-    /** Public key backing the access key. */
-    publicKey: Hex.Hex
-  }
+/** Handle persisted by the {@link webCryptoP256} entry. */
+type WebCryptoP256Handle = {
+  kind: 'webcrypto-p256'
+} & (
+  | {
+      /** Live key pair (non-extractable). Requires structured-clone storage. */
+      keyPair: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>>
+      jwk?: undefined
+    }
+  | {
+      /** Exported private key. At-rest protection is the host app's storage adapter. */
+      jwk: JsonWebKey
+      keyPair?: undefined
+    }
+)
 
-  /** Account construction context passed to {@link Keystore.toAccount}. */
-  type Context = {
-    /** Root account address the access key signs for. */
-    access: Address.Address
-    /** Pending key authorization manager to thread into the account. */
-    keyAuthorizationManager: TempoKeyAuthorizationManager.KeyAuthorizationManager
+/**
+ * WebCrypto P-256 keystore entry. The built-in default (see {@link defaults}).
+ *
+ * By default the key is generated non-extractable: the private key never has
+ * a JS-visible encoding, and the handle holds the live `CryptoKey`, which
+ * persists only through structured-clone storage (`Storage.idb`,
+ * `Storage.memory`) — on string-based storage the key is session-only.
+ *
+ * Pass `extractable: true` for environments without structured-clone storage
+ * where keys must survive restarts (e.g. React Native, Node, CLI): the
+ * private key is exported once as a JWK (at-rest protection is the host
+ * app's storage adapter) and re-imported non-extractable each session. In
+ * browsers with IndexedDB storage, prefer the non-extractable default.
+ *
+ * @example
+ * ```ts
+ * import { Keystore, Provider } from 'accounts'
+ *
+ * const provider = Provider.create({
+ *   keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
+ * })
+ * ```
+ */
+export function webCryptoP256(options: webCryptoP256.Options = {}): Entry {
+  const { extractable = false } = options
+  return {
+    handle: extractable ? 'json' : 'structured-clone',
+    async createKey() {
+      if (!globalThis.crypto?.subtle)
+        throw new Error('`webCryptoP256` keystore requires WebCrypto (`crypto.subtle`) support.')
+      const keyPair = await WebCryptoP256.createKeyPair({ extractable })
+      const publicKey = PublicKey.toHex(keyPair.publicKey)
+      if (!extractable)
+        return {
+          handle: { keyPair, kind: 'webcrypto-p256' } satisfies WebCryptoP256Handle,
+          publicKey,
+        }
+      const jwk = await globalThis.crypto.subtle.exportKey('jwk', keyPair.privateKey)
+      return { handle: { jwk, kind: 'webcrypto-p256' } satisfies WebCryptoP256Handle, publicKey }
+    },
+    async toAccount(record, context) {
+      const handle = record.handle as Partial<WebCryptoP256Handle> | undefined
+      if (handle?.kind !== 'webcrypto-p256')
+        throw new Error('Unrecognized `webCryptoP256` keystore handle.')
+      const account = {
+        access: context.access,
+        keyAuthorizationManager: context.keyAuthorizationManager,
+      }
+      if (handle.keyPair) {
+        // A live key pair serialized through non-structured-clone storage
+        // arrives mangled — the key is permanently gone.
+        if (!isCryptoKey(handle.keyPair.privateKey))
+          throw new KeyUnavailableError('`webCryptoP256` key material did not survive storage.')
+        return TempoAccount.fromWebCryptoP256(handle.keyPair, account)
+      }
+      if (handle.jwk) {
+        const privateKey = await globalThis.crypto.subtle
+          .importKey('jwk', handle.jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign'])
+          .catch((error) => {
+            throw new KeyUnavailableError(
+              '`webCryptoP256` keystore handle holds unusable key material.',
+              { cause: error },
+            )
+          })
+        return TempoAccount.fromWebCryptoP256(
+          { privateKey, publicKey: PublicKey.fromHex(record.publicKey) },
+          account,
+        )
+      }
+      throw new Error('Unrecognized `webCryptoP256` keystore handle.')
+    },
   }
+}
+
+export declare namespace webCryptoP256 {
+  /** Options for {@link webCryptoP256}. */
+  type Options = {
+    /**
+     * Generate the key extractable and persist it as a JWK so it survives
+     * string-based storage adapters. When `false` (default), the key is
+     * non-extractable from creation and persists only through
+     * structured-clone storage.
+     *
+     * @default false
+     */
+    extractable?: boolean | undefined
+  }
+}
+
+/** Built-in default keystore used when none is configured. */
+export const defaults: Keystore = { p256: webCryptoP256() }
+
+function isCryptoKey(value: unknown): value is CryptoKey {
+  if (typeof CryptoKey !== 'undefined' && value instanceof CryptoKey) return true
+  // Cross-realm fallback (e.g. keys structured-cloned through IndexedDB).
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'algorithm' in value &&
+    (value as CryptoKey).type === 'private'
+  )
 }

@@ -7,9 +7,8 @@ import {
   Hex,
   Json,
   Provider as ox_Provider,
-  PublicKey,
   RpcResponse,
-  WebCryptoP256,
+  type WebCryptoP256,
 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import {
@@ -42,7 +41,7 @@ import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import { withDedupe } from './internal/withDedupe.js'
-import type * as Keystore from './Keystore.js'
+import * as Keystore from './Keystore.js'
 import * as Schema from './Schema.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
@@ -476,51 +475,49 @@ export function create(options: create.Options = {}): create.ReturnType {
         chainId: chainId_,
       })
       return {
-        ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
         parameters: toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
         ...(prepared.privateKey ? { privateKey: prepared.privateKey } : {}),
       }
     }
 
-    // A configured keystore takes precedence over the adapter's
-    // `generateAccessKey` — the keystore owns the device's key capabilities.
-    if (keystore && parameters.keyType !== 'webAuthn') {
-      const { key, keyAuthorization } = await AccessKey.prepareAuthorization({
+    // Resolve the key source: an explicit `keystore` wins; otherwise the
+    // adapter's `generateAccessKey` applies; otherwise the default keystore —
+    // in browsers only, since elsewhere the wallet generates the key.
+    if (!keystore && instance.generateAccessKey) {
+      const generated = await instance.generateAccessKey({ keyType: parameters.keyType })
+      if (!generated) return { parameters }
+      const prepared = await AccessKey.prepareAuthorization({
         ...parameters,
         chainId: chainId_,
-        keystore,
+        keyType: generated.keyType,
+        publicKey: generated.publicKey,
       })
-      if (!key)
-        throw new RpcResponse.InternalError({
-          message: 'Keystore did not produce access-key material.',
-        })
       return {
-        key,
+        keyPair: generated.keyPair,
         parameters: {
-          ...toAuthorizeAccessKeyParameters(parameters, keyAuthorization),
-          publicKey: key.publicKey,
+          ...toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
+          publicKey: generated.publicKey,
         },
+        privateKey: generated.privateKey,
       }
     }
+    if (!keystore && !isBrowserWebCrypto()) return { parameters }
 
-    const generated = instance.generateAccessKey
-      ? await instance.generateAccessKey({ keyType: parameters.keyType })
-      : await generateBrowserP256AccessKey(parameters)
-    if (!generated) return { parameters }
-
-    const prepared = await AccessKey.prepareAuthorization({
+    const { key, keyAuthorization } = await AccessKey.prepareAuthorization({
       ...parameters,
       chainId: chainId_,
-      keyType: generated.keyType,
-      publicKey: generated.publicKey,
+      ...(keystore ? { keystore } : {}),
     })
+    if (!key)
+      throw new RpcResponse.InternalError({
+        message: 'Keystore did not produce access-key material.',
+      })
     return {
-      keyPair: generated.keyPair,
+      key,
       parameters: {
-        ...toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
-        publicKey: generated.publicKey,
+        ...toAuthorizeAccessKeyParameters(parameters, keyAuthorization),
+        publicKey: key.publicKey,
       },
-      privateKey: generated.privateKey,
     }
   }
 
@@ -537,22 +534,6 @@ export function create(options: create.Options = {}): create.ReturnType {
       address: keyAuthorization.address,
       chainId: keyAuthorization.chainId,
       keyType: keyAuthorization.type,
-    }
-  }
-
-  async function generateBrowserP256AccessKey(
-    parameters: Adapter.authorizeAccessKey.Parameters,
-  ): Promise<Adapter.generateAccessKey.ReturnType> {
-    if (!isBrowserWebCrypto()) return undefined
-    if (parameters.keyType && parameters.keyType !== 'p256')
-      throw new RpcResponse.InvalidParamsError({
-        message: `\`keyType: "${parameters.keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
-      })
-    const keyPair = await WebCryptoP256.createKeyPair()
-    return {
-      keyPair,
-      keyType: 'p256',
-      publicKey: PublicKey.toHex(keyPair.publicKey),
     }
   }
 
@@ -760,7 +741,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         account: address,
         chainId: Number(parameters.chainId ?? options_.chainId),
         parameters,
-        store: { state: store },
+        store: { keystore: keystore ?? Keystore.defaults, state: store },
       }))
     )
       return undefined
@@ -1853,21 +1834,25 @@ export declare namespace create {
     /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */
     feePayer?: Client.fromChainId.Options['feePayer']
     /**
-     * Keystore backing locally generated access keys (e.g. Secure Enclave,
-     * WebCrypto). When set, access-key material is created via
-     * `keystore.createKey()` (taking precedence over the adapter's
-     * `generateAccessKey`) and persisted as an opaque `handle` that
-     * `keystore.toAccount()` turns back into a signing account on hydration.
+     * Keystore backing locally generated access keys: one entry per key type
+     * (e.g. Secure Enclave, WebCrypto). Access-key material is created via
+     * the entry's `createKey()` (taking precedence over the adapter's
+     * `generateAccessKey`) and persisted as an opaque `handle` that the
+     * entry's `toAccount()` turns back into a signing account on hydration.
      *
      * The keystore is about the device's key capabilities — `storage`
      * persists provider state; `keystore` holds key material. Existing
      * `privateKey`/`keyPair` records hydrate unchanged.
      *
+     * @default Keystore.defaults — `{ p256: Keystore.webCryptoP256() }`
+     *
      * @example
      * ```ts
-     * import { webCryptoP256 } from 'accounts/keystore'
+     * import { Keystore, Provider } from 'accounts'
      *
-     * const provider = Provider.create({ keystore: webCryptoP256() })
+     * const provider = Provider.create({
+     *   keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
+     * })
      * ```
      */
     keystore?: Keystore.Keystore | undefined

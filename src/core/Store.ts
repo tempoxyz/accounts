@@ -6,7 +6,7 @@ import { createStore } from 'zustand/vanilla'
 
 import * as core_AccessKey from './AccessKey.js'
 import type { Store as Account } from './Account.js'
-import type * as Keystore from './Keystore.js'
+import * as core_Keystore from './Keystore.js'
 import * as Storage from './Storage.js'
 
 const supportsStructuredClone = Symbol.for('accounts.storage.supportsStructuredClone')
@@ -81,7 +81,7 @@ export type Options = {
   /** Initial chain ID. */
   chainId: number
   /** Keystore backing access-key records that carry an opaque `handle`. */
-  keystore?: Keystore.Keystore | undefined
+  keystore?: core_Keystore.Keystore | undefined
   /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
   maxAccounts?: number | undefined
   /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
@@ -96,7 +96,7 @@ export type Options = {
 export function create(options: Options): Store {
   const {
     chainId,
-    keystore,
+    keystore = core_Keystore.defaults,
     maxAccounts,
     persistCredentials = true,
     schema,
@@ -119,6 +119,7 @@ export function create(options: Options): Store {
           name: 'store',
           partialize: (state) =>
             serialize(state, {
+              keystore,
               maxAccounts,
               persistCredentials,
               structuredClone: canStructuredClone(storage),
@@ -138,7 +139,7 @@ export function create(options: Options): Store {
 
 /** Converts runtime provider state into the persisted refresh snapshot. */
 function serialize(state: State, options: serialize.Options = {}): Persisted {
-  const { maxAccounts, persistCredentials = true, structuredClone = false } = options
+  const { keystore, maxAccounts, persistCredentials = true, structuredClone = false } = options
   const accounts =
     maxAccounts && state.accounts.length > maxAccounts
       ? state.accounts.slice(0, maxAccounts)
@@ -149,7 +150,7 @@ function serialize(state: State, options: serialize.Options = {}): Persisted {
     ...(persistCredentials
       ? {
           accessKeys: state.accessKeys.map((accessKey) =>
-            serializeAccessKey(accessKey, { structuredClone }),
+            serializeAccessKey(accessKey, { keystore, structuredClone }),
           ),
         }
       : {}),
@@ -161,6 +162,8 @@ function serialize(state: State, options: serialize.Options = {}): Persisted {
 declare namespace serialize {
   /** Options for {@link serialize}. */
   type Options = {
+    /** Keystore backing access-key records that carry an opaque `handle`. */
+    keystore?: core_Keystore.Keystore | undefined
     /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded. */
     maxAccounts?: number | undefined
     /** Whether to persist credentials and access keys to storage. @default true */
@@ -240,14 +243,28 @@ function isStoredAccount(account: unknown): account is Account {
 
 function serializeAccessKey(
   accessKey: core_AccessKey.AccessKey,
-  options: { structuredClone: boolean },
+  options: { keystore?: core_Keystore.Keystore | undefined; structuredClone: boolean },
 ): core_AccessKey.AccessKey {
-  // WebCrypto key pairs are opaque/non-extractable, so structured-clone stores can keep them inline.
+  // Live key material (e.g. WebCrypto key pairs) survives structured-clone
+  // stores inline; everywhere else it is stripped so the key is session-only.
   if (options.structuredClone) return accessKey
   const { keyPair: _keyPair, ...metadata } = accessKey as core_AccessKey.AccessKey & {
     keyPair?: unknown
   }
+  if ('handle' in metadata && requiresStructuredClone(options.keystore, metadata.keyType)) {
+    const { handle: _handle, ...rest } = metadata
+    return rest as core_AccessKey.AccessKey
+  }
   return metadata as core_AccessKey.AccessKey
+}
+
+/** Returns whether the keystore entry for `keyType` writes structured-clone-only handles. */
+function requiresStructuredClone(
+  keystore: core_Keystore.Keystore | undefined,
+  keyType: core_AccessKey.AccessKey['keyType'],
+): boolean {
+  if (keyType !== 'p256' && keyType !== 'secp256k1') return false
+  return keystore?.[keyType]?.handle === 'structured-clone'
 }
 
 function canStructuredClone(storage: Storage.Storage): boolean {

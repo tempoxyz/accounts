@@ -266,44 +266,63 @@ const provider = Provider.create({
 ### keystore
 
 - **Type:** `Keystore.Keystore`
-- **Optional**
+- **Default:** `Keystore.defaults` — `{ p256: Keystore.webCryptoP256() }`
 
-Keystore backing locally generated access keys. When set, access-key material is created via `keystore.createKey()` — taking precedence over the adapter's `generateAccessKey` — and persisted as an opaque, JSON-serializable handle that `keystore.toAccount()` turns back into a signing account on hydration.
+Keystore backing locally generated access keys: one entry per key type. An entry's `createKey()` provisions key material — taking precedence over the adapter's `generateAccessKey` — and persists an opaque handle that the entry's `toAccount()` turns back into a signing account on hydration.
 
 The keystore is about the device's key capabilities: [`storage`](#storage) persists provider state, `keystore` holds key material. This enables hardware-backed access keys (e.g. Secure Enclave / Android Keystore) and other custom key backends. Existing records backed by `privateKey` or `keyPair` material hydrate unchanged.
 
+By default, keys are generated with WebCrypto, non-extractable from creation: the private key never has a JS-visible encoding, and persists only through structured-clone storage (`Storage.idb`, `Storage.memory`) — on string-based storage the key is session-only. For environments without structured-clone storage where keys must survive restarts (React Native, Node, CLI), pass `extractable: true`: the private key is exported once as a JWK (at-rest protection is the host app's storage adapter, e.g. `secureMmkv` on React Native) and re-imported non-extractable each session. In browsers with IndexedDB storage, prefer the default.
+
 ```ts twoslash
-import { Provider } from 'accounts'
-import { webCryptoP256 } from 'accounts/keystore'
+import { Keystore, Provider } from 'accounts'
 
 const provider = Provider.create({
-  keystore: webCryptoP256(), // [!code focus]
+  keystore: { p256: Keystore.webCryptoP256({ extractable: true }) }, // [!code focus]
 })
 ```
 
-Apps with custom needs (own native module, HSM, remote signer) can implement the two-function interface themselves. The handle's schema is owned by whichever keystore wrote it:
+Entries compose with `Keystore.fallback` — the first entry that can provision wins, and hydration routes to whichever entry recognizes the handle:
+
+```ts twoslash
+import { Keystore, Provider } from 'accounts'
+
+declare function secureEnclave(): Keystore.Entry
+
+const provider = Provider.create({
+  keystore: { // [!code focus]
+    p256: Keystore.fallback(secureEnclave(), Keystore.webCryptoP256({ extractable: true })), // [!code focus]
+  }, // [!code focus]
+})
+```
+
+Apps with custom needs (own native module, HSM, remote signer) implement the two-function entry interface. The handle's schema is owned by whichever entry wrote it:
 
 ```ts
-type Keystore = {
+type Entry = {
   /**
-   * Creates access-key material. `handle` is opaque, JSON-serializable,
-   * and persisted verbatim by the SDK. Must fail loudly when runtime
-   * prerequisites are missing (e.g. no Secure Enclave, no `crypto.subtle`)
-   * so provisioning errors surface at authorization time, not at first sign.
+   * What the handle is made of. 'json' (default) survives any storage
+   * adapter; 'structured-clone' holds live objects (e.g. a CryptoKey) and
+   * persists only through structured-clone storage — on other storage the
+   * handle is stripped at persist time, making the key session-only.
    */
-  createKey(options: { keyType?: 'p256' | 'secp256k1' }): Promise<{
-    keyType: 'p256' | 'secp256k1'
-    publicKey: Hex
-    handle: unknown
-  }>
+  handle?: 'json' | 'structured-clone'
+  /**
+   * Creates access-key material. `handle` is opaque and persisted verbatim
+   * by the SDK. Must fail loudly when runtime prerequisites are missing
+   * (e.g. no Secure Enclave, no `crypto.subtle`) so provisioning errors
+   * surface at authorization time, not at first sign.
+   */
+  createKey(): Promise<{ publicKey: Hex; handle: unknown }>
   /**
    * Turns a persisted key record back into a signing account.
    * Called once per launch; the SDK caches the result per record.
    *
-   * Throw `KeyUnavailableError` (from `accounts/keystore`) when the key
-   * behind the handle is permanently gone (e.g. hardware key deleted) —
-   * the SDK evicts the record so callers re-authorize. Any other error is
-   * treated as transient (e.g. device locked): the record is kept and
+   * Throw `Keystore.KeyUnavailableError` when the key behind the handle is
+   * permanently gone (e.g. hardware key deleted) — the SDK evicts the
+   * record so callers re-authorize. Throw any other error for handles the
+   * entry does not recognize (so `Keystore.fallback` can route past it) or
+   * transient failures (e.g. device locked): the record is kept and
    * retried on next use.
    */
   toAccount(
