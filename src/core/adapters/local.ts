@@ -4,7 +4,6 @@ import { hashMessage } from 'viem'
 import { Account as TempoAccount } from 'viem/tempo'
 import * as z from 'zod/mini'
 
-import * as AccessKey from '../AccessKey.js'
 import * as Account from '../Account.js'
 import * as Adapter from '../Adapter.js'
 import * as u from '../zod/utils.js'
