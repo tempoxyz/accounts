@@ -15,11 +15,10 @@ export function cli(options: cli.Options): Adapter.Adapter {
   const { name = 'Tempo CLI', rdns = 'xyz.tempo.cli' } = options
 
   return Adapter.define({ name, rdns }, ({ store }) => {
-    // Pure-JS keystores: the CLI persists to string-based filesystem storage,
-    // so WebCrypto keys could not survive restarts. secp256k1 is the
-    // unspecified-type default. Shared between the device-code ceremony below
-    // and the instance declaration so records hydrate through the same
-    // backends.
+    // Pure-JS keystores: filesystem storage is string-based, so WebCrypto
+    // keys could not survive restarts. Shared between the device-code
+    // ceremony and the instance declaration so records hydrate through the
+    // same backends.
     const keystores = { p256: Keystore.p256(), secp256k1: Keystore.secp256k1() }
 
     async function saveGeneratedAccessKey(
@@ -215,9 +214,6 @@ export function cli(options: cli.Options): Adapter.Adapter {
           })
         return { account }
       },
-      // Pure-JS keystores: the CLI persists to string-based filesystem
-      // storage, so WebCrypto keys could not survive restarts. secp256k1 is
-      // the unspecified-type default.
       accessKey: { keystores },
     }
   })

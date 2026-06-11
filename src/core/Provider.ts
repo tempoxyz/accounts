@@ -1838,8 +1838,8 @@ export declare namespace create {
            *
            * Keystores hold key material — locally or remotely; `storage`
            * persists provider state. App-level keystores override
-           * adapter-supplied defaults. Existing `privateKey`/`keyPair`
-           * records hydrate unchanged.
+           * adapter-supplied defaults. Access keys created before a
+           * keystore was configured keep working.
            *
            * @default Keystore.defaults — `{ p256: Keystore.webCryptoP256() }`
            *

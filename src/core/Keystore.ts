@@ -31,8 +31,8 @@ export type KeyType = keyof Keystores
  * it, so backends can be heterogeneous per device (e.g. hardware-backed keys
  * with a software fallback composed behind one keystore).
  *
- * Records carrying `privateKey` or `keyPair` material continue to hydrate
- * without consulting the keystore.
+ * Records carrying `privateKey` or `keyPair` material hydrate without
+ * consulting the keystore.
  */
 export type Keystore = {
   /**
@@ -64,7 +64,7 @@ export type Keystore = {
    * Throw {@link KeyUnavailableError} when the key behind the handle is
    * permanently gone (e.g. hardware key deleted) — the SDK evicts the record
    * so callers fall back to authorizing a fresh key. Throw any other error
-   * for handles the entry does not recognize or transient failures (e.g.
+   * for handles the keystore does not recognize or transient failures (e.g.
    * device locked): the record is kept and retried on next use.
    */
   toAccount: (
