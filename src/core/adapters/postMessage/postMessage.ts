@@ -77,7 +77,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
       ],
     })
     wata.on('notification', (event) => {
-      if (event.method === 'dialog_switchMode') void switchToPopup()
+      if (event.method === 'switch-mode') void switchToPopup()
       // The wallet asserts its current accounts (e.g. on connect, or a
       // wallet-side logout) so the SDK can drop a stale persisted session.
       else if (event.method === 'accountsChanged')
@@ -110,12 +110,16 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
    * wallet so it tears down its own pending request and returns to idle.
    */
   function cancel() {
-    void session?.notify({ method: 'dialog_cancel', params: [] })
+    void session?.notify({ method: 'cancel', params: [] })
     reject_inflight?.(new core_Provider.UserRejectedRequestError())
     mount?.hide()
   }
 
-  async function send(request: { method: string; params?: readonly unknown[] | undefined }) {
+  async function send(request: {
+    method: string
+    params?: readonly unknown[] | undefined
+    context?: { account?: string | undefined; chainId?: number | undefined } | undefined
+  }) {
     // Loops only to replay once after an occlusion-driven popup switch
     // (`resend`); the request otherwise leaves via one of three exits —
     // resolved, locally cancelled (dismiss), or rejected (window closed).
@@ -126,7 +130,11 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
         reject_inflight = reject
       })
       try {
-        const sent = wata.send({ method: request.method, params: request.params ?? [] })
+        const sent = wata.send({
+          method: request.method,
+          params: request.params ?? [],
+          ...(request.context ? { context: request.context } : {}),
+        })
         // Once `cancelled` wins the race, the wallet's eventual answer is
         // ignored; swallow it so it never surfaces as an unhandled rejection.
         void sent.catch(() => {})

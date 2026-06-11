@@ -667,10 +667,10 @@ describe('mount', () => {
         const [data] = z.decode(Rpc.personal_sign.schema.params!, event.params as never)
         await event.respond(await root.signMessage({ message: { raw: data } }))
       }
-      // Other methods stay pending (e.g. awaiting a dialog_cancel).
+      // Other methods stay pending (e.g. awaiting a cancel).
     })
     host.on('notification', (event) => {
-      if (event.method !== 'dialog_cancel') return
+      if (event.method !== 'cancel') return
       for (const pending of live.splice(0))
         void pending.reject({ code: 4001, message: 'User rejected the request.' }).catch(() => {})
     })
@@ -809,7 +809,7 @@ describe('mount', () => {
     const events: string[] = []
     // The iframe wallet asks to continue in a popup instead of answering.
     const scripted = scriptedMount(events, consumerRealm, (host) =>
-      host.on('request', () => void host.notify({ method: 'dialog_switchMode', params: [] })),
+      host.on('request', () => void host.notify({ method: 'switch-mode', params: [] })),
     )
 
     const provider = Provider.create({

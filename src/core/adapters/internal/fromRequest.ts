@@ -44,10 +44,16 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
 
     const provider = core_Provider.from({
       async request(request) {
-        if (request.method === 'eth_chainId') return Hex.fromNumber(store.getState().chainId)
+        const { accounts, activeAccount, chainId } = store.getState()
+        if (request.method === 'eth_chainId') return Hex.fromNumber(chainId)
+        // Forward the active account + chain as request context so the wallet
+        // acts against the session the app believes it is using rather than
+        // whatever the wallet last selected for itself.
+        const account = accounts[activeAccount]?.address
         return await requestRemote({
           method: request.method,
           params: request.params as readonly unknown[] | undefined,
+          context: { chainId, ...(account ? { account } : {}) },
         })
       },
     })
@@ -158,6 +164,8 @@ export declare namespace fromRequest {
       method: string
       /** JSON-RPC params. */
       params?: readonly unknown[] | undefined
+      /** Session selectors (active account + chain) for the wallet to act on. */
+      context?: { account?: string | undefined; chainId?: number | undefined } | undefined
     }) => Promise<unknown>
   }
 }
