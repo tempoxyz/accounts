@@ -2,6 +2,7 @@ import { WebCryptoP256 } from 'ox'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
+import { testKeystore } from '../../test/keystore.js'
 import { createJsonStorage } from '../../test/utils.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
@@ -340,6 +341,77 @@ describe('persistence', () => {
 
     const accessKeys = (await getPersistedState(storage))?.accessKeys as Record<string, unknown>[]
     expect('keyPair' in accessKeys[0]!).toMatchInlineSnapshot(`true`)
+  })
+
+  test('behavior: strips structured-clone keystore handles from JSON-backed storage', async () => {
+    const storage = createJsonStorage()
+    const { store } = await setup({ storage })
+
+    store.setState({
+      accessKeys: [
+        {
+          access: account,
+          address: accessKey,
+          chainId: 123,
+          handle: { kind: 'webcrypto-p256' },
+          keyType: 'p256',
+          publicKey: '0x1234',
+        },
+      ],
+    })
+
+    const accessKeys = (await getPersistedState(storage))?.accessKeys as Record<string, unknown>[]
+    expect('handle' in accessKeys[0]!).toMatchInlineSnapshot(`false`)
+  })
+
+  test('behavior: keeps structured-clone keystore handles in structured-clone storage', async () => {
+    const { storage, store } = await setup()
+
+    store.setState({
+      accessKeys: [
+        {
+          access: account,
+          address: accessKey,
+          chainId: 123,
+          handle: { kind: 'webcrypto-p256' },
+          keyType: 'p256',
+          publicKey: '0x1234',
+        },
+      ],
+    })
+
+    const accessKeys = (await getPersistedState(storage))?.accessKeys as Record<string, unknown>[]
+    expect('handle' in accessKeys[0]!).toMatchInlineSnapshot(`true`)
+  })
+
+  test('behavior: persists json keystore handles inline and rehydrates them', async () => {
+    const keystore = testKeystore()
+    const keystores = { p256: keystore }
+    const key = await keystore.createKey()
+    const storage = createJsonStorage()
+    const { store } = await setup({ keystores, storage })
+
+    store.setState({
+      accessKeys: [
+        {
+          access: account,
+          address: accessKey,
+          chainId: 123,
+          handle: key.handle,
+          keyType: 'p256',
+          publicKey: key.publicKey,
+        },
+      ],
+    })
+
+    const persisted = (await getPersistedState(storage))?.accessKeys as Record<string, unknown>[]
+    expect(persisted[0]!.handle).toMatchObject({ kind: 'test' })
+
+    const store2 = Store.create({ chainId: 123, keystores, storage })
+    await Store.waitForHydration(store2)
+    const hydrated = await store2.accessKeys.get({ accessKey, account, chainId: 123 })
+    expect(hydrated?.accessKeyAddress).toBeDefined()
+    expect(keystore.stats.toAccountCalls).toMatchInlineSnapshot(`1`)
   })
 
   test('behavior: drops legacy access key without chain context', async () => {
