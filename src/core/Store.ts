@@ -264,7 +264,7 @@ function requiresStructuredClone(
   keyType: core_AccessKey.AccessKey['keyType'],
 ): boolean {
   if (keyType !== 'p256' && keyType !== 'secp256k1') return false
-  return keystore?.[keyType]?.handle === 'structured-clone'
+  return keystore?.[keyType]?.requiresStructuredClone === true
 }
 
 function canStructuredClone(storage: Storage.Storage): boolean {

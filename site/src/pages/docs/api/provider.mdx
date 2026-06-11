@@ -227,12 +227,13 @@ Apps with custom needs (own native module, HSM, remote signer) implement the two
 ```ts
 type Entry = {
   /**
-   * What the handle is made of. 'json' (default) survives any storage
-   * adapter; 'structured-clone' holds live objects (e.g. a CryptoKey) and
-   * persists only through structured-clone storage — on other storage the
-   * handle is stripped at persist time, making the key session-only.
+   * Whether handles hold live objects (e.g. a CryptoKey) that persist only
+   * through structured-clone storage — on other storage the handle is
+   * stripped at persist time, making the key session-only. When false
+   * (default), handles must survive JSON serialization, portable across
+   * all storage adapters.
    */
-  handle?: 'json' | 'structured-clone'
+  requiresStructuredClone?: boolean
   /**
    * Creates access-key material. `handle` is opaque and persisted verbatim
    * by the SDK. Must fail loudly when runtime prerequisites are missing

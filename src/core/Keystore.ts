@@ -34,16 +34,17 @@ export type KeyType = keyof Keystore
 /** Single-key-type keystore backend. */
 export type Entry = {
   /**
-   * What the handle is made of.
+   * Whether this entry's handles hold live objects (e.g. a `CryptoKey`)
+   * that persist only through structured-clone storage (`Storage.idb`,
+   * `Storage.memory`). On other storage the handle is stripped at persist
+   * time, making the key session-only.
    *
-   * - `'json'` (default): survives JSON serialization — portable across all
-   *   storage adapters.
-   * - `'structured-clone'`: holds live objects (e.g. a `CryptoKey`) and
-   *   persists only through structured-clone storage (`Storage.idb`,
-   *   `Storage.memory`). On other storage the handle is stripped at persist
-   *   time, making the key session-only.
+   * When `false` (default), handles must survive JSON serialization —
+   * portable across all storage adapters.
+   *
+   * @default false
    */
-  handle?: 'json' | 'structured-clone' | undefined
+  requiresStructuredClone?: boolean | undefined
   /**
    * Creates access-key material. `handle` is opaque and persisted verbatim.
    *
@@ -163,7 +164,7 @@ type WebCryptoP256Handle = {
 export function webCryptoP256(options: webCryptoP256.Options = {}): Entry {
   const { extractable = false } = options
   return {
-    handle: extractable ? 'json' : 'structured-clone',
+    requiresStructuredClone: !extractable,
     async createKey() {
       if (!globalThis.crypto?.subtle)
         throw new Error('`webCryptoP256` keystore requires WebCrypto (`crypto.subtle`) support.')

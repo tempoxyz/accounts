@@ -18,7 +18,7 @@ function toAccountContext() {
 describe('webCryptoP256', () => {
   test('default: creates a non-extractable key with a structured-clone handle', async () => {
     const entry = Keystore.webCryptoP256()
-    expect(entry.handle).toBe('structured-clone')
+    expect(entry.requiresStructuredClone).toBe(true)
 
     const key = await entry.createKey()
     expect(key.publicKey).toMatch(/^0x[0-9a-f]+$/i)
@@ -37,7 +37,7 @@ describe('webCryptoP256', () => {
 
   test('behavior: extractable handles survive JSON and verify against the public key', async () => {
     const entry = Keystore.webCryptoP256({ extractable: true })
-    expect(entry.handle).toBe('json')
+    expect(entry.requiresStructuredClone).toBe(false)
 
     const key = await entry.createKey()
     expect(JSON.parse(JSON.stringify(key.handle))).toEqual(key.handle)
