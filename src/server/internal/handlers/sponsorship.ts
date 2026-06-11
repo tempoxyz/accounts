@@ -113,7 +113,7 @@ export declare namespace sign {
 
 /** Handles `eth_signRawTransaction` and broadcast methods for sponsored Tempo transactions. */
 export async function handleRawTransaction(options: handleRawTransaction.Options) {
-  const { account, getClient, method, request, validate } = options
+  const { account, feeToken: sponsorFeeToken, getClient, method, request, validate } = options
   const serialized = request.params?.[0] as `0x76${string}` | undefined
 
   if (!serialized?.startsWith('0x76') && !serialized?.startsWith('0x78'))
@@ -134,11 +134,15 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     })
 
   const client = getClient(transaction.chainId)
+  const chainFeeToken = (client.chain as { feeToken?: Address | undefined } | undefined)?.feeToken
+  const feeToken =
+    (transaction.feeToken as Address | null | undefined) ?? sponsorFeeToken ?? chainFeeToken
   const serializedTransaction = toSerializedTransaction(
     await signTransaction(client, {
       ...transaction,
       account,
       feePayer: account,
+      ...(feeToken ? { feeToken } : {}),
     } as never),
   )
 
@@ -153,6 +157,8 @@ export declare namespace handleRawTransaction {
   type Options = {
     /** Account used as the fee payer. */
     account: LocalAccount
+    /** Optional token the fee payer prefers for sponsored raw transactions. */
+    feeToken?: Address | undefined
     /** Client resolver keyed by transaction `chainId`. */
     getClient: (chainId?: number | undefined) => Client
     /** Raw transaction method to handle. */

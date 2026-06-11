@@ -375,6 +375,34 @@ describe('behavior: with feePayer.feeToken', () => {
     expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
     expect(receipt.feeToken?.toLowerCase()).toBe(sponsorFeeToken)
   })
+
+  test('behavior: raw sponsor signing restores sponsor.feeToken when envelope omits feeToken', async () => {
+    const rpc = getClient({ account: userAccount, chain, transport: http() })
+    const { transaction } = await fillTransaction(rpc, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feePayer: true as never,
+    })
+    const partial = await userAccount.signTransaction({ ...transaction, feePayer: true } as never)
+    expect([null, undefined]).toContain(
+      Transaction.deserialize(partial as `0x76${string}`).feeToken,
+    )
+
+    const response = await fetch(server.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_signRawTransaction',
+        params: [partial],
+      }),
+    })
+    const body = (await response.json()) as { result: `0x76${string}` }
+    const feeToken = Transaction.deserialize(body.result).feeToken as Address | undefined
+
+    expect(feeToken?.toLowerCase()).toBe(sponsorFeeToken)
+  })
 })
 
 describe('behavior: with app-provided feePayer URL', () => {
