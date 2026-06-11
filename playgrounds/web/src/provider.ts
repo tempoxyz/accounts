@@ -11,7 +11,7 @@ import {
   turnkey,
   webAuthn,
 } from 'accounts'
-import { Mount } from 'accounts/postMessage'
+import { Mount } from 'accounts'
 import { privy } from 'accounts/react/privy'
 import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
