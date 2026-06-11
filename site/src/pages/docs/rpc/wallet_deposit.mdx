@@ -23,6 +23,8 @@ type Request = {
     chainId?: number
     /** Display name shown in the deposit UI (e.g. the app name). */
     displayName?: string
+    /** Preferred funding path to show first. */
+    intent?: 'applePay' | 'credits' | 'crypto' | 'faucet' | 'referralCode' | 'x'
     /** Token contract address to pre-fill. Omit to let the user choose. */
     token?: `0x${string}`
     /** Human-readable amount to pre-fill (e.g. `"1.5"`). */
