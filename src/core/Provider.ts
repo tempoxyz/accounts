@@ -1819,14 +1819,13 @@ export declare namespace create {
     accessKey?:
       | {
           /**
-           * Default access key parameters for `wallet_connect`.
+           * Access-key parameters to authorize automatically when no stored
+           * key satisfies a request.
            *
-           * Pass an object to use the same access-key policy for every
-           * applicable request, or a function to compute it dynamically. When
-           * set, `wallet_connect` and send transaction requests will authorize
-           * an access key only when no reusable local key is available. Return
-           * `undefined` from the function to skip authorization for the
-           * current request.
+           * Applies to `wallet_connect` and transaction sends. Pass an object
+           * to use the same parameters for every request, or a function to
+           * compute them per request — return `undefined` to skip
+           * authorization for that request.
            */
           authorize?: AuthorizeAccessKey | undefined
           /**
@@ -1929,12 +1928,12 @@ export declare namespace create {
     transports?: Record<number, Transport> | undefined
   }
 
-  /** Default access-key authorization parameters with SDK-only reuse policy. */
+  /** Access-key parameters to authorize automatically, with SDK-only reuse policy. */
   type AuthorizeAccessKeyParameters = Adapter.authorizeAccessKey.Parameters & {
     /** SDK-only policy for deciding whether a stored local key can be reused. */
     reuse?: AccessKey.ReusePolicy | undefined
   }
-  /** Static or dynamic default access-key authorization policy. */
+  /** Static or per-request access-key authorization parameters. */
   type AuthorizeAccessKey =
     | AuthorizeAccessKeyParameters
     | (() => AuthorizeAccessKeyParameters | undefined)

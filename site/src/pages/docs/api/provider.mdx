@@ -89,7 +89,9 @@ Access-key configuration: `authorize` automatically authorizes an access key whe
 - **Type:** `Provider.create.AuthorizeAccessKeyParameters | (() => Provider.create.AuthorizeAccessKeyParameters | undefined)`
 - **Optional**
 
-Default access key parameters for `wallet_connect` and transaction sends. Pass an object to use the same policy for every applicable request, or a function to compute it dynamically. When set, the provider first checks stored local access keys. If one can satisfy the request, the provider reuses it. If none can, `wallet_connect` includes `capabilities.authorizeAccessKey`, and send requests authorize the key immediately before sending when the requested scopes cover the transaction calls. Return `undefined` from the function to skip authorization for the current request.
+Access-key parameters to authorize automatically when no stored key satisfies a request.
+
+Applies to `wallet_connect` and transaction sends: the provider first checks stored access keys and reuses one that satisfies the request; if none does, `wallet_connect` includes `capabilities.authorizeAccessKey`, and sends authorize the key immediately beforehand when the requested scopes cover the transaction calls. Pass an object to use the same parameters for every request, or a function to compute them per request — return `undefined` to skip authorization for that request.
 
 The optional `reuse` object is SDK-only. It is never sent to the wallet RPC. Use it to make reuse stricter than the default scope check.
 
