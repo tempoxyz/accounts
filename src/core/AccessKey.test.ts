@@ -1038,10 +1038,17 @@ describe('keystore', () => {
   test('behavior: records round-trip the backend that created them', async () => {
     const backendA = testEntry('backend-a')
     const backendB = testEntry('backend-b')
-    const store = Store.create({
-      chainId: 1,
-      keystore: { p256: Keystore.fallback(backendA, backendB) },
-    })
+    // Bespoke composition: one entry routing two backends by handle kind
+    // (e.g. a hardware entry with a software fallback).
+    const entry: Keystore.Entry = {
+      createKey: () => backendA.createKey(),
+      toAccount(record, context) {
+        const handle = record.handle as { kind: string }
+        if (handle.kind === 'backend-a') return backendA.toAccount(record, context)
+        return backendB.toAccount(record, context)
+      },
+    }
+    const store = Store.create({ chainId: 1, keystore: { p256: entry } })
 
     for (const backend of [backendA, backendB]) {
       const key = await backend.createKey()

@@ -1,6 +1,6 @@
 import { Address, Hex, Json, P256, PublicKey } from 'ox'
 import { SignatureEnvelope } from 'ox/tempo'
-import { Account as TempoAccount, KeyAuthorizationManager } from 'viem/tempo'
+import { KeyAuthorizationManager } from 'viem/tempo'
 import { describe, expect, test, vi } from 'vp/test'
 
 import { accounts } from '../../test/config.js'
@@ -126,107 +126,5 @@ describe('webCryptoP256', () => {
     } finally {
       vi.unstubAllGlobals()
     }
-  })
-})
-
-describe('fallback', () => {
-  /** Entry that signs with a noble P256 key, discriminating handles by `kind`. */
-  function stubEntry(kind: string, options: { available?: boolean | undefined } = {}) {
-    const keys = new Map<string, Hex.Hex>()
-    const stats = { createKeyCalls: 0, toAccountCalls: 0 }
-    const entry: Keystore.Entry = {
-      async createKey() {
-        stats.createKeyCalls++
-        if (options.available === false) throw new Error(`${kind} unavailable`)
-        const privateKey = P256.randomPrivateKey()
-        const id = `key-${keys.size}`
-        keys.set(id, privateKey)
-        return {
-          handle: { id, kind },
-          publicKey: PublicKey.toHex(P256.getPublicKey({ privateKey })),
-        }
-      },
-      async toAccount(record, context) {
-        stats.toAccountCalls++
-        const handle = record.handle as { id: string; kind: string }
-        if (handle.kind !== kind) throw new Error('not my handle')
-        const privateKey = keys.get(handle.id)
-        if (!privateKey) throw new Keystore.KeyUnavailableError(`${kind} key deleted`)
-        return TempoAccount.fromP256(privateKey, {
-          access: context.access,
-          keyAuthorizationManager: context.keyAuthorizationManager,
-        })
-      },
-    }
-    return Object.assign(entry, { keys, stats })
-  }
-
-  test('default: first entry that can provision wins', async () => {
-    const primary = stubEntry('primary')
-    const secondary = stubEntry('secondary')
-    const entry = Keystore.fallback(primary, secondary)
-
-    const key = await entry.createKey()
-    expect((key.handle as { kind: string }).kind).toBe('primary')
-    expect(secondary.stats.createKeyCalls).toBe(0)
-  })
-
-  test('behavior: falls through when an entry cannot provision', async () => {
-    const primary = stubEntry('primary', { available: false })
-    const secondary = stubEntry('secondary')
-    const entry = Keystore.fallback(primary, secondary)
-
-    const key = await entry.createKey()
-    expect((key.handle as { kind: string }).kind).toBe('secondary')
-  })
-
-  test('error: surfaces all errors when no entry can provision', async () => {
-    const entry = Keystore.fallback(
-      stubEntry('primary', { available: false }),
-      stubEntry('secondary', { available: false }),
-    )
-    await expect(entry.createKey()).rejects.toMatchObject({
-      errors: [expect.any(Error), expect.any(Error)],
-      message: 'No keystore entry could create key material.',
-    })
-  })
-
-  test('behavior: hydration routes to the entry that recognizes the handle', async () => {
-    const primary = stubEntry('primary')
-    const secondary = stubEntry('secondary')
-    const entry = Keystore.fallback(primary, secondary)
-
-    const key = await secondary.createKey()
-    const account = await entry.toAccount(
-      { handle: key.handle, keyType: 'p256', publicKey: key.publicKey },
-      toAccountContext(),
-    )
-    expect(account.accessKeyAddress).toBe(
-      Address.fromPublicKey(PublicKey.fromHex(key.publicKey)).toLowerCase(),
-    )
-  })
-
-  test('behavior: KeyUnavailableError claims the handle', async () => {
-    const primary = stubEntry('primary')
-    const secondary = stubEntry('secondary')
-    const entry = Keystore.fallback(primary, secondary)
-
-    const key = await primary.createKey()
-    primary.keys.clear()
-
-    await expect(
-      entry.toAccount(
-        { handle: key.handle, keyType: 'p256', publicKey: key.publicKey },
-        toAccountContext(),
-      ),
-    ).rejects.toBeInstanceOf(Keystore.KeyUnavailableError)
-    // The owning entry's verdict is terminal — later entries are not consulted.
-    expect(secondary.stats.toAccountCalls).toBe(0)
-  })
-
-  test('behavior: declares structured-clone when any entry does', () => {
-    const json = stubEntry('json')
-    expect(Keystore.fallback(json).handle).toBe('json')
-    expect(Keystore.fallback(json, Keystore.webCryptoP256()).handle).toBe('structured-clone')
   })
 })

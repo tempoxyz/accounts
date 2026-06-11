@@ -15,7 +15,7 @@ import type { MaybePromise } from '../internal/types.js'
  * access-key record; `toAccount` turns a persisted record back into a signing
  * account. The handle's schema is owned by whichever entry wrote it, so
  * backends can be heterogeneous per device (e.g. hardware-backed keys with a
- * software fallback — see {@link fallback}).
+ * software fallback composed behind one entry).
  *
  * When no keystore is configured, {@link defaults} applies. Records carrying
  * `privateKey` or `keyPair` material continue to hydrate without consulting
@@ -104,8 +104,9 @@ export declare namespace toAccount {
  * Signals that the key behind a persisted handle is permanently gone
  * (e.g. hardware key deleted, app keychain wiped). Thrown from
  * {@link Entry.toAccount}, it evicts the access-key record so callers fall
- * back to authorizing a fresh key. In a {@link fallback} composition it also
- * claims ownership of the handle — later entries are not consulted.
+ * back to authorizing a fresh key. Entries composing multiple backends
+ * should treat it as an ownership claim: do not route the handle to another
+ * backend.
  */
 export class KeyUnavailableError extends Error {
   constructor(message?: string, options?: { cause?: unknown | undefined }) {
@@ -118,59 +119,6 @@ export class KeyUnavailableError extends Error {
 export function isKeyUnavailableError(error: unknown): error is KeyUnavailableError {
   if (error instanceof KeyUnavailableError) return true
   return error instanceof Error && error.name === 'Keystore.KeyUnavailableError'
-}
-
-/**
- * Composes entries into one: the first entry that can provision wins, and
- * hydration routes to whichever entry recognizes the handle.
- *
- * `createKey` tries entries in order, falling through on failure (e.g. no
- * Secure Enclave on this device). `toAccount` tries entries in order,
- * treating plain errors as "not my handle"; a {@link KeyUnavailableError}
- * claims the handle and is rethrown immediately so the record is evicted
- * rather than resurrected by another entry.
- *
- * @example
- * ```ts
- * import { Keystore, Provider } from 'accounts'
- *
- * const provider = Provider.create({
- *   keystore: {
- *     p256: Keystore.fallback(secureEnclave(), Keystore.webCryptoP256({ extractable: true })),
- *   },
- * })
- * ```
- */
-export function fallback(...entries: readonly Entry[]): Entry {
-  if (entries.length === 0) throw new Error('`fallback` requires at least one entry.')
-  return {
-    handle: entries.some((entry) => entry.handle === 'structured-clone')
-      ? 'structured-clone'
-      : 'json',
-    async createKey() {
-      const errors: unknown[] = []
-      for (const entry of entries) {
-        try {
-          return await entry.createKey()
-        } catch (error) {
-          errors.push(error)
-        }
-      }
-      throw new AggregateError(errors, 'No keystore entry could create key material.')
-    },
-    async toAccount(record, context) {
-      let error: unknown
-      for (const entry of entries) {
-        try {
-          return await entry.toAccount(record, context)
-        } catch (error_) {
-          if (isKeyUnavailableError(error_)) throw error_
-          error = error_
-        }
-      }
-      throw error ?? new Error('No keystore entry recognized the handle.')
-    },
-  }
 }
 
 /** Handle persisted by the {@link webCryptoP256} entry. */

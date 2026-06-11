@@ -282,16 +282,16 @@ const provider = Provider.create({
 })
 ```
 
-Entries compose with `Keystore.fallback` — the first entry that can provision wins, and hydration routes to whichever entry recognizes the handle:
+An entry can compose multiple backends behind one slot (e.g. a hardware entry with a software fallback for devices without a Secure Enclave). Gate provisioning fallback on a deliberate capability check — not on errors, so a transient failure never silently downgrades a hardware-capable device to a software key — and route hydration by the handle's own discriminant:
 
 ```ts twoslash
 import { Keystore, Provider } from 'accounts'
 
-declare function secureEnclave(): Keystore.Entry
+declare function secureEnclave(options: { fallback: Keystore.Entry }): Keystore.Entry
 
 const provider = Provider.create({
   keystore: { // [!code focus]
-    p256: Keystore.fallback(secureEnclave(), Keystore.webCryptoP256({ extractable: true })), // [!code focus]
+    p256: secureEnclave({ fallback: Keystore.webCryptoP256({ extractable: true }) }), // [!code focus]
   }, // [!code focus]
 })
 ```
@@ -321,9 +321,10 @@ type Entry = {
    * Throw `Keystore.KeyUnavailableError` when the key behind the handle is
    * permanently gone (e.g. hardware key deleted) — the SDK evicts the
    * record so callers re-authorize. Throw any other error for handles the
-   * entry does not recognize (so `Keystore.fallback` can route past it) or
-   * transient failures (e.g. device locked): the record is kept and
-   * retried on next use.
+   * entry does not recognize or transient failures (e.g. device locked):
+   * the record is kept and retried on next use. Entries composing multiple
+   * backends should treat `KeyUnavailableError` as an ownership claim and
+   * not route the handle to another backend.
    */
   toAccount(
     record: { keyType: string; publicKey: Hex; handle: unknown },
