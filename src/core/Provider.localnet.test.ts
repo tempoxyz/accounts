@@ -2338,7 +2338,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        accessKey: { keystore: { p256: Keystore.webCryptoP256({ extractable: true }) } },
+        accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage: createJsonStorage(),
       })
       await connect(provider)
@@ -2361,7 +2361,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        accessKey: { keystore: { p256: Keystore.webCryptoP256({ extractable: true }) } },
+        accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage: createJsonStorage(),
       })
       const address = await connect(provider)
@@ -2389,7 +2389,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider1 = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        accessKey: { keystore: { p256: Keystore.webCryptoP256({ extractable: true }) } },
+        accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage,
       })
       const address = await connect(provider1)
@@ -2404,7 +2404,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider2 = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        accessKey: { keystore: { p256: Keystore.webCryptoP256({ extractable: true }) } },
+        accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage,
       })
       await new Promise((resolve) => setTimeout(resolve, 200))
@@ -2462,7 +2462,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const provider = Provider.create({
         adapter: jsonRpcAdapter,
         chains: [chain],
-        accessKey: { keystore: { p256: Keystore.webCryptoP256({ extractable: true }) } },
+        accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage: createJsonStorage(),
       })
       await provider.request({ method: 'wallet_connect' })

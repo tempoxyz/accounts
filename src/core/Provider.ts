@@ -105,7 +105,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
   } = options
-  const keystore = options.accessKey?.keystore
+  const keystores = options.accessKey?.keystores
   const authorizeAccessKey_default = options.accessKey?.authorize ?? options.authorizeAccessKey
 
   // Build per-chain transports from `relay` (if set), then layer caller-provided
@@ -136,7 +136,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const store = Store.create({
     chainId: defaultChain.id,
-    keystore,
+    keystores,
     maxAccounts,
     persistCredentials,
     schema: adapter.schema,
@@ -481,10 +481,10 @@ export function create(options: create.Options = {}): create.ReturnType {
       }
     }
 
-    // Resolve the key source: an explicit `keystore` wins; otherwise the
+    // Resolve the key source: explicit `keystores` win; otherwise the
     // adapter's `generateAccessKey` applies; otherwise the default keystore —
     // in browsers only, since elsewhere the wallet generates the key.
-    if (!keystore && instance.generateAccessKey) {
+    if (!keystores && instance.generateAccessKey) {
       const generated = await instance.generateAccessKey({ keyType: parameters.keyType })
       if (!generated) return { parameters }
       const prepared = await AccessKey.prepareAuthorization({
@@ -502,12 +502,12 @@ export function create(options: create.Options = {}): create.ReturnType {
         privateKey: generated.privateKey,
       }
     }
-    if (!keystore && !isBrowserWebCrypto()) return { parameters }
+    if (!keystores && !isBrowserWebCrypto()) return { parameters }
 
     const { key, keyAuthorization } = await AccessKey.prepareAuthorization({
       ...parameters,
       chainId: chainId_,
-      ...(keystore ? { keystore } : {}),
+      ...(keystores ? { keystores } : {}),
     })
     if (!key)
       throw new RpcResponse.InternalError({
@@ -741,7 +741,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         account: address,
         chainId: Number(parameters.chainId ?? options_.chainId),
         parameters,
-        store: { keystore: keystore ?? Keystore.defaults, state: store },
+        store: { keystores: keystores ?? Keystore.defaults, state: store },
       }))
     )
       return undefined
@@ -1821,15 +1821,15 @@ export declare namespace create {
            */
           authorize?: AuthorizeAccessKey | undefined
           /**
-           * Keystore backing locally generated access keys: one entry per key
+           * Keystores backing locally generated access keys: one per key
            * type (e.g. Secure Enclave, WebCrypto). Access-key material is
-           * created via the entry's `createKey()` (taking precedence over the
-           * adapter's `generateAccessKey`) and persisted as an opaque `handle`
-           * that the entry's `toAccount()` turns back into a signing account
-           * on hydration.
+           * created via the keystore's `createKey()` (taking precedence over
+           * the adapter's `generateAccessKey`) and persisted as an opaque
+           * `handle` that the keystore's `toAccount()` turns back into a
+           * signing account on hydration.
            *
-           * The keystore is about the device's key capabilities — `storage`
-           * persists provider state; the keystore holds key material. Existing
+           * Keystores are about the device's key capabilities — `storage`
+           * persists provider state; keystores hold key material. Existing
            * `privateKey`/`keyPair` records hydrate unchanged.
            *
            * @default Keystore.defaults — `{ p256: Keystore.webCryptoP256() }`
@@ -1840,12 +1840,12 @@ export declare namespace create {
            *
            * const provider = Provider.create({
            *   accessKey: {
-           *     keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
+           *     keystores: { p256: Keystore.webCryptoP256({ extractable: true }) },
            *   },
            * })
            * ```
            */
-          keystore?: Keystore.Keystore | undefined
+          keystores?: Keystore.Keystores | undefined
         }
       | undefined
     /** Adapter to use for account management. @default dialog() */

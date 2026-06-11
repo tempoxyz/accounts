@@ -17,16 +17,16 @@ function toAccountContext() {
 
 describe('webCryptoP256', () => {
   test('default: creates a non-extractable key with a structured-clone handle', async () => {
-    const entry = Keystore.webCryptoP256()
-    expect(entry.requiresStructuredClone).toBe(true)
+    const keystore = Keystore.webCryptoP256()
+    expect(keystore.requiresStructuredClone).toBe(true)
 
-    const key = await entry.createKey()
+    const key = await keystore.createKey()
     expect(key.publicKey).toMatch(/^0x[0-9a-f]+$/i)
     const handle = key.handle as { kind: string; keyPair?: { privateKey: CryptoKey } }
     expect(handle.kind).toBe('webcrypto-p256')
     expect(handle.keyPair?.privateKey.extractable).toBe(false)
 
-    const account = await entry.toAccount(
+    const account = await keystore.toAccount(
       { handle: key.handle, keyType: 'p256', publicKey: key.publicKey },
       toAccountContext(),
     )
@@ -36,13 +36,13 @@ describe('webCryptoP256', () => {
   })
 
   test('behavior: extractable handles survive JSON and verify against the public key', async () => {
-    const entry = Keystore.webCryptoP256({ extractable: true })
-    expect(entry.requiresStructuredClone).toBe(false)
+    const keystore = Keystore.webCryptoP256({ extractable: true })
+    expect(keystore.requiresStructuredClone).toBe(false)
 
-    const key = await entry.createKey()
+    const key = await keystore.createKey()
     expect(JSON.parse(JSON.stringify(key.handle))).toEqual(key.handle)
 
-    const account = await entry.toAccount(
+    const account = await keystore.toAccount(
       {
         handle: JSON.parse(JSON.stringify(key.handle)),
         keyType: 'p256',
@@ -70,14 +70,14 @@ describe('webCryptoP256', () => {
   })
 
   test('behavior: a live handle mangled by JSON storage is permanently unavailable', async () => {
-    const entry = Keystore.webCryptoP256()
-    const key = await entry.createKey()
+    const keystore = Keystore.webCryptoP256()
+    const key = await keystore.createKey()
     // Simulate a structured-clone handle squeezed through a string-based
     // storage adapter: the CryptoKey degrades to a plain object.
     const mangled = Json.parse(Json.stringify(key.handle))
 
     await expect(
-      entry.toAccount(
+      keystore.toAccount(
         { handle: mangled, keyType: 'p256', publicKey: key.publicKey },
         toAccountContext(),
       ),
@@ -85,10 +85,10 @@ describe('webCryptoP256', () => {
   })
 
   test('error: corrupt key material is permanently unavailable', async () => {
-    const entry = Keystore.webCryptoP256({ extractable: true })
-    const key = await entry.createKey()
+    const keystore = Keystore.webCryptoP256({ extractable: true })
+    const key = await keystore.createKey()
     await expect(
-      entry.toAccount(
+      keystore.toAccount(
         {
           handle: { jwk: { kty: 'EC' }, kind: 'webcrypto-p256' },
           keyType: 'p256',
@@ -100,9 +100,9 @@ describe('webCryptoP256', () => {
   })
 
   test('error: rejects handles written by another keystore', async () => {
-    const entry = Keystore.webCryptoP256()
-    const key = await entry.createKey()
-    const toAccount = entry.toAccount(
+    const keystore = Keystore.webCryptoP256()
+    const key = await keystore.createKey()
+    const toAccount = keystore.toAccount(
       {
         handle: { keyTag: 'app.example.key', kind: 'secure-enclave' },
         keyType: 'p256',
@@ -117,10 +117,10 @@ describe('webCryptoP256', () => {
   })
 
   test('error: fails loudly when WebCrypto is unavailable', async () => {
-    const entry = Keystore.webCryptoP256()
+    const keystore = Keystore.webCryptoP256()
     vi.stubGlobal('crypto', {})
     try {
-      await expect(entry.createKey()).rejects.toThrowErrorMatchingInlineSnapshot(
+      await expect(keystore.createKey()).rejects.toThrowErrorMatchingInlineSnapshot(
         `[Error: \`webCryptoP256\` keystore requires WebCrypto (\`crypto.subtle\`) support.]`,
       )
     } finally {

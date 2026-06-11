@@ -8,33 +8,35 @@ import {
 import type { MaybePromise } from '../internal/types.js'
 
 /**
- * Pluggable access-key keystore: one {@link Entry} per key type it can create.
- *
- * An entry owns access-key material end to end: `createKey` provisions a key
- * and returns an opaque `handle` that the SDK persists verbatim alongside the
- * access-key record; `toAccount` turns a persisted record back into a signing
- * account. The handle's schema is owned by whichever entry wrote it, so
- * backends can be heterogeneous per device (e.g. hardware-backed keys with a
- * software fallback composed behind one entry).
- *
- * When no keystore is configured, {@link defaults} applies. Records carrying
- * `privateKey` or `keyPair` material continue to hydrate without consulting
- * the keystore.
+ * Keystores backing locally generated access keys: one {@link Keystore} per
+ * key type. When none are configured, {@link defaults} applies.
  */
-export type Keystore = {
-  /** Entry used to create and rehydrate `p256` access keys. */
-  p256?: Entry | undefined
-  /** Entry used to create and rehydrate `secp256k1` access keys. */
-  secp256k1?: Entry | undefined
+export type Keystores = {
+  /** Keystore used to create and rehydrate `p256` access keys. */
+  p256?: Keystore | undefined
+  /** Keystore used to create and rehydrate `secp256k1` access keys. */
+  secp256k1?: Keystore | undefined
 }
 
-/** Key types a keystore can hold entries for. */
-export type KeyType = keyof Keystore
+/** Key types keystores can be configured for. */
+export type KeyType = keyof Keystores
 
-/** Single-key-type keystore backend. */
-export type Entry = {
+/**
+ * Single-key-type access-key backend.
+ *
+ * A keystore owns access-key material end to end: `createKey` provisions a
+ * key and returns an opaque `handle` that the SDK persists verbatim alongside
+ * the access-key record; `toAccount` turns a persisted record back into a
+ * signing account. The handle's schema is owned by whichever keystore wrote
+ * it, so backends can be heterogeneous per device (e.g. hardware-backed keys
+ * with a software fallback composed behind one keystore).
+ *
+ * Records carrying `privateKey` or `keyPair` material continue to hydrate
+ * without consulting the keystore.
+ */
+export type Keystore = {
   /**
-   * Whether this entry's handles hold live objects (e.g. a `CryptoKey`)
+   * Whether this keystore's handles hold live objects (e.g. a `CryptoKey`)
    * that persist only through structured-clone storage (`Storage.idb`,
    * `Storage.memory`). On other storage the handle is stripped at persist
    * time, making the key session-only.
@@ -48,7 +50,7 @@ export type Entry = {
   /**
    * Creates access-key material. `handle` is opaque and persisted verbatim.
    *
-   * Must fail loudly when the entry's runtime prerequisites are missing
+   * Must fail loudly when the keystore's runtime prerequisites are missing
    * (e.g. no Secure Enclave, no `crypto.subtle`) so provisioning errors
    * surface at authorization time, not at first sign.
    */
@@ -74,7 +76,7 @@ export type Entry = {
 export declare namespace createKey {
   /** Created access-key material. */
   type ReturnType = {
-    /** Opaque handle for the created key. Persisted verbatim; schema owned by the entry that wrote it. */
+    /** Opaque handle for the created key. Persisted verbatim; schema owned by the keystore that wrote it. */
     handle: unknown
     /** Public key of the created key. */
     publicKey: Hex.Hex
@@ -82,9 +84,9 @@ export declare namespace createKey {
 }
 
 export declare namespace toAccount {
-  /** Persisted access-key record fields passed to {@link Entry.toAccount}. */
+  /** Persisted access-key record fields passed to {@link Keystore.toAccount}. */
   type Record = {
-    /** Opaque handle persisted by {@link Entry.createKey}. */
+    /** Opaque handle persisted by {@link Keystore.createKey}. */
     handle: unknown
     /** Key type. */
     keyType: string
@@ -92,7 +94,7 @@ export declare namespace toAccount {
     publicKey: Hex.Hex
   }
 
-  /** Account construction context passed to {@link Entry.toAccount}. */
+  /** Account construction context passed to {@link Keystore.toAccount}. */
   type Context = {
     /** Root account address the access key signs for. */
     access: Address.Address
@@ -104,8 +106,8 @@ export declare namespace toAccount {
 /**
  * Signals that the key behind a persisted handle is permanently gone
  * (e.g. hardware key deleted, app keychain wiped). Thrown from
- * {@link Entry.toAccount}, it evicts the access-key record so callers fall
- * back to authorizing a fresh key. Entries composing multiple backends
+ * {@link Keystore.toAccount}, it evicts the access-key record so callers fall
+ * back to authorizing a fresh key. Keystores composing multiple backends
  * should treat it as an ownership claim: do not route the handle to another
  * backend.
  */
@@ -122,7 +124,7 @@ export function isKeyUnavailableError(error: unknown): error is KeyUnavailableEr
   return error instanceof Error && error.name === 'Keystore.KeyUnavailableError'
 }
 
-/** Handle persisted by the {@link webCryptoP256} entry. */
+/** Handle persisted by the {@link webCryptoP256} keystore. */
 type WebCryptoP256Handle = {
   kind: 'webcrypto-p256'
 } & (
@@ -139,7 +141,7 @@ type WebCryptoP256Handle = {
 )
 
 /**
- * WebCrypto P-256 keystore entry. The built-in default (see {@link defaults}).
+ * WebCrypto P-256 keystore. The built-in default (see {@link defaults}).
  *
  * By default the key is generated non-extractable: the private key never has
  * a JS-visible encoding, and the handle holds the live `CryptoKey`, which
@@ -157,11 +159,11 @@ type WebCryptoP256Handle = {
  * import { Keystore, Provider } from 'accounts'
  *
  * const provider = Provider.create({
- *   keystore: { p256: Keystore.webCryptoP256({ extractable: true }) },
+ *   accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
  * })
  * ```
  */
-export function webCryptoP256(options: webCryptoP256.Options = {}): Entry {
+export function webCryptoP256(options: webCryptoP256.Options = {}): Keystore {
   const { extractable = false } = options
   return {
     requiresStructuredClone: !extractable,
@@ -227,8 +229,8 @@ export declare namespace webCryptoP256 {
   }
 }
 
-/** Built-in default keystore used when none is configured. */
-export const defaults: Keystore = { p256: webCryptoP256() }
+/** Built-in default keystores used when none are configured. */
+export const defaults: Keystores = { p256: webCryptoP256() }
 
 function isCryptoKey(value: unknown): value is CryptoKey {
   if (typeof CryptoKey !== 'undefined' && value instanceof CryptoKey) return true

@@ -80,8 +80,8 @@ export type Options = {
   schema?: z.ZodMiniType | undefined
   /** Initial chain ID. */
   chainId: number
-  /** Keystore backing access-key records that carry an opaque `handle`. */
-  keystore?: core_Keystore.Keystore | undefined
+  /** Keystores backing access-key records that carry an opaque `handle`. */
+  keystores?: core_Keystore.Keystores | undefined
   /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
   maxAccounts?: number | undefined
   /** Whether to persist credentials and access keys to storage. When `false`, only account addresses are persisted. @default true */
@@ -96,7 +96,7 @@ export type Options = {
 export function create(options: Options): Store {
   const {
     chainId,
-    keystore = core_Keystore.defaults,
+    keystores = core_Keystore.defaults,
     maxAccounts,
     persistCredentials = true,
     schema,
@@ -119,7 +119,7 @@ export function create(options: Options): Store {
           name: 'store',
           partialize: (state) =>
             serialize(state, {
-              keystore,
+              keystores,
               maxAccounts,
               persistCredentials,
               structuredClone: canStructuredClone(storage),
@@ -131,7 +131,7 @@ export function create(options: Options): Store {
     ),
   ) as ZustandStore
   const store = state as Store
-  store.accessKeys = core_AccessKey.createManager({ keystore, state })
+  store.accessKeys = core_AccessKey.createManager({ keystores, state })
   store.disconnect = () =>
     state.setState({ accessKeys: [], accounts: [], activeAccount: 0, auth: undefined })
   return store
@@ -139,7 +139,7 @@ export function create(options: Options): Store {
 
 /** Converts runtime provider state into the persisted refresh snapshot. */
 function serialize(state: State, options: serialize.Options = {}): Persisted {
-  const { keystore, maxAccounts, persistCredentials = true, structuredClone = false } = options
+  const { keystores, maxAccounts, persistCredentials = true, structuredClone = false } = options
   const accounts =
     maxAccounts && state.accounts.length > maxAccounts
       ? state.accounts.slice(0, maxAccounts)
@@ -150,7 +150,7 @@ function serialize(state: State, options: serialize.Options = {}): Persisted {
     ...(persistCredentials
       ? {
           accessKeys: state.accessKeys.map((accessKey) =>
-            serializeAccessKey(accessKey, { keystore, structuredClone }),
+            serializeAccessKey(accessKey, { keystores, structuredClone }),
           ),
         }
       : {}),
@@ -162,8 +162,8 @@ function serialize(state: State, options: serialize.Options = {}): Persisted {
 declare namespace serialize {
   /** Options for {@link serialize}. */
   type Options = {
-    /** Keystore backing access-key records that carry an opaque `handle`. */
-    keystore?: core_Keystore.Keystore | undefined
+    /** Keystores backing access-key records that carry an opaque `handle`. */
+    keystores?: core_Keystore.Keystores | undefined
     /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded. */
     maxAccounts?: number | undefined
     /** Whether to persist credentials and access keys to storage. @default true */
@@ -243,7 +243,7 @@ function isStoredAccount(account: unknown): account is Account {
 
 function serializeAccessKey(
   accessKey: core_AccessKey.AccessKey,
-  options: { keystore?: core_Keystore.Keystore | undefined; structuredClone: boolean },
+  options: { keystores?: core_Keystore.Keystores | undefined; structuredClone: boolean },
 ): core_AccessKey.AccessKey {
   // Live key material (e.g. WebCrypto key pairs) survives structured-clone
   // stores inline; everywhere else it is stripped so the key is session-only.
@@ -251,20 +251,20 @@ function serializeAccessKey(
   const { keyPair: _keyPair, ...metadata } = accessKey as core_AccessKey.AccessKey & {
     keyPair?: unknown
   }
-  if ('handle' in metadata && requiresStructuredClone(options.keystore, metadata.keyType)) {
+  if ('handle' in metadata && requiresStructuredClone(options.keystores, metadata.keyType)) {
     const { handle: _handle, ...rest } = metadata
     return rest as core_AccessKey.AccessKey
   }
   return metadata as core_AccessKey.AccessKey
 }
 
-/** Returns whether the keystore entry for `keyType` writes structured-clone-only handles. */
+/** Returns whether the keystore for `keyType` writes structured-clone-only handles. */
 function requiresStructuredClone(
-  keystore: core_Keystore.Keystore | undefined,
+  keystores: core_Keystore.Keystores | undefined,
   keyType: core_AccessKey.AccessKey['keyType'],
 ): boolean {
   if (keyType !== 'p256' && keyType !== 'secp256k1') return false
-  return keystore?.[keyType]?.requiresStructuredClone === true
+  return keystores?.[keyType]?.requiresStructuredClone === true
 }
 
 function canStructuredClone(storage: Storage.Storage): boolean {

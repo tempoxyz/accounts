@@ -119,7 +119,7 @@ export type ReusePolicy = {
 }
 
 /** Access key authorization parameters plus SDK-only reuse policy. */
-export type ReusableAuthorization = Omit<prepareAuthorization.Options, 'chainId' | 'keystore'> & {
+export type ReusableAuthorization = Omit<prepareAuthorization.Options, 'chainId' | 'keystores'> & {
   /** Chain ID the key authorization is scoped to. */
   chainId?: bigint | number | undefined
   /** SDK-only reuse policy. Not sent over RPC. */
@@ -160,8 +160,8 @@ type ListQuery = {
 }
 
 type ManagerOptions = {
-  /** Keystore backing access-key records that carry an opaque `handle`. */
-  keystore: Keystore.Keystore
+  /** Keystores backing access-key records that carry an opaque `handle`. */
+  keystores: Keystore.Keystores
   /** Zustand store containing access-key metadata. */
   state: Pick<StoreApi<Store.State>, 'getState' | 'setState'>
 }
@@ -212,7 +212,7 @@ export function createManager(options: createManager.Options): Manager {
     clear: () => clear({ store: options }),
     get: (parameters) => get({ ...parameters, store: options }),
     prepareAuthorization: (parameters) =>
-      prepareAuthorization({ ...parameters, keystore: options.keystore }),
+      prepareAuthorization({ ...parameters, keystores: options.keystores }),
     getStatus: (parameters) => getStatus({ ...parameters, store: options }),
     list: (parameters) => list({ ...parameters, store: options }),
     remove: (parameters) => remove({ ...parameters, store: options }),
@@ -234,7 +234,7 @@ export async function prepareAuthorization(
     address,
     chainId,
     expiry,
-    keystore,
+    keystores,
     keyType,
     limits,
     privateKey,
@@ -282,12 +282,12 @@ export async function prepareAuthorization(
     return { keyAuthorization }
   }
   const type = keyType ?? 'p256'
-  const entry = type === 'webAuthn' ? undefined : (keystore ?? Keystore.defaults)[type]
-  if (!entry)
+  const keystore = type === 'webAuthn' ? undefined : (keystores ?? Keystore.defaults)[type]
+  if (!keystore)
     throw new RpcResponse.InvalidParamsError({
       message: `\`keyType: "${type}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
     })
-  const key = await entry.createKey()
+  const key = await keystore.createKey()
   const keyAuthorization = KeyAuthorization.from({
     address: Address.fromPublicKey(PublicKey.fromHex(key.publicKey)),
     chainId: BigInt(chainId),
@@ -310,10 +310,10 @@ export declare namespace prepareAuthorization {
     /** Unix timestamp when the key expires. */
     expiry: number
     /**
-     * Keystore used to create key material when none is provided.
+     * Keystores used to create key material when none is provided.
      * @default Keystore.defaults
      */
-    keystore?: Keystore.Keystore | undefined
+    keystores?: Keystore.Keystores | undefined
     /** External key type. Defaults to `secp256k1` for external keys. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
@@ -350,7 +350,7 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
   const prepared = await prepareAuthorization({
     ...parameters,
     chainId: parameters.chainId ?? chainId,
-    keystore: store.keystore,
+    keystores: store.keystores,
   })
   const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
   const signature = await account.sign({ hash: digest })
@@ -377,7 +377,7 @@ export declare namespace authorize {
     /** Default chain ID for the authorization when `parameters.chainId` is not set. */
     chainId: bigint | number
     /** Access key authorization parameters. */
-    parameters: Omit<prepareAuthorization.Options, 'chainId' | 'keystore'> & {
+    parameters: Omit<prepareAuthorization.Options, 'chainId' | 'keystores'> & {
       /** Chain ID the key authorization is scoped to. */
       chainId?: bigint | number | undefined
     }
@@ -826,15 +826,15 @@ async function hydrate(
     }
   }
   if ('handle' in accessKey && typeof accessKey.handle !== 'undefined' && accessKey.publicKey) {
-    const entry =
+    const keystore =
       accessKey.keyType === 'p256' || accessKey.keyType === 'secp256k1'
-        ? store.keystore[accessKey.keyType]
+        ? store.keystores[accessKey.keyType]
         : undefined
-    if (!entry) return undefined
+    if (!keystore) return undefined
     let account = keystoreAccounts.get(accessKey)
     if (!account) {
       account = (async () =>
-        await entry.toAccount(
+        await keystore.toAccount(
           {
             handle: accessKey.handle,
             keyType: accessKey.keyType,
