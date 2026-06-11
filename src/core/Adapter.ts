@@ -1,4 +1,3 @@
-import type { WebCryptoP256 } from 'ox'
 import type { KeyAuthorization } from 'ox/tempo'
 import type { Client, Hex, Transport } from 'viem'
 import type { Address, JsonRpcAccount } from 'viem/accounts'
@@ -6,7 +5,6 @@ import type { Account as TempoAccount } from 'viem/tempo'
 import type { tempo } from 'viem/tempo/chains'
 import type * as z from 'zod/mini'
 
-import type { MaybePromise } from '../internal/types.js'
 import type * as Account from './Account.js'
 import type * as Keystore from './Keystore.js'
 import type * as Schema from './Schema.js'
@@ -164,18 +162,6 @@ export type Instance = {
   }
   /** Cleanup function called when the provider is destroyed. */
   cleanup?: (() => void) | undefined
-  /**
-   * Generates access-key material when `authorizeAccessKey` omits `address`
-   * and `publicKey`. Return `undefined` to let adapter actions handle key
-   * generation themselves.
-   *
-   * @deprecated Supply default keystores via {@link Instance.accessKey} instead.
-   */
-  generateAccessKey?:
-    | ((
-        options?: generateAccessKey.Options | undefined,
-      ) => MaybePromise<generateAccessKey.ReturnType>)
-    | undefined
   /** Materializes the adapter-managed account used for provider-owned RPC actions. */
   getAccount?: ((options?: getAccount.Options | undefined) => getAccount.ReturnType) | undefined
   /**
@@ -228,28 +214,6 @@ export declare namespace getClient {
     /** Fee payer service URL, or `false` to opt out of fee payers for this transaction if set globally. */
     feePayer?: string | false | undefined
   }
-}
-
-export declare namespace generateAccessKey {
-  /** Options for {@link Instance.generateAccessKey}. */
-  type Options = {
-    /** Requested key type from `authorizeAccessKey`. Defaults to adapter policy. */
-    keyType?: authorizeAccessKey.Parameters['keyType'] | undefined
-  }
-
-  /** Generated access-key material. */
-  type ReturnType =
-    | {
-        /** Generated key type. */
-        keyType: 'secp256k1' | 'p256'
-        /** Generated public key. */
-        publicKey: Hex
-        /** Exported private key backing the generated access key. */
-        privateKey?: Hex | undefined
-        /** WebCrypto key pair backing the generated access key. */
-        keyPair?: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
-      }
-    | undefined
 }
 
 export declare namespace getAccount {

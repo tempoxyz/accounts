@@ -2559,53 +2559,6 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       expect(record2.handle).toMatchObject({ kind: 'webcrypto-p256' })
     })
 
-    test('behavior: deprecated generateAccessKey is still honored', async () => {
-      const root = TempoAccount.fromSecp256k1(Secp256k1.randomPrivateKey())
-      const accessKeyPrivateKey = Secp256k1.randomPrivateKey()
-      const jsonRpcAdapter = Adapter.define({ name: 'JSON-RPC Test' }, () => ({
-        actions: {
-          createAccount: async () => ({ accounts: [{ address: root.address }] }),
-          loadAccounts: async () => ({ accounts: [{ address: root.address }] }),
-        },
-        generateAccessKey: () => ({
-          keyType: 'secp256k1' as const,
-          privateKey: accessKeyPrivateKey,
-          publicKey: TempoAccount.fromSecp256k1(accessKeyPrivateKey).publicKey,
-        }),
-        getAccount: () => ({
-          account: { address: root.address, type: 'json-rpc' as const },
-          transport: custom({
-            async request({ method, params }: { method: string; params?: unknown[] }) {
-              if (method !== 'wallet_authorizeAccessKey')
-                throw new Error(`unexpected wallet method: ${method}`)
-              const [parameters] = params as [
-                { address: Hex.Hex; chainId: Hex.Hex; expiry: Hex.Hex; keyType: never },
-              ]
-              const signed = await root.signKeyAuthorization(
-                { address: parameters.address, type: parameters.keyType },
-                { chainId: BigInt(parameters.chainId), expiry: Number(parameters.expiry) },
-              )
-              return { keyAuthorization: KeyAuthorization.toRpc(signed), rootAddress: root.address }
-            },
-          }),
-        }),
-      }))
-
-      const provider = Provider.create({
-        adapter: jsonRpcAdapter,
-        chains: [chain],
-        storage: createJsonStorage(),
-      })
-      await provider.request({ method: 'wallet_connect' })
-      await provider.request({
-        method: 'wallet_authorizeAccessKey',
-        params: [{ expiry: Expiry.days(1) }],
-      })
-      const record = provider.store.getState().accessKeys[0]!
-      expect(record.keyType).toBe('secp256k1')
-      expect(record.privateKey).toBe(accessKeyPrivateKey)
-      expect(record.handle).toBeUndefined()
-    })
   })
 
   describe('wallet_connect with authorizeAccessKey', () => {

@@ -8,7 +8,6 @@ import {
   Json,
   Provider as ox_Provider,
   RpcResponse,
-  type WebCryptoP256,
 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import {
@@ -473,7 +472,6 @@ export function create(options: create.Options = {}): create.ReturnType {
     chainId: number | undefined,
   ): Promise<{
     key?: { handle: unknown; publicKey: Hex.Hex } | undefined
-    keyPair?: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
     parameters: Adapter.authorizeAccessKey.Parameters
     privateKey?: Hex.Hex | undefined
   }> {
@@ -490,27 +488,8 @@ export function create(options: create.Options = {}): create.ReturnType {
     }
 
     // Resolve the key source: configured keystores (app-level, else the
-    // adapter's defaults) win; otherwise the adapter's deprecated
-    // `generateAccessKey` applies; otherwise the built-in keystore — in
-    // browsers only, since elsewhere the wallet generates the key.
-    if (!keystores_configured && instance.generateAccessKey) {
-      const generated = await instance.generateAccessKey({ keyType: parameters.keyType })
-      if (!generated) return { parameters }
-      const prepared = await AccessKey.prepareAuthorization({
-        ...parameters,
-        chainId: chainId_,
-        keyType: generated.keyType,
-        publicKey: generated.publicKey,
-      })
-      return {
-        keyPair: generated.keyPair,
-        parameters: {
-          ...toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
-          publicKey: generated.publicKey,
-        },
-        privateKey: generated.privateKey,
-      }
-    }
+    // adapter's defaults) win; otherwise the built-in keystore — in browsers
+    // only, since elsewhere the wallet generates the key.
     if (!keystores_configured && !isBrowserWebCrypto()) return { parameters }
 
     const { key, keyAuthorization } = await AccessKey.prepareAuthorization({
@@ -554,14 +533,12 @@ export function create(options: create.Options = {}): create.ReturnType {
   }) {
     const { accessKey, account, keyAuthorization } = options
     if (!account || !keyAuthorization || !accessKey) return
-    const { key, keyPair, privateKey } = accessKey
+    const { key, privateKey } = accessKey
     const material = key
       ? { handle: key.handle, publicKey: key.publicKey }
-      : keyPair
-        ? { keyPair }
-        : privateKey
-          ? { privateKey }
-          : undefined
+      : privateKey
+        ? { privateKey }
+        : undefined
     if (!material) return
     store.accessKeys.add({
       account,
