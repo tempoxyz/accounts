@@ -51,6 +51,8 @@
     "prool": "catalog:",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-native-mmkv": "^4.3.1",
+    "react-native-nitro-modules": "^0.35.9",
     "simple-git-hooks": "^2.13.1",
     "testcontainers": "^11.14.0",
     "tsx": "^4.21.0",
@@ -70,7 +72,7 @@
   "name": "accounts",
   "description": "Tempo Accounts SDK",
   "type": "module",
-  "version": "0.14.8",
+  "version": "0.14.9",
   "dependencies": {
     "hono": "catalog:",
     "idb-keyval": "^6.2.2",
@@ -90,6 +92,8 @@
     "expo-secure-store": "^55.0.12",
     "expo-web-browser": "^55.0.13",
     "react": ">=18",
+    "react-native-mmkv": "^4.3.1",
+    "react-native-nitro-modules": "^0.35.9",
     "viem": ">=2.50.4",
     "wagmi": ">=0.0.0"
   },
@@ -110,6 +114,12 @@
       "optional": true
     },
     "expo-secure-store": {
+      "optional": true
+    },
+    "react-native-mmkv": {
+      "optional": true
+    },
+    "react-native-nitro-modules": {
       "optional": true
     },
     "@react-native-async-storage/async-storage": {
@@ -164,12 +174,6 @@
       "src": "./src/wagmi/index.ts",
       "default": "./dist/wagmi/index.js"
     },
-    "./react-native": {
-      "types": "./dist/react-native/index.d.ts",
-      "src": "./src/react-native/index.ts",
-      "react-native": "./dist/react-native/index.js",
-      "default": "./dist/react-native/index.js"
-    },
     "./mobileWebAuth": {
       "types": "./dist/core/adapters/mobileWebAuth/index.d.ts",
       "src": "./src/core/adapters/mobileWebAuth/index.ts",
@@ -193,6 +197,12 @@
       "src": "./src/react-native/expoSecureStore.ts",
       "react-native": "./dist/react-native/expoSecureStore.js",
       "default": "./dist/react-native/expoSecureStore.js"
+    },
+    "./react-native/secure-mmkv": {
+      "types": "./dist/react-native/secureMmkv.d.ts",
+      "src": "./src/react-native/secureMmkv.ts",
+      "react-native": "./dist/react-native/secureMmkv.js",
+      "default": "./dist/react-native/secureMmkv.js"
     }
   }
 }

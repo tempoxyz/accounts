@@ -1,5 +1,19 @@
 # accounts
 
+## 0.14.9
+
+### Patch Changes
+
+- e15e2a4: Added `mobileWebAuth()` and `tempoWalletMobileWebAuth()` adapters, also available from `accounts/mobileWebAuth` as `mobileWebAuth` and `tempoWallet`.
+
+  Added `accounts/react-native/expo-web-browser`.
+
+  Added `ProviderRequest.parse()`.
+
+  Renamed `accounts/react-native/secure-storage` to `accounts/react-native/expo-secure-store`.
+
+  Removed the `reactNative()` adapter.
+
 ## 0.14.8
 
 ### Patch Changes

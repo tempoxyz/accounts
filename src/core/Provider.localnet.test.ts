@@ -526,7 +526,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         )
       })
 
-      test('default: auth + authorizeAccessKey surfaces both capabilities (two ceremonies)', async () => {
+      test('default: auth + authorizeAccessKey surfaces both capabilities (one witness-bound ceremony)', async () => {
         const provider = Provider.create({ adapter: adapter() })
 
         const result = await provider.request({
@@ -544,7 +544,10 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
 
         expect(result.accounts[0]!.capabilities.auth).toEqual({ token: expect.any(String) })
         expect(result.accounts[0]!.capabilities.keyAuthorization).toBeDefined()
+        // TIP-1053 witness binding: the auth message is folded into the
+        // access-key authorization, which doubles as the auth proof.
         expect(result.accounts[0]!.capabilities.personalSign).toEqual({
+          keyAuthorization: expect.stringMatching(/^0x[0-9a-f]+$/),
           message: expect.any(String),
         })
         expect(result.accounts[0]!.capabilities.signature).toMatch(/^0x[0-9a-f]+$/)

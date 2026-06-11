@@ -1,0 +1,47 @@
+---
+title: asyncStorage
+description: React Native Storage adapter backed by AsyncStorage.
+---
+
+# `asyncStorage`
+
+Creates a [`Storage`](/docs/api/storage) adapter backed by [`@react-native-async-storage/async-storage`](https://react-native-async-storage.github.io/async-storage/).
+
+Values are JSON-serialized and stored in plain text. Use it for non-sensitive provider state; when the provider manages access keys, use [`secureMmkv`](/docs/api/storage.secureMmkv) instead.
+
+The adapter ships as an optional subpath — `accounts/react-native/async-storage` — so apps that do not use it do not install AsyncStorage:
+
+```sh
+npx expo install @react-native-async-storage/async-storage
+```
+
+## Usage
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { asyncStorage } from 'accounts/react-native/async-storage'
+
+const provider = Provider.create({
+  storage: asyncStorage(),
+})
+```
+
+## Parameters
+
+### options.key
+
+- **Type:** `string`
+- **Default:** `'tempo'`
+
+Key prefix applied to every entry written to AsyncStorage. Useful to avoid collisions with other AsyncStorage usage in the app.
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { asyncStorage } from 'accounts/react-native/async-storage'
+
+const provider = Provider.create({
+  storage: asyncStorage({
+    key: 'my-app', // [!code focus]
+  }),
+})
+```

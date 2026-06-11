@@ -7,12 +7,12 @@
     "android": "node scripts/expo.mjs run:android",
     "consumer": "node scripts/consumer-server.mjs",
     "ios": "node scripts/expo.mjs run:ios",
+    "ios:prod": "TUNNEL=1 node scripts/expo.mjs run:ios",
     "start": "node scripts/expo.mjs start"
   },
   "dependencies": {
-    "accounts": "workspace:*",
     "@react-native-async-storage/async-storage": "^3.0.2",
-    "react-native-get-random-values": "~2.0.0",
+    "accounts": "workspace:*",
     "expo": "~55.0.12",
     "expo-secure-store": "~55.0.12",
     "expo-status-bar": "~55.0.5",
@@ -20,6 +20,9 @@
     "ox": "catalog:",
     "react": "catalog:",
     "react-native": "0.83.4",
+    "react-native-get-random-values": "~2.0.0",
+    "react-native-mmkv": "^4.3.1",
+    "react-native-nitro-modules": "^0.35.9",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.24.0",
     "viem": "catalog:"

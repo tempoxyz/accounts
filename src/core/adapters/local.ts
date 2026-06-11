@@ -1,7 +1,7 @@
 import { Provider as ox_Provider, type Hex, type WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
-import { type Chain, hashMessage } from 'viem'
-import { Account as TempoAccount, Hardfork } from 'viem/tempo'
+import { hashMessage } from 'viem'
+import { Account as TempoAccount } from 'viem/tempo'
 import * as z from 'zod/mini'
 
 import * as AccessKey from '../AccessKey.js'
@@ -110,19 +110,17 @@ export function local(options: local.Options): Adapter.Adapter {
               grantOptions?.chainId ? { chainId: Number(grantOptions.chainId) } : undefined,
             )
             const chainId = grantOptions?.chainId ?? client.chain.id
-            if (personalSign && grantOptions?.witness && supportsWitness(client.chain))
+            if (personalSign && grantOptions?.witness)
               throw new ox_Provider.ProviderRpcError(
                 -32602,
-                '`personalSign` and `authorizeAccessKey.witness` cannot both be set on `wallet_connect` for witness-capable chains.',
+                '`personalSign` and `authorizeAccessKey.witness` cannot both be set on `wallet_connect`.',
               )
 
             // TIP-1053 witness binding (see `loadAccounts`): fold the auth
             // message into the access-key authorization and sign both in the
-            // single create-account ceremony when the chain supports it.
+            // single create-account ceremony.
             const witness =
-              personalSign && grantOptions && supportsWitness(client.chain)
-                ? hashMessage(personalSign.message)
-                : undefined
+              personalSign && grantOptions ? hashMessage(personalSign.message) : undefined
             if (witness) validatePersonalSignProof(grantOptions)
 
             const peronsalSign_digest =
@@ -225,21 +223,19 @@ export function local(options: local.Options): Adapter.Adapter {
                 : undefined,
             )
             const chainId = authorizeAccessKey?.chainId ?? client.chain.id
-            if (personalSign && authorizeAccessKey?.witness && supportsWitness(client.chain))
+            if (personalSign && authorizeAccessKey?.witness)
               throw new ox_Provider.ProviderRpcError(
                 -32602,
-                '`personalSign` and `authorizeAccessKey.witness` cannot both be set on `wallet_connect` for witness-capable chains.',
+                '`personalSign` and `authorizeAccessKey.witness` cannot both be set on `wallet_connect`.',
               )
 
             // TIP-1053 witness binding: when both a `personalSign` challenge and
-            // an `authorizeAccessKey` are requested on a witness-capable chain,
-            // bind the message into the key authorization's `witness` and sign
-            // both in ONE ceremony. The signed key authorization doubles as the
-            // auth proof. Otherwise fall back to the two-ceremony path below.
+            // an `authorizeAccessKey` are requested, bind the message into the
+            // key authorization's `witness` and sign both in ONE ceremony. The
+            // signed key authorization doubles as the auth proof. Otherwise fall
+            // back to the two-ceremony path below.
             const witness =
-              personalSign && authorizeAccessKey && supportsWitness(client.chain)
-                ? hashMessage(personalSign.message)
-                : undefined
+              personalSign && authorizeAccessKey ? hashMessage(personalSign.message) : undefined
             if (witness) validatePersonalSignProof(authorizeAccessKey)
 
             // Only claim the ceremony slot with the `personalSign` digest when
@@ -384,17 +380,4 @@ export declare namespace local {
     /** Reverse DNS identifier. @default `com.{lowercase name}` */
     rdns?: string | undefined
   }
-}
-
-/**
- * Returns whether the given chain supports TIP-1053 witness binding, which
- * lets the wallet collapse access-key authorization and the auth proof into a
- * single passkey ceremony. Witness binding ships in the T5 hardfork, so a
- * chain qualifies only once it is at T5 or later.
- *
- * @param chain - Chain to check (reads its `hardfork`).
- * @returns `true` when the chain supports witness binding.
- */
-function supportsWitness(chain: Chain & { hardfork?: Hardfork.Hardfork | undefined }) {
-  return Boolean(chain.hardfork && !Hardfork.lt(chain.hardfork, 't5'))
 }
