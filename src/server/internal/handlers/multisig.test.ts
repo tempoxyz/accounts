@@ -322,6 +322,71 @@ describe('config resolution', () => {
     `)
   })
 
+  test('behavior: preserves bootstrap init when claimed operation omits stored init config', async () => {
+    const base = Multisig.memoryStore()
+    const store: Multisig.Store = {
+      claimSubmission: async (operation, options) => {
+        const result = await base.claimSubmission(operation, options)
+        if (result.status !== 'claimed') return result
+        return {
+          operation: { ...result.operation, initConfig: undefined },
+          status: result.status,
+        }
+      },
+      get: base.get,
+      listPendingByAddress: base.listPendingByAddress,
+      savePending: base.savePending,
+      setSubmitted: base.setSubmitted,
+    }
+    const owner = Account.fromSecp256k1(privateKey_1)
+    const account = Account.fromMultisig({
+      threshold: 1,
+      owners: [{ owner: owner.address, weight: 1 }],
+    })
+    const transaction = {
+      calls: [{ to: '0xcafebabecafebabecafebabecafebabecafebabe', value: 1n }],
+      chainId: tempoDevnet.id,
+      gas: 21_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 0n,
+      multisig: account.config,
+      nonce: 0n,
+    }
+    const signature = await owner.signTransaction(transaction as never)
+    const serialized = await account.signTransaction({
+      ...transaction,
+      signatures: [signature],
+    } as never)
+    let submitted: `0x${string}` | undefined
+
+    const hash = await Multisig.handleRawTransaction({
+      getClient: (() => ({
+        request: async ({ params }: { params: unknown }) => {
+          submitted = Array.isArray(params) ? (params[0] as `0x${string}`) : undefined
+          return hashRawTransaction(params)
+        },
+      })) as never,
+      method: 'eth_sendRawTransaction',
+      request: { params: [serialized] },
+      store,
+    })
+
+    const transaction_submitted = Transaction.deserialize(submitted! as never) as {
+      signature: SignatureEnvelope.Multisig
+    }
+    expect({
+      hash,
+      init: transaction_submitted.signature.init
+        ? MultisigConfig.toId(transaction_submitted.signature.init)
+        : undefined,
+    }).toMatchInlineSnapshot(`
+      {
+        "hash": "${hash}",
+        "init": "${MultisigConfig.toId(account.config)}",
+      }
+    `)
+  })
+
   test('behavior: rejects resolved configs that do not match the multisig account', async () => {
     const owner_1 = Account.fromSecp256k1(privateKey_1)
     const owner_2 = Account.fromSecp256k1(privateKey_2)
