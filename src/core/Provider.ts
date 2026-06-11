@@ -1836,10 +1836,10 @@ export declare namespace create {
            * `handle` that the keystore's `toAccount()` turns back into a
            * signing account on hydration.
            *
-           * Keystores are about the device's key capabilities — `storage`
-           * persists provider state; keystores hold key material. App-level
-           * keystores override adapter-supplied defaults. Existing
-           * `privateKey`/`keyPair` records hydrate unchanged.
+           * Keystores hold key material — locally or remotely; `storage`
+           * persists provider state. App-level keystores override
+           * adapter-supplied defaults. Existing `privateKey`/`keyPair`
+           * records hydrate unchanged.
            *
            * @default Keystore.defaults — `{ p256: Keystore.webCryptoP256() }`
            *
