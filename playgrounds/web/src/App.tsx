@@ -32,6 +32,7 @@ import {
   testnet,
   tokens,
 } from './provider.js'
+import { TurnkeyEmailOtp } from './TurnkeyEmailOtp.js'
 
 /** Persists a playground setting in the URL so a reload keeps it. */
 function setParam(key: string, value: string) {
@@ -39,7 +40,6 @@ function setParam(key: string, value: string) {
   url.searchParams.set(key, value)
   window.history.replaceState(null, '', url)
 }
-import { TurnkeyEmailOtp } from './TurnkeyEmailOtp.js'
 
 const sectionLinks = [
   { id: 'provider', title: 'Provider' },

@@ -42,15 +42,16 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
       return session
     }
     const factory = sticky_popup ? Mount.popup() : (options.mount ?? Mount.auto())
+    const url = hostUrl(host, factory.mode)
     const mount_ = factory({
-      host: hostUrl(host, factory.mode),
+      host: url,
       onDismiss: cancel,
       onInvalidate: () => void session?.close(),
     })
     mount = mount_
     session = create({
       close: (handle) => mount_.close(handle),
-      host: hostUrl(host, mount_.mode),
+      host: url,
       target: () => mount_.target(),
     })
     return session
@@ -115,6 +116,9 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
   }
 
   async function send(request: { method: string; params?: readonly unknown[] | undefined }) {
+    // Loops only to replay once after an occlusion-driven popup switch
+    // (`resend`); the request otherwise leaves via one of three exits —
+    // resolved, locally cancelled (dismiss), or rejected (window closed).
     for (;;) {
       const wata = ensure()
       mount?.show()
