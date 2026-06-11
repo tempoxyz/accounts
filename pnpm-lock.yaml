@@ -111,8 +111,8 @@ importers:
         specifier: 0.14.29
         version: 0.14.29(typescript@5.9.3)(zod@4.3.6)
       wata:
-        specifier: 0.0.1
-        version: 0.0.1(typescript@5.9.3)
+        specifier: 0.0.4
+        version: 0.0.4(typescript@5.9.3)
       webauthx:
         specifier: ~0.1.1
         version: 0.1.1(typescript@5.9.3)(zod@4.3.6)
@@ -11554,8 +11554,8 @@ packages:
   warn-once@0.1.1:
     resolution: {integrity: sha512-VkQZJbO8zVImzYFteBXvBOZEl1qL175WH8VmZcxF2fZAoudNhNDvHi+doCaAEdU2l2vtcIwa2zn0QK5+I1HQ3Q==}
 
-  wata@0.0.1:
-    resolution: {integrity: sha512-cJ8lN48Tgabj5mUnpCXDrEOhCHxXi5NlR9vTleQedn5EpSXwHmuQ9SXxLuQMdq4qjsToKd/gw0p5uftyp+LInA==}
+  wata@0.0.4:
+    resolution: {integrity: sha512-EAkFxB19UthN2dK40Igwe12CEScG93J2j8CvPY4MiwXL1JbqExf/1GnvB5oWk0KU6P51IfL2mDUOD+LyB3mSOA==}
 
   watchpack@2.5.1:
     resolution: {integrity: sha512-Zn5uXdcFNIA1+1Ei5McRd+iRzfhENPCe7LeABkJtNulSxjma+l7ltNx55BWZkRlwRnpOgHqxnjyaDgJnNXnqzg==}
@@ -28038,7 +28038,7 @@ snapshots:
 
   warn-once@0.1.1: {}
 
-  wata@0.0.1(typescript@5.9.3):
+  wata@0.0.4(typescript@5.9.3):
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.23)
       '@noble/ciphers': 2.2.0
