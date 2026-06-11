@@ -403,6 +403,51 @@ describe('behavior: with feePayer.feeToken', () => {
 
     expect(feeToken?.toLowerCase()).toBe(sponsorFeeToken)
   })
+
+  test('behavior: raw sponsor signing restores token-list default before validation', async () => {
+    let feeToken_validated: Address | undefined
+    const customServer = await createServer(
+      relay({
+        chains: [chain],
+        transports: { [chain.id]: http() },
+        feePayer: {
+          account: feePayerAccount,
+          validate: (request) => {
+            feeToken_validated = request.feeToken as Address | undefined
+            return true
+          },
+        },
+        resolveTokens: () => localnetTokens,
+      }).listener,
+    )
+    const rpc = getClient({ account: userAccount, chain, transport: http() })
+    const { transaction } = await fillTransaction(rpc, {
+      account: userAccount.address,
+      calls: [transferCall()],
+      feePayer: true as never,
+    })
+    const partial = await userAccount.signTransaction({ ...transaction, feePayer: true } as never)
+
+    try {
+      const response = await fetch(customServer.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'eth_signRawTransaction',
+          params: [partial],
+        }),
+      })
+      const body = (await response.json()) as { result: `0x76${string}` }
+      const feeToken = Transaction.deserialize(body.result).feeToken as Address | undefined
+
+      expect(feeToken_validated?.toLowerCase()).toBe(sponsorFeeToken)
+      expect(feeToken?.toLowerCase()).toBe(sponsorFeeToken)
+    } finally {
+      customServer.close()
+    }
+  })
 })
 
 describe('behavior: with app-provided feePayer URL', () => {

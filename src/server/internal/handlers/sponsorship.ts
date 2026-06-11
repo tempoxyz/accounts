@@ -128,21 +128,25 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
       message: 'Transaction must be signed by the sender before fee payer signing.',
     })
 
-  if (validate && !(await validate(transaction as Transaction.TransactionRequest)))
+  const client = getClient(transaction.chainId)
+  const feeToken_chain = (client.chain as { feeToken?: Address | undefined } | undefined)?.feeToken
+  const feeToken =
+    (transaction.feeToken as Address | null | undefined) ??
+    sponsorFeeToken ??
+    (await options.getFeeToken?.(transaction.chainId)) ??
+    feeToken_chain
+  const transaction_sponsored = feeToken ? { ...transaction, feeToken } : transaction
+
+  if (validate && !(await validate(transaction_sponsored as Transaction.TransactionRequest)))
     throw new RpcResponse.InvalidParamsError({
       message: 'Sponsorship rejected.',
     })
 
-  const client = getClient(transaction.chainId)
-  const chainFeeToken = (client.chain as { feeToken?: Address | undefined } | undefined)?.feeToken
-  const feeToken =
-    (transaction.feeToken as Address | null | undefined) ?? sponsorFeeToken ?? chainFeeToken
   const serializedTransaction = toSerializedTransaction(
     await signTransaction(client, {
-      ...transaction,
+      ...transaction_sponsored,
       account,
       feePayer: account,
-      ...(feeToken ? { feeToken } : {}),
     } as never),
   )
 
@@ -159,6 +163,8 @@ export declare namespace handleRawTransaction {
     account: LocalAccount
     /** Optional token the fee payer prefers for sponsored raw transactions. */
     feeToken?: Address | undefined
+    /** Optional fee-token resolver used when the raw envelope omits `feeToken`. */
+    getFeeToken?: ((chainId: number) => Promise<Address | undefined>) | undefined
     /** Client resolver keyed by transaction `chainId`. */
     getClient: (chainId?: number | undefined) => Client
     /** Raw transaction method to handle. */
