@@ -142,7 +142,7 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   const final = await serializeFinal({
     account: operation.account,
     genesisConfigId: operation.genesisConfigId,
-    init: operation.initConfig,
+    init: operation.initConfig ?? initConfig,
     signatures: approvals.signatures,
     transaction: input.transaction,
   })
