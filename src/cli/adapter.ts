@@ -57,7 +57,8 @@ export function cli(options: cli.Options): Adapter.Adapter {
           : undefined
 
       const publicKey = authorizeAccessKey?.publicKey ?? generatedAccessKey?.publicKey
-      const keyType = authorizeAccessKey?.keyType ?? (generatedAccessKey ? generatedKeyType : undefined)
+      const keyType =
+        authorizeAccessKey?.keyType ?? (generatedAccessKey ? generatedKeyType : undefined)
 
       if (!publicKey)
         throw new RpcResponse.InvalidParamsError({
@@ -335,4 +336,3 @@ async function post<
 function unsupported(message: string) {
   return new core_Provider.UnsupportedMethodError({ message })
 }
-
