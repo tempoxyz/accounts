@@ -309,6 +309,16 @@ describe('prepareAuthorization', () => {
     expect(result.key).toBeDefined()
   })
 
+  test('behavior: unspecified key type prefers a configured secp256k1 keystore', async () => {
+    const result = await AccessKey.prepareAuthorization({
+      chainId: 1,
+      expiry: 123,
+      keystores: { p256: Keystore.p256(), secp256k1: Keystore.secp256k1() },
+    })
+    expect(result.keyAuthorization.type).toMatchInlineSnapshot(`"secp256k1"`)
+    expect(result.key?.handle).toMatchObject({ kind: 'secp256k1' })
+  })
+
   test('error: rejects secp256k1 authorization without external key material', async () => {
     await expect(
       AccessKey.prepareAuthorization({ chainId: 1, expiry: 123, keyType: 'secp256k1' }),

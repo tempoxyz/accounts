@@ -128,3 +128,44 @@ describe('webCryptoP256', () => {
     }
   })
 })
+
+describe('p256 / secp256k1', () => {
+  test.each([
+    { factory: Keystore.p256, kind: 'p256' },
+    { factory: Keystore.secp256k1, kind: 'secp256k1' },
+  ] as const)('default: $kind handles survive JSON and rehydrate', async ({ factory, kind }) => {
+    const keystore = factory()
+    expect(keystore.requiresStructuredClone).toBeFalsy()
+
+    const key = await keystore.createKey()
+    expect(key.handle).toMatchObject({ kind })
+    expect(JSON.parse(JSON.stringify(key.handle))).toEqual(key.handle)
+
+    const account = await keystore.toAccount(
+      {
+        handle: JSON.parse(JSON.stringify(key.handle)),
+        keyType: kind,
+        publicKey: key.publicKey,
+      },
+      toAccountContext(),
+    )
+    expect(account.accessKeyAddress).toBe(
+      Address.fromPublicKey(PublicKey.fromHex(key.publicKey)).toLowerCase(),
+    )
+  })
+
+  test('error: rejects handles written by another keystore', async () => {
+    const keystore = Keystore.p256()
+    const key = await keystore.createKey()
+    expect(() =>
+      keystore.toAccount(
+        {
+          handle: { kind: 'secp256k1', privateKey: '0x01' },
+          keyType: 'p256',
+          publicKey: key.publicKey,
+        },
+        toAccountContext(),
+      ),
+    ).toThrowErrorMatchingInlineSnapshot(`[Error: Unrecognized \`p256\` keystore handle.]`)
+  })
+})

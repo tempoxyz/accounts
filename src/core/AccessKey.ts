@@ -281,8 +281,12 @@ export async function prepareAuthorization(
     })
     return { keyAuthorization }
   }
-  const type = keyType ?? 'p256'
-  const keystore = type === 'webAuthn' ? undefined : (keystores ?? Keystore.defaults)[type]
+  // Unspecified key type: prefer secp256k1 when a keystore for it is
+  // configured (the chain's cheapest signature envelope), else p256 —
+  // matching the built-in WebCrypto default.
+  const keystores_ = keystores ?? Keystore.defaults
+  const type = keyType ?? (keystores_.secp256k1 ? 'secp256k1' : 'p256')
+  const keystore = type === 'webAuthn' ? undefined : keystores_[type]
   if (!keystore)
     throw new RpcResponse.InvalidParamsError({
       message: `\`keyType: "${type}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,

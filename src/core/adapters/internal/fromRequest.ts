@@ -1,9 +1,9 @@
-import { Hex, P256, Provider as core_Provider, RpcResponse } from 'ox'
+import { Hex, Provider as core_Provider } from 'ox'
 import { custom } from 'viem'
-import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 import { z } from 'zod/mini'
 
 import * as Adapter from '../../Adapter.js'
+import * as Keystore from '../../Keystore.js'
 import * as Rpc from '../../zod/rpc.js'
 
 /**
@@ -22,25 +22,6 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
     // Late-bind the store so the request channel can reconcile local
     // connection state (e.g. a wallet `accountsChanged` notification).
     bind?.({ store })
-
-    function generateAccessKey(
-      parameters: Adapter.generateAccessKey.Options = {},
-    ): Adapter.generateAccessKey.ReturnType {
-      const { keyType } = parameters
-      if (keyType && keyType !== 'p256' && keyType !== 'secp256k1')
-        throw new RpcResponse.InvalidParamsError({
-          message: `\`keyType: "${keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
-        })
-      const type = keyType ?? 'p256'
-      const privateKey = type === 'p256' ? P256.randomPrivateKey() : Secp256k1.randomPrivateKey()
-      const account =
-        type === 'p256' ? TempoAccount.fromP256(privateKey) : TempoAccount.fromSecp256k1(privateKey)
-      return {
-        keyType: type,
-        privateKey,
-        publicKey: account.publicKey,
-      }
-    }
 
     const provider = core_Provider.from({
       async request(request) {
@@ -118,7 +99,10 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
         },
       },
       ...(cleanup ? { cleanup } : close ? { cleanup: () => void close() } : {}),
-      generateAccessKey,
+      // Pure-JS keystores: the key must live app-side so transactions sign
+      // without a wallet round-trip, and the host environment may lack
+      // WebCrypto (e.g. React Native).
+      accessKey: { keystores: { p256: Keystore.p256(), secp256k1: Keystore.secp256k1() } },
       getAccount(parameters = {}) {
         return {
           account: {

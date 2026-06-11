@@ -8,6 +8,7 @@ import type * as z from 'zod/mini'
 
 import type { MaybePromise } from '../internal/types.js'
 import type * as Account from './Account.js'
+import type * as Keystore from './Keystore.js'
 import type * as Schema from './Schema.js'
 import type * as Storage from './Storage.js'
 import type * as Store from './Store.js'
@@ -42,6 +43,17 @@ export type Meta = {
 }
 
 export type Instance = {
+  /**
+   * Default access-key configuration for this adapter's environment (e.g.
+   * pure-JS keystores where no WebCrypto implementation is available).
+   * App-level `Provider.create({ accessKey })` options override these.
+   */
+  accessKey?:
+    | {
+        /** Default keystores backing locally generated access keys. */
+        keystores?: Keystore.Keystores | undefined
+      }
+    | undefined
   /** Adapter actions dispatched by the provider's `request()` method. */
   actions: {
     /** Grant an access key for the active account. */
@@ -156,6 +168,8 @@ export type Instance = {
    * Generates access-key material when `authorizeAccessKey` omits `address`
    * and `publicKey`. Return `undefined` to let adapter actions handle key
    * generation themselves.
+   *
+   * @deprecated Supply default keystores via {@link Instance.accessKey} instead.
    */
   generateAccessKey?:
     | ((

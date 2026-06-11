@@ -1,4 +1,4 @@
-import { PublicKey, WebCryptoP256 } from 'ox'
+import { P256, PublicKey, Secp256k1, WebCryptoP256 } from 'ox'
 import type { Address, Hex } from 'ox'
 import {
   Account as TempoAccount,
@@ -226,6 +226,62 @@ export declare namespace webCryptoP256 {
      * @default false
      */
     extractable?: boolean | undefined
+  }
+}
+
+/** Handle persisted by the {@link p256} and {@link secp256k1} keystores. */
+type HexKeyHandle = {
+  kind: 'p256' | 'secp256k1'
+  /** Exported private key. At-rest protection is the host app's storage adapter. */
+  privateKey: Hex.Hex
+}
+
+/**
+ * Pure-JS P-256 keystore. The private key is held as hex in the handle and
+ * signing runs in JavaScript — at-rest protection is the host app's storage
+ * adapter, and the key is readable by anything with JS execution. Prefer
+ * {@link webCryptoP256} (or a hardware keystore) where a WebCrypto
+ * implementation is available; this exists chiefly as an adapter default
+ * for environments without one.
+ */
+export function p256(): Keystore {
+  return hexKeystore('p256')
+}
+
+/**
+ * Pure-JS secp256k1 keystore. The private key is held as hex in the handle
+ * and signing runs in JavaScript — at-rest protection is the host app's
+ * storage adapter, and the key is readable by anything with JS execution.
+ * secp256k1 signatures are the chain's cheapest envelope, making this the
+ * economical default for environments without a WebCrypto implementation
+ * (e.g. React Native, CLI).
+ */
+export function secp256k1(): Keystore {
+  return hexKeystore('secp256k1')
+}
+
+function hexKeystore(kind: HexKeyHandle['kind']): Keystore {
+  const curve = kind === 'p256' ? P256 : Secp256k1
+  return {
+    async createKey() {
+      const privateKey = curve.randomPrivateKey()
+      return {
+        handle: { kind, privateKey } satisfies HexKeyHandle,
+        publicKey: PublicKey.toHex(curve.getPublicKey({ privateKey })),
+      }
+    },
+    toAccount(record, context) {
+      const handle = record.handle as Partial<HexKeyHandle> | undefined
+      if (handle?.kind !== kind || !handle.privateKey)
+        throw new Error(`Unrecognized \`${kind}\` keystore handle.`)
+      const account = {
+        access: context.access,
+        keyAuthorizationManager: context.keyAuthorizationManager,
+      }
+      return kind === 'p256'
+        ? TempoAccount.fromP256(handle.privateKey, account)
+        : TempoAccount.fromSecp256k1(handle.privateKey, account)
+    },
   }
 }
 

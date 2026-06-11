@@ -105,8 +105,12 @@ export function create(options: create.Options = {}): create.ReturnType {
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
   } = options
-  const keystores = options.accessKey?.keystores
   const authorizeAccessKey_default = options.accessKey?.authorize ?? options.authorizeAccessKey
+  // Filled in below once the adapter instance exists (adapters may supply
+  // environment defaults). The object identity is shared with the store's
+  // access-key manager and serializer; nothing reads it before the first
+  // request.
+  const keystores: Keystore.Keystores = {}
 
   // Build per-chain transports from `relay` (if set), then layer caller-provided
   // `transports` on top so explicit per-chain overrides win.
@@ -166,6 +170,10 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const instance = adapter({ getAccount, getClient, storage, store })
   const { actions } = instance
+
+  // App-level keystores override adapter-supplied defaults.
+  const keystores_configured = options.accessKey?.keystores ?? instance.accessKey?.keystores
+  Object.assign(keystores, keystores_configured ?? Keystore.defaults)
 
   const emitter = ox_Provider.createEmitter()
 
@@ -481,10 +489,11 @@ export function create(options: create.Options = {}): create.ReturnType {
       }
     }
 
-    // Resolve the key source: explicit `keystores` win; otherwise the
-    // adapter's `generateAccessKey` applies; otherwise the default keystore —
-    // in browsers only, since elsewhere the wallet generates the key.
-    if (!keystores && instance.generateAccessKey) {
+    // Resolve the key source: configured keystores (app-level, else the
+    // adapter's defaults) win; otherwise the adapter's deprecated
+    // `generateAccessKey` applies; otherwise the built-in keystore — in
+    // browsers only, since elsewhere the wallet generates the key.
+    if (!keystores_configured && instance.generateAccessKey) {
       const generated = await instance.generateAccessKey({ keyType: parameters.keyType })
       if (!generated) return { parameters }
       const prepared = await AccessKey.prepareAuthorization({
@@ -502,12 +511,12 @@ export function create(options: create.Options = {}): create.ReturnType {
         privateKey: generated.privateKey,
       }
     }
-    if (!keystores && !isBrowserWebCrypto()) return { parameters }
+    if (!keystores_configured && !isBrowserWebCrypto()) return { parameters }
 
     const { key, keyAuthorization } = await AccessKey.prepareAuthorization({
       ...parameters,
       chainId: chainId_,
-      ...(keystores ? { keystores } : {}),
+      keystores,
     })
     if (!key)
       throw new RpcResponse.InternalError({
@@ -741,7 +750,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         account: address,
         chainId: Number(parameters.chainId ?? options_.chainId),
         parameters,
-        store: { keystores: keystores ?? Keystore.defaults, state: store },
+        store: { keystores, state: store },
       }))
     )
       return undefined
@@ -1823,13 +1832,13 @@ export declare namespace create {
           /**
            * Keystores backing locally generated access keys: one per key
            * type (e.g. Secure Enclave, WebCrypto). Access-key material is
-           * created via the keystore's `createKey()` (taking precedence over
-           * the adapter's `generateAccessKey`) and persisted as an opaque
+           * created via the keystore's `createKey()` and persisted as an opaque
            * `handle` that the keystore's `toAccount()` turns back into a
            * signing account on hydration.
            *
            * Keystores are about the device's key capabilities — `storage`
-           * persists provider state; keystores hold key material. Existing
+           * persists provider state; keystores hold key material. App-level
+           * keystores override adapter-supplied defaults. Existing
            * `privateKey`/`keyPair` records hydrate unchanged.
            *
            * @default Keystore.defaults — `{ p256: Keystore.webCryptoP256() }`

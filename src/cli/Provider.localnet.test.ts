@@ -140,8 +140,8 @@ async function readAccessKeys(storage: ReturnType<typeof Storage.filesystem>) {
         address: Address.Address
         chainId: number
         expiry?: number | undefined
+        handle?: { kind: string; privateKey: Hex.Hex } | undefined
         keyType: string
-        privateKey?: Hex.Hex | undefined
       }[]
     }
   }>('store')
@@ -668,7 +668,8 @@ describe('Provider.create', () => {
           "keyType": "secp256k1",
         }
       `)
-      expect(entry!.privateKey).toMatch(/^0x[0-9a-f]{64}$/i)
+      expect(entry!.handle).toMatchObject({ kind: 'secp256k1' })
+      expect(entry!.handle!.privateKey).toMatch(/^0x[0-9a-f]{64}$/i)
     } finally {
       await server.closeAsync()
     }

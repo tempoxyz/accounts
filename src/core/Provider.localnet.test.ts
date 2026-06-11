@@ -2497,6 +2497,115 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         provider.getAccessKeyStatus({ address: root.address }),
       ).resolves.toMatchInlineSnapshot(`"published"`)
     })
+
+    test('behavior: adapter-supplied keystores apply; app keystores override', async () => {
+      const root = TempoAccount.fromSecp256k1(Secp256k1.randomPrivateKey())
+      // Wallet-host stand-in that signs whatever key type is forwarded.
+      const jsonRpcAdapter = Adapter.define({ name: 'JSON-RPC Test' }, () => ({
+        accessKey: { keystores: { secp256k1: Keystore.secp256k1() } },
+        actions: {
+          createAccount: async () => ({ accounts: [{ address: root.address }] }),
+          loadAccounts: async () => ({ accounts: [{ address: root.address }] }),
+        },
+        getAccount: () => ({
+          account: { address: root.address, type: 'json-rpc' as const },
+          transport: custom({
+            async request({ method, params }: { method: string; params?: unknown[] }) {
+              if (method !== 'wallet_authorizeAccessKey')
+                throw new Error(`unexpected wallet method: ${method}`)
+              const [parameters] = params as [
+                { address: Hex.Hex; chainId: Hex.Hex; expiry: Hex.Hex; keyType: never },
+              ]
+              const signed = await root.signKeyAuthorization(
+                { address: parameters.address, type: parameters.keyType },
+                { chainId: BigInt(parameters.chainId), expiry: Number(parameters.expiry) },
+              )
+              return { keyAuthorization: KeyAuthorization.toRpc(signed), rootAddress: root.address }
+            },
+          }),
+        }),
+      }))
+
+      // Adapter defaults apply (secp256k1 is the unspecified-type default).
+      const provider = Provider.create({
+        adapter: jsonRpcAdapter,
+        chains: [chain],
+        storage: createJsonStorage(),
+      })
+      await provider.request({ method: 'wallet_connect' })
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      const record = provider.store.getState().accessKeys[0]!
+      expect(record.keyType).toBe('secp256k1')
+      expect(record.handle).toMatchObject({ kind: 'secp256k1' })
+      expect(record.privateKey).toBeUndefined()
+
+      // App-level keystores override the adapter's defaults wholesale.
+      const provider2 = Provider.create({
+        accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
+        adapter: jsonRpcAdapter,
+        chains: [chain],
+        storage: createJsonStorage(),
+      })
+      await provider2.request({ method: 'wallet_connect' })
+      await provider2.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      const record2 = provider2.store.getState().accessKeys[0]!
+      expect(record2.keyType).toBe('p256')
+      expect(record2.handle).toMatchObject({ kind: 'webcrypto-p256' })
+    })
+
+    test('behavior: deprecated generateAccessKey is still honored', async () => {
+      const root = TempoAccount.fromSecp256k1(Secp256k1.randomPrivateKey())
+      const accessKeyPrivateKey = Secp256k1.randomPrivateKey()
+      const jsonRpcAdapter = Adapter.define({ name: 'JSON-RPC Test' }, () => ({
+        actions: {
+          createAccount: async () => ({ accounts: [{ address: root.address }] }),
+          loadAccounts: async () => ({ accounts: [{ address: root.address }] }),
+        },
+        generateAccessKey: () => ({
+          keyType: 'secp256k1' as const,
+          privateKey: accessKeyPrivateKey,
+          publicKey: TempoAccount.fromSecp256k1(accessKeyPrivateKey).publicKey,
+        }),
+        getAccount: () => ({
+          account: { address: root.address, type: 'json-rpc' as const },
+          transport: custom({
+            async request({ method, params }: { method: string; params?: unknown[] }) {
+              if (method !== 'wallet_authorizeAccessKey')
+                throw new Error(`unexpected wallet method: ${method}`)
+              const [parameters] = params as [
+                { address: Hex.Hex; chainId: Hex.Hex; expiry: Hex.Hex; keyType: never },
+              ]
+              const signed = await root.signKeyAuthorization(
+                { address: parameters.address, type: parameters.keyType },
+                { chainId: BigInt(parameters.chainId), expiry: Number(parameters.expiry) },
+              )
+              return { keyAuthorization: KeyAuthorization.toRpc(signed), rootAddress: root.address }
+            },
+          }),
+        }),
+      }))
+
+      const provider = Provider.create({
+        adapter: jsonRpcAdapter,
+        chains: [chain],
+        storage: createJsonStorage(),
+      })
+      await provider.request({ method: 'wallet_connect' })
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      const record = provider.store.getState().accessKeys[0]!
+      expect(record.keyType).toBe('secp256k1')
+      expect(record.privateKey).toBe(accessKeyPrivateKey)
+      expect(record.handle).toBeUndefined()
+    })
   })
 
   describe('wallet_connect with authorizeAccessKey', () => {
