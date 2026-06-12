@@ -1,4 +1,4 @@
-import { Address, Hex, P256, PublicKey, WebCryptoP256 } from 'ox'
+import { Address, Hex, PublicKey, WebCryptoP256 } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { BaseError, encodeErrorResult, encodeFunctionResult } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
@@ -6,7 +6,6 @@ import { describe, expect, test } from 'vp/test'
 
 import { accounts, privateKeys } from '../../test/config.js'
 import { testKeystore } from '../../test/keystore.js'
-import { createJsonStorage } from '../../test/utils.js'
 import * as AccessKey from './AccessKey.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import * as Keystore from './Keystore.js'
