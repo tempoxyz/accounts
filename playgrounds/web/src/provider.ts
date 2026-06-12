@@ -232,10 +232,7 @@ function getTurnkeyAdapterClient() {
   return turnkeyClient as TurnkeyPlaygroundClient
 }
 
-export function switchTheme(
-  next: DialogNs.Theme | undefined,
-  adapterType: AdapterType = 'dialog',
-) {
+export function switchTheme(next: DialogNs.Theme | undefined, adapterType: AdapterType = 'dialog') {
   theme = next
   Mppx.restore()
   provider = createProvider(adapterType)

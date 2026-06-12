@@ -2,4 +2,8 @@
 "accounts": patch
 ---
 
-`tempoWallet` now uses the Wata `postMessage` transport (also exported from `accounts/postMessage`) and the bespoke-messenger `dialog` adapter is deprecated; added the lower-level `postMessage()` adapter, and per-transport `tempoWallet` variants now live on their subpaths (e.g. `accounts/mobileWebAuth`) instead of top-level aliases.
+Introduced `postMessage` adapter built on the Wata transport of the same name. 
+
+Updated the `tempoWallet` adapter to use `postMessage`.
+
+Deprecated `dialog` adapter in favor of `postMessage`.
