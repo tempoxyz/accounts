@@ -51,23 +51,21 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const balanceChainIdForDemo = (demo: DemoKind) =>
   demo === "Add Funds" ? TEMPO_MAINNET_CHAIN_ID : TEMPO_MODERATO_CHAIN_ID;
 
-const rejectPendingRequests = (provider: AccountsProvider | null) => {
-  provider?.store.setState((state) => ({
-    ...state,
-    requestQueue: state.requestQueue.map((queued) =>
-      queued.status === "pending"
-        ? {
-            request: queued.request,
-            error: { code: 4001, message: "Demo changed." },
-            status: "error" as const,
-          }
-        : queued,
-    ),
-  }));
+const cancelPendingRequests = () => {
+  clearWalletSurfaces();
 };
 
-const cancelPendingRequests = (provider: AccountsProvider | null) => {
-  rejectPendingRequests(provider);
+const clearWalletSurfaces = () => {
+  if (typeof document === "undefined") return;
+  for (const dialog of document.querySelectorAll(
+    'dialog[data-tempo-wallet-postmessage], dialog[data-tempo-wallet]',
+  )) {
+    dialog.remove();
+  }
+  document.body.style.overflow = "";
+  for (const sibling of Array.from(document.body.children)) {
+    if (sibling.hasAttribute("inert")) sibling.removeAttribute("inert");
+  }
 };
 
 const timeout = (ms: number) =>
@@ -145,7 +143,7 @@ export default function Demo() {
   statusRef.current = status;
 
   const selectDemo = (next: DemoKind) => {
-    cancelPendingRequests(providerRef.current);
+    cancelPendingRequests();
     depositWatchRef.current += 1;
     setDemo(next);
     setStatus("idle");
@@ -189,7 +187,7 @@ export default function Demo() {
   };
 
   const onDisconnect = async () => {
-    cancelPendingRequests(providerRef.current);
+    cancelPendingRequests();
     depositWatchRef.current += 1;
     try {
       const provider = providerRef.current;
@@ -310,7 +308,7 @@ export default function Demo() {
       });
       setAccountStatus("connected");
     } catch {
-      cancelPendingRequests(providerRef.current);
+      cancelPendingRequests();
       if (!connected) setAccountStatus("disconnected");
     } finally {
       setSignInStatus("idle");
@@ -324,7 +322,7 @@ export default function Demo() {
     setLastVariant(variant ?? null);
     const def = DEMOS[demo];
     const provider = await getProvider();
-    if (nonBlockingDeposit) cancelPendingRequests(provider);
+    if (nonBlockingDeposit) cancelPendingRequests();
     let depositBaseline = connected?.balance ?? 0n;
     let depositBaselineAddress = connected?.address ?? null;
 
@@ -449,7 +447,7 @@ export default function Demo() {
       } else if ("__polled" in winner) {
         nextResult = { summary: `Signed in · ${shorten(winner.__polled)}` };
       } else {
-        if ("__timeout" in winner) cancelPendingRequests(provider);
+        if ("__timeout" in winner) cancelPendingRequests();
         setStatus("idle");
         setResult(null);
         return;
@@ -477,7 +475,7 @@ export default function Demo() {
       setStatus("done");
     } catch {
       if (pollHandle) clearInterval(pollHandle);
-      cancelPendingRequests(provider);
+      cancelPendingRequests();
       if (activeDemoRef.current !== demo) return;
       setStatus("idle");
       setResult(null);
