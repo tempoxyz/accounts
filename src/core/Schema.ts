@@ -86,6 +86,7 @@ export const schema = from([
   Rpc.eth_signTypedData_v4.schema,
   Rpc.personal_sign.schema,
   Rpc.wallet_authorizeAccessKey.schema,
+  Rpc.wallet_authorizeChallenge.schema,
   Rpc.wallet_connect.schema,
   Rpc.wallet_deposit.schema,
   Rpc.wallet_depositZone.schema,

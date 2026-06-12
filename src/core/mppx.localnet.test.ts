@@ -1,3 +1,4 @@
+import { Challenge, Credential } from 'mppx'
 import { Fetch } from 'mppx/client'
 import { Mppx as ServerMppx, tempo } from 'mppx/server'
 import { parseUnits } from 'viem'
@@ -136,6 +137,55 @@ describe('mppx integration', () => {
     } finally {
       await failingServer.closeAsync()
     }
+  })
+
+  test('wallet_authorizeChallenge creates a credential for a serialized challenge', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+      chains: [chain],
+      // Keep the global fetch raw so the 402 challenge surfaces directly
+      // instead of being handled by the payment-aware fetch.
+      mpp: { polyfill: false },
+    })
+    const address = await connect(provider)
+    await fund(address)
+
+    const response = await fetch(`${server.url}/fortune`)
+    expect(response.status).toBe(402)
+    const header = response.headers.get('www-authenticate')!
+
+    const result = await provider.request({
+      method: 'wallet_authorizeChallenge',
+      params: [{ challenges: [header] }],
+    })
+
+    const credential = Credential.deserialize(result.authorization)
+    expect(credential.challenge.id).toBe(Challenge.deserialize(header).id)
+
+    const retry = await fetch(`${server.url}/fortune`, {
+      headers: { Authorization: result.authorization },
+    })
+    expect(retry.status).toBe(200)
+  })
+
+  test('provider.mpp.fetch handles 402 without the global polyfill', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+      chains: [chain],
+      mpp: { polyfill: false },
+    })
+    const address = await connect(provider)
+    await fund(address)
+
+    const res = await provider.mpp!.fetch(`${server.url}/fortune`)
+    expect(res.status).toBe(200)
+
+    const body = await res.json()
+    expect(body).toMatchInlineSnapshot(`
+      {
+        "fortune": "Your code will compile on the first try.",
+      }
+    `)
   })
 
   test('push mode publishes pending access key authorization', async () => {
