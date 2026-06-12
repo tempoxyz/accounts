@@ -177,7 +177,7 @@ async function signKeyAuthorization(parameters: AdapterAuthorizeParameters) {
   return await root.signKeyAuthorization(
     {
       accessKeyAddress: accessKeyAddress(parameters),
-      keyType: parameters.keyType ?? 'secp256k1',
+      keyType: parameters.keyType ?? 'p256',
     },
     {
       chainId: parameters.chainId ?? BigInt(chain.id),
@@ -331,6 +331,9 @@ describe('create', () => {
       params: [{ capabilities: { method: 'register', name: 'Accounts RN Test' } }],
     })
     expect(result.accounts[0]!.address).toBe(root.address)
+    expect(
+      connectParameters(wallet, 0)?.capabilities?.authorizeAccessKey?.keyType,
+    ).toMatchInlineSnapshot(`"p256"`)
 
     await fund(root.address)
 
