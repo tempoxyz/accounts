@@ -5,15 +5,9 @@ description: PostMessage adapter for wallet-window sessions.
 
 # `postMessage`
 
-Creates an adapter that sends provider RPC requests to a wallet web page over a [uRPC postMessage session](https://github.com/tempoxyz/urpc/blob/main/specs/transport-window.md).
+Creates an adapter that delegates signing to a wallet web page over a [uRPC postMessage session](https://github.com/tempoxyz/urpc/blob/main/specs/transport-window.md). For the Tempo Wallet, use the preconfigured [`tempoWallet`](#tempowallet) below.
 
-One provider holds one session to one wallet window. The wallet page mounts in a hidden overlay iframe by default — or a popup where iframes can't work — surfaces while requests are pending, and is put away once the queue drains: the iframe hides, a popup closes. Dismissing the UI or closing the window rejects the in-flight request; `wallet_disconnect` tears the session down.
-
-When the wallet detects its iframe is occluded (a clickjacking risk), it asks to continue in a popup; the adapter remounts there and replays the in-flight request.
-
-The wallet identifies the app by its browser-verified window origin, so no discovery document is required; `name` and `rdns` only describe the provider identity announced to the app.
-
-Both adapters are exported from the root entry — `postMessage` and `tempoWalletPostMessage` — and from the `accounts/postMessage` subpath as `postMessage` and `tempoWallet` (alongside the `iframe`/`popup` mounts).
+One provider holds one session to one wallet window: the page surfaces while a request is pending and is put away once the queue drains. Dismissing the UI or closing the window rejects the in-flight request, and `wallet_disconnect` ends the session. The wallet identifies the app by its browser-verified window origin, so no discovery document is needed — `name` and `rdns` only describe the provider identity announced to the app.
 
 ## Usage
 
@@ -32,11 +26,10 @@ const provider = Provider.create({
 
 ## tempoWallet
 
-`tempoWallet()` is a template over `postMessage()` preconfigured with the Tempo Wallet post-message page and provider identity.
+`tempoWallet()` is a template over `postMessage()` preconfigured with the Tempo Wallet post-message page and provider identity. It is exported from the root entry as the Tempo Wallet adapter.
 
 ```ts twoslash
-import { Provider } from 'accounts'
-import { tempoWallet } from 'accounts/postMessage'
+import { Provider, tempoWallet } from 'accounts'
 
 const provider = Provider.create({
   adapter: tempoWallet(),
@@ -45,7 +38,7 @@ const provider = Provider.create({
 
 ## Mounts
 
-The mount decides where the wallet page lives and how it surfaces for requests. By default the adapter picks for you: an overlay iframe, falling back to a popup in insecure contexts, in Safari (no WebAuthn in cross-origin iframes), or when the browser lacks IntersectionObserver v2 (the wallet can't run its occlusion defense). Pass a mount to pin one explicitly:
+The mount decides where the wallet page lives and how it surfaces for requests. By default the adapter picks for you: an overlay iframe, falling back to a popup in insecure contexts, in Safari (no WebAuthn in cross-origin iframes), or when the browser lacks IntersectionObserver v2 (the wallet can't run its occlusion defense). If the wallet detects its iframe is occluded mid-session, it asks to continue in a popup and the adapter remounts there, replaying the request. Pass a mount to pin one explicitly:
 
 ```ts twoslash
 import { popup, postMessage } from 'accounts/postMessage'
