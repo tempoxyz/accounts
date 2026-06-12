@@ -2502,7 +2502,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
       const root = TempoAccount.fromSecp256k1(Secp256k1.randomPrivateKey())
       // Wallet-host stand-in that signs whatever key type is forwarded.
       const jsonRpcAdapter = Adapter.define({ name: 'JSON-RPC Test' }, () => ({
-        accessKey: { keystores: { secp256k1: Keystore.secp256k1() } },
+        accessKey: { keystores: { p256: Keystore.p256() } },
         actions: {
           createAccount: async () => ({ accounts: [{ address: root.address }] }),
           loadAccounts: async () => ({ accounts: [{ address: root.address }] }),
@@ -2526,7 +2526,7 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         }),
       }))
 
-      // Adapter defaults apply (secp256k1 is the unspecified-type default).
+      // The adapter's p256 keystore (pure-JS) backs the default key.
       const provider = Provider.create({
         adapter: jsonRpcAdapter,
         chains: [chain],
@@ -2538,8 +2538,8 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         params: [{ expiry: Expiry.days(1) }],
       })
       const record = provider.store.getState().accessKeys[0]!
-      expect(record.keyType).toBe('secp256k1')
-      expect(record.handle).toMatchObject({ kind: 'secp256k1' })
+      expect(record.keyType).toBe('p256')
+      expect(record.handle).toMatchObject({ kind: 'p256' })
       expect(record.privateKey).toBeUndefined()
 
       // App-level keystores override the adapter's defaults wholesale.

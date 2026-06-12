@@ -320,10 +320,21 @@ describe('prepareAuthorization', () => {
     expect(result.key).toBeDefined()
   })
 
-  test('behavior: unspecified key type prefers a configured secp256k1 keystore', async () => {
+  test('behavior: unspecified key type defaults to p256 even when secp256k1 is configured', async () => {
     const result = await AccessKey.prepareAuthorization({
       chainId: 1,
       expiry: 123,
+      keystores: { p256: Keystore.p256(), secp256k1: Keystore.secp256k1() },
+    })
+    expect(result.keyAuthorization.type).toMatchInlineSnapshot(`"p256"`)
+    expect(result.key?.handle).toMatchObject({ kind: 'p256' })
+  })
+
+  test('behavior: secp256k1 is used only when explicitly requested', async () => {
+    const result = await AccessKey.prepareAuthorization({
+      chainId: 1,
+      expiry: 123,
+      keyType: 'secp256k1',
       keystores: { p256: Keystore.p256(), secp256k1: Keystore.secp256k1() },
     })
     expect(result.keyAuthorization.type).toMatchInlineSnapshot(`"secp256k1"`)

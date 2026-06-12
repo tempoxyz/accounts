@@ -29,9 +29,10 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
   }
 
   return fromRequest({
-    // Pure-JS keystores: React Native may lack WebCrypto, and the access key
-    // must live app-side so transactions sign without a wallet round-trip.
-    keystores: { p256: Keystore.p256(), secp256k1: Keystore.secp256k1() },
+    // React Native may lack WebCrypto and persists through string-based
+    // storage, so this opts into pure-JS P-256 (the access key lives app-side
+    // and signs without a wallet round-trip).
+    keystores: { p256: Keystore.p256() },
     name,
     rdns,
     async request(request) {

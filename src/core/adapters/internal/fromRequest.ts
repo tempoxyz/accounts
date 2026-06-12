@@ -57,6 +57,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
 
     return {
       forwardsAuth: true,
+      ...(keystores ? { accessKey: { keystores } } : {}),
       actions: {
         async createAccount(_parameters, request) {
           return toConnectReturn(
@@ -99,7 +100,6 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
         },
       },
       ...(cleanup ? { cleanup } : close ? { cleanup: () => void close() } : {}),
-      ...(keystores ? { accessKey: { keystores } } : {}),
       getAccount(parameters = {}) {
         return {
           account: {
@@ -131,9 +131,10 @@ export declare namespace fromRequest {
     icon?: Adapter.Meta['icon'] | undefined
     /**
      * Default keystores backing locally generated access keys. Omit to use
-     * the SDK default (`webCryptoP256`) — appropriate for browser transports.
-     * Pass pure-JS keystores for environments without WebCrypto (e.g. the
-     * React Native mobile-web-auth transport).
+     * the SDK default (non-extractable `webCryptoP256`). Pass an explicit
+     * keystore where the transport's environment needs one — e.g. pure-JS
+     * P-256 for React Native, which may lack WebCrypto and persists access
+     * keys through string-based storage.
      */
     keystores?: Keystore.Keystores | undefined
     /**

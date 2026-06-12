@@ -281,10 +281,10 @@ export async function prepareAuthorization(
     })
     return { keyAuthorization }
   }
-  // Unspecified key type: prefer secp256k1 when a keystore for it is
-  // configured (the chain's cheapest signature envelope), else p256.
+  // p256 is the default key type everywhere (WebCrypto-backed where
+  // available, safest); secp256k1 is opt-in via an explicit `keyType`.
   const keystores_ = keystores ?? Keystore.defaults
-  const type = keyType ?? (keystores_.secp256k1 ? 'secp256k1' : 'p256')
+  const type = keyType ?? 'p256'
   const keystore = type === 'webAuthn' ? undefined : keystores_[type]
   if (!keystore)
     throw new RpcResponse.InvalidParamsError({

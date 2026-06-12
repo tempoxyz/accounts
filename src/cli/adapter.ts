@@ -15,11 +15,15 @@ export function cli(options: cli.Options): Adapter.Adapter {
   const { name = 'Tempo CLI', rdns = 'xyz.tempo.cli' } = options
 
   return Adapter.define({ name, rdns }, ({ store }) => {
-    // Pure-JS keystores: filesystem storage is string-based, so WebCrypto
-    // keys could not survive restarts. Shared between the device-code
-    // ceremony and the instance declaration so records hydrate through the
-    // same backends.
-    const keystores = { p256: Keystore.p256(), secp256k1: Keystore.secp256k1() }
+    // The CLI persists to string-based filesystem storage, so its p256
+    // default opts into an extractable WebCrypto key (a non-extractable one
+    // could not survive a restart). secp256k1 stays available for explicit
+    // requests. Shared between the device-code ceremony and the instance
+    // declaration so records hydrate through the same keystores.
+    const keystores = {
+      p256: Keystore.webCryptoP256({ extractable: true }),
+      secp256k1: Keystore.secp256k1(),
+    }
 
     async function saveGeneratedAccessKey(
       address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
@@ -49,7 +53,8 @@ export function cli(options: cli.Options): Adapter.Adapter {
       } = options
       const { account, authorizeAccessKey, method } = request
 
-      const generatedKeyType = authorizeAccessKey?.keyType === 'p256' ? 'p256' : 'secp256k1'
+      // p256 by default; secp256k1 only when explicitly requested.
+      const generatedKeyType = authorizeAccessKey?.keyType === 'secp256k1' ? 'secp256k1' : 'p256'
       const generatedAccessKey =
         authorizeAccessKey && !authorizeAccessKey.publicKey && !authorizeAccessKey.address
           ? await keystores[generatedKeyType].createKey()
