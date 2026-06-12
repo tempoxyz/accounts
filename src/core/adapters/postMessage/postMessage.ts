@@ -184,15 +184,8 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
         store.disconnect()
       }
     },
-    // No `close` (disconnect) hook: `wallet_disconnect` is handled SDK-side
-    // (logout + `store.disconnect()`) and never reaches the wallet, so there
-    // is nothing to forward. The session and its mount are a persistent
-    // channel that outlives any single connection — like the eager warm
-    // state — so disconnect leaves them up and the next login reuses the
-    // already-handshaked session. Tearing the session down here instead
-    // strands the next login: the iframe's wallet page stays `ready` and
-    // ignores the fresh session's hello, so the request buffers forever.
-    // Only `cleanup` (provider teardown) closes the session and mount.
+    // No `close` (disconnect) hook: the session and mount stay warm across
+    // disconnect so the next login reuses the already-handshaked session.
     cleanup() {
       void session?.close()
       mount?.destroy()
