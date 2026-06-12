@@ -31,7 +31,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
         throw new RpcResponse.InvalidParamsError({
           message: `\`keyType: "${keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
         })
-      const type = keyType ?? 'secp256k1'
+      const type = keyType ?? 'p256'
       const privateKey = type === 'p256' ? P256.randomPrivateKey() : Secp256k1.randomPrivateKey()
       const account =
         type === 'p256' ? TempoAccount.fromP256(privateKey) : TempoAccount.fromSecp256k1(privateKey)

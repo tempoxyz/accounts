@@ -143,7 +143,7 @@ async function signKeyAuthorization(parameters: AdapterAuthorizeParameters) {
   return await root.signKeyAuthorization(
     {
       accessKeyAddress: accessKeyAddress(parameters),
-      keyType: parameters.keyType ?? 'secp256k1',
+      keyType: parameters.keyType ?? 'p256',
     },
     {
       chainId: parameters.chainId ?? BigInt(chain.id),
@@ -158,6 +158,12 @@ function accessKeyAddress(parameters: AdapterAuthorizeParameters) {
   if (!parameters.publicKey)
     throw new Error('Expected access key address or public key in wallet request.')
   return Address.fromPublicKey(PublicKey.fromHex(parameters.publicKey))
+}
+
+function connectParameters(wallet: ReturnType<typeof createWallet>, index: number) {
+  const [parameters] =
+    z.decode(Rpc.wallet_connect.schema.params!, wallet.requests()[index]!.params as never) ?? []
+  return parameters
 }
 
 async function signature(
@@ -310,6 +316,9 @@ describe('create', () => {
       params: [{ capabilities: { method: 'register', name: 'Accounts Web Test' } }],
     })
     expect(result.accounts[0]!.address).toBe(root.address)
+    expect(
+      connectParameters(wallet, 0)?.capabilities?.authorizeAccessKey?.keyType,
+    ).toMatchInlineSnapshot(`"p256"`)
 
     await fund(root.address)
 
