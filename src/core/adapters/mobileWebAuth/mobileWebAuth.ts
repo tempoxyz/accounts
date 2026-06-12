@@ -1,7 +1,8 @@
-import { Discovery, Wata, mobileWebAuth as core_mobileWebAuth, type MobileWebAuth } from 'wata'
+import { Wata, mobileWebAuth as core_mobileWebAuth, type MobileWebAuth } from 'wata'
 
 import type * as Adapter from '../../Adapter.js'
 import { fromRequest } from '../internal/fromRequest.js'
+import { hostResolver } from '../internal/hostResolver.js'
 
 /**
  * Creates a mobile web auth adapter that forwards wallet RPC through Wata.
@@ -12,20 +13,7 @@ import { fromRequest } from '../internal/fromRequest.js'
 export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
   const { baseUrl, fetch, host, name, openAuthSession, rdns, redirectUri } = options
 
-  // The host discovery document is fetched once and reused for the
-  // adapter's lifetime; a wallet rotating its document requires a new
-  // adapter instance to pick up.
-  let hostDocument: Promise<Discovery.HostDocument> | undefined
-  function resolveHost() {
-    if (typeof host !== 'string') return host
-    hostDocument ??= Discovery.fetchHost(host, fetch !== undefined ? { fetch } : {}).catch(
-      (error) => {
-        hostDocument = undefined
-        throw error
-      },
-    )
-    return hostDocument
-  }
+  const resolveHost = hostResolver(host, fetch)
 
   return fromRequest({
     name,
