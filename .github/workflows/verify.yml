@@ -45,6 +45,7 @@ jobs:
       matrix:
         tag:
           - latest
+          - sha-3da8342
           - https://rpc.moderato.tempo.xyz
 
     steps:
@@ -87,7 +88,12 @@ jobs:
           docker save ghcr.io/tempoxyz/tempo:${{ matrix.tag }} -o /tmp/tempo-image.tar
 
       - name: Run tests
-        run: pnpm test --bail=1
+        run: |
+          if [[ "${{ matrix.tag }}" == sha-* ]]; then
+            pnpm test src/server/internal/handlers/multisig.localnet.test.ts --bail=1
+          else
+            pnpm test --bail=1
+          fi
         env:
           CI: true
           VITE_NODE_TAG: ${{ matrix.tag }}
