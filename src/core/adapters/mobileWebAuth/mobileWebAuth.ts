@@ -1,6 +1,7 @@
 import { Discovery, Wata, mobileWebAuth as core_mobileWebAuth, type MobileWebAuth } from 'wata'
 
 import type * as Adapter from '../../Adapter.js'
+import * as Keystore from '../../Keystore.js'
 import { fromRequest } from '../internal/fromRequest.js'
 
 /**
@@ -28,6 +29,9 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
   }
 
   return fromRequest({
+    // Pure-JS keystores: React Native may lack WebCrypto, and the access key
+    // must live app-side so transactions sign without a wallet round-trip.
+    keystores: { p256: Keystore.p256(), secp256k1: Keystore.secp256k1() },
     name,
     rdns,
     async request(request) {

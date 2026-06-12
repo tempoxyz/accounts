@@ -3,7 +3,7 @@ import { custom } from 'viem'
 import { z } from 'zod/mini'
 
 import * as Adapter from '../../Adapter.js'
-import * as Keystore from '../../Keystore.js'
+import type * as Keystore from '../../Keystore.js'
 import * as Rpc from '../../zod/rpc.js'
 
 /**
@@ -16,7 +16,7 @@ import * as Rpc from '../../zod/rpc.js'
  * `request`.
  */
 export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
-  const { bind, cleanup, close, icon, name, rdns, request: requestRemote } = options
+  const { bind, cleanup, close, icon, keystores, name, rdns, request: requestRemote } = options
 
   return Adapter.define({ ...(icon ? { icon } : {}), name, rdns }, ({ getAccount, store }) => {
     // Late-bind the store so the request channel can reconcile local
@@ -99,10 +99,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
         },
       },
       ...(cleanup ? { cleanup } : close ? { cleanup: () => void close() } : {}),
-      // Pure-JS keystores: the key must live app-side so transactions sign
-      // without a wallet round-trip, and the host environment may lack
-      // WebCrypto (e.g. React Native).
-      accessKey: { keystores: { p256: Keystore.p256(), secp256k1: Keystore.secp256k1() } },
+      ...(keystores ? { accessKey: { keystores } } : {}),
       getAccount(parameters = {}) {
         return {
           account: {
@@ -132,6 +129,13 @@ export declare namespace fromRequest {
     cleanup?: (() => void) | undefined
     /** Data URI of the provider icon, announced via EIP-6963. */
     icon?: Adapter.Meta['icon'] | undefined
+    /**
+     * Default keystores backing locally generated access keys. Omit to use
+     * the SDK default (`webCryptoP256`) — appropriate for browser transports.
+     * Pass pure-JS keystores for environments without WebCrypto (e.g. the
+     * React Native mobile-web-auth transport).
+     */
+    keystores?: Keystore.Keystores | undefined
     /**
      * Tears down the adapter's wallet session. Wired to the `disconnect`
      * action and instance cleanup; never forwarded to the remote wallet.
