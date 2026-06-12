@@ -2051,6 +2051,76 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
     })
   })
 
+  describe('wallet_updateAccessKey', () => {
+    test('default: updates spending limits in place', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const address = await connect(provider)
+      await fund(address)
+
+      const { keyAuthorization } = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [
+          {
+            expiry: Expiry.days(1),
+            limits: [{ token: Addresses.pathUsd, limit: Hex.fromNumber(parseUnits('5', 6)) }],
+          },
+        ],
+      })
+      // Publish the key (and spend 1 pathUSD of its allowance).
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      await provider.request({
+        method: 'wallet_updateAccessKey',
+        params: [
+          {
+            address,
+            accessKeyAddress: keyAuthorization.address!,
+            limits: [{ token: Addresses.pathUsd, limit: Hex.fromNumber(parseUnits('9', 6)) }],
+          },
+        ],
+      })
+
+      // `updateSpendingLimit` writes the remaining allowance directly — the
+      // key keeps its address and the prior spend is not subtracted.
+      const client = getClient()
+      const { remaining } = await Actions.accessKey.getRemainingLimit(client, {
+        account: address,
+        accessKey: keyAuthorization.address!,
+        token: Addresses.pathUsd,
+      })
+      expect(remaining).toBe(parseUnits('9', 6))
+
+      // The key remains usable under the new allowance.
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+    })
+
+    test('error: rejects for an unknown access key', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const address = await connect(provider)
+      await fund(address)
+
+      await expect(
+        provider.request({
+          method: 'wallet_updateAccessKey',
+          params: [
+            {
+              address,
+              accessKeyAddress: '0x000000000000000000000000000000000000dEaD',
+              limits: [{ token: Addresses.pathUsd, limit: Hex.fromNumber(1n) }],
+            },
+          ],
+        }),
+      ).rejects.toThrow(/key.*not.*found|KeyNotFound/i)
+    })
+  })
+
   describe('wallet_revokeAccessKey', () => {
     test('default: revokes a granted access key on-chain', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })

@@ -579,6 +579,36 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
   }
 
+  async function updateAccessKey(parameters: Adapter.updateAccessKey.Parameters) {
+    const selected = await getAdapterAccount({ address: parameters.address })
+    const chainId = Number(parameters.chainId ?? getClient().chain.id)
+    if (selected.account.type === 'json-rpc') {
+      const client = getWalletClient({
+        account: selected.account,
+        chainId,
+        transport: selected.transport,
+      })
+      await client.request({
+        method: 'wallet_updateAccessKey' as never,
+        params: [z.encode(Rpc.wallet_updateAccessKey.parameters, parameters)] as never,
+      })
+      return
+    }
+    // One transaction; `updateSpendingLimit` writes each token's remaining
+    // allowance directly, preserving period configuration.
+    const calls = parameters.limits.map((limit) =>
+      Actions.accessKey.updateLimit.call({
+        accessKey: parameters.accessKeyAddress,
+        limit: limit.limit,
+        token: limit.token,
+      }),
+    )
+    await viem_sendTransactionSync(getClient({ chainId }), {
+      account: selected.account,
+      calls,
+    })
+  }
+
   async function signTransactionAction(
     parameters: TransactionParameters,
     request: Pick<Rpc.eth_signTransaction.Encoded, 'method' | 'params'>,
@@ -640,6 +670,15 @@ export function create(options: create.Options = {}): create.ReturnType {
     if (actions.revokeAccessKey) return await actions.revokeAccessKey(parameters, request)
     if (instance.getAccount) return await revokeAccessKey(parameters)
     unsupported('revokeAccessKey')
+  }
+
+  async function updateAccessKeyAction(
+    parameters: Adapter.updateAccessKey.Parameters,
+    request: Pick<Rpc.wallet_updateAccessKey.Encoded, 'method' | 'params'>,
+  ) {
+    if (actions.updateAccessKey) return await actions.updateAccessKey(parameters, request)
+    if (instance.getAccount) return await updateAccessKey(parameters)
+    unsupported('updateAccessKey')
   }
 
   /** Returns accounts to persist. When `persistAccounts` is set, merges new accounts with existing ones. */
@@ -1505,6 +1544,13 @@ export function create(options: create.Options = {}): create.ReturnType {
                     assertConnected()
                     const [decoded] = request._decoded.params
                     await revokeAccessKeyAction({ ...decoded }, request)
+                    return
+                  }
+
+                  case 'wallet_updateAccessKey': {
+                    assertConnected()
+                    const [decoded] = request._decoded.params
+                    await updateAccessKeyAction({ ...decoded }, request)
                     return
                   }
 
