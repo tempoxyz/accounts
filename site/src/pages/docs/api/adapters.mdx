@@ -12,6 +12,7 @@ Adapters control how accounts are created and managed. Pass an adapter to `Provi
 | Adapter                                      | Uses                               | Best for                                                                                            |
 | -------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------- |
 | [`dialog`](/docs/api/dialog) (default)       | Hosted dialog                      | Apps wanting a universal account experience                                                         |
+| [`deviceCode`](/docs/api/deviceCode)         | User code + polling                | CLIs, remote shells, and devices without a callback channel connecting to a hosted wallet           |
 | [`mobileWebAuth`](/docs/api/mobileWebAuth)   | Mobile browser auth session        | React Native apps and mobile clients connecting to a hosted wallet                                  |
 | [`postMessage`](/docs/api/postMessage)       | Wallet page popup                  | Web apps connecting to a hosted wallet through a popup session                                      |
 | [`webAuthn`](/docs/api/webAuthn)             | Domain-bound passkeys              | Wallets integrating Passkey accounts, or Apps wanting to host and manage their own Passkey accounts |
@@ -40,6 +41,12 @@ Adapters control how accounts are created and managed. Pass an adapter to `Provi
     icon="lucide:smartphone"
     to="/docs/api/mobileWebAuth"
     title="mobileWebAuth"
+  />
+  <Card
+    description="Uses a user code + polling exchange for provider requests"
+    icon="lucide:terminal"
+    to="/docs/api/deviceCode"
+    title="deviceCode"
   />
   <Card
     description="Uses a wallet page popup session for provider requests"

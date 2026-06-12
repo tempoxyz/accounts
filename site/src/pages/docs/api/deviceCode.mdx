@@ -1,0 +1,108 @@
+---
+title: deviceCode
+description: Device code adapter for hosts without a callback channel.
+---
+
+# `deviceCode`
+
+Connect to a wallet from environments that can reach it over HTTPS but cannot receive a callback — a CLI, a remote shell, a CI runner, a kiosk. Communication happens over the [uRPC Device Code](https://github.com/tempoxyz/urpc/blob/main/specs/transport-device-code.md) transport: each request registers an authorization intent, the user approves it on the wallet's verification page, and the adapter polls until the response is released.
+
+## Usage
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { deviceCode } from 'accounts/deviceCode'
+
+const provider = Provider.create({
+  adapter: deviceCode({
+    host: 'https://wallet.example',
+    name: 'Example Wallet',
+    onPrompt({ userCode, verificationUri }) {
+      console.log(`Visit ${verificationUri} and enter ${userCode}`)
+    },
+    rdns: 'com.example.wallet',
+  }),
+})
+```
+
+## tempoWallet
+
+To connect to the Tempo Wallet, use the preconfigured `tempoWallet` below.
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { tempoWallet } from 'accounts/deviceCode'
+
+const provider = Provider.create({
+  adapter: tempoWallet({
+    onPrompt({ userCode, verificationUri }) {
+      console.log(`Visit ${verificationUri} and enter ${userCode}`)
+    },
+  }),
+})
+```
+
+## Parameters
+
+### baseUrl
+
+- **Type:** `string`
+- **Optional**
+
+Public HTTPS origin that serves your app's consumer discovery document (`/.well-known/urpc/consumer.json`), surfaced to the wallet's approval UI. Required when `meta` is set.
+
+### fetch
+
+- **Type:** `typeof fetch`
+- **Optional**
+
+Override the fetch implementation used for discovery and device-code requests.
+
+### host
+
+- **Type:** `string | object`
+- **Required by:** `deviceCode`
+
+Wallet discovery origin serving `/.well-known/urpc/host.json`, or a preloaded host document. The document must advertise the `device-code` transport.
+
+### meta
+
+- **Type:** `{ name: string; description?: string; icon?: string; websiteUrl?: string }`
+- **Optional**
+
+Human-facing app metadata rendered by the wallet's approval UI. Use instead of `baseUrl` when your app does not publish a consumer discovery document.
+
+### name
+
+- **Type:** `string`
+- **Required by:** `deviceCode`
+
+Provider display name.
+
+### onPrompt
+
+- **Type:** `(prompt: { userCode, verificationUri, verificationUriFull, expiresIn, pollingInterval, deviceCode }) => void | Promise<void>`
+- **Required**
+
+Surfaces the user code and verification URL once the wallet accepts the registration — print to the terminal, render a QR code, etc. Always display `userCode`, even when presenting `verificationUriFull`, so the user can confirm it on the approval page.
+
+### pollingInterval
+
+- **Type:** `number`
+- **Optional**
+
+Poll interval override in milliseconds. Defaults to the cadence suggested by the wallet.
+
+### pollingTimeout
+
+- **Type:** `number`
+- **Optional**
+
+Per-poll request timeout in milliseconds. Defaults to `30000`.
+
+### rdns
+
+- **Type:** `string`
+- **Required by:** `deviceCode`
+
+Reverse-DNS provider identifier.

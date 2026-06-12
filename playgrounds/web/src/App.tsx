@@ -189,6 +189,7 @@ function ConfigPanel(props: {
         <label>
           <span>Adapter</span>
           <select value={adapterType} onChange={(e) => onSwitch(e.target.value as AdapterType)}>
+            <option value="deviceCode">deviceCode</option>
             <option value="dialog">dialog</option>
             <option value="tempoWallet">tempoWallet</option>
             <option value="dialogRefImpl">dialogRefImpl</option>

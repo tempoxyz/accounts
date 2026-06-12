@@ -77,6 +77,7 @@ const config: Config = defineConfig({
             collapsed: true,
             items: [
               { text: 'Overview', link: '/docs/api/adapters' },
+              { text: 'deviceCode', link: '/docs/api/deviceCode' },
               { text: 'dialog', link: '/docs/api/dialog' },
               { text: 'local', link: '/docs/api/local' },
               { text: 'mobileWebAuth', link: '/docs/api/mobileWebAuth' },

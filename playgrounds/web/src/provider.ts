@@ -3,6 +3,7 @@ import type { CreateSubOrgParams } from '@turnkey/core'
 import {
   type Dialog as DialogNs,
   WebAuthnCeremony,
+  deviceCode,
   dialog,
   Dialog,
   local,
@@ -24,6 +25,7 @@ export type AdapterType =
   | 'webAuthn'
   | 'turnkey'
   | 'privy'
+  | 'deviceCode'
   | 'dialog'
   | 'tempoWallet'
   | 'dialogRefImpl'
@@ -81,6 +83,7 @@ export const initialAdapter: AdapterType = (() => {
     'webAuthn',
     'turnkey',
     'privy',
+    'deviceCode',
     'dialog',
     'tempoWallet',
     'dialogRefImpl',
@@ -130,6 +133,22 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       testnet,
     })
   }
+
+  if (adapterType === 'deviceCode')
+    return Provider.create({
+      adapter: deviceCode({
+        host,
+        name: 'Tempo Wallet',
+        onPrompt({ userCode, verificationUri, verificationUriFull }) {
+          const url = verificationUriFull ?? verificationUri
+          console.info(`Device code ${userCode} — approve at ${url}`)
+          window.open(url, '_blank', 'noopener')
+        },
+        rdns: 'xyz.tempo',
+      }),
+      mpp: mpp(),
+      testnet,
+    })
 
   if (adapterType === 'dialogRefImpl')
     return Provider.create({
