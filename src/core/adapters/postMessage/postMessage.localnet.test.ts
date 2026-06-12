@@ -362,7 +362,7 @@ describe('create', () => {
     expect(wallet.opened()).toHaveLength(1)
   })
 
-  test('behavior: reopens the wallet page after disconnect', async () => {
+  test('behavior: reuses the wallet page session across disconnect', async () => {
     const wallet = createWallet()
     const provider = createProvider(wallet, { storage: Storage.memory() })
 
@@ -370,13 +370,25 @@ describe('create', () => {
       method: 'wallet_connect',
       params: [{ capabilities: { method: 'login' } }],
     })
+    expect(provider.store.getState().accounts).toHaveLength(1)
+
+    // `wallet_disconnect` is a local teardown (logout + clear); it never
+    // reaches the wallet. The wallet-page session is a persistent channel, so
+    // reconnecting reuses the already-handshaked session rather than reopening
+    // a new one — the second login must still round-trip and succeed.
     await provider.request({ method: 'wallet_disconnect' })
-    await provider.request({
+    expect(provider.store.getState().accounts).toHaveLength(0)
+
+    const result = await provider.request({
       method: 'wallet_connect',
       params: [{ capabilities: { method: 'login' } }],
     })
 
-    expect(wallet.opened()).toHaveLength(2)
+    expect(result.accounts[0]!.address).toBe(root.address)
+    expect(wallet.opened()).toHaveLength(1)
+    expect(wallet.requests().filter((request) => request.method === 'wallet_connect')).toHaveLength(
+      2,
+    )
   })
 
   test('behavior: serializes overlapping requests over one session', async () => {
@@ -751,6 +763,43 @@ describe('mount', () => {
     expect(events.filter((event) => event === 'show')).toHaveLength(2)
     await vi.waitFor(() => expect(events.at(-1)).toBe('hide'))
     // One mount, one session for the provider's lifetime.
+    expect(events.filter((event) => event.startsWith('mount:'))).toHaveLength(1)
+    expect(events.filter((event) => event === 'target')).toHaveLength(1)
+  })
+
+  test('behavior: keeps the iframe mount up across disconnect', async () => {
+    const { consumerRealm } = installBrowser()
+    const events: string[] = []
+    const scripted = scriptedMount(events, consumerRealm)
+
+    const provider = Provider.create({
+      adapter: postMessage({
+        host: `${walletOrigin}/post-message`,
+        mount: scripted.factory,
+        name: 'Accounts Web Test',
+        rdns: 'xyz.tempo.accounts.playground',
+      }),
+      chains: [chain],
+      storage: Storage.memory(),
+    })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    await provider.request({ method: 'wallet_disconnect' })
+
+    // Disconnect is a local teardown — the mount and its handshaked session
+    // stay up, so the iframe is never destroyed and the next login reuses the
+    // same session instead of stranding on a stale handshake.
+    expect(events).not.toContain('destroy')
+
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+
+    expect(result.accounts[0]!.address).toBe(root.address)
     expect(events.filter((event) => event.startsWith('mount:'))).toHaveLength(1)
     expect(events.filter((event) => event === 'target')).toHaveLength(1)
   })

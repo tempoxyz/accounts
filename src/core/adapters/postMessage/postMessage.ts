@@ -184,10 +184,8 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
         store.disconnect()
       }
     },
-    async close() {
-      await session?.close()
-      mount?.hide()
-    },
+    // No `close` (disconnect) hook: the session and mount stay warm across
+    // disconnect so the next login reuses the already-handshaked session.
     cleanup() {
       void session?.close()
       mount?.destroy()
