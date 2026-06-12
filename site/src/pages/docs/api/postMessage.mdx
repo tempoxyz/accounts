@@ -1,13 +1,12 @@
 ---
 title: postMessage
-description: PostMessage adapter for wallet-window sessions.
+description: Connect to wallet from anywhere on the web
 ---
 
 # `postMessage`
 
-Creates an adapter that delegates signing to a wallet web page over a [uRPC postMessage session](https://github.com/tempoxyz/urpc/blob/main/specs/transport-window.md). For the Tempo Wallet, use the preconfigured [`tempoWallet`](#tempowallet) below.
+Connect to a wallet hosted on another domain from anywhere on the web. Communication happens over the [uRPC window](https://github.com/tempoxyz/urpc/blob/main/specs/transport-window.md) transport. 
 
-One provider holds one session to one wallet window: the page surfaces while a request is pending and is put away once the queue drains. Dismissing the UI or closing the window rejects the in-flight request, and `wallet_disconnect` ends the session. The wallet identifies the app by its browser-verified window origin, so no discovery document is needed — `name` and `rdns` only describe the provider identity announced to the app.
 
 ## Usage
 
@@ -26,7 +25,7 @@ const provider = Provider.create({
 
 ## tempoWallet
 
-`tempoWallet()` is a template over `postMessage()` preconfigured with the Tempo Wallet post-message page and provider identity. It is exported from the root entry as the Tempo Wallet adapter.
+To connect to the Tempo Wallet, use the preconfigured [`tempoWallet`](#tempowallet) below.
 
 ```ts twoslash
 import { Provider, tempoWallet } from 'accounts'
@@ -34,22 +33,8 @@ import { Provider, tempoWallet } from 'accounts'
 const provider = Provider.create({
   adapter: tempoWallet(),
 })
-```
 
-## Mounts
 
-The mount decides where the wallet page lives and how it surfaces for requests. By default the adapter picks for you: an overlay iframe, falling back to a popup in insecure contexts, in Safari (no WebAuthn in cross-origin iframes), or when the browser lacks IntersectionObserver v2 (the wallet can't run its occlusion defense). If the wallet detects its iframe is occluded mid-session, it asks to continue in a popup and the adapter remounts there, replaying the request. Pass a mount to pin one explicitly:
-
-```ts twoslash
-import { popup, postMessage } from 'accounts/postMessage'
-
-const adapter = postMessage({
-  host: 'https://wallet.example/post-message',
-  mount: popup({ size: { height: 440, width: 360 } }),
-  name: 'Example Wallet',
-  rdns: 'com.example.wallet',
-})
-```
 
 ## Parameters
 
@@ -80,3 +65,19 @@ Provider display name.
 - **Required by:** `postMessage`
 
 Reverse-DNS provider identifier.
+
+
+## Mounts
+
+The mount decides where the wallet page lives and how it surfaces for requests. By default the adapter picks for you: an overlay iframe, falling back to a popup in insecure contexts, in Safari (no WebAuthn in cross-origin iframes), or when the browser lacks IntersectionObserver v2 (the wallet can't run its occlusion defense). If the wallet detects its iframe is occluded mid-session, it asks to continue in a popup and the adapter remounts there, replaying the request. Pass a mount to pin one explicitly:
+
+```ts twoslash
+import { popup, postMessage } from 'accounts/postMessage'
+
+const adapter = postMessage({
+  host: 'https://wallet.example/post-message',
+  mount: popup({ size: { height: 440, width: 360 } }),
+  name: 'Example Wallet',
+  rdns: 'com.example.wallet',
+})
+```
