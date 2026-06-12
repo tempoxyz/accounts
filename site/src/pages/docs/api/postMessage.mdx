@@ -1,0 +1,83 @@
+---
+title: postMessage
+description: Connect to wallet from anywhere on the web
+---
+
+# `postMessage`
+
+Connect to a wallet hosted on another domain from anywhere on the web. Communication happens over the [uRPC window](https://github.com/tempoxyz/urpc/blob/main/specs/transport-window.md) transport. 
+
+
+## Usage
+
+```ts twoslash
+import { Provider } from 'accounts'
+import { postMessage } from 'accounts/postMessage'
+
+const provider = Provider.create({
+  adapter: postMessage({
+    host: 'https://wallet.example/post-message',
+    name: 'Example Wallet',
+    rdns: 'com.example.wallet',
+  }),
+})
+```
+
+## tempoWallet
+
+To connect to the Tempo Wallet, use the preconfigured [`tempoWallet`](#tempowallet) below.
+
+```ts twoslash
+import { Provider, tempoWallet } from 'accounts'
+
+const provider = Provider.create({
+  adapter: tempoWallet(),
+})
+
+
+
+## Parameters
+
+### host
+
+- **Type:** `string`
+- **Required by:** `postMessage`
+
+URL of the wallet's post-message page. The adapter tags the URL with your app's origin — so the wallet can pin its responses before the first frame arrives — and the mount mode, so approvals render matching chrome.
+
+### mount
+
+- **Type:** `Mount.Factory`
+- **Optional**
+
+Where the wallet page lives and how it surfaces for requests. Defaults to `Mount.auto()` — an overlay iframe, or a popup where iframes can't work.
+
+### name
+
+- **Type:** `string`
+- **Required by:** `postMessage`
+
+Provider display name.
+
+### rdns
+
+- **Type:** `string`
+- **Required by:** `postMessage`
+
+Reverse-DNS provider identifier.
+
+
+## Mounts
+
+The mount decides where the wallet page lives and how it surfaces for requests. By default the adapter picks for you: an overlay iframe, falling back to a popup in insecure contexts, in Safari (no WebAuthn in cross-origin iframes), or when the browser lacks IntersectionObserver v2 (the wallet can't run its occlusion defense). If the wallet detects its iframe is occluded mid-session, it asks to continue in a popup and the adapter remounts there, replaying the request. Pass a mount to pin one explicitly:
+
+```ts twoslash
+import { popup, postMessage } from 'accounts/postMessage'
+
+const adapter = postMessage({
+  host: 'https://wallet.example/post-message',
+  mount: popup({ size: { height: 440, width: 360 } }),
+  name: 'Example Wallet',
+  rdns: 'com.example.wallet',
+})
+```

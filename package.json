@@ -80,7 +80,7 @@
     "mipd": "^0.0.7",
     "mppx": "catalog:",
     "ox": "~0.14.20",
-    "wata": "0.0.1",
+    "wata": "0.0.4",
     "webauthx": "~0.1.1",
     "zod": "^4.3.6",
     "zustand": "^5.0.12"
@@ -179,6 +179,12 @@
       "src": "./src/core/adapters/mobileWebAuth/index.ts",
       "react-native": "./dist/core/adapters/mobileWebAuth/index.js",
       "default": "./dist/core/adapters/mobileWebAuth/index.js"
+    },
+    "./postMessage": {
+      "types": "./dist/core/adapters/postMessage/index.d.ts",
+      "src": "./src/core/adapters/postMessage/index.ts",
+      "react-native": "./dist/core/adapters/postMessage/index.js",
+      "default": "./dist/core/adapters/postMessage/index.js"
     },
     "./react-native/async-storage": {
       "types": "./dist/react-native/asyncStorage.d.ts",

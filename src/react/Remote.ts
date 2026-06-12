@@ -12,7 +12,8 @@ export function useEnsureVisibility(
 ): useEnsureVisibility.ReturnType {
   const { enabled = true } = options
 
-  const origin = useState(remote, (s) => s.origin)
+  const origin_store = useState(remote, (s) => s.origin)
+  const origin = options.origin ?? origin_store
 
   const trusted = useMemo(() => {
     if (!origin) return false
@@ -58,10 +59,11 @@ export function useEnsureVisibility(
     return () => observer.disconnect()
   }, [active])
 
-  const invokePopup = useCallback(
-    () => remote.messenger.send('switch-mode', { mode: 'popup' }),
-    [remote],
-  )
+  const { invokePopup: invokePopup_options } = options
+  const invokePopup = useCallback(() => {
+    if (invokePopup_options) return invokePopup_options()
+    remote.messenger.send('switch-mode', { mode: 'popup' })
+  }, [remote, invokePopup_options])
 
   return { invokePopup, ref, visible }
 }
@@ -179,6 +181,17 @@ export declare namespace useEnsureVisibility {
   type Options = {
     /** Whether visibility monitoring is enabled. @default true */
     enabled?: boolean | undefined
+    /**
+     * Override how the popup switch is requested when the element is
+     * occluded (e.g. a wata session notification). @default Sends the
+     * bespoke `switch-mode` message through the remote messenger.
+     */
+    invokePopup?: (() => void) | undefined
+    /**
+     * Override the consumer origin used for the trusted-host check (e.g.
+     * a wata session's pinned origin). @default The remote store origin.
+     */
+    origin?: string | undefined
   }
 
   type ReturnType = {
