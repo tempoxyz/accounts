@@ -440,6 +440,11 @@ export namespace wallet_getCapabilities {
             status: z.union([z.literal('supported'), z.literal('unsupported')]),
           }),
         ),
+        mpp: z.optional(
+          z.object({
+            status: z.union([z.literal('supported'), z.literal('unsupported')]),
+          }),
+        ),
       }),
     ),
   })
@@ -536,6 +541,27 @@ export namespace wallet_authorizeAccessKey_strict {
     ),
     showDeposit: wallet_authorizeAccessKey.showDeposit,
   })
+}
+
+/** Creates a Machine Payment Protocol (MPP) credential for the first challenge (all must be supported). */
+export namespace wallet_authorizeChallenge {
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_authorizeChallenge'),
+    params: z.readonly(
+      z.tuple([
+        z.object({
+          /** Serialized MPP challenges (`Challenge.serialize` format). */
+          challenges: z.readonly(z.array(z.string()).check(z.minLength(1))),
+        }),
+      ]),
+    ),
+    returns: z.object({
+      /** Serialized MPP credential (deserializable via `Credential.deserialize`). */
+      authorization: z.string(),
+    }),
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
 }
 
 export namespace wallet_revokeAccessKey {

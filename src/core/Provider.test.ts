@@ -1,3 +1,4 @@
+import { Challenge } from 'mppx'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Adapter from './Adapter.js'
@@ -5,6 +6,18 @@ import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 
 const address = '0x0000000000000000000000000000000000000001'
+
+const testAdapter = () =>
+  Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+    actions: {
+      async createAccount() {
+        return { accounts: [{ address }] }
+      },
+      async loadAccounts() {
+        return { accounts: [{ address }] }
+      },
+    },
+  }))
 
 describe('wallet_connect', () => {
   test('behavior: validates auth before preparing access key material', async () => {
@@ -135,6 +148,193 @@ describe('wallet_connect', () => {
 
       expect(verifyBody?.idToken).toBe('eyJhbG.payload.sig')
     })
+  })
+})
+
+describe('mpp', () => {
+  test('default: exposes payment-aware fetch and method clients', () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+
+    expect(typeof provider.mpp?.fetch).toMatch(/function/)
+    expect(provider.mpp?.methods.map((m) => `${m.name}/${m.intent}`)).toMatchInlineSnapshot(`
+      [
+        "tempo/charge",
+        "tempo/session",
+        "tempo/subscription",
+      ]
+    `)
+  })
+
+  test('behavior: undefined when disabled', () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: false,
+      storage: Storage.memory(),
+    })
+
+    expect(provider.mpp).toBeUndefined()
+  })
+})
+
+describe('wallet_authorizeChallenge', () => {
+  function serializedChallenge(
+    options: { amount?: string; chainId?: number; intent?: string; method?: string } = {},
+  ) {
+    const { amount = '1', chainId, intent = 'charge', method = 'tempo' } = options
+    return Challenge.serialize(
+      Challenge.from({
+        id: 'test-challenge',
+        intent,
+        method,
+        realm: 'api.example.com',
+        request: {
+          amount,
+          currency: '0x20c0000000000000000000000000000000000001',
+          ...(chainId !== undefined && { methodDetails: { chainId } }),
+        },
+      }),
+    )
+  }
+
+  test('behavior: wallet-internal method clients do not re-enter wallet_authorizeChallenge', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    // The tempo method clients probe their wallet (`wallet_authorizeChallenge`)
+    // before signing locally, routed back through this provider — a second
+    // `wallet_authorizeChallenge` entering `request` means the handler
+    // re-entered itself.
+    let entries = 0
+    const request = provider.request.bind(provider)
+    provider.request = (async (args: { method: string }) => {
+      if (args.method === 'wallet_authorizeChallenge' && ++entries > 1)
+        throw new Error('nested wallet_authorizeChallenge detected')
+      return request(args as never)
+    }) as typeof provider.request
+
+    // Zero-amount keeps the local fallback on the signing path, which the
+    // bare test adapter rejects — only the absence of re-entrancy matters.
+    const result = await provider
+      .request({
+        method: 'wallet_authorizeChallenge',
+        params: [{ challenges: [serializedChallenge({ amount: '0' })] }],
+      })
+      .catch((error) => error)
+
+    expect(entries).toBe(1)
+    expect(String(result)).not.toContain('nested wallet_authorizeChallenge detected')
+  })
+
+  test('error: throws UnsupportedMethodError when mpp is disabled', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: false,
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      provider.request({
+        method: 'wallet_authorizeChallenge',
+        params: [{ challenges: [serializedChallenge()] }],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnsupportedMethodError: \`wallet_authorizeChallenge\` not supported. MPP is disabled.]`,
+    )
+  })
+
+  test('error: throws DisconnectedError when no account is connected', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+
+    await expect(
+      provider.request({
+        method: 'wallet_authorizeChallenge',
+        params: [{ challenges: [serializedChallenge()] }],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Provider.DisconnectedError: No accounts connected.]`,
+    )
+  })
+
+  test('error: throws InvalidParamsError when challenges is empty', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      provider.request({ method: 'wallet_authorizeChallenge', params: [{ challenges: [] }] }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: Invalid params: params.0.challenges: Invalid input]`,
+    )
+  })
+
+  test('error: throws InvalidParamsError when a challenge is malformed', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      provider.request({
+        method: 'wallet_authorizeChallenge',
+        params: [{ challenges: ['not-a-challenge'] }],
+      }),
+    ).rejects.toThrow(/`challenges\[0\]` is not a valid MPP challenge/)
+  })
+
+  test('error: throws InvalidParamsError when a challenge targets an unsupported chain', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      provider.request({
+        method: 'wallet_authorizeChallenge',
+        params: [{ challenges: [serializedChallenge({ chainId: 999 })] }],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: \`challenges[0]\` targets unsupported chain 999.]`,
+    )
+  })
+
+  test('error: throws InvalidParamsError when any challenge is unsupported', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await expect(
+      provider.request({
+        method: 'wallet_authorizeChallenge',
+        params: [
+          { challenges: [serializedChallenge(), serializedChallenge({ method: 'stripe' })] },
+        ],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: \`challenges[1]\` has unsupported method "stripe/charge". Supported: tempo/charge, tempo/session, tempo/subscription.]`,
+    )
   })
 })
 

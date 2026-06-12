@@ -1,4 +1,5 @@
 import { announceProvider } from 'mipd'
+import { Challenge } from 'mppx'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
 import {
   Address,
@@ -66,6 +67,8 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
       chainId?: number | undefined
       feePayer?: string | undefined
     }): ViemClient<Transport, typeof tempo>
+    /** Payment-aware `fetch` and MPP method clients. `undefined` when MPP is disabled. */
+    mpp: mpp.Mpp | undefined
     /** Reactive state store. */
     store: Store.Store
   }
@@ -737,6 +740,61 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
   }
 
+  // Machine Payment Protocol (mppx) integration. The method clients resolve
+  // their viem Client lazily through `providerRef` (assigned below) so
+  // signing routes through the provider like any other wallet request.
+  const mpp = ((): Provider['mpp'] => {
+    const mppOptions = (() => {
+      if (options.mpp === false) return undefined
+      if (typeof options.mpp === 'object') return options.mpp
+      return {}
+    })()
+    if (!mppOptions) return undefined
+    const { mode = 'push', polyfill: polyfill_option, ...methodOptions } = mppOptions
+    // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
+    // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
+    const polyfill = polyfill_option ?? isFetchWritable()
+    const getMppClient = ({ chainId }: { chainId?: number | undefined }) => {
+      const client = Client.fromChainId(chainId, {
+        chains,
+        provider: providerRef,
+        store,
+        transports,
+      })
+      const account = store.getState().accounts[store.getState().activeAccount]
+      if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
+      // The provider IS the wallet: mppx method clients probe their `json-rpc`
+      // account's wallet (`wallet_authorizeChallenge`) before signing locally,
+      // which would re-enter the handler and recurse forever. Answer the
+      // nested call with `4200` so mppx falls back to its local signing path.
+      const request = (async (args: { method: string; params?: unknown }, options?: unknown) => {
+        if (args.method === 'wallet_authorizeChallenge')
+          throw new ox_Provider.UnsupportedMethodError({
+            message:
+              '`wallet_authorizeChallenge` is not re-entrant: wallet-internal MPP clients sign locally.',
+          })
+        return client.request(args as never, options as never)
+      }) as typeof client.request
+      // Copy the client — the cached instance is shared with `provider.getClient()`,
+      // which must keep its unguarded `request` and stay account-less.
+      return Object.assign({}, client, {
+        account: {
+          address: account.address,
+          type: 'json-rpc' as const,
+        },
+        request,
+      })
+    }
+    const { fetch, methods } = Mppx.create({
+      methods: [
+        mppx_tempo({ ...methodOptions, getClient: getMppClient, mode }),
+        mppx_tempo.subscription({ getClient: getMppClient }),
+      ],
+      polyfill,
+    })
+    return { fetch, methods }
+  })()
+
   const provider = Object.assign(
     ox_Provider.from(
       {
@@ -1107,6 +1165,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         accessKeys: { status: 'supported' }
                         atomic: { status: 'supported' }
                         feePayer?: { status: 'supported' } | undefined
+                        mpp?: { status: 'supported' } | undefined
                       }
                     > = {}
                     for (const chain of filtered)
@@ -1114,6 +1173,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         accessKeys: { status: 'supported' },
                         atomic: { status: 'supported' },
                         ...(feePayerConfig ? { feePayer: { status: 'supported' } } : {}),
+                        ...(mpp ? { mpp: { status: 'supported' } } : {}),
                       }
                     return result as Rpc.wallet_getCapabilities.Encoded['returns']
                   }
@@ -1397,6 +1457,50 @@ export function create(options: create.Options = {}): create.ReturnType {
                     } satisfies Rpc.wallet_authorizeAccessKey.Encoded['returns']
                   }
 
+                  case 'wallet_authorizeChallenge': {
+                    if (!mpp)
+                      throw new ox_Provider.UnsupportedMethodError({
+                        message: '`wallet_authorizeChallenge` not supported. MPP is disabled.',
+                      })
+                    assertConnected()
+                    const [{ challenges }] = request._decoded.params
+                    // Every challenge must deserialize and match a configured
+                    // MPP method client; the credential is created for the
+                    // first one, routed through `getMppClient` exactly like
+                    // the internal payment-aware fetch.
+                    const candidates = challenges.map((serialized, index) => {
+                      let challenge: Challenge.Challenge
+                      try {
+                        challenge = Challenge.deserialize(serialized)
+                      } catch (error) {
+                        throw new RpcResponse.InvalidParamsError({
+                          message: `\`challenges[${index}]\` is not a valid MPP challenge: ${withDetails(error).message}`,
+                        })
+                      }
+                      const method = mpp.methods.find(
+                        (m) => m.name === challenge.method && m.intent === challenge.intent,
+                      )
+                      if (!method)
+                        throw new RpcResponse.InvalidParamsError({
+                          message: `\`challenges[${index}]\` has unsupported method "${challenge.method}/${challenge.intent}". Supported: ${mpp.methods.map((m) => `${m.name}/${m.intent}`).join(', ')}.`,
+                        })
+                      // `Client.fromChainId` falls back to the first chain for
+                      // unknown IDs — reject foreign-chain challenges instead
+                      // of settling them on the wrong chain.
+                      const chainId = (challenge.request.methodDetails as { chainId?: unknown })
+                        ?.chainId
+                      if (chainId !== undefined && !chains.some((c) => c.id === chainId))
+                        throw new RpcResponse.InvalidParamsError({
+                          message: `\`challenges[${index}]\` targets unsupported chain ${chainId}.`,
+                        })
+                      return { challenge, method }
+                    })
+                    const { challenge, method } = candidates[0]!
+                    return {
+                      authorization: await method.createCredential({ challenge } as never),
+                    } satisfies Rpc.wallet_authorizeChallenge.Encoded['returns']
+                  }
+
                   case 'wallet_revokeAccessKey': {
                     assertConnected()
                     const [decoded] = request._decoded.params
@@ -1610,6 +1714,7 @@ export function create(options: create.Options = {}): create.ReturnType {
           transports,
         })
       },
+      mpp,
       store,
     },
   )
@@ -1630,36 +1735,6 @@ export function create(options: create.Options = {}): create.ReturnType {
         provider,
       } as never)
     }
-  }
-
-  const mpp = (() => {
-    if (options.mpp === false) return undefined
-    if (typeof options.mpp === 'object') return options.mpp
-    return {}
-  })()
-  if (mpp) {
-    const { mode = 'push', polyfill: polyfill_option, ...methodOptions } = mpp
-    // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
-    // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
-    const polyfill = polyfill_option ?? isFetchWritable()
-    const getClient = ({ chainId }: { chainId?: number | undefined }) => {
-      const client = provider.getClient({ chainId })
-      const account = store.getState().accounts[store.getState().activeAccount]
-      if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
-      return Object.assign(client, {
-        account: {
-          address: account.address,
-          type: 'json-rpc' as const,
-        },
-      })
-    }
-    Mppx.create({
-      methods: [
-        mppx_tempo({ ...methodOptions, getClient, mode }),
-        mppx_tempo.subscription({ getClient }),
-      ],
-      polyfill,
-    })
   }
 
   providerRef = provider
@@ -1794,6 +1869,14 @@ export declare namespace mpp {
      */
     polyfill?: boolean | undefined
   }
+
+  /** MPP integration handle exposed as {@link Provider.mpp}. */
+  type Mpp = Pick<
+    Mppx.Mppx<
+      readonly [...ReturnType<typeof mppx_tempo>, ReturnType<typeof mppx_tempo.subscription>]
+    >,
+    'fetch' | 'methods'
+  >
 }
 
 function withDetails(error: unknown): Error & { details: string } {
