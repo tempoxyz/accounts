@@ -85,7 +85,7 @@ export const initialAdapter: AdapterType = (() => {
     'tempoWallet',
     'dialogRefImpl',
   ]
-  return adapters.includes(param as AdapterType) ? (param as AdapterType) : 'dialog'
+  return adapters.includes(param as AdapterType) ? (param as AdapterType) : 'tempoWallet'
 })()
 
 export let dialogMode: DialogMode =
@@ -207,13 +207,13 @@ export function switchAdapter(adapterType: AdapterType) {
   provider = createProvider(adapterType)
 }
 
-export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 'dialog') {
+export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 'tempoWallet') {
   dialogMode = mode
   Mppx.restore()
   provider = createProvider(adapterType)
 }
 
-export function switchMppMode(mode: MppMode, adapterType: AdapterType = 'dialog') {
+export function switchMppMode(mode: MppMode, adapterType: AdapterType = 'tempoWallet') {
   mppMode = mode
   Mppx.restore()
   provider = createProvider(adapterType)
@@ -232,7 +232,10 @@ function getTurnkeyAdapterClient() {
   return turnkeyClient as TurnkeyPlaygroundClient
 }
 
-export function switchTheme(next: DialogNs.Theme | undefined, adapterType: AdapterType = 'dialog') {
+export function switchTheme(
+  next: DialogNs.Theme | undefined,
+  adapterType: AdapterType = 'tempoWallet',
+) {
   theme = next
   Mppx.restore()
   provider = createProvider(adapterType)
