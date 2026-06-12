@@ -84,6 +84,13 @@ export type Instance = {
           request: EncodedRequest<Rpc.wallet_revokeAccessKey.Encoded>,
         ) => Promise<void>)
       | undefined
+    /** Update an access key's spending limits. */
+    updateAccessKey?:
+      | ((
+          params: updateAccessKey.Parameters,
+          request: EncodedRequest<Rpc.wallet_updateAccessKey.Encoded>,
+        ) => Promise<void>)
+      | undefined
     /** Open the send-token flow. */
     transfer?:
       | ((
@@ -456,6 +463,19 @@ export declare namespace revokeAccessKey {
     address: Address
     /** Address of the access key to revoke. */
     accessKeyAddress: Address
+  }
+}
+
+export declare namespace updateAccessKey {
+  type Parameters = {
+    /** Root account address. */
+    address: Address
+    /** Address of the access key to update. */
+    accessKeyAddress: Address
+    /** Chain ID the access key is scoped to. Defaults to the active chain. */
+    chainId?: bigint | undefined
+    /** New spending limits per token. */
+    limits: readonly { token: Address; limit: bigint }[]
   }
 }
 

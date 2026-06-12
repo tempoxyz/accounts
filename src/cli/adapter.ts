@@ -190,6 +190,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
         async revokeAccessKey() {
           throw unsupported('`wallet_revokeAccessKey` not supported by CLI adapter.')
         },
+        async updateAccessKey() {
+          throw unsupported('`wallet_updateAccessKey` not supported by CLI adapter.')
+        },
       },
       async getAccount(options = {}) {
         const { accounts, activeAccount, chainId } = store.getState()
