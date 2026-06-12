@@ -189,8 +189,8 @@ function ConfigPanel(props: {
         <label>
           <span>Adapter</span>
           <select value={adapterType} onChange={(e) => onSwitch(e.target.value as AdapterType)}>
+            <option value="dialog">dialog</option>
             <option value="tempoWallet">tempoWallet</option>
-            <option value="tempoWalletPostMessage">tempoWalletPostMessage</option>
             <option value="dialogRefImpl">dialogRefImpl</option>
             <option value="turnkey">turnkey</option>
             <option value="privy">privy</option>
@@ -198,8 +198,8 @@ function ConfigPanel(props: {
             <option value="secp256k1">secp256k1</option>
           </select>
         </label>
-        {(adapterType === 'tempoWallet' ||
-          adapterType === 'tempoWalletPostMessage' ||
+        {(adapterType === 'dialog' ||
+          adapterType === 'tempoWallet' ||
           adapterType === 'dialogRefImpl') && (
           <label>
             <span>Mode</span>
@@ -217,8 +217,8 @@ function ConfigPanel(props: {
           </label>
         )}
       </div>
-      {(adapterType === 'tempoWallet' ||
-        adapterType === 'tempoWalletPostMessage' ||
+      {(adapterType === 'dialog' ||
+        adapterType === 'tempoWallet' ||
         adapterType === 'dialogRefImpl') && (
         <>
           <h3 className="control-panel-title">Theme</h3>

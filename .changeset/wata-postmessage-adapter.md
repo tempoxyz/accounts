@@ -2,4 +2,4 @@
 "accounts": patch
 ---
 
-Added `postMessage()` and `tempoWallet()` (from `accounts/postMessage`) adapters that forward wallet RPC to a wallet page over a Wata postMessage session.
+`tempoWallet` now uses the Wata `postMessage` transport (also exported from `accounts/postMessage`) and the bespoke-messenger `dialog` adapter is deprecated; added the lower-level `postMessage()` adapter, and per-transport `tempoWallet` variants now live on their subpaths (e.g. `accounts/mobileWebAuth`) instead of top-level aliases.

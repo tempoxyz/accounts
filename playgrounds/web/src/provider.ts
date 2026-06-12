@@ -24,8 +24,8 @@ export type AdapterType =
   | 'webAuthn'
   | 'turnkey'
   | 'privy'
+  | 'dialog'
   | 'tempoWallet'
-  | 'tempoWalletPostMessage'
   | 'dialogRefImpl'
 export type Env = 'mainnet' | 'testnet' | 'devnet'
 export type DialogMode = 'iframe' | 'popup'
@@ -81,11 +81,11 @@ export const initialAdapter: AdapterType = (() => {
     'webAuthn',
     'turnkey',
     'privy',
+    'dialog',
     'tempoWallet',
-    'tempoWalletPostMessage',
     'dialogRefImpl',
   ]
-  return adapters.includes(param as AdapterType) ? (param as AdapterType) : 'tempoWallet'
+  return adapters.includes(param as AdapterType) ? (param as AdapterType) : 'dialog'
 })()
 
 export let dialogMode: DialogMode =
@@ -103,7 +103,7 @@ function mpp() {
 }
 
 export function createProvider(adapterType: AdapterType): ProviderValue {
-  if (adapterType === 'tempoWallet')
+  if (adapterType === 'dialog')
     return Provider.create({
       adapter: dialog({
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
@@ -114,7 +114,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       testnet,
     })
 
-  if (adapterType === 'tempoWalletPostMessage') {
+  if (adapterType === 'tempoWallet') {
     const postMessageHost = new URL('/post-message', host)
     if (theme?.accent) postMessageHost.searchParams.set('accent', theme.accent)
     if (theme?.radius) postMessageHost.searchParams.set('radius', theme.radius)
@@ -207,13 +207,13 @@ export function switchAdapter(adapterType: AdapterType) {
   provider = createProvider(adapterType)
 }
 
-export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 'tempoWallet') {
+export function switchDialogMode(mode: DialogMode, adapterType: AdapterType = 'dialog') {
   dialogMode = mode
   Mppx.restore()
   provider = createProvider(adapterType)
 }
 
-export function switchMppMode(mode: MppMode, adapterType: AdapterType = 'tempoWallet') {
+export function switchMppMode(mode: MppMode, adapterType: AdapterType = 'dialog') {
   mppMode = mode
   Mppx.restore()
   provider = createProvider(adapterType)
@@ -234,7 +234,7 @@ function getTurnkeyAdapterClient() {
 
 export function switchTheme(
   next: DialogNs.Theme | undefined,
-  adapterType: AdapterType = 'tempoWallet',
+  adapterType: AdapterType = 'dialog',
 ) {
   theme = next
   Mppx.restore()
