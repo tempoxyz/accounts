@@ -80,10 +80,3 @@ Provider display name.
 - **Required by:** `postMessage`
 
 Reverse-DNS provider identifier.
-
-### target
-
-- **Type:** `({ host }) => Window | MessagePort | null | Promise<Window | MessagePort | null>`
-- **Optional**
-
-Low-level override for the session's window handle, bypassing mounts entirely (no UI is created). A nullish handle (e.g. a blocked `window.open`) rejects the request with `PostMessage.PopupBlockedError`. Pair with `close` for handle cleanup.
