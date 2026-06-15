@@ -3022,6 +3022,56 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
   })
 })
 
+describe('eth_fillTransaction metadata', () => {
+  test('behavior: sends WebAuthn keyType hints during fill', async () => {
+    const requests: { method: string; params?: unknown }[] = []
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+      chains: [chain],
+      storage: Storage.memory(),
+      transports: {
+        [chain.id]: custom({
+          async request({ method, params }) {
+            requests.push({ method, params })
+            return { capabilities: { sponsored: false }, tx: { gas: '0x5208' } }
+          },
+        }),
+      },
+    })
+
+    const login = await provider.request({ method: 'wallet_connect' })
+    const address = login.accounts[0]!.address
+    const result = await provider.request({
+      method: 'eth_fillTransaction',
+      params: [{ from: address, to: '0x0000000000000000000000000000000000000001' }],
+    })
+
+    const payload = requests.map((request) => {
+      const [params] = request.params as [{ keyData?: unknown; keyType?: unknown }]
+      return {
+        keyData: params.keyData,
+        keyType: params.keyType,
+        method: request.method,
+      }
+    })
+
+    expect(result.tx).toMatchInlineSnapshot(`
+      {
+        "gas": "0x5208",
+      }
+    `)
+    expect(payload).toMatchInlineSnapshot(`
+      [
+        {
+          "keyData": "0x0578",
+          "keyType": "webAuthn",
+          "method": "eth_fillTransaction",
+        },
+      ]
+    `)
+  })
+})
+
 describe('transports', () => {
   test('default: proxies unknown RPC methods through configured transport', async () => {
     const calls: { method: string; params?: unknown }[] = []

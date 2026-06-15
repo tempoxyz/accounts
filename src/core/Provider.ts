@@ -158,6 +158,27 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
   }
 
+  function getFillKeyType(
+    address: Address.Address | undefined,
+  ): z.output<typeof Rpc.transactionRequest>['keyType'] {
+    if (!address) return undefined
+    const account = store
+      .getState()
+      .accounts.find((a) => a.address.toLowerCase() === address.toLowerCase())
+    switch (account?.keyType) {
+      case 'secp256k1':
+      case 'p256':
+      case 'webAuthn':
+        return account.keyType
+      case 'webAuthn_headless':
+        return 'webAuthn'
+      case 'webCrypto':
+        return 'p256'
+      default:
+        return undefined
+    }
+  }
+
   const instance = adapter({ getAccount, getClient, storage, store })
   const { actions } = instance
 
@@ -833,14 +854,22 @@ export function create(options: create.Options = {}): create.ReturnType {
                     }
                     const client = getClient({ chainId, feePayer })
                     const fill = (params: FillParams) => {
+                      const state = store.getState()
+                      const address = params.from ?? state.accounts[state.activeAccount]?.address
+                      const keyType = params.keyType ?? getFillKeyType(address)
+                      const account =
+                        address && keyType && !params.keyData
+                          ? { address, keyType, type: 'json-rpc' as const }
+                          : undefined
                       const fillRequest = {
                         ...params,
                         chainId: params.chainId ?? client.chain?.id,
                         ...(feePayer ? { feePayer: true } : {}),
+                        ...(keyType ? { keyType } : {}),
                       }
                       const formatter = client.chain?.formatters?.transactionRequest
                       const formatted = formatter
-                        ? formatter.format({ ...fillRequest } as never, 'fillTransaction')
+                        ? formatter.format({ ...fillRequest, ...(account ? { account } : {}) } as never, 'fillTransaction')
                         : fillRequest
                       return client.request({
                         method: 'eth_fillTransaction',
