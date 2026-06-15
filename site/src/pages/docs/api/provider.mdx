@@ -188,9 +188,7 @@ const provider = Provider.create({
 - **Type:** `Keystore.Keystores`
 - **Default:** `Keystore.defaults` — `{ p256: Keystore.webCryptoP256() }`
 
-[Keystores](/docs/api/keystore) backing provider-generated access keys, one per key type. Access keys default to p256 (non-extractable WebCrypto); secp256k1 is used only when requested explicitly via `keyType`. App-level keystores override adapter-supplied defaults — the React Native adapter defaults to pure-JS p256 (no WebCrypto required) and the CLI adapter to extractable WebCrypto p256 (persists through filesystem storage). Access keys created before a keystore was configured keep working. This enables hardware-backed access keys (e.g. Secure Enclave / Android Keystore) and other custom backends; existing `privateKey`/`keyPair` records hydrate unchanged.
-
-By default, keys are non-extractable WebCrypto keys that persist through structured-clone storage (`Storage.idb`, `Storage.memory`). See [`Keystore.webCryptoP256`](/docs/api/keystore.webCryptoP256) for environments with string-based storage (React Native, Node, CLI), and [`Keystore`](/docs/api/keystore) for the interface, handle semantics, and composition guidance.
+[Keystores](/docs/api/keystore) backing provider-generated access keys, one per key type. 
 
 ```ts twoslash
 import { Keystore, Provider } from 'accounts'
