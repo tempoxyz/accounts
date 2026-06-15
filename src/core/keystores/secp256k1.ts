@@ -15,9 +15,8 @@ type Handle = {
  * Pure-JS secp256k1 keystore. The private key is held as hex in the handle
  * and signing runs in JavaScript — at-rest protection is the host app's
  * storage adapter, and the key is readable by anything with JS execution.
- * secp256k1 signatures are the chain's cheapest envelope, making this the
- * economical default for environments without a WebCrypto implementation
- * (e.g. React Native, CLI).
+ * Opt into it via `keyType: 'secp256k1'`; secp256k1 signatures are the
+ * chain's cheapest envelope.
  */
 export function secp256k1(): Keystore.Keystore {
   return {
