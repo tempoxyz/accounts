@@ -1,7 +1,14 @@
 import { verify } from 'hono/jwt'
 import { Hex, Provider as core_Provider, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { type Address, createClient, createWalletClient, custom, parseUnits } from 'viem'
+import {
+  type Address,
+  createClient,
+  createWalletClient,
+  custom,
+  parseUnits,
+  type Transport,
+} from 'viem'
 import {
   getBalance,
   sendCalls,
@@ -31,7 +38,7 @@ const adapters = [
   { name: 'secp256k1', adapter: secp256k1 },
 ] as const
 
-describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
+describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) => {
   function transfer(amount: string) {
     return Actions.token.transfer.call({
       to: '0x0000000000000000000000000000000000000001',
@@ -2223,6 +2230,97 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
   describe('eth_fillTransaction', () => {
     const fillTx = { to: transferCall.to, data: transferCall.data } as const
 
+    /** Wraps the node transport to capture `eth_fillTransaction` request params. */
+    function recordingTransport(captures: Record<string, unknown>[]): Transport {
+      const base = http()
+      return (args) => {
+        const instance = base(args)
+        return {
+          ...instance,
+          async request(body: { method: string; params?: unknown }, opts?: unknown) {
+            if (body.method === 'eth_fillTransaction')
+              captures.push((body.params as Record<string, unknown>[])[0]!)
+            return instance.request(body as never, opts as never)
+          },
+        }
+      }
+    }
+
+    test('behavior: includes the root account key type for gas estimation', async () => {
+      const captures: Record<string, unknown>[] = []
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        transports: { [chain.id]: recordingTransport(captures) },
+      })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'eth_fillTransaction',
+        params: [{ from: address, ...fillTx }],
+      })
+
+      expect(captures).toHaveLength(1)
+      const sent = captures[0]!
+      if (name === 'headlessWebAuthn') {
+        expect(sent.keyType).toBe('webAuthn')
+        // viem derives the 1400-byte big-endian size hint from the key type so
+        // the node sizes the (larger) WebAuthn signature when estimating gas.
+        expect(sent.keyData).toBe('0x0578')
+      } else {
+        // secp256k1 is the node's default gas assumption, so no hint is needed.
+        expect(sent.keyType).toBeUndefined()
+      }
+    })
+
+    test('behavior: does not override a caller-provided key type', async () => {
+      const captures: Record<string, unknown>[] = []
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        transports: { [chain.id]: recordingTransport(captures) },
+      })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'eth_fillTransaction',
+        params: [{ from: address, ...fillTx, keyType: 'p256' }],
+      })
+
+      expect(captures).toHaveLength(1)
+      expect(captures[0]!.keyType).toBe('p256')
+    })
+
+    test('behavior: includes the access key type for gas estimation', async () => {
+      const captures: Record<string, unknown>[] = []
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        transports: { [chain.id]: recordingTransport(captures) },
+      })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      captures.length = 0
+      const result = await provider.request({
+        method: 'eth_fillTransaction',
+        params: [{ from: address, ...fillTx }],
+      })
+      expect((result.tx as { keyAuthorization?: unknown }).keyAuthorization).toBeDefined()
+
+      expect(captures.length).toBeGreaterThan(0)
+      // Access keys default to p256; the key type flows via the viem account so
+      // the node estimates gas for the larger p256 signature.
+      expect(captures.at(-1)!.keyType).toBe('p256')
+    })
+
     test('default: proxies to the node without modification', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
@@ -2233,7 +2331,11 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         params: [{ from: address, ...fillTx }],
       })
       expect(result.tx.gas).toBeDefined()
-      expect(result.tx.to).toBeDefined()
+      // secp256k1 root fills keep the legacy shape (top-level `to`); p256/webAuthn
+      // roots are routed through the tempo envelope, which carries the target in
+      // `calls` so the node can size gas for the larger signature.
+      const tx = result.tx as { to?: unknown; calls?: { to?: unknown }[] }
+      expect(tx.to ?? tx.calls?.[0]?.to).toBeDefined()
     })
 
     test('behavior: fills stored keyAuthorization for access key accounts', async () => {
@@ -2301,6 +2403,42 @@ describe.each(adapters)('$name', ({ adapter }: (typeof adapters)[number]) => {
         ],
       })
       expect(result.tx.gas).toBeDefined()
+    })
+
+    test('behavior: published access key uses its key type without re-authorizing', async () => {
+      const captures: Record<string, unknown>[] = []
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        transports: { [chain.id]: recordingTransport(captures) },
+      })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      // Publish the access key on-chain so its stored keyAuthorization is no
+      // longer pending.
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      await expect(provider.getAccessKeyStatus()).resolves.toMatchInlineSnapshot(`"published"`)
+
+      captures.length = 0
+      const result = await provider.request({
+        method: 'eth_fillTransaction',
+        params: [{ from: address, ...fillTx }],
+      })
+
+      // The access key still signs (p256 key type flows to the node), but with
+      // no keyAuthorization attached — it's already authorized on-chain.
+      expect(captures.length).toBeGreaterThan(0)
+      expect(captures.at(-1)!.keyType).toBe('p256')
+      expect((result.tx as { keyAuthorization?: unknown }).keyAuthorization ?? null).toBeNull()
     })
   })
 

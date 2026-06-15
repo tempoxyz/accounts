@@ -922,17 +922,40 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'eth_fillTransaction': {
                     const [decoded] = request._decoded.params
                     const parameters = { ...decoded }
-                    const chainId = parameters.chainId
                     const feePayer = resolveFeePayer(parameters.feePayer)
+                    const client = getClient({ chainId: parameters.chainId, feePayer })
+                    const state = store.getState()
+                    const chainId = parameters.chainId ?? state.chainId
+                    const address = parameters.from ?? state.accounts[state.activeAccount]?.address
 
-                    type FillParams = z.output<typeof Rpc.transactionRequest> & {
-                      keyAuthorization?: unknown
-                    }
-                    const client = getClient({ chainId, feePayer })
-                    const fill = (params: FillParams) => {
+                    // The node sizes intrinsic gas from the signing key's signature
+                    // type; absent it, it assumes secp256k1 (the smallest signature)
+                    // and underestimates gas for p256/webAuthn signers. The key type
+                    // is the *signer's*, not the embedded `keyAuthorization`'s (which
+                    // is just a registration payload). The `fill` path below always
+                    // signs with the root account, so resolve its key type (a caller's
+                    // explicit `keyType` wins) and hand viem's tempo formatter an
+                    // account carrying it — viem forwards `keyType` and derives the
+                    // webAuthn `keyData` hint. secp256k1 (the node default) flows
+                    // through the legacy formatter unchanged. The managed access-key
+                    // path carries the access key's type via its own viem account.
+                    const signer = ((): JsonRpcAccount | undefined => {
+                      if (!address) return undefined
+                      const keyType =
+                        parameters.keyType ??
+                        Account.signatureKeyType(
+                          state.accounts.find(
+                            (a) => a.address.toLowerCase() === address.toLowerCase(),
+                          ),
+                        )
+                      if (!keyType) return undefined
+                      return { address, keyType, type: 'json-rpc' } as JsonRpcAccount
+                    })()
+                    const fill = (account = signer) => {
                       const fillRequest = {
-                        ...params,
-                        chainId: params.chainId ?? client.chain?.id,
+                        ...parameters,
+                        ...(account ? { account, from: account.address } : {}),
+                        chainId,
                         ...(feePayer ? { feePayer: true } : {}),
                       }
                       const formatter = client.chain?.formatters?.transactionRequest
@@ -945,45 +968,43 @@ export function create(options: create.Options = {}): create.ReturnType {
                       })
                     }
 
-                    // Route through the managed access-key account so viem can
-                    // attach stored key authorizations during fill.
-                    if (!parameters.keyAuthorization) {
-                      const state = store.getState()
-                      const address =
-                        parameters.from ?? state.accounts[state.activeAccount]?.address
-                      if (address) {
-                        const calls =
-                          parameters.calls ??
-                          (parameters.to
-                            ? [
-                                {
-                                  data: parameters.data,
-                                  to: parameters.to,
-                                },
-                              ]
-                            : undefined)
-                        const transaction = await AccessKeyTransaction.create({
-                          address,
-                          calls,
-                          chainId: parameters.chainId ?? state.chainId,
-                          client,
-                          store,
-                        })
-                        if (transaction)
-                          try {
-                            return await transaction.fill({
-                              ...parameters,
-                              chainId: parameters.chainId ?? state.chainId,
-                              from: parameters.from ?? address,
-                              ...(feePayer ? { feePayer: true } : {}),
-                            })
-                          } catch {
-                            return await fill(parameters)
-                          }
-                      }
+                    // Dapp-provided `keyAuthorization`: the root account signs and
+                    // the authorization rides along in `parameters` (so the node
+                    // prices its on-chain registration). Skip managed access-key
+                    // routing, which would otherwise attach a second authorization.
+                    if (parameters.keyAuthorization) return await fill()
+
+                    // Locally-managed access key: the access key signs, and viem
+                    // attaches a stored `keyAuthorization` if one is still pending
+                    // (i.e. not yet authorized on-chain). When it does, the estimate
+                    // must include the gas to authorize the key on-chain — so this
+                    // path can't be collapsed into the plain root fill. Falls back to
+                    // the root account on failure.
+                    if (address) {
+                      const calls =
+                        parameters.calls ??
+                        (parameters.to ? [{ data: parameters.data, to: parameters.to }] : undefined)
+                      const transaction = await AccessKeyTransaction.create({
+                        address,
+                        calls,
+                        chainId,
+                        client,
+                        store,
+                      })
+                      if (transaction)
+                        try {
+                          return await transaction.fill({
+                            ...parameters,
+                            chainId,
+                            from: address,
+                            ...(feePayer ? { feePayer: true } : {}),
+                          })
+                        } catch {
+                          // Fall through to the root account fill.
+                        }
                     }
 
-                    return await fill(parameters)
+                    return await fill()
                   }
 
                   case 'eth_signTransaction': {
