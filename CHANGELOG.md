@@ -1,5 +1,25 @@
 # accounts
 
+## 0.14.10
+
+### Patch Changes
+
+- fa0434f: Added `wallet_updateAccessKey` to update an access key's spending limits in place.
+- c5bbc8d: Added multisig approval collection to `Handler.relay`.
+- 426bb87: Added the `wallet_authorizeChallenge` method.
+- ab78127: Fixed raw sponsored transaction signing to restore the configured fee token when the serialized transaction omits it.
+- a993dff: Remove the `accounts/react-native` subpath; import `asyncStorage` from `accounts/react-native/async-storage` instead.
+- 05d5458: Removed the T5 hardfork gate so TIP-1053 witness binding always collapses access-key authorization and the auth proof into a single passkey ceremony.
+- 8203e44: Add encrypted MMKV-backed React Native storage that manages its SecureStore encryption key internally.
+
+  Remove `secureStorage` from `accounts/react-native/expo-secure-store`; use `secureMmkv` from `accounts/react-native/secure-mmkv` instead.
+
+- a188f7e: Introduced `postMessage` adapter built on the Wata transport of the same name.
+
+  Updated the `tempoWallet` adapter to use `postMessage`.
+
+  Deprecated `dialog` adapter in favor of `postMessage`.
+
 ## 0.14.9
 
 ### Patch Changes
