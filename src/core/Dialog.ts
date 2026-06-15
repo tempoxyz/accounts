@@ -90,6 +90,32 @@ export function isSafari(): boolean {
   return ua.includes('safari') && !ua.includes('chrome')
 }
 
+/** Detects browser extensions that monkey-patch WebAuthn APIs in the top page. */
+export function hasWebAuthnShim(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const credentials = navigator.credentials
+  if (!credentials) return false
+  const prototype = (() => {
+    if (typeof CredentialsContainer !== 'undefined') return CredentialsContainer.prototype
+    const constructor = credentials.constructor as { prototype?: CredentialsContainer } | undefined
+    return constructor?.prototype
+  })()
+  if (typeof prototype?.create === 'function' && typeof prototype.get === 'function') {
+    if (
+      credentials.create !== prototype.create ||
+      credentials.get !== prototype.get
+    )
+      return true
+  }
+  if (credentials.create?.name === 'createCredentials' && credentials.get?.name === 'getCredentials')
+    return true
+  if (typeof PublicKeyCredential === 'undefined') return false
+  return (
+    PublicKeyCredential.isConditionalMediationAvailable?.name === 'mediationAvailable' &&
+    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.name === 'authenticatorAvailable'
+  )
+}
+
 type Cached = {
   host: string
   instance: Instance
