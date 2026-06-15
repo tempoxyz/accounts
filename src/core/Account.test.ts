@@ -86,6 +86,70 @@ describe('hydrate', () => {
   })
 })
 
+describe('signatureKeyType', () => {
+  test('default: maps secp256k1 to secp256k1', () => {
+    expect(
+      Account.signatureKeyType({
+        address: accounts[0].address,
+        keyType: 'secp256k1',
+        privateKey: privateKeys[0],
+      }),
+    ).toMatchInlineSnapshot(`"secp256k1"`)
+  })
+
+  test('behavior: maps p256 to p256', () => {
+    expect(
+      Account.signatureKeyType({
+        address: accounts[0].address,
+        keyType: 'p256',
+        privateKey: privateKeys[0],
+      }),
+    ).toMatchInlineSnapshot(`"p256"`)
+  })
+
+  test('behavior: maps webCrypto to p256', () => {
+    expect(
+      Account.signatureKeyType({
+        address: accounts[0].address,
+        keyType: 'webCrypto',
+        keyPair: undefined as never,
+      }),
+    ).toMatchInlineSnapshot(`"p256"`)
+  })
+
+  test('behavior: maps webAuthn to webAuthn', () => {
+    expect(
+      Account.signatureKeyType({
+        address: accounts[0].address,
+        keyType: 'webAuthn',
+        credential: { id: 'a', publicKey: '0x', rpId: 'example.com' },
+      }),
+    ).toMatchInlineSnapshot(`"webAuthn"`)
+  })
+
+  test('behavior: maps webAuthn_headless to webAuthn', () => {
+    expect(
+      Account.signatureKeyType({
+        address: accounts[0].address,
+        keyType: 'webAuthn_headless',
+        privateKey: privateKeys[0],
+        rpId: 'example.com',
+        origin: 'https://example.com',
+      }),
+    ).toMatchInlineSnapshot(`"webAuthn"`)
+  })
+
+  test('behavior: returns undefined for accounts without a key type', () => {
+    expect(Account.signatureKeyType({ address: accounts[0].address })).toMatchInlineSnapshot(
+      `undefined`,
+    )
+  })
+
+  test('behavior: returns undefined for undefined account', () => {
+    expect(Account.signatureKeyType(undefined)).toMatchInlineSnapshot(`undefined`)
+  })
+})
+
 describe('find', () => {
   function setup(storeAccounts: readonly Account.Store[] = []) {
     const store = Store.create({ chainId: tempoLocalnet.id })
