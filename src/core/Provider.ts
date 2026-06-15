@@ -878,41 +878,38 @@ export function create(options: create.Options = {}): create.ReturnType {
                     }
 
                     // Route through the managed access-key account so viem can
-                    // attach stored key authorizations during fill.
-                    if (!parameters.keyAuthorization) {
-                      const state = store.getState()
-                      const address =
-                        parameters.from ?? state.accounts[state.activeAccount]?.address
-                      if (address) {
-                        const calls =
-                          parameters.calls ??
-                          (parameters.to
-                            ? [
-                                {
-                                  data: parameters.data,
-                                  to: parameters.to,
-                                },
-                              ]
-                            : undefined)
-                        const transaction = await AccessKeyTransaction.create({
-                          address,
-                          calls,
-                          chainId: parameters.chainId ?? state.chainId,
-                          client,
-                          store,
-                        })
-                        if (transaction)
-                          try {
-                            return await transaction.fill({
-                              ...parameters,
-                              chainId: parameters.chainId ?? state.chainId,
-                              from: parameters.from ?? address,
-                              ...(feePayer ? { feePayer: true } : {}),
-                            })
-                          } catch {
-                            return await fill(parameters)
-                          }
-                      }
+                    // estimate against the key that will actually sign.
+                    const state = store.getState()
+                    const address = parameters.from ?? state.accounts[state.activeAccount]?.address
+                    if (address) {
+                      const calls =
+                        parameters.calls ??
+                        (parameters.to
+                          ? [
+                              {
+                                data: parameters.data,
+                                to: parameters.to,
+                              },
+                            ]
+                          : undefined)
+                      const transaction = await AccessKeyTransaction.create({
+                        address,
+                        calls,
+                        chainId: parameters.chainId ?? state.chainId,
+                        client,
+                        store,
+                      })
+                      if (transaction)
+                        try {
+                          return await transaction.fill({
+                            ...parameters,
+                            chainId: parameters.chainId ?? state.chainId,
+                            from: parameters.from ?? address,
+                            ...(feePayer ? { feePayer: true } : {}),
+                          })
+                        } catch {
+                          return await fill(parameters)
+                        }
                     }
 
                     return await fill(parameters)

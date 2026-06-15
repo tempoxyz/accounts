@@ -3070,6 +3070,68 @@ describe('eth_fillTransaction metadata', () => {
       ]
     `)
   })
+
+  test('behavior: sends access key keyType hints during fill', async () => {
+    const requests: { method: string; params?: unknown }[] = []
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+      chains: [chain],
+      storage: Storage.memory(),
+      transports: {
+        [chain.id]: custom({
+          async request({ method, params }) {
+            requests.push({ method, params })
+            return { capabilities: { sponsored: false }, tx: { gas: '0x5208' } }
+          },
+        }),
+      },
+    })
+
+    const login = await provider.request({ method: 'wallet_connect' })
+    const address = login.accounts[0]!.address
+    const { keyAuthorization } = await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [{ expiry: Expiry.days(1) }],
+    })
+    const result = await provider.request({
+      method: 'eth_fillTransaction',
+      params: [
+        {
+          from: address,
+          keyAuthorization,
+          to: '0x0000000000000000000000000000000000000001',
+        },
+      ],
+    })
+
+    const payload = requests.map((request) => {
+      const [params] = request.params as [
+        { keyAuthorization?: unknown; keyData?: unknown; keyId?: unknown; keyType?: unknown },
+      ]
+      return {
+        hasKeyAuthorization: !!params.keyAuthorization,
+        hasKeyId: typeof params.keyId === 'string',
+        keyType: params.keyType,
+        method: request.method,
+      }
+    })
+
+    expect(result.tx).toMatchInlineSnapshot(`
+      {
+        "gas": "0x5208",
+      }
+    `)
+    expect(payload).toMatchInlineSnapshot(`
+      [
+        {
+          "hasKeyAuthorization": true,
+          "hasKeyId": true,
+          "keyType": "p256",
+          "method": "eth_fillTransaction",
+        },
+      ]
+    `)
+  })
 })
 
 describe('transports', () => {
