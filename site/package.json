@@ -22,7 +22,7 @@
     "ox": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "regen-ui": "^0.3.0",
+    "regen-ui": "^0.5.0",
     "tailwindcss": "^4.2.4",
     "three": "^0.184.0",
     "tsx": "catalog:",
