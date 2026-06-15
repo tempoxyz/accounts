@@ -7,6 +7,7 @@ import { Wata as HostWata, postMessage as hostPostMessage } from 'wata/host'
 import * as z from 'zod/mini'
 
 import { accounts, chain, getClient } from '../../../../test/config.js'
+import * as Keystore from '../../Keystore.js'
 import * as Provider from '../../Provider.js'
 import * as Storage from '../../Storage.js'
 import * as Store from '../../Store.js'
@@ -303,8 +304,13 @@ describe('create', () => {
 
   test('behavior: persists managed access keys through provider storage', async () => {
     const storage = asyncJsonStorage({ key: 'post-message-managed-key' })
+    // String-based storage can't persist the non-extractable WebCrypto
+    // default, so an extractable keystore is required for the managed key to
+    // survive a reload here (structured-clone storage would persist either).
+    const accessKey = { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } }
     const wallet = createWallet()
     const provider1 = createProvider(wallet, {
+      accessKey,
       authorizeAccessKey: () => ({
         expiry: Math.floor(Date.now() / 1000) + 3600,
       }),
@@ -323,6 +329,7 @@ describe('create', () => {
     await fund(root.address)
 
     const provider2 = createProvider(wallet, {
+      accessKey,
       storage,
     })
     await Store.waitForHydration(provider2.store)

@@ -1,16 +1,7 @@
 import { announceProvider } from 'mipd'
 import { Challenge } from 'mppx'
 import { Mppx, tempo as mppx_tempo } from 'mppx/client'
-import {
-  Address,
-  Hash,
-  Hex,
-  Json,
-  Provider as ox_Provider,
-  PublicKey,
-  RpcResponse,
-  WebCryptoP256,
-} from 'ox'
+import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import {
   createWalletClient,
@@ -42,6 +33,7 @@ import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
 import { withDedupe } from './internal/withDedupe.js'
+import * as Keystore from './Keystore.js'
 import * as Schema from './Schema.js'
 import * as Storage from './Storage.js'
 import * as Store from './Store.js'
@@ -105,6 +97,12 @@ export function create(options: create.Options = {}): create.ReturnType {
     testnet,
     storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
   } = options
+  const authorizeAccessKey_default = options.accessKey?.authorize ?? options.authorizeAccessKey
+  // Filled in below once the adapter instance exists (adapters may supply
+  // environment defaults). The object identity is shared with the store's
+  // access-key manager and serializer; nothing reads it before the first
+  // request.
+  const keystores: Keystore.Keystores = {}
 
   // Build per-chain transports from `relay` (if set), then layer caller-provided
   // `transports` on top so explicit per-chain overrides win.
@@ -134,6 +132,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const store = Store.create({
     chainId: defaultChain.id,
+    keystores,
     maxAccounts,
     persistCredentials,
     schema: adapter.schema,
@@ -163,6 +162,10 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const instance = adapter({ getAccount, getClient, storage, store })
   const { actions } = instance
+
+  // App-level keystores override adapter-supplied defaults.
+  const keystores_configured = options.accessKey?.keystores ?? instance.accessKey?.keystores
+  Object.assign(keystores, keystores_configured ?? Keystore.defaults)
 
   const emitter = ox_Provider.createEmitter()
 
@@ -461,7 +464,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     parameters: Adapter.authorizeAccessKey.Parameters,
     chainId: number | undefined,
   ): Promise<{
-    keyPair?: Awaited<ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
+    key?: { handle: Keystore.Handle; publicKey: Hex.Hex } | undefined
     parameters: Adapter.authorizeAccessKey.Parameters
     privateKey?: Hex.Hex | undefined
   }> {
@@ -472,30 +475,31 @@ export function create(options: create.Options = {}): create.ReturnType {
         chainId: chainId_,
       })
       return {
-        ...(prepared.keyPair ? { keyPair: prepared.keyPair } : {}),
         parameters: toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
         ...(prepared.privateKey ? { privateKey: prepared.privateKey } : {}),
       }
     }
 
-    const generated = instance.generateAccessKey
-      ? await instance.generateAccessKey({ keyType: parameters.keyType })
-      : await generateBrowserP256AccessKey(parameters)
-    if (!generated) return { parameters }
+    // Resolve the key source: configured keystores (app-level, else the
+    // adapter's defaults) win; otherwise the built-in keystore — in browsers
+    // only, since elsewhere the wallet generates the key.
+    if (!keystores_configured && !isBrowserWebCrypto()) return { parameters }
 
-    const prepared = await AccessKey.prepareAuthorization({
+    const { key, keyAuthorization } = await AccessKey.prepareAuthorization({
       ...parameters,
       chainId: chainId_,
-      keyType: generated.keyType,
-      publicKey: generated.publicKey,
+      keystores,
     })
+    if (!key)
+      throw new RpcResponse.InternalError({
+        message: 'Keystore did not produce access-key material.',
+      })
     return {
-      keyPair: generated.keyPair,
+      key,
       parameters: {
-        ...toAuthorizeAccessKeyParameters(parameters, prepared.keyAuthorization),
-        publicKey: generated.publicKey,
+        ...toAuthorizeAccessKeyParameters(parameters, keyAuthorization),
+        publicKey: key.publicKey,
       },
-      privateKey: generated.privateKey,
     }
   }
 
@@ -515,22 +519,6 @@ export function create(options: create.Options = {}): create.ReturnType {
     }
   }
 
-  async function generateBrowserP256AccessKey(
-    parameters: Adapter.authorizeAccessKey.Parameters,
-  ): Promise<Adapter.generateAccessKey.ReturnType> {
-    if (!isBrowserWebCrypto()) return undefined
-    if (parameters.keyType && parameters.keyType !== 'p256')
-      throw new RpcResponse.InvalidParamsError({
-        message: `\`keyType: "${parameters.keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
-      })
-    const keyPair = await WebCryptoP256.createKeyPair()
-    return {
-      keyPair,
-      keyType: 'p256',
-      publicKey: PublicKey.toHex(keyPair.publicKey),
-    }
-  }
-
   async function savePreparedAccessKey(options: {
     accessKey: Awaited<ReturnType<typeof prepareAuthorizeAccessKey>> | undefined
     account: Address.Address | undefined
@@ -538,8 +526,12 @@ export function create(options: create.Options = {}): create.ReturnType {
   }) {
     const { accessKey, account, keyAuthorization } = options
     if (!account || !keyAuthorization || !accessKey) return
-    const { keyPair, privateKey } = accessKey
-    const material = keyPair ? { keyPair } : privateKey ? { privateKey } : undefined
+    const { key, privateKey } = accessKey
+    const material = key
+      ? { handle: key.handle, publicKey: key.publicKey }
+      : privateKey
+        ? { privateKey }
+        : undefined
     if (!material) return
     store.accessKeys.add({
       account,
@@ -711,9 +703,8 @@ export function create(options: create.Options = {}): create.ReturnType {
   }
 
   function resolveDefaultAuthorizeAccessKey(): create.AuthorizeAccessKeyParameters | undefined {
-    const authorizeAccessKey = options.authorizeAccessKey
-    if (typeof authorizeAccessKey === 'function') return authorizeAccessKey()
-    return authorizeAccessKey
+    if (typeof authorizeAccessKey_default === 'function') return authorizeAccessKey_default()
+    return authorizeAccessKey_default
   }
 
   async function defaultAuthorizeAccessKeyForConnect(options_: {
@@ -729,7 +720,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         account: address,
         chainId: Number(parameters.chainId ?? options_.chainId),
         parameters,
-        store: { state: store },
+        store: { keystores, state: store },
       }))
     )
       return undefined
@@ -1815,6 +1806,46 @@ const sendCallsMagic = Hash.keccak256(Hex.fromString('TEMPO_5792'))
 
 export declare namespace create {
   type Options = {
+    /** Access-key configuration: authorization policy and key material. */
+    accessKey?:
+      | {
+          /**
+           * Access-key parameters to authorize automatically when no stored
+           * key satisfies a request.
+           *
+           * Applies to `wallet_connect` and transaction sends. Pass an object
+           * to use the same parameters for every request, or a function to
+           * compute them per request — return `undefined` to skip
+           * authorization for that request.
+           */
+          authorize?: AuthorizeAccessKey | undefined
+          /**
+           * Keystores backing provider-generated access keys, one per key
+           * type. A keystore creates key material and turns persisted
+           * records back into signing accounts — see
+           * {@link Keystore.Keystore} for the contract.
+           *
+           * App-level keystores override adapter-supplied defaults.
+           * Keystores hold key material; `storage` persists provider state.
+           * Access keys created before a keystore was configured keep
+           * working.
+           *
+           * @default Keystore.defaults — `{ p256: Keystore.webCryptoP256() }`
+           *
+           * @example
+           * ```ts
+           * import { Keystore, Provider } from 'accounts'
+           *
+           * const provider = Provider.create({
+           *   accessKey: {
+           *     keystores: { p256: Keystore.webCryptoP256({ extractable: true }) },
+           *   },
+           * })
+           * ```
+           */
+          keystores?: Keystore.Keystores | undefined
+        }
+      | undefined
     /** Adapter to use for account management. @default dialog() */
     adapter?: Adapter.Adapter | undefined
     /**
@@ -1825,15 +1856,7 @@ export declare namespace create {
      * `capabilities.auth` (per-call override).
      */
     auth?: z.input<typeof Rpc.wallet_connect.auth> | undefined
-    /**
-     * Default access key parameters for `wallet_connect`.
-     *
-     * Pass an object to use the same access-key policy for every applicable
-     * request, or a function to compute it dynamically. When set,
-     * `wallet_connect` and send transaction requests will authorize an access
-     * key only when no reusable local key is available. Return `undefined`
-     * from the function to skip authorization for the current request.
-     */
+    /** @deprecated Use `accessKey.authorize` instead. */
     authorizeAccessKey?: AuthorizeAccessKey | undefined
     /**
      * Supported chains. First chain is the default.
@@ -1895,12 +1918,12 @@ export declare namespace create {
     transports?: Record<number, Transport> | undefined
   }
 
-  /** Default access-key authorization parameters with SDK-only reuse policy. */
+  /** Access-key parameters to authorize automatically, with SDK-only reuse policy. */
   type AuthorizeAccessKeyParameters = Adapter.authorizeAccessKey.Parameters & {
     /** SDK-only policy for deciding whether a stored local key can be reused. */
     reuse?: AccessKey.ReusePolicy | undefined
   }
-  /** Static or dynamic default access-key authorization policy. */
+  /** Static or per-request access-key authorization parameters. */
   type AuthorizeAccessKey =
     | AuthorizeAccessKeyParameters
     | (() => AuthorizeAccessKeyParameters | undefined)

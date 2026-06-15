@@ -1,9 +1,9 @@
-import { Hex, P256, Provider as core_Provider, RpcResponse } from 'ox'
+import { Hex, Provider as core_Provider } from 'ox'
 import { custom } from 'viem'
-import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 import { z } from 'zod/mini'
 
 import * as Adapter from '../../Adapter.js'
+import type * as Keystore from '../../Keystore.js'
 import * as Rpc from '../../zod/rpc.js'
 
 /**
@@ -16,31 +16,12 @@ import * as Rpc from '../../zod/rpc.js'
  * `request`.
  */
 export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
-  const { bind, cleanup, close, icon, name, rdns, request: requestRemote } = options
+  const { bind, cleanup, close, icon, keystores, name, rdns, request: requestRemote } = options
 
   return Adapter.define({ ...(icon ? { icon } : {}), name, rdns }, ({ getAccount, store }) => {
     // Late-bind the store so the request channel can reconcile local
     // connection state (e.g. a wallet `accountsChanged` notification).
     bind?.({ store })
-
-    function generateAccessKey(
-      parameters: Adapter.generateAccessKey.Options = {},
-    ): Adapter.generateAccessKey.ReturnType {
-      const { keyType } = parameters
-      if (keyType && keyType !== 'p256' && keyType !== 'secp256k1')
-        throw new RpcResponse.InvalidParamsError({
-          message: `\`keyType: "${keyType}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
-        })
-      const type = keyType ?? 'p256'
-      const privateKey = type === 'p256' ? P256.randomPrivateKey() : Secp256k1.randomPrivateKey()
-      const account =
-        type === 'p256' ? TempoAccount.fromP256(privateKey) : TempoAccount.fromSecp256k1(privateKey)
-      return {
-        keyType: type,
-        privateKey,
-        publicKey: account.publicKey,
-      }
-    }
 
     const provider = core_Provider.from({
       async request(request) {
@@ -76,6 +57,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
 
     return {
       forwardsAuth: true,
+      ...(keystores ? { accessKey: { keystores } } : {}),
       actions: {
         async createAccount(_parameters, request) {
           return toConnectReturn(
@@ -118,7 +100,6 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
         },
       },
       ...(cleanup ? { cleanup } : close ? { cleanup: () => void close() } : {}),
-      generateAccessKey,
       getAccount(parameters = {}) {
         return {
           account: {
@@ -148,6 +129,14 @@ export declare namespace fromRequest {
     cleanup?: (() => void) | undefined
     /** Data URI of the provider icon, announced via EIP-6963. */
     icon?: Adapter.Meta['icon'] | undefined
+    /**
+     * Default keystores backing locally generated access keys. Omit to use
+     * the SDK default (non-extractable `webCryptoP256`). Pass an explicit
+     * keystore where the transport's environment needs one — e.g. pure-JS
+     * P-256 for React Native, which may lack WebCrypto and persists access
+     * keys through string-based storage.
+     */
+    keystores?: Keystore.Keystores | undefined
     /**
      * Tears down the adapter's wallet session. Wired to the `disconnect`
      * action and instance cleanup; never forwarded to the remote wallet.

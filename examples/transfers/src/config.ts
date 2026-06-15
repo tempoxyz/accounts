@@ -10,14 +10,16 @@ export const config = createConfig({
   chains: [tempoModerato, tempo],
   connectors: [
     tempoWallet({
-      authorizeAccessKey: () => ({
-        expiry: Expiry.days(1),
-        limits: [{ token: pathUsd, limit: parseUnits('10', 6) }],
-        scopes: [
-          { address: pathUsd, selector: 'transfer(address,uint256)' },
-          { address: pathUsd, selector: 'transferWithMemo(address,uint256,bytes32)' },
-        ],
-      }),
+      accessKey: {
+        authorize: () => ({
+          expiry: Expiry.days(1),
+          limits: [{ token: pathUsd, limit: parseUnits('10', 6) }],
+          scopes: [
+            { address: pathUsd, selector: 'transfer(address,uint256)' },
+            { address: pathUsd, selector: 'transferWithMemo(address,uint256,bytes32)' },
+          ],
+        }),
+      },
     }),
   ],
   multiInjectedProviderDiscovery: false,

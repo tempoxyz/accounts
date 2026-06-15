@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { Base64, Hash, Hex, P256, Provider as core_Provider, RpcResponse } from 'ox'
+import { Base64, Hash, Hex, Provider as core_Provider, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { Account as TempoAccount, Secp256k1 } from 'viem/tempo'
 import * as z from 'zod/mini'
 
 import * as Adapter from '../core/Adapter.js'
+import * as Keystore from '../core/Keystore.js'
 import * as CliAuth from '../server/CliAuth.js'
 
 /**
@@ -15,16 +15,27 @@ export function cli(options: cli.Options): Adapter.Adapter {
   const { name = 'Tempo CLI', rdns = 'xyz.tempo.cli' } = options
 
   return Adapter.define({ name, rdns }, ({ store }) => {
+    // The CLI persists to string-based filesystem storage, so its p256
+    // default opts into an extractable WebCrypto key (a non-extractable one
+    // could not survive a restart). secp256k1 stays available for explicit
+    // requests. Shared between the device-code ceremony and the instance
+    // declaration so records hydrate through the same keystores.
+    const keystores = {
+      p256: Keystore.webCryptoP256({ extractable: true }),
+      secp256k1: Keystore.secp256k1(),
+    }
+
     async function saveGeneratedAccessKey(
       address: Adapter.authorizeAccessKey.ReturnType['rootAddress'],
-      accessKey: ReturnType<typeof createAccessKey>,
+      accessKey: Awaited<ReturnType<Keystore.Keystore['createKey']>>,
       keyAuthorization: z.output<typeof CliAuth.keyAuthorization>,
     ) {
       const signed = KeyAuthorization.fromRpc(z.encode(CliAuth.keyAuthorization, keyAuthorization))
       store.accessKeys.add({
         account: address,
         authorization: signed,
-        privateKey: accessKey.privateKey,
+        handle: accessKey.handle,
+        publicKey: accessKey.publicKey,
       })
     }
 
@@ -42,13 +53,16 @@ export function cli(options: cli.Options): Adapter.Adapter {
       } = options
       const { account, authorizeAccessKey, method } = request
 
+      // p256 by default; secp256k1 only when explicitly requested.
+      const generatedKeyType = authorizeAccessKey?.keyType === 'secp256k1' ? 'secp256k1' : 'p256'
       const generatedAccessKey =
         authorizeAccessKey && !authorizeAccessKey.publicKey && !authorizeAccessKey.address
-          ? createAccessKey({ keyType: authorizeAccessKey.keyType })
+          ? await keystores[generatedKeyType].createKey()
           : undefined
 
       const publicKey = authorizeAccessKey?.publicKey ?? generatedAccessKey?.publicKey
-      const keyType = authorizeAccessKey?.keyType ?? generatedAccessKey?.keyType
+      const keyType =
+        authorizeAccessKey?.keyType ?? (generatedAccessKey ? generatedKeyType : undefined)
 
       if (!publicKey)
         throw new RpcResponse.InvalidParamsError({
@@ -205,9 +219,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
           })
         return { account }
       },
-      generateAccessKey(options) {
-        return createAccessKey(options)
-      },
+      accessKey: { keystores },
     }
   })
 }
@@ -324,18 +336,4 @@ async function post<
 
 function unsupported(message: string) {
   return new core_Provider.UnsupportedMethodError({ message })
-}
-
-function createAccessKey(
-  options: Adapter.generateAccessKey.Options = {},
-): NonNullable<Adapter.generateAccessKey.ReturnType> {
-  const keyType = options.keyType === 'p256' ? 'p256' : 'secp256k1'
-  const privateKey = keyType === 'p256' ? P256.randomPrivateKey() : Secp256k1.randomPrivateKey()
-  const account =
-    keyType === 'p256' ? TempoAccount.fromP256(privateKey) : TempoAccount.fromSecp256k1(privateKey)
-  return {
-    keyType,
-    privateKey,
-    publicKey: account.publicKey,
-  }
 }

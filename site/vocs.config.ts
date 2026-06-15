@@ -200,6 +200,16 @@ const config: Config = defineConfig({
             ],
           },
           {
+            text: 'Keystore',
+            collapsed: true,
+            items: [
+              { text: 'Overview', link: '/docs/api/keystore' },
+              { text: '.p256', link: '/docs/api/keystore.p256' },
+              { text: '.secp256k1', link: '/docs/api/keystore.secp256k1' },
+              { text: '.webCryptoP256', link: '/docs/api/keystore.webCryptoP256' },
+            ],
+          },
+          {
             text: 'Storage',
             collapsed: true,
             items: [

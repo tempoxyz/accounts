@@ -1,5 +1,5 @@
 import { verify } from 'hono/jwt'
-import { Hex, Provider as core_Provider, WebCryptoP256 } from 'ox'
+import { Hex, Provider as core_Provider, Secp256k1, WebCryptoP256 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import {
   type Address,
@@ -25,11 +25,12 @@ import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 
 import { headlessWebAuthn, secp256k1 } from '../../test/adapters.js'
 import { accounts, chain, getClient, http } from '../../test/config.js'
-import { createServer, type Server } from '../../test/utils.js'
+import { createJsonStorage, createServer, type Server } from '../../test/utils.js'
 import * as Handler from '../server/Handler.js'
 import * as Adapter from './Adapter.js'
 import { local as core_local } from './adapters/local.js'
 import * as Expiry from './Expiry.js'
+import * as Keystore from './Keystore.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 
@@ -2442,6 +2443,261 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
   })
 
+  describe('Provider.create keystore option', () => {
+    test('default: the built-in keystore provisions handle-backed records', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        storage: Storage.memory(),
+      })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      const record = provider.store.getState().accessKeys[0]!
+      expect(record.keyType).toBe('p256')
+      expect(record.handle).toMatchObject({ kind: 'webcrypto-p256' })
+      expect(record.privateKey).toBeUndefined()
+      expect(record.keyPair).toBeUndefined()
+
+      // The non-extractable default signs transactions.
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+    })
+
+    test('default: provisions a p256 access key backed by the keystore', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
+        storage: createJsonStorage(),
+      })
+      await connect(provider)
+
+      const result = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      expect(result.keyAuthorization.keyType).toBe('p256')
+
+      const record = provider.store.getState().accessKeys[0]!
+      expect(record.keyType).toBe('p256')
+      expect(record.handle).toMatchObject({ kind: 'webcrypto-p256' })
+      expect(record.publicKey).toMatch(/^0x[0-9a-f]+$/i)
+      expect(record.privateKey).toBeUndefined()
+      expect(record.keyPair).toBeUndefined()
+    })
+
+    test('behavior: keystore-backed key signs transactions', async () => {
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
+        storage: createJsonStorage(),
+      })
+      const address = await connect(provider)
+      await fund(address)
+
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      await expect(provider.getAccessKeyStatus()).resolves.toMatchInlineSnapshot(`"pending"`)
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+
+      // Published status proves the keystore-backed key signed the transaction.
+      await expect(provider.getAccessKeyStatus()).resolves.toMatchInlineSnapshot(`"published"`)
+    })
+
+    test('behavior: key survives reload through string-based storage without re-auth', async () => {
+      const storage = createJsonStorage()
+
+      const provider1 = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
+        storage,
+      })
+      const address = await connect(provider1)
+      await fund(address)
+      await provider1.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      const accessKeyAddress = provider1.store.getState().accessKeys[0]!.address
+
+      // Simulate an app restart: fresh provider, same storage and keystore.
+      const provider2 = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
+        storage,
+      })
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      const record = provider2.store.getState().accessKeys[0]!
+      expect(record.address).toBe(accessKeyAddress)
+      expect(record.handle).toMatchObject({ kind: 'webcrypto-p256' })
+      expect(record.privateKey).toBeUndefined()
+      expect(record.keyPair).toBeUndefined()
+
+      const receipt = await provider2.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+      await expect(provider2.getAccessKeyStatus()).resolves.toMatchInlineSnapshot(`"published"`)
+    })
+
+    test('behavior: json-rpc wallets provision through the keystore', async () => {
+      const root = TempoAccount.fromSecp256k1(Secp256k1.randomPrivateKey())
+      const forwarded: {
+        address: Hex.Hex
+        chainId: Hex.Hex
+        expiry: Hex.Hex
+        keyType: 'p256'
+        privateKey?: unknown
+        publicKey?: Hex.Hex
+      }[] = []
+
+      // Wallet-host stand-in: the dapp-side provider holds no root account and
+      // forwards `wallet_authorizeAccessKey` over a JSON-RPC transport.
+      const jsonRpcAdapter = Adapter.define({ name: 'JSON-RPC Test' }, () => ({
+        actions: {
+          createAccount: async () => ({ accounts: [{ address: root.address }] }),
+          loadAccounts: async () => ({ accounts: [{ address: root.address }] }),
+        },
+        getAccount: () => ({
+          account: { address: root.address, type: 'json-rpc' as const },
+          transport: custom({
+            async request({ method, params }: { method: string; params?: unknown[] }) {
+              if (method !== 'wallet_authorizeAccessKey')
+                throw new Error(`unexpected wallet method: ${method}`)
+              const [parameters] = params as [(typeof forwarded)[number]]
+              forwarded.push(parameters)
+              const signed = await root.signKeyAuthorization(
+                { address: parameters.address, type: parameters.keyType },
+                { chainId: BigInt(parameters.chainId), expiry: Number(parameters.expiry) },
+              )
+              return { keyAuthorization: KeyAuthorization.toRpc(signed), rootAddress: root.address }
+            },
+          }),
+        }),
+      }))
+
+      const provider = Provider.create({
+        adapter: jsonRpcAdapter,
+        chains: [chain],
+        accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
+        storage: createJsonStorage(),
+      })
+      await provider.request({ method: 'wallet_connect' })
+      await fund(root.address)
+
+      const result = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      expect(result.rootAddress).toBe(root.address)
+
+      // The wallet received only public key material.
+      expect(forwarded).toHaveLength(1)
+      expect(forwarded[0]!.publicKey).toMatch(/^0x[0-9a-f]+$/i)
+      expect(forwarded[0]!.privateKey).toBeUndefined()
+
+      const record = provider.store.getState().accessKeys[0]!
+      expect(record.access).toBe(root.address)
+      expect(record.keyType).toBe('p256')
+      expect(record.handle).toMatchObject({ kind: 'webcrypto-p256' })
+      expect(record.publicKey).toBe(forwarded[0]!.publicKey)
+      expect(record.privateKey).toBeUndefined()
+      expect(record.keyPair).toBeUndefined()
+
+      // The keystore-backed key signs without round-tripping the wallet.
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall], from: root.address }],
+      })
+      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+      await expect(
+        provider.getAccessKeyStatus({ address: root.address }),
+      ).resolves.toMatchInlineSnapshot(`"published"`)
+    })
+
+    test('behavior: adapter-supplied keystores apply; app keystores override', async () => {
+      const root = TempoAccount.fromSecp256k1(Secp256k1.randomPrivateKey())
+      // Wallet-host stand-in that signs whatever key type is forwarded.
+      const jsonRpcAdapter = Adapter.define({ name: 'JSON-RPC Test' }, () => ({
+        accessKey: { keystores: { p256: Keystore.p256() } },
+        actions: {
+          createAccount: async () => ({ accounts: [{ address: root.address }] }),
+          loadAccounts: async () => ({ accounts: [{ address: root.address }] }),
+        },
+        getAccount: () => ({
+          account: { address: root.address, type: 'json-rpc' as const },
+          transport: custom({
+            async request({ method, params }: { method: string; params?: unknown[] }) {
+              if (method !== 'wallet_authorizeAccessKey')
+                throw new Error(`unexpected wallet method: ${method}`)
+              const [parameters] = params as [
+                { address: Hex.Hex; chainId: Hex.Hex; expiry: Hex.Hex; keyType: never },
+              ]
+              const signed = await root.signKeyAuthorization(
+                { address: parameters.address, type: parameters.keyType },
+                { chainId: BigInt(parameters.chainId), expiry: Number(parameters.expiry) },
+              )
+              return { keyAuthorization: KeyAuthorization.toRpc(signed), rootAddress: root.address }
+            },
+          }),
+        }),
+      }))
+
+      // The adapter's p256 keystore (pure-JS) backs the default key.
+      const provider = Provider.create({
+        adapter: jsonRpcAdapter,
+        chains: [chain],
+        storage: createJsonStorage(),
+      })
+      await provider.request({ method: 'wallet_connect' })
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      const record = provider.store.getState().accessKeys[0]!
+      expect(record.keyType).toBe('p256')
+      expect(record.handle).toMatchObject({ kind: 'p256' })
+      expect(record.privateKey).toBeUndefined()
+
+      // App-level keystores override the adapter's defaults wholesale.
+      const provider2 = Provider.create({
+        accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
+        adapter: jsonRpcAdapter,
+        chains: [chain],
+        storage: createJsonStorage(),
+      })
+      await provider2.request({ method: 'wallet_connect' })
+      await provider2.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      const record2 = provider2.store.getState().accessKeys[0]!
+      expect(record2.keyType).toBe('p256')
+      expect(record2.handle).toMatchObject({ kind: 'webcrypto-p256' })
+    })
+  })
+
   describe('wallet_connect with authorizeAccessKey', () => {
     test('default: grants access key during register', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
@@ -2514,12 +2770,12 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
   })
 
-  describe('Provider.create authorizeAccessKey option', () => {
+  describe('Provider.create accessKey.authorize option', () => {
     test('default: wallet_connect auto-authorizes access key', async () => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => ({ expiry: Expiry.days(1) }),
+        accessKey: { authorize: () => ({ expiry: Expiry.days(1) }) },
       })
 
       const result = await provider.request({
@@ -2531,7 +2787,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       expect(result.accounts[0]!.capabilities.keyAuthorization!.keyId).toMatch(/^0x[0-9a-f]{40}$/i)
     })
 
-    test('default: wallet_connect auto-authorizes access key from literal option', async () => {
+    test('default: deprecated `authorizeAccessKey` alias still applies', async () => {
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
@@ -2551,7 +2807,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => ({ expiry: Expiry.days(1) }),
+        accessKey: { authorize: () => ({ expiry: Expiry.days(1) }) },
       })
 
       const result = await provider.request({
@@ -2573,12 +2829,14 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => {
-          if (!authorize) return undefined
-          return {
-            expiry: Expiry.days(1),
-            scopes: [{ address: Addresses.pathUsd, selector: 'transfer(address,uint256)' }],
-          }
+        accessKey: {
+          authorize: () => {
+            if (!authorize) return undefined
+            return {
+              expiry: Expiry.days(1),
+              scopes: [{ address: Addresses.pathUsd, selector: 'transfer(address,uint256)' }],
+            }
+          },
         },
       })
       const address = await connect(provider)
@@ -2609,17 +2867,19 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => {
-          if (!authorize) return undefined
-          return {
-            expiry: Expiry.days(1),
-            scopes: [
-              {
-                address: '0x0000000000000000000000000000000000000099',
-                selector: 'transfer(address,uint256)',
-              },
-            ],
-          }
+        accessKey: {
+          authorize: () => {
+            if (!authorize) return undefined
+            return {
+              expiry: Expiry.days(1),
+              scopes: [
+                {
+                  address: '0x0000000000000000000000000000000000000099',
+                  selector: 'transfer(address,uint256)',
+                },
+              ],
+            }
+          },
         },
       })
       const address = await connect(provider)
@@ -2652,12 +2912,14 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => {
-          if (!authorize) return undefined
-          return {
-            expiry: Expiry.days(1),
-            scopes: [{ address: Addresses.pathUsd, selector: 'transfer(address,uint256)' }],
-          }
+        accessKey: {
+          authorize: () => {
+            if (!authorize) return undefined
+            return {
+              expiry: Expiry.days(1),
+              scopes: [{ address: Addresses.pathUsd, selector: 'transfer(address,uint256)' }],
+            }
+          },
         },
       })
       const address = await connect(provider)
@@ -2695,7 +2957,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => ({ expiry: Expiry.days(7) }),
+        accessKey: { authorize: () => ({ expiry: Expiry.days(7) }) },
       })
 
       const result = await provider.request({
@@ -2709,7 +2971,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       const provider = Provider.create({
         adapter: adapter(),
         chains: [chain],
-        authorizeAccessKey: () => ({ expiry: Expiry.days(1) }),
+        accessKey: { authorize: () => ({ expiry: Expiry.days(1) }) },
       })
 
       await connect(provider)
