@@ -101,18 +101,18 @@ export function hasWebAuthnShim(): boolean {
     return constructor?.prototype
   })()
   if (typeof prototype?.create === 'function' && typeof prototype.get === 'function') {
-    if (
-      credentials.create !== prototype.create ||
-      credentials.get !== prototype.get
-    )
-      return true
+    if (credentials.create !== prototype.create || credentials.get !== prototype.get) return true
   }
-  if (credentials.create?.name === 'createCredentials' && credentials.get?.name === 'getCredentials')
+  if (
+    credentials.create?.name === 'createCredentials' &&
+    credentials.get?.name === 'getCredentials'
+  )
     return true
   if (typeof PublicKeyCredential === 'undefined') return false
   return (
     PublicKeyCredential.isConditionalMediationAvailable?.name === 'mediationAvailable' &&
-    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.name === 'authenticatorAvailable'
+    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.name ===
+      'authenticatorAvailable'
   )
 }
 

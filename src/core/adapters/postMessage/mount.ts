@@ -58,8 +58,7 @@ export declare namespace Factory {
  */
 export function auto(): Factory {
   if (typeof window === 'undefined') return popup()
-  if (isInsecureContext() || isSafari() || hasWebAuthnShim() || !IO.supported())
-    return popup()
+  if (isInsecureContext() || isSafari() || hasWebAuthnShim() || !IO.supported()) return popup()
   return iframe()
 }
 
