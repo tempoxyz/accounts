@@ -44,9 +44,9 @@ catalog:
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
   viem: 2.52.2
-  vite: ^8.0.5
-  vite-plus: ~0.1.18
-  vp: npm:vite-plus@~0.1.18
+  vite: ^8.0.16
+  vite-plus: ~0.1.24
+  vp: npm:vite-plus@~0.1.24
   wagmi: ^3.6.16
   wrangler: ^4.98.0
   zod: ^4.3.6
@@ -78,18 +78,22 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 overrides:
   accounts: 'workspace:*'
   '@grpc/grpc-js': '1.14.4'
+  '@babel/core@<=7.29.0': '7.29.7'
   '@sinclair/typebox': '^0.34.0'
   'brace-expansion@>=5.0.0 <5.0.6': '5.0.6'
+  'dompurify@<3.4.9': '3.4.9'
   esbuild: '0.28.1'
   viem: 2.52.2
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
+  'form-data@>=4.0.0 <4.0.6': '4.0.6'
   'js-cookie@<=3.0.5': '3.0.7'
-  js-yaml@^3: '3.14.2'
+  'js-yaml@<=4.1.1': '4.2.0'
+  'launch-editor@<=2.14.0': '2.14.1'
   mermaid: '^11.14.1'
   ox: 0.14.29
   postcss: '8.5.14'
-  protobufjs: '7.5.8'
+  protobufjs: '7.6.3'
   '@protobufjs/utf8': '1.1.1'
   qs: '6.15.2'
   # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
@@ -98,12 +102,14 @@ overrides:
   'shell-quote@>=1.1.0 <=1.8.3': '1.8.4'
   react: 'catalog:'
   react-dom: 'catalog:'
-  tar: '7.5.15'
-  'tmp@<0.2.6': '0.2.6'
+  tar: '7.5.16'
+  'tmp@<0.2.7': '0.2.7'
   'uuid@<11.1.1': '11.1.1'
   vite-plus: 'catalog:'
   vp: 'catalog:'
-  'ws@>=8.0.0 <8.20.1': '8.20.1'
+  'vite@>=8.0.0 <=8.0.15': '8.0.16'
+  'ws@>=7.0.0 <7.5.11': '7.5.11'
+  'ws@>=8.0.0 <8.21.0': '8.21.0'
   wrangler: 'catalog:'
 
 packages:
