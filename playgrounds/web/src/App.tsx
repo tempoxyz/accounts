@@ -1,4 +1,5 @@
 import { tempo as mppx_tempo } from 'mppx/client'
+import type { Session as MppxSession } from 'mppx/tempo'
 import { Hex, Json } from 'ox'
 import {
   type ComponentProps,
@@ -2400,7 +2401,7 @@ function MppSummary(props: { children: ReactNode }) {
 }
 
 function createMppSessionManager() {
-  return mppx_tempo.session({
+  return mppx_tempo.session.manager({
     getClient(options: { chainId?: number | undefined } = {}) {
       const client = provider.getClient({ chainId: options.chainId })
       const account = provider.getAccount()
@@ -2475,7 +2476,7 @@ async function runMppManagedSse(
   const balanceBefore = await getPathUsdBalance()
   const started = performance.now()
   const stream = await manager.sse('/mpp/session/stream', {
-    onReceipt(receipt) {
+    onReceipt(receipt: MppxSession.Precompile.Protocol.SessionReceipt) {
       receipts.push(receipt)
     },
   })
