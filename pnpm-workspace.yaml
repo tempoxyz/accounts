@@ -35,7 +35,7 @@ catalog:
   '@vitejs/devtools': ^0.2.0
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.5.0
-  hono: ^4.12.23
+  hono: ^4.12.25
   mppx: ^0.7.0
   ox: 0.14.29
   prool: ~0.2.4
@@ -91,6 +91,8 @@ overrides:
   follow-redirects: '1.16.0'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
   'form-data@>=4.0.0 <4.0.6': '4.0.6'
+  # GHSA-88fw-hqm2-52qc (high, CORS reflects any Origin) + serve-static path traversal, AWS Lambda Set-Cookie/body-limit/header advisories. Forces transitive hono (mppx > @modelcontextprotocol/sdk) to the patched release.
+  'hono@<4.12.25': '4.12.25'
   # GHSA-v6wh-96g9-6wx3: launch-editor NTLMv2 hash disclosure via UNC path (dev tooling).
   'launch-editor@<=2.14.0': '2.14.1'
   'js-cookie@<=3.0.5': '3.0.7'
