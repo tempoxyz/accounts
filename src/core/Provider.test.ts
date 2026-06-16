@@ -1,4 +1,7 @@
 import { Challenge } from 'mppx'
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { Account as TempoAccount, Actions } from 'viem/tempo'
+import { tempo } from 'viem/tempo/chains'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Adapter from './Adapter.js'
@@ -193,10 +196,20 @@ describe('mpp', () => {
 })
 
 describe('wallet_authorizeChallenge', () => {
+  const currency = '0x20c0000000000000000000000000000000000001'
+  // viem anvil test key #1; its access key address is deterministic.
+  const accessKeyPrivateKey = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
+
   function serializedChallenge(
-    options: { amount?: string; chainId?: number; intent?: string; method?: string } = {},
+    options: {
+      amount?: string
+      chainId?: number
+      intent?: string
+      method?: string
+      recipient?: string
+    } = {},
   ) {
-    const { amount = '1', chainId, intent = 'charge', method = 'tempo' } = options
+    const { amount = '1', chainId, intent = 'charge', method = 'tempo', recipient } = options
     return Challenge.serialize(
       Challenge.from({
         id: 'test-challenge',
@@ -205,11 +218,55 @@ describe('wallet_authorizeChallenge', () => {
         realm: 'api.example.com',
         request: {
           amount,
-          currency: '0x20c0000000000000000000000000000000000001',
+          currency,
+          ...(recipient !== undefined && { recipient }),
           ...(chainId !== undefined && { methodDetails: { chainId } }),
         },
       }),
     )
+  }
+
+  /** Provisions a locally-signable secp256k1 access key for the active account. */
+  function provisionAccessKey(
+    provider: ReturnType<typeof Provider.create>,
+    options: {
+      account?: `0x${string}` | undefined
+      chainId?: number | undefined
+      expiry?: number | undefined
+      scopes?: KeyAuthorization.Scope[] | undefined
+    } = {},
+  ) {
+    const account = options.account ?? address
+    const chainId = options.chainId ?? tempo.id
+    const accessKey = TempoAccount.fromSecp256k1(accessKeyPrivateKey)
+    const authorization = KeyAuthorization.from(
+      {
+        address: accessKey.address,
+        chainId: BigInt(chainId),
+        expiry: options.expiry ?? Math.floor(Date.now() / 1000) + 3600,
+        scopes: options.scopes,
+        type: 'secp256k1',
+      },
+      { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
+    )
+    provider.store.accessKeys.add({
+      account,
+      authorization,
+      privateKey: accessKeyPrivateKey,
+    })
+    return accessKey.address
+  }
+
+  /**
+   * Captures the arguments passed to a method's `createCredential` and answers
+   * with a sentinel, so tests can assert which signer the handler injects
+   * without driving the full credential pipeline.
+   */
+  function spyCreateCredential(provider: ReturnType<typeof Provider.create>, intent: string) {
+    const method = provider.mpp!.methods.find((m) => m.intent === intent)!
+    return vi
+      .spyOn(method as { createCredential: (args: unknown) => unknown }, 'createCredential')
+      .mockResolvedValue('credential-stub' as never)
   }
 
   test('behavior: wallet-internal method clients do not re-enter wallet_authorizeChallenge', async () => {
@@ -347,6 +404,227 @@ describe('wallet_authorizeChallenge', () => {
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[RpcResponse.InvalidParamsError: \`challenges[1]\` has unsupported method "stripe/charge". Supported: tempo/charge, tempo/session, tempo/subscription.]`,
     )
+  })
+
+  test('behavior: charge signs with a scoped access key when one is selectable', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+    const recipient = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+    // Charge credentials use `transferWithMemo` (0x95777d59).
+    const accessKeyAddress = provisionAccessKey(provider, {
+      scopes: [{ address: currency, selector: '0x95777d59', recipients: [recipient] }],
+    })
+    const createCredential = spyCreateCredential(provider, 'charge')
+
+    await provider.request({
+      method: 'wallet_authorizeChallenge',
+      params: [{ challenges: [serializedChallenge({ recipient })] }],
+    })
+
+    // The handler passes the scoped key through `context.account`.
+    const args = createCredential.mock.calls[0]![0] as {
+      context?: { account?: TempoAccount.AccessKeyAccount }
+    }
+    expect(args.context?.account?.type).toBe('local')
+    expect(args.context?.account?.address.toLowerCase()).toBe(address.toLowerCase())
+    expect(args.context?.account?.accessKeyAddress?.toLowerCase()).toBe(
+      accessKeyAddress.toLowerCase(),
+    )
+  })
+
+  test('behavior: charge derives a transferWithMemo call matching the viem/tempo encoder', () => {
+    const recipient = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+    // Assert against the encoder output, not only the literal selector.
+    const expected = Actions.token.transfer.call({
+      amount: 1n,
+      memo: '0x',
+      to: recipient,
+      token: currency,
+    })
+    expect(expected.data.slice(0, 10)).toBe('0x95777d59')
+
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+    // The derived call must use the same selector the encoder produces.
+    const accessKeyAddress = provisionAccessKey(provider, {
+      scopes: [
+        { address: currency, selector: expected.data.slice(0, 10), recipients: [recipient] },
+      ],
+    })
+    const createCredential = spyCreateCredential(provider, 'charge')
+
+    return provider
+      .request({
+        method: 'wallet_authorizeChallenge',
+        params: [{ challenges: [serializedChallenge({ recipient })] }],
+      })
+      .then(() => {
+        const args = createCredential.mock.calls[0]![0] as {
+          context?: { account?: TempoAccount.AccessKeyAccount }
+        }
+        expect(args.context?.account?.accessKeyAddress?.toLowerCase()).toBe(
+          accessKeyAddress.toLowerCase(),
+        )
+      })
+  })
+
+  test('behavior: charge does not select a key scoped to plain transfer (0xa9059cbb)', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+    const recipient = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+    // Plain `transfer` scopes must not match charge credentials.
+    provisionAccessKey(provider, {
+      scopes: [{ address: currency, selector: '0xa9059cbb', recipients: [recipient] }],
+    })
+    const createCredential = spyCreateCredential(provider, 'charge')
+
+    await provider.request({
+      method: 'wallet_authorizeChallenge',
+      params: [{ challenges: [serializedChallenge({ recipient })] }],
+    })
+
+    expect((createCredential.mock.calls[0]![0] as { context?: unknown }).context).toBeUndefined()
+  })
+
+  test('behavior: charge falls back to root when no access key is selectable', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+    const createCredential = spyCreateCredential(provider, 'charge')
+
+    await provider.request({
+      method: 'wallet_authorizeChallenge',
+      params: [{ challenges: [serializedChallenge()] }],
+    })
+
+    // No selected access key means no `context`.
+    expect(createCredential.mock.calls[0]![0]).toMatchInlineSnapshot(`
+      {
+        "challenge": {
+          "id": "test-challenge",
+          "intent": "charge",
+          "method": "tempo",
+          "realm": "api.example.com",
+          "request": {
+            "amount": "1",
+            "currency": "0x20c0000000000000000000000000000000000001",
+          },
+        },
+      }
+    `)
+  })
+
+  test('behavior: charge does not select a scoped key whose recipients do not match', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+    provisionAccessKey(provider, {
+      scopes: [
+        {
+          address: currency,
+          selector: '0x95777d59',
+          recipients: ['0x000000000000000000000000000000000000dEaD'],
+        },
+      ],
+    })
+    const createCredential = spyCreateCredential(provider, 'charge')
+
+    await provider.request({
+      method: 'wallet_authorizeChallenge',
+      params: [
+        {
+          challenges: [
+            serializedChallenge({ recipient: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' }),
+          ],
+        },
+      ],
+    })
+
+    // Scope mismatch means no `context`.
+    expect((createCredential.mock.calls[0]![0] as { context?: unknown }).context).toBeUndefined()
+  })
+
+  test('behavior: charge signs with an unscoped access key (limits only)', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+    const recipient = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+    // No call scopes: an unscoped key matches any charge, so it is selected.
+    const accessKeyAddress = provisionAccessKey(provider)
+    const createCredential = spyCreateCredential(provider, 'charge')
+
+    await provider.request({
+      method: 'wallet_authorizeChallenge',
+      params: [{ challenges: [serializedChallenge({ recipient })] }],
+    })
+
+    const args = createCredential.mock.calls[0]![0] as {
+      context?: { account?: TempoAccount.AccessKeyAccount }
+    }
+    expect(args.context?.account?.accessKeyAddress?.toLowerCase()).toBe(
+      accessKeyAddress.toLowerCase(),
+    )
+  })
+
+  test('behavior: charge falls back to root when the scoped key is expired', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+    const recipient = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+    // Correctly scoped but past expiry: selection skips it -> root signs.
+    provisionAccessKey(provider, {
+      scopes: [{ address: currency, selector: '0x95777d59', recipients: [recipient] }],
+      expiry: Math.floor(Date.now() / 1000) - 60,
+    })
+    const createCredential = spyCreateCredential(provider, 'charge')
+
+    await provider.request({
+      method: 'wallet_authorizeChallenge',
+      params: [{ challenges: [serializedChallenge({ recipient })] }],
+    })
+
+    expect((createCredential.mock.calls[0]![0] as { context?: unknown }).context).toBeUndefined()
+  })
+
+  test('behavior: no access key path is identical with mpp enabled and no keys', async () => {
+    const provider = Provider.create({
+      adapter: testAdapter(),
+      mpp: { polyfill: false },
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+    const createCredential = spyCreateCredential(provider, 'charge')
+
+    await provider.request({
+      method: 'wallet_authorizeChallenge',
+      params: [{ challenges: [serializedChallenge({ intent: 'charge' })] }],
+    })
+
+    expect((createCredential.mock.calls[0]![0] as { context?: unknown }).context).toBeUndefined()
   })
 })
 

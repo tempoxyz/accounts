@@ -32,6 +32,7 @@ import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
+import * as ChallengeSigner from './internal/ChallengeSigner.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Keystore from './Keystore.js'
 import * as Schema from './Schema.js'
@@ -1544,11 +1545,28 @@ export function create(options: create.Options = {}): create.ReturnType {
                         throw new RpcResponse.InvalidParamsError({
                           message: `\`challenges[${index}]\` targets unsupported chain ${chainId}.`,
                         })
-                      return { challenge, method }
+                      return { challenge, method, chainId }
                     })
-                    const { challenge, method } = candidates[0]!
+                    const { challenge, method, chainId } = candidates[0]!
+                    // Pass a locally-signable access key to mppx when the challenge
+                    // can be covered by an existing scope.
+                    const state = store.getState()
+                    const account =
+                      state.accounts[state.activeAccount]?.address ?? state.accounts[0]?.address
+                    const signer = account
+                      ? await ChallengeSigner.select({
+                          account,
+                          challenge,
+                          chainId: typeof chainId === 'number' ? chainId : state.chainId,
+                          store,
+                        })
+                      : undefined
                     return {
-                      authorization: await method.createCredential({ challenge } as never),
+                      authorization: await method.createCredential(
+                        signer
+                          ? ({ challenge, context: { account: signer } } as never)
+                          : ({ challenge } as never),
+                      ),
                     } satisfies Rpc.wallet_authorizeChallenge.Encoded['returns']
                   }
 
