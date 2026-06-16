@@ -3,6 +3,7 @@ auditConfig:
     - GHSA-rmmr-r34h-pfm5 # affected versions have been removed from npm.
     - GHSA-w5hq-g745-h8pq # transitive Expo xcode uuid usage; no direct runtime exposure.
     - GHSA-qjx8-664m-686j # transitive Privy js-cookie usage in playground.
+    - GHSA-h67p-54hq-rp68 # over-broad <=4.1.1 range flags terminal js-yaml@3.14.2 (v3 has no merge-key DoS, no later v3 to upgrade to); v4 deps already pinned to patched 4.2.0.
 
 allowBuilds:
   '@reown/appkit': false
@@ -31,7 +32,7 @@ catalog:
   '@types/node': ^25.6.0
   '@types/react': ^19.2.14
   '@types/react-dom': ^19.2.3
-  '@vitejs/devtools': ^0.1.15
+  '@vitejs/devtools': ^0.2.0
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.5.0
   hono: ^4.12.23
@@ -44,9 +45,9 @@ catalog:
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
   viem: 2.52.2
-  vite: ^8.0.5
-  vite-plus: ~0.1.18
-  vp: npm:vite-plus@~0.1.18
+  vite: ^8.0.16
+  vite-plus: ~0.1.24
+  vp: npm:vite-plus@~0.1.24
   wagmi: ^3.6.16
   wrangler: ^4.98.0
   zod: ^4.3.6
@@ -77,19 +78,29 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 
 overrides:
   accounts: 'workspace:*'
+  # GHSA-4x5r-pxfx-6jf8: @babel/core arbitrary file read via sourceMappingURL (7.29.1 unpublished; 7.29.6 is first patched release).
+  '@babel/core@<=7.29.0': '7.29.6'
   '@grpc/grpc-js': '1.14.4'
   '@sinclair/typebox': '^0.34.0'
   'brace-expansion@>=5.0.0 <5.0.6': '5.0.6'
+  # GHSA-rp9w-3fw7-7cwq et al: DOMPurify IN_PLACE/hook sanitization bypasses (3.4.9 patches the trailing Trusted-Types advisories too).
+  'dompurify@<3.4.9': '3.4.9'
   esbuild: '0.28.1'
   viem: 2.52.2
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
+  # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
+  'form-data@>=4.0.0 <4.0.6': '4.0.6'
+  # GHSA-v6wh-96g9-6wx3: launch-editor NTLMv2 hash disclosure via UNC path (dev tooling).
+  'launch-editor@<=2.14.0': '2.14.1'
   'js-cookie@<=3.0.5': '3.0.7'
   js-yaml@^3: '3.14.2'
+  # GHSA-h67p-54hq-rp68: quadratic-complexity DoS in js-yaml v4 merge keys (4.1.2 unpublished; 4.2.0 is first patched release).
+  js-yaml@4: '4.2.0'
   mermaid: '^11.14.1'
   ox: 0.14.29
   postcss: '8.5.14'
-  protobufjs: '7.5.8'
+  protobufjs: '7.6.3'
   '@protobufjs/utf8': '1.1.1'
   qs: '6.15.2'
   # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
@@ -98,12 +109,17 @@ overrides:
   'shell-quote@>=1.1.0 <=1.8.3': '1.8.4'
   react: 'catalog:'
   react-dom: 'catalog:'
-  tar: '7.5.15'
-  'tmp@<0.2.6': '0.2.6'
+  tar: '7.5.16'
+  'tmp@<0.2.7': '0.2.7'
   'uuid@<11.1.1': '11.1.1'
+  # GHSA-fx2h-pf6j-xcff: vite server.fs.deny bypass on Windows alternate paths (dev tooling).
+  # Unconditional pin: range-keyed override does not rewrite `latest` importer specifiers (examples/basic).
+  'vite@8': '8.0.16'
   vite-plus: 'catalog:'
   vp: 'catalog:'
-  'ws@>=8.0.0 <8.20.1': '8.20.1'
+  # GHSA-96hv-2xvq-fx4p: ws memory-exhaustion DoS (v8 prod path via viem; v7 dev path via react-native metro).
+  'ws@>=7.0.0 <7.5.11': '7.5.11'
+  'ws@>=8.0.0 <8.21.0': '8.21.0'
   wrangler: 'catalog:'
 
 packages:
