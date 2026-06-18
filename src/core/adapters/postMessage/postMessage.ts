@@ -46,7 +46,12 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
       session = create({ close, host: hostUrl(host), target })
       return session
     }
-    const factory = sticky_popup ? Mount.popup() : (options.mount ?? Mount.auto())
+    const factory = sticky_popup
+      ? Mount.popup()
+      : (options.mount ??
+        Mount.auto({
+          source: new URL(host).hostname.replace(/^www\./, ''),
+        }))
     const url = hostUrl(host, factory.mode)
     const mount_ = factory({
       host: url,
@@ -312,7 +317,7 @@ export declare namespace postMessage {
     /**
      * Where the wallet page lives and how it surfaces for requests.
      * @default `Mount.auto()` — an overlay iframe, or a popup where
-     * iframes can't work (insecure context, no IO v2).
+     * iframes can't work (insecure context, no IO v2 for untrusted hosts).
      */
     mount?: Mount.Factory | undefined
     /** Provider display name. */
