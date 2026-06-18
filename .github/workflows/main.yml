@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Clone repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # 11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # 11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
 
@@ -43,7 +43,7 @@ jobs:
 
       - name: Create or update release pull request
         id: changesets
-        uses: changesets/action@63a615b9cd06ba9a3e6d13796c7fbcb080a60a0b # 06245a4e0a36c064a573d4150030f5ec548e4fcc
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # 06245a4e0a36c064a573d4150030f5ec548e4fcc
         with:
           commitMode: github-api
           title: 'chore: version packages'
@@ -65,7 +65,7 @@ jobs:
 
     steps:
       - name: Clone repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # 11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # 11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
 
@@ -75,7 +75,7 @@ jobs:
           skip-cache: 'true' # avoid cache poisoning attacks
 
       - name: Publish to npm
-        uses: changesets/action@63a615b9cd06ba9a3e6d13796c7fbcb080a60a0b # 06245a4e0a36c064a573d4150030f5ec548e4fcc
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # 06245a4e0a36c064a573d4150030f5ec548e4fcc
         with:
           publish: pnpm changeset:publish
         env:
