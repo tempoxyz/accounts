@@ -275,13 +275,11 @@ export function popup(options: popup.Options = {}): Factory {
           if (win && !win.closed) win.focus()
         },
         target: () => {
+          if (win && !win.closed) return win
           const left = (window.innerWidth - size.width) / 2 + window.screenX
-          const top = window.screenY + 100
-          win = window.open(
-            host,
-            '_blank',
-            `width=${size.width},height=${size.height},left=${left},top=${top}`,
-          )
+          const top = (window.innerHeight - size.height) / 2 + window.screenY
+          const features = `width=${size.width},height=${size.height},left=${left},top=${top}`
+          win = window.open(host, '_blank', features)
           if (win) overlay.style.display = 'flex'
           return win
         },
@@ -294,7 +292,7 @@ export function popup(options: popup.Options = {}): Factory {
 export declare namespace popup {
   /** Options for {@link popup}. */
   export type Options = {
-    /** Popup window dimensions. @default `{ width: 360, height: 440 }` */
+    /** Popup window dimensions. @default `{ width: 404, height: 600 }` */
     size?: { width: number; height: number } | undefined
   }
 }
