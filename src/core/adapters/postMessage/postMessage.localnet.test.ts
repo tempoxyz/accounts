@@ -610,22 +610,25 @@ describe('mount', () => {
    * global `window` (with `window.open` minting a fresh in-process wallet
    * window per call) and a `document` stub for `Mount.popup()`'s overlay.
    */
-  function installBrowser() {
+  function installBrowser(wire = wireWallet) {
     const consumerRealm = realm()
     const opened: string[] = []
+    const opened_handles: ReturnType<typeof walletWindow>['handle'][] = []
     const window_ = Object.assign(consumerRealm, {
       innerWidth: 1024,
       location: { origin: consumerOrigin },
       open: (url: string) => {
         opened.push(url)
-        return walletWindow(consumerRealm).handle
+        const window_wallet = walletWindow(consumerRealm, wire)
+        opened_handles.push(window_wallet.handle)
+        return window_wallet.handle
       },
       screenX: 0,
       screenY: 0,
     })
     vi.stubGlobal('window', window_)
     vi.stubGlobal('document', fakeDocument())
-    return { consumerRealm, opened }
+    return { consumerRealm, opened, opened_handles }
   }
 
   /** Minimal DOM for `Mount.popup()`'s overlay. */
@@ -809,6 +812,40 @@ describe('mount', () => {
     expect(result.accounts[0]!.address).toBe(root.address)
     expect(events.filter((event) => event.startsWith('mount:'))).toHaveLength(1)
     expect(events.filter((event) => event === 'target')).toHaveLength(1)
+  })
+
+  test('behavior: cleanup closes in-flight Safari popup fallback', async () => {
+    const { consumerRealm, opened_handles } = installBrowser((host) => host.on('request', () => {}))
+    vi.stubGlobal('navigator', { userAgent: 'Version/17.0 Safari/605.1.15' })
+    const events: string[] = []
+    const scripted = scriptedMount(events, consumerRealm)
+    const storage = Storage.memory()
+    const store = Store.create({ chainId: chain.id, storage })
+    const adapter = postMessage({
+      host: `${walletOrigin}/post-message`,
+      mount: scripted.factory,
+      name: 'Accounts Web Test',
+      rdns: 'xyz.tempo.accounts.playground',
+    })({
+      getAccount: () => ({ address: root.address, type: 'json-rpc' }) as never,
+      getClient: () => ({}) as never,
+      storage,
+      store,
+    })
+
+    const pending = adapter.actions.loadAccounts(undefined, {
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login' } }],
+    })
+    void pending.catch(() => {})
+
+    await vi.waitFor(() => expect(opened_handles).toHaveLength(1))
+    expect(opened_handles[0]!.closed).toBe(false)
+
+    adapter.cleanup?.()
+
+    await vi.waitFor(() => expect(opened_handles[0]!.closed).toBe(true))
+    await expect(pending).rejects.toMatchObject({ code: 4001 })
   })
 
   test('behavior: dismissing the mount cancels the in-flight request', async () => {

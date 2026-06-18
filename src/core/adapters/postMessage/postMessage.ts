@@ -2,6 +2,7 @@ import { Provider as core_Provider } from 'ox'
 import { PostMessage, Transport, Wata, postMessage as core_postMessage } from 'wata'
 
 import type * as Adapter from '../../Adapter.js'
+import { isSafari } from '../../Dialog.js'
 import * as Store from '../../Store.js'
 import { fromRequest } from '../internal/fromRequest.js'
 import * as Mount from './mount.js'
@@ -17,8 +18,10 @@ import * as Mount from './mount.js'
  * popup closes. Dismissing the UI or closing the window rejects the
  * in-flight request; `wallet_disconnect` tears the session down.
  *
- * When the wallet detects its iframe is occluded it asks to continue in a
- * popup; the adapter remounts and re-sends the in-flight request there.
+ * Safari account requests use a temporary popup because Safari rejects
+ * WebAuthn creation inside cross-origin iframes. When the wallet detects its
+ * iframe is occluded it asks to continue in a popup; the adapter remounts and
+ * re-sends the in-flight request there.
  */
 export function postMessage(options: postMessage.Options): Adapter.Adapter {
   const { close, host, icon, name, rdns, target } = options
@@ -28,14 +31,16 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
   let queue: Promise<unknown> = Promise.resolve()
   /** Reconciles local connection state against the wallet's asserted accounts. */
   let reconcile: ((accounts: readonly string[]) => void) | undefined
+  let fallback: Target | undefined
+  let inflight: Target | undefined
   /** Rejects the in-flight send when the user dismisses the mount UI. */
   let reject_inflight: ((error: Error) => void) | undefined
   let resend = false
-  let session: ReturnType<typeof create> | undefined
+  let session: Session | undefined
   /** The wallet asked to continue in a popup; stick to it for this provider. */
   let sticky_popup = false
 
-  function ensure(): NonNullable<typeof session> {
+  function ensure(): Session {
     if (session) return session
     if (target) {
       session = create({ close, host: hostUrl(host), target })
@@ -61,7 +66,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     close: ((handle: Window | MessagePort) => void | Promise<void>) | undefined
     host: string
     target: NonNullable<postMessage.Options['target']>
-  }) {
+  }): Session {
     const wata = Wata.create({
       transports: [
         core_postMessage({
@@ -110,9 +115,9 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
    * wallet so it tears down its own pending request and returns to idle.
    */
   function cancel() {
-    void session?.notify({ method: 'cancel', params: [] })
+    void inflight?.session.notify({ method: 'cancel', params: [] })
     reject_inflight?.(new core_Provider.UserRejectedRequestError())
-    mount?.hide()
+    inflight?.mount?.hide()
   }
 
   async function send(request: {
@@ -125,20 +130,11 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     // resolved, locally cancelled (dismiss), or rejected (window closed).
     for (;;) {
       const wata = ensure()
-      mount?.show()
-      const cancelled = new Promise<never>((_, reject) => {
-        reject_inflight = reject
-      })
+      if (requiresSafariPopup(request) && !target && !sticky_popup && mount?.mode !== 'popup')
+        return await sendWithPopup(request)
+
       try {
-        const sent = wata.send({
-          method: request.method,
-          params: request.params ?? [],
-          ...(request.context ? { context: request.context } : {}),
-        })
-        // Once `cancelled` wins the race, the wallet's eventual answer is
-        // ignored; swallow it so it never surfaces as an unhandled rejection.
-        void sent.catch(() => {})
-        return (await Promise.race([sent, cancelled])).result
+        return await sendWith(request, { mount, session: wata })
       } catch (error) {
         if (error instanceof Transport.ClosedError) {
           // The wallet asked to continue in a popup — replay there.
@@ -150,9 +146,76 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
           throw new core_Provider.UserRejectedRequestError()
         }
         throw error
-      } finally {
-        reject_inflight = undefined
       }
+    }
+  }
+
+  async function sendWith(
+    request: {
+      method: string
+      params?: readonly unknown[] | undefined
+      context?: { account?: string | undefined; chainId?: number | undefined } | undefined
+    },
+    active: Target,
+  ) {
+    active.mount?.show()
+    inflight = active
+    const cancelled = new Promise<never>((_, reject) => {
+      reject_inflight = reject
+    })
+    try {
+      const sent = active.session.send({
+        method: request.method,
+        params: request.params ?? [],
+        ...(request.context ? { context: request.context } : {}),
+      })
+      // Once `cancelled` wins the race, the wallet's eventual answer is
+      // ignored; swallow it so it never surfaces as an unhandled rejection.
+      void sent.catch(() => {})
+      return (await Promise.race([sent, cancelled])).result
+    } finally {
+      reject_inflight = undefined
+      inflight = undefined
+    }
+  }
+
+  async function sendWithPopup(request: {
+    method: string
+    params?: readonly unknown[] | undefined
+    context?: { account?: string | undefined; chainId?: number | undefined } | undefined
+  }) {
+    let session_popup: Session | undefined
+    const factory = Mount.popup()
+    const url = hostUrl(host, factory.mode)
+    const mount_popup = factory({
+      host: url,
+      onDismiss: cancel,
+      onInvalidate: () => void session_popup?.close(),
+    })
+    let closed = false
+    const active: Target = {
+      close: async () => {
+        if (closed) return
+        closed = true
+        mount_popup.destroy()
+        await session_popup?.close()
+      },
+      mount: mount_popup,
+      session: (session_popup = create({
+        close: (handle) => mount_popup.close(handle),
+        host: url,
+        target: () => mount_popup.target(),
+      })),
+    }
+    fallback = active
+    try {
+      return await sendWith(request, active)
+    } catch (error) {
+      if (error instanceof Transport.ClosedError) throw new core_Provider.UserRejectedRequestError()
+      throw error
+    } finally {
+      if (fallback === active) fallback = undefined
+      await active.close?.()
     }
   }
 
@@ -188,6 +251,8 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     // disconnect so the next login reuses the already-handshaked session.
     cleanup() {
       void session?.close()
+      void fallback?.close?.()
+      fallback = undefined
       mount?.destroy()
       mount = undefined
     },
@@ -206,6 +271,31 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
   })
 }
 
+type Target = {
+  close?: (() => Promise<void>) | undefined
+  mount: Mount.Mount | undefined
+  session: Session
+}
+
+type Session = {
+  close: (cause?: Error | undefined) => Promise<void>
+  notify: (event: { method: string; params: readonly unknown[] }) => void | Promise<void>
+  send: (request: {
+    method: string
+    params: readonly unknown[]
+    context?: { account?: string | undefined; chainId?: number | undefined } | undefined
+  }) => Promise<{ result: unknown }>
+  start: () => Promise<void>
+}
+
+function requiresSafariPopup(request: {
+  method: string
+  params?: readonly unknown[] | undefined
+}): boolean {
+  if (!isSafari()) return false
+  return ['wallet_connect', 'eth_requestAccounts'].includes(request.method)
+}
+
 export declare namespace postMessage {
   /** Options for {@link postMessage}. */
   export type Options = {
@@ -222,7 +312,7 @@ export declare namespace postMessage {
     /**
      * Where the wallet page lives and how it surfaces for requests.
      * @default `Mount.auto()` — an overlay iframe, or a popup where
-     * iframes can't work (insecure context, Safari, no IO v2).
+     * iframes can't work (insecure context, no IO v2).
      */
     mount?: Mount.Factory | undefined
     /** Provider display name. */
