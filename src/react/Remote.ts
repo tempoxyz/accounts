@@ -10,7 +10,7 @@ export function useEnsureVisibility(
   remote: CoreRemote.Remote,
   options: useEnsureVisibility.Options = {},
 ): useEnsureVisibility.ReturnType {
-  const { enabled = true } = options
+  const { enabled = true, ignoreTrusted = false } = options
 
   const origin_store = useState(remote, (s) => s.origin)
   const origin = options.origin ?? origin_store
@@ -25,16 +25,25 @@ export function useEnsureVisibility(
     }
   }, [origin, remote.trustedHosts])
 
-  const active = enabled && !trusted
+  const active = enabled && (ignoreTrusted || !trusted)
 
   const ref = useRef<HTMLDivElement>(null)
+  const [observed, setObserved] = react_useState(false)
   const [visible, setVisible] = react_useState(true)
 
   useEffect(() => {
-    if (!active) return
+    if (!active) {
+      setObserved(true)
+      setVisible(true)
+      return
+    }
+
+    setObserved(false)
+
     if (!ref.current) return
 
     if (!IO.supported()) {
+      setObserved(true)
       setVisible(false)
       return
     }
@@ -46,6 +55,7 @@ export function useEnsureVisibility(
         if (!entry) return
         const isVisible =
           (entry as unknown as { isVisible: boolean | undefined }).isVisible || false
+        setObserved(true)
         setVisible(isVisible)
       },
       {
@@ -65,7 +75,7 @@ export function useEnsureVisibility(
     remote.messenger.send('switch-mode', { mode: 'popup' })
   }, [remote, invokePopup_options])
 
-  return { invokePopup, ref, visible }
+  return { invokePopup, observed, ref, visible }
 }
 
 /** React hook to select state from a remote context's store. */
@@ -182,6 +192,12 @@ export declare namespace useEnsureVisibility {
     /** Whether visibility monitoring is enabled. @default true */
     enabled?: boolean | undefined
     /**
+     * Monitor visibility even when the consumer origin is trusted. Useful for
+     * transports that can safely remount in a popup without treating occlusion
+     * as a trust failure. @default false
+     */
+    ignoreTrusted?: boolean | undefined
+    /**
      * Override how the popup switch is requested when the element is
      * occluded (e.g. a wata session notification). @default Sends the
      * bespoke `switch-mode` message through the remote messenger.
@@ -197,6 +213,8 @@ export declare namespace useEnsureVisibility {
   type ReturnType = {
     /** Requests the host switch to a popup dialog. */
     invokePopup: () => void
+    /** Whether visibility monitoring has produced its first real result. */
+    observed: boolean
     /** Ref to attach to the element being monitored. */
     ref: React.RefObject<HTMLDivElement | null>
     /** Whether the element is currently visible. */
