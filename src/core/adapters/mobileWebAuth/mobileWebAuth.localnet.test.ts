@@ -83,14 +83,14 @@ function createWallet() {
     requests: () => requests,
     openAuthSession: (async ({ authorizationUrl }) => {
       calls += 1
-      const host = await createHost(requests)
+      const host = createHost(requests)
       const response = await host.fetch(new Request(authorizationUrl))
       return response.headers.get('location') ?? undefined
     }) satisfies NonNullable<MobileWebAuth.Options['openAuthSession']>,
   }
 }
 
-async function createHost(requests: { method: string; params: unknown }[]) {
+function createHost(requests: { method: string; params: unknown }[]) {
   const host = HostWata.create({
     baseUrl: hostOrigin,
     identity: Identity.fromPrivateKey(
@@ -119,8 +119,7 @@ async function createHost(requests: { method: string; params: unknown }[]) {
     ],
   })
 
-  const session = await host.start()
-  session.onRequest(async (event) => {
+  host.on('request', async (event) => {
     requests.push({ method: event.method, params: event.params })
     if (event.method === 'wallet_connect') {
       const [parameters] = z.decode(Rpc.wallet_connect.schema.params!, event.params as never) ?? []

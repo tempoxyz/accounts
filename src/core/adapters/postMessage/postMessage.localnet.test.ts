@@ -22,11 +22,11 @@ const transferCall = Actions.token.transfer.call({
   amount: parseUnits('1', 6),
 })
 
-const hosts: Promise<Pick<Awaited<ReturnType<typeof createHost>>, 'close' | 'notify'>>[] = []
+const hosts: Pick<ReturnType<typeof createHost>, 'close' | 'notify'>[] = []
 
 afterEach(async () => {
   vi.unstubAllGlobals()
-  await Promise.all(hosts.splice(0).map((host) => host.then((session) => session.close())))
+  await Promise.all(hosts.splice(0).map((host) => host.close()))
 })
 
 async function fund(address: viem_Address) {
@@ -81,14 +81,12 @@ function createWallet() {
   }
 }
 
-async function createHost(requests: { method: string; params: unknown }[], port: MessagePort) {
+function createHost(requests: { method: string; params: unknown }[], port: MessagePort) {
   const host = HostWata.create({
     transports: [hostPostMessage({ target: () => port })],
   })
 
-  const session = await host.start()
-
-  session.onRequest(async (event) => {
+  host.on('request', async (event) => {
     requests.push({ method: event.method, params: event.params })
     if (event.method === 'wallet_connect') {
       const [parameters] = z.decode(Rpc.wallet_connect.schema.params!, event.params as never) ?? []
@@ -139,7 +137,7 @@ async function createHost(requests: { method: string; params: unknown }[], port:
     }
   })
 
-  return session
+  return host
 }
 
 async function signKeyAuthorization(parameters: AdapterAuthorizeParameters) {
@@ -287,12 +285,7 @@ describe('create', () => {
   })
 
   test('behavior: tags the wallet page URL with the app origin', async () => {
-    vi.stubGlobal('window', {
-      addEventListener() {},
-      dispatchEvent: () => true,
-      location: { origin: 'https://app.example' },
-      removeEventListener() {},
-    })
+    vi.stubGlobal('window', { location: { origin: 'https://app.example' } })
 
     const wallet = createWallet()
     const provider = createProvider(wallet, { storage: Storage.memory() })
@@ -521,7 +514,7 @@ describe('create', () => {
 
     // The wallet reports the user is no longer connected (logout / revoke);
     // the SDK drops the stale persisted session.
-    await (await hosts[0]!).notify({ method: 'accountsChanged', params: [] })
+    await hosts[0]!.notify({ method: 'accountsChanged', params: [] })
 
     await vi.waitFor(() => expect(provider.store.getState().accounts).toHaveLength(0))
   })
@@ -535,7 +528,7 @@ describe('create', () => {
       params: [{ capabilities: { method: 'login' } }],
     })
 
-    await (await hosts[0]!).notify({ method: 'accountsChanged', params: [root.address] })
+    await hosts[0]!.notify({ method: 'accountsChanged', params: [root.address] })
     // The assertion still lists the account, so nothing is dropped.
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(provider.store.getState().accounts).toHaveLength(1)
@@ -562,7 +555,6 @@ describe('create', () => {
     // popup stand-in that reports itself closed.
     vi.stubGlobal('window', {
       addEventListener() {},
-      dispatchEvent: () => true,
       location: { origin: 'https://app.example' },
       removeEventListener() {},
     })
@@ -623,7 +615,6 @@ describe('mount', () => {
     const opened: string[] = []
     const opened_handles: ReturnType<typeof walletWindow>['handle'][] = []
     const window_ = Object.assign(consumerRealm, {
-      dispatchEvent: () => true,
       innerWidth: 1024,
       location: { origin: consumerOrigin },
       open: (url: string) => {
@@ -658,8 +649,6 @@ describe('mount', () => {
    */
   function walletWindow(consumerRealm: ReturnType<typeof realm>, wire = wireWallet) {
     const walletRealm = realm()
-    let wired = false
-    const buffered: unknown[] = []
     const handle = {
       addEventListener() {},
       closed: false,
@@ -671,20 +660,11 @@ describe('mount', () => {
     }
     const opener = {
       addEventListener() {},
-      postMessage: (data: unknown) => {
-        if (wired) consumerRealm.deliver(data, walletOrigin)
-        else buffered.push(data)
-      },
+      postMessage: (data: unknown) => consumerRealm.deliver(data, walletOrigin),
     }
     const host = createWalletHost(walletRealm, opener)
-      .start()
-      .then((session) => {
-        wire(session)
-        wired = true
-        for (const data of buffered.splice(0)) consumerRealm.deliver(data, walletOrigin)
-        return session
-      })
     hosts.push(host)
+    wire(host)
     return { handle, host }
   }
 
@@ -703,12 +683,12 @@ describe('mount', () => {
     })
   }
 
-  type WalletSession = Awaited<ReturnType<ReturnType<typeof createWalletHost>['start']>>
+  type WalletHost = ReturnType<typeof createWalletHost>
 
   /** Answers wallet RPC like the live endpoint, plus dialog notifications. */
-  function wireWallet(session: WalletSession) {
+  function wireWallet(host: WalletHost) {
     const live: { reject: (error: { code: number; message: string }) => Promise<void> }[] = []
-    session.onRequest(async (event) => {
+    host.on('request', async (event) => {
       live.push(event)
       if (event.method === 'wallet_connect') {
         await event.respond({ accounts: [{ address: root.address, capabilities: {} }] })
@@ -720,7 +700,7 @@ describe('mount', () => {
       }
       // Other methods stay pending (e.g. awaiting a cancel).
     })
-    session.onNotification((event) => {
+    host.on('notification', (event) => {
       if (event.method !== 'cancel') return
       for (const pending of live.splice(0))
         void pending.reject({ code: 4001, message: 'User rejected the request.' }).catch(() => {})
@@ -771,11 +751,13 @@ describe('mount', () => {
       storage: Storage.memory(),
     })
 
+    // Eager: the wallet page is mounted and the session handshake started
+    // before any request, but nothing is shown.
+    await vi.waitFor(() => expect(events).toContain('target'))
+    expect(events).not.toContain('show')
     expect(events[0]).toMatchInlineSnapshot(
       `"mount:https://wallet.tempo.xyz/post-message?origin=https%3A%2F%2Fapp.example&mode=iframe"`,
     )
-    expect(events).not.toContain('target')
-    expect(events).not.toContain('show')
 
     await provider.request({
       method: 'wallet_connect',
@@ -833,7 +815,7 @@ describe('mount', () => {
   })
 
   test('behavior: cleanup closes in-flight Safari popup fallback', async () => {
-    const { consumerRealm, opened_handles } = installBrowser((session) => session.onRequest(() => {}))
+    const { consumerRealm, opened_handles } = installBrowser((host) => host.on('request', () => {}))
     vi.stubGlobal('navigator', { userAgent: 'Version/17.0 Safari/605.1.15' })
     const events: string[] = []
     const scripted = scriptedMount(events, consumerRealm)
@@ -900,7 +882,7 @@ describe('mount', () => {
     const events: string[] = []
     // Wallet accepts the request but never answers and ignores notifications
     // (a wedged iframe). Dismiss must still reject — there is no closed poll.
-    const scripted = scriptedMount(events, consumerRealm, (session) => session.onRequest(() => {}))
+    const scripted = scriptedMount(events, consumerRealm, (host) => host.on('request', () => {}))
 
     const provider = Provider.create({
       adapter: postMessage({
@@ -928,8 +910,8 @@ describe('mount', () => {
     const { consumerRealm, opened } = installBrowser()
     const events: string[] = []
     // The iframe wallet asks to continue in a popup instead of answering.
-    const scripted = scriptedMount(events, consumerRealm, (session) =>
-      session.onRequest(() => void session.notify({ method: 'switch-mode', params: [] })),
+    const scripted = scriptedMount(events, consumerRealm, (host) =>
+      host.on('request', () => void host.notify({ method: 'switch-mode', params: [] })),
     )
 
     const provider = Provider.create({
