@@ -28,17 +28,6 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
     return hostDocument
   }
 
-  const wata = Wata.create({
-    baseUrl,
-    transports: [
-      core_mobileWebAuth({
-        callback: redirectUri,
-        openAuthSession,
-        ...(fetch !== undefined ? { fetch } : {}),
-      }),
-    ],
-  })
-
   return fromRequest({
     // React Native may lack WebCrypto and persists through string-based
     // storage, so this opts into pure-JS P-256 (the access key lives app-side
@@ -51,9 +40,17 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
       // RPC request envelope, and one callback URL carries one response.
       // The wallet learns this app's identity from the consumer discovery
       // document served at `baseUrl`, not from session metadata.
-      const host = await resolveHost()
-      if (host === undefined) throw new Error('`mobileWebAuth` requires a `host`.')
-      const session = await wata.start({ host })
+      const session = Wata.create({
+        baseUrl,
+        transports: [
+          core_mobileWebAuth({
+            callback: redirectUri,
+            host: await resolveHost(),
+            openAuthSession,
+            ...(fetch !== undefined ? { fetch } : {}),
+          }),
+        ],
+      })
       return (await session.send({ method: request.method, params: request.params ?? [] })).result
     },
   })
