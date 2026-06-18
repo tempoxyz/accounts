@@ -2945,7 +2945,9 @@ function OcclusionSimulator() {
     }
 
     function sync() {
-      const dialog = document.querySelector('dialog[data-tempo-wallet][open]')
+      const dialog = document.querySelector(
+        'dialog[data-tempo-wallet][open], dialog[data-tempo-wallet-postmessage][open]',
+      )
       if (!dialog) {
         overlay?.remove()
         overlay = null

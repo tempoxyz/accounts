@@ -69,7 +69,7 @@ Reverse-DNS provider identifier.
 
 ## Mounts
 
-The mount decides where the wallet page lives and how it surfaces for requests. By default the adapter picks for you: an overlay iframe, falling back to a popup in insecure contexts, in Safari (no WebAuthn in cross-origin iframes), or when the browser lacks IntersectionObserver v2 (the wallet can't run its occlusion defense). If the wallet detects its iframe is occluded mid-session, it asks to continue in a popup and the adapter remounts there, replaying the request. Pass a mount to pin one explicitly:
+The mount decides where the wallet page lives and how it surfaces for requests. By default the adapter picks for you: an overlay iframe, falling back to a popup in insecure contexts or when the browser lacks IntersectionObserver v2 (the wallet can't run its occlusion defense). On Safari, account requests use a temporary popup because Safari rejects WebAuthn creation inside cross-origin iframes. If the wallet detects its iframe is occluded mid-session, it asks to continue in a popup and the adapter remounts there, replaying the request. Pass a mount to pin one explicitly:
 
 ```ts twoslash
 import { popup, postMessage } from 'accounts/postMessage'
