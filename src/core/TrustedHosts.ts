@@ -18,7 +18,8 @@ export const hosts: Record<string, readonly string[]> = _hosts
  * (e.g. `*.workers.dev` matches `foo.workers.dev`).
  */
 export function match(trustedHosts: readonly string[], hostname: string, source?: string) {
-  if (source && sameRegistrableDomain(hostname, source)) return true
+  if (source && !isLocal(hostname) && !isLocal(source) && sameRegistrableDomain(hostname, source))
+    return true
   return trustedHosts.some((pattern) => {
     if (pattern.startsWith('*.'))
       return hostname.endsWith(pattern.slice(1)) && hostname.length > pattern.length - 1
@@ -37,4 +38,8 @@ function registrableDomain(host: string) {
   const labels = hostname.split('.')
   if (labels.length <= 2) return hostname
   return labels.slice(-2).join('.')
+}
+
+function isLocal(host: string) {
+  return host.split(':')[0]!.toLowerCase().endsWith('.local')
 }
