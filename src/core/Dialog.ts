@@ -504,11 +504,9 @@ export function popup(options: popup.Options = {}): Dialog {
         const left = (window.innerWidth - size.width) / 2 + window.screenX
         const top = (window.innerHeight - size.height) / 2 + window.screenY
 
-        // Use a named target, not `_blank`: Safari ignores the size/position
-        // features (and renders top-left) when the target is `_blank`.
         win = window.open(
           hostUrl.toString(),
-          'tempo-wallet',
+          '_blank',
           `width=${size.width},height=${size.height},left=${left},top=${top}`,
         )
         if (!win) throw new Error('Failed to open popup')

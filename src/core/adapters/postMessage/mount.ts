@@ -279,9 +279,7 @@ export function popup(options: popup.Options = {}): Factory {
           const left = (window.innerWidth - size.width) / 2 + window.screenX
           const top = (window.innerHeight - size.height) / 2 + window.screenY
           const features = `width=${size.width},height=${size.height},left=${left},top=${top}`
-          // Use a named target, not `_blank`: Safari ignores the size/position
-          // features (and renders top-left) when the target is `_blank`.
-          win = window.open(host, 'tempo-wallet', features)
+          win = window.open(host, '_blank', features)
           if (win) overlay.style.display = 'flex'
           return win
         },
