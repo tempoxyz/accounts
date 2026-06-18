@@ -10,7 +10,7 @@ export function useEnsureVisibility(
   remote: CoreRemote.Remote,
   options: useEnsureVisibility.Options = {},
 ): useEnsureVisibility.ReturnType {
-  const { enabled = true, ignoreTrusted = false } = options
+  const { enabled = true } = options
 
   const origin_store = useState(remote, (s) => s.origin)
   const origin = options.origin ?? origin_store
@@ -25,7 +25,7 @@ export function useEnsureVisibility(
     }
   }, [origin, remote.trustedHosts])
 
-  const active = enabled && (ignoreTrusted || !trusted)
+  const active = enabled && !trusted
 
   const ref = useRef<HTMLDivElement>(null)
   const [observed, setObserved] = react_useState(false)
@@ -191,12 +191,6 @@ export declare namespace useEnsureVisibility {
   type Options = {
     /** Whether visibility monitoring is enabled. @default true */
     enabled?: boolean | undefined
-    /**
-     * Monitor visibility even when the consumer origin is trusted. Useful for
-     * transports that can safely remount in a popup without treating occlusion
-     * as a trust failure. @default false
-     */
-    ignoreTrusted?: boolean | undefined
     /**
      * Override how the popup switch is requested when the element is
      * occluded (e.g. a wata session notification). @default Sends the
