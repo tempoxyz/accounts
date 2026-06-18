@@ -84,7 +84,6 @@ type Page =
   | { path: '/docs/rpc/eth_signTypedData_v4'; render: 'static' }
   | { path: '/docs/rpc/personal_sign'; render: 'static' }
   | { path: '/docs/rpc/wallet_authorizeAccessKey'; render: 'static' }
-  | { path: '/docs/rpc/wallet_authorizeChallenge'; render: 'static' }
   | { path: '/docs/rpc/wallet_connect'; render: 'static' }
   | { path: '/docs/rpc/wallet_deposit'; render: 'static' }
   | { path: '/docs/rpc/wallet_depositZone'; render: 'static' }

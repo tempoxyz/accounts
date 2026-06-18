@@ -6,7 +6,6 @@
 
 - fa0434f: Added `wallet_updateAccessKey` to update an access key's spending limits in place.
 - c5bbc8d: Added multisig approval collection to `Handler.relay`.
-- 426bb87: Added the `wallet_authorizeChallenge` method.
 - ab78127: Fixed raw sponsored transaction signing to restore the configured fee token when the serialized transaction omits it.
 - a993dff: Remove the `accounts/react-native` subpath; import `asyncStorage` from `accounts/react-native/async-storage` instead.
 - 05d5458: Removed the T5 hardfork gate so TIP-1053 witness binding always collapses access-key authorization and the auth proof into a single passkey ceremony.

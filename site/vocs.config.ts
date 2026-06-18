@@ -135,7 +135,6 @@ const config: Config = defineConfig({
               { text: 'eth_signTypedData_v4', link: '/docs/rpc/eth_signTypedData_v4' },
               { text: 'personal_sign', link: '/docs/rpc/personal_sign' },
               { text: 'wallet_authorizeAccessKey', link: '/docs/rpc/wallet_authorizeAccessKey' },
-              { text: 'wallet_authorizeChallenge', link: '/docs/rpc/wallet_authorizeChallenge' },
               { text: 'wallet_connect', link: '/docs/rpc/wallet_connect' },
               { text: 'wallet_deposit', link: '/docs/rpc/wallet_deposit' },
               { text: 'wallet_depositZone', link: '/docs/rpc/wallet_depositZone' },

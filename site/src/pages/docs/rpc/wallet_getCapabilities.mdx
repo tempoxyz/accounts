@@ -26,8 +26,6 @@ type Response = Record<Hex, {
   atomic: { status: 'supported' | 'ready' | 'unsupported' }
   /** Whether the relay can sponsor fees on this chain. */
   feePayer?: { status: 'supported' | 'unsupported' }
-  /** Machine Payment Protocol (`wallet_authorizeChallenge`) support. Omitted when MPP is disabled. */
-  mpp?: { status: 'supported' }
 }>
 ```
 
