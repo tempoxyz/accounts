@@ -83,8 +83,8 @@ overrides:
   '@grpc/grpc-js': '1.14.4'
   '@sinclair/typebox': '^0.34.0'
   'brace-expansion@>=5.0.0 <5.0.6': '5.0.6'
-  # GHSA-rp9w-3fw7-7cwq et al: DOMPurify IN_PLACE/hook sanitization bypasses (3.4.9 patches the trailing Trusted-Types advisories too).
-  'dompurify@<3.4.9': '3.4.9'
+  # GHSA-rp9w-3fw7-7cwq et al: DOMPurify hook/config sanitization bypasses.
+  'dompurify@<=3.4.10': '3.4.11'
   esbuild: '0.28.1'
   viem: 2.52.2
   file-type: '22.0.1'
@@ -113,6 +113,9 @@ overrides:
   react-dom: 'catalog:'
   tar: '7.5.16'
   'tmp@<0.2.7': '0.2.7'
+  # GHSA-vmh5-mc38-953g + GHSA-38rv-x7px-6hhq + GHSA-pr7r-676h-xcf6: undici proxy TLS/cache/WebSocket advisories.
+  'undici@>=7.0.0 <7.28.0': '7.28.0'
+  'undici@>=8.0.0 <8.5.0': '8.5.0'
   'uuid@<11.1.1': '11.1.1'
   # GHSA-fx2h-pf6j-xcff: vite server.fs.deny bypass on Windows alternate paths (dev tooling).
   # Unconditional pin: range-keyed override does not rewrite `latest` importer specifiers (examples/basic).
