@@ -771,7 +771,7 @@ describe('mount', () => {
     expect(events[0]).toMatchInlineSnapshot(
       `"mount:https://wallet.tempo.xyz/post-message?origin=https%3A%2F%2Fapp.example&mode=iframe"`,
     )
-    expect(events).not.toContain('target')
+    expect(events.filter((event) => event === 'target')).toHaveLength(1)
     expect(events).not.toContain('show')
 
     await provider.request({
@@ -830,7 +830,9 @@ describe('mount', () => {
   })
 
   test('behavior: cleanup closes in-flight Safari popup fallback', async () => {
-    const { consumerRealm, opened_handles } = installBrowser((session) => session.onRequest(() => {}))
+    const { consumerRealm, opened_handles } = installBrowser((session) =>
+      session.onRequest(() => {}),
+    )
     vi.stubGlobal('navigator', { userAgent: 'Version/17.0 Safari/605.1.15' })
     const events: string[] = []
     const scripted = scriptedMount(events, consumerRealm)
