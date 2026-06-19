@@ -1836,6 +1836,167 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       expect(result.rootAddress).toBe(rootAddress)
     })
 
+    test('behavior: grants an admin access key', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const rootAddress = await connect(provider)
+      await fund(rootAddress)
+
+      const result = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [
+          {
+            expiry: Expiry.days(1),
+            isAdmin: true,
+            keyType: 'secp256k1',
+          },
+        ],
+      })
+      const accessKey = result.keyAuthorization.keyId
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      const isAdmin = await Actions.accessKey.isAdmin(provider.getClient(), {
+        account: rootAddress,
+        accessKey,
+      })
+      const authorization = KeyAuthorization.fromRpc(result.keyAuthorization)
+      const record = provider.store.getState().accessKeys[0]!
+
+      expect({
+        authorization: {
+          account: authorization.account,
+          address: authorization.address,
+          isAdmin: authorization.isAdmin,
+        },
+        chain: { isAdmin },
+        receipt: { status: receipt.status },
+        result: {
+          account: result.keyAuthorization.account,
+          address: result.keyAuthorization.address,
+          isAdmin: result.keyAuthorization.isAdmin,
+          rootAddress: result.rootAddress,
+        },
+        stored: {
+          account: record.account,
+          access: record.access,
+          address: record.address,
+          isAdmin: record.isAdmin,
+        },
+      }).toMatchInlineSnapshot(`
+        {
+          "authorization": {
+            "account": "${rootAddress}",
+            "address": "${accessKey}",
+            "isAdmin": true,
+          },
+          "chain": {
+            "isAdmin": true,
+          },
+          "receipt": {
+            "status": "0x1",
+          },
+          "result": {
+            "account": "${rootAddress}",
+            "address": "${accessKey}",
+            "isAdmin": true,
+            "rootAddress": "${rootAddress}",
+          },
+          "stored": {
+            "access": "${rootAddress}",
+            "account": "${rootAddress}",
+            "address": "${accessKey}",
+            "isAdmin": true,
+          },
+        }
+      `)
+    })
+
+    test('behavior: grants a witness-bound access key', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      const rootAddress = await connect(provider)
+      await fund(rootAddress)
+      const witness = `0x${'33'.repeat(32)}` as const
+
+      const result = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [
+          {
+            expiry: Expiry.days(1),
+            keyType: 'secp256k1',
+            witness,
+          },
+        ],
+      })
+      const accessKey = result.keyAuthorization.keyId
+
+      const receipt = await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+      const isWitnessBurned = await Actions.accessKey.isWitnessBurned(provider.getClient(), {
+        account: rootAddress,
+        witness,
+      })
+      const authorization = KeyAuthorization.fromRpc(result.keyAuthorization)
+      const record = provider.store.getState().accessKeys[0]!
+
+      expect({
+        authorization: {
+          account: authorization.account,
+          address: authorization.address,
+          isAdmin: authorization.isAdmin,
+          witness: authorization.witness,
+        },
+        chain: { isWitnessBurned },
+        receipt: { status: receipt.status },
+        result: {
+          account: result.keyAuthorization.account,
+          address: result.keyAuthorization.address,
+          isAdmin: result.keyAuthorization.isAdmin,
+          rootAddress: result.rootAddress,
+          witness: result.keyAuthorization.witness,
+        },
+        stored: {
+          account: record.account,
+          access: record.access,
+          address: record.address,
+          isAdmin: record.isAdmin,
+          witness: record.witness,
+        },
+      }).toMatchInlineSnapshot(`
+        {
+          "authorization": {
+            "account": "${rootAddress}",
+            "address": "${accessKey}",
+            "isAdmin": false,
+            "witness": "0x3333333333333333333333333333333333333333333333333333333333333333",
+          },
+          "chain": {
+            "isWitnessBurned": false,
+          },
+          "receipt": {
+            "status": "0x1",
+          },
+          "result": {
+            "account": "${rootAddress}",
+            "address": "${accessKey}",
+            "isAdmin": undefined,
+            "rootAddress": "${rootAddress}",
+            "witness": "0x3333333333333333333333333333333333333333333333333333333333333333",
+          },
+          "stored": {
+            "access": "${rootAddress}",
+            "account": "${rootAddress}",
+            "address": "${accessKey}",
+            "isAdmin": false,
+            "witness": "0x3333333333333333333333333333333333333333333333333333333333333333",
+          },
+        }
+      `)
+    })
+
     test('behavior: granted access key is used for sendTransactionSync', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)

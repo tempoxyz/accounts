@@ -378,6 +378,9 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
   const { store } = options
   const prepared = await prepareAuthorization({
     ...parameters,
+    ...(parameters.account || parameters.isAdmin || parameters.witness
+      ? { account: parameters.account ?? account.address }
+      : {}),
     chainId: parameters.chainId ?? chainId,
     keystores: store.keystores,
   })

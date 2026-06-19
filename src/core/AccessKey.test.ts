@@ -688,6 +688,102 @@ describe('authorize', () => {
       ]
     `)
   })
+
+  test('behavior: infers admin account from signer', async () => {
+    const store = createStore()
+    const account = {
+      ...accounts[0]!,
+      sign: async () => `0x${'11'.repeat(32)}${'22'.repeat(32)}1b` as const,
+    } as TempoAccount.Account
+
+    const result = await store.accessKeys.authorize({
+      account,
+      chainId: 1,
+      parameters: {
+        address: accounts[1]!.address,
+        expiry: 123,
+        isAdmin: true,
+      },
+    })
+
+    expect({
+      result: {
+        account: result.account,
+        isAdmin: result.isAdmin,
+      },
+      stored: store.getState().accessKeys.map(({ keyAuthorization: _, ...accessKey }) => accessKey),
+    }).toMatchInlineSnapshot(`
+      {
+        "result": {
+          "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+          "isAdmin": true,
+        },
+        "stored": [
+          {
+            "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+            "chainId": 1,
+            "expiry": 123,
+            "isAdmin": true,
+            "keyType": "secp256k1",
+            "limits": undefined,
+            "scopes": undefined,
+          },
+        ],
+      }
+    `)
+  })
+
+  test('behavior: infers witness account from signer', async () => {
+    const store = createStore()
+    const account = {
+      ...accounts[0]!,
+      sign: async () => `0x${'11'.repeat(32)}${'22'.repeat(32)}1b` as const,
+    } as TempoAccount.Account
+    const witness = `0x${'33'.repeat(32)}` as const
+
+    const result = await store.accessKeys.authorize({
+      account,
+      chainId: 1,
+      parameters: {
+        address: accounts[1]!.address,
+        expiry: 123,
+        witness,
+      },
+    })
+
+    expect({
+      result: {
+        account: result.account,
+        isAdmin: result.isAdmin,
+        witness: result.witness,
+      },
+      stored: store.getState().accessKeys.map(({ keyAuthorization: _, ...accessKey }) => accessKey),
+    }).toMatchInlineSnapshot(`
+      {
+        "result": {
+          "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+          "isAdmin": undefined,
+          "witness": "0x3333333333333333333333333333333333333333333333333333333333333333",
+        },
+        "stored": [
+          {
+            "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+            "chainId": 1,
+            "expiry": 123,
+            "isAdmin": false,
+            "keyType": "secp256k1",
+            "limits": undefined,
+            "scopes": undefined,
+            "witness": "0x3333333333333333333333333333333333333333333333333333333333333333",
+          },
+        ],
+      }
+    `)
+  })
 })
 
 describe('select', () => {
@@ -1026,19 +1122,19 @@ describe('hasReusableAuthorization', () => {
       account: rootAddress,
       chainId: 1,
       parameters: { account: rootAddress, expiry: 300, isAdmin: true },
-      store: { state: store },
+      store: { keystores: Keystore.defaults, state: store },
     })
     const miss_admin = await AccessKey.hasReusableAuthorization({
       account: rootAddress,
       chainId: 1,
       parameters: { account: rootAddress, expiry: 300, isAdmin: false },
-      store: { state: store },
+      store: { keystores: Keystore.defaults, state: store },
     })
     const miss_account = await AccessKey.hasReusableAuthorization({
       account: rootAddress,
       chainId: 1,
       parameters: { expiry: 300 },
-      store: { state: store },
+      store: { keystores: Keystore.defaults, state: store },
     })
 
     expect({ match, miss_account, miss_admin }).toMatchInlineSnapshot(`
@@ -1067,13 +1163,13 @@ describe('hasReusableAuthorization', () => {
       account: rootAddress,
       chainId: 1,
       parameters: { expiry: 300 },
-      store: { state: store },
+      store: { keystores: Keystore.defaults, state: store },
     })
     const requested = await AccessKey.hasReusableAuthorization({
       account: rootAddress,
       chainId: 1,
       parameters: { expiry: 300, witness: `0x${'22'.repeat(32)}` },
-      store: { state: store },
+      store: { keystores: Keystore.defaults, state: store },
     })
 
     expect({ requested, stored }).toMatchInlineSnapshot(`

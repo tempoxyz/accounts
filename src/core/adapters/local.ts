@@ -118,8 +118,12 @@ export function local(options: local.Options): Adapter.Adapter {
             // TIP-1053 witness binding (see `loadAccounts`): fold the auth
             // message into the access-key authorization and sign both in the
             // single create-account ceremony.
+            const needsAccount =
+              (!!grantOptions?.isAdmin || !!grantOptions?.witness) && !grantOptions.account
             const witness =
-              personalSign && grantOptions ? hashMessage(personalSign.message) : undefined
+              personalSign && grantOptions && !needsAccount
+                ? hashMessage(personalSign.message)
+                : undefined
             if (witness) validatePersonalSignProof(grantOptions)
 
             const peronsalSign_digest =
@@ -236,8 +240,13 @@ export function local(options: local.Options): Adapter.Adapter {
             // key authorization's `witness` and sign both in ONE ceremony. The
             // signed key authorization doubles as the auth proof. Otherwise fall
             // back to the two-ceremony path below.
+            const needsAccount =
+              (!!authorizeAccessKey?.isAdmin || !!authorizeAccessKey?.witness) &&
+              !authorizeAccessKey.account
             const witness =
-              personalSign && authorizeAccessKey ? hashMessage(personalSign.message) : undefined
+              personalSign && authorizeAccessKey && !needsAccount
+                ? hashMessage(personalSign.message)
+                : undefined
             if (witness) validatePersonalSignProof(authorizeAccessKey)
 
             // Only claim the ceremony slot with the `personalSign` digest when
@@ -246,13 +255,14 @@ export function local(options: local.Options): Adapter.Adapter {
             const peronsalSign_digest =
               personalSign && !witness ? hashMessage(personalSign.message) : undefined
 
-            const keyAuthorization_unsigned = authorizeAccessKey
-              ? await store.accessKeys.prepareAuthorization({
-                  ...authorizeAccessKey,
-                  chainId,
-                  ...(witness ? { witness } : {}),
-                })
-              : undefined
+            const keyAuthorization_unsigned =
+              authorizeAccessKey && !needsAccount
+                ? await store.accessKeys.prepareAuthorization({
+                    ...authorizeAccessKey,
+                    chainId,
+                    ...(witness ? { witness } : {}),
+                  })
+                : undefined
 
             const keyAuthorization_digest = keyAuthorization_unsigned
               ? KeyAuthorization.getSignPayload(keyAuthorization_unsigned.keyAuthorization)
@@ -318,7 +328,13 @@ export function local(options: local.Options): Adapter.Adapter {
 
             const keyAuthorization = keyAuthorization_signed
               ? KeyAuthorization.toRpc(keyAuthorization_signed)
-              : undefined
+              : authorizeAccessKey && account && !keyAuthorization_unsigned
+                ? await store.accessKeys.authorize({
+                    account,
+                    chainId,
+                    parameters: authorizeAccessKey,
+                  })
+                : undefined
 
             return {
               accounts,

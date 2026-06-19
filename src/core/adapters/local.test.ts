@@ -90,6 +90,110 @@ describe('local', () => {
         }
       `)
     })
+
+    test('behavior: infers admin account after account selection', async () => {
+      const captured: { digest: Hex | undefined }[] = []
+      const { adapter, store } = setup({
+        loadAccounts: makeLoadAccounts(0, captured),
+      })
+
+      const result = await adapter.actions.loadAccounts(
+        {
+          authorizeAccessKey: {
+            address: core_accounts[1]!.address,
+            expiry: 0,
+            isAdmin: true,
+          },
+        },
+        { method: 'wallet_connect', params: undefined },
+      )
+
+      expect({
+        digest: captured[0]?.digest,
+        result: {
+          account: result.keyAuthorization?.account,
+          isAdmin: result.keyAuthorization?.isAdmin,
+        },
+        stored: store
+          .getState()
+          .accessKeys.map(({ keyAuthorization: _, ...accessKey }) => accessKey),
+      }).toMatchInlineSnapshot(`
+        {
+          "digest": undefined,
+          "result": {
+            "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "isAdmin": true,
+          },
+          "stored": [
+            {
+              "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+              "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+              "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+              "chainId": 1337,
+              "expiry": 0,
+              "isAdmin": true,
+              "keyType": "secp256k1",
+              "limits": undefined,
+              "scopes": undefined,
+            },
+          ],
+        }
+      `)
+    })
+
+    test('behavior: infers witness account after account selection', async () => {
+      const captured: { digest: Hex | undefined }[] = []
+      const { adapter, store } = setup({
+        loadAccounts: makeLoadAccounts(0, captured),
+      })
+      const witness = `0x${'33'.repeat(32)}` as const
+
+      const result = await adapter.actions.loadAccounts(
+        {
+          authorizeAccessKey: {
+            address: core_accounts[1]!.address,
+            expiry: 0,
+            witness,
+          },
+        },
+        { method: 'wallet_connect', params: undefined },
+      )
+
+      expect({
+        digest: captured[0]?.digest,
+        result: {
+          account: result.keyAuthorization?.account,
+          isAdmin: result.keyAuthorization?.isAdmin,
+          witness: result.keyAuthorization?.witness,
+        },
+        stored: store
+          .getState()
+          .accessKeys.map(({ keyAuthorization: _, ...accessKey }) => accessKey),
+      }).toMatchInlineSnapshot(`
+        {
+          "digest": undefined,
+          "result": {
+            "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "isAdmin": undefined,
+            "witness": "0x3333333333333333333333333333333333333333333333333333333333333333",
+          },
+          "stored": [
+            {
+              "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+              "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+              "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+              "chainId": 1337,
+              "expiry": 0,
+              "isAdmin": false,
+              "keyType": "secp256k1",
+              "limits": undefined,
+              "scopes": undefined,
+              "witness": "0x3333333333333333333333333333333333333333333333333333333333333333",
+            },
+          ],
+        }
+      `)
+    })
   })
 
   describe('loadAccounts: personalSign', () => {
