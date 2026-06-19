@@ -200,6 +200,54 @@ describe('add', () => {
   })
 })
 
+describe('updateAuthorization', () => {
+  test('behavior: syncs key authorization matching metadata', () => {
+    const store = createStore()
+    const accessKey = accounts[1]!.address
+    const witness = `0x${'11'.repeat(32)}` as const
+    const initialAuthorization = createKeyAuthorization(accessKey)
+    const constrainedAuthorization = createKeyAuthorization(accessKey, {
+      account: rootAddress,
+      isAdmin: true,
+      witness,
+    })
+    const unconstrainedAuthorization = createKeyAuthorization(accessKey)
+
+    addAuthorization({
+      address: rootAddress,
+      keyAuthorization: initialAuthorization,
+      store,
+    })
+
+    store.accessKeys.updateAuthorization({
+      account: rootAddress,
+      accessKey,
+      authorization: constrainedAuthorization,
+      chainId: 1,
+    })
+
+    expect(store.getState().accessKeys[0]).toMatchObject({
+      account: rootAddress,
+      isAdmin: true,
+      keyAuthorization: constrainedAuthorization,
+      witness,
+    })
+
+    store.accessKeys.updateAuthorization({
+      account: rootAddress,
+      accessKey,
+      authorization: unconstrainedAuthorization,
+      chainId: 1,
+    })
+
+    const updatedAccessKey = store.getState().accessKeys[0]!
+    expect(updatedAccessKey.keyAuthorization).toBe(unconstrainedAuthorization)
+    expect(updatedAccessKey).not.toHaveProperty('account')
+    expect(updatedAccessKey).not.toHaveProperty('isAdmin')
+    expect(updatedAccessKey).not.toHaveProperty('witness')
+  })
+})
+
 describe('create invalidation', () => {
   async function setup(options: { other?: boolean | undefined } = {}) {
     const store = createStore()

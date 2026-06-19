@@ -615,10 +615,13 @@ function updateAuthorization(options: updateAuthorization.Options): void {
   patch({
     ...key,
     patch: {
+      account: authorization.account ?? undefined,
       expiry: authorization.expiry ?? undefined,
+      isAdmin: authorization.isAdmin ?? undefined,
       keyAuthorization: authorization,
       limits: authorization.limits as AccessKey['limits'],
       scopes: authorization.scopes as AccessKey['scopes'],
+      witness: authorization.witness ?? undefined,
     },
     store,
   })
