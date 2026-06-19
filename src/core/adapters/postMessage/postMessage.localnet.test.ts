@@ -676,14 +676,11 @@ describe('mount', () => {
         else buffered.push(data)
       },
     }
-    const host = createWalletHost(walletRealm, opener)
-      .start()
-      .then((session) => {
-        wire(session)
-        wired = true
-        for (const data of buffered.splice(0)) consumerRealm.deliver(data, walletOrigin)
-        return session
-      })
+    const session = createWalletHost(walletRealm, opener).start()
+    wire(session)
+    wired = true
+    for (const data of buffered.splice(0)) consumerRealm.deliver(data, walletOrigin)
+    const host = Promise.resolve(session)
     hosts.push(host)
     return { handle, host }
   }
