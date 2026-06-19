@@ -1,5 +1,18 @@
 # accounts
 
+## 0.14.11
+
+### Patch Changes
+
+- 3610539: Added adapter-supplied default access-key keystores via `Adapter.Instance.accessKey.keystores`, replacing the removed `generateAccessKey`.
+- a94dcff: Bumped `hono` to `4.12.25` (catalog + override for transitive `@modelcontextprotocol/sdk` paths) to clear the remaining `pnpm audit` advisories: CORS middleware origin reflection (high), `serve-static` path traversal, and the AWS Lambda Set-Cookie/body-limit/header issues.
+- 0406c1c: Upgraded vulnerable transitive dependencies to patched versions to clear `pnpm audit` (vite-plus, vite, ws, tmp, form-data, protobufjs, tar, js-yaml, launch-editor, @babel/core, dompurify).
+- a65930b: Bumped the `mppx` dependency to `^0.7.0`.
+- 9aa1ed4: Fixed `eth_fillTransaction` to estimate gas for the signing key's signature size instead of always assuming secp256k1.
+- 3610539: Added an `accessKey` option group to `Provider.create` — `accessKey.keystores` for pluggable per-key-type access-key keystores and `accessKey.authorize` superseding the now-deprecated top-level `authorizeAccessKey`.
+- 0b960e2: Restored popup treatment in Safari for wallet_connect in the postMessage adapter.
+- b588aa8: Upgraded the `wata` dependency to `0.2.0` and migrated the `postMessage` and `mobileWebAuth` adapters to its async `wata.start()` session API.
+
 ## 0.14.10
 
 ### Patch Changes
