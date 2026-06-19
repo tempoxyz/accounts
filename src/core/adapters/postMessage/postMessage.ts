@@ -26,6 +26,13 @@ import * as Mount from './mount.js'
 export function postMessage(options: postMessage.Options): Adapter.Adapter {
   const { close, host, icon, name, rdns, target } = options
 
+  type Session = Awaited<ReturnType<typeof create>>
+  type Target = {
+    close?: (() => Promise<void>) | undefined
+    mount: Mount.Mount | undefined
+    session: Promise<Session>
+  }
+
   let mount: Mount.Mount | undefined
   let pending = 0
   let queue: Promise<unknown> = Promise.resolve()
@@ -36,11 +43,11 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
   /** Rejects the in-flight send when the user dismisses the mount UI. */
   let reject_inflight: ((error: Error) => void) | undefined
   let resend = false
-  let session: Session | undefined
+  let session: Promise<Session> | undefined
   /** The wallet asked to continue in a popup; stick to it for this provider. */
   let sticky_popup = false
 
-  function ensure(): Session {
+  function ensure(): Promise<Session> {
     if (session) return session
     if (target) {
       session = create({ close, host: hostUrl(host), target })
@@ -51,7 +58,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     const mount_ = factory({
       host: url,
       onDismiss: cancel,
-      onInvalidate: () => void session?.close(),
+      onInvalidate: () => void session?.then((s) => s.close()).catch(() => {}),
     })
     mount = mount_
     session = create({
@@ -62,11 +69,12 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     return session
   }
 
+  // Creates and starts a session, wiring inbound wallet notifications.
   function create(transport: {
     close: ((handle: Window | MessagePort) => void | Promise<void>) | undefined
     host: string
     target: NonNullable<postMessage.Options['target']>
-  }): Session {
+  }) {
     const wata = Wata.create({
       transports: [
         core_postMessage({
@@ -81,14 +89,16 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
         }),
       ],
     })
-    wata.on('notification', (event) => {
-      if (event.method === 'switch-mode') void switchToPopup()
-      // The wallet asserts its current accounts (e.g. on connect, or a
-      // wallet-side logout) so the SDK can drop a stale persisted session.
-      else if (event.method === 'accountsChanged')
-        void reconcile?.((event.params ?? []) as readonly string[])
+    return wata.start().then((session) => {
+      session.onNotification((event) => {
+        if (event.method === 'switch-mode') void switchToPopup()
+        // The wallet asserts its current accounts (e.g. on connect, or a
+        // wallet-side logout) so the SDK can drop a stale persisted session.
+        else if (event.method === 'accountsChanged')
+          void reconcile?.((event.params ?? []) as readonly string[])
+      })
+      return session
     })
-    return wata
   }
 
   /**
@@ -105,7 +115,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     mount = undefined
     session = undefined
     mount_old?.destroy()
-    await session_old?.close()
+    await session_old?.then((s) => s.close()).catch(() => {})
   }
 
   /**
@@ -115,7 +125,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
    * wallet so it tears down its own pending request and returns to idle.
    */
   function cancel() {
-    void inflight?.session.notify({ method: 'cancel', params: [] })
+    void inflight?.session.then((s) => s.notify({ method: 'cancel', params: [] })).catch(() => {})
     reject_inflight?.(new core_Provider.UserRejectedRequestError())
     inflight?.mount?.hide()
   }
@@ -129,12 +139,12 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     // (`resend`); the request otherwise leaves via one of three exits —
     // resolved, locally cancelled (dismiss), or rejected (window closed).
     for (;;) {
-      const wata = ensure()
+      const session = ensure()
       if (requiresSafariPopup(request) && !target && !sticky_popup && mount?.mode !== 'popup')
         return await sendWithPopup(request)
 
       try {
-        return await sendWith(request, { mount, session: wata })
+        return await sendWith(request, { mount, session })
       } catch (error) {
         if (error instanceof Transport.ClosedError) {
           // The wallet asked to continue in a popup — replay there.
@@ -164,11 +174,13 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
       reject_inflight = reject
     })
     try {
-      const sent = active.session.send({
-        method: request.method,
-        params: request.params ?? [],
-        ...(request.context ? { context: request.context } : {}),
-      })
+      const sent = active.session.then((s) =>
+        s.send({
+          method: request.method,
+          params: request.params ?? [],
+          ...(request.context ? { context: request.context } : {}),
+        }),
+      )
       // Once `cancelled` wins the race, the wallet's eventual answer is
       // ignored; swallow it so it never surfaces as an unhandled rejection.
       void sent.catch(() => {})
@@ -179,26 +191,25 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     }
   }
 
-  async function sendWithPopup(request: {
-    method: string
-    params?: readonly unknown[] | undefined
-    context?: { account?: string | undefined; chainId?: number | undefined } | undefined
-  }) {
-    let session_popup: Session | undefined
+  // Builds a popup channel (mount + session). Acquiring its `target` opens the
+  // window; the caller drives that so the open can land inside a user gesture
+  // (Safari only sizes a gesture-opened popup).
+  function openPopup(): Target {
+    let session_popup: Promise<Session> | undefined
     const factory = Mount.popup()
     const url = hostUrl(host, factory.mode)
     const mount_popup = factory({
       host: url,
       onDismiss: cancel,
-      onInvalidate: () => void session_popup?.close(),
+      onInvalidate: () => void session_popup?.then((s) => s.close()).catch(() => {}),
     })
     let closed = false
-    const active: Target = {
+    return {
       close: async () => {
         if (closed) return
         closed = true
         mount_popup.destroy()
-        await session_popup?.close()
+        await session_popup?.then((s) => s.close()).catch(() => {})
       },
       mount: mount_popup,
       session: (session_popup = create({
@@ -207,6 +218,15 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
         target: () => mount_popup.target(),
       })),
     }
+  }
+
+  async function sendWithPopup(request: {
+    method: string
+    params?: readonly unknown[] | undefined
+    context?: { account?: string | undefined; chainId?: number | undefined } | undefined
+  }) {
+    // Reuse the popup `request` pre-opened in the user's gesture, if any.
+    const active = fallback ?? openPopup()
     fallback = active
     try {
       return await sendWith(request, active)
@@ -219,12 +239,8 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     }
   }
 
-  // Warm the wallet page and wata handshake before the first request.
-  // Popups can't pre-open, so only iframe mounts start eagerly.
-  if (typeof window !== 'undefined' && !target && document.body) {
-    ensure()
-    if (mount?.mode === 'iframe') void session?.start().catch(() => {})
-  }
+  // Warm the wallet page and start the session before the first request.
+  if (typeof window !== 'undefined' && !target && document.body) ensure().catch(() => {})
 
   return fromRequest({
     ...(icon ? { icon } : {}),
@@ -250,7 +266,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     // No `close` (disconnect) hook: the session and mount stay warm across
     // disconnect so the next login reuses the already-handshaked session.
     cleanup() {
-      void session?.close()
+      void session?.then((s) => s.close()).catch(() => {})
       void fallback?.close?.()
       fallback = undefined
       mount?.destroy()
@@ -258,6 +274,16 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     },
     request(request) {
       pending += 1
+      // Open the popup inside the caller's gesture; Safari only sizes a popup
+      // opened synchronously from the click, and the session otherwise acquires
+      // it from the async `queue.then` below (full-screen). Covers the popup
+      // mount and the per-request Safari account popup; `target` is idempotent,
+      // so the transport's later acquire reuses the same window.
+      if (mount?.mode === 'popup') mount.target()
+      else if (requiresSafariPopup(request) && !target && !sticky_popup) {
+        fallback ??= openPopup()
+        fallback.mount?.target()
+      }
       const result = queue.then(() => send(request))
       queue = result.catch(() => undefined)
       void result
@@ -269,23 +295,6 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
       return result
     },
   })
-}
-
-type Target = {
-  close?: (() => Promise<void>) | undefined
-  mount: Mount.Mount | undefined
-  session: Session
-}
-
-type Session = {
-  close: (cause?: Error | undefined) => Promise<void>
-  notify: (event: { method: string; params: readonly unknown[] }) => void | Promise<void>
-  send: (request: {
-    method: string
-    params: readonly unknown[]
-    context?: { account?: string | undefined; chainId?: number | undefined } | undefined
-  }) => Promise<{ result: unknown }>
-  start: () => Promise<void>
 }
 
 function requiresSafariPopup(request: {
