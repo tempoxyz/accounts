@@ -53,7 +53,7 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
       // document served at `baseUrl`, not from session metadata.
       const host = await resolveHost()
       if (host === undefined) throw new Error('`mobileWebAuth` requires a `host`.')
-      const session = await wata.start({ host })
+      const session = wata.start({ host })
       return (await session.send({ method: request.method, params: request.params ?? [] })).result
     },
   })
