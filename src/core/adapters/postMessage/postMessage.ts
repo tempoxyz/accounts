@@ -270,6 +270,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     // No `close` (disconnect) hook: the session and mount stay warm across
     // disconnect so the next login reuses the already-handshaked session.
     cleanup() {
+      reject_inflight?.(new core_Provider.UserRejectedRequestError())
       void session?.close().catch(() => {})
       void fallback?.close?.()
       fallback = undefined
