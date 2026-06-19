@@ -1,5 +1,5 @@
 ---
-"accounts": minor
+"accounts": patch
 ---
 
-Added signer-account inference for `isAdmin` and `witness` access-key authorizations.
+Added support for admin access keys + witness.
