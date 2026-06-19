@@ -6,10 +6,12 @@ import {
   dialog,
   Dialog,
   local,
+  postMessage,
   Provider,
   turnkey,
   webAuthn,
 } from 'accounts'
+import { Mount } from 'accounts'
 import { privy } from 'accounts/react/privy'
 import { Mppx } from 'mppx/client'
 import { generatePrivateKey } from 'viem/accounts'
@@ -22,6 +24,7 @@ export type AdapterType =
   | 'webAuthn'
   | 'turnkey'
   | 'privy'
+  | 'dialog'
   | 'tempoWallet'
   | 'dialogRefImpl'
 export type Env = 'mainnet' | 'testnet' | 'devnet'
@@ -70,10 +73,26 @@ export const tokens =
 export const host =
   new URLSearchParams(window.location.search).get('host') ?? import.meta.env.VITE_WALLET_HOST
 
-export let dialogMode: DialogMode = 'iframe'
+/** Initial adapter, read from `?adapter=` so a reload keeps the selection. */
+export const initialAdapter: AdapterType = (() => {
+  const param = new URLSearchParams(window.location.search).get('adapter')
+  const adapters: readonly AdapterType[] = [
+    'secp256k1',
+    'webAuthn',
+    'turnkey',
+    'privy',
+    'dialog',
+    'tempoWallet',
+    'dialogRefImpl',
+  ]
+  return adapters.includes(param as AdapterType) ? (param as AdapterType) : 'tempoWallet'
+})()
+
+export let dialogMode: DialogMode =
+  new URLSearchParams(window.location.search).get('mode') === 'popup' ? 'popup' : 'iframe'
 export let mppMode: MppMode = 'push'
 export let theme: DialogNs.Theme | undefined
-export let provider: ProviderValue = createProvider('tempoWallet')
+export let provider: ProviderValue = createProvider(initialAdapter)
 let turnkeyClient: TurnkeyClient | undefined
 
 function mpp() {
@@ -84,7 +103,7 @@ function mpp() {
 }
 
 export function createProvider(adapterType: AdapterType): ProviderValue {
-  if (adapterType === 'tempoWallet')
+  if (adapterType === 'dialog')
     return Provider.create({
       adapter: dialog({
         dialog: dialogMode === 'popup' ? Dialog.popup() : Dialog.iframe(),
@@ -94,6 +113,23 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       mpp: mpp(),
       testnet,
     })
+
+  if (adapterType === 'tempoWallet') {
+    const postMessageHost = new URL('/post-message', host)
+    if (theme?.accent) postMessageHost.searchParams.set('accent', theme.accent)
+    if (theme?.radius) postMessageHost.searchParams.set('radius', theme.radius)
+    if (theme?.scheme) postMessageHost.searchParams.set('scheme', theme.scheme)
+    return Provider.create({
+      adapter: postMessage({
+        host: postMessageHost.toString(),
+        mount: dialogMode === 'popup' ? Mount.popup() : Mount.iframe(),
+        name: 'Tempo Wallet',
+        rdns: 'xyz.tempo',
+      }),
+      mpp: mpp(),
+      testnet,
+    })
+  }
 
   if (adapterType === 'dialogRefImpl')
     return Provider.create({

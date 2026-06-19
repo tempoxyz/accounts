@@ -12,6 +12,9 @@ import * as Rpc from '../zod/rpc.js'
  * Creates a dialog adapter that delegates signing to a remote embed app
  * via an iframe or popup dialog.
  *
+ * @deprecated Prefer {@link tempoWallet} (the Wata `postMessage` transport).
+ * The bespoke-messenger dialog adapter remains available for now.
+ *
  * @example
  * ```ts
  * import { dialog, Provider } from 'accounts'

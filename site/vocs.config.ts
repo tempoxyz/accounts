@@ -80,6 +80,7 @@ const config: Config = defineConfig({
               { text: 'dialog', link: '/docs/api/dialog' },
               { text: 'local', link: '/docs/api/local' },
               { text: 'mobileWebAuth', link: '/docs/api/mobileWebAuth' },
+              { text: 'postMessage', link: '/docs/api/postMessage' },
               { text: 'privy', link: '/docs/api/privy' },
               { text: 'secp256k1', link: '/docs/api/secp256k1' },
               { text: 'turnkey', link: '/docs/api/turnkey' },
@@ -195,6 +196,16 @@ const config: Config = defineConfig({
                   { text: '.memory', link: '/docs/server/kv.memory' },
                 ],
               },
+            ],
+          },
+          {
+            text: 'Keystore',
+            collapsed: true,
+            items: [
+              { text: 'Overview', link: '/docs/api/keystore' },
+              { text: '.p256', link: '/docs/api/keystore.p256' },
+              { text: '.secp256k1', link: '/docs/api/keystore.secp256k1' },
+              { text: '.webCryptoP256', link: '/docs/api/keystore.webCryptoP256' },
             ],
           },
           {

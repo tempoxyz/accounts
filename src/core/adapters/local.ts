@@ -4,7 +4,6 @@ import { hashMessage } from 'viem'
 import { Account as TempoAccount } from 'viem/tempo'
 import * as z from 'zod/mini'
 
-import * as AccessKey from '../AccessKey.js'
 import * as Account from '../Account.js'
 import * as Adapter from '../Adapter.js'
 import * as u from '../zod/utils.js'
@@ -128,7 +127,7 @@ export function local(options: local.Options): Adapter.Adapter {
 
             const keyAuthorization_unsigned =
               witness && grantOptions
-                ? await AccessKey.prepareAuthorization({ ...grantOptions, chainId, witness })
+                ? await store.accessKeys.prepareAuthorization({ ...grantOptions, chainId, witness })
                 : undefined
 
             const keyAuthorization_digest = keyAuthorization_unsigned
@@ -164,8 +163,11 @@ export function local(options: local.Options): Adapter.Adapter {
                     store.accessKeys.add({
                       account: account.address,
                       authorization: signed,
-                      ...(keyAuthorization_unsigned.keyPair
-                        ? { keyPair: keyAuthorization_unsigned.keyPair }
+                      ...(keyAuthorization_unsigned.key
+                        ? {
+                            handle: keyAuthorization_unsigned.key.handle,
+                            publicKey: keyAuthorization_unsigned.key.publicKey,
+                          }
                         : {}),
                       ...(keyAuthorization_unsigned.privateKey
                         ? { privateKey: keyAuthorization_unsigned.privateKey }
@@ -245,7 +247,7 @@ export function local(options: local.Options): Adapter.Adapter {
               personalSign && !witness ? hashMessage(personalSign.message) : undefined
 
             const keyAuthorization_unsigned = authorizeAccessKey
-              ? await AccessKey.prepareAuthorization({
+              ? await store.accessKeys.prepareAuthorization({
                   ...authorizeAccessKey,
                   chainId,
                   ...(witness ? { witness } : {}),
@@ -301,8 +303,11 @@ export function local(options: local.Options): Adapter.Adapter {
               store.accessKeys.add({
                 account: account.address,
                 authorization: keyAuthorization,
-                ...(keyAuthorization_unsigned.keyPair
-                  ? { keyPair: keyAuthorization_unsigned.keyPair }
+                ...(keyAuthorization_unsigned.key
+                  ? {
+                      handle: keyAuthorization_unsigned.key.handle,
+                      publicKey: keyAuthorization_unsigned.key.publicKey,
+                    }
                   : {}),
                 ...(keyAuthorization_unsigned.privateKey
                   ? { privateKey: keyAuthorization_unsigned.privateKey }

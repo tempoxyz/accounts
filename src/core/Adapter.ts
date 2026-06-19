@@ -1,4 +1,3 @@
-import type { WebCryptoP256 } from 'ox'
 import type { KeyAuthorization } from 'ox/tempo'
 import type { Client, Hex, Transport } from 'viem'
 import type { Address, JsonRpcAccount } from 'viem/accounts'
@@ -6,8 +5,8 @@ import type { Account as TempoAccount } from 'viem/tempo'
 import type { tempo } from 'viem/tempo/chains'
 import type * as z from 'zod/mini'
 
-import type { MaybePromise } from '../internal/types.js'
 import type * as Account from './Account.js'
+import type * as Keystore from './Keystore.js'
 import type * as Schema from './Schema.js'
 import type * as Storage from './Storage.js'
 import type * as Store from './Store.js'
@@ -42,6 +41,17 @@ export type Meta = {
 }
 
 export type Instance = {
+  /**
+   * Default access-key configuration for this adapter's environment (e.g.
+   * pure-JS keystores where no WebCrypto implementation is available).
+   * App-level `Provider.create({ accessKey })` options override these.
+   */
+  accessKey?:
+    | {
+        /** Default keystores backing locally generated access keys. */
+        keystores?: Keystore.Keystores | undefined
+      }
+    | undefined
   /** Adapter actions dispatched by the provider's `request()` method. */
   actions: {
     /** Grant an access key for the active account. */
@@ -82,6 +92,13 @@ export type Instance = {
       | ((
           params: revokeAccessKey.Parameters,
           request: EncodedRequest<Rpc.wallet_revokeAccessKey.Encoded>,
+        ) => Promise<void>)
+      | undefined
+    /** Update an access key's spending limits. */
+    updateAccessKey?:
+      | ((
+          params: updateAccessKey.Parameters,
+          request: EncodedRequest<Rpc.wallet_updateAccessKey.Encoded>,
         ) => Promise<void>)
       | undefined
     /** Open the send-token flow. */
@@ -145,16 +162,6 @@ export type Instance = {
   }
   /** Cleanup function called when the provider is destroyed. */
   cleanup?: (() => void) | undefined
-  /**
-   * Generates access-key material when `authorizeAccessKey` omits `address`
-   * and `publicKey`. Return `undefined` to let adapter actions handle key
-   * generation themselves.
-   */
-  generateAccessKey?:
-    | ((
-        options?: generateAccessKey.Options | undefined,
-      ) => MaybePromise<generateAccessKey.ReturnType>)
-    | undefined
   /** Materializes the adapter-managed account used for provider-owned RPC actions. */
   getAccount?: ((options?: getAccount.Options | undefined) => getAccount.ReturnType) | undefined
   /**
@@ -207,28 +214,6 @@ export declare namespace getClient {
     /** Fee payer service URL, or `false` to opt out of fee payers for this transaction if set globally. */
     feePayer?: string | false | undefined
   }
-}
-
-export declare namespace generateAccessKey {
-  /** Options for {@link Instance.generateAccessKey}. */
-  type Options = {
-    /** Requested key type from `authorizeAccessKey`. Defaults to adapter policy. */
-    keyType?: authorizeAccessKey.Parameters['keyType'] | undefined
-  }
-
-  /** Generated access-key material. */
-  type ReturnType =
-    | {
-        /** Generated key type. */
-        keyType: 'secp256k1' | 'p256'
-        /** Generated public key. */
-        publicKey: Hex
-        /** Exported private key backing the generated access key. */
-        privateKey?: Hex | undefined
-        /** WebCrypto key pair backing the generated access key. */
-        keyPair?: Awaited<globalThis.ReturnType<typeof WebCryptoP256.createKeyPair>> | undefined
-      }
-    | undefined
 }
 
 export declare namespace getAccount {
@@ -462,6 +447,19 @@ export declare namespace revokeAccessKey {
     address: Address
     /** Address of the access key to revoke. */
     accessKeyAddress: Address
+  }
+}
+
+export declare namespace updateAccessKey {
+  type Parameters = {
+    /** Root account address. */
+    address: Address
+    /** Address of the access key to update. */
+    accessKeyAddress: Address
+    /** Chain ID the access key is scoped to. Defaults to the active chain. */
+    chainId?: bigint | undefined
+    /** New spending limits per token. */
+    limits: readonly { token: Address; limit: bigint }[]
   }
 }
 

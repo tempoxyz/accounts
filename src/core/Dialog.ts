@@ -66,7 +66,7 @@ function applyThemeParams(url: URL, theme: Theme | undefined) {
   if (theme.scheme) url.searchParams.set('scheme', theme.scheme)
 }
 
-export const defaultSize = { height: 440, width: 360 }
+export const defaultSize = { height: 600, width: 404 }
 
 /** Creates a dialog from metadata and a setup function. */
 export function define(meta: Meta, fn: SetupFn): Dialog {
@@ -502,7 +502,7 @@ export function popup(options: popup.Options = {}): Dialog {
         applyThemeParams(hostUrl, parameters.theme)
 
         const left = (window.innerWidth - size.width) / 2 + window.screenX
-        const top = window.screenY + 100
+        const top = (window.innerHeight - size.height) / 2 + window.screenY
 
         win = window.open(
           hostUrl.toString(),

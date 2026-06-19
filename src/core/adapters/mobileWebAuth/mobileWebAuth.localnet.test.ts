@@ -83,14 +83,14 @@ function createWallet() {
     requests: () => requests,
     openAuthSession: (async ({ authorizationUrl }) => {
       calls += 1
-      const host = createHost(requests)
+      const host = await createHost(requests)
       const response = await host.fetch(new Request(authorizationUrl))
       return response.headers.get('location') ?? undefined
     }) satisfies NonNullable<MobileWebAuth.Options['openAuthSession']>,
   }
 }
 
-function createHost(requests: { method: string; params: unknown }[]) {
+async function createHost(requests: { method: string; params: unknown }[]) {
   const host = HostWata.create({
     baseUrl: hostOrigin,
     identity: Identity.fromPrivateKey(
@@ -119,7 +119,8 @@ function createHost(requests: { method: string; params: unknown }[]) {
     ],
   })
 
-  host.on('request', async (event) => {
+  const session = await host.start()
+  session.onRequest(async (event) => {
     requests.push({ method: event.method, params: event.params })
     if (event.method === 'wallet_connect') {
       const [parameters] = z.decode(Rpc.wallet_connect.schema.params!, event.params as never) ?? []
@@ -177,7 +178,7 @@ async function signKeyAuthorization(parameters: AdapterAuthorizeParameters) {
   return await root.signKeyAuthorization(
     {
       accessKeyAddress: accessKeyAddress(parameters),
-      keyType: parameters.keyType ?? 'secp256k1',
+      keyType: parameters.keyType ?? 'p256',
     },
     {
       chainId: parameters.chainId ?? BigInt(chain.id),
@@ -331,6 +332,9 @@ describe('create', () => {
       params: [{ capabilities: { method: 'register', name: 'Accounts RN Test' } }],
     })
     expect(result.accounts[0]!.address).toBe(root.address)
+    expect(
+      connectParameters(wallet, 0)?.capabilities?.authorizeAccessKey?.keyType,
+    ).toMatchInlineSnapshot(`"p256"`)
 
     await fund(root.address)
 

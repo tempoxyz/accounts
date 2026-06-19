@@ -8,8 +8,8 @@ const address = '0x0000000000000000000000000000000000000001'
 
 describe('wallet_connect', () => {
   test('behavior: validates auth before preparing access key material', async () => {
-    const generateAccessKey = vi.fn(() => {
-      throw new Error('generateAccessKey called')
+    const createKey = vi.fn(() => {
+      throw new Error('createKey called')
     })
     const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
       actions: {
@@ -20,9 +20,21 @@ describe('wallet_connect', () => {
           return { accounts: [{ address }] }
         },
       },
-      generateAccessKey,
     }))
-    const provider = Provider.create({ adapter, storage: Storage.memory() })
+    const provider = Provider.create({
+      accessKey: {
+        keystores: {
+          p256: {
+            createKey,
+            toAccount() {
+              throw new Error('unused')
+            },
+          },
+        },
+      },
+      adapter,
+      storage: Storage.memory(),
+    })
 
     await expect(
       provider.request({
@@ -39,7 +51,7 @@ describe('wallet_connect', () => {
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[RpcResponse.InvalidParamsError: \`auth\` capability must include either \`url\` or an explicit \`challenge\` endpoint.]`,
     )
-    expect(generateAccessKey.mock.calls).toMatchInlineSnapshot(`[]`)
+    expect(createKey.mock.calls).toMatchInlineSnapshot(`[]`)
   })
 
   test('behavior: forwards identity.email + identity.idToken onto the authenticated account', async () => {

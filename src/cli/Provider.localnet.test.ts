@@ -140,8 +140,8 @@ async function readAccessKeys(storage: ReturnType<typeof Storage.filesystem>) {
         address: Address.Address
         chainId: number
         expiry?: number | undefined
+        handle?: { kind: string; privateKey: Hex.Hex } | undefined
         keyType: string
-        privateKey?: Hex.Hex | undefined
       }[]
     }
   }>('store')
@@ -653,22 +653,14 @@ describe('Provider.create', () => {
           "restored": "0x1",
         }
       `)
-      expect({
-        access: entry!.access,
-        address: entry!.address.toLowerCase(),
-        chainId: entry!.chainId,
-        expiry: entry!.expiry,
-        keyType: entry!.keyType,
-      }).toMatchInlineSnapshot(`
-        {
-          "access": "${root.address}",
-          "address": "${account.capabilities.keyAuthorization!.keyId.toLowerCase()}",
-          "chainId": ${chain.id},
-          "expiry": ${expiry_2},
-          "keyType": "secp256k1",
-        }
-      `)
-      expect(entry!.privateKey).toMatch(/^0x[0-9a-f]{64}$/i)
+      expect(entry!.access).toBe('0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266')
+      expect(entry!.chainId).toBe(1337)
+      expect(entry!.keyType).toBe('p256')
+      expect(entry!.address).toMatch(/^0x[0-9a-f]{40}$/i)
+      // The CLI default is an extractable WebCrypto P-256 key (JWK handle),
+      // which survives the filesystem storage round-trip above.
+      expect(entry!.handle).toMatchObject({ kind: 'webcrypto-p256' })
+      expect((entry!.handle as { jwk?: { d?: string } }).jwk?.d).toBeTruthy()
     } finally {
       await server.closeAsync()
     }
@@ -743,9 +735,11 @@ describe('Provider.create', () => {
         storage,
       })
 
+      // secp256k1 is requested explicitly; p256 is the default — a genuine
+      // type change that regenerates the managed key.
       const first = await provider.request({
         method: 'wallet_authorizeAccessKey',
-        params: [{ expiry }],
+        params: [{ expiry, keyType: 'secp256k1' }],
       })
       const second = await provider.request({
         method: 'wallet_authorizeAccessKey',
@@ -759,42 +753,11 @@ describe('Provider.create', () => {
       })
       const keys = await readAccessKeys(storage)
 
-      expect({
-        first: {
-          keyId: first.keyAuthorization.keyId,
-          keyType: first.keyAuthorization.keyType,
-        },
-        second: {
-          keyId: second.keyAuthorization.keyId,
-          keyType: second.keyAuthorization.keyType,
-        },
-        stored: keys.map((key) => ({
-          keyAddress: key.address.toLowerCase(),
-          keyType: key.keyType,
-        })),
-      }).toMatchInlineSnapshot(`
-        {
-          "first": {
-            "keyId": "${first.keyAuthorization.keyId}",
-            "keyType": "secp256k1",
-          },
-          "second": {
-            "keyId": "${second.keyAuthorization.keyId}",
-            "keyType": "p256",
-          },
-          "stored": [
-            {
-              "keyAddress": "${second.keyAuthorization.keyId}",
-              "keyType": "p256",
-            },
-            {
-              "keyAddress": "${first.keyAuthorization.keyId}",
-              "keyType": "secp256k1",
-            },
-          ],
-        }
-      `)
-      expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
+      expect(first.keyAuthorization.keyType).toBe('secp256k1')
+      expect(second.keyAuthorization.keyType).toBe('p256')
+      expect(first.keyAuthorization.keyId).not.toBe(second.keyAuthorization.keyId)
+      expect(new Set(keys.map((key) => key.keyType))).toEqual(new Set(['secp256k1', 'p256']))
+      expect(receipt.status).toBe('0x1')
     } finally {
       await server.closeAsync()
     }

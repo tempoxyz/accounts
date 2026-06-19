@@ -2,6 +2,7 @@ import { Handler, Kv } from 'accounts/server'
 import { Mppx, Store as MppStore, tempo } from 'mppx/server'
 import { Subscription } from 'mppx/tempo'
 import { privateKeyToAccount } from 'viem/accounts'
+import { tempo as tempoChain, tempoModerato } from 'viem/tempo/chains'
 
 const pathUsd = '0x20c0000000000000000000000000000000000000' as const
 const testnet = process.env.VITE_ENV !== 'mainnet'
@@ -29,12 +30,12 @@ const payment = Mppx.create({
     }),
     tempo.session({
       account,
+      chainId: testnet ? tempoModerato.id : tempoChain.id,
       currency: pathUsd,
       feePayer: true,
       sse: { poll: true },
       store,
       suggestedDeposit: '0.03',
-      testnet,
     }),
     tempo.subscription({
       activate: async ({ request, resolved, source }) => {

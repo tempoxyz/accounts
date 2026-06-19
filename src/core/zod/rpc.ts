@@ -569,6 +569,29 @@ export namespace wallet_revokeAccessKey {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
+export namespace wallet_updateAccessKey {
+  export const parameters = z.object({
+    /** Root account address. */
+    address: u.address(),
+    /** Address of the access key to update. */
+    accessKeyAddress: u.address(),
+    /** Chain ID the access key is scoped to. Defaults to the active chain. */
+    chainId: z.optional(u.bigint()),
+    /** New spending limits per token. */
+    limits: z.readonly(
+      z.array(z.object({ token: u.address(), limit: u.bigint() })).check(z.minLength(1)),
+    ),
+  })
+
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_updateAccessKey'),
+    params: z.readonly(z.tuple([parameters])),
+    returns: undefined,
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
 export namespace wallet_connect {
   export const authorizeAccessKey = z.optional(
     z.omit(wallet_authorizeAccessKey.parameters, { showDeposit: true }),
@@ -990,6 +1013,17 @@ export namespace wallet_deposit {
             amount: z.optional(z.string()),
             chainId: z.optional(u.number()),
             displayName: z.optional(z.string()),
+            /** Preferred funding path to show first. */
+            intent: z.optional(
+              z.union([
+                z.literal('applePay'),
+                z.literal('credits'),
+                z.literal('crypto'),
+                z.literal('faucet'),
+                z.literal('referralCode'),
+                z.literal('x'),
+              ]),
+            ),
             /**
              * Token to pre-fill, accepted as either a contract address or a
              * supported deposit token symbol (case-insensitive, e.g. `"USDC"`).

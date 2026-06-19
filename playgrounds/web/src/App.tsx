@@ -1,4 +1,5 @@
 import { tempo as mppx_tempo } from 'mppx/client'
+import type { Session as MppxSession } from 'mppx/tempo'
 import { Hex, Json } from 'ox'
 import {
   type ComponentProps,
@@ -20,6 +21,7 @@ import {
   type DialogMode,
   type MppMode,
   dialogMode,
+  initialAdapter,
   provider,
   switchAdapter,
   switchDialogMode,
@@ -32,6 +34,13 @@ import {
   tokens,
 } from './provider.js'
 import { TurnkeyEmailOtp } from './TurnkeyEmailOtp.js'
+
+/** Persists a playground setting in the URL so a reload keeps it. */
+function setParam(key: string, value: string) {
+  const url = new URL(window.location.href)
+  url.searchParams.set(key, value)
+  window.history.replaceState(null, '', url)
+}
 
 const sectionLinks = [
   { id: 'provider', title: 'Provider' },
@@ -51,12 +60,13 @@ const sectionLinks = [
 type SectionId = (typeof sectionLinks)[number]['id']
 
 export function App() {
-  const [adapterType, setAdapterType] = useState<AdapterType>('tempoWallet')
+  const [adapterType, setAdapterType] = useState<AdapterType>(initialAdapter)
   const [, rerender] = useState(0)
   const activeSection = useActiveSection()
   const network = useActiveNetwork()
 
   function onSwitch(type: AdapterType) {
+    setParam('adapter', type)
     switchAdapter(type)
     setAdapterType(type)
     rerender((n) => n + 1)
@@ -180,6 +190,7 @@ function ConfigPanel(props: {
         <label>
           <span>Adapter</span>
           <select value={adapterType} onChange={(e) => onSwitch(e.target.value as AdapterType)}>
+            <option value="dialog">dialog</option>
             <option value="tempoWallet">tempoWallet</option>
             <option value="dialogRefImpl">dialogRefImpl</option>
             <option value="turnkey">turnkey</option>
@@ -188,12 +199,15 @@ function ConfigPanel(props: {
             <option value="secp256k1">secp256k1</option>
           </select>
         </label>
-        {(adapterType === 'tempoWallet' || adapterType === 'dialogRefImpl') && (
+        {(adapterType === 'dialog' ||
+          adapterType === 'tempoWallet' ||
+          adapterType === 'dialogRefImpl') && (
           <label>
             <span>Mode</span>
             <select
               value={dialogMode}
               onChange={(e) => {
+                setParam('mode', e.target.value)
                 switchDialogMode(e.target.value as DialogMode, adapterType)
                 rerender()
               }}
@@ -204,7 +218,9 @@ function ConfigPanel(props: {
           </label>
         )}
       </div>
-      {(adapterType === 'tempoWallet' || adapterType === 'dialogRefImpl') && (
+      {(adapterType === 'dialog' ||
+        adapterType === 'tempoWallet' ||
+        adapterType === 'dialogRefImpl') && (
         <>
           <h3 className="control-panel-title">Theme</h3>
           <ThemeConfig adapterType={adapterType} rerender={rerender} />
@@ -2385,7 +2401,7 @@ function MppSummary(props: { children: ReactNode }) {
 }
 
 function createMppSessionManager() {
-  return mppx_tempo.session({
+  return mppx_tempo.session.manager({
     getClient(options: { chainId?: number | undefined } = {}) {
       const client = provider.getClient({ chainId: options.chainId })
       const account = provider.getAccount()
@@ -2460,7 +2476,7 @@ async function runMppManagedSse(
   const balanceBefore = await getPathUsdBalance()
   const started = performance.now()
   const stream = await manager.sse('/mpp/session/stream', {
-    onReceipt(receipt) {
+    onReceipt(receipt: MppxSession.Precompile.Protocol.SessionReceipt) {
       receipts.push(receipt)
     },
   })
@@ -2929,7 +2945,9 @@ function OcclusionSimulator() {
     }
 
     function sync() {
-      const dialog = document.querySelector('dialog[data-tempo-wallet][open]')
+      const dialog = document.querySelector(
+        'dialog[data-tempo-wallet][open], dialog[data-tempo-wallet-postmessage][open]',
+      )
       if (!dialog) {
         overlay?.remove()
         overlay = null

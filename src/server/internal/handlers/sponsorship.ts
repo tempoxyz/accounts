@@ -2,7 +2,6 @@ import { RpcResponse, Signature } from 'ox'
 import { TxEnvelopeTempo } from 'ox/tempo'
 import type { Address, Client } from 'viem'
 import type { LocalAccount } from 'viem/accounts'
-import { signTransaction } from 'viem/actions'
 import { Transaction } from 'viem/tempo'
 
 import * as Utils from './utils.js'
@@ -60,8 +59,8 @@ export declare namespace shouldSponsor {
 
 /** Returns whether a raw Tempo transaction is explicitly requesting sponsorship. */
 export function requestsRawSponsorship(serialized: `0x${string}`) {
-  if (!serialized.startsWith('0x76') && !serialized.startsWith('0x78')) return false
-  const transaction = Transaction.deserialize(serialized as `0x76${string}`)
+  if (!Utils.isSerializedTempoTransaction(serialized)) return false
+  const transaction = Transaction.deserialize(serialized)
   return 'feePayerSignature' in transaction && transaction.feePayerSignature === null
 }
 
@@ -113,35 +112,51 @@ export declare namespace sign {
 
 /** Handles `eth_signRawTransaction` and broadcast methods for sponsored Tempo transactions. */
 export async function handleRawTransaction(options: handleRawTransaction.Options) {
-  const { account, getClient, method, request, validate } = options
+  const { account, feeToken: sponsorFeeToken, getClient, method, request, validate } = options
   const serialized = request.params?.[0] as `0x76${string}` | undefined
 
-  if (!serialized?.startsWith('0x76') && !serialized?.startsWith('0x78'))
+  if (!Utils.isSerializedTempoTransaction(serialized))
     throw new RpcResponse.InvalidParamsError({
       message: 'Only Tempo (0x76/0x78) transactions are supported.',
     })
 
   const transaction = Transaction.deserialize(serialized)
+  // Prefer sender recovered from raw envelope; multisig finalize path supplies fallback sender.
+  const sender = transaction.from ?? options.sender
 
-  if (!transaction.signature || !transaction.from)
+  // Sponsorship only applies after sender has signed original transaction.
+  if (!transaction.signature || !sender)
     throw new RpcResponse.InvalidParamsError({
       message: 'Transaction must be signed by the sender before fee payer signing.',
     })
+  if (!account.sign) throw new Error('Fee payer account cannot sign transactions.')
 
-  if (validate && !(await validate(transaction as Transaction.TransactionRequest)))
+  const client = getClient(transaction.chainId)
+  const feeToken_chain = (client.chain as { feeToken?: Address | undefined } | undefined)?.feeToken
+  const feeToken =
+    (transaction.feeToken as Address | null | undefined) ??
+    sponsorFeeToken ??
+    (await options.getFeeToken?.(transaction.chainId)) ??
+    feeToken_chain
+  const transaction_sponsored = feeToken ? { ...transaction, feeToken } : transaction
+
+  if (validate && !(await validate(transaction_sponsored as Transaction.TransactionRequest)))
     throw new RpcResponse.InvalidParamsError({
       message: 'Sponsorship rejected.',
     })
 
-  const client = getClient(transaction.chainId)
-  const serializedTransaction = toSerializedTransaction(
-    await signTransaction(client, {
-      ...transaction,
-      account,
-      feePayer: account,
-    } as never),
+  const envelope = TxEnvelopeTempo.from(transaction_sponsored as never)
+  const feePayerSignature = Signature.from(
+    await account.sign({
+      hash: TxEnvelopeTempo.getFeePayerSignPayload(envelope, { sender }),
+    }),
   )
+  const serializedTransaction = TxEnvelopeTempo.serialize(envelope, {
+    feePayerSignature,
+    signature: transaction.signature,
+  })
 
+  // Raw-sign requests stop after fee-payer signature is added; send methods broadcast it.
   if (method === 'eth_signRawTransaction') return serializedTransaction
   return await client.request({
     method: method as never,
@@ -153,20 +168,19 @@ export declare namespace handleRawTransaction {
   type Options = {
     /** Account used as the fee payer. */
     account: LocalAccount
+    /** Optional token the fee payer prefers for sponsored raw transactions. */
+    feeToken?: Address | undefined
+    /** Optional fee-token resolver used when the raw envelope omits `feeToken`. */
+    getFeeToken?: ((chainId: number) => Promise<Address | undefined>) | undefined
     /** Client resolver keyed by transaction `chainId`. */
     getClient: (chainId?: number | undefined) => Client
     /** Raw transaction method to handle. */
     method: 'eth_signRawTransaction' | 'eth_sendRawTransaction' | 'eth_sendRawTransactionSync'
     /** Incoming JSON-RPC request. */
     request: { params?: readonly unknown[] | undefined }
+    /** Sender address to use if it cannot be recovered from the raw envelope. */
+    sender?: Address | undefined
     /** Optional sponsorship approval callback. */
     validate?: ((request: Transaction.TransactionRequest) => boolean | Promise<boolean>) | undefined
   }
-}
-
-function toSerializedTransaction(value: unknown) {
-  if (typeof value === 'string') return value
-  if (value && typeof value === 'object' && 'raw' in value && typeof value.raw === 'string')
-    return value.raw
-  throw new Error('Expected a serialized transaction result.')
 }

@@ -30,6 +30,31 @@ export type Store = {
     }
 >
 
+/**
+ * Maps a stored account's key type to the signature key type used on the wire.
+ *
+ * The node sizes intrinsic gas in `eth_fillTransaction` from the request's
+ * `keyType`. Store-only key types (`webCrypto`, `webAuthn_headless`) sign with
+ * a `p256` / `webAuthn` signature envelope respectively, so they must be
+ * reported as their on-chain signature type — otherwise gas is underestimated.
+ */
+export function signatureKeyType(
+  account: Store | undefined,
+): 'secp256k1' | 'p256' | 'webAuthn' | undefined {
+  switch (account?.keyType) {
+    case 'secp256k1':
+    case 'p256':
+    case 'webAuthn':
+      return account.keyType
+    case 'webCrypto':
+      return 'p256'
+    case 'webAuthn_headless':
+      return 'webAuthn'
+    default:
+      return undefined
+  }
+}
+
 /** Resolves a viem Account from the store by address (or active account). */
 export function find(options: find.Options & { signable: true }): TempoAccount.Account
 export function find(options: find.Options): TempoAccount.Account | JsonRpcAccount
