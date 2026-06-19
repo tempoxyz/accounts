@@ -123,8 +123,8 @@ importers:
         specifier: 0.14.29
         version: 0.14.29(typescript@5.9.3)(zod@4.3.6)
       wata:
-        specifier: 0.0.4
-        version: 0.0.4(typescript@5.9.3)
+        specifier: 0.2.0
+        version: 0.2.0(react@19.2.5)(typescript@5.9.3)
       webauthx:
         specifier: ~0.1.1
         version: 0.1.1(typescript@5.9.3)(zod@4.3.6)
@@ -9930,9 +9930,6 @@ packages:
     resolution: {integrity: sha512-9LkiTwjUh6rT555DtE9rTX+BKByPfrMzEAtnlEtdEwr3Nkffwiihqe2bWADg+OQRjt9gl6ICdmB/ZFDCGAtSow==}
     engines: {node: '>= 4'}
 
-  rettime@0.11.11:
-    resolution: {integrity: sha512-ILJRqVWBCTlg9r42fFgwVZx1gnFAcQF8mRoMkbgQfIrjEDf9nbBFDFx00oloOa+Q869FUtaYDXZvEfnecQSCoQ==}
-
   reusify@1.1.0:
     resolution: {integrity: sha512-g6QUff04oZpHs0eG5p83rFLhHeV00ug/Yf9nZM6fLeUrPguBTkTQOdpAWWspMh55TZfVQDPaN3NQJfbVRAxdIw==}
     engines: {iojs: '>=1.0.0', node: '>=0.10.0'}
@@ -11140,8 +11137,16 @@ packages:
   warn-once@0.1.1:
     resolution: {integrity: sha512-VkQZJbO8zVImzYFteBXvBOZEl1qL175WH8VmZcxF2fZAoudNhNDvHi+doCaAEdU2l2vtcIwa2zn0QK5+I1HQ3Q==}
 
-  wata@0.0.4:
-    resolution: {integrity: sha512-EAkFxB19UthN2dK40Igwe12CEScG93J2j8CvPY4MiwXL1JbqExf/1GnvB5oWk0KU6P51IfL2mDUOD+LyB3mSOA==}
+  wata@0.2.0:
+    resolution: {integrity: sha512-H25HChmzTLsyaWNYa/pML2Dm+4NrDuaZG9krLXkP4c7pdKeSwmc1XOMFHfLvfFQYpis0wPZb8MK8pmZ2FxKovQ==}
+    peerDependencies:
+      expo-crypto: '*'
+      react: ^19.2.5
+    peerDependenciesMeta:
+      expo-crypto:
+        optional: true
+      react:
+        optional: true
 
   watchpack@2.5.2:
     resolution: {integrity: sha512-6i/00NBjP4yGPs+caKSyRfpTF/8Torsu0MOW3mMzIbhgISFder8i7xbqgHlLMwJrdiN8ndBV3UA1/AfzPSr+jg==}
@@ -24895,8 +24900,6 @@ snapshots:
 
   retry@0.12.0: {}
 
-  rettime@0.11.11: {}
-
   reusify@1.1.0: {}
 
   rimraf@3.0.2:
@@ -26696,15 +26699,16 @@ snapshots:
 
   warn-once@0.1.1: {}
 
-  wata@0.0.4(typescript@5.9.3):
+  wata@0.2.0(react@19.2.5)(typescript@5.9.3):
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.25)
       '@noble/ciphers': 2.2.0
       '@noble/hashes': 2.2.0
       hono: 4.12.25
       ox: 0.14.29(typescript@5.9.3)(zod@4.4.3)
-      rettime: 0.11.11
       zod: 4.4.3
+    optionalDependencies:
+      react: 19.2.5
     transitivePeerDependencies:
       - typescript
 
