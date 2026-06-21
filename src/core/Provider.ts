@@ -286,7 +286,9 @@ export function create(options: create.Options = {}): create.ReturnType {
             ...(feePayer ? { feePayer: true as never } : {}),
           })
           return await prepared.sign()
-        } catch {}
+        } catch (error) {
+          fallbackFromAccessKey(error)
+        }
     }
 
     const { client, request, selected } = await prepareRootTransaction(parameters)
@@ -325,7 +327,9 @@ export function create(options: create.Options = {}): create.ReturnType {
             ...(feePayer ? { feePayer: true as never } : {}),
           })
           return await prepared.send()
-        } catch {}
+        } catch (error) {
+          fallbackFromAccessKey(error)
+        }
     }
 
     const { feePayer, ...rest } = parameters
@@ -372,7 +376,9 @@ export function create(options: create.Options = {}): create.ReturnType {
             ...(feePayer ? { feePayer: true as never } : {}),
           })
           return await prepared.sendSync()
-        } catch {}
+        } catch (error) {
+          fallbackFromAccessKey(error)
+        }
     }
 
     const { feePayer, ...rest } = parameters
@@ -397,6 +403,11 @@ export function create(options: create.Options = {}): create.ReturnType {
       ...request,
     } as never)
     return z.encode(Rpc.receipt, receipt as never) as Rpc.eth_sendTransactionSync.Encoded['returns']
+  }
+
+  function fallbackFromAccessKey(error: unknown): void {
+    if (AccessKeyTransaction.isDispatchedError(error)) throw error
+    console.warn('[accounts] Access-key transaction failed; falling back to wallet.', error)
   }
 
   async function signPersonalMessage(parameters: { address: Address.Address; data: Hex.Hex }) {

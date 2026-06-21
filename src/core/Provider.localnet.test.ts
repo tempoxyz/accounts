@@ -1097,6 +1097,49 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         }
       `)
     })
+
+    test('behavior: does not fall back after an access-key transaction is dispatched', async () => {
+      let failAfterDispatch = false
+      let sends = 0
+      const transport: Transport = (options) => {
+        const base = http()(options)
+        return {
+          ...base,
+          async request(request: Parameters<typeof base.request>[0]) {
+            if (request.method !== 'eth_sendRawTransactionSync') return await base.request(request)
+            sends++
+            const result = await base.request(request)
+            if (!failAfterDispatch) return result
+            failAfterDispatch = false
+            throw new Error('receipt response lost')
+          },
+        } as never
+      }
+      const provider = Provider.create({
+        adapter: adapter(),
+        chains: [chain],
+        transports: { [chain.id]: transport },
+      })
+      const connected = await connect(provider)
+      await fund(connected)
+      await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      sends = 0
+      failAfterDispatch = true
+
+      await expect(
+        provider.request({
+          method: 'eth_sendTransactionSync',
+          params: [{ calls: [transferCall] }],
+        }),
+      ).rejects.toMatchObject({
+        name: 'AccessKeyTransaction.DispatchedError',
+        transactionHash: expect.stringMatching(/^0x[0-9a-f]{64}$/),
+      })
+      expect(sends).toMatchInlineSnapshot(`1`)
+    })
   })
 
   describe('eth_signTransaction', () => {
