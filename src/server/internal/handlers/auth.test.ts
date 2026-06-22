@@ -83,6 +83,78 @@ describe('challenge', () => {
     expect(parsed.nonce).toMatch(/^[a-z0-9]+$/)
   })
 
+  test('includes requested resources and statement in the challenge message', async () => {
+    const { app } = setup()
+    const resources = ['urn:tempo:api-signing-key:test', 'https://api.example.com/signing-keys/1']
+
+    const { status, body } = await getChallenge(app, {
+      chainId: 1,
+      resources,
+      statement: 'Authorize a scoped API signing key.',
+    })
+
+    expect(status).toBe(200)
+    const parsed = parseSiweMessage(body.message!)
+    expect({ resources: parsed.resources, statement: parsed.statement }).toMatchInlineSnapshot(`
+      {
+        "resources": [
+          "urn:tempo:api-signing-key:test",
+          "https://api.example.com/signing-keys/1",
+        ],
+        "statement": "Authorize a scoped API signing key.",
+      }
+    `)
+  })
+
+  test('rejects invalid resource URIs', async () => {
+    const { app } = setup()
+
+    const { status, body } = await getChallenge(app, {
+      chainId: 1,
+      resources: ['not a uri'],
+    })
+
+    expect(status).toBe(400)
+    expect(body).toMatchInlineSnapshot(`
+      {
+        "error": "invalid SIWE challenge parameters",
+      }
+    `)
+  })
+
+  test('rejects line breaks in resources and statements', async () => {
+    const { app } = setup()
+
+    const resource = await getChallenge(app, {
+      chainId: 1,
+      resources: ['urn:tempo:one\ntwo'],
+    })
+    const statement = await getChallenge(app, {
+      chainId: 1,
+      statement: 'one\ntwo',
+    })
+
+    expect({
+      resource: { body: resource.body, status: resource.status },
+      statement: { body: statement.body, status: statement.status },
+    }).toMatchInlineSnapshot(`
+      {
+        "resource": {
+          "body": {
+            "error": "resources must not include line breaks",
+          },
+          "status": 400,
+        },
+        "statement": {
+          "body": {
+            "error": "statement must not include line breaks",
+          },
+          "status": 400,
+        },
+      }
+    `)
+  })
+
   test('defaults chainId to 0 when omitted', async () => {
     const { app } = setup()
 
@@ -225,6 +297,34 @@ describe('verify (EOA, cookie mode)', () => {
     const tampered = message.replace(
       /(0x0000000000000000000000000000000000000000\n)\n/,
       '$1\nSign to prove you are human\n\n',
+    )
+    expect(tampered).not.toBe(message)
+    const signature = await account.signMessage({ message: tampered })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message: tampered,
+      signature,
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchInlineSnapshot(`
+      {
+        "error": "message mismatch",
+      }
+    `)
+  })
+
+  test('rejects tampered message resources with 400', async () => {
+    const { app } = setup()
+
+    const { body: challengeBody } = await getChallenge(app, {
+      chainId: 1,
+      resources: ['https://api.example.com/signing-keys/1'],
+    })
+    const message = challengeBody.message!
+    const tampered = message.replace(
+      'https://api.example.com/signing-keys/1',
+      'https://api.example.com/signing-keys/2',
     )
     expect(tampered).not.toBe(message)
     const signature = await account.signMessage({ message: tampered })
@@ -1186,7 +1286,14 @@ function setup(options: Parameters<typeof auth>[0] = {}) {
   return { handler, app }
 }
 
-async function getChallenge(app: Hono, body: { chainId: number }) {
+async function getChallenge(
+  app: Hono,
+  body: {
+    chainId: number
+    resources?: readonly string[] | undefined
+    statement?: string | undefined
+  },
+) {
   const res = await app.request('/challenge', {
     method: 'POST',
     headers: { 'content-type': 'application/json', host: 'wallet.example' },

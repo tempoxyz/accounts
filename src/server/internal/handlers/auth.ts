@@ -21,6 +21,9 @@ const defaults = {
     session: 24 * 60 * 60, // 24 hours
   },
 } as const
+const maxResources = 10
+const maxResourceLength = 2_048
+const lineBreak = /[\r\n]/
 
 /**
  * Default OIDC issuer — the Tempo wallet's production OIDC mount. Apps that opt
@@ -79,9 +82,15 @@ const sessionKey = (token: string) => `session:${token}`
 export namespace schema {
   /** Schemas for `POST {path}/challenge`. */
   export namespace challenge {
+    const resource = z.string().check(z.maxLength(maxResourceLength))
+
     /** Request body schema. */
     export const parameters = z.object({
       chainId: z.optional(z.number()),
+      /** SIWE resources to bind into the issued challenge message. */
+      resources: z.optional(z.readonly(z.array(resource).check(z.maxLength(maxResources)))),
+      /** Human-readable SIWE statement to bind into the issued challenge message. */
+      statement: z.optional(z.string()),
     })
 
     /** Response body schema. */
@@ -121,7 +130,8 @@ export namespace schema {
     })
 
     /** Response body schema. */
-    export const returns = z.object({
+    export const returns = z.looseObject({
+      /** Session token in bearer-token mode. */
       token: z.optional(z.string()),
     })
   }
@@ -201,7 +211,12 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
   const logoutPath = path === '/' ? '/logout' : `${path}/logout`
 
   router.post(challengePath, Hono.validate('json', schema.challenge.parameters), async (c) => {
-    const { chainId = 0 } = c.req.valid('json')
+    const { chainId = 0, resources, statement } = c.req.valid('json')
+
+    if (resources?.some((resource) => lineBreak.test(resource)))
+      return c.json({ error: 'resources must not include line breaks' }, 400)
+    if (statement !== undefined && lineBreak.test(statement))
+      return c.json({ error: 'statement must not include line breaks' }, 400)
 
     const { protocol, host: reqHost } = resolveReqOrigin(c.req.raw)
     const resolvedDomain = domain ?? reqHost
@@ -210,16 +225,25 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     const issuedAt = new Date()
     const expirationTime = new Date(issuedAt.getTime() + challengeTtl * 1000)
 
-    const message = createSiweMessage({
-      address: zeroAddress,
-      chainId,
-      domain: resolvedDomain,
-      uri: `${protocol}//${resolvedDomain}`,
-      version: '1',
-      nonce,
-      issuedAt,
-      expirationTime,
-    })
+    const message = (() => {
+      try {
+        return createSiweMessage({
+          address: zeroAddress,
+          chainId,
+          domain: resolvedDomain,
+          uri: `${protocol}//${resolvedDomain}`,
+          version: '1',
+          nonce,
+          issuedAt,
+          expirationTime,
+          ...(resources?.length ? { resources: [...resources] } : {}),
+          ...(statement ? { statement } : {}),
+        })
+      } catch (error) {
+        return error instanceof Error ? error : new Error('invalid SIWE challenge parameters')
+      }
+    })()
+    if (message instanceof Error) return c.json({ error: 'invalid SIWE challenge parameters' }, 400)
 
     await store.set(
       challengeKey(nonce),
