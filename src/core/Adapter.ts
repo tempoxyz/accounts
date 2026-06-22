@@ -17,6 +17,8 @@ type EncodedRequest<encoded extends { method: unknown; params: unknown }> = Pick
   encoded,
   'method' | 'params'
 >
+type AuthCapability =
+  Rpc.wallet_connect.Encoded['returns']['accounts'][number]['capabilities']['auth']
 
 /** Adapter interface for the provider. */
 export type Adapter = SetupFn & Meta
@@ -279,7 +281,7 @@ export declare namespace createAccount {
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Server Authentication result, if the auth capability was requested. */
-    auth?: { token?: string | undefined } | undefined
+    auth?: AuthCapability | undefined
     /**
      * Consented identity claims (e.g. verified email), if the `identity`
      * capability was requested and the user approved sharing.
@@ -353,7 +355,7 @@ export declare namespace loadAccounts {
     /** Signed key authorization, if an access key was granted. */
     keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Server Authentication result, if the auth capability was requested. */
-    auth?: { token?: string | undefined } | undefined
+    auth?: AuthCapability | undefined
     /**
      * Consented identity claims (e.g. verified email), if the `identity`
      * capability was requested and the user approved sharing.

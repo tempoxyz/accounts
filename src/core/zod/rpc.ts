@@ -620,12 +620,23 @@ export namespace wallet_connect {
         verify: z.optional(z.string()),
         logout: z.optional(z.string()),
         /**
+         * SIWE resources to bind into the server-issued challenge. The server
+         * decides their meaning; the SDK only requires the issued SIWE message
+         * to echo them exactly before signing.
+         */
+        resources: z.optional(z.readonly(z.array(z.string()))),
+        /**
          * Ask the verify endpoint to also return `{ token }` in the JSON body.
          * Default `false` — cookie mode relies on `Set-Cookie` only.
          * Set this for non-browser clients (RN, CLI) that can't store cookies, or
          * to surface the JWT alongside a cookie in dual-transport setups.
          */
         returnToken: z.optional(z.boolean()),
+        /**
+         * Human-readable SIWE statement to pair with machine-readable
+         * `resources`. The server-issued challenge must echo it exactly.
+         */
+        statement: z.optional(z.string()),
       }),
     ]),
   )
@@ -747,10 +758,11 @@ export namespace wallet_connect {
       /**
        * SIWE round-trip output, populated when the request `auth` capability was set.
        * `token` is present in JWT mode or when the request set `returnToken: true`.
+       * Additional JSON fields returned by the verify endpoint are preserved.
        * Cookie-mode default = `{}` (the session arrived via `Set-Cookie`).
        */
       auth: z.optional(
-        z.object({
+        z.looseObject({
           token: z.optional(z.string()),
         }),
       ),

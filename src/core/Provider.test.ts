@@ -1,3 +1,5 @@
+import { Hex } from 'ox'
+import { createSiweMessage } from 'viem/siwe'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import * as Adapter from './Adapter.js'
@@ -146,6 +148,230 @@ describe('wallet_connect', () => {
       })
 
       expect(verifyBody?.idToken).toBe('eyJhbG.payload.sig')
+    })
+  })
+
+  describe('auth resources', () => {
+    afterEach(() => vi.unstubAllGlobals())
+
+    function authAdapter() {
+      return Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address }], signature: '0xabc' }
+          },
+          async loadAccounts() {
+            return { accounts: [{ address }], signature: '0xabc' }
+          },
+        },
+      }))
+    }
+
+    function message(options: {
+      chainId: number
+      resources?: readonly string[] | undefined
+      statement?: string | undefined
+    }) {
+      const { chainId, resources, statement } = options
+      return createSiweMessage({
+        address,
+        chainId,
+        domain: 'app.example.com',
+        uri: 'https://app.example.com',
+        version: '1',
+        nonce: 'deadbeef00',
+        issuedAt: new Date('2025-01-01T00:00:00Z'),
+        ...(resources ? { resources: [...resources] } : {}),
+        ...(statement ? { statement } : {}),
+      })
+    }
+
+    function stubAuthFetch(options: {
+      resources?: readonly string[] | undefined
+      statement?: string | undefined
+      onChallenge?: ((body: Record<string, unknown>) => void) | undefined
+      verify?: Record<string, unknown> | undefined
+    }) {
+      vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/auth/challenge')) {
+          const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+          options.onChallenge?.(body)
+          const { chainId } = body as { chainId: number }
+          return new Response(
+            JSON.stringify({
+              message: message({
+                chainId,
+                resources: options.resources,
+                statement: options.statement,
+              }),
+            }),
+            { status: 200 },
+          )
+        }
+        if (url === 'https://app.example.com/auth')
+          return new Response(JSON.stringify(options.verify ?? { token: 'session' }), {
+            status: 200,
+          })
+        throw new Error(`unexpected fetch: ${url}`)
+      })
+    }
+
+    function connect(
+      provider: ReturnType<typeof Provider.create>,
+      options: {
+        chainId?: `0x${string}` | undefined
+        resources: readonly string[]
+        statement?: string | undefined
+      },
+    ) {
+      const { chainId, resources, statement } = options
+      return provider.request({
+        method: 'wallet_connect',
+        params: [
+          {
+            ...(chainId ? { chainId } : {}),
+            capabilities: {
+              auth: {
+                url: 'https://app.example.com/auth',
+                resources,
+                ...(statement ? { statement } : {}),
+              },
+            },
+          },
+        ],
+      })
+    }
+
+    test('behavior: sends resources and statement to the challenge endpoint', async () => {
+      const resources = ['urn:tempo:api-signing-key:test', 'https://api.example.com/signing-keys/1']
+      let challengeBody: Record<string, unknown> | undefined
+      stubAuthFetch({
+        resources,
+        statement: 'Authorize a scoped API signing key.',
+        onChallenge(body) {
+          challengeBody = body
+        },
+      })
+
+      const provider = Provider.create({ adapter: authAdapter(), storage: Storage.memory() })
+
+      await connect(provider, {
+        chainId: Hex.fromNumber(1),
+        resources,
+        statement: 'Authorize a scoped API signing key.',
+      })
+
+      expect(challengeBody).toMatchInlineSnapshot(`
+        {
+          "chainId": 1,
+          "resources": [
+            "urn:tempo:api-signing-key:test",
+            "https://api.example.com/signing-keys/1",
+          ],
+          "statement": "Authorize a scoped API signing key.",
+        }
+      `)
+    })
+
+    test('error: rejects when the challenge omits requested resources', async () => {
+      const resources = ['https://api.example.com/signing-keys/1']
+      stubAuthFetch({})
+      const provider = Provider.create({ adapter: authAdapter(), storage: Storage.memory() })
+
+      await expect(
+        connect(provider, {
+          resources,
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[RpcResponse.InvalidParamsError: Server Authentication challenge endpoint \`https://app.example.com/auth/challenge\` did not echo the requested SIWE resources.]`,
+      )
+    })
+
+    test('error: rejects when the challenge changes requested resources', async () => {
+      const resources = ['https://api.example.com/signing-keys/1']
+      stubAuthFetch({
+        resources: ['https://api.example.com/signing-keys/2'],
+      })
+      const provider = Provider.create({ adapter: authAdapter(), storage: Storage.memory() })
+
+      await expect(
+        connect(provider, {
+          resources,
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[RpcResponse.InvalidParamsError: Server Authentication challenge endpoint \`https://app.example.com/auth/challenge\` did not echo the requested SIWE resources.]`,
+      )
+    })
+
+    test('error: rejects when forwarded auth message omits requested resources', async () => {
+      const resources = ['https://api.example.com/signing-keys/1']
+      const signed = message({ chainId: 1 })
+      let verifyCalled = false
+      vi.stubGlobal('fetch', async (input: string | URL) => {
+        const url = String(input)
+        if (url === 'https://app.example.com/auth') {
+          verifyCalled = true
+          return new Response(JSON.stringify({ token: 'session' }), { status: 200 })
+        }
+        throw new Error(`unexpected fetch: ${url}`)
+      })
+      const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        actions: {
+          async createAccount() {
+            return {
+              accounts: [{ address }],
+              personalSign: { message: signed },
+              signature: '0xabc',
+            }
+          },
+          async loadAccounts() {
+            return {
+              accounts: [{ address }],
+              personalSign: { message: signed },
+              signature: '0xabc',
+            }
+          },
+        },
+        forwardsAuth: true,
+      }))
+      const provider = Provider.create({ adapter, storage: Storage.memory() })
+
+      await expect(
+        connect(provider, {
+          chainId: Hex.fromNumber(1),
+          resources,
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[RpcResponse.InvalidParamsError: Server Authentication challenge endpoint \`https://app.example.com/auth/challenge\` did not echo the requested SIWE resources.]`,
+      )
+      expect(verifyCalled).toMatchInlineSnapshot(`false`)
+    })
+
+    test('behavior: preserves extra verify JSON under capabilities.auth', async () => {
+      const resources = ['https://api.example.com/signing-keys/1']
+      stubAuthFetch({
+        resources,
+        verify: {
+          apiSigningKey: { id: 'key_1', scope: 'read' },
+          token: 'session',
+        },
+      })
+      const provider = Provider.create({ adapter: authAdapter(), storage: Storage.memory() })
+
+      const result = await connect(provider, {
+        resources,
+      })
+
+      expect(result.accounts[0]?.capabilities.auth).toMatchInlineSnapshot(`
+        {
+          "apiSigningKey": {
+            "id": "key_1",
+            "scope": "read",
+          },
+          "token": "session",
+        }
+      `)
     })
   })
 })
