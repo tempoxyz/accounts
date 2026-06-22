@@ -1,4 +1,21 @@
+import { Base64, Hex, P256, PublicKey } from 'ox'
+import { vi } from 'vitest'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
+
+const webauthn_mock = vi.hoisted(() => ({
+  verifyRegistration: vi.fn(),
+}))
+
+vi.mock('webauthx/server', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('webauthx/server')>()
+  return {
+    ...actual,
+    Registration: {
+      ...actual.Registration,
+      verify: webauthn_mock.verifyRegistration,
+    },
+  }
+})
 
 import { createServer, type Server } from '../../../../test/utils.js'
 import * as WebAuthnCeremony from '../../../core/WebAuthnCeremony.js'
@@ -7,6 +24,32 @@ import { type SessionPayload, webAuthn } from './webAuthn.js'
 
 let server: Server
 let ceremony: WebAuthnCeremony.WebAuthnCeremony
+
+function registrationCredential(options: {
+  challenge: Hex.Hex
+  credentialId: string
+  publicKey: Hex.Hex
+}) {
+  const { challenge, credentialId, publicKey } = options
+  const clientDataJSON = Base64.fromString(
+    JSON.stringify({
+      challenge: Base64.fromBytes(Hex.toBytes(challenge), { pad: false, url: true }),
+    }),
+  )
+  return {
+    attestationObject: Base64.fromString('attestation'),
+    clientDataJSON,
+    id: credentialId,
+    publicKey,
+    raw: {
+      id: credentialId,
+      type: 'public-key',
+      authenticatorAttachment: null,
+      rawId: Base64.fromString(credentialId),
+      response: { clientDataJSON },
+    },
+  }
+}
 
 beforeAll(async () => {
   server = await createServer(
@@ -17,6 +60,10 @@ beforeAll(async () => {
     }).listener,
   )
   ceremony = WebAuthnCeremony.server({ url: server.url })
+})
+
+afterEach(() => {
+  webauthn_mock.verifyRegistration.mockReset()
 })
 
 afterAll(async () => {
@@ -37,6 +84,66 @@ describe('POST /register/options', () => {
     const { options: b } = await ceremony.getRegistrationOptions({ name: 'Test' })
     expect(a.publicKey!.challenge).not.toBe(b.publicKey!.challenge)
   })
+
+  test('error: rejects oversized extensions payloads', async () => {
+    const response = await fetch(`${server.url}/register/options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ extensions: { value: 'x'.repeat(16 * 1024) }, name: 'Test' }),
+    })
+
+    expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body.error).toMatchInlineSnapshot(`"WebAuthn extensions exceed 16384 bytes"`)
+  })
+
+  test('behavior: stores extensions with generated challenge', async () => {
+    const entries = new Map<string, unknown>()
+    const kv: Kv.Kv = {
+      async get(key) {
+        return entries.get(key) as never
+      },
+      async set(key, value) {
+        entries.set(key, value)
+      },
+      async delete(key) {
+        entries.delete(key)
+      },
+    }
+    const s = await createServer(
+      webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost' }).listener,
+    )
+
+    try {
+      await fetch(`${s.url}/register/options`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          extensions: { hostContext: { value: 'register-context' } },
+          name: 'Test',
+        }),
+      })
+
+      const [stored] = entries.values() as IterableIterator<{
+        created: number
+        extensions?: unknown | undefined
+        name: string
+      }>
+      const { created: _created, ...rest } = stored!
+      expect(rest).toMatchInlineSnapshot(`
+        {
+          "extensions": {
+            "hostContext": {
+              "value": "register-context",
+            },
+          },
+          "name": "Test",
+        }
+      `)
+    } finally {
+      await s.closeAsync()
+    }
+  })
 })
 
 describe('POST /login/options', () => {
@@ -51,6 +158,63 @@ describe('POST /login/options', () => {
     const { options: a } = await ceremony.getAuthenticationOptions()
     const { options: b } = await ceremony.getAuthenticationOptions()
     expect(a.publicKey!.challenge).not.toBe(b.publicKey!.challenge)
+  })
+
+  test('error: rejects oversized extensions payloads', async () => {
+    const response = await fetch(`${server.url}/login/options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ extensions: { value: 'x'.repeat(16 * 1024) } }),
+    })
+
+    expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body.error).toMatchInlineSnapshot(`"WebAuthn extensions exceed 16384 bytes"`)
+  })
+
+  test('behavior: stores extensions with generated challenge', async () => {
+    const entries = new Map<string, unknown>()
+    const kv: Kv.Kv = {
+      async get(key) {
+        return entries.get(key) as never
+      },
+      async set(key, value) {
+        entries.set(key, value)
+      },
+      async delete(key) {
+        entries.delete(key)
+      },
+    }
+    const s = await createServer(
+      webAuthn({ kv, origin: 'http://localhost', rpId: 'localhost' }).listener,
+    )
+
+    try {
+      await fetch(`${s.url}/login/options`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          extensions: { hostContext: { value: 'login-context' } },
+        }),
+      })
+
+      const [stored] = entries.values() as IterableIterator<{
+        created: number
+        extensions?: unknown | undefined
+      }>
+      const { created: _created, ...rest } = stored!
+      expect(rest).toMatchInlineSnapshot(`
+        {
+          "extensions": {
+            "hostContext": {
+              "value": "login-context",
+            },
+          },
+        }
+      `)
+    } finally {
+      await s.closeAsync()
+    }
   })
 })
 
@@ -150,6 +314,44 @@ describe('hooks', () => {
     expect(called).toBe(false)
 
     await hookServer.closeAsync()
+  })
+
+  test('behavior: onRegister rejection removes created credential', async () => {
+    const kv = Kv.memory()
+    const challenge = Hex.random(32)
+    const credentialId = 'cred-register-rejected'
+    const publicKey = PublicKey.toHex(
+      P256.getPublicKey({ privateKey: P256.randomPrivateKey() }),
+    ) as Hex.Hex
+    await kv.set(`challenge:${challenge}`, { created: Date.now(), name: 'Rejected' })
+    webauthn_mock.verifyRegistration.mockReturnValue({ credential: { publicKey } })
+
+    const hookServer = await createServer(
+      webAuthn({
+        kv,
+        origin: 'http://localhost',
+        rpId: 'localhost',
+        onRegister() {
+          throw new Error('registration rejected')
+        },
+      }).listener,
+    )
+
+    try {
+      const response = await fetch(`${hookServer.url}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(registrationCredential({ challenge, credentialId, publicKey })),
+      })
+
+      expect(response.status).toBe(400)
+      const body = await response.json()
+      expect(body.error).toMatchInlineSnapshot(`"registration rejected"`)
+      expect(await kv.get(`credential:${credentialId}`)).toBeUndefined()
+      expect(await kv.get(`challenge:${challenge}`)).toBeUndefined()
+    } finally {
+      await hookServer.closeAsync()
+    }
   })
 
   test('behavior: onAuthenticate error does not call hook', async () => {

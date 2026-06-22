@@ -198,6 +198,43 @@ describe('server (hooks)', () => {
     expect(res.headers.get('x-custom')).toBe('register-hook')
   })
 
+  test('behavior: onRegister receives challenge-bound extensions', async () => {
+    const regOptionsRes = await fetch(`${hooksUrl}/register/options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        extensions: {
+          hostContext: {
+            expiresAt: 123,
+            requestId: 'register-request',
+            value: 'stored-register-context',
+          },
+        },
+        name: 'Hook Extension Test',
+      }),
+    })
+    const { options } = await regOptionsRes.json()
+    const credential = await Registration.create({ options })
+
+    const res = await fetch(`${hooksUrl}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...credential,
+        extensions: { hostContext: { value: 'final-body-register-context' } },
+      }),
+    })
+
+    const body = await res.json()
+    expect(body.extensions.hostContext).toMatchInlineSnapshot(`
+      {
+        "expiresAt": 123,
+        "requestId": "register-request",
+        "value": "stored-register-context",
+      }
+    `)
+  })
+
   test('behavior: onAuthenticate merges extra JSON and headers', async () => {
     // Register first
     const regOptionsRes = await fetch(`${hooksUrl}/register/options`, {
@@ -235,5 +272,57 @@ describe('server (hooks)', () => {
     expect(body.publicKey).toMatch(/^0x[0-9a-f]+$/)
     expect(body.sessionToken).toBe(`auth_${credentialId}`)
     expect(res.headers.get('x-custom')).toBe('authenticate-hook')
+  })
+
+  test('behavior: onAuthenticate receives challenge-bound extensions', async () => {
+    const regOptionsRes = await fetch(`${hooksUrl}/register/options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Hook Auth Extension Test' }),
+    })
+    const { options: regOptions } = await regOptionsRes.json()
+    const credential = await Registration.create({ options: regOptions })
+
+    const regRes = await fetch(`${hooksUrl}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credential),
+    })
+    const { credentialId } = await regRes.json()
+
+    const authOptionsRes = await fetch(`${hooksUrl}/login/options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        credentialId,
+        extensions: {
+          hostContext: {
+            expiresAt: 456,
+            requestId: 'login-request',
+            value: 'stored-login-context',
+          },
+        },
+      }),
+    })
+    const { options: authOptions } = await authOptionsRes.json()
+    const response = await Authentication.sign({ options: authOptions })
+
+    const res = await fetch(`${hooksUrl}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...response,
+        extensions: { hostContext: { value: 'final-body-login-context' } },
+      }),
+    })
+
+    const body = await res.json()
+    expect(body.extensions.hostContext).toMatchInlineSnapshot(`
+      {
+        "expiresAt": 456,
+        "requestId": "login-request",
+        "value": "stored-login-context",
+      }
+    `)
   })
 })

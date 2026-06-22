@@ -280,6 +280,8 @@ export declare namespace createAccount {
     keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Server Authentication result, if the auth capability was requested. */
     auth?: { token?: string | undefined } | undefined
+    /** Adapter-defined data returned by the account creation ceremony. */
+    extensions?: Record<string, unknown> | undefined
     /**
      * Consented identity claims (e.g. verified email), if the `identity`
      * capability was requested and the user approved sharing.
@@ -354,6 +356,8 @@ export declare namespace loadAccounts {
     keyAuthorization?: KeyAuthorization.Rpc | undefined
     /** Server Authentication result, if the auth capability was requested. */
     auth?: { token?: string | undefined } | undefined
+    /** Adapter-defined data returned by the account loading ceremony. */
+    extensions?: Record<string, unknown> | undefined
     /**
      * Consented identity claims (e.g. verified email), if the `identity`
      * capability was requested and the user approved sharing.

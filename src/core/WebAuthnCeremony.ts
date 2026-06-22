@@ -5,30 +5,35 @@ import { Authentication, Registration } from 'webauthx/server'
 import * as Storage from './Storage.js'
 
 /** Pluggable strategy for WebAuthn registration and authentication ceremonies. */
-export type WebAuthnCeremony = {
+export type WebAuthnCeremony<
+  requestExtensions extends Record<string, unknown> = Record<string, unknown>,
+  responseExtensions extends Record<string, unknown> = Record<string, unknown>,
+> = {
   /** Get credential creation options for `navigator.credentials.create()`. */
   getRegistrationOptions: (
-    params: getRegistrationOptions.Parameters,
+    params: getRegistrationOptions.Parameters<requestExtensions>,
   ) => Promise<getRegistrationOptions.ReturnType>
   /** Verify a registration response and extract the public key. */
   verifyRegistration: (
     credential: Registration.Credential,
     options?: verifyRegistration.Options | undefined,
-  ) => Promise<verifyRegistration.ReturnType>
+  ) => Promise<verifyRegistration.ReturnType<responseExtensions>>
   /** Get credential request options for `navigator.credentials.get()`. */
   getAuthenticationOptions: (
-    params?: getAuthenticationOptions.Parameters | undefined,
+    params?: getAuthenticationOptions.Parameters<requestExtensions> | undefined,
   ) => Promise<getAuthenticationOptions.ReturnType>
   /** Verify an authentication response and extract the public key. */
   verifyAuthentication: (
     response: Authentication.Response,
-  ) => Promise<verifyAuthentication.ReturnType>
+  ) => Promise<verifyAuthentication.ReturnType<responseExtensions>>
 }
 
 export declare namespace getRegistrationOptions {
-  type Parameters = {
+  type Parameters<extensions extends Record<string, unknown> = Record<string, unknown>> = {
     /** Credential IDs to exclude (prevents re-registering existing credentials). */
     excludeCredentialIds?: readonly string[] | undefined
+    /** Host-defined, JSON-serializable data to bind to this ceremony challenge. */
+    extensions?: extensions | undefined
     /** Credential display name (e.g. `"alice"`). */
     name: string
     /** Opaque user identifier. Encoded as `user.id` in the WebAuthn creation options. */
@@ -42,9 +47,11 @@ export declare namespace verifyRegistration {
     /** Display name for the credential (e.g. user's email). */
     name?: string | undefined
   }
-  type ReturnType = {
+  type ReturnType<extensions extends Record<string, unknown> = Record<string, unknown>> = {
     /** The registered credential's ID. */
     credentialId: string
+    /** Host-defined data returned by the server hook. */
+    extensions?: extensions | undefined
     /** The credential's public key (uncompressed P256, hex-encoded). */
     publicKey: Hex
     /** Username associated with the account. */
@@ -53,13 +60,15 @@ export declare namespace verifyRegistration {
 }
 
 export declare namespace getAuthenticationOptions {
-  type Parameters = {
+  type Parameters<extensions extends Record<string, unknown> = Record<string, unknown>> = {
     /** Credential IDs to allow (restricts which credentials can be used). */
     allowCredentialIds?: readonly string[] | undefined
     /** Challenge to use. */
     challenge?: `0x${string}` | undefined
     /** Credential ID to restrict authentication to a specific credential. */
     credentialId?: string | undefined
+    /** Host-defined, JSON-serializable data to bind to this ceremony challenge. */
+    extensions?: extensions | undefined
     /** Mediation hint for passkey autofill / conditional UI. */
     mediation?: 'conditional' | 'optional' | 'required' | 'silent' | undefined
   }
@@ -67,9 +76,11 @@ export declare namespace getAuthenticationOptions {
 }
 
 export declare namespace verifyAuthentication {
-  type ReturnType = {
+  type ReturnType<extensions extends Record<string, unknown> = Record<string, unknown>> = {
     /** The authenticated credential's ID. */
     credentialId: string
+    /** Host-defined data returned by the server hook. */
+    extensions?: extensions | undefined
     /** The credential's public key (uncompressed P256, hex-encoded). */
     publicKey: Hex
     /** User identifier from the authenticator's `userHandle` (discoverable/conditional flows). */
@@ -80,7 +91,12 @@ export declare namespace verifyAuthentication {
 }
 
 /** Creates a {@link WebAuthnCeremony} from a custom implementation. */
-export function from(ceremony: WebAuthnCeremony): WebAuthnCeremony {
+export function from<
+  const requestExtensions extends Record<string, unknown> = Record<string, unknown>,
+  const responseExtensions extends Record<string, unknown> = Record<string, unknown>,
+>(
+  ceremony: WebAuthnCeremony<requestExtensions, responseExtensions>,
+): WebAuthnCeremony<requestExtensions, responseExtensions> {
   return ceremony
 }
 
@@ -164,24 +180,47 @@ export declare namespace local {
  * const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
  * ```
  */
-export function server(options: server.Options): WebAuthnCeremony {
-  const { url } = options
+export function server<
+  const requestExtensions extends Record<string, unknown> = Record<string, unknown>,
+  const responseExtensions extends Record<string, unknown> = Record<string, unknown>,
+>(
+  options: server.Options<requestExtensions>,
+): WebAuthnCeremony<requestExtensions, responseExtensions> {
+  const { getExtensions, url } = options
 
   async function request<returnType>(path: string, body: unknown): Promise<returnType> {
+    let json_body: string
+    try {
+      json_body = JSON.stringify(body)
+    } catch {
+      throw new Error('WebAuthn extensions must be JSON-serializable')
+    }
+
     const response = await fetch(`${url}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: json_body,
     })
     const json = await response.json()
     if (!response.ok) throw new Error((json as { error?: string }).error ?? 'Request failed')
     return json as returnType
   }
 
+  async function resolveExtensions(parameters: { extensions?: requestExtensions | undefined }) {
+    if ('extensions' in parameters) return parameters.extensions
+    return await getExtensions?.()
+  }
+
   return from({
     async getRegistrationOptions(parameters) {
       const { excludeCredentialIds, name, userId } = parameters
-      return request('/register/options', { excludeCredentialIds, name, userId })
+      const extensions = await resolveExtensions(parameters)
+      return request('/register/options', {
+        excludeCredentialIds,
+        ...(extensions !== undefined ? { extensions } : {}),
+        name,
+        userId,
+      })
     },
 
     async verifyRegistration(credential) {
@@ -190,7 +229,14 @@ export function server(options: server.Options): WebAuthnCeremony {
 
     async getAuthenticationOptions(parameters = {}) {
       const { allowCredentialIds, challenge, credentialId, mediation } = parameters
-      return request('/login/options', { allowCredentialIds, challenge, credentialId, mediation })
+      const extensions = await resolveExtensions(parameters)
+      return request('/login/options', {
+        allowCredentialIds,
+        challenge,
+        credentialId,
+        ...(extensions !== undefined ? { extensions } : {}),
+        mediation,
+      })
     },
 
     async verifyAuthentication(response) {
@@ -200,7 +246,12 @@ export function server(options: server.Options): WebAuthnCeremony {
 }
 
 export declare namespace server {
-  type Options = {
+  type Options<extensions extends Record<string, unknown> = Record<string, unknown>> = {
+    /**
+     * Default extension payloads for each options request. Call-time
+     * `extensions` parameters take precedence.
+     */
+    getExtensions?: (() => extensions | undefined | Promise<extensions | undefined>) | undefined
     /** Base URL of the WebAuthn handler (e.g. `"https://example.com/webauthn"`). */
     url: string
   }

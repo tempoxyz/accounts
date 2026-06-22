@@ -130,7 +130,7 @@ export function local(options: local.Options): Adapter.Adapter {
 
             const digest = peronsalSign_digest ?? keyAuthorization_digest ?? rest.digest
 
-            const { accounts, signature, username } = await createAccount({
+            const { accounts, extensions, signature, username } = await createAccount({
               ...rest,
               digest,
             })
@@ -185,6 +185,7 @@ export function local(options: local.Options): Adapter.Adapter {
 
             return {
               accounts,
+              ...(extensions !== undefined ? { extensions } : {}),
               keyAuthorization,
               signature: signature_,
               username,
@@ -258,7 +259,10 @@ export function local(options: local.Options): Adapter.Adapter {
 
             // Pass the prepared digest (or the caller's) into loadAccounts so
             // the ceremony can sign it in a single biometric prompt.
-            const { accounts, signature, username } = await loadAccounts({ ...rest, digest })
+            const { accounts, extensions, signature, username } = await loadAccounts({
+              ...rest,
+              digest,
+            })
 
             // Hydrate here (not from the store) — same reason as createAccount.
             // Guard against empty accounts (e.g. user cancelled the ceremony).
@@ -310,6 +314,7 @@ export function local(options: local.Options): Adapter.Adapter {
 
             return {
               accounts,
+              ...(extensions !== undefined ? { extensions } : {}),
               keyAuthorization,
               signature: signature_,
               username,

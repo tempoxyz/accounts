@@ -20,6 +20,34 @@ const defaults = {
 
 const sessionKey = (token: string) => `session:${token}`
 
+const extensionsSizeLimit = 16 * 1024
+
+type Challenge<extensionMap extends Record<string, unknown> = Record<string, unknown>> = {
+  created: number
+  extensions?: extensionMap | undefined
+}
+
+type RegistrationChallenge<extensionMap extends Record<string, unknown> = Record<string, unknown>> =
+  Challenge<extensionMap> & {
+    name: string
+    userId?: string | undefined
+  }
+
+function validateExtensions<extensionMap extends Record<string, unknown>>(
+  extensions: unknown,
+): extensionMap | undefined {
+  if (extensions === undefined) return undefined
+  if (typeof extensions !== 'object' || extensions === null || Array.isArray(extensions))
+    throw new Error('WebAuthn extensions must be a JSON-serializable object')
+
+  const json = JSON.stringify(extensions)
+  if (json === undefined) throw new Error('WebAuthn extensions must be JSON-serializable')
+  if (new TextEncoder().encode(json).length > extensionsSizeLimit)
+    throw new Error(`WebAuthn extensions exceed ${extensionsSizeLimit} bytes`)
+
+  return extensions as extensionMap
+}
+
 async function createCredential(
   kv: Kv.Kv,
   key: string,
@@ -83,7 +111,9 @@ export type SessionPayload = {
  * @param options - Options.
  * @returns Request handler.
  */
-export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
+export function webAuthn<
+  const extensionMap extends Record<string, unknown> = Record<string, unknown>,
+>(options: webAuthn.Options<extensionMap>): webAuthn.ReturnType {
   const {
     cookie = true,
     cookieName = defaults.cookieName,
@@ -108,9 +138,11 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       const body = await c.req.raw.json()
       const { excludeCredentialIds, name, userId } = body as {
         excludeCredentialIds?: string[]
+        extensions?: unknown
         name: string
         userId?: string
       }
+      const extensions_ = validateExtensions<extensionMap>(body.extensions)
 
       const { challenge, options } = Registration.getOptions({
         excludeCredentialIds,
@@ -121,7 +153,12 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
       await kv.set(
         `challenge:${challenge}`,
-        { created: Date.now(), name, ...(userId ? { userId } : {}) },
+        {
+          created: Date.now(),
+          ...(extensions_ !== undefined ? { extensions: extensions_ } : {}),
+          name,
+          ...(userId ? { userId } : {}),
+        },
         { ttl: challengeTtl },
       )
 
@@ -140,9 +177,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         Bytes.toString(new Uint8Array(deserialized.clientDataJSON)),
       ) as { challenge: string }
       const challenge = Hex.fromBytes(Base64.toBytes(clientData.challenge))
-      const stored = await kv.get<{ created: number; name: string; userId?: string }>(
-        `challenge:${challenge}`,
-      )
+      const stored = await kv.get<RegistrationChallenge<extensionMap>>(`challenge:${challenge}`)
       if (!stored || Date.now() - stored.created > challengeTtl * 1_000)
         throw new Error('Missing or expired challenge')
 
@@ -166,16 +201,25 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       })
       if (!created) throw new Error('Credential already exists')
 
-      const [hook] = await Promise.all([
-        onRegister?.({
+      let hook: Response | void
+      try {
+        hook = await onRegister?.({
           credentialId,
+          ...(stored.extensions !== undefined ? { extensions: stored.extensions } : {}),
           name: stored.name,
           publicKey,
           request: c.req.raw,
           ...(userId ? { userId } : {}),
-        }),
-        kv.delete(`challenge:${challenge}`),
-      ])
+        })
+      } catch (error) {
+        await Promise.all([
+          kv.delete(`credential:${credentialId}`),
+          kv.delete(`challenge:${challenge}`),
+        ])
+        throw error
+      }
+
+      await kv.delete(`challenge:${challenge}`)
 
       // Successful registration is also a successful authentication for
       // the freshly-minted credential. Issue a session here so the
@@ -227,13 +271,16 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         allowCredentialIds,
         challenge: requestChallenge,
         credentialId,
+        extensions,
         mediation,
       } = body as {
         allowCredentialIds?: string[]
         challenge?: Hex.Hex
         credentialId?: string
+        extensions?: unknown
         mediation?: string
       }
+      const extensions_ = validateExtensions<extensionMap>(extensions)
 
       const { challenge, options: authOptions } = Authentication.getOptions({
         challenge: requestChallenge,
@@ -242,7 +289,11 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       })
       const options = mediation ? { ...authOptions, mediation } : authOptions
 
-      await kv.set(`challenge:${challenge}`, Date.now(), { ttl: challengeTtl })
+      await kv.set(
+        `challenge:${challenge}`,
+        { created: Date.now(), ...(extensions_ !== undefined ? { extensions: extensions_ } : {}) },
+        { ttl: challengeTtl },
+      )
 
       return Response.json({ options })
     } catch (error) {
@@ -263,10 +314,11 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       const challenge = Hex.fromBytes(Base64.toBytes(clientData.challenge))
 
       const [stored, credentialData] = await Promise.all([
-        kv.get<number>(`challenge:${challenge}`),
+        kv.get<number | Challenge<extensionMap>>(`challenge:${challenge}`),
         kv.get<{ publicKey: string; userId?: string }>(`credential:${response.id}`),
       ])
-      if (!stored || Date.now() - stored > challengeTtl * 1_000)
+      const challengeData = typeof stored === 'number' ? { created: stored } : stored
+      if (!challengeData || Date.now() - challengeData.created > challengeTtl * 1_000)
         throw new Error('Missing or expired challenge')
       if (!credentialData) throw new Error('Unknown credential')
 
@@ -292,6 +344,9 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         try {
           const result = await onAuthenticate({
             credentialId,
+            ...(challengeData.extensions !== undefined
+              ? { extensions: challengeData.extensions }
+              : {}),
             publicKey,
             request: c.req.raw,
             ...(userId ? { userId } : {}),
@@ -393,77 +448,82 @@ export declare namespace webAuthn {
   /** Resolves the current session from a request's cookie or bearer token. */
   type getSession = (req: Session.SessionRequest) => Promise<SessionPayload | undefined>
 
-  type Options = from.Options & {
-    /**
-     * Whether to issue a session cookie on successful login. When
-     * `false`, the login response always contains `{ token }` in the
-     * body, no `Set-Cookie` header is sent, logout does not clear a
-     * cookie, and `getSession` ignores any incoming cookie — only
-     * `Authorization: Bearer <token>` is honored. Use this when the SDK
-     * lives in a non-browser context or the host app already manages
-     * its own auth cookies.
-     * @default true
-     */
-    cookie?: boolean | undefined
-    /** Cookie name for the session token. @default "accounts_webauthn" */
-    cookieName?: string | undefined
-    /**
-     * Key-value store for challenges, credentials, and sessions. When
-     * `create` is available, credential registration uses it to reject
-     * duplicates atomically. Otherwise, registration falls back to
-     * best-effort `get` then `set` storage.
-     */
-    kv: Kv.Kv
-    /** Called after a successful registration. The returned response is merged onto the default JSON response. */
-    onRegister?: (parameters: {
-      credentialId: string
-      /** The name provided during `/register/options` (e.g. user email). */
-      name: string
-      publicKey: string
-      request: Request
-      /** The `userId` provided during `/register/options`, if any. */
-      userId?: string | undefined
-    }) => Response | Promise<Response> | void | Promise<void>
-    /**
-     * Called after a successful authentication, before the session
-     * token is issued. Returning a `Response` merges its JSON body and
-     * status onto the default login response (legacy contract).
-     * Throwing rejects the request with `401` — the thrown error's
-     * `message` is surfaced as the response `error` field — and no
-     * session is issued.
-     */
-    onAuthenticate?: (parameters: {
-      credentialId: string
-      publicKey: string
-      userId?: string | undefined
-      request: Request
-    }) => Response | Promise<Response> | void | Promise<void>
-    /** Expected origin(s) (e.g. `"https://example.com"` or `["https://a.com", "https://b.com"]`). */
-    origin: string | readonly string[]
-    /** Path prefix for the WebAuthn endpoints (e.g. `"/webauthn"`). @default "" */
-    path?: string | undefined
-    /** Relying Party ID (e.g. `"example.com"`). */
-    rpId: string
-    /**
-     * Whether to issue a session on successful login. When `false`,
-     * login acts as a stateless WebAuthn verification — no token is
-     * generated, no entry is written to the kv, and no cookie is sent.
-     * The login response still carries `{ credentialId, publicKey,
-     * userId? }`. `getSession` always returns `undefined` and `/logout`
-     * is a no-op (still returns `204`). Use this when the host
-     * application mints its own session token (e.g. a JWT inside
-     * `onAuthenticate`).
-     * @default true
-     */
-    session?: boolean | undefined
-    /** TTLs in seconds. */
-    ttl?:
-      | {
-          /** Challenge TTL. @default 300 (5m) */
-          challenge?: number | undefined
-          /** Session TTL. @default 86400 (24h) */
-          session?: number | undefined
-        }
-      | undefined
-  }
+  type Options<extensionMap extends Record<string, unknown> = Record<string, unknown>> =
+    from.Options & {
+      /**
+       * Whether to issue a session cookie on successful login. When
+       * `false`, the login response always contains `{ token }` in the
+       * body, no `Set-Cookie` header is sent, logout does not clear a
+       * cookie, and `getSession` ignores any incoming cookie — only
+       * `Authorization: Bearer <token>` is honored. Use this when the SDK
+       * lives in a non-browser context or the host app already manages
+       * its own auth cookies.
+       * @default true
+       */
+      cookie?: boolean | undefined
+      /** Cookie name for the session token. @default "accounts_webauthn" */
+      cookieName?: string | undefined
+      /**
+       * Key-value store for challenges, credentials, and sessions. When
+       * `create` is available, credential registration uses it to reject
+       * duplicates atomically. Otherwise, registration falls back to
+       * best-effort `get` then `set` storage.
+       */
+      kv: Kv.Kv
+      /** Called after a successful registration. The returned response is merged onto the default JSON response. */
+      onRegister?: (parameters: {
+        credentialId: string
+        /** Host-defined data supplied to `/register/options`, bound to the verified challenge. */
+        extensions?: extensionMap | undefined
+        /** The name provided during `/register/options` (e.g. user email). */
+        name: string
+        publicKey: string
+        request: Request
+        /** The `userId` provided during `/register/options`, if any. */
+        userId?: string | undefined
+      }) => Response | Promise<Response> | void | Promise<void>
+      /**
+       * Called after a successful authentication, before the session
+       * token is issued. Returning a `Response` merges its JSON body and
+       * status onto the default login response (legacy contract).
+       * Throwing rejects the request with `401` — the thrown error's
+       * `message` is surfaced as the response `error` field — and no
+       * session is issued.
+       */
+      onAuthenticate?: (parameters: {
+        credentialId: string
+        /** Host-defined data supplied to `/login/options`, bound to the verified challenge. */
+        extensions?: extensionMap | undefined
+        publicKey: string
+        userId?: string | undefined
+        request: Request
+      }) => Response | Promise<Response> | void | Promise<void>
+      /** Expected origin(s) (e.g. `"https://example.com"` or `["https://a.com", "https://b.com"]`). */
+      origin: string | readonly string[]
+      /** Path prefix for the WebAuthn endpoints (e.g. `"/webauthn"`). @default "" */
+      path?: string | undefined
+      /** Relying Party ID (e.g. `"example.com"`). */
+      rpId: string
+      /**
+       * Whether to issue a session on successful login. When `false`,
+       * login acts as a stateless WebAuthn verification — no token is
+       * generated, no entry is written to the kv, and no cookie is sent.
+       * The login response still carries `{ credentialId, publicKey,
+       * userId? }`. `getSession` always returns `undefined` and `/logout`
+       * is a no-op (still returns `204`). Use this when the host
+       * application mints its own session token (e.g. a JWT inside
+       * `onAuthenticate`).
+       * @default true
+       */
+      session?: boolean | undefined
+      /** TTLs in seconds. */
+      ttl?:
+        | {
+            /** Challenge TTL. @default 300 (5m) */
+            challenge?: number | undefined
+            /** Session TTL. @default 86400 (24h) */
+            session?: number | undefined
+          }
+        | undefined
+    }
 }

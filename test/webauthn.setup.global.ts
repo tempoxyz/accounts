@@ -4,6 +4,12 @@ import * as Handler from '../src/server/Handler.js'
 import * as Kv from '../src/server/Kv.js'
 import { hooksPort, port } from './webauthn.constants.js'
 
+function extensions_response(extensions: unknown) {
+  if (!extensions || typeof extensions !== 'object') return undefined
+  const { hostContext } = extensions as { hostContext?: unknown }
+  return hostContext === undefined ? undefined : { hostContext }
+}
+
 export default async function () {
   const kv = Kv.memory()
   const server = Http.createServer((req, res) => {
@@ -20,15 +26,15 @@ export default async function () {
       kv: hooksKv,
       origin,
       rpId: 'localhost',
-      onRegister({ credentialId }) {
+      onRegister({ credentialId, extensions }) {
         return Response.json(
-          { sessionToken: `reg_${credentialId}` },
+          { extensions: extensions_response(extensions), sessionToken: `reg_${credentialId}` },
           { headers: { 'x-custom': 'register-hook' } },
         )
       },
-      onAuthenticate({ credentialId }) {
+      onAuthenticate({ credentialId, extensions }) {
         return Response.json(
-          { sessionToken: `auth_${credentialId}` },
+          { extensions: extensions_response(extensions), sessionToken: `auth_${credentialId}` },
           { headers: { 'x-custom': 'authenticate-hook' } },
         )
       },

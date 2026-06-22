@@ -8,6 +8,12 @@ import { setupServer } from './prool.js'
 import { createServer } from './utils.js'
 import { hooksPort, port } from './webauthn.constants.js'
 
+function extensions_response(extensions: unknown) {
+  if (!extensions || typeof extensions !== 'object') return undefined
+  const { hostContext } = extensions as { hostContext?: unknown }
+  return hostContext === undefined ? undefined : { hostContext }
+}
+
 export default async function () {
   const teardowns: (() => Promise<void>)[] = []
 
@@ -26,15 +32,15 @@ export default async function () {
       kv: Kv.memory(),
       origin: 'http://localhost',
       rpId: 'localhost',
-      onRegister({ credentialId }) {
+      onRegister({ credentialId, extensions }) {
         return Response.json(
-          { sessionToken: `reg_${credentialId}` },
+          { extensions: extensions_response(extensions), sessionToken: `reg_${credentialId}` },
           { headers: { 'x-custom': 'register-hook' } },
         )
       },
-      onAuthenticate({ credentialId }) {
+      onAuthenticate({ credentialId, extensions }) {
         return Response.json(
-          { sessionToken: `auth_${credentialId}` },
+          { extensions: extensions_response(extensions), sessionToken: `auth_${credentialId}` },
           { headers: { 'x-custom': 'authenticate-hook' } },
         )
       },

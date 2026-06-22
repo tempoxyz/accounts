@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vp/test'
+import { afterEach, describe, expect, test } from 'vp/test'
 
 import * as WebAuthnCeremony from './WebAuthnCeremony.js'
 
@@ -147,5 +147,170 @@ describe('local', () => {
     const { options: a } = await ceremony.getAuthenticationOptions()
     const { options: b } = await ceremony.getAuthenticationOptions()
     expect(a.publicKey!.challenge).not.toBe(b.publicKey!.challenge)
+  })
+})
+
+describe('server', () => {
+  const fetch_ = globalThis.fetch
+
+  afterEach(() => {
+    globalThis.fetch = fetch_
+  })
+
+  function mock_fetch(calls: unknown[]) {
+    globalThis.fetch = (async (_input, init) => {
+      calls.push(JSON.parse(init?.body as string))
+      return Response.json({ options: {} })
+    }) as typeof fetch
+  }
+
+  test('behavior: sends call-time registration extensions', async () => {
+    const calls: unknown[] = []
+    mock_fetch(calls)
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+
+    await ceremony.getRegistrationOptions({
+      extensions: { source: 'call' },
+      name: 'Test',
+    })
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "extensions": {
+            "source": "call",
+          },
+          "name": "Test",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: sends default authentication extensions', async () => {
+    const calls: unknown[] = []
+    mock_fetch(calls)
+    const ceremony = WebAuthnCeremony.server({
+      url: 'https://example.com/webauthn',
+      getExtensions: () => ({ source: 'default' }),
+    })
+
+    await ceremony.getAuthenticationOptions()
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "extensions": {
+            "source": "default",
+          },
+        },
+      ]
+    `)
+  })
+
+  test('behavior: call-time extensions override default extensions', async () => {
+    const calls: unknown[] = []
+    mock_fetch(calls)
+    const ceremony = WebAuthnCeremony.server<{ source: string }>({
+      url: 'https://example.com/webauthn',
+      getExtensions: () => ({ source: 'default' }),
+    })
+
+    await ceremony.getAuthenticationOptions({ extensions: { source: 'call' } })
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "extensions": {
+            "source": "call",
+          },
+        },
+      ]
+    `)
+  })
+
+  test('behavior: verifyRegistration returns server extensions', async () => {
+    globalThis.fetch = (async () =>
+      Response.json({
+        credentialId: 'cred-1',
+        extensions: { hostContext: { id: 'context-1' } },
+        publicKey: '0x1234',
+      })) as typeof fetch
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+
+    const result = await ceremony.verifyRegistration({
+      attestationObject: 'mock',
+      clientDataJSON: 'mock',
+      id: 'cred-1',
+      publicKey: '0x1234',
+      raw: {
+        id: 'cred-1',
+        type: 'public-key',
+        authenticatorAttachment: null,
+        rawId: 'cred-1',
+        response: { clientDataJSON: 'mock' },
+      },
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "credentialId": "cred-1",
+        "extensions": {
+          "hostContext": {
+            "id": "context-1",
+          },
+        },
+        "publicKey": "0x1234",
+      }
+    `)
+  })
+
+  test('behavior: verifyAuthentication returns server extensions', async () => {
+    globalThis.fetch = (async () =>
+      Response.json({
+        credentialId: 'cred-1',
+        extensions: { hostContext: { id: 'context-1' } },
+        publicKey: '0x1234',
+      })) as typeof fetch
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+
+    const result = await ceremony.verifyAuthentication({
+      id: 'cred-1',
+      metadata: {
+        authenticatorData: '0x00',
+        clientDataJSON: '{}',
+      },
+      raw: {
+        id: 'cred-1',
+        type: 'public-key',
+        authenticatorAttachment: null,
+        rawId: 'cred-1',
+        response: { clientDataJSON: 'mock' },
+      },
+      signature: '0x00',
+    })
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "credentialId": "cred-1",
+        "extensions": {
+          "hostContext": {
+            "id": "context-1",
+          },
+        },
+        "publicKey": "0x1234",
+      }
+    `)
+  })
+
+  test('error: rejects non-serializable extensions data', async () => {
+    const ceremony = WebAuthnCeremony.server({ url: 'https://example.com/webauthn' })
+    const extensions: { self?: unknown } = {}
+    extensions.self = extensions
+
+    await expect(
+      ceremony.getAuthenticationOptions({ extensions }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: WebAuthn extensions must be JSON-serializable]`,
+    )
   })
 })

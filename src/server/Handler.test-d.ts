@@ -53,6 +53,32 @@ describe('auth identity (OIDC)', () => {
   })
 })
 
+describe('webAuthn extensions', () => {
+  type Extensions = {
+    hostContext?: { value: string } | undefined
+  }
+
+  test('hook extensions are typed from the handler generic', () => {
+    void Handler.webAuthn<Extensions>({
+      kv: {
+        async get() {
+          return undefined
+        },
+        async set() {},
+        async delete() {},
+      },
+      origin: 'http://localhost',
+      rpId: 'localhost',
+      onRegister({ extensions }) {
+        expectTypeOf(extensions?.hostContext?.value).toEqualTypeOf<string | undefined>()
+      },
+      onAuthenticate({ extensions }) {
+        expectTypeOf(extensions?.hostContext?.value).toEqualTypeOf<string | undefined>()
+      },
+    })
+  })
+})
+
 describe('compose', () => {
   // Two ad-hoc schema-typed handlers to exercise schema merging.
   function makeAlpha() {
