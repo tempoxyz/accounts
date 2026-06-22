@@ -180,14 +180,13 @@ describe('wallet_connect.capabilities.request: auth', () => {
     `)
   })
 
-  test('accepts object with `resources` and `statement`', () => {
+  test('accepts object with `resources`', () => {
     expect(
       z.parse(Rpc.wallet_connect.capabilities.request, {
         method: 'login',
         auth: {
           url: '/api/auth',
           resources: ['urn:tempo:api-signing-key:test'],
-          statement: 'Authorize a scoped API signing key.',
         },
       }),
     ).toMatchInlineSnapshot(`
@@ -196,7 +195,6 @@ describe('wallet_connect.capabilities.request: auth', () => {
           "resources": [
             "urn:tempo:api-signing-key:test",
           ],
-          "statement": "Authorize a scoped API signing key.",
           "url": "/api/auth",
         },
         "method": "login",

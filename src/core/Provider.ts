@@ -2007,7 +2007,6 @@ function absolutizeAuth(
       ? { resources: auth.resources }
       : {}),
     ...(typeof auth === 'object' && auth.returnToken ? { returnToken: true } : {}),
-    ...(typeof auth === 'object' && auth.statement ? { statement: auth.statement } : {}),
   }
   assertSameAuthOrigin(resolved)
   return resolved
@@ -2062,7 +2061,6 @@ function validateAuthMessage(
     options.url ??
     (typeof auth === 'object' ? auth.challenge! : resolveAuthEndpoint(auth, 'challenge'))
   const resources = typeof auth === 'object' ? auth.resources : undefined
-  const statement = typeof auth === 'object' ? auth.statement : undefined
   const parsed = parseSiweMessage(message)
   const expected = new URL(url)
 
@@ -2090,10 +2088,6 @@ function validateAuthMessage(
     throw new RpcResponse.InvalidParamsError({
       message: `Server Authentication challenge endpoint \`${url}\` did not echo the requested SIWE resources.`,
     })
-  if (statement && parsed.statement !== statement)
-    throw new RpcResponse.InvalidParamsError({
-      message: `Server Authentication challenge endpoint \`${url}\` did not echo the requested SIWE statement.`,
-    })
 }
 
 /**
@@ -2117,14 +2111,12 @@ async function fetchAuthChallenge(
 ): Promise<{ message: string }> {
   const url = typeof auth === 'object' ? auth.challenge! : resolveAuthEndpoint(auth, 'challenge')
   const resources = typeof auth === 'object' ? auth.resources : undefined
-  const statement = typeof auth === 'object' ? auth.statement : undefined
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       chainId,
       ...(resources !== undefined ? { resources } : {}),
-      ...(statement ? { statement } : {}),
     }),
   })
   if (!res.ok)
