@@ -89,8 +89,6 @@ export namespace schema {
       chainId: z.optional(z.number()),
       /** SIWE resources to bind into the issued challenge message. */
       resources: z.optional(z.readonly(z.array(resource).check(z.maxLength(maxResources)))),
-      /** Human-readable SIWE statement to bind into the issued challenge message. */
-      statement: z.optional(z.string()),
     })
 
     /** Response body schema. */
@@ -163,6 +161,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     path = '/',
     origin: origin_option,
     session = true,
+    statement,
     store = Kv.memory(),
     transport = http(),
     // Cloudflare Workers always run behind Cloudflare's edge proxy, which
@@ -211,11 +210,15 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
   const logoutPath = path === '/' ? '/logout' : `${path}/logout`
 
   router.post(challengePath, Hono.validate('json', schema.challenge.parameters), async (c) => {
-    const { chainId = 0, resources, statement } = c.req.valid('json')
+    const { chainId = 0, resources } = c.req.valid('json')
 
     if (resources?.some((resource) => lineBreak.test(resource)))
       return c.json({ error: 'resources must not include line breaks' }, 400)
-    if (statement !== undefined && lineBreak.test(statement))
+    const statementValue =
+      typeof statement === 'function'
+        ? await statement({ chainId, resources, request: c.req.raw })
+        : statement
+    if (statementValue !== undefined && lineBreak.test(statementValue))
       return c.json({ error: 'statement must not include line breaks' }, 400)
 
     const { protocol, host: reqHost } = resolveReqOrigin(c.req.raw)
@@ -237,7 +240,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
           issuedAt,
           expirationTime,
           ...(resources?.length ? { resources: [...resources] } : {}),
-          ...(statement ? { statement } : {}),
+          ...(statementValue ? { statement: statementValue } : {}),
         })
       } catch (error) {
         return error instanceof Error ? error : new Error('invalid SIWE challenge parameters')
@@ -522,6 +525,22 @@ export declare namespace auth {
      * @default true
      */
     session?: boolean | undefined
+    /**
+     * Human-readable SIWE statement to bind into issued challenges. Static
+     * strings are used verbatim; callbacks can derive copy from the accepted
+     * `resources` while keeping the user-facing text under server control.
+     */
+    statement?:
+      | string
+      | ((params: {
+          /** Chain ID requested for the SIWE challenge. */
+          chainId: number
+          /** SIWE resources requested by the caller. */
+          resources?: readonly string[] | undefined
+          /** Underlying request — useful for headers, IP, etc. */
+          request: Request
+        }) => string | Promise<string | undefined> | undefined)
+      | undefined
     /**
      * Backing store for both single-use challenges (nonces) and issued
      * sessions. Keys are namespaced internally (`challenge:…`, `session:…`).

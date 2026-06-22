@@ -4,11 +4,10 @@ import type * as z from 'zod/mini'
 import type * as Rpc from './rpc.js'
 
 describe('wallet_connect.auth', () => {
-  test('request exposes resources and statement', () => {
+  test('request exposes resources', () => {
     type Auth = Exclude<z.output<typeof Rpc.wallet_connect.auth>, string | undefined>
     expectTypeOf<Auth>().toMatchTypeOf<{
       resources?: readonly string[] | undefined
-      statement?: string | undefined
     }>()
   })
 

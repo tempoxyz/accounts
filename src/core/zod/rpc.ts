@@ -632,11 +632,6 @@ export namespace wallet_connect {
          * to surface the JWT alongside a cookie in dual-transport setups.
          */
         returnToken: z.optional(z.boolean()),
-        /**
-         * Human-readable SIWE statement to pair with machine-readable
-         * `resources`. The server-issued challenge must echo it exactly.
-         */
-        statement: z.optional(z.string()),
       }),
     ]),
   )

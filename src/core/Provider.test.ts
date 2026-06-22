@@ -222,10 +222,9 @@ describe('wallet_connect', () => {
       options: {
         chainId?: `0x${string}` | undefined
         resources: readonly string[]
-        statement?: string | undefined
       },
     ) {
-      const { chainId, resources, statement } = options
+      const { chainId, resources } = options
       return provider.request({
         method: 'wallet_connect',
         params: [
@@ -235,7 +234,6 @@ describe('wallet_connect', () => {
               auth: {
                 url: 'https://app.example.com/auth',
                 resources,
-                ...(statement ? { statement } : {}),
               },
             },
           },
@@ -243,7 +241,7 @@ describe('wallet_connect', () => {
       })
     }
 
-    test('behavior: sends resources and statement to the challenge endpoint', async () => {
+    test('behavior: sends resources and accepts a server-provided statement', async () => {
       const resources = ['urn:tempo:api-signing-key:test', 'https://api.example.com/signing-keys/1']
       let challengeBody: Record<string, unknown> | undefined
       stubAuthFetch({
@@ -259,7 +257,6 @@ describe('wallet_connect', () => {
       await connect(provider, {
         chainId: Hex.fromNumber(1),
         resources,
-        statement: 'Authorize a scoped API signing key.',
       })
 
       expect(challengeBody).toMatchInlineSnapshot(`
@@ -269,7 +266,6 @@ describe('wallet_connect', () => {
             "urn:tempo:api-signing-key:test",
             "https://api.example.com/signing-keys/1",
           ],
-          "statement": "Authorize a scoped API signing key.",
         }
       `)
     })

@@ -4,7 +4,7 @@ import { KeyAuthorization } from 'ox/tempo'
 import { hashMessage } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { parseSiweMessage } from 'viem/siwe'
-import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vp/test'
 
 import { createServer } from '../../../../test/utils.js'
 import * as Handler from '../../Handler.js'
@@ -83,14 +83,13 @@ describe('challenge', () => {
     expect(parsed.nonce).toMatch(/^[a-z0-9]+$/)
   })
 
-  test('includes requested resources and statement in the challenge message', async () => {
-    const { app } = setup()
+  test('includes requested resources and configured statement in the challenge message', async () => {
+    const { app } = setup({ statement: 'Authorize account access.' })
     const resources = ['urn:tempo:api-signing-key:test', 'https://api.example.com/signing-keys/1']
 
     const { status, body } = await getChallenge(app, {
       chainId: 1,
       resources,
-      statement: 'Authorize a scoped API signing key.',
     })
 
     expect(status).toBe(200)
@@ -101,9 +100,95 @@ describe('challenge', () => {
           "urn:tempo:api-signing-key:test",
           "https://api.example.com/signing-keys/1",
         ],
-        "statement": "Authorize a scoped API signing key.",
+        "statement": "Authorize account access.",
       }
     `)
+  })
+
+  test('uses statement callback output in the challenge message', async () => {
+    const resources = ['https://api.example.com/signing-keys/1']
+    let params_seen:
+      | {
+          chainId: number
+          resources?: readonly string[] | undefined
+          url: string
+        }
+      | undefined
+    const statement = vi.fn(
+      (params: {
+        chainId: number
+        resources?: readonly string[] | undefined
+        request: Request
+      }) => {
+        params_seen = {
+          chainId: params.chainId,
+          resources: params.resources,
+          url: params.request.url,
+        }
+        return `Authorize ${params.resources?.length ?? 0} resource.`
+      },
+    )
+    const { app } = setup({ statement })
+
+    const { status, body } = await getChallenge(app, {
+      chainId: 1,
+      resources,
+    })
+
+    expect(status).toBe(200)
+    const parsed = parseSiweMessage(body.message!)
+    expect({ params: params_seen, statement: parsed.statement }).toMatchInlineSnapshot(`
+      {
+        "params": {
+          "chainId": 1,
+          "resources": [
+            "https://api.example.com/signing-keys/1",
+          ],
+          "url": "http://localhost/challenge",
+        },
+        "statement": "Authorize 1 resource.",
+      }
+    `)
+  })
+
+  test('supports async statement callbacks', async () => {
+    const resources = ['https://api.example.com/signing-keys/1']
+    const statement = vi.fn(async (params: { resources?: readonly string[] | undefined }) => {
+      return `Authorize ${params.resources?.length ?? 0} resource.`
+    })
+    const { app } = setup({ statement })
+
+    const { status, body } = await getChallenge(app, {
+      chainId: 1,
+      resources,
+    })
+
+    expect(status).toBe(200)
+    const parsed = parseSiweMessage(body.message!)
+    expect({ calls: statement.mock.calls.length, statement: parsed.statement })
+      .toMatchInlineSnapshot(`
+      {
+        "calls": 1,
+        "statement": "Authorize 1 resource.",
+      }
+    `)
+  })
+
+  test('ignores requester-provided statement', async () => {
+    const { app } = setup({ statement: 'Server statement.' })
+
+    const res = await app.request('/challenge', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', host: 'wallet.example' },
+      body: JSON.stringify({
+        chainId: 1,
+        statement: 'Requester statement.',
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    const { message } = (await res.json()) as { message: string }
+    expect(parseSiweMessage(message).statement).toMatchInlineSnapshot(`"Server statement."`)
   })
 
   test('rejects invalid resource URIs', async () => {
@@ -122,17 +207,14 @@ describe('challenge', () => {
     `)
   })
 
-  test('rejects line breaks in resources and statements', async () => {
+  test('rejects line breaks in resources and configured statement', async () => {
     const { app } = setup()
 
     const resource = await getChallenge(app, {
       chainId: 1,
       resources: ['urn:tempo:one\ntwo'],
     })
-    const statement = await getChallenge(app, {
-      chainId: 1,
-      statement: 'one\ntwo',
-    })
+    const statement = await getChallenge(setup({ statement: 'one\ntwo' }).app, { chainId: 1 })
 
     expect({
       resource: { body: resource.body, status: resource.status },
@@ -1291,7 +1373,6 @@ async function getChallenge(
   body: {
     chainId: number
     resources?: readonly string[] | undefined
-    statement?: string | undefined
   },
 ) {
   const res = await app.request('/challenge', {
