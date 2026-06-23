@@ -802,6 +802,54 @@ describe('wallet_authorizeAccessKey.parameters: T5 fields', () => {
   })
 })
 
+describe('wallet_authorizeAdminKey.parameters', () => {
+  test('accepts admin key authorization parameters without expiry', () => {
+    expect(
+      z.parse(Rpc.wallet_authorizeAdminKey.parameters, {
+        publicKey: '0x1234',
+        keyType: 'p256',
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "keyType": "p256",
+        "publicKey": "0x1234",
+      }
+    `)
+  })
+})
+
+describe('wallet_receivePolicy schemas', () => {
+  test('decodes get return values', () => {
+    expect(
+      z.decode(Rpc.wallet_receivePolicy_get.returns, {
+        claimer: 'self',
+        hasReceivePolicy: true,
+        recoveryAuthority: account,
+        senderPolicyId: '0x2',
+        senderPolicyType: 'whitelist',
+        tokenPolicyId: 'allow-all',
+        tokenPolicyType: 'blacklist',
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "claimer": "self",
+        "hasReceivePolicy": true,
+        "recoveryAuthority": "0x0000000000000000000000000000000000000001",
+        "senderPolicyId": 2n,
+        "senderPolicyType": "whitelist",
+        "tokenPolicyId": "allow-all",
+        "tokenPolicyType": "blacklist",
+      }
+    `)
+  })
+
+  test('encodes blocked balances', () => {
+    expect(
+      z.encode(Rpc.wallet_receivePolicy_getBlockedBalance.schema.returns!, 123n),
+    ).toMatchInlineSnapshot(`"0x7b"`)
+  })
+})
+
 describe('wallet_authorizeAccessKey_strict.parameters: showDeposit', () => {
   test('accepts showDeposit with required access-key policy', () => {
     expect(

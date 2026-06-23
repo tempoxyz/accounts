@@ -1,3 +1,4 @@
+import type { Hex } from 'viem'
 import { describe, expectTypeOf, test } from 'vp/test'
 import type * as z from 'zod/mini'
 
@@ -44,5 +45,22 @@ describe('wallet_connect.identity', () => {
     expectTypeOf<Result['identity']>().toEqualTypeOf<
       { email?: string | null | undefined; idToken?: string | undefined } | undefined
     >()
+  })
+})
+
+describe('receive policy rpc', () => {
+  test('wallet_receivePolicy_get decodes policy refs', () => {
+    type Parameters = Rpc.wallet_receivePolicy_get.Decoded['params'][0]
+    type Returns = Rpc.wallet_receivePolicy_get.Decoded['returns']
+
+    expectTypeOf<Parameters>().toEqualTypeOf<{ account: Hex; chainId?: number | undefined }>()
+    expectTypeOf<Returns['senderPolicyId']>().toEqualTypeOf<bigint | 'reject-all' | 'allow-all'>()
+    expectTypeOf<Returns['claimer']>().toEqualTypeOf<'sender' | 'self' | Hex>()
+  })
+
+  test('wallet_receivePolicy write methods expose hashes', () => {
+    expectTypeOf<Rpc.wallet_receivePolicy_set.Decoded['returns']>().toEqualTypeOf<Hex>()
+    expectTypeOf<Rpc.wallet_receivePolicy_claim.Decoded['returns']>().toEqualTypeOf<Hex>()
+    expectTypeOf<Rpc.wallet_receivePolicy_burn.Decoded['returns']>().toEqualTypeOf<Hex>()
   })
 })

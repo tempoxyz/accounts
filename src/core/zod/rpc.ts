@@ -528,6 +528,26 @@ export namespace wallet_authorizeAccessKey {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
+export namespace wallet_authorizeAdminKey {
+  export const parameters = z.object({
+    address: z.optional(u.address()),
+    chainId: z.optional(u.bigint()),
+    expiry: z.optional(z.number()),
+    keyType: z.optional(keyType),
+    publicKey: z.optional(u.hex()),
+  })
+
+  export const returns = wallet_authorizeAccessKey.returns
+
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_authorizeAdminKey'),
+    params: z.readonly(z.tuple([parameters])),
+    returns,
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
 export namespace wallet_authorizeAccessKey_strict {
   export const parameters = z.object({
     address: z.optional(u.address()),
@@ -587,6 +607,130 @@ export namespace wallet_updateAccessKey {
     method: z.literal('wallet_updateAccessKey'),
     params: z.readonly(z.tuple([parameters])),
     returns: undefined,
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
+const policyType = z.union([z.literal('whitelist'), z.literal('blacklist')])
+const policyRef = z.union([z.literal('reject-all'), z.literal('allow-all'), u.bigint()])
+const receivePolicyClaimer = z.union([z.literal('sender'), z.literal('self'), u.address()])
+const receivePolicyBlockedReason = z.union([
+  z.literal('none'),
+  z.literal('tokenFilter'),
+  z.literal('receivePolicy'),
+])
+
+const receivePolicyReadOptions = z.object({
+  chainId: z.optional(u.number()),
+})
+
+const receivePolicyWriteOptions = z.object({
+  chainId: z.optional(u.number()),
+  feePayer: z.optional(z.union([z.boolean(), z.string()])),
+  from: z.optional(u.address()),
+})
+
+export namespace wallet_receivePolicy_get {
+  export const parameters = z.object({
+    account: u.address(),
+    chainId: z.optional(u.number()),
+  })
+
+  export const returns = z.object({
+    claimer: receivePolicyClaimer,
+    hasReceivePolicy: z.boolean(),
+    recoveryAuthority: u.address(),
+    senderPolicyId: policyRef,
+    senderPolicyType: policyType,
+    tokenPolicyId: policyRef,
+    tokenPolicyType: policyType,
+  })
+
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_receivePolicy_get'),
+    params: z.readonly(z.tuple([parameters])),
+    returns,
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
+export namespace wallet_receivePolicy_set {
+  export const parameters = z.extend(receivePolicyWriteOptions, {
+    claimer: z.optional(receivePolicyClaimer),
+    senderPolicyId: z.optional(policyRef),
+    tokenPolicyId: z.optional(policyRef),
+  })
+
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_receivePolicy_set'),
+    params: z.readonly(z.tuple([parameters])),
+    returns: u.hex(),
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
+export namespace wallet_receivePolicy_validate {
+  export const parameters = z.extend(receivePolicyReadOptions, {
+    receiver: u.address(),
+    sender: u.address(),
+    token: u.address(),
+  })
+
+  export const returns = z.object({
+    authorized: z.boolean(),
+    blockedReason: receivePolicyBlockedReason,
+  })
+
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_receivePolicy_validate'),
+    params: z.readonly(z.tuple([parameters])),
+    returns,
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
+export namespace wallet_receivePolicy_getBlockedBalance {
+  export const parameters = z.extend(receivePolicyReadOptions, {
+    receipt: u.hex(),
+  })
+
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_receivePolicy_getBlockedBalance'),
+    params: z.readonly(z.tuple([parameters])),
+    returns: u.bigint(),
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
+export namespace wallet_receivePolicy_claim {
+  export const parameters = z.extend(receivePolicyWriteOptions, {
+    receipt: u.hex(),
+    to: u.address(),
+  })
+
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_receivePolicy_claim'),
+    params: z.readonly(z.tuple([parameters])),
+    returns: u.hex(),
+  })
+  export type Encoded = Schema.Encoded<typeof schema>
+  export type Decoded = Schema.Decoded<typeof schema>
+}
+
+export namespace wallet_receivePolicy_burn {
+  export const parameters = z.extend(receivePolicyWriteOptions, {
+    receipt: u.hex(),
+  })
+
+  export const schema = Schema.defineItem({
+    method: z.literal('wallet_receivePolicy_burn'),
+    params: z.readonly(z.tuple([parameters])),
+    returns: u.hex(),
   })
   export type Encoded = Schema.Encoded<typeof schema>
   export type Decoded = Schema.Decoded<typeof schema>

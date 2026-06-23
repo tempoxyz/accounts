@@ -161,6 +161,36 @@ describe('Encoded', () => {
     )
   })
 
+  test('wallet_authorizeAdminKey', () => {
+    expectTypeOf<Rpc.wallet_authorizeAdminKey.Encoded>().toMatchTypeOf<{
+      method: 'wallet_authorizeAdminKey'
+      params: readonly [{ expiry?: number | undefined; publicKey?: Hex | undefined }]
+      returns: { rootAddress: Hex }
+    }>()
+  })
+
+  test('wallet_receivePolicy', () => {
+    expectTypeOf<Rpc.wallet_receivePolicy_get.Encoded>().toMatchTypeOf<{
+      method: 'wallet_receivePolicy_get'
+      params: readonly [{ account: Hex; chainId?: Hex | undefined }]
+      returns: { senderPolicyId: Hex | 'reject-all' | 'allow-all' }
+    }>()
+    expectTypeOf<Rpc.wallet_receivePolicy_set.Encoded>().toMatchTypeOf<{
+      method: 'wallet_receivePolicy_set'
+      params: readonly [{ claimer?: 'sender' | 'self' | Hex | undefined }]
+      returns: Hex
+    }>()
+    expectTypeOf<Rpc.wallet_receivePolicy_validate.Encoded['returns']>().toMatchTypeOf<{
+      authorized: boolean
+      blockedReason: 'none' | 'tokenFilter' | 'receivePolicy'
+    }>()
+    expectTypeOf<
+      Rpc.wallet_receivePolicy_getBlockedBalance.Encoded['returns']
+    >().toEqualTypeOf<Hex>()
+    expectTypeOf<Rpc.wallet_receivePolicy_claim.Encoded['returns']>().toEqualTypeOf<Hex>()
+    expectTypeOf<Rpc.wallet_receivePolicy_burn.Encoded['returns']>().toEqualTypeOf<Hex>()
+  })
+
   test('wallet_disconnect', () => {
     expectTypeOf<Rpc.wallet_disconnect.Encoded>().toEqualTypeOf<{
       method: 'wallet_disconnect'
@@ -260,7 +290,7 @@ describe('Ox', () => {
 describe('Viem', () => {
   test('is a tuple of all provider methods', () => {
     expectTypeOf<Schema.Viem[0]['Method']>().toEqualTypeOf<'eth_accounts'>()
-    expectTypeOf<Schema.Viem[22]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
+    expectTypeOf<Schema.Viem[29]['Method']>().toEqualTypeOf<'wallet_switchEthereumChain'>()
   })
 })
 
@@ -282,12 +312,19 @@ describe('Request', () => {
       | 'wallet_getCapabilities'
       | 'wallet_sendCalls'
       | 'wallet_switchEthereumChain'
+      | 'wallet_authorizeAdminKey'
       | 'wallet_authorizeAccessKey'
       | 'eth_sendTransactionSync'
       | 'wallet_deposit'
       | 'wallet_depositZone'
       | 'wallet_getBalances'
       | 'wallet_revokeAccessKey'
+      | 'wallet_receivePolicy_burn'
+      | 'wallet_receivePolicy_claim'
+      | 'wallet_receivePolicy_get'
+      | 'wallet_receivePolicy_getBlockedBalance'
+      | 'wallet_receivePolicy_set'
+      | 'wallet_receivePolicy_validate'
       | 'wallet_updateAccessKey'
       | 'wallet_transfer'
       | 'wallet_swap'

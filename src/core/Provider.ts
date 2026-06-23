@@ -66,6 +66,8 @@ const announced = new Set<string>()
 
 type TransactionParameters = Adapter.ActionRequest<typeof Rpc.eth_sendTransaction.schema>
 
+type AuthorizeAdminKeyParameters = z.output<typeof Rpc.wallet_authorizeAdminKey.parameters>
+
 type WalletConnectCapabilities = NonNullable<
   NonNullable<Rpc.wallet_connect.Decoded['params']>[number]['capabilities']
 >
@@ -460,6 +462,36 @@ export function create(options: create.Options = {}): create.ReturnType {
     return result
   }
 
+  async function authorizeAdminKey(parameters: AuthorizeAdminKeyParameters) {
+    const selected = await getAdapterAccount()
+    const chainId = parameters.chainId ?? getClient().chain.id
+    if (selected.account.type !== 'json-rpc') {
+      const keyAuthorization = await store.accessKeys.authorize({
+        account: selected.account as Pick<TempoAccount.Account, 'address' | 'sign'>,
+        chainId,
+        parameters: { ...parameters, isAdmin: true },
+      })
+      return { keyAuthorization, rootAddress: selected.account.address }
+    }
+
+    const prepared = await prepareAuthorizeAdminKey(parameters, Number(chainId))
+    const client = getWalletClient({
+      account: selected.account,
+      chainId: Number(chainId),
+      transport: selected.transport,
+    })
+    const result = (await client.request({
+      method: 'wallet_authorizeAdminKey' as never,
+      params: [z.encode(Rpc.wallet_authorizeAdminKey.parameters, prepared.parameters)] as never,
+    })) as Rpc.wallet_authorizeAdminKey.Encoded['returns']
+    await savePreparedAccessKey({
+      account: result.rootAddress,
+      accessKey: prepared,
+      keyAuthorization: result.keyAuthorization,
+    })
+    return result
+  }
+
   async function prepareAuthorizeAccessKey(
     parameters: Adapter.authorizeAccessKey.Parameters,
     chainId: number | undefined,
@@ -503,6 +535,37 @@ export function create(options: create.Options = {}): create.ReturnType {
     }
   }
 
+  async function prepareAuthorizeAdminKey(
+    parameters: AuthorizeAdminKeyParameters,
+    chainId: number | undefined,
+  ): Promise<{
+    key?: { handle: Keystore.Handle; publicKey: Hex.Hex } | undefined
+    parameters: AuthorizeAdminKeyParameters
+  }> {
+    const chainId_ = parameters.chainId ?? chainId ?? getClient().chain.id
+    if (parameters.address || parameters.publicKey)
+      return { parameters: { ...parameters, chainId: BigInt(chainId_) } }
+    if (!keystores_configured && !isBrowserWebCrypto())
+      return { parameters: { ...parameters, chainId: BigInt(chainId_) } }
+
+    const type = parameters.keyType ?? 'p256'
+    const keystore = type === 'webAuthn' ? undefined : keystores[type]
+    if (!keystore)
+      throw new RpcResponse.InvalidParamsError({
+        message: `\`keyType: "${type}"\` requires externally generated key material; provide \`publicKey\` or \`address\`.`,
+      })
+    const key = await keystore.createKey()
+    return {
+      key,
+      parameters: {
+        ...parameters,
+        chainId: BigInt(chainId_),
+        keyType: type,
+        publicKey: key.publicKey,
+      },
+    }
+  }
+
   function toAuthorizeAccessKeyParameters(
     parameters: Adapter.authorizeAccessKey.Parameters,
     keyAuthorization: Awaited<
@@ -520,7 +583,12 @@ export function create(options: create.Options = {}): create.ReturnType {
   }
 
   async function savePreparedAccessKey(options: {
-    accessKey: Awaited<ReturnType<typeof prepareAuthorizeAccessKey>> | undefined
+    accessKey:
+      | {
+          key?: { handle: Keystore.Handle; publicKey: Hex.Hex } | undefined
+          privateKey?: Hex.Hex | undefined
+        }
+      | undefined
     account: Address.Address | undefined
     keyAuthorization: KeyAuthorization.Rpc | undefined
   }) {
@@ -599,6 +667,93 @@ export function create(options: create.Options = {}): create.ReturnType {
       account: selected.account,
       calls,
     })
+  }
+
+  function getReceivePolicyClient(options: { chainId?: number | undefined }) {
+    return getClient({ chainId: options.chainId })
+  }
+
+  async function getReceivePolicy(parameters: Rpc.wallet_receivePolicy_get.Decoded['params'][0]) {
+    const { chainId, ...rest } = parameters
+    return await Actions.receivePolicy.get(getReceivePolicyClient({ chainId }), rest)
+  }
+
+  async function validateReceivePolicy(
+    parameters: Rpc.wallet_receivePolicy_validate.Decoded['params'][0],
+  ) {
+    const { chainId, ...rest } = parameters
+    return await Actions.receivePolicy.validate(getReceivePolicyClient({ chainId }), rest)
+  }
+
+  async function getReceivePolicyBlockedBalance(
+    parameters: Rpc.wallet_receivePolicy_getBlockedBalance.Decoded['params'][0],
+  ) {
+    const { chainId, ...rest } = parameters
+    return await Actions.receivePolicy.getBlockedBalance(getReceivePolicyClient({ chainId }), rest)
+  }
+
+  function resolveReceivePolicyFeePayer(feePayer: string | boolean | undefined): {
+    client: string | false | undefined
+    request: boolean
+  } {
+    const resolved = resolveFeePayer(feePayer)
+    return {
+      client: typeof resolved === 'string' ? resolved : resolved === false ? false : undefined,
+      request: typeof resolved === 'string',
+    }
+  }
+
+  async function setReceivePolicy(parameters: Rpc.wallet_receivePolicy_set.Decoded['params'][0]) {
+    const { chainId, feePayer, from, ...rest } = parameters
+    const selected = await getAdapterAccount({ address: from })
+    const feePayer_ = resolveReceivePolicyFeePayer(feePayer)
+    const client = getWalletClient({
+      account: selected.account,
+      chainId,
+      feePayer: feePayer_.client,
+      transport: selected.transport,
+    })
+    return await Actions.receivePolicy.set(client, {
+      account: selected.account as never,
+      ...rest,
+      ...(feePayer_.request ? { feePayer: true as never } : {}),
+    } as never)
+  }
+
+  async function claimReceivePolicy(
+    parameters: Rpc.wallet_receivePolicy_claim.Decoded['params'][0],
+  ) {
+    const { chainId, feePayer, from, ...rest } = parameters
+    const selected = await getAdapterAccount({ address: from })
+    const feePayer_ = resolveReceivePolicyFeePayer(feePayer)
+    const client = getWalletClient({
+      account: selected.account,
+      chainId,
+      feePayer: feePayer_.client,
+      transport: selected.transport,
+    })
+    return await Actions.receivePolicy.claim(client, {
+      account: selected.account as never,
+      ...rest,
+      ...(feePayer_.request ? { feePayer: true as never } : {}),
+    } as never)
+  }
+
+  async function burnReceivePolicy(parameters: Rpc.wallet_receivePolicy_burn.Decoded['params'][0]) {
+    const { chainId, feePayer, from, ...rest } = parameters
+    const selected = await getAdapterAccount({ address: from })
+    const feePayer_ = resolveReceivePolicyFeePayer(feePayer)
+    const client = getWalletClient({
+      account: selected.account,
+      chainId,
+      feePayer: feePayer_.client,
+      transport: selected.transport,
+    })
+    return await Actions.receivePolicy.burn(client, {
+      account: selected.account as never,
+      ...rest,
+      ...(feePayer_.request ? { feePayer: true as never } : {}),
+    } as never)
   }
 
   async function signTransactionAction(
@@ -1454,6 +1609,18 @@ export function create(options: create.Options = {}): create.ReturnType {
                     } satisfies Rpc.wallet_authorizeAccessKey.Encoded['returns']
                   }
 
+                  case 'wallet_authorizeAdminKey': {
+                    const decoded = request._decoded.params[0]
+                    const result = await authorizeAdminKey(decoded)
+                    return {
+                      keyAuthorization: {
+                        ...result.keyAuthorization,
+                        address: result.keyAuthorization.keyId,
+                      },
+                      rootAddress: result.rootAddress,
+                    } satisfies Rpc.wallet_authorizeAdminKey.Encoded['returns']
+                  }
+
                   case 'wallet_revokeAccessKey': {
                     assertConnected()
                     const [decoded] = request._decoded.params
@@ -1466,6 +1633,53 @@ export function create(options: create.Options = {}): create.ReturnType {
                     const [decoded] = request._decoded.params
                     await updateAccessKeyAction({ ...decoded }, request)
                     return
+                  }
+
+                  case 'wallet_receivePolicy_get': {
+                    const [decoded] = request._decoded.params
+                    return z.encode(
+                      Rpc.wallet_receivePolicy_get.returns,
+                      await getReceivePolicy(decoded),
+                    ) satisfies Rpc.wallet_receivePolicy_get.Encoded['returns']
+                  }
+
+                  case 'wallet_receivePolicy_set': {
+                    assertConnected()
+                    const [decoded] = request._decoded.params
+                    return (await setReceivePolicy(
+                      decoded,
+                    )) satisfies Rpc.wallet_receivePolicy_set.Encoded['returns']
+                  }
+
+                  case 'wallet_receivePolicy_validate': {
+                    const [decoded] = request._decoded.params
+                    return (await validateReceivePolicy(
+                      decoded,
+                    )) satisfies Rpc.wallet_receivePolicy_validate.Encoded['returns']
+                  }
+
+                  case 'wallet_receivePolicy_getBlockedBalance': {
+                    const [decoded] = request._decoded.params
+                    return z.encode(
+                      Rpc.wallet_receivePolicy_getBlockedBalance.schema.returns!,
+                      await getReceivePolicyBlockedBalance(decoded),
+                    ) satisfies Rpc.wallet_receivePolicy_getBlockedBalance.Encoded['returns']
+                  }
+
+                  case 'wallet_receivePolicy_claim': {
+                    assertConnected()
+                    const [decoded] = request._decoded.params
+                    return (await claimReceivePolicy(
+                      decoded,
+                    )) satisfies Rpc.wallet_receivePolicy_claim.Encoded['returns']
+                  }
+
+                  case 'wallet_receivePolicy_burn': {
+                    assertConnected()
+                    const [decoded] = request._decoded.params
+                    return (await burnReceivePolicy(
+                      decoded,
+                    )) satisfies Rpc.wallet_receivePolicy_burn.Encoded['returns']
                   }
 
                   case 'wallet_deposit': {

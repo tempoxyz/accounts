@@ -1,12 +1,75 @@
 import { Hex } from 'ox'
+import { custom } from 'viem'
 import { createSiweMessage } from 'viem/siwe'
-import { afterEach, describe, expect, test, vi } from 'vp/test'
+import { vi } from 'vitest'
+import { afterEach, describe, expect, test } from 'vp/test'
 
 import * as Adapter from './Adapter.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 
 const address = '0x0000000000000000000000000000000000000001'
+const hash = `0x${'11'.repeat(32)}` as const
+const receivePolicy = vi.hoisted(() => ({
+  burn: vi.fn(),
+  claim: vi.fn(),
+  get: vi.fn(),
+  getBlockedBalance: vi.fn(),
+  set: vi.fn(),
+  validate: vi.fn(),
+}))
+
+vi.mock('viem/tempo', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('viem/tempo')>()
+  return {
+    ...actual,
+    Actions: {
+      ...actual.Actions,
+      receivePolicy: {
+        ...actual.Actions.receivePolicy,
+        burn: receivePolicy.burn,
+        claim: receivePolicy.claim,
+        get: receivePolicy.get,
+        getBlockedBalance: receivePolicy.getBlockedBalance,
+        set: receivePolicy.set,
+        validate: receivePolicy.validate,
+      },
+    },
+  }
+})
+
+function receivePolicyAdapter() {
+  const account = { address, type: 'local' as const }
+  return Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+    actions: {
+      async createAccount() {
+        return { accounts: [{ address }] }
+      },
+      async loadAccounts() {
+        return { accounts: [{ address }] }
+      },
+    },
+    getAccount() {
+      return { account: account as never }
+    },
+  }))
+}
+
+const keyAuthorization = {
+  account: address,
+  chainId: '0x1',
+  expiry: null,
+  isAdmin: true,
+  keyId: '0x0000000000000000000000000000000000000002',
+  keyType: 'p256',
+  limits: undefined,
+  signature: {
+    r: `0x${'22'.repeat(32)}`,
+    s: `0x${'33'.repeat(32)}`,
+    type: 'p256',
+    yParity: '0x0',
+  },
+} as const
 
 describe('wallet_connect', () => {
   test('behavior: validates auth before preparing access key material', async () => {
@@ -369,6 +432,250 @@ describe('wallet_connect', () => {
         }
       `)
     })
+  })
+})
+
+describe('wallet_authorizeAdminKey', () => {
+  test('behavior: forwards to json-rpc adapter and returns key authorization', async () => {
+    const requests: unknown[] = []
+    const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+      actions: {
+        async createAccount() {
+          return { accounts: [{ address }] }
+        },
+        async loadAccounts() {
+          return { accounts: [{ address }] }
+        },
+      },
+      getAccount() {
+        return {
+          account: { address, type: 'json-rpc' as const },
+          transport: custom({
+            async request(request) {
+              requests.push(request)
+              return { keyAuthorization, rootAddress: address }
+            },
+          }),
+        }
+      },
+    }))
+    const provider = Provider.create({ adapter, storage: Storage.memory() })
+
+    const result = await provider.request({
+      method: 'wallet_authorizeAdminKey',
+      params: [{ chainId: '0x1', publicKey: '0x1234' }],
+    })
+
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        {
+          "method": "wallet_authorizeAdminKey",
+          "params": [
+            {
+              "chainId": "0x1",
+              "publicKey": "0x1234",
+            },
+          ],
+        },
+      ]
+    `)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "keyAuthorization": {
+          "account": "0x0000000000000000000000000000000000000001",
+          "address": "0x0000000000000000000000000000000000000002",
+          "chainId": "0x1",
+          "expiry": null,
+          "isAdmin": true,
+          "keyId": "0x0000000000000000000000000000000000000002",
+          "keyType": "p256",
+          "limits": undefined,
+          "signature": {
+            "r": "0x2222222222222222222222222222222222222222222222222222222222222222",
+            "s": "0x3333333333333333333333333333333333333333333333333333333333333333",
+            "type": "p256",
+            "yParity": "0x0",
+          },
+        },
+        "rootAddress": "0x0000000000000000000000000000000000000001",
+      }
+    `)
+  })
+})
+
+describe('wallet_receivePolicy', () => {
+  afterEach(() => {
+    receivePolicy.burn.mockReset()
+    receivePolicy.claim.mockReset()
+    receivePolicy.get.mockReset()
+    receivePolicy.getBlockedBalance.mockReset()
+    receivePolicy.set.mockReset()
+    receivePolicy.validate.mockReset()
+  })
+
+  test('behavior: read methods decode params and encode return values', async () => {
+    receivePolicy.get.mockResolvedValue({
+      claimer: 'self',
+      hasReceivePolicy: true,
+      recoveryAuthority: address,
+      senderPolicyId: 2n,
+      senderPolicyType: 'whitelist',
+      tokenPolicyId: 'allow-all',
+      tokenPolicyType: 'blacklist',
+    })
+    receivePolicy.validate.mockResolvedValue({
+      authorized: false,
+      blockedReason: 'receivePolicy',
+    })
+    receivePolicy.getBlockedBalance.mockResolvedValue(123n)
+    const provider = Provider.create({
+      adapter: receivePolicyAdapter(),
+      storage: Storage.memory(),
+    })
+
+    const policy = await provider.request({
+      method: 'wallet_receivePolicy_get',
+      params: [{ account: address, chainId: '0x1' }],
+    })
+    const validation = await provider.request({
+      method: 'wallet_receivePolicy_validate',
+      params: [{ chainId: '0x1', receiver: address, sender: address, token: address }],
+    })
+    const blockedBalance = await provider.request({
+      method: 'wallet_receivePolicy_getBlockedBalance',
+      params: [{ chainId: '0x1', receipt: '0x1234' }],
+    })
+
+    expect(receivePolicy.get.mock.calls[0]?.[1]).toMatchInlineSnapshot(`
+      {
+        "account": "0x0000000000000000000000000000000000000001",
+      }
+    `)
+    expect(policy).toMatchInlineSnapshot(`
+      {
+        "claimer": "self",
+        "hasReceivePolicy": true,
+        "recoveryAuthority": "0x0000000000000000000000000000000000000001",
+        "senderPolicyId": "0x2",
+        "senderPolicyType": "whitelist",
+        "tokenPolicyId": "allow-all",
+        "tokenPolicyType": "blacklist",
+      }
+    `)
+    expect(receivePolicy.validate.mock.calls[0]?.[1]).toMatchInlineSnapshot(`
+      {
+        "receiver": "0x0000000000000000000000000000000000000001",
+        "sender": "0x0000000000000000000000000000000000000001",
+        "token": "0x0000000000000000000000000000000000000001",
+      }
+    `)
+    expect(validation).toMatchInlineSnapshot(`
+      {
+        "authorized": false,
+        "blockedReason": "receivePolicy",
+      }
+    `)
+    expect(receivePolicy.getBlockedBalance.mock.calls[0]?.[1]).toMatchInlineSnapshot(`
+      {
+        "receipt": "0x1234",
+      }
+    `)
+    expect(blockedBalance).toMatchInlineSnapshot(`"0x7b"`)
+  })
+
+  test('behavior: set resolves feePayer true from provider default', async () => {
+    receivePolicy.set.mockResolvedValue(hash)
+    const provider = Provider.create({
+      adapter: receivePolicyAdapter(),
+      feePayer: 'https://relay.example.com',
+      storage: Storage.memory(),
+    })
+    await provider.request({ method: 'wallet_connect' })
+
+    const result = await provider.request({
+      method: 'wallet_receivePolicy_set',
+      params: [{ feePayer: true, senderPolicyId: 'allow-all', tokenPolicyId: 'reject-all' }],
+    })
+
+    expect(result).toMatchInlineSnapshot(
+      `"0x1111111111111111111111111111111111111111111111111111111111111111"`,
+    )
+    expect(receivePolicy.set.mock.calls[0]?.[1]).toMatchInlineSnapshot(`
+      {
+        "account": {
+          "address": "0x0000000000000000000000000000000000000001",
+          "type": "local",
+        },
+        "feePayer": true,
+        "senderPolicyId": "allow-all",
+        "tokenPolicyId": "reject-all",
+      }
+    `)
+  })
+
+  test('behavior: set does not forward unresolved feePayer true', async () => {
+    receivePolicy.set.mockResolvedValue(hash)
+    const provider = Provider.create({
+      adapter: receivePolicyAdapter(),
+      storage: Storage.memory(),
+    })
+    await provider.request({ method: 'wallet_connect' })
+
+    await provider.request({
+      method: 'wallet_receivePolicy_set',
+      params: [{ feePayer: true, senderPolicyId: 'allow-all' }],
+    })
+
+    expect(receivePolicy.set.mock.calls[0]?.[1]).toMatchInlineSnapshot(`
+      {
+        "account": {
+          "address": "0x0000000000000000000000000000000000000001",
+          "type": "local",
+        },
+        "senderPolicyId": "allow-all",
+      }
+    `)
+  })
+
+  test('behavior: claim and burn forward explicit feePayer URLs', async () => {
+    receivePolicy.claim.mockResolvedValue(hash)
+    receivePolicy.burn.mockResolvedValue(hash)
+    const provider = Provider.create({
+      adapter: receivePolicyAdapter(),
+      storage: Storage.memory(),
+    })
+    await provider.request({ method: 'wallet_connect' })
+
+    await provider.request({
+      method: 'wallet_receivePolicy_claim',
+      params: [{ feePayer: 'https://relay.example.com', receipt: '0x1234', to: address }],
+    })
+    await provider.request({
+      method: 'wallet_receivePolicy_burn',
+      params: [{ feePayer: 'https://relay.example.com', receipt: '0x1234' }],
+    })
+
+    expect(receivePolicy.claim.mock.calls[0]?.[1]).toMatchInlineSnapshot(`
+      {
+        "account": {
+          "address": "0x0000000000000000000000000000000000000001",
+          "type": "local",
+        },
+        "feePayer": true,
+        "receipt": "0x1234",
+        "to": "0x0000000000000000000000000000000000000001",
+      }
+    `)
+    expect(receivePolicy.burn.mock.calls[0]?.[1]).toMatchInlineSnapshot(`
+      {
+        "account": {
+          "address": "0x0000000000000000000000000000000000000001",
+          "type": "local",
+        },
+        "feePayer": true,
+        "receipt": "0x1234",
+      }
+    `)
   })
 })
 

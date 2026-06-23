@@ -335,7 +335,7 @@ export declare namespace prepareAuthorization {
     /** Chain ID the key authorization is scoped to. */
     chainId: bigint | number
     /** Unix timestamp when the key expires. */
-    expiry: number
+    expiry?: number | undefined
     /** Whether this authorization grants admin key privileges. */
     isAdmin?: boolean | undefined
     /**
