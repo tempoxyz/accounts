@@ -4,7 +4,7 @@ import { KeyAuthorization } from 'ox/tempo'
 import { hashMessage } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { parseSiweMessage } from 'viem/siwe'
-import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vp/test'
 
 import { createServer } from '../../../../test/utils.js'
 import * as Handler from '../../Handler.js'
@@ -81,6 +81,160 @@ describe('challenge', () => {
     expect(parsed.uri).toBe('http://wallet.example')
     expect(parsed.version).toBe('1')
     expect(parsed.nonce).toMatch(/^[a-z0-9]+$/)
+  })
+
+  test('includes requested resources and configured statement in the challenge message', async () => {
+    const { app } = setup({ statement: 'Authorize account access.' })
+    const resources = ['urn:tempo:api-signing-key:test', 'https://api.example.com/signing-keys/1']
+
+    const { status, body } = await getChallenge(app, {
+      chainId: 1,
+      resources,
+    })
+
+    expect(status).toBe(200)
+    const parsed = parseSiweMessage(body.message!)
+    expect({ resources: parsed.resources, statement: parsed.statement }).toMatchInlineSnapshot(`
+      {
+        "resources": [
+          "urn:tempo:api-signing-key:test",
+          "https://api.example.com/signing-keys/1",
+        ],
+        "statement": "Authorize account access.",
+      }
+    `)
+  })
+
+  test('uses statement callback output in the challenge message', async () => {
+    const resources = ['https://api.example.com/signing-keys/1']
+    let params_seen:
+      | {
+          chainId: number
+          resources?: readonly string[] | undefined
+          url: string
+        }
+      | undefined
+    const statement = vi.fn(
+      (params: {
+        chainId: number
+        resources?: readonly string[] | undefined
+        request: Request
+      }) => {
+        params_seen = {
+          chainId: params.chainId,
+          resources: params.resources,
+          url: params.request.url,
+        }
+        return `Authorize ${params.resources?.length ?? 0} resource.`
+      },
+    )
+    const { app } = setup({ statement })
+
+    const { status, body } = await getChallenge(app, {
+      chainId: 1,
+      resources,
+    })
+
+    expect(status).toBe(200)
+    const parsed = parseSiweMessage(body.message!)
+    expect({ params: params_seen, statement: parsed.statement }).toMatchInlineSnapshot(`
+      {
+        "params": {
+          "chainId": 1,
+          "resources": [
+            "https://api.example.com/signing-keys/1",
+          ],
+          "url": "http://localhost/challenge",
+        },
+        "statement": "Authorize 1 resource.",
+      }
+    `)
+  })
+
+  test('supports async statement callbacks', async () => {
+    const resources = ['https://api.example.com/signing-keys/1']
+    const statement = vi.fn(async (params: { resources?: readonly string[] | undefined }) => {
+      return `Authorize ${params.resources?.length ?? 0} resource.`
+    })
+    const { app } = setup({ statement })
+
+    const { status, body } = await getChallenge(app, {
+      chainId: 1,
+      resources,
+    })
+
+    expect(status).toBe(200)
+    const parsed = parseSiweMessage(body.message!)
+    expect({ calls: statement.mock.calls.length, statement: parsed.statement })
+      .toMatchInlineSnapshot(`
+      {
+        "calls": 1,
+        "statement": "Authorize 1 resource.",
+      }
+    `)
+  })
+
+  test('ignores requester-provided statement', async () => {
+    const { app } = setup({ statement: 'Server statement.' })
+
+    const res = await app.request('/challenge', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', host: 'wallet.example' },
+      body: JSON.stringify({
+        chainId: 1,
+        statement: 'Requester statement.',
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    const { message } = (await res.json()) as { message: string }
+    expect(parseSiweMessage(message).statement).toMatchInlineSnapshot(`"Server statement."`)
+  })
+
+  test('rejects invalid resource URIs', async () => {
+    const { app } = setup()
+
+    const { status, body } = await getChallenge(app, {
+      chainId: 1,
+      resources: ['not a uri'],
+    })
+
+    expect(status).toBe(400)
+    expect(body).toMatchInlineSnapshot(`
+      {
+        "error": "invalid SIWE challenge parameters",
+      }
+    `)
+  })
+
+  test('rejects line breaks in resources and configured statement', async () => {
+    const { app } = setup()
+
+    const resource = await getChallenge(app, {
+      chainId: 1,
+      resources: ['urn:tempo:one\ntwo'],
+    })
+    const statement = await getChallenge(setup({ statement: 'one\ntwo' }).app, { chainId: 1 })
+
+    expect({
+      resource: { body: resource.body, status: resource.status },
+      statement: { body: statement.body, status: statement.status },
+    }).toMatchInlineSnapshot(`
+      {
+        "resource": {
+          "body": {
+            "error": "resources must not include line breaks",
+          },
+          "status": 400,
+        },
+        "statement": {
+          "body": {
+            "error": "statement must not include line breaks",
+          },
+          "status": 400,
+        },
+      }
+    `)
   })
 
   test('defaults chainId to 0 when omitted', async () => {
@@ -225,6 +379,34 @@ describe('verify (EOA, cookie mode)', () => {
     const tampered = message.replace(
       /(0x0000000000000000000000000000000000000000\n)\n/,
       '$1\nSign to prove you are human\n\n',
+    )
+    expect(tampered).not.toBe(message)
+    const signature = await account.signMessage({ message: tampered })
+
+    const res = await postVerify(app, {
+      address: account.address,
+      message: tampered,
+      signature,
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchInlineSnapshot(`
+      {
+        "error": "message mismatch",
+      }
+    `)
+  })
+
+  test('rejects tampered message resources with 400', async () => {
+    const { app } = setup()
+
+    const { body: challengeBody } = await getChallenge(app, {
+      chainId: 1,
+      resources: ['https://api.example.com/signing-keys/1'],
+    })
+    const message = challengeBody.message!
+    const tampered = message.replace(
+      'https://api.example.com/signing-keys/1',
+      'https://api.example.com/signing-keys/2',
     )
     expect(tampered).not.toBe(message)
     const signature = await account.signMessage({ message: tampered })
@@ -1186,7 +1368,13 @@ function setup(options: Parameters<typeof auth>[0] = {}) {
   return { handler, app }
 }
 
-async function getChallenge(app: Hono, body: { chainId: number }) {
+async function getChallenge(
+  app: Hono,
+  body: {
+    chainId: number
+    resources?: readonly string[] | undefined
+  },
+) {
   const res = await app.request('/challenge', {
     method: 'POST',
     headers: { 'content-type': 'application/json', host: 'wallet.example' },

@@ -3,6 +3,22 @@ import type * as z from 'zod/mini'
 
 import type * as Rpc from './rpc.js'
 
+describe('wallet_connect.auth', () => {
+  test('request exposes resources', () => {
+    type Auth = Exclude<z.output<typeof Rpc.wallet_connect.auth>, string | undefined>
+    expectTypeOf<Auth>().toMatchTypeOf<{
+      resources?: readonly string[] | undefined
+    }>()
+  })
+
+  test('result preserves token plus arbitrary JSON fields', () => {
+    type Result = z.output<typeof Rpc.wallet_connect.capabilities.result>
+    expectTypeOf<Result['auth']>().toMatchTypeOf<
+      ({ token?: string | undefined } & Record<string, unknown>) | undefined
+    >()
+  })
+})
+
 describe('wallet_connect.identity', () => {
   type EmailRequest = boolean | { nonce?: string | undefined } | undefined
 

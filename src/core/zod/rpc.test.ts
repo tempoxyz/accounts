@@ -245,6 +245,28 @@ describe('wallet_connect.capabilities.request: auth', () => {
     `)
   })
 
+  test('accepts object with `resources`', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'login',
+        auth: {
+          url: '/api/auth',
+          resources: ['urn:tempo:api-signing-key:test'],
+        },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "auth": {
+          "resources": [
+            "urn:tempo:api-signing-key:test",
+          ],
+          "url": "/api/auth",
+        },
+        "method": "login",
+      }
+    `)
+  })
+
   test('accepts explicit endpoints (challenge + verify + logout)', () => {
     expect(
       z.parse(Rpc.wallet_connect.capabilities.request, {
@@ -337,6 +359,15 @@ describe('wallet_connect.capabilities.request: auth', () => {
       z.parse(Rpc.wallet_connect.capabilities.request, {
         method: 'login',
         auth: { returnToken: 'yes' },
+      }),
+    ).toThrow()
+  })
+
+  test('rejects auth.resources as string', () => {
+    expect(() =>
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'login',
+        auth: { resources: 'urn:tempo:api-signing-key:test' },
       }),
     ).toThrow()
   })
@@ -476,6 +507,26 @@ describe('wallet_connect.capabilities.result: auth + personalSign', () => {
     ).toMatchInlineSnapshot(`
       {
         "auth": {},
+      }
+    `)
+  })
+
+  test('accepts extra auth JSON fields', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.result, {
+        auth: {
+          apiSigningKey: { id: 'key_1' },
+          token: 'sess_abc',
+        },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "auth": {
+          "apiSigningKey": {
+            "id": "key_1",
+          },
+          "token": "sess_abc",
+        },
       }
     `)
   })

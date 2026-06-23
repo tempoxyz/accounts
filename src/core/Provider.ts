@@ -69,6 +69,9 @@ type TransactionParameters = Adapter.ActionRequest<typeof Rpc.eth_sendTransactio
 type WalletConnectCapabilities = NonNullable<
   NonNullable<Rpc.wallet_connect.Decoded['params']>[number]['capabilities']
 >
+type AuthCapabilityResult = NonNullable<
+  Rpc.wallet_connect.Encoded['returns']['accounts'][number]['capabilities']['auth']
+>
 
 function isBrowserWebCrypto() {
   return typeof document !== 'undefined' && !!globalThis.crypto?.subtle
@@ -1207,6 +1210,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                           '`auth` and `personalSign` cannot both be set on `wallet_connect`.',
                       })
 
+                    const authChainId = chainId ?? store.getState().chainId ?? 0
                     const accessKey = authorizeAccessKey
                       ? await prepareAuthorizeAccessKey(authorizeAccessKey, chainId)
                       : undefined
@@ -1238,10 +1242,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                     const auth =
                       auth_request && !instance.forwardsAuth
-                        ? await fetchAuthChallenge(
-                            auth_request,
-                            chainId ?? store.getState().chainId ?? 0,
-                          )
+                        ? await fetchAuthChallenge(auth_request, authChainId)
                         : undefined
 
                     const personalSign_request = auth
@@ -1349,6 +1350,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                         ? auth_request.verify
                         : undefined
                     const verifyMessage = auth?.message ?? personalSign?.message
+                    if (auth_request && verifyUrl && verifyMessage && signature && accountAddress)
+                      validateAuthMessage(auth_request, {
+                        chainId: authChainId,
+                        message: verifyMessage,
+                      })
                     const auth_result =
                       auth_request && verifyUrl && verifyMessage && signature && accountAddress
                         ? await verifyAuthMessage(auth_request, {
@@ -1997,6 +2003,9 @@ function absolutizeAuth(
     ...(hasChallenge ? { challenge: resolveAuthEndpoint(auth, 'challenge') } : {}),
     ...(hasVerify ? { verify: resolveAuthEndpoint(auth, 'verify') } : {}),
     ...(hasLogout ? { logout: resolveAuthEndpoint(auth, 'logout') } : {}),
+    ...(typeof auth === 'object' && auth.resources !== undefined
+      ? { resources: auth.resources }
+      : {}),
     ...(typeof auth === 'object' && auth.returnToken ? { returnToken: true } : {}),
   }
   assertSameAuthOrigin(resolved)
@@ -2034,42 +2043,25 @@ function assertSameAuthOrigin(auth: NonNullable<z.output<typeof Rpc.wallet_conne
 const authOriginHint =
   ' Hint: if the server is behind a reverse proxy or tunnel, set `Handler.auth({ trustProxy: true })` to honor `x-forwarded-*` headers, or pin the public origin with `Handler.auth({ origin: "https://app.example.com" })`.'
 
-/**
- * Fetches an auth challenge from the auth endpoint and validates that the
- * server-supplied message is bound to the auth endpoint's origin and the
- * requested chain.
- *
- * Expects an absolutized auth capability (post-`absolutizeAuth`).
- *
- * The signature produced from this challenge is a portable artifact: once
- * the wallet signs, anyone holding the bytes can replay it against any
- * auth verifier that accepts the embedded domain. We therefore refuse to
- * sign a message whose `domain`/`uri` doesn't match the auth endpoint —
- * otherwise a compromised auth provider could trick the wallet into
- * signing "Sign in to attacker.com" and use it to log in as the user
- * elsewhere.
- */
-async function fetchAuthChallenge(
-  auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
-  chainId: number,
-): Promise<{ message: string }> {
-  const url = typeof auth === 'object' ? auth.challenge! : resolveAuthEndpoint(auth, 'challenge')
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chainId }),
-  })
-  if (!res.ok)
-    throw new RpcResponse.InvalidParamsError({
-      message: `Server Authentication challenge endpoint \`${url}\` returned ${res.status}.`,
-    })
-  const body = (await res.json().catch(() => ({}))) as { message?: string }
-  if (!body.message)
-    throw new RpcResponse.InvalidParamsError({
-      message: `Server Authentication challenge endpoint \`${url}\` response missing \`message\`.`,
-    })
+function stringsEqual(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((value, index) => value === b[index])
+}
 
-  const parsed = parseSiweMessage(body.message)
+function validateAuthMessage(
+  auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
+  options: {
+    chainId: number
+    message: string
+    url?: string | undefined
+  },
+): void {
+  const { chainId, message } = options
+  const url =
+    options.url ??
+    (typeof auth === 'object' ? auth.challenge! : resolveAuthEndpoint(auth, 'challenge'))
+  const resources = typeof auth === 'object' ? auth.resources : undefined
+  const parsed = parseSiweMessage(message)
   const expected = new URL(url)
 
   if (parsed.version !== '1')
@@ -2092,14 +2084,61 @@ async function fetchAuthChallenge(
     throw new RpcResponse.InvalidParamsError({
       message: `Server Authentication challenge endpoint \`${url}\` returned a message bound to chainId \`${parsed.chainId}\` (expected \`${chainId}\`).`,
     })
+  if (resources !== undefined && !stringsEqual(parsed.resources ?? [], resources))
+    throw new RpcResponse.InvalidParamsError({
+      message: `Server Authentication challenge endpoint \`${url}\` did not echo the requested SIWE resources.`,
+    })
+}
+
+/**
+ * Fetches an auth challenge from the auth endpoint and validates that the
+ * server-supplied message is bound to the auth endpoint's origin and the
+ * requested chain.
+ *
+ * Expects an absolutized auth capability (post-`absolutizeAuth`).
+ *
+ * The signature produced from this challenge is a portable artifact: once
+ * the wallet signs, anyone holding the bytes can replay it against any
+ * auth verifier that accepts the embedded domain. We therefore refuse to
+ * sign a message whose `domain`/`uri` doesn't match the auth endpoint —
+ * otherwise a compromised auth provider could trick the wallet into
+ * signing "Sign in to attacker.com" and use it to log in as the user
+ * elsewhere.
+ */
+async function fetchAuthChallenge(
+  auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
+  chainId: number,
+): Promise<{ message: string }> {
+  const url = typeof auth === 'object' ? auth.challenge! : resolveAuthEndpoint(auth, 'challenge')
+  const resources = typeof auth === 'object' ? auth.resources : undefined
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      chainId,
+      ...(resources !== undefined ? { resources } : {}),
+    }),
+  })
+  if (!res.ok)
+    throw new RpcResponse.InvalidParamsError({
+      message: `Server Authentication challenge endpoint \`${url}\` returned ${res.status}.`,
+    })
+  const body = (await res.json().catch(() => ({}))) as { message?: string }
+  if (!body.message)
+    throw new RpcResponse.InvalidParamsError({
+      message: `Server Authentication challenge endpoint \`${url}\` response missing \`message\`.`,
+    })
+
+  validateAuthMessage(auth, { chainId, message: body.message, url })
 
   return { message: body.message }
 }
 
 /**
  * Posts the signed message to the auth `verify` endpoint and returns
- * the SDK-shaped `auth` capability output (`{ token }` in token mode,
- * `{}` in cookie mode).
+ * the SDK-shaped `auth` capability output. `{ token }` remains reserved
+ * for token mode; other JSON fields returned by the verify endpoint are
+ * preserved for application-specific metadata.
  */
 async function verifyAuthMessage(
   auth: NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
@@ -2110,7 +2149,7 @@ async function verifyAuthMessage(
     signature: Hex.Hex
     keyAuthorization?: Hex.Hex | undefined
   },
-): Promise<{ token?: string }> {
+): Promise<AuthCapabilityResult> {
   const url = typeof auth === 'object' ? auth.verify! : resolveAuthEndpoint(auth, 'verify')
   // Auto-request the token in environments without a cookie jar (React
   // Native / Node / CLI). Browser lets the cookie do the work; explicit
@@ -2130,6 +2169,7 @@ async function verifyAuthMessage(
     throw new RpcResponse.InternalError({
       message: `Server Authentication verify endpoint \`${url}\` returned ${res.status}.`,
     })
-  const json = (await res.json().catch(() => ({}))) as { token?: string }
-  return json.token ? { token: json.token } : {}
+  const json = await res.json().catch(() => ({}))
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return {}
+  return json as AuthCapabilityResult
 }

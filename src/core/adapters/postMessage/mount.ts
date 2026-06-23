@@ -1,5 +1,6 @@
 import { defaultSize, isInsecureContext } from '../../Dialog.js'
 import * as IO from '../../IntersectionObserver.js'
+import * as TrustedHosts from '../../TrustedHosts.js'
 
 /**
  * Wallet-window mounts for the postMessage adapter — the UI half of a wata
@@ -53,12 +54,41 @@ export declare namespace Factory {
 /**
  * Picks the default mount: an overlay iframe unless the context can't
  * support one — insecure contexts lack WebAuthn in iframes, and without
- * IntersectionObserver v2 the wallet can't run its occlusion defense.
+ * IntersectionObserver v2 an untrusted host can't run its occlusion
+ * defense.
  */
-export function auto(): Factory {
+export function auto(options: auto.Options = {}): Factory {
   if (typeof window === 'undefined') return popup()
-  if (isInsecureContext() || !IO.supported()) return popup()
+  if (isInsecureContext()) return popup()
+
+  const trusted = (() => {
+    const trustedHosts = options.trustedHosts ?? trustedHostsFor(options.source)
+    if (!trustedHosts) return false
+    const hostname = window.location.hostname.replace(/^www\./, '')
+    return TrustedHosts.match(trustedHosts, hostname, options.source)
+  })()
+
+  if (!IO.supported() && !trusted) return popup()
   return iframe()
+}
+
+export declare namespace auto {
+  /** Options for {@link auto}. */
+  type Options = {
+    /** Wallet hostname used for bundled and same-site trusted-host matching. */
+    source?: string | undefined
+    /** Hostnames trusted to render the wallet in an iframe without IO v2. */
+    trustedHosts?: readonly string[] | undefined
+  }
+}
+
+function trustedHostsFor(source: string | undefined) {
+  if (!source) return undefined
+
+  const hostname = source.replace(/^www\./, '')
+  for (const [source_, trustedHosts] of Object.entries(TrustedHosts.hosts))
+    if (TrustedHosts.sameRegistrableDomain(hostname, source_)) return trustedHosts
+  return undefined
 }
 
 /** Mounts the wallet page in a hidden full-viewport overlay iframe. */

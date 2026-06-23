@@ -21,6 +21,9 @@ const defaults = {
     session: 24 * 60 * 60, // 24 hours
   },
 } as const
+const maxResources = 10
+const maxResourceLength = 2_048
+const lineBreak = /[\r\n]/
 
 /**
  * Default OIDC issuer — the Tempo wallet's production OIDC mount. Apps that opt
@@ -79,9 +82,13 @@ const sessionKey = (token: string) => `session:${token}`
 export namespace schema {
   /** Schemas for `POST {path}/challenge`. */
   export namespace challenge {
+    const resource = z.string().check(z.maxLength(maxResourceLength))
+
     /** Request body schema. */
     export const parameters = z.object({
       chainId: z.optional(z.number()),
+      /** SIWE resources to bind into the issued challenge message. */
+      resources: z.optional(z.readonly(z.array(resource).check(z.maxLength(maxResources)))),
     })
 
     /** Response body schema. */
@@ -121,7 +128,8 @@ export namespace schema {
     })
 
     /** Response body schema. */
-    export const returns = z.object({
+    export const returns = z.looseObject({
+      /** Session token in bearer-token mode. */
       token: z.optional(z.string()),
     })
   }
@@ -153,6 +161,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     path = '/',
     origin: origin_option,
     session = true,
+    statement,
     store = Kv.memory(),
     transport = http(),
     // Cloudflare Workers always run behind Cloudflare's edge proxy, which
@@ -201,7 +210,16 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
   const logoutPath = path === '/' ? '/logout' : `${path}/logout`
 
   router.post(challengePath, Hono.validate('json', schema.challenge.parameters), async (c) => {
-    const { chainId = 0 } = c.req.valid('json')
+    const { chainId = 0, resources } = c.req.valid('json')
+
+    if (resources?.some((resource) => lineBreak.test(resource)))
+      return c.json({ error: 'resources must not include line breaks' }, 400)
+    const statementValue =
+      typeof statement === 'function'
+        ? await statement({ chainId, resources, request: c.req.raw })
+        : statement
+    if (statementValue !== undefined && lineBreak.test(statementValue))
+      return c.json({ error: 'statement must not include line breaks' }, 400)
 
     const { protocol, host: reqHost } = resolveReqOrigin(c.req.raw)
     const resolvedDomain = domain ?? reqHost
@@ -210,16 +228,25 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     const issuedAt = new Date()
     const expirationTime = new Date(issuedAt.getTime() + challengeTtl * 1000)
 
-    const message = createSiweMessage({
-      address: zeroAddress,
-      chainId,
-      domain: resolvedDomain,
-      uri: `${protocol}//${resolvedDomain}`,
-      version: '1',
-      nonce,
-      issuedAt,
-      expirationTime,
-    })
+    const message = (() => {
+      try {
+        return createSiweMessage({
+          address: zeroAddress,
+          chainId,
+          domain: resolvedDomain,
+          uri: `${protocol}//${resolvedDomain}`,
+          version: '1',
+          nonce,
+          issuedAt,
+          expirationTime,
+          ...(resources?.length ? { resources: [...resources] } : {}),
+          ...(statementValue ? { statement: statementValue } : {}),
+        })
+      } catch (error) {
+        return error instanceof Error ? error : new Error('invalid SIWE challenge parameters')
+      }
+    })()
+    if (message instanceof Error) return c.json({ error: 'invalid SIWE challenge parameters' }, 400)
 
     await store.set(
       challengeKey(nonce),
@@ -498,6 +525,22 @@ export declare namespace auth {
      * @default true
      */
     session?: boolean | undefined
+    /**
+     * Human-readable SIWE statement to bind into issued challenges. Static
+     * strings are used verbatim; callbacks can derive copy from the accepted
+     * `resources` while keeping the user-facing text under server control.
+     */
+    statement?:
+      | string
+      | ((params: {
+          /** Chain ID requested for the SIWE challenge. */
+          chainId: number
+          /** SIWE resources requested by the caller. */
+          resources?: readonly string[] | undefined
+          /** Underlying request — useful for headers, IP, etc. */
+          request: Request
+        }) => string | Promise<string | undefined> | undefined)
+      | undefined
     /**
      * Backing store for both single-use challenges (nonces) and issued
      * sessions. Keys are namespaced internally (`challenge:…`, `session:…`).
