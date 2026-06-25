@@ -105,6 +105,7 @@ export declare namespace upsert {
   }
 }
 
+/** Parses managed key entries from TOML text. */
 export function parse(text: string): readonly Entry[] {
   const keys: Entry[] = []
   let key: Partial<Entry> | undefined

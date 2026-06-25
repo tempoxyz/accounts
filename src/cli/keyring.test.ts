@@ -134,6 +134,8 @@ key_authorization = "0x22"
 expiry = 2
 `
 
-    expect(() => Keyring.parse(content)).toThrow('Invalid chain_id')
+    expect(() => Keyring.parse(content)).toThrowErrorMatchingInlineSnapshot(
+      `[Error: Invalid chain_id: ${chain.id}abc]`,
+    )
   })
 })
