@@ -22,7 +22,7 @@ const payment = ServerMppx.create({
     }),
   ],
   realm: 'mppx-test',
-  secretKey: 'test-secret-key',
+  secretKey: 'test-secret-key-test-secret-key-32',
 })
 
 let server: Server

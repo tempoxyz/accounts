@@ -216,6 +216,7 @@ const pathUsd = '0x20c0000000000000000000000000000000000000'
 
 const mppx = Mppx.create({
   methods: [tempo.charge({ testnet: true })],
+  secretKey: process.env.MPP_SECRET_KEY,
 })
 
 const app = new Hono()

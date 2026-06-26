@@ -44,7 +44,7 @@ const account = privateKeyToAccount('0x...')
 const mppx = Mppx.create({
   methods: [tempo({ account, currency: '0x...', feePayer: true, testnet: true })],
   realm: 'mpp',
-  secretKey: '...',
+  secretKey: 'dev-secret-key-change-me-in-production',
 })
 
 const app = new Hono()
