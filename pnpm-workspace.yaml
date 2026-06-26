@@ -36,7 +36,7 @@ catalog:
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.5.0
   hono: ^4.12.25
-  mppx: ^0.7.0
+  mppx: ^0.8.0
   ox: 0.14.29
   prool: ~0.2.4
   react: ^19.2.5
