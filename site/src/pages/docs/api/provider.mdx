@@ -7,7 +7,7 @@ description: Create an EIP-1193 provider for managing accounts on Tempo.
 
 Creates an EIP-1193 provider with a pluggable adapter for managing accounts on Tempo.
 
-The returned object implements [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193) (`request`, `on`, `removeListener`, `emit`, ...) and exposes a few convenience helpers (`getAccount`, `getAccessKeyStatus`, `getClient`, `store`, `chains`). See [Return Type](#return-type) for the full surface.
+The returned object implements [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193) (`request`, `on`, `removeListener`, `emit`, ...) and exposes a few convenience helpers (`getAccount`, `getAccessKeyStatus`, `getClient`, `getMppxParameters`, `store`, `chains`). See [Return Type](#return-type) for the full surface.
 
 ## Usage
 
@@ -325,6 +325,8 @@ const provider = Provider.create({
 
 MPP session endpoints can use `deposit` or `maxDeposit` so the client opens and tops up a payment channel before sending vouchers.
 
+Use `provider.getMppxParameters()` when composing an mppx client with `tempo({ account, ...provider.getMppxParameters() })`.
+
 ```ts twoslash
 import { Provider } from 'accounts'
 
@@ -429,6 +431,7 @@ The provider type is exported as `Provider` and is the intersection of [`ox.Prov
 
 ```ts
 import type { Address, Hex, Provider as ox_Provider } from 'ox'
+import type { tempo as mppx_tempo } from 'mppx/client'
 import type { Chain, Client as ViemClient, Transport } from 'viem'
 import type { JsonRpcAccount } from 'viem/accounts'
 import type { tempo } from 'viem/tempo/chains'
@@ -450,6 +453,11 @@ export type Provider = ox_Provider.Provider & ox_Provider.Emitter & {
     chainId?: number | undefined
     feePayer?: string | undefined
   }): ViemClient<Transport, typeof tempo>
+  /** Returns mppx Tempo client parameters backed by this provider. */
+  getMppxParameters(): {
+    getClient: NonNullable<mppx_tempo.Parameters['getClient']>
+    resolveAccount: NonNullable<mppx_tempo.Parameters['resolveAccount']>
+  }
   /** Reactive state store. */
   store: Store
 }

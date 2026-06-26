@@ -1,12 +1,114 @@
 import { Hex } from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
+import { custom } from 'viem'
 import { createSiweMessage } from 'viem/siwe'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
+import { accounts, privateKeys } from '../../test/config.js'
 import * as Adapter from './Adapter.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 
 const address = '0x0000000000000000000000000000000000000001'
+
+describe('getMppxParameters', () => {
+  test('error: rejects unsupported chain IDs', () => {
+    const provider = Provider.create({ storage: Storage.memory() })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    expect(() =>
+      provider.getMppxParameters().getClient({ chainId: 1 }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnsupportedChainIdError: Chain 1 not configured.]`,
+    )
+  })
+
+  test('behavior: returns account-scoped client without mutating cached client', () => {
+    const provider = Provider.create({ storage: Storage.memory() })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    const client = provider.getClient()
+    const mppxClient = provider.getMppxParameters().getClient({})
+
+    expect(mppxClient).not.toBe(client)
+    expect((mppxClient as { account?: unknown }).account).toEqual({
+      address,
+      type: 'json-rpc',
+    })
+    expect((client as { account?: unknown }).account).toBeUndefined()
+  })
+
+  test('behavior: does not store a JSON-RPC access key for the wrong root account', async () => {
+    const payer = accounts[0]!
+    const active = accounts[1]!
+    const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+      actions: {
+        async createAccount() {
+          return { accounts: [{ address: active.address }] }
+        },
+        async loadAccounts() {
+          return { accounts: [{ address: active.address }] }
+        },
+      },
+      getAccount(options = {}) {
+        return {
+          account: {
+            address: options.address ?? active.address,
+            type: 'json-rpc' as const,
+          },
+          transport: custom({
+            async request({ method, params }: { method: string; params?: unknown[] }) {
+              if (method !== 'wallet_authorizeAccessKey')
+                throw new Error(`unexpected wallet method: ${method}`)
+              const [parameters] = params as [
+                {
+                  address: `0x${string}`
+                  chainId: `0x${string}`
+                  expiry: `0x${string}`
+                  keyType: 'secp256k1'
+                },
+              ]
+              const signed = await active.signKeyAuthorization(
+                { address: parameters.address, type: parameters.keyType },
+                {
+                  chainId: BigInt(parameters.chainId),
+                  expiry: Number(parameters.expiry),
+                },
+              )
+              return {
+                keyAuthorization: KeyAuthorization.toRpc(signed),
+                rootAddress: active.address,
+              }
+            },
+          }),
+        }
+      },
+    }))
+    const provider = Provider.create({
+      accessKey: {
+        authorize: {
+          expiry: 123,
+          privateKey: privateKeys[2],
+        },
+      },
+      adapter,
+      storage: Storage.memory(),
+    })
+    provider.store.setState({
+      accounts: [{ address: payer.address }, { address: active.address }],
+      activeAccount: 1,
+    })
+
+    const resolved = await provider.getMppxParameters().resolveAccount({
+      account: provider.getAccount({ address: payer.address }),
+      chainId: provider.store.getState().chainId,
+      operation: { kind: 'authorizePaymentChannel' },
+    })
+
+    expect(resolved).toBeUndefined()
+    expect(provider.store.getState().accessKeys).toEqual([])
+  })
+})
 
 describe('wallet_connect', () => {
   test('behavior: validates auth before preparing access key material', async () => {

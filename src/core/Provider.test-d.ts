@@ -1,3 +1,4 @@
+import { tempo } from 'mppx/client'
 import type { RpcSchema } from 'ox'
 import { describe, expectTypeOf, test } from 'vp/test'
 
@@ -85,5 +86,23 @@ describe('create options', () => {
           }
         | undefined
     }>()
+
+    Provider.create({
+      mpp: {
+        // @ts-expect-error accounts resolves MPP accounts internally.
+        resolveAccount: () => undefined,
+      },
+    })
+  })
+
+  test('getMppxParameters returns mppx tempo parameters', () => {
+    const provider = Provider.create({ mpp: false })
+    const account = {} as ReturnType<typeof provider.getAccount>
+    const parameters = provider.getMppxParameters()
+
+    expectTypeOf(parameters).toMatchTypeOf<
+      Pick<NonNullable<Parameters<typeof tempo>[0]>, 'getClient' | 'resolveAccount'>
+    >()
+    tempo({ account, ...parameters })
   })
 })
