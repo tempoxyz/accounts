@@ -6,6 +6,7 @@ const app = new Hono()
 
 const mppx = Mppx.create({
   methods: [tempo.charge()],
+  secretKey: 'dev-secret-key-change-me-in-production',
 })
 
 app.get(

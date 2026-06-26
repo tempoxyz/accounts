@@ -9,7 +9,7 @@ const payment = Mppx.create({
       testnet: true,
     }),
   ],
-  secretKey: 'top-secret',
+  secretKey: 'dev-secret-key-change-me-in-production',
 })
 
 const handler = Handler.relay({ path: '/relay' })

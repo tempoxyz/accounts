@@ -9,7 +9,7 @@ const mppx = Mppx.create({
     }),
   ],
   realm: 'accounts.tempo.xyz',
-  secretKey: 'demo',
+  secretKey: 'dev-secret-key-change-me-in-production',
 })
 
 export async function GET(request: Request) {

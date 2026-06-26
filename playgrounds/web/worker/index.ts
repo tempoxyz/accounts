@@ -19,6 +19,11 @@ const subscriptions = Subscription.fromStore(store)
 const inspections = new Map<string, unknown>()
 let activationCount = 0
 let renewalCount = 0
+const secretKey =
+  !process.env.MPP_SECRET_KEY ||
+  new TextEncoder().encode(process.env.MPP_SECRET_KEY).byteLength < 32
+    ? 'dev-secret-key-change-me-in-production'
+    : process.env.MPP_SECRET_KEY
 
 const payment = Mppx.create({
   methods: [
@@ -86,7 +91,7 @@ const payment = Mppx.create({
       testnet,
     }),
   ],
-  secretKey: process.env.MPP_SECRET_KEY,
+  secretKey,
 })
 
 payment.onPaymentSuccess(recordInspection)

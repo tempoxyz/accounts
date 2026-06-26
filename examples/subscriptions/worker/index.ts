@@ -30,6 +30,7 @@ const mppx = Mppx.create({
       testnet: true,
     }),
   ],
+  secretKey: 'dev-secret-key-change-me-in-production',
 })
 
 app.get(
