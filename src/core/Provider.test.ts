@@ -108,6 +108,27 @@ describe('getMppxParameters', () => {
     expect(resolved).toBeUndefined()
     expect(provider.store.getState().accessKeys).toEqual([])
   })
+
+  test('error: does not resolve access keys for disconnected accounts', async () => {
+    const payer = accounts[0]!
+    const active = accounts[1]!
+    const provider = Provider.create({ storage: Storage.memory() })
+
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId: provider.store.getState().chainId,
+      parameters: { expiry: 123, privateKey: privateKeys[2] },
+    })
+    provider.store.setState({ accounts: [{ address: active.address }], activeAccount: 0 })
+
+    await expect(
+      provider.getMppxParameters().resolveAccount({
+        account: { address: payer.address, type: 'json-rpc' },
+        chainId: provider.store.getState().chainId,
+        operation: { kind: 'authorizePaymentChannel' },
+      }),
+    ).rejects.toThrowError(`Account "${payer.address}" not found.`)
+  })
 })
 
 describe('wallet_connect', () => {

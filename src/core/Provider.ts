@@ -829,9 +829,18 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
   }
 
+  function assertMppAccountConnected(address: Address.Address) {
+    const { accounts } = store.getState()
+    if (accounts.length === 0)
+      throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
+    if (!accounts.some((account) => isSameMppAddress(account.address, address)))
+      throw new ox_Provider.UnauthorizedError({ message: `Account "${address}" not found.` })
+  }
+
   async function resolveMppAccount(info: ResolveAccountInfo) {
     const account = readMppAddress(info.account.address)
     if (!account) return undefined
+    assertMppAccountConnected(account)
 
     if (info.operation.kind === 'executeCalls')
       return await selectOrAuthorizeAccessKey({
