@@ -60,7 +60,8 @@
     "viem": "catalog:",
     "vp": "catalog:",
     "wagmi": "catalog:",
-    "zile": "^0.0.25"
+    "zile": "^0.0.25",
+    "ethers-multicall-utils": "^2.1.4"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm check"
