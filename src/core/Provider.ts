@@ -1706,15 +1706,28 @@ export function create(options: create.Options = {}): create.ReturnType {
     // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
     // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
     const polyfill = polyfill_option ?? isFetchWritable()
-    const getClient = ({ chainId }: { chainId?: number | undefined }) => {
+    const getClient = async ({ chainId }: { chainId?: number | undefined }) => {
       const client = provider.getClient({ chainId })
-      const account = store.getState().accounts[store.getState().activeAccount]
+      const state = store.getState()
+      const account = state.accounts[state.activeAccount]
       if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
+      const resolvedChainId = chainId ?? state.chainId
+      const accessKey = await AccessKey.select({
+        account: account.address,
+        chainId: resolvedChainId,
+        store,
+      })
       return Object.assign(client, {
-        account: {
-          address: account.address,
-          type: 'json-rpc' as const,
-        },
+        account: accessKey
+          ? {
+              address: account.address,
+              accessKeyAddress: accessKey.address,
+              type: 'json-rpc' as const,
+            }
+          : {
+              address: account.address,
+              type: 'json-rpc' as const,
+            },
       })
     }
     Mppx.create({

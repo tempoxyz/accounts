@@ -138,6 +138,27 @@ describe('mppx integration', () => {
     }
   })
 
+  test('mpp client uses access key address as authorizedSigner', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+      chains: [chain],
+      mpp: { mode: 'push' },
+    })
+    const address = await connect(provider)
+    await fund(address)
+
+    await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [{ expiry: Expiry.days(1) }],
+    })
+
+    const key = provider.store.getState().accessKeys[0]!
+    expect(key).toBeDefined()
+
+    const res = await fetch(`${server.url}/fortune`)
+    expect(res.status).toBe(200)
+  })
+
   test('push mode publishes pending access key authorization', async () => {
     const provider = Provider.create({
       adapter: headlessWebAuthn(),
