@@ -1,4 +1,4 @@
-import { Fetch } from 'mppx/client'
+import { Fetch, Mppx as ClientMppx, tempo as clientTempo } from 'mppx/client'
 import { Mppx as ServerMppx, tempo } from 'mppx/server'
 import { parseUnits } from 'viem'
 import { Addresses } from 'viem/tempo'
@@ -64,6 +64,101 @@ describe('mppx integration', () => {
         "fortune": "Your code will compile on the first try.",
       }
     `)
+  })
+
+  test('mppx front door works without global polyfill', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+      chains: [chain],
+      mpp: false,
+    })
+
+    const address = await connect(provider)
+    await fund(address)
+
+    const mppx = ClientMppx.create({
+      methods: [
+        clientTempo({
+          account: provider.getAccount(),
+          ...provider.getMppxParameters(),
+        }),
+      ],
+      polyfill: false,
+    })
+
+    const res = await mppx.fetch(`${server.url}/fortune`)
+    expect(res.status).toMatchInlineSnapshot(`200`)
+  })
+
+  test('mppx global front door uses provider access keys', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+      chains: [chain],
+      mpp: false,
+    })
+
+    const address = await connect(provider)
+    await fund(address)
+    await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [{ expiry: Expiry.days(1) }],
+    })
+
+    ClientMppx.create({
+      methods: [
+        clientTempo({
+          account: provider.getAccount(),
+          ...provider.getMppxParameters(),
+          mode: 'pull',
+        }),
+      ],
+    })
+    const res = await fetch(`${server.url}/fortune`)
+    expect(res.status).toMatchInlineSnapshot(`200`)
+
+    const key = provider.store.getState().accessKeys[0]!
+    expect(await provider.getAccessKeyStatus({ accessKey: key.address })).toMatchInlineSnapshot(
+      `"published"`,
+    )
+  })
+
+  test('mppx access-key authorization targets the payer account', async () => {
+    const provider = Provider.create({
+      adapter: headlessWebAuthn(),
+      chains: [chain],
+      mpp: false,
+    })
+
+    const payer = await connect(provider)
+    const payerAccount = provider.store.getState().accounts[0]!
+    await fund(payer)
+    await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [{ expiry: Expiry.days(1) }],
+    })
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register' } }],
+    })
+    const activeAccount = provider.store.getState().accounts[0]!
+    provider.store.setState({ accounts: [payerAccount, activeAccount], activeAccount: 1 })
+    const active = activeAccount.address
+    expect(active.toLowerCase()).not.toBe(payer.toLowerCase())
+
+    ClientMppx.create({
+      methods: [
+        clientTempo({
+          account: provider.getAccount({ address: payer }),
+          ...provider.getMppxParameters(),
+          mode: 'pull',
+        }),
+      ],
+    })
+    const res = await fetch(`${server.url}/fortune`)
+    expect(res.status).toMatchInlineSnapshot(`200`)
+
+    const [key] = provider.store.getState().accessKeys
+    expect(key?.access.toLowerCase()).toBe(payer.toLowerCase())
   })
 
   test('pull mode publishes a pending access key authorization', async () => {

@@ -2,11 +2,88 @@ import { Hex } from 'ox'
 import { createSiweMessage } from 'viem/siwe'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
+import { accounts, privateKeys } from '../../test/config.js'
 import * as Adapter from './Adapter.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 
 const address = '0x0000000000000000000000000000000000000001'
+
+describe('getMppxParameters', () => {
+  test('error: rejects unsupported chain IDs', () => {
+    const provider = Provider.create({ storage: Storage.memory() })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    expect(() =>
+      provider.getMppxParameters().getClient({ chainId: 1 }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnsupportedChainIdError: Chain 1 not configured.]`,
+    )
+  })
+
+  test('behavior: returns account-scoped client without mutating cached client', () => {
+    const provider = Provider.create({ storage: Storage.memory() })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    const client = provider.getClient()
+    const mppxClient = provider.getMppxParameters().getClient({})
+
+    expect(mppxClient).not.toBe(client)
+    expect((mppxClient as { account?: unknown }).account).toEqual({
+      address,
+      type: 'json-rpc',
+    })
+    expect((client as { account?: unknown }).account).toBeUndefined()
+  })
+
+  test('behavior: resolves existing access key for connected account', async () => {
+    const payer = accounts[0]!
+    const provider = Provider.create({ storage: Storage.memory() })
+    const chainId = provider.store.getState().chainId
+
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId,
+      parameters: { expiry: 9999999999, privateKey: privateKeys[2] },
+    })
+    const key = provider.store.getState().accessKeys[0]!
+    provider.store.setState({ accounts: [{ address: payer.address }], activeAccount: 0 })
+
+    const resolved = await provider.getMppxParameters().resolveAccount({
+      account: { address: payer.address, type: 'json-rpc' },
+      chainId,
+      operation: { kind: 'authorizePaymentChannel' },
+    })
+    const resolvedKey = resolved as
+      | { accessKeyAddress: string; address: string; source: string }
+      | undefined
+
+    expect(resolvedKey?.accessKeyAddress.toLowerCase()).toBe(key.address.toLowerCase())
+    expect(resolvedKey?.address).toBe(payer.address)
+    expect(resolvedKey?.source).toBe('accessKey')
+  })
+
+  test('error: does not resolve access keys for disconnected accounts', async () => {
+    const payer = accounts[0]!
+    const active = accounts[1]!
+    const provider = Provider.create({ storage: Storage.memory() })
+
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId: provider.store.getState().chainId,
+      parameters: { expiry: 123, privateKey: privateKeys[2] },
+    })
+    provider.store.setState({ accounts: [{ address: active.address }], activeAccount: 0 })
+
+    await expect(
+      provider.getMppxParameters().resolveAccount({
+        account: { address: payer.address, type: 'json-rpc' },
+        chainId: provider.store.getState().chainId,
+        operation: { kind: 'authorizePaymentChannel' },
+      }),
+    ).rejects.toThrowError(`Account "${payer.address}" not found.`)
+  })
+})
 
 describe('wallet_connect', () => {
   test('behavior: validates auth before preparing access key material', async () => {

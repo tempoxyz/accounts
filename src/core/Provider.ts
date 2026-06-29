@@ -1,5 +1,5 @@
 import { announceProvider } from 'mipd'
-import { Mppx, tempo as mppx_tempo } from 'mppx/client'
+import { Mppx, tempo as mppx_tempo, type ResolveAccountInfo } from 'mppx/client'
 import { Address, Hash, Hex, Json, Provider as ox_Provider, RpcResponse } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import {
@@ -31,6 +31,7 @@ import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
+import * as AddressUtil from './internal/address.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Keystore from './Keystore.js'
 import * as Schema from './Schema.js'
@@ -58,6 +59,8 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
       chainId?: number | undefined
       feePayer?: string | undefined
     }): ViemClient<Transport, typeof tempo>
+    /** Returns mppx Tempo client parameters backed by this provider. */
+    getMppxParameters(): MppxParameters
     /** Reactive state store. */
     store: Store.Store
   }
@@ -72,6 +75,11 @@ type WalletConnectCapabilities = NonNullable<
 type AuthCapabilityResult = NonNullable<
   Rpc.wallet_connect.Encoded['returns']['accounts'][number]['capabilities']['auth']
 >
+
+type MppxParameters = {
+  getClient: NonNullable<mppx_tempo.Parameters['getClient']>
+  resolveAccount: NonNullable<mppx_tempo.Parameters['resolveAccount']>
+}
 
 function isBrowserWebCrypto() {
   return typeof document !== 'undefined' && !!globalThis.crypto?.subtle
@@ -678,7 +686,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     if (!instance.persistAccounts) return accounts
     const merged = [...accounts]
     for (const a of store.getState().accounts)
-      if (!merged.some((m) => m.address.toLowerCase() === a.address.toLowerCase())) merged.push(a)
+      if (!merged.some((m) => AddressUtil.isEqual(m.address, a.address))) merged.push(a)
     return merged
   }
 
@@ -768,6 +776,58 @@ export function create(options: create.Options = {}): create.ReturnType {
       method: 'wallet_authorizeAccessKey',
       params: [z.encode(Rpc.wallet_authorizeAccessKey.parameters, decoded)!],
     })
+  }
+
+  function assertMppAccountConnected(address: Address.Address) {
+    const { accounts } = store.getState()
+    if (accounts.length === 0)
+      throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
+    if (!accounts.some((account) => AddressUtil.isEqual(account.address, address)))
+      throw new ox_Provider.UnauthorizedError({ message: `Account "${address}" not found.` })
+  }
+
+  async function resolveMppAccount(info: ResolveAccountInfo) {
+    const account = AddressUtil.from(info.account.address)
+    if (!account) return undefined
+    assertMppAccountConnected(account)
+
+    if (info.operation.kind === 'executeCalls')
+      return await store.accessKeys.select({
+        account,
+        ...(info.operation.calls ? { calls: info.operation.calls } : {}),
+        chainId: info.chainId,
+      })
+
+    const accessKey = AddressUtil.from(info.operation.authority)
+    if (!accessKey) return await store.accessKeys.select({ account, chainId: info.chainId })
+    if (AddressUtil.isZero(accessKey) || AddressUtil.isEqual(accessKey, account)) return undefined
+
+    return await store.accessKeys.get({
+      account,
+      accessKey,
+      chainId: info.chainId,
+    })
+  }
+
+  function getMppxParameters(): MppxParameters {
+    return {
+      getClient({ chainId }: { chainId?: number | undefined }) {
+        if (chainId !== undefined && !chains.some((chain) => chain.id === chainId))
+          throw new ox_Provider.UnsupportedChainIdError({
+            message: `Chain ${chainId} not configured.`,
+          })
+        const client = provider.getClient({ chainId })
+        const account = store.getState().accounts[store.getState().activeAccount]
+        if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
+        return Object.assign(Object.create(Object.getPrototypeOf(client)), client, {
+          account: {
+            address: account.address,
+            type: 'json-rpc' as const,
+          },
+        })
+      },
+      resolveAccount: (info: ResolveAccountInfo) => resolveMppAccount(info),
+    }
   }
 
   const provider = Object.assign(
@@ -880,9 +940,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                       const keyType =
                         parameters.keyType ??
                         Account.signatureKeyType(
-                          state.accounts.find(
-                            (a) => a.address.toLowerCase() === address.toLowerCase(),
-                          ),
+                          state.accounts.find((a) => AddressUtil.isEqual(a.address, address)),
                         )
                       if (!keyType) return undefined
                       return { address, keyType, type: 'json-rpc' } as JsonRpcAccount
@@ -1145,7 +1203,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                     if (address) {
                       const { accounts } = store.getState()
-                      if (!accounts.some((a) => a.address.toLowerCase() === address.toLowerCase()))
+                      if (!accounts.some((a) => AddressUtil.isEqual(a.address, address)))
                         throw new ox_Provider.UnauthorizedError({
                           message: `Address ${address} is not connected.`,
                         })
@@ -1674,6 +1732,7 @@ export function create(options: create.Options = {}): create.ReturnType {
           transports,
         })
       },
+      getMppxParameters,
       store,
     },
   )
@@ -1706,22 +1765,14 @@ export function create(options: create.Options = {}): create.ReturnType {
     // Skip polyfill on runtimes where `globalThis.fetch` is read-only (e.g.
     // Cloudflare Workers). Caller can also explicitly opt out via `mpp.polyfill`.
     const polyfill = polyfill_option ?? isFetchWritable()
-    const getClient = ({ chainId }: { chainId?: number | undefined }) => {
-      const client = provider.getClient({ chainId })
-      const account = store.getState().accounts[store.getState().activeAccount]
-      if (!account) throw new ox_Provider.DisconnectedError({ message: 'No active account.' })
-      return Object.assign(client, {
-        account: {
-          address: account.address,
-          type: 'json-rpc' as const,
-        },
-      })
+    const parameters = provider.getMppxParameters()
+    const tempoOptions = {
+      ...methodOptions,
+      ...parameters,
+      mode,
     }
     Mppx.create({
-      methods: [
-        mppx_tempo({ ...methodOptions, getClient, mode }),
-        mppx_tempo.subscription({ getClient }),
-      ],
+      methods: [mppx_tempo(tempoOptions), mppx_tempo.subscription(parameters)],
       polyfill,
     })
   }
@@ -1880,7 +1931,7 @@ export declare namespace getAccessKeyStatus {
 
 export declare namespace mpp {
   /** Options for Machine Payment Protocol (mppx) integration. */
-  type Options = Omit<mppx_tempo.Parameters, 'account' | 'getClient'> & {
+  type Options = Omit<mppx_tempo.Parameters, 'account' | 'getClient' | 'resolveAccount'> & {
     /**
      * Whether to polyfill `globalThis.fetch` with the payment-aware wrapper.
      *
