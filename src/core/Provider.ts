@@ -31,6 +31,7 @@ import type * as Adapter from './Adapter.js'
 import { dialog } from './adapters/dialog.js'
 import * as Client from './Client.js'
 import * as AccessKeyTransaction from './internal/AccessKeyTransaction.js'
+import * as AddressUtil from './internal/address.js'
 import { withDedupe } from './internal/withDedupe.js'
 import * as Keystore from './Keystore.js'
 import * as Schema from './Schema.js'
@@ -685,7 +686,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     if (!instance.persistAccounts) return accounts
     const merged = [...accounts]
     for (const a of store.getState().accounts)
-      if (!merged.some((m) => m.address.toLowerCase() === a.address.toLowerCase())) merged.push(a)
+      if (!merged.some((m) => AddressUtil.isEqual(m.address, a.address))) merged.push(a)
     return merged
   }
 
@@ -781,12 +782,12 @@ export function create(options: create.Options = {}): create.ReturnType {
     const { accounts } = store.getState()
     if (accounts.length === 0)
       throw new ox_Provider.DisconnectedError({ message: 'No accounts connected.' })
-    if (!accounts.some((account) => isSameMppAddress(account.address, address)))
+    if (!accounts.some((account) => AddressUtil.isEqual(account.address, address)))
       throw new ox_Provider.UnauthorizedError({ message: `Account "${address}" not found.` })
   }
 
   async function resolveMppAccount(info: ResolveAccountInfo) {
-    const account = readMppAddress(info.account.address)
+    const account = AddressUtil.from(info.account.address)
     if (!account) return undefined
     assertMppAccountConnected(account)
 
@@ -797,9 +798,9 @@ export function create(options: create.Options = {}): create.ReturnType {
         chainId: info.chainId,
       })
 
-    const accessKey = readMppAddress(info.operation.authority)
+    const accessKey = AddressUtil.from(info.operation.authority)
     if (!accessKey) return await store.accessKeys.select({ account, chainId: info.chainId })
-    if (isZeroMppAddress(accessKey) || isSameMppAddress(accessKey, account)) return undefined
+    if (AddressUtil.isZero(accessKey) || AddressUtil.isEqual(accessKey, account)) return undefined
 
     return await store.accessKeys.get({
       account,
@@ -939,9 +940,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                       const keyType =
                         parameters.keyType ??
                         Account.signatureKeyType(
-                          state.accounts.find(
-                            (a) => a.address.toLowerCase() === address.toLowerCase(),
-                          ),
+                          state.accounts.find((a) => AddressUtil.isEqual(a.address, address)),
                         )
                       if (!keyType) return undefined
                       return { address, keyType, type: 'json-rpc' } as JsonRpcAccount
@@ -1204,7 +1203,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
                     if (address) {
                       const { accounts } = store.getState()
-                      if (!accounts.some((a) => a.address.toLowerCase() === address.toLowerCase()))
+                      if (!accounts.some((a) => AddressUtil.isEqual(a.address, address)))
                         throw new ox_Provider.UnauthorizedError({
                           message: `Address ${address} is not connected.`,
                         })
@@ -1974,19 +1973,6 @@ function isFetchWritable(): boolean {
   } catch {
     return false
   }
-}
-
-function readMppAddress(value: unknown): Address.Address | undefined {
-  if (typeof value === 'string' && Address.validate(value)) return value
-  return undefined
-}
-
-function isSameMppAddress(a: Address.Address, b: Address.Address): boolean {
-  return a.toLowerCase() === b.toLowerCase()
-}
-
-function isZeroMppAddress(address: Address.Address): boolean {
-  return BigInt(address) === 0n
 }
 
 /**
