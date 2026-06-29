@@ -92,7 +92,6 @@ describe('mppx integration', () => {
 
   test('mppx global front door uses provider access keys', async () => {
     const provider = Provider.create({
-      accessKey: { authorize: { expiry: Expiry.days(1) } },
       adapter: headlessWebAuthn(),
       chains: [chain],
       mpp: false,
@@ -100,6 +99,10 @@ describe('mppx integration', () => {
 
     const address = await connect(provider)
     await fund(address)
+    await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [{ expiry: Expiry.days(1) }],
+    })
 
     ClientMppx.create({
       methods: [
@@ -121,7 +124,6 @@ describe('mppx integration', () => {
 
   test('mppx access-key authorization targets the payer account', async () => {
     const provider = Provider.create({
-      accessKey: { authorize: { expiry: Expiry.days(1) } },
       adapter: headlessWebAuthn(),
       chains: [chain],
       mpp: false,
@@ -130,6 +132,10 @@ describe('mppx integration', () => {
     const payer = await connect(provider)
     const payerAccount = provider.store.getState().accounts[0]!
     await fund(payer)
+    await provider.request({
+      method: 'wallet_authorizeAccessKey',
+      params: [{ expiry: Expiry.days(1) }],
+    })
     await provider.request({
       method: 'wallet_connect',
       params: [{ capabilities: { method: 'register' } }],

@@ -437,11 +437,8 @@ export function create(options: create.Options = {}): create.ReturnType {
     return await selected.account.sign!({ hash: hashTypedData(typedData as never) })
   }
 
-  async function authorizeAccessKey(
-    parameters: Adapter.authorizeAccessKey.Parameters,
-    options_: { address?: Address.Address | undefined } = {},
-  ) {
-    const selected = await getAdapterAccount({ address: options_.address })
+  async function authorizeAccessKey(parameters: Adapter.authorizeAccessKey.Parameters) {
+    const selected = await getAdapterAccount()
     const chainId = parameters.chainId ?? getClient().chain.id
     if (selected.account.type !== 'json-rpc') {
       const keyAuthorization = await store.accessKeys.authorize({
@@ -462,7 +459,6 @@ export function create(options: create.Options = {}): create.ReturnType {
       method: 'wallet_authorizeAccessKey' as never,
       params: [z.encode(Rpc.wallet_authorizeAccessKey.parameters, prepared.parameters)] as never,
     })) as Adapter.authorizeAccessKey.ReturnType
-    if (options_.address && !isSameMppAddress(result.rootAddress, options_.address)) return result
     await savePreparedAccessKey({
       account: result.rootAddress,
       accessKey: prepared,
@@ -666,31 +662,6 @@ export function create(options: create.Options = {}): create.ReturnType {
     unsupported('authorizeAccessKey')
   }
 
-  async function authorizeAccessKeyForAddress(
-    parameters: Adapter.authorizeAccessKey.Parameters,
-    request: Pick<Rpc.wallet_authorizeAccessKey.Encoded, 'method' | 'params'>,
-    address: Address.Address,
-  ) {
-    if (instance.getAccount) {
-      const result = await authorizeAccessKey(parameters, { address })
-      return isSameMppAddress(result.rootAddress, address) ? result : undefined
-    }
-
-    const activeAccount = store.getState().accounts[store.getState().activeAccount]?.address
-    if (!activeAccount || !isSameMppAddress(activeAccount, address)) return undefined
-    if (!actions.authorizeAccessKey) return undefined
-
-    const result = await actions.authorizeAccessKey(parameters, request)
-    if (isSameMppAddress(result.rootAddress, address)) return result
-
-    store.accessKeys.remove({
-      account: result.rootAddress,
-      accessKey: result.keyAuthorization.keyId,
-      chainId: Number(result.keyAuthorization.chainId),
-    })
-    return undefined
-  }
-
   async function revokeAccessKeyAction(
     parameters: Adapter.revokeAccessKey.Parameters,
     request: Pick<Rpc.wallet_revokeAccessKey.Encoded, 'method' | 'params'>,
@@ -800,32 +771,9 @@ export function create(options: create.Options = {}): create.ReturnType {
     if (existing) return
     if (!AccessKey.canAuthorizeCalls({ parameters, calls: options_.calls })) return
     const decoded = stripAuthorizeAccessKey(parameters)
-    await authorizeAccessKeyForAddress(
-      decoded,
-      {
-        method: 'wallet_authorizeAccessKey',
-        params: [z.encode(Rpc.wallet_authorizeAccessKey.parameters, decoded)!],
-      },
-      options_.address,
-    )
-  }
-
-  async function selectOrAuthorizeAccessKey(options_: {
-    address: Address.Address
-    calls?: readonly AccessKey.Call[] | undefined
-    chainId: number
-  }) {
-    const existing = await store.accessKeys.select({
-      account: options_.address,
-      ...(options_.calls ? { calls: options_.calls } : {}),
-      chainId: options_.chainId,
-    })
-    if (existing) return existing
-    await authorizeDefaultAccessKeyForTransaction(options_)
-    return await store.accessKeys.select({
-      account: options_.address,
-      ...(options_.calls ? { calls: options_.calls } : {}),
-      chainId: options_.chainId,
+    await authorizeAccessKeyAction(decoded, {
+      method: 'wallet_authorizeAccessKey',
+      params: [z.encode(Rpc.wallet_authorizeAccessKey.parameters, decoded)!],
     })
   }
 
@@ -843,18 +791,14 @@ export function create(options: create.Options = {}): create.ReturnType {
     assertMppAccountConnected(account)
 
     if (info.operation.kind === 'executeCalls')
-      return await selectOrAuthorizeAccessKey({
-        address: account,
+      return await store.accessKeys.select({
+        account,
         ...(info.operation.calls ? { calls: info.operation.calls } : {}),
         chainId: info.chainId,
       })
 
     const accessKey = readMppAddress(info.operation.authority)
-    if (!accessKey)
-      return await selectOrAuthorizeAccessKey({
-        address: account,
-        chainId: info.chainId,
-      })
+    if (!accessKey) return await store.accessKeys.select({ account, chainId: info.chainId })
     if (isZeroMppAddress(accessKey) || isSameMppAddress(accessKey, account)) return undefined
 
     return await store.accessKeys.get({
