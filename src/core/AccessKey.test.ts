@@ -726,6 +726,38 @@ describe('get', () => {
     expect(keystore.stats.toAccountCalls).toBe(1)
   })
 
+  test('behavior: matches access key scopes against exact-key transaction calls', async () => {
+    const store = createStore()
+    const keyPair = await WebCryptoP256.createKeyPair()
+    const accessKey = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+    const token = '0x0000000000000000000000000000000000000abc' as const
+    await addAuthorization({
+      address: rootAddress,
+      keyAuthorization: createKeyAuthorization(accessKey.accessKeyAddress, {
+        scopes: [{ address: token, selector: 'transfer(address,uint256)' }],
+      }),
+      keyPair,
+      store,
+    })
+
+    const query = { accessKey: accessKey.accessKeyAddress, account: rootAddress, chainId: 1 }
+    const match = await store.accessKeys.get({
+      ...query,
+      calls: [{ to: token, data: '0xa9059cbb0000000000000000000000000000000000000001' }],
+    })
+    const miss = await store.accessKeys.get({
+      ...query,
+      calls: [{ to: '0x0000000000000000000000000000000000000def', data: '0xdeadbeef' }],
+    })
+
+    expect({ match: !!match, miss: !!miss }).toMatchInlineSnapshot(`
+      {
+        "match": true,
+        "miss": false,
+      }
+    `)
+  })
+
   test('behavior: unrecognized handles are unusable and retained', async () => {
     const foreign = testKeystore('foreign')
     const key = await foreign.createKey()
