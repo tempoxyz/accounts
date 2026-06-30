@@ -808,11 +808,10 @@ export function create(options: create.Options = {}): create.ReturnType {
         throw new ox_Provider.UnauthorizedError({
           message: `Access key "${options_.accessKey}" cannot satisfy channel authority "${authority}".`,
         })
-      const calls = info.operation.kind === 'executeCalls' ? info.operation.calls : undefined
       const accessKey = await store.accessKeys.get({
         account,
         accessKey: options_.accessKey,
-        ...(calls ? { calls } : {}),
+        ...(info.operation.kind === 'executeCalls' ? { calls: info.operation.calls } : {}),
         chainId: info.chainId,
       })
       if (!accessKey)

@@ -485,7 +485,7 @@ export async function get(options: get.Options): Promise<get.ReturnType> {
   const now = options.now ?? Date.now() / 1000
   const record = list({ account, accessKey, chainId, store })[0]
   if (!record) return undefined
-  if (!recordScopesMatch(record, { calls })) return undefined
+  if ('calls' in options && !recordScopesMatch(record, { calls })) return undefined
   if (isExpired(record.expiry, now)) {
     await remove({
       accessKey: record.address,

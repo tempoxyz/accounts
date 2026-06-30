@@ -741,6 +741,7 @@ describe('get', () => {
     })
 
     const query = { accessKey: accessKey.accessKeyAddress, account: rootAddress, chainId: 1 }
+    const channel = await store.accessKeys.get(query)
     const match = await store.accessKeys.get({
       ...query,
       calls: [{ to: token, data: '0xa9059cbb0000000000000000000000000000000000000001' }],
@@ -750,8 +751,9 @@ describe('get', () => {
       calls: [{ to: '0x0000000000000000000000000000000000000def', data: '0xdeadbeef' }],
     })
 
-    expect({ match: !!match, miss: !!miss }).toMatchInlineSnapshot(`
+    expect({ channel: !!channel, match: !!match, miss: !!miss }).toMatchInlineSnapshot(`
       {
+        "channel": true,
         "match": true,
         "miss": false,
       }

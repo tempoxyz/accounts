@@ -67,11 +67,16 @@ describe('getMppxParameters', () => {
     const payer = accounts[0]!
     const provider = Provider.create({ storage: Storage.memory() })
     const chainId = provider.store.getState().chainId
+    const token = '0x0000000000000000000000000000000000000abc' as const
 
     await provider.store.accessKeys.authorize({
       account: payer,
       chainId,
-      parameters: { expiry: 9999999999, privateKey: privateKeys[1] },
+      parameters: {
+        expiry: 9999999999,
+        privateKey: privateKeys[1],
+        scopes: [{ address: token, selector: 'transfer(address,uint256)' }],
+      },
     })
     await provider.store.accessKeys.authorize({
       account: payer,
@@ -93,6 +98,38 @@ describe('getMppxParameters', () => {
       | undefined
 
     expect(resolvedKey?.accessKeyAddress.toLowerCase()).toBe(requested.address.toLowerCase())
+    expect(resolvedKey?.address).toBe(payer.address)
+    expect(resolvedKey?.source).toBe('accessKey')
+  })
+
+  test('behavior: resolves scoped access key for channel authority', async () => {
+    const payer = accounts[0]!
+    const provider = Provider.create({ storage: Storage.memory() })
+    const chainId = provider.store.getState().chainId
+    const token = '0x0000000000000000000000000000000000000abc' as const
+
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId,
+      parameters: {
+        expiry: 9999999999,
+        privateKey: privateKeys[1],
+        scopes: [{ address: token, selector: 'transfer(address,uint256)' }],
+      },
+    })
+    const key = provider.store.getState().accessKeys[0]!
+    provider.store.setState({ accounts: [{ address: payer.address }], activeAccount: 0 })
+
+    const resolved = await provider.getMppxParameters().resolveAccount({
+      account: { address: payer.address, type: 'json-rpc' },
+      chainId,
+      operation: { kind: 'authorizePaymentChannel', authority: key.address },
+    })
+    const resolvedKey = resolved as
+      | { accessKeyAddress: string; address: string; source: string }
+      | undefined
+
+    expect(resolvedKey?.accessKeyAddress.toLowerCase()).toBe(key.address.toLowerCase())
     expect(resolvedKey?.address).toBe(payer.address)
     expect(resolvedKey?.source).toBe('accessKey')
   })
