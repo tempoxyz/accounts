@@ -159,6 +159,11 @@ type ListQuery = {
   store: ManagerOptions
 }
 
+type MatchQuery = {
+  /** Calls the access key must be able to sign. */
+  calls?: readonly Call[] | undefined
+}
+
 type ManagerOptions = {
   /** Keystores backing access-key records that carry an opaque `handle`. */
   keystores: Keystore.Keystores
@@ -475,11 +480,12 @@ export async function select(
 
 /** Returns a locally-signable access key account by exact address. */
 export async function get(options: get.Options): Promise<get.ReturnType> {
-  const { accessKey, account, chainId } = options
+  const { accessKey, account, calls, chainId } = options
   const { store } = options
   const now = options.now ?? Date.now() / 1000
   const record = list({ account, accessKey, chainId, store })[0]
   if (!record) return undefined
+  if ('calls' in options && !recordScopesMatch(record, { calls })) return undefined
   if (isExpired(record.expiry, now)) {
     await remove({
       accessKey: record.address,
@@ -493,7 +499,7 @@ export async function get(options: get.Options): Promise<get.ReturnType> {
 }
 
 export declare namespace get {
-  type Options = {
+  type Options = MatchQuery & {
     /** Root account address. */
     account: Address.Address
     /** Specific access key address to match. */

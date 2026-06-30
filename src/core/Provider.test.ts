@@ -63,6 +63,161 @@ describe('getMppxParameters', () => {
     expect(resolvedKey?.source).toBe('accessKey')
   })
 
+  test('behavior: resolves requested access key for connected account', async () => {
+    const payer = accounts[0]!
+    const provider = Provider.create({ storage: Storage.memory() })
+    const chainId = provider.store.getState().chainId
+    const token = '0x0000000000000000000000000000000000000abc' as const
+
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId,
+      parameters: {
+        expiry: 9999999999,
+        privateKey: privateKeys[1],
+        scopes: [{ address: token, selector: 'transfer(address,uint256)' }],
+      },
+    })
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId,
+      parameters: { expiry: 9999999999, privateKey: privateKeys[2] },
+    })
+    const requested = provider.store.getState().accessKeys[1]!
+    provider.store.setState({ accounts: [{ address: payer.address }], activeAccount: 0 })
+
+    const resolved = await provider
+      .getMppxParameters({ accessKey: requested.address })
+      .resolveAccount({
+        account: { address: payer.address, type: 'json-rpc' },
+        chainId,
+        operation: { kind: 'authorizePaymentChannel' },
+      })
+    const resolvedKey = resolved as
+      | { accessKeyAddress: string; address: string; source: string }
+      | undefined
+
+    expect(resolvedKey?.accessKeyAddress.toLowerCase()).toBe(requested.address.toLowerCase())
+    expect(resolvedKey?.address).toBe(payer.address)
+    expect(resolvedKey?.source).toBe('accessKey')
+  })
+
+  test('behavior: resolves scoped access key for channel authority', async () => {
+    const payer = accounts[0]!
+    const provider = Provider.create({ storage: Storage.memory() })
+    const chainId = provider.store.getState().chainId
+    const token = '0x0000000000000000000000000000000000000abc' as const
+
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId,
+      parameters: {
+        expiry: 9999999999,
+        privateKey: privateKeys[1],
+        scopes: [{ address: token, selector: 'transfer(address,uint256)' }],
+      },
+    })
+    const key = provider.store.getState().accessKeys[0]!
+    provider.store.setState({ accounts: [{ address: payer.address }], activeAccount: 0 })
+
+    const resolved = await provider.getMppxParameters().resolveAccount({
+      account: { address: payer.address, type: 'json-rpc' },
+      chainId,
+      operation: { kind: 'authorizePaymentChannel', authority: key.address },
+    })
+    const resolvedKey = resolved as
+      | { accessKeyAddress: string; address: string; source: string }
+      | undefined
+
+    expect(resolvedKey?.accessKeyAddress.toLowerCase()).toBe(key.address.toLowerCase())
+    expect(resolvedKey?.address).toBe(payer.address)
+    expect(resolvedKey?.source).toBe('accessKey')
+  })
+
+  test('error: rejects requested access key that cannot sign for account', async () => {
+    const payer = accounts[0]!
+    const provider = Provider.create({ storage: Storage.memory() })
+    const chainId = provider.store.getState().chainId
+    provider.store.setState({ accounts: [{ address: payer.address }], activeAccount: 0 })
+
+    await expect(
+      provider.getMppxParameters({ accessKey: accounts[1]!.address }).resolveAccount({
+        account: { address: payer.address, type: 'json-rpc' },
+        chainId,
+        operation: { kind: 'authorizePaymentChannel' },
+      }),
+    ).rejects.toThrowError(`Access key "${accounts[1]!.address}" cannot sign`)
+  })
+
+  test('error: rejects requested access key that cannot satisfy channel authority', async () => {
+    const payer = accounts[0]!
+    const provider = Provider.create({ storage: Storage.memory() })
+    const chainId = provider.store.getState().chainId
+
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId,
+      parameters: { expiry: 9999999999, privateKey: privateKeys[1] },
+    })
+    const key = provider.store.getState().accessKeys[0]!
+    provider.store.setState({ accounts: [{ address: payer.address }], activeAccount: 0 })
+
+    for (const authority of [
+      accounts[2]!.address,
+      payer.address,
+      '0x0000000000000000000000000000000000000000',
+    ] as const)
+      await expect(
+        provider.getMppxParameters({ accessKey: key.address }).resolveAccount({
+          account: { address: payer.address, type: 'json-rpc' },
+          chainId,
+          operation: { kind: 'authorizePaymentChannel', authority },
+        }),
+      ).rejects.toThrowError(
+        `Access key "${key.address}" cannot satisfy channel authority "${authority}".`,
+      )
+  })
+
+  test('error: rejects requested access key when transaction calls do not match scopes', async () => {
+    const payer = accounts[0]!
+    const provider = Provider.create({ storage: Storage.memory() })
+    const chainId = provider.store.getState().chainId
+    const token = '0x0000000000000000000000000000000000000abc' as const
+
+    await provider.store.accessKeys.authorize({
+      account: payer,
+      chainId,
+      parameters: {
+        expiry: 9999999999,
+        privateKey: privateKeys[2],
+        scopes: [{ address: token, selector: 'transfer(address,uint256)' }],
+      },
+    })
+    const key = provider.store.getState().accessKeys[0]!
+    provider.store.setState({ accounts: [{ address: payer.address }], activeAccount: 0 })
+
+    await expect(
+      provider.getMppxParameters({ accessKey: key.address }).resolveAccount({
+        account: { address: payer.address, type: 'json-rpc' },
+        chainId,
+        operation: { kind: 'executeCalls' },
+      }),
+    ).rejects.toThrowError(
+      `Access key "${key.address}" cannot be selected for executeCalls without transaction call details.`,
+    )
+
+    await expect(
+      provider.getMppxParameters({ accessKey: key.address }).resolveAccount({
+        account: { address: payer.address, type: 'json-rpc' },
+        chainId,
+        operation: {
+          kind: 'executeCalls',
+          calls: [{ to: '0x0000000000000000000000000000000000000def', data: '0xdeadbeef' }],
+        },
+      }),
+    ).rejects.toThrowError(`Access key "${key.address}" cannot sign`)
+  })
+
   test('error: does not resolve access keys for disconnected accounts', async () => {
     const payer = accounts[0]!
     const active = accounts[1]!
