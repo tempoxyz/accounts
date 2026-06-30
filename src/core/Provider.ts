@@ -799,25 +799,33 @@ export function create(options: create.Options = {}): create.ReturnType {
         info.operation.kind === 'authorizePaymentChannel'
           ? AddressUtil.from(info.operation.authority)
           : undefined
-      if (
-        authority &&
-        !AddressUtil.isZero(authority) &&
-        !AddressUtil.isEqual(authority, account) &&
-        !AddressUtil.isEqual(authority, options_.accessKey)
-      )
+      if (authority && !AddressUtil.isEqual(authority, options_.accessKey))
         throw new ox_Provider.UnauthorizedError({
           message: `Access key "${options_.accessKey}" cannot satisfy channel authority "${authority}".`,
         })
-      const accessKey = await store.accessKeys.get({
+      const query = {
         account,
         accessKey: options_.accessKey,
-        ...(info.operation.kind === 'executeCalls' ? { calls: info.operation.calls } : {}),
         chainId: info.chainId,
+      } as const
+      if (info.operation.kind === 'executeCalls' && !info.operation.calls) {
+        const accessKey = await store.accessKeys.get(query)
+        const record = store.accessKeys.list(query)[0]
+        if (accessKey && record?.scopes)
+          throw new ox_Provider.UnauthorizedError({
+            message: `Access key "${options_.accessKey}" cannot be selected for executeCalls without transaction call details.`,
+          })
+        if (accessKey) return accessKey
+      }
+      const accessKey = await store.accessKeys.get({
+        ...query,
+        ...(info.operation.kind === 'executeCalls' ? { calls: info.operation.calls } : {}),
       })
-      if (!accessKey)
+      if (!accessKey) {
         throw new ox_Provider.UnauthorizedError({
           message: `Access key "${options_.accessKey}" cannot sign for account "${account}".`,
         })
+      }
       return accessKey
     }
 

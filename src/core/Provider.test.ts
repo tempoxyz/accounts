@@ -162,15 +162,20 @@ describe('getMppxParameters', () => {
     const key = provider.store.getState().accessKeys[0]!
     provider.store.setState({ accounts: [{ address: payer.address }], activeAccount: 0 })
 
-    await expect(
-      provider.getMppxParameters({ accessKey: key.address }).resolveAccount({
-        account: { address: payer.address, type: 'json-rpc' },
-        chainId,
-        operation: { kind: 'authorizePaymentChannel', authority: accounts[2]!.address },
-      }),
-    ).rejects.toThrowError(
-      `Access key "${key.address}" cannot satisfy channel authority "${accounts[2]!.address}".`,
-    )
+    for (const authority of [
+      accounts[2]!.address,
+      payer.address,
+      '0x0000000000000000000000000000000000000000',
+    ] as const)
+      await expect(
+        provider.getMppxParameters({ accessKey: key.address }).resolveAccount({
+          account: { address: payer.address, type: 'json-rpc' },
+          chainId,
+          operation: { kind: 'authorizePaymentChannel', authority },
+        }),
+      ).rejects.toThrowError(
+        `Access key "${key.address}" cannot satisfy channel authority "${authority}".`,
+      )
   })
 
   test('error: rejects requested access key when transaction calls do not match scopes', async () => {
@@ -190,6 +195,16 @@ describe('getMppxParameters', () => {
     })
     const key = provider.store.getState().accessKeys[0]!
     provider.store.setState({ accounts: [{ address: payer.address }], activeAccount: 0 })
+
+    await expect(
+      provider.getMppxParameters({ accessKey: key.address }).resolveAccount({
+        account: { address: payer.address, type: 'json-rpc' },
+        chainId,
+        operation: { kind: 'executeCalls' },
+      }),
+    ).rejects.toThrowError(
+      `Access key "${key.address}" cannot be selected for executeCalls without transaction call details.`,
+    )
 
     await expect(
       provider.getMppxParameters({ accessKey: key.address }).resolveAccount({
