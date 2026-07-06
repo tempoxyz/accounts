@@ -99,7 +99,6 @@ describe('create options', () => {
     const provider = Provider.create({ mpp: false })
     const account = {} as ReturnType<typeof provider.getAccount>
     const parameters = provider.getMppxParameters()
-    provider.getMppxParameters({ accessKey: '0x0000000000000000000000000000000000000001' })
 
     expectTypeOf(parameters).toMatchTypeOf<
       Pick<NonNullable<Parameters<typeof tempo>[0]>, 'getClient' | 'resolveAccount'>

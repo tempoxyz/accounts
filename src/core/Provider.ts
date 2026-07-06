@@ -60,7 +60,7 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
       feePayer?: string | undefined
     }): ViemClient<Transport, typeof tempo>
     /** Returns mppx Tempo client parameters backed by this provider. */
-    getMppxParameters(options?: getMppxParameters.Options | undefined): MppxParameters
+    getMppxParameters(): MppxParameters
     /** Reactive state store. */
     store: Store.Store
   }
@@ -786,48 +786,10 @@ export function create(options: create.Options = {}): create.ReturnType {
       throw new ox_Provider.UnauthorizedError({ message: `Account "${address}" not found.` })
   }
 
-  async function resolveMppAccount(
-    info: ResolveAccountInfo,
-    options_: { accessKey?: Address.Address | undefined } = {},
-  ) {
+  async function resolveMppAccount(info: ResolveAccountInfo) {
     const account = AddressUtil.from(info.account.address)
     if (!account) return undefined
     assertMppAccountConnected(account)
-
-    if (options_.accessKey) {
-      const authority =
-        info.operation.kind === 'authorizePaymentChannel'
-          ? AddressUtil.from(info.operation.authority)
-          : undefined
-      if (authority && !AddressUtil.isEqual(authority, options_.accessKey))
-        throw new ox_Provider.UnauthorizedError({
-          message: `Access key "${options_.accessKey}" cannot satisfy channel authority "${authority}".`,
-        })
-      const query = {
-        account,
-        accessKey: options_.accessKey,
-        chainId: info.chainId,
-      } as const
-      if (info.operation.kind === 'executeCalls' && !info.operation.calls) {
-        const accessKey = await store.accessKeys.get(query)
-        const record = store.accessKeys.list(query)[0]
-        if (accessKey && record?.scopes)
-          throw new ox_Provider.UnauthorizedError({
-            message: `Access key "${options_.accessKey}" cannot be selected for executeCalls without transaction call details.`,
-          })
-        if (accessKey) return accessKey
-      }
-      const accessKey = await store.accessKeys.get({
-        ...query,
-        ...(info.operation.kind === 'executeCalls' ? { calls: info.operation.calls } : {}),
-      })
-      if (!accessKey) {
-        throw new ox_Provider.UnauthorizedError({
-          message: `Access key "${options_.accessKey}" cannot sign for account "${account}".`,
-        })
-      }
-      return accessKey
-    }
 
     if (info.operation.kind === 'executeCalls')
       return await store.accessKeys.select({
@@ -847,17 +809,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
   }
 
-  function getMppxParameters(options_: getMppxParameters.Options = {}): MppxParameters {
-    const accessKey = (() => {
-      if (!options_.accessKey) return undefined
-      const accessKey = AddressUtil.from(options_.accessKey)
-      if (!accessKey)
-        throw new RpcResponse.InvalidParamsError({
-          message: `Invalid access key address "${options_.accessKey}".`,
-        })
-      return accessKey
-    })()
-
+  function getMppxParameters(): MppxParameters {
     return {
       getClient({ chainId }: { chainId?: number | undefined }) {
         if (chainId !== undefined && !chains.some((chain) => chain.id === chainId))
@@ -874,7 +826,7 @@ export function create(options: create.Options = {}): create.ReturnType {
           },
         })
       },
-      resolveAccount: (info: ResolveAccountInfo) => resolveMppAccount(info, { accessKey }),
+      resolveAccount: (info: ResolveAccountInfo) => resolveMppAccount(info),
     }
   }
 
@@ -1975,14 +1927,6 @@ export declare namespace getAccessKeyStatus {
 
   /** Access-key publication status. */
   type ReturnType = 'missing' | 'pending' | 'published' | 'expired'
-}
-
-export declare namespace getMppxParameters {
-  /** Options for {@link Provider.getMppxParameters}. */
-  type Options = {
-    /** Specific access key address to use for mppx signing. */
-    accessKey?: Address.Address | undefined
-  }
 }
 
 export declare namespace mpp {
