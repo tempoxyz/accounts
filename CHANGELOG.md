@@ -1,5 +1,15 @@
 # accounts
 
+## 0.14.12
+
+### Patch Changes
+
+- 186b1f7: Added provider MPP account resolution parameters for locally managed access keys.
+- 2e092e9: Added exact access-key selection for provider-backed mppx parameters.
+- d5c0d66: Changed `Mount.auto` to allow trusted hosts to use iframe mounts without IntersectionObserver v2 support.
+- 98a8138: Added `identity` to `Provider.create`, minting verified-email id tokens from a configured OIDC issuer when local adapters fulfill `wallet_connect`.
+- 4aa479d: Add SIWE resources to wallet_connect auth challenges, support server-provided SIWE statements in Handler.auth, and preserve extra auth verify JSON fields.
+
 ## 0.14.11
 
 ### Patch Changes
