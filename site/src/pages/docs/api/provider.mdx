@@ -293,6 +293,27 @@ const provider = Provider.create({
 })
 ```
 
+### identity
+
+- **Type:** `{ audience?: string; issuer: string }`
+- **Optional**
+
+Identity (verified email) token minting for local adapters. When a `wallet_connect` request asks for `identity.email` and the adapter returns no identity claims — local adapters have no wallet host to mint them — the provider mints the id token from this issuer's `/token` route (the `Handler.oidcProvider` shape) and attaches it to the connect result.
+
+The issuer must trust body-supplied subjects (`Handler.oidcProvider` without `authenticate`), so this is for development deployments — for example, signing in to a local app with the `secp256k1` adapter and an auto-verified email.
+
+- `audience` — the `aud` claim bound into minted tokens. Defaults to `location.origin`.
+- `issuer` — the OIDC issuer whose `/token` route mints the id token.
+
+```ts twoslash
+import { Provider, secp256k1 } from 'accounts'
+
+const provider = Provider.create({
+  adapter: secp256k1(),
+  identity: { issuer: 'http://localhost:8787/v1/auth/dev-oidc' }, // [!code focus]
+})
+```
+
 ### maxAccounts
 
 - **Type:** `number`
