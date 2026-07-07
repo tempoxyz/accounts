@@ -42,6 +42,7 @@ export default defineConfig({
     include: [
       '@base-ui/react/otp-field',
       '@base-ui/react/select',
+      'react/jsx-runtime',
       'use-sync-external-store/shim',
       'use-sync-external-store/shim/with-selector',
     ],

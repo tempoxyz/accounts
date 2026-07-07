@@ -215,6 +215,7 @@ describe('Encoded', () => {
               chainId?: Hex | undefined
               displayName?: string | undefined
               token?: Hex | string | undefined
+              userId?: string | undefined
             },
           ]
         | undefined

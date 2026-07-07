@@ -1010,6 +1010,8 @@ export namespace wallet_deposit {
              * supported deposit token symbol (case-insensitive, e.g. `"USDC"`).
              */
             token: z.optional(z.union([u.address(), z.string()])),
+            /** External credits customer id, such as a Privy user id. */
+            userId: z.optional(z.string()),
           }),
         ]),
       ),

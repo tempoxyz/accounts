@@ -103,6 +103,11 @@ export function PrivyAccountsBridge() {
   return null
 }
 
+/** Returns the current Privy bridge state for playground/debug UI. */
+export function usePrivyAccountsState(): usePrivyAccountsState.ReturnType {
+  return useSyncExternalStore(subscribeState, getStateSnapshot, getStateSnapshot)
+}
+
 type PrivyReactWallet = {
   address: string
   getEthereumProvider: () => Promise<core_privy.EthereumProvider> | core_privy.EthereumProvider
@@ -133,6 +138,7 @@ let state: PrivyReactState = {
 }
 let bridge_mounts = 0
 const listeners = new Set<() => void>()
+const state_listeners = new Set<() => void>()
 const ready_listeners = new Set<() => void>()
 const wallets_ready_listeners = new Set<() => void>()
 
@@ -189,6 +195,7 @@ const client = {
 
 function setPrivyReactState(next: PrivyReactState) {
   state = next
+  emitState()
   if (next.ready) emitReady()
   if (next.ready && next.walletsReady) emitWalletsReady()
 }
@@ -223,6 +230,10 @@ function emit() {
   for (const listener of listeners) listener()
 }
 
+function emitState() {
+  for (const listener of state_listeners) listener()
+}
+
 function emitReady() {
   for (const listener of ready_listeners) listener()
   ready_listeners.clear()
@@ -241,6 +252,10 @@ function getSnapshot() {
   return request
 }
 
+function getStateSnapshot() {
+  return state
+}
+
 function isEmbeddedEthereumWallet(wallet: ConnectedWallet) {
   return wallet.type === 'ethereum' && wallet.walletClientType === 'privy'
 }
@@ -252,6 +267,11 @@ function sameAddress(a: string, b: string) {
 function subscribe(listener: () => void) {
   listeners.add(listener)
   return () => listeners.delete(listener)
+}
+
+function subscribeState(listener: () => void) {
+  state_listeners.add(listener)
+  return () => state_listeners.delete(listener)
 }
 
 function waitForReady() {
@@ -268,11 +288,38 @@ async function waitForWallets() {
 export declare namespace privy {
   /** Options for {@link privy}. */
   type Options = {
+    /**
+     * Optional funding handler for `wallet_deposit` requests. Privy itself does
+     * not provide deposit UI; apps can route supported funding intents to a
+     * wallet-owned flow while leaving unsupported intents rejected by that handler.
+     */
+    deposit?: NonNullable<Adapter.Instance['actions']['deposit']> | undefined
     /** Data URI of the provider icon. @default Black 1×1 SVG. */
     icon?: `data:image/${string}` | undefined
     /** Display name of the provider. @default "Privy" */
     name?: string | undefined
     /** Reverse DNS identifier. @default "io.privy" */
     rdns?: string | undefined
+  }
+}
+
+export declare namespace usePrivyAccountsState {
+  /** Current Privy bridge state. */
+  type ReturnType = {
+    /** Whether the user is currently authenticated with Privy. */
+    authenticated: boolean
+    /** Whether Privy has initialized. */
+    ready: boolean
+    /** Connected Privy user id. */
+    userId?: string | undefined
+    /** Embedded Ethereum wallets exposed by Privy. */
+    wallets: readonly {
+      /** Wallet address. */
+      address: string
+      /** Privy embedded wallet index. */
+      walletIndex?: number | undefined
+    }[]
+    /** Whether Privy's wallet list has initialized. */
+    walletsReady: boolean
   }
 }

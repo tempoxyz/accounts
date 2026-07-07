@@ -62,10 +62,11 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     })
     mount = mount_
     session = create({
-      connect: mount_.mode === 'iframe' ? 'eager' : 'lazy',
+      connect: 'lazy',
       close: (handle) => mount_.close(handle),
       host: url,
       target: () => mount_.target(),
+      waitForNavigation: mount_.mode === 'popup',
     })
     return session
   }
@@ -76,6 +77,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     connect?: 'eager' | 'lazy' | undefined
     host: string
     target: NonNullable<postMessage.Options['target']>
+    waitForNavigation?: boolean | undefined
   }) {
     const wata = Wata.create({
       transports: [
@@ -87,6 +89,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
             const acquired = await transport.target(parameters)
             if (!acquired)
               throw new PostMessage.PopupBlockedError('the wallet page popup was blocked')
+            if (transport.waitForNavigation) await waitForPopupNavigation(acquired, transport.host)
             return acquired
           },
         }),
@@ -216,6 +219,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
         close: (handle) => mount_popup.close(handle),
         host: url,
         target: () => mount_popup.target(),
+        waitForNavigation: true,
       })),
     }
   }
@@ -270,6 +274,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
     // No `close` (disconnect) hook: the session and mount stay warm across
     // disconnect so the next login reuses the already-handshaked session.
     cleanup() {
+      reject_inflight?.(new core_Provider.UserRejectedRequestError())
       void session?.close().catch(() => {})
       void fallback?.close?.()
       fallback = undefined
@@ -307,6 +312,23 @@ function requiresSafariPopup(request: {
 }): boolean {
   if (!isSafari()) return false
   return ['wallet_connect', 'eth_requestAccounts'].includes(request.method)
+}
+
+async function waitForPopupNavigation(target: PostMessage.Target, host: string): Promise<void> {
+  if (!('location' in target)) return
+  const origin = new URL(host).origin
+  const started = Date.now()
+
+  while (!target.closed) {
+    try {
+      if (target.location.origin === origin) return
+    } catch {
+      return
+    }
+
+    if (Date.now() - started > 2_000) return
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
 }
 
 export declare namespace postMessage {

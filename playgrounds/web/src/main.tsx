@@ -13,12 +13,12 @@ createRoot(document.getElementById('root')!).render(
 )
 
 function Root() {
-  const app_id = import.meta.env.VITE_PRIVY_APP_ID
-  if (!app_id) return <App />
+  const appId = import.meta.env.VITE_PRIVY_APP_ID
+  if (!appId) return <App />
 
   return (
     <PrivyProvider
-      appId={app_id}
+      appId={appId}
       config={{
         embeddedWallets: {
           ethereum: { createOnLogin: 'users-without-wallets' },

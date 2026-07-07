@@ -5,15 +5,16 @@ import {
   WebAuthnCeremony,
   dialog,
   Dialog,
+  Mount,
   local,
   postMessage,
   Provider,
   turnkey,
   webAuthn,
 } from 'accounts'
-import { Mount } from 'accounts'
 import { privy } from 'accounts/react/privy'
 import { Mppx } from 'mppx/client'
+import { Provider as core_Provider } from 'ox'
 import { generatePrivateKey } from 'viem/accounts'
 import { Account } from 'viem/tempo'
 
@@ -92,8 +93,8 @@ export let dialogMode: DialogMode =
   new URLSearchParams(window.location.search).get('mode') === 'popup' ? 'popup' : 'iframe'
 export let mppMode: MppMode = 'push'
 export let theme: DialogNs.Theme | undefined
-export let provider: ProviderValue = createProvider(initialAdapter)
 let turnkeyClient: TurnkeyClient | undefined
+export let provider: ProviderValue = createProvider(initialAdapter)
 
 function mpp() {
   return {
@@ -114,22 +115,7 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
       testnet,
     })
 
-  if (adapterType === 'tempoWallet') {
-    const postMessageHost = new URL('/post-message', host)
-    if (theme?.accent) postMessageHost.searchParams.set('accent', theme.accent)
-    if (theme?.radius) postMessageHost.searchParams.set('radius', theme.radius)
-    if (theme?.scheme) postMessageHost.searchParams.set('scheme', theme.scheme)
-    return Provider.create({
-      adapter: postMessage({
-        host: postMessageHost.toString(),
-        mount: dialogMode === 'popup' ? Mount.popup() : Mount.iframe(),
-        name: 'Tempo Wallet',
-        rdns: 'xyz.tempo',
-      }),
-      mpp: mpp(),
-      testnet,
-    })
-  }
+  if (adapterType === 'tempoWallet') return createTempoWalletProvider()
 
   if (adapterType === 'dialogRefImpl')
     return Provider.create({
@@ -179,8 +165,21 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
     if (!import.meta.env.VITE_PRIVY_APP_ID)
       throw new Error('VITE_PRIVY_APP_ID is required for the Privy adapter.')
 
+    const provider_deposit = createTempoWalletPopupProvider()
     return Provider.create({
-      adapter: privy(),
+      adapter: privy({
+        async deposit(parameters) {
+          if (parameters.intent !== 'credits')
+            throw new core_Provider.UnsupportedMethodError({
+              message: '`wallet_deposit` only supports MPP Credits for the Privy adapter.',
+            })
+
+          return await provider_deposit.request({
+            method: 'wallet_deposit',
+            params: [parameters],
+          } as never)
+        },
+      }),
       mpp: true,
       testnet,
     })
@@ -196,6 +195,42 @@ export function createProvider(adapterType: AdapterType): ProviderValue {
         const newAccount = Account.fromSecp256k1(key)
         return { accounts: [newAccount] }
       },
+    }),
+    mpp: mpp(),
+    testnet,
+  })
+}
+
+function createTempoWalletProvider(): ProviderValue {
+  const postMessageHost = new URL('/post-message', host)
+  if (theme?.accent) postMessageHost.searchParams.set('accent', theme.accent)
+  if (theme?.radius) postMessageHost.searchParams.set('radius', theme.radius)
+  if (theme?.scheme) postMessageHost.searchParams.set('scheme', theme.scheme)
+
+  return Provider.create({
+    adapter: postMessage({
+      host: postMessageHost.toString(),
+      mount: dialogMode === 'popup' ? Mount.popup() : Mount.iframe(),
+      name: 'Tempo Wallet',
+      rdns: 'xyz.tempo',
+    }),
+    mpp: mpp(),
+    testnet,
+  })
+}
+
+function createTempoWalletPopupProvider(): ProviderValue {
+  const postMessageHost = new URL('/post-message', host)
+  if (theme?.accent) postMessageHost.searchParams.set('accent', theme.accent)
+  if (theme?.radius) postMessageHost.searchParams.set('radius', theme.radius)
+  if (theme?.scheme) postMessageHost.searchParams.set('scheme', theme.scheme)
+
+  return Provider.create({
+    adapter: postMessage({
+      host: postMessageHost.toString(),
+      mount: Mount.popup(),
+      name: 'Tempo Wallet',
+      rdns: 'xyz.tempo',
     }),
     mpp: mpp(),
     testnet,

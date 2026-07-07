@@ -1,3 +1,4 @@
+import { usePrivyAccountsState } from 'accounts/react/privy'
 import { tempo as mppx_tempo } from 'mppx/client'
 import type { Session as MppxSession } from 'mppx/tempo'
 import { Hex, Json } from 'ox'
@@ -118,7 +119,7 @@ export function App() {
           <PlaygroundSection id="balances-funding" title="Balances & Funding">
             <WalletGetBalances />
             <Faucet />
-            <WalletDeposit />
+            <WalletDeposit adapterType={adapterType} />
           </PlaygroundSection>
 
           <PlaygroundSection id="transactions" title="Transactions">
@@ -325,10 +326,37 @@ function Faucet() {
   )
 }
 
-function WalletDeposit() {
+function WalletDeposit(props: { adapterType: AdapterType }) {
+  const { adapterType } = props
   const [result, error, execute] = useRequest()
+  const [creditsAddress, setCreditsAddress] = useState('0x263bd65ce92Fcfad76dc68Ca9cba74f48D264Cd5')
+  const [userId, setUserId] = useState('did:privy:example-user')
+  const privy = usePrivyAccountsState()
+  const userId_value = adapterType === 'privy' ? (privy.userId ?? userId) : userId
+  const address_value =
+    adapterType === 'privy' ? (privy.wallets[0]?.address ?? creditsAddress) : creditsAddress
   return (
     <Method method="wallet_deposit" result={result} error={error}>
+      <fieldset>
+        <legend>MPP Credits external user</legend>
+        {adapterType === 'privy' && (
+          <p>
+            Privy {privy.authenticated ? 'connected' : 'not connected'}; use Connection →
+            wallet_connect → Login to connect.
+          </p>
+        )}
+        <label>
+          Privy user id
+          <input value={userId_value} onChange={(event) => setUserId(event.target.value)} />
+        </label>
+        <label>
+          Destination wallet address
+          <input
+            value={address_value}
+            onChange={(event) => setCreditsAddress(event.target.value)}
+          />
+        </label>
+      </fieldset>
       <Button
         onClick={() =>
           execute(() =>
@@ -376,6 +404,26 @@ function WalletDeposit() {
         }
       >
         Deposit $25 pathUSD
+      </Button>
+      <Button
+        disabled={!address_value || !userId_value}
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_deposit',
+              params: [
+                {
+                  address: address_value,
+                  displayName: 'Accounts Playground',
+                  intent: 'credits',
+                  userId: userId_value,
+                },
+              ],
+            } as never),
+          )
+        }
+      >
+        Deposit MPP Credits for Privy user
       </Button>
     </Method>
   )

@@ -76,6 +76,7 @@ describe('privy', () => {
             parameters: Adapter.createAccount.Parameters
           }) => Promise<privy.AccountSelection>)
         | undefined
+      deposit?: NonNullable<Adapter.Instance['actions']['deposit']> | undefined
       loadAccounts: (parameters: {
         client: privy.Client
         parameters?: Adapter.loadAccounts.Parameters | undefined

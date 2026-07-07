@@ -568,6 +568,7 @@ export function privy<const client extends privy.Client>(
           })
           return { keyAuthorization, rootAddress: account.address }
         },
+        ...(options.deposit ? { deposit: options.deposit } : {}),
         async revokeAccessKey(parameters) {
           const account = await getSigningAccount(parameters.address)
           try {
@@ -635,6 +636,12 @@ export declare namespace privy {
   type Options<client extends Client = Client> = {
     /** Existing structural Privy client, such as `Privy` from Core JS or a React hook-backed shim. */
     client: client
+    /**
+     * Optional funding handler for `wallet_deposit` requests. Privy itself does
+     * not provide deposit UI; apps can route supported funding intents to a
+     * wallet-owned flow while leaving unsupported intents rejected by that handler.
+     */
+    deposit?: NonNullable<Adapter.Instance['actions']['deposit']> | undefined
     /**
      * Runs the Privy registration UI. May optionally return a subset of the user's
      * embedded wallet addresses to expose to the provider; if omitted, the adapter

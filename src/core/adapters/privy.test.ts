@@ -4,6 +4,7 @@ import type { Address } from 'viem/accounts'
 import { Abis } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 
+import type * as Adapter from '../Adapter.js'
 import * as Storage from '../Storage.js'
 import * as Store from '../Store.js'
 import { privy } from './privy.js'
@@ -122,6 +123,57 @@ describe('privy', () => {
     expect(result).toMatchInlineSnapshot(
       `"0xe5ddc160e4c8f92de507c7db9b982d4f9b7197bfa421864aeadc586bc96b09ae0ba0c5b131650ae4994cff1839341d00f3735ef5abc62ac8fe2cf50f65208e2a1b"`,
     )
+  })
+
+  test('default: deposit is omitted unless the app provides a funding handler', async () => {
+    const { adapter } = setup()
+
+    expect(adapter.actions.deposit).toMatchInlineSnapshot(`undefined`)
+  })
+
+  test('default: deposit delegates to the app-provided funding handler', async () => {
+    const calls: unknown[] = []
+    const { adapter } = setup({
+      deposit: async (parameters, request) => {
+        calls.push({ parameters, request })
+        return { receipts: [] }
+      },
+    })
+
+    const result = await adapter.actions.deposit!(
+      { address, intent: 'credits', userId: 'did:privy:user' },
+      {
+        method: 'wallet_deposit',
+        params: [{ address, intent: 'credits', userId: 'did:privy:user' }],
+      },
+    )
+
+    expect(calls).toMatchInlineSnapshot(`
+      [
+        {
+          "parameters": {
+            "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+            "intent": "credits",
+            "userId": "did:privy:user",
+          },
+          "request": {
+            "method": "wallet_deposit",
+            "params": [
+              {
+                "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+                "intent": "credits",
+                "userId": "did:privy:user",
+              },
+            ],
+          },
+        },
+      ]
+    `)
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "receipts": [],
+      }
+    `)
   })
 
   test('default: loadAccounts can select and order embedded wallets', async () => {
@@ -626,6 +678,7 @@ function setup(options: setup.Options = {}) {
   const client = createClient(options)
   const adapter = privy({
     client,
+    ...(options.deposit ? { deposit: options.deposit } : {}),
     ...(options.createAccount === false
       ? {}
       : {
@@ -670,6 +723,7 @@ declare namespace setup {
     /** Pass `false` to omit the adapter's `createAccount` callback (tests fallback to `loadAccounts`). */
     createAccount?: false | undefined
     createAddresses?: readonly Address[] | undefined
+    deposit?: NonNullable<Adapter.Instance['actions']['deposit']> | undefined
     loadAddresses?: readonly Address[] | undefined
     /** Make the mock client's `user.get` throw, to test restore-side session errors. */
     restoreError?: unknown

@@ -10,6 +10,7 @@ describe('privy', () => {
 
   test('accepts adapter metadata options', () => {
     expectTypeOf<privy.Options>().toEqualTypeOf<{
+      deposit?: NonNullable<Adapter.Instance['actions']['deposit']> | undefined
       icon?: `data:image/${string}` | undefined
       name?: string | undefined
       rdns?: string | undefined
