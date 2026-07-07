@@ -17,7 +17,7 @@ import {
   useColorScheme,
   View,
 } from 'react-native'
-import { formatUnits, parseUnits, type Address } from 'viem'
+import { parseUnits, type Address } from 'viem'
 import { Actions } from 'viem/tempo'
 import { tempoModerato } from 'viem/tempo/chains'
 
@@ -232,7 +232,7 @@ export default function App() {
         account: address,
         token: tokens.pathUSD,
       })
-      setBalance(formatUnits(bal, 6))
+      setBalance(bal.formatted)
     } catch {
       setBalance('error')
     }

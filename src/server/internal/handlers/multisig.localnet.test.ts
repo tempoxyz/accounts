@@ -1,5 +1,4 @@
-import { MultisigConfig, SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
-import { fillTransaction, getTransactionReceipt, sendRawTransactionSync } from 'viem/actions'
+import { getTransactionReceipt, prepareTransactionRequest, signTransaction } from 'viem/actions'
 import { Account } from 'viem/tempo'
 import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 
@@ -11,7 +10,10 @@ import { relay } from './relay.js'
 const owner_1 = accounts[1]!
 const owner_2 = accounts[2]!
 const feePayer = accounts[0]!
-const tag = import.meta.env.VITE_NODE_TAG || 'sha-3da8342'
+const feeToken = '0x20c0000000000000000000000000000000000000' as const
+// Requires a multisig-capable node image (updated TIP-1061 wire format),
+// e.g. VITE_NODE_TAG=sha-8968664. Skipped otherwise.
+const tag = import.meta.env.VITE_NODE_TAG || ''
 
 describe.skipIf(!tag.startsWith('sha-'))('relay multisig', () => {
   const store = Multisig.memoryStore()
@@ -22,7 +24,7 @@ describe.skipIf(!tag.startsWith('sha-'))('relay multisig', () => {
     server = await createServer(
       relay({
         chains: [chain],
-        feePayer: { account: feePayer },
+        feePayer: { account: feePayer, feeToken },
         multisig: { store },
         transports: { [chain.id]: http() },
       }).listener,
@@ -42,103 +44,51 @@ describe.skipIf(!tag.startsWith('sha-'))('relay multisig', () => {
         { owner: owner_2.address, weight: 1 },
       ],
     })
-    const { transaction } = await fillTransaction(client, {
+    const transaction = await prepareTransactionRequest(client, {
       account,
+      feePayer: true,
       to: account.address,
       value: 0n,
-    } as never)
-    const { account: _account, gas, ...filled } = transaction as Record<string, unknown>
-    const request: Record<string, unknown> = {
-      ...filled,
-      feePayerSignature: null,
-      gas: typeof gas === 'bigint' ? gas + 100_000n : gas,
-    }
-    const {
-      _capabilities,
-      account: _account_request,
-      data,
-      from: _from,
-      multisig: _multisig,
-      signature: _signature,
-      signatures: _signatures,
-      to,
-      value,
-      ...transaction_request
-    } = request
-    const calls = (() => {
-      if ('calls' in transaction_request) return transaction_request.calls
-      if (typeof to !== 'string') return undefined
-      return [
-        {
-          ...(typeof data === 'string' ? { data } : {}),
-          to,
-          value: typeof value === 'bigint' ? value : 0n,
-        },
-      ]
-    })()
-    const envelope = TxEnvelopeTempo.from({ ...transaction_request, calls } as never)
-    const payload = TxEnvelopeTempo.getSignPayload(envelope)
-    const genesisConfigId = MultisigConfig.toId(account.config)
-    const id = MultisigConfig.getSignPayload({
-      account: account.address,
-      genesisConfigId,
-      payload,
     })
-    const signature_1 = await signApproval({ digest: id, signer: owner_1 })
-    const signature_2 = await signApproval({ digest: id, signer: owner_2 })
+    const [signature_1, signature_2] = await Promise.all(
+      [owner_1, owner_2].map((owner) =>
+        signTransaction(client, { ...transaction, account: owner } as never),
+      ),
+    )
 
-    const pending = await client.request({
+    // `feePayerSignature: null` requests relay sponsorship at broadcast; the
+    // fill-time fee payer signature is stale once the multisig signature is
+    // attached.
+    const serialize = (signature: unknown) =>
+      account.signTransaction({
+        ...transaction,
+        feePayerSignature: null,
+        signatures: [signature],
+      } as never)
+
+    // Below-quorum submission stores the approval and returns the operation id.
+    const pending = (await client.request({
       method: 'eth_sendRawTransactionSync',
-      params: [serializeTransaction({ account, envelope, signatures: [signature_1] })],
-    } as never)
+      params: [await serialize(signature_1)],
+    } as never)) as `0x${string}`
 
-    expect(pending).toMatchInlineSnapshot(`"${id}"`)
+    expect(pending).toMatch(/^0x[0-9a-f]{64}$/)
     await expect(
-      client.request({ method: 'eth_getTransactionReceipt', params: [id] }),
-    ).resolves.toMatchInlineSnapshot(`null`)
+      client.request({ method: 'eth_getTransactionReceipt', params: [pending] }),
+    ).resolves.toBeNull()
 
-    const receipt = await sendRawTransactionSync(client, {
-      serializedTransaction: serializeTransaction({ account, envelope, signatures: [signature_2] }),
-    })
+    // Quorum reached: the relay merges the stored approval and broadcasts.
+    const receipt = (await client.request({
+      method: 'eth_sendRawTransactionSync',
+      params: [await serialize(signature_2)],
+    } as never)) as { status: string; transactionHash: `0x${string}` }
     const hash = receipt.transactionHash
     if (!hash) throw new Error('Expected multisig transaction hash.')
 
-    expect(hash === id).toMatchInlineSnapshot(`false`)
-    expect(receipt).toMatchObject({
-      status: 'success',
-    })
-    await expect(getTransactionReceipt(client, { hash: id })).resolves.toMatchObject({
+    expect(hash === pending).toBe(false)
+    expect(receipt).toMatchObject({ status: '0x1' })
+    await expect(getTransactionReceipt(client, { hash: pending })).resolves.toMatchObject({
       transactionHash: hash,
     })
   })
 })
-
-async function signApproval(options: { digest: `0x${string}`; signer: typeof owner_1 }) {
-  const { digest, signer } = options
-  return SignatureEnvelope.serialize(SignatureEnvelope.from(await signer.sign({ hash: digest })))
-}
-
-function serializeTransaction(options: {
-  account: ReturnType<typeof Account.fromMultisig>
-  envelope: ReturnType<typeof TxEnvelopeTempo.from>
-  signatures: readonly `0x${string}`[]
-}) {
-  const { account, envelope } = options
-  const payload = TxEnvelopeTempo.getSignPayload(envelope)
-  const genesisConfigId = MultisigConfig.toId(account.config)
-  const signatures = SignatureEnvelope.sortMultisigApprovals({
-    account: account.address,
-    genesisConfigId,
-    payload,
-    signatures: options.signatures.map((signature) => SignatureEnvelope.from(signature)),
-  })
-  return TxEnvelopeTempo.serialize(envelope, {
-    feePayerSignature: undefined,
-    signature: SignatureEnvelope.from({
-      account: account.address,
-      genesisConfigId,
-      init: account.config,
-      signatures,
-    }),
-  })
-}

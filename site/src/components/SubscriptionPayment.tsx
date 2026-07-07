@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import { Receipt } from 'mppx'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Amount, Button } from 'regen-ui'
-import { formatUnits, stringify, toHex } from 'viem'
+import { stringify, toHex } from 'viem'
 import { useConnection } from 'wagmi'
 import { Hooks } from 'wagmi/tempo'
 import LucideCircleCheck from '~icons/lucide/circle-check'
@@ -12,18 +12,8 @@ import LucideCircleCheck from '~icons/lucide/circle-check'
 import * as Steps from './Steps.js'
 
 const pathUsd = '0x20c0000000000000000000000000000000000000' as const
-const pathUsdDecimals = 6
 const pathUsdSymbol = 'pathUSD'
 const subscriptionPeriodMs = 10_000
-
-function toPathUsdAmount(value: bigint) {
-  return {
-    amount: toHex(value),
-    decimals: pathUsdDecimals,
-    formatted: formatUnits(value, pathUsdDecimals),
-    symbol: pathUsdSymbol,
-  } satisfies Amount.Amount
-}
 
 function getNextRenewalAt(receipt: Receipt.Receipt) {
   const timestamp = Date.parse(receipt.timestamp)
@@ -102,7 +92,14 @@ function SubscribeStep(props: {
     },
   })
   const balanceAmount =
-    balance.data !== undefined ? toPathUsdAmount(balance.data) : undefined
+    balance.data !== undefined
+      ? {
+          amount: toHex(balance.data.amount),
+          decimals: balance.data.decimals,
+          formatted: balance.data.formatted,
+          symbol: pathUsdSymbol,
+        } satisfies Amount.Amount
+      : undefined
 
   return (
     <Steps.Step

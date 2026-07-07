@@ -1,4 +1,4 @@
-import { formatUnits, stringify, type Address } from 'viem'
+import { stringify, type Address } from 'viem'
 import {
   useChains,
   useConnect,
@@ -94,9 +94,7 @@ function Balance() {
     token: pathUsd,
     query: { refetchInterval: 1_000 },
   })
-  return (
-    <div>{isLoading ? 'Loading...' : data !== undefined ? formatUnits(data, 6) : '—'} pathUsd</div>
-  )
+  return <div>{isLoading ? 'Loading...' : data !== undefined ? data.formatted : '—'} pathUsd</div>
 }
 
 function SendTransfer() {

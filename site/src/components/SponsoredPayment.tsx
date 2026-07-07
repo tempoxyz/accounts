@@ -57,7 +57,8 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
   const steps = Steps.use(value)
   const to = useMemo(() => privateKeyToAccount(generatePrivateKey()).address, [])
   useEffect(() => {
-    if (address && balance.data !== undefined) setCachedBalance({ account: address, value: balance.data })
+    if (address && balance.data !== undefined)
+      setCachedBalance({ account: address, value: balance.data.amount })
   }, [address, balance.data])
   const balanceValue =
     cachedBalance && address && cachedBalance.account === address ? cachedBalance.value : undefined

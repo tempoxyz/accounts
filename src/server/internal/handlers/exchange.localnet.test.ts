@@ -239,7 +239,7 @@ describe('default', () => {
       account: trader.address,
       token: base,
     })
-    expect(baseBalance).toBeGreaterThan(0n)
+    expect(baseBalance.amount).toBeGreaterThan(0n)
   })
 
   test('error: schema validation rejects malformed body', async () => {
