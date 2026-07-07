@@ -11,8 +11,8 @@ const owner_1 = accounts[1]!
 const owner_2 = accounts[2]!
 const feePayer = accounts[0]!
 const feeToken = '0x20c0000000000000000000000000000000000000' as const
-// Requires a node build with the config-id-free TIP-1061 wire format
-// (tempoxyz/tempo#5178), e.g. VITE_NODE_TAG=sha-8968664.
+// Requires a multisig-capable node image (updated TIP-1061 wire format),
+// e.g. VITE_NODE_TAG=sha-8968664. Skipped otherwise.
 const tag = import.meta.env.VITE_NODE_TAG || ''
 
 describe.skipIf(!tag.startsWith('sha-'))('relay multisig', () => {
