@@ -222,10 +222,8 @@ describe('mppx integration', () => {
       })
       const key = provider.store.getState().accessKeys[0]!
 
-      // mppx >=0.8.5 surfaces a challenge-less 402 retry as an error.
-      await expect(fetch(`${failingServer.url}/fortune`)).rejects.toThrowError(
-        /No method found for challenges/,
-      )
+      const res = await fetch(`${failingServer.url}/fortune`)
+      expect(res.status).toMatchInlineSnapshot(`402`)
       expect(provider.store.getState().accessKeys[0]!.keyAuthorization).toBeDefined()
 
       const status = await provider.getAccessKeyStatus({ accessKey: key.address })
