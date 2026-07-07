@@ -1441,6 +1441,29 @@ export function create(options: create.Options = {}): create.ReturnType {
                       keyAuthorization,
                     })
 
+                    // Local adapters return no identity claims — there is no
+                    // wallet host to mint them. When the request asks for the
+                    // email and an issuer is configured, mint the id token
+                    // provider-side. Best-effort, mirroring the wallet host: a
+                    // failed mint omits the claim, never the connect.
+                    const identity_result =
+                      identity ??
+                      (await (async () => {
+                        const email = capabilities?.identity?.email
+                        if (!email || !options.identity || instance.forwardsAuth) return undefined
+                        if (!accountAddress) return undefined
+                        const audience = options.identity.audience ?? globalThis.location?.origin
+                        if (!audience) return undefined
+                        const nonce =
+                          (typeof email === 'object' ? email.nonce : undefined) ??
+                          (auth ? parseAuthNonce(auth.message) : undefined)
+                        return await mintIdentity(options.identity.issuer, {
+                          audience,
+                          nonce,
+                          subject: accountAddress,
+                        }).catch(() => undefined)
+                      })())
+
                     // Server Authentication verify: POST the signed SIWE message
                     // to the verify endpoint. Skipped when the auth capability
                     // omits `verify` — typical when the wallet host strips it
@@ -1470,9 +1493,11 @@ export function create(options: create.Options = {}): create.ReturnType {
                             // Forward the verified-email id token so a
                             // `Handler.auth({ identity })` can verify it and fold
                             // the email onto the session in the same round-trip.
-                            // The wallet minted it reusing this SIWE nonce, so
-                            // the handler's nonce check passes.
-                            ...(identity?.idToken ? { idToken: identity.idToken } : {}),
+                            // The minter reused this SIWE nonce, so the
+                            // handler's nonce check passes.
+                            ...(identity_result?.idToken
+                              ? { idToken: identity_result.idToken }
+                              : {}),
                             ...(personalSign?.keyAuthorization
                               ? { keyAuthorization: personalSign.keyAuthorization }
                               : {}),
@@ -1500,7 +1525,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                                 ...((auth_result ?? auth_capability)
                                   ? { auth: auth_result ?? auth_capability }
                                   : {}),
-                                ...(identity ? { identity } : {}),
+                                ...(identity_result ? { identity: identity_result } : {}),
                                 ...(personalSign
                                   ? {
                                       personalSign: {
@@ -1895,6 +1920,22 @@ export declare namespace create {
     chains?: readonly [Chain, ...Chain[]] | undefined
     /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */
     feePayer?: Client.fromChainId.Options['feePayer']
+    /**
+     * Identity (verified email) token minting for local adapters. When a
+     * `wallet_connect` request asks for `identity.email` and the adapter
+     * returns no identity claims (local adapters have no wallet host to mint
+     * them), the provider mints the id token from this issuer's `/token`
+     * route (`Handler.oidcProvider` shape). The issuer must trust
+     * body-supplied subjects, so this is for development deployments.
+     */
+    identity?:
+      | {
+          /** Audience (`aud`) bound into minted tokens. @default `location.origin` */
+          audience?: string | undefined
+          /** OIDC issuer whose `/token` route mints the id token. */
+          issuer: string
+        }
+      | undefined
     /** Maximum number of accounts to persist. Oldest accounts are evicted when exceeded (LRU). */
     maxAccounts?: number | undefined
     /**
@@ -2239,6 +2280,42 @@ async function fetchAuthChallenge(
   validateAuthMessage(auth, { chainId, message: body.message, url })
 
   return { message: body.message }
+}
+
+/**
+ * Extracts the nonce from an EIP-4361 (SIWE) challenge message so a minted
+ * identity token binds to the same single-use value the server checks.
+ */
+function parseAuthNonce(message: string) {
+  return message.match(/^Nonce: (.+)$/m)?.[1]
+}
+
+/**
+ * Mints a verified-email identity token from an OIDC issuer's `/token` route
+ * (`Handler.oidcProvider` shape). Local adapters fulfill the connect ceremony
+ * without a wallet host, so the provider mints the token itself when
+ * configured (see `create.Options.identity`).
+ */
+async function mintIdentity(
+  issuer: string,
+  body: { audience: string; nonce?: string | undefined; subject: string },
+): Promise<{ email: string | null; idToken: string }> {
+  const res = await fetch(`${issuer.replace(/\/+$/, '')}/token`, {
+    body: JSON.stringify({
+      audience: body.audience,
+      ...(body.nonce ? { nonce: body.nonce } : {}),
+      subject: body.subject,
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error(`Identity issuer \`${issuer}\` returned ${res.status}.`)
+  const { idToken } = (await res.json()) as { idToken: string }
+  // Display-only claim read; server-side trust comes from JWKS verification.
+  const payload = JSON.parse(
+    atob(idToken.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/')),
+  ) as { email?: string | undefined }
+  return { email: payload.email ?? null, idToken }
 }
 
 /**

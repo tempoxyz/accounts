@@ -853,6 +853,67 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         })
         expect(res.status).toBe(400)
       })
+
+      test('behavior: provider mints identity when configured with an issuer', async () => {
+        const provider = Provider.create({
+          adapter: adapter(),
+          identity: { audience: 'https://app.example.com', issuer },
+        })
+
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [
+            { capabilities: { identity: { email: { nonce: 'n-provider' } }, method: 'register' } },
+          ],
+        })
+
+        const capabilities = result.accounts[0]!.capabilities
+        expect(capabilities.identity?.email).toBe('alice@tempo.xyz')
+
+        // The token verifies against the issuer's JWKS and binds the app
+        // (`aud`), the connected account (`sub`), and the request nonce.
+        const { keys } = (await fetch(`${issuer}/.well-known/jwks.json`).then((r) => r.json())) as {
+          keys: JsonWebKey[]
+        }
+        const claims = (await verify(
+          capabilities.identity!.idToken!,
+          { ...keys[0]!, alg: 'EdDSA' },
+          'EdDSA',
+        )) as Record<string, unknown>
+        expect(claims.aud).toBe('https://app.example.com')
+        expect(claims.email).toBe('alice@tempo.xyz')
+        expect(claims.email_verified).toBe(true)
+        expect(claims.nonce).toBe('n-provider')
+        expect(claims.sub).toBe(result.accounts[0]!.address)
+      })
+
+      test('behavior: provider identity mint is best-effort (failure omits the claim)', async () => {
+        const provider = Provider.create({
+          adapter: adapter(),
+          identity: { audience: 'https://app.example.com', issuer: `${server.url}/nowhere` },
+        })
+
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [{ capabilities: { identity: { email: true }, method: 'register' } }],
+        })
+
+        expect(result.accounts[0]!.address).toBeDefined()
+        expect(result.accounts[0]!.capabilities.identity).toBeUndefined()
+      })
+
+      test('behavior: provider identity is not minted unless requested', async () => {
+        const provider = Provider.create({
+          adapter: adapter(),
+          identity: { audience: 'https://app.example.com', issuer },
+        })
+
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [{ capabilities: { method: 'register' } }],
+        })
+        expect(result.accounts[0]!.capabilities.identity).toBeUndefined()
+      })
     })
   })
 
