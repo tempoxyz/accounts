@@ -346,6 +346,18 @@ function WalletDeposit() {
           execute(() =>
             provider.request({
               method: 'wallet_deposit',
+              params: [{ displayName: 'accounts playground', intent: 'credits' }],
+            }),
+          )
+        }
+      >
+        Buy MPP Credits
+      </Button>
+      <Button
+        onClick={() =>
+          execute(() =>
+            provider.request({
+              method: 'wallet_deposit',
               params: [{ amount: '25' }],
             }),
           )

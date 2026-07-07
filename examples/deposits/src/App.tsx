@@ -1,3 +1,4 @@
+import { useMutation } from '@tanstack/react-query'
 import { formatUnits, stringify } from 'viem'
 import { useConnect, useConnection, useConnectors, useDisconnect } from 'wagmi'
 import { tempo } from 'wagmi/chains'
@@ -81,8 +82,19 @@ function Balance() {
 }
 
 function Deposit() {
-  const { address } = useConnection()
+  const connection = useConnection()
+  const { address } = connection
   const deposit = Hooks.wallet.useDeposit()
+  const credits = useMutation({
+    mutationFn: async () => {
+      const provider = await connection.connector?.getProvider()
+      if (!provider) throw new Error('Wallet not connected.')
+      return (provider as Deposit.Provider).request({
+        method: 'wallet_deposit',
+        params: [{ displayName: 'Deposits Example', intent: 'credits' }],
+      })
+    },
+  })
   return (
     <div>
       <p>
@@ -90,9 +102,21 @@ function Deposit() {
         <code>amount</code>, <code>chainId</code>, <code>displayName</code>, and <code>token</code>;
         omit fields to let the user choose them in the wallet UI.
       </p>
+      <p>
+        To deep-link directly into the MPP Credits card onramp from another site, pass{' '}
+        <code>{`{ intent: 'credits' }`}</code>. The wallet still owns sign-in, onramp eligibility,
+        and checkout.
+      </p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <button type="button" disabled={deposit.isPending} onClick={() => deposit.mutate({})}>
           Open deposit
+        </button>
+        <button
+          type="button"
+          disabled={deposit.isPending || credits.isPending}
+          onClick={() => credits.mutate()}
+        >
+          Buy MPP Credits
         </button>
         <button
           type="button"
@@ -125,6 +149,7 @@ function Deposit() {
       {deposit.error && (
         <pre style={{ color: 'red' }}>{`${deposit.error.name}: ${deposit.error.message}`}</pre>
       )}
+      {credits.error && <pre style={{ color: 'red' }}>{credits.error.message}</pre>}
       {deposit.isSuccess && (
         <div>
           <p>Deposit submitted.</p>
@@ -147,6 +172,16 @@ function Deposit() {
           )}
         </div>
       )}
+      {credits.isSuccess && <p>Credit purchase flow completed.</p>}
     </div>
   )
+}
+
+declare namespace Deposit {
+  type Provider = {
+    request: (request: {
+      method: 'wallet_deposit'
+      params: [{ displayName: string; intent: 'credits' }]
+    }) => Promise<unknown>
+  }
 }
