@@ -34,21 +34,21 @@ catalog:
   '@types/react-dom': ^19.2.3
   '@vitejs/devtools': ^0.2.0
   '@vitejs/plugin-react': ^5.2.0
-  '@wagmi/core': ^3.5.0
+  '@wagmi/core': ^3.6.0
   hono: ^4.12.25
-  mppx: ^0.8.0
-  ox: 0.14.29
+  mppx: ^0.8.5
+  ox: 0.14.30
   prool: ~0.2.4
   react: ^19.2.5
   react-dom: ^19.2.5
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: 2.52.2
+  viem: 2.54.6
   vite: ^8.0.16
   vite-plus: ~0.1.24
   vp: npm:vite-plus@~0.1.24
-  wagmi: ^3.6.16
+  wagmi: ^3.7.0
   wrangler: ^4.98.0
   zod: ^4.3.6
 
@@ -86,7 +86,7 @@ overrides:
   # GHSA-rp9w-3fw7-7cwq et al: DOMPurify hook/config sanitization bypasses.
   'dompurify@<=3.4.10': '3.4.11'
   esbuild: '0.28.1'
-  viem: 2.52.2
+  viem: 2.54.6
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
@@ -100,7 +100,7 @@ overrides:
   # GHSA-h67p-54hq-rp68: quadratic-complexity DoS in js-yaml v4 merge keys (4.1.2 unpublished; 4.2.0 is first patched release).
   js-yaml@4: '4.2.0'
   mermaid: '^11.14.1'
-  ox: 0.14.29
+  ox: 0.14.30
   postcss: '8.5.14'
   protobufjs: '7.6.3'
   '@protobufjs/utf8': '1.1.1'

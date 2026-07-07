@@ -1,6 +1,6 @@
 import { Expiry } from 'accounts'
 import { useCallback, useState } from 'react'
-import { formatUnits, parseUnits, stringify, type Hex } from 'viem'
+import { parseUnits, stringify, type Hex } from 'viem'
 import { Actions } from 'viem/tempo'
 import {
   useConnect,
@@ -180,7 +180,7 @@ function Balance() {
   })
   return (
     <div>
-      {isLoading ? 'Loading...' : data !== undefined ? formatUnits(data, 6) : '—'}{' '}
+      {isLoading ? 'Loading...' : data !== undefined ? data.formatted : '—'}{' '}
       {testnet ? 'pathUSD' : 'USDC.e'}
     </div>
   )

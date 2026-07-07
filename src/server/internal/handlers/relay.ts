@@ -856,6 +856,7 @@ async function fill(client: Client, options: fill.Options) {
         const [balance, metadata] = await Promise.all([
           Actions.token
             .getBalance(client, { account: fromAddress, token: resolvedFeeToken })
+            .then(({ amount }) => amount)
             .catch(() => 0n),
           resolveTokenMetadata(client, { token: resolvedFeeToken, kv }).catch(() => undefined),
         ])
@@ -940,7 +941,10 @@ async function resolveFeeToken(
       ? Promise.all(
           tokens.map(async (token) => ({
             address: token,
-            balance: await Actions.token.getBalance(client, { account, token }).catch(() => 0n),
+            balance: await Actions.token
+              .getBalance(client, { account, token })
+              .then(({ amount }) => amount)
+              .catch(() => 0n),
           })),
         )
       : [],
@@ -960,7 +964,7 @@ async function resolveFeeToken(
           account,
           token: userToken.address,
         })
-        if (balance > 0n) return userToken.address
+        if (balance.amount > 0n) return userToken.address
       } catch {}
     }
   }

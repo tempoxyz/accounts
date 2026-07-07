@@ -64,7 +64,6 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   const config = await resolveValidatedConfig({
     account: input.account,
     chainId: input.chainId,
-    genesisConfigId: input.genesisConfigId,
     init: input.init,
     pending,
     resolveConfig,
@@ -76,7 +75,6 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     })
   const initConfig = resolveInitConfig({
     config,
-    genesisConfigId: input.genesisConfigId,
     init: input.init,
     nonce: input.nonce,
     pending,
@@ -89,7 +87,6 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     claimExpiresAt: pending?.claimExpiresAt,
     config,
     createdAt: pending?.createdAt ?? now,
-    genesisConfigId: input.genesisConfigId,
     id: input.id,
     init: pending?.init || !!initConfig,
     initConfig,
@@ -104,7 +101,6 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   let approvals = getApprovals({
     account: input.account,
     config,
-    genesisConfigId: input.genesisConfigId,
     payload: input.payload,
     signatures: operation.signatures,
   })
@@ -119,7 +115,6 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     approvals = getApprovals({
       account: operation.account,
       config,
-      genesisConfigId: operation.genesisConfigId,
       payload: operation.payload,
       signatures: operation.signatures,
     })
@@ -134,14 +129,12 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   approvals = getApprovals({
     account: operation.account,
     config,
-    genesisConfigId: operation.genesisConfigId,
     payload: operation.payload,
     signatures: operation.signatures,
   })
   const client = getClient(operation.chainId)
   const final = await serializeFinal({
     account: operation.account,
-    genesisConfigId: operation.genesisConfigId,
     init: operation.initConfig ?? initConfig,
     signatures: approvals.signatures,
     transaction: input.transaction,
@@ -291,7 +284,6 @@ export async function getStatus(options: getStatus.Options): Promise<Status | nu
   const config = await resolveValidatedConfig({
     account: operation.account,
     chainId: operation.chainId,
-    genesisConfigId: operation.genesisConfigId,
     pending: operation,
     resolveConfig: options.resolveConfig,
   })
@@ -299,7 +291,6 @@ export async function getStatus(options: getStatus.Options): Promise<Status | nu
     return {
       account: operation.account,
       chainId: operation.chainId,
-      genesisConfigId: operation.genesisConfigId,
       id: operation.id,
       signatures: operation.signatures.length,
       status: operation.status,
@@ -308,7 +299,6 @@ export async function getStatus(options: getStatus.Options): Promise<Status | nu
   const approvals = getApprovals({
     account: operation.account,
     config,
-    genesisConfigId: operation.genesisConfigId,
     payload: operation.payload,
     signatures: operation.signatures,
   })
@@ -335,7 +325,6 @@ export async function listStatuses(options: listStatuses.Options): Promise<reado
       const config = await resolveValidatedConfig({
         account: operation.account,
         chainId: operation.chainId,
-        genesisConfigId: operation.genesisConfigId,
         pending: operation,
         resolveConfig: options.resolveConfig,
       })
@@ -343,7 +332,6 @@ export async function listStatuses(options: listStatuses.Options): Promise<reado
         return {
           account: operation.account,
           chainId: operation.chainId,
-          genesisConfigId: operation.genesisConfigId,
           id: operation.id,
           signatures: operation.signatures.length,
           status: operation.status,
@@ -352,7 +340,6 @@ export async function listStatuses(options: listStatuses.Options): Promise<reado
       const approvals = getApprovals({
         account: operation.account,
         config,
-        genesisConfigId: operation.genesisConfigId,
         payload: operation.payload,
         signatures: operation.signatures,
       })
@@ -449,8 +436,6 @@ export type ResolveConfig = (request: {
   account: Address
   /** Transaction chain id. */
   chainId: number
-  /** Permanent genesis config id. */
-  genesisConfigId: Hex.Hex
   /** Bootstrap config carried by the transaction, when present. */
   init?: MultisigConfig.Config | undefined
 }) => MultisigConfig.Config | Promise<MultisigConfig.Config | undefined> | undefined
@@ -522,8 +507,6 @@ export type Operation = {
   config?: MultisigConfig.Config | undefined
   /** Creation timestamp in milliseconds. */
   createdAt: number
-  /** Permanent genesis config id. */
-  genesisConfigId: Hex.Hex
   /** Deterministic operation id. */
   id: Hex.Hex
   /** Whether the finalized transaction must carry the genesis init config. */
@@ -550,8 +533,6 @@ export type Status = {
   account: Address
   /** Transaction chain id. */
   chainId: number
-  /** Permanent genesis config id. */
-  genesisConfigId: Hex.Hex
   /** Deterministic operation id. */
   id: Hex.Hex
   /** Number of collected owner approvals. */
@@ -579,7 +560,6 @@ function parse(serialized: Hex.Hex) {
   const chainId = Number(transaction.chainId)
   const id = MultisigConfig.getSignPayload({
     account: signature.account,
-    genesisConfigId: signature.genesisConfigId,
     payload,
   })
   const init = signature.init ? MultisigConfig.from(signature.init) : undefined
@@ -588,7 +568,6 @@ function parse(serialized: Hex.Hex) {
   return {
     account: signature.account,
     chainId,
-    genesisConfigId: signature.genesisConfigId,
     id,
     init,
     nonce,
@@ -604,7 +583,6 @@ function isMultisigSignature(value: unknown): value is SignatureEnvelope.Multisi
     value !== null &&
     (value as { type?: unknown }).type === 'multisig' &&
     typeof (value as { account?: unknown }).account === 'string' &&
-    typeof (value as { genesisConfigId?: unknown }).genesisConfigId === 'string' &&
     Array.isArray((value as { signatures?: unknown }).signatures)
   )
 }
@@ -612,48 +590,39 @@ function isMultisigSignature(value: unknown): value is SignatureEnvelope.Multisi
 async function resolveValidatedConfig(options: {
   account: Address
   chainId: number
-  genesisConfigId: Hex.Hex
   init?: MultisigConfig.Config | undefined
   pending?: Operation | undefined
   resolveConfig?: ResolveConfig | undefined
 }) {
-  const { account, chainId, genesisConfigId, init, pending, resolveConfig } = options
-  const config =
-    (await resolveConfig?.({ account, chainId, genesisConfigId, init })) ?? pending?.config ?? init
+  const { account, chainId, init, pending, resolveConfig } = options
+  const config = (await resolveConfig?.({ account, chainId, init })) ?? pending?.config ?? init
   if (!config) return undefined
 
-  if (init && !isGenesisConfig(init, genesisConfigId))
-    throw new RpcResponse.InvalidParamsError({
-      message: 'Bootstrap multisig init config does not match genesis config id.',
-    })
-
   const normalized = MultisigConfig.from(config)
-  const account_expected = MultisigConfig.getAddress({ genesisConfigId })
-  if (account_expected.toLowerCase() !== account.toLowerCase())
+  // The multisig account address derives from the genesis config, so a
+  // bootstrap init config must derive the transaction's account.
+  if (
+    init &&
+    MultisigConfig.getAddress(MultisigConfig.from(init)).toLowerCase() !== account.toLowerCase()
+  )
     throw new RpcResponse.InvalidParamsError({
-      message: 'Resolved multisig config does not match account or genesis config id.',
+      message: 'Bootstrap multisig init config does not match the multisig account.',
     })
   return normalized
 }
 
 function resolveInitConfig(options: {
   config: MultisigConfig.Config
-  genesisConfigId: Hex.Hex
   init?: MultisigConfig.Config | undefined
   nonce?: number | undefined
   pending?: Operation | undefined
 }) {
-  const { config, genesisConfigId, init, nonce, pending } = options
+  const { config, init, nonce, pending } = options
   if (pending?.initConfig) return pending.initConfig
-  if (pending?.init && pending.config && isGenesisConfig(pending.config, genesisConfigId))
-    return pending.config
+  if (pending?.init && pending.config) return pending.config
   if (init) return init
-  if (nonce === 0 && isGenesisConfig(config, genesisConfigId)) return config
+  if (nonce === 0) return config
   return undefined
-}
-
-function isGenesisConfig(config: MultisigConfig.Config, genesisConfigId: Hex.Hex) {
-  return MultisigConfig.toId(config).toLowerCase() === genesisConfigId.toLowerCase()
 }
 
 function mergeSignatures(signatures: readonly Hex.Hex[]) {
@@ -671,12 +640,11 @@ function mergeSignatures(signatures: readonly Hex.Hex[]) {
 function getApprovals(options: {
   account: Address
   config: MultisigConfig.Config
-  genesisConfigId: Hex.Hex
   payload: Hex.Hex
   signatures: readonly Hex.Hex[]
 }) {
-  const { account, config, genesisConfigId, payload } = options
-  const digest = MultisigConfig.getSignPayload({ account, genesisConfigId, payload })
+  const { account, config, payload } = options
+  const digest = MultisigConfig.getSignPayload({ account, payload })
   const owners = new Map(
     config.owners.map((owner) => [
       owner.owner.toLowerCase(),
@@ -716,7 +684,6 @@ function getApprovals(options: {
 
 async function serializeFinal(options: {
   account: Address
-  genesisConfigId: Hex.Hex
   init?: MultisigConfig.Config | undefined
   signatures: readonly Hex.Hex[]
   transaction: Record<string, unknown>
@@ -756,13 +723,11 @@ async function serializeFinal(options: {
   const signatures = options.signatures.map((approval) => SignatureEnvelope.from(approval))
   const sorted = SignatureEnvelope.sortMultisigApprovals({
     account: options.account,
-    genesisConfigId: options.genesisConfigId,
     payload,
     signatures,
   })
   const signature = SignatureEnvelope.from({
     account: options.account,
-    genesisConfigId: options.genesisConfigId,
     signatures: sorted,
     ...(options.init ? { init: options.init } : {}),
   })
@@ -799,7 +764,6 @@ function toStatus(options: {
   return {
     account: operation.account,
     chainId: operation.chainId,
-    genesisConfigId: operation.genesisConfigId,
     id: operation.id,
     signatures: approvals.signatures.length,
     status: operation.status,

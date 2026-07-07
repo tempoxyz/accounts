@@ -1,4 +1,4 @@
-import { formatUnits, stringify } from 'viem'
+import { stringify } from 'viem'
 import { useConnect, useConnection, useConnectors, useDisconnect } from 'wagmi'
 import { tempoModerato } from 'wagmi/chains'
 import { Hooks } from 'wagmi/tempo'
@@ -74,11 +74,7 @@ function Balance() {
   })
   return (
     <div>
-      {balance.isLoading
-        ? 'Loading...'
-        : balance.data !== undefined
-          ? formatUnits(balance.data, 6)
-          : '—'}{' '}
+      {balance.isLoading ? 'Loading...' : balance.data !== undefined ? balance.data.formatted : '—'}{' '}
       pathUSD
     </div>
   )

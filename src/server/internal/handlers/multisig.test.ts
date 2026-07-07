@@ -246,12 +246,12 @@ describe('config resolution', () => {
     expect({
       hash,
       init: transaction_submitted.signature.init
-        ? MultisigConfig.toId(transaction_submitted.signature.init)
+        ? MultisigConfig.getAddress(transaction_submitted.signature.init)
         : undefined,
     }).toMatchInlineSnapshot(`
       {
         "hash": "${hash}",
-        "init": "${MultisigConfig.toId(account.config)}",
+        "init": "${MultisigConfig.getAddress(account.config)}",
       }
     `)
   })
@@ -312,12 +312,12 @@ describe('config resolution', () => {
     expect({
       hash,
       init: transaction_submitted.signature.init
-        ? MultisigConfig.toId(transaction_submitted.signature.init)
+        ? MultisigConfig.getAddress(transaction_submitted.signature.init)
         : undefined,
     }).toMatchInlineSnapshot(`
       {
         "hash": "${hash}",
-        "init": "${MultisigConfig.toId(account.config)}",
+        "init": "${MultisigConfig.getAddress(account.config)}",
       }
     `)
   })
@@ -377,12 +377,12 @@ describe('config resolution', () => {
     expect({
       hash,
       init: transaction_submitted.signature.init
-        ? MultisigConfig.toId(transaction_submitted.signature.init)
+        ? MultisigConfig.getAddress(transaction_submitted.signature.init)
         : undefined,
     }).toMatchInlineSnapshot(`
       {
         "hash": "${hash}",
-        "init": "${MultisigConfig.toId(account.config)}",
+        "init": "${MultisigConfig.getAddress(account.config)}",
       }
     `)
   })
@@ -475,12 +475,12 @@ describe('config resolution', () => {
       signature: SignatureEnvelope.Multisig
     }
     expect({
+      account: transaction_submitted.signature.account,
       hash,
       init: transaction_submitted.signature.init,
-      genesisConfigId: transaction_submitted.signature.genesisConfigId,
     }).toMatchInlineSnapshot(`
       {
-        "genesisConfigId": "${MultisigConfig.toId(account.config)}",
+        "account": "${MultisigConfig.getAddress(account.config)}",
         "hash": "${hash}",
         "init": undefined,
       }
@@ -713,7 +713,6 @@ function createOperation(): Multisig.Operation {
     account: '0x0000000000000000000000000000000000000001',
     chainId: tempoDevnet.id,
     createdAt: now,
-    genesisConfigId: `0x${'11'.repeat(32)}`,
     id: `0x${'22'.repeat(32)}`,
     payload: `0x${'33'.repeat(32)}`,
     signatures: [],
@@ -738,7 +737,6 @@ function withoutInit(serialized: `0x${string}`) {
   return TxEnvelopeTempo.serialize(TxEnvelopeTempo.from(unsigned as never), {
     signature: SignatureEnvelope.from({
       account: signature.account,
-      genesisConfigId: signature.genesisConfigId,
       signatures: signature.signatures,
     }),
   })

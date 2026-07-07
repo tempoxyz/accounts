@@ -1197,14 +1197,14 @@ export function create(options: create.Options = {}): create.ReturnType {
                           Actions.token.getBalance(client, { account, token }),
                           Actions.token.getMetadata(client, { token }),
                         ])
-                        const value = Number(balance) / 10 ** metadata.decimals
+                        const value = Number(balance.amount) / 10 ** metadata.decimals
                         const display = new Intl.NumberFormat('en-US', {
                           style: 'currency',
                           currency: 'USD',
                         }).format(value)
                         return {
                           address: token,
-                          balance: Hex.fromNumber(balance),
+                          balance: Hex.fromNumber(balance.amount),
                           decimals: metadata.decimals,
                           display,
                           name: metadata.name,
