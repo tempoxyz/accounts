@@ -1,5 +1,11 @@
 # accounts
 
+## 0.15.1
+
+### Patch Changes
+
+- 03c1161: Added string and `{ address }` forms to the `wallet_connect` `identity.email` capability for requiring a specific email.
+
 ## 0.15.0
 
 ### Minor Changes
