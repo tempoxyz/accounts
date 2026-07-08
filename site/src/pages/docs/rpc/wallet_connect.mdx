@@ -78,10 +78,14 @@ type Identity = {
    *
    * - `true` — request the email; the wallet auto-issues the signed token,
    *   reusing the `auth` (SIWE) challenge nonce when present.
-   * - `{ nonce }` — same, with an explicit nonce baked into the token (for
-   *   standalone use without the `auth` capability).
+   * - `'user@example.com'` — require this exact email: the wallet forces the
+   *   user to authenticate with the account owning it (verifying it first
+   *   when needed) instead of a free-form entry.
+   * - `{ address, nonce }` — same as above, with an explicit nonce baked into
+   *   the token (for standalone use without the `auth` capability). Both
+   *   fields are optional; `{ nonce }` alone requests any email.
    */
-  email?: boolean | { nonce?: string }
+  email?: boolean | string | { address?: string; nonce?: string }
 }
 
 type ShowDeposit = boolean | {
@@ -225,3 +229,35 @@ const { email, idToken } = identity ?? {}
 The token is a standard OIDC ID token (JWT) bound to your app origin (`aud`) and
 the connected account address (`sub`). Verify it with any OIDC-aware library, or
 with [`Identity.verify`](/docs/server/identity.verify).
+
+### Requiring a specific email
+
+Set `capabilities.identity.email` to an email address to require that exact
+email. The wallet pre-fills and locks the sign-in entry to it: the user must
+authenticate with the account that owns the email (verifying it with a one-time
+code first when needed) and cannot substitute another one. Connecting an
+account whose verified email differs is rejected. Use this when your app
+already knows who is signing in — an invite link, a pre-auth session, or a
+server-side allowlist.
+
+```ts
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
+  params: [{ capabilities: { identity: { email: 'user@example.com' } } }],
+})
+```
+
+Use the object form to also bind an explicit nonce into the issued token:
+
+```ts
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
+  params: [
+    {
+      capabilities: {
+        identity: { email: { address: 'user@example.com', nonce } },
+      },
+    },
+  ],
+})
+```

@@ -387,6 +387,41 @@ describe('wallet_connect.capabilities.request: identity', () => {
     `)
   })
 
+  test('accepts identity.email as string (required email)', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'login',
+        identity: { email: 'user@example.com' },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {
+          "email": "user@example.com",
+        },
+        "method": "login",
+      }
+    `)
+  })
+
+  test('accepts identity.email as { address, nonce } object', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'register',
+        identity: { email: { address: 'user@example.com', nonce: 'abc123' } },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {
+          "email": {
+            "address": "user@example.com",
+            "nonce": "abc123",
+          },
+        },
+        "method": "register",
+      }
+    `)
+  })
+
   test('accepts identity.email as empty { } object (no nonce)', () => {
     expect(
       z.parse(Rpc.wallet_connect.capabilities.request, {
@@ -403,11 +438,11 @@ describe('wallet_connect.capabilities.request: identity', () => {
     `)
   })
 
-  test('rejects identity.email as string', () => {
+  test('rejects identity.email as number', () => {
     expect(() =>
       z.parse(Rpc.wallet_connect.capabilities.request, {
         method: 'login',
-        identity: { email: 'yes' },
+        identity: { email: 1 },
       }),
     ).toThrow()
   })

@@ -181,6 +181,42 @@ app.post('/verify-email', async (c) => {
 
 ::::
 
+## Require a Specific Email
+
+Pass an email address instead of `true` to require that exact email. The wallet
+pre-fills and locks the sign-in entry to it: the user must authenticate with
+the account that owns the email (verifying it with a one-time code first when
+needed), and connecting an account whose verified email differs is rejected.
+Use this when your app already knows who is signing in — an invite link, a
+pre-auth session, or a server-side allowlist.
+
+```tsx twoslash [src/App.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
+
+function Connect() {
+  const { connectAsync } = useConnect()
+  const [connector] = useConnectors()
+
+  return (
+    <button
+      onClick={() =>
+        connectAsync({
+          connector,
+          capabilities: { identity: { email: 'user@example.com' } }, // [!code focus]
+        })
+      }
+    >
+      Sign in
+    </button>
+  )
+}
+```
+
+To also bind an explicit nonce into the issued token, use the object form:
+`identity: { email: { address: 'user@example.com', nonce } }` (see
+[`wallet_connect`](/docs/rpc/wallet_connect#requiring-a-specific-email)).
+
 ## Verify From Any Stack
 
 The token is a standard OIDC ID token, so any JWT/OIDC library can verify it against the JWKS above. You do not need the Accounts SDK. For example, with [`jose`](https://github.com/panva/jose):

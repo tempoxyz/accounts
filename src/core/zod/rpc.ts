@@ -667,13 +667,20 @@ export namespace wallet_connect {
        *
        * - `true` — request the email; the wallet auto-issues the signed token,
        *   reusing the `auth` (SIWE) challenge nonce when present.
-       * - `{ nonce }` — same, with an explicit nonce baked into the token
-       *   (for standalone use without the `auth` capability).
+       * - `'user@example.com'` — require this exact email: the wallet forces
+       *   the user to authenticate with the account owning it (verifying it
+       *   first when needed) instead of a free-form entry.
+       * - `{ address, nonce }` — same as above, with an explicit nonce baked
+       *   into the token (for standalone use without the `auth` capability).
+       *   Both fields are optional; `{ nonce }` alone requests any email.
        */
       email: z.optional(
         z.union([
           z.boolean(),
+          z.string(),
           z.object({
+            /** Exact email the user must authenticate with. */
+            address: z.optional(z.string()),
             /** Nonce to bind into the issued identity token (replay protection). */
             nonce: z.optional(z.string()),
           }),
