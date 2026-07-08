@@ -84,8 +84,11 @@ type Identity = {
    * - `{ address, nonce }` — same as above, with an explicit nonce baked into
    *   the token (for standalone use without the `auth` capability). Both
    *   fields are optional; `{ nonce }` alone requests any email.
+   * - `{ domains }` — restrict email entry to these domains: the wallet
+   *   rejects entering an email outside them. An account's already-verified
+   *   email is still shared; verify server-side.
    */
-  email?: boolean | string | { address?: string; nonce?: string }
+  email?: boolean | string | { address?: string; domains?: string[]; nonce?: string }
 }
 
 type ShowDeposit = boolean | {
@@ -261,3 +264,29 @@ const { accounts } = await provider.request({
   ],
 })
 ```
+
+### Restricting email domains
+
+Set `capabilities.identity.email` to `{ domains }` to restrict email entry to
+an allowlist of domains. The wallet rejects entering an email outside them
+(matched case-insensitively) in both the sign-in entry and the in-flow email
+prompt. Use this when your server restricts sign-ups to approved domains, so
+users get immediate feedback instead of a rejection after authenticating.
+
+```ts
+const { accounts } = await provider.request({
+  method: 'wallet_connect',
+  params: [
+    {
+      capabilities: {
+        identity: { email: { domains: ['tempo.xyz'] } },
+      },
+    },
+  ],
+})
+```
+
+The restriction applies to email *entry* only: an account whose email is
+already verified still shares it, since your server may accept existing or
+invited users beyond the allowlist. Always enforce the policy server-side by
+verifying the `idToken`. An exact `address` takes precedence over `domains`.
