@@ -422,6 +422,27 @@ describe('wallet_connect.capabilities.request: identity', () => {
     `)
   })
 
+  test('accepts identity.email as { domains } object', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        method: 'login',
+        identity: { email: { domains: ['tempo.xyz', 'example.com'] } },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "identity": {
+          "email": {
+            "domains": [
+              "tempo.xyz",
+              "example.com",
+            ],
+          },
+        },
+        "method": "login",
+      }
+    `)
+  })
+
   test('accepts identity.email as empty { } object (no nonce)', () => {
     expect(
       z.parse(Rpc.wallet_connect.capabilities.request, {

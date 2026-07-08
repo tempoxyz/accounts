@@ -217,6 +217,42 @@ To also bind an explicit nonce into the issued token, use the object form:
 `identity: { email: { address: 'user@example.com', nonce } }` (see
 [`wallet_connect`](/docs/rpc/wallet_connect#requiring-a-specific-email)).
 
+## Restrict Email Domains
+
+Pass `{ domains }` to restrict email entry to an allowlist of domains. The
+wallet rejects entering an email outside them, so users whose sign-ups your
+server would refuse get immediate feedback instead of a rejection after
+authenticating.
+
+```tsx twoslash [src/App.tsx]
+// @noErrors
+import { useConnect, useConnectors } from 'wagmi'
+
+function Connect() {
+  const { connectAsync } = useConnect()
+  const [connector] = useConnectors()
+
+  return (
+    <button
+      onClick={() =>
+        connectAsync({
+          connector,
+          capabilities: { identity: { email: { domains: ['tempo.xyz'] } } }, // [!code focus]
+        })
+      }
+    >
+      Sign in
+    </button>
+  )
+}
+```
+
+The restriction applies to email entry only: an account whose email is already
+verified still shares it, since your server may accept existing or invited
+users beyond the allowlist. Always enforce the policy server-side by verifying
+the `idToken` (see
+[`wallet_connect`](/docs/rpc/wallet_connect#restricting-email-domains)).
+
 ## Verify From Any Stack
 
 The token is a standard OIDC ID token, so any JWT/OIDC library can verify it against the JWKS above. You do not need the Accounts SDK. For example, with [`jose`](https://github.com/panva/jose):
