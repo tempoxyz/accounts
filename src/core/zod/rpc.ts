@@ -673,21 +673,22 @@ export namespace wallet_connect {
        * - `{ address, nonce }` — same as above, with an explicit nonce baked
        *   into the token (for standalone use without the `auth` capability).
        *   Both fields are optional; `{ nonce }` alone requests any email.
-       * - `{ domains }` — restrict email entry to these domains: the wallet
-       *   rejects entering an email outside them. An account's
-       *   already-verified email is still shared; verify server-side.
+       * - `{ verify }` — app endpoint that gates email entry: the wallet
+       *   POSTs `{ email }` to it and blocks entry on a 4xx (showing the
+       *   response's `message` when present). An account's already-verified
+       *   email is still shared; enforce the policy server-side.
        */
       email: z.optional(
         z.union([
           z.boolean(),
           z.string(),
           z.object({
-            /** Exact email the user must authenticate with. Takes precedence over `domains`. */
+            /** Exact email the user must authenticate with. Takes precedence over `verify`. */
             address: z.optional(z.string()),
-            /** Allowed email domains for entry (e.g. `['tempo.xyz']`), matched case-insensitively. */
-            domains: z.optional(z.array(z.string())),
             /** Nonce to bind into the issued identity token (replay protection). */
             nonce: z.optional(z.string()),
+            /** URL the wallet POSTs `{ email }` to at entry time (2xx allows, 4xx blocks); relative URLs resolve against the app origin. */
+            verify: z.optional(z.string()),
           }),
         ]),
       ),

@@ -1305,6 +1305,21 @@ export function create(options: create.Options = {}): create.ReturnType {
                           auth_input as NonNullable<z.output<typeof Rpc.wallet_connect.auth>>,
                         )
                       : undefined
+
+                    // Same origin problem for `identity.email.verify`: resolve
+                    // it dapp-side so the wallet host receives an absolute URL.
+                    const identity_request = (() => {
+                      const email = capabilities?.identity?.email
+                      if (typeof email !== 'object' || !email?.verify) return undefined
+                      const verify = (() => {
+                        const value = email.verify
+                        if (value.startsWith('http://') || value.startsWith('https://'))
+                          return value
+                        if (typeof window === 'undefined') return value
+                        return new URL(value, window.location.origin).href
+                      })()
+                      return { ...capabilities!.identity, email: { ...email, verify } }
+                    })()
                     if (auth_request && typeof auth_request === 'object' && !auth_request.challenge)
                       throw new RpcResponse.InvalidParamsError({
                         message:
@@ -1324,7 +1339,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                     // Patch the raw request so forwarding adapters carry the
                     // absolutized auth URLs and prepared access-key material
                     // downstream.
-                    if (auth_request || accessKey)
+                    if (auth_request || accessKey || identity_request)
                       request = {
                         ...request,
                         params: [
@@ -1333,6 +1348,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                             capabilities: {
                               ...request.params?.[0]?.capabilities,
                               ...(auth_request ? { auth: auth_request } : {}),
+                              ...(identity_request ? { identity: identity_request } : {}),
                               ...(accessKey
                                 ? {
                                     authorizeAccessKey: z.encode(

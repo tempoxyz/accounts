@@ -217,12 +217,13 @@ To also bind an explicit nonce into the issued token, use the object form:
 `identity: { email: { address: 'user@example.com', nonce } }` (see
 [`wallet_connect`](/docs/rpc/wallet_connect#requiring-a-specific-email)).
 
-## Restrict Email Domains
+## Gate Email Entry
 
-Pass `{ domains }` to restrict email entry to an allowlist of domains. The
-wallet rejects entering an email outside them, so users whose sign-ups your
-server would refuse get immediate feedback instead of a rejection after
-authenticating.
+Pass `{ verify }` to gate email entry through an app endpoint. The wallet
+POSTs `{ email }` to it when the user enters an email and blocks entry on a
+4xx response (showing the response's `message` when present), so users whose
+sign-ups your server would refuse get immediate feedback instead of a
+rejection after authenticating.
 
 ```tsx twoslash [src/App.tsx]
 // @noErrors
@@ -237,7 +238,7 @@ function Connect() {
       onClick={() =>
         connectAsync({
           connector,
-          capabilities: { identity: { email: { domains: ['tempo.xyz'] } } }, // [!code focus]
+          capabilities: { identity: { email: { verify: '/api/email/check' } } }, // [!code focus]
         })
       }
     >
@@ -247,11 +248,10 @@ function Connect() {
 }
 ```
 
-The restriction applies to email entry only: an account whose email is already
-verified still shares it, since your server may accept existing or invited
-users beyond the allowlist. Always enforce the policy server-side by verifying
-the `idToken` (see
-[`wallet_connect`](/docs/rpc/wallet_connect#restricting-email-domains)).
+Relative URLs resolve against the app's origin. The gate applies to email
+entry only: an account whose email is already verified still shares it.
+Always enforce the policy server-side by verifying the `idToken` (see
+[`wallet_connect`](/docs/rpc/wallet_connect#gating-email-entry)).
 
 ## Verify From Any Stack
 

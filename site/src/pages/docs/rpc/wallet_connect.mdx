@@ -84,11 +84,12 @@ type Identity = {
    * - `{ address, nonce }` — same as above, with an explicit nonce baked into
    *   the token (for standalone use without the `auth` capability). Both
    *   fields are optional; `{ nonce }` alone requests any email.
-   * - `{ domains }` — restrict email entry to these domains: the wallet
-   *   rejects entering an email outside them. An account's already-verified
-   *   email is still shared; verify server-side.
+   * - `{ verify }` — app endpoint that gates email entry: the wallet POSTs
+   *   `{ email }` to it and blocks entry on a 4xx (showing the response's
+   *   `message` when present). An account's already-verified email is still
+   *   shared; enforce the policy server-side.
    */
-  email?: boolean | string | { address?: string; domains?: string[]; nonce?: string }
+  email?: boolean | string | { address?: string; nonce?: string; verify?: string }
 }
 
 type ShowDeposit = boolean | {
@@ -265,13 +266,15 @@ const { accounts } = await provider.request({
 })
 ```
 
-### Restricting email domains
+### Gating email entry
 
-Set `capabilities.identity.email` to `{ domains }` to restrict email entry to
-an allowlist of domains. The wallet rejects entering an email outside them
-(matched case-insensitively) in both the sign-in entry and the in-flow email
-prompt. Use this when your server restricts sign-ups to approved domains, so
-users get immediate feedback instead of a rejection after authenticating.
+Set `capabilities.identity.email` to `{ verify }` to gate email entry through
+an app endpoint. The wallet POSTs `{ email }` (JSON) to the URL when the user
+enters an email — in both the sign-in entry and the in-flow email prompt — and
+blocks entry on a 4xx response, showing the response body's `message` when
+present. Use this when your server restricts sign-ups (e.g. an allowlist with
+invited exceptions), so users get immediate feedback instead of a rejection
+after authenticating.
 
 ```ts
 const { accounts } = await provider.request({
@@ -279,14 +282,16 @@ const { accounts } = await provider.request({
   params: [
     {
       capabilities: {
-        identity: { email: { domains: ['tempo.xyz'] } },
+        identity: { email: { verify: '/api/email/check' } },
       },
     },
   ],
 })
 ```
 
-The restriction applies to email *entry* only: an account whose email is
-already verified still shares it, since your server may accept existing or
-invited users beyond the allowlist. Always enforce the policy server-side by
-verifying the `idToken`. An exact `address` takes precedence over `domains`.
+Relative URLs resolve against the app's origin. The endpoint must allow
+cross-origin requests from the wallet host (CORS), and a network failure or
+5xx fails open (entry proceeds). The gate applies to email *entry* only: an
+account whose email is already verified still shares it. Always enforce the
+policy server-side by verifying the `idToken`. An exact `address` takes
+precedence over `verify`.

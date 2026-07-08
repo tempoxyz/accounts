@@ -25,12 +25,12 @@ describe('wallet_connect.identity', () => {
     | string
     | {
         address?: string | undefined
-        domains?: string[] | undefined
         nonce?: string | undefined
+        verify?: string | undefined
       }
     | undefined
 
-  test('infers email as boolean | string | { address, domains, nonce } | undefined', () => {
+  test('infers email as boolean | string | { address, nonce, verify } | undefined', () => {
     type Identity = z.output<typeof Rpc.wallet_connect.identity>
     expectTypeOf<Identity>().toEqualTypeOf<{ email?: EmailRequest } | undefined>()
   })

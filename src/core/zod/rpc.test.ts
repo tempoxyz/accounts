@@ -422,20 +422,17 @@ describe('wallet_connect.capabilities.request: identity', () => {
     `)
   })
 
-  test('accepts identity.email as { domains } object', () => {
+  test('accepts identity.email as { verify } object', () => {
     expect(
       z.parse(Rpc.wallet_connect.capabilities.request, {
         method: 'login',
-        identity: { email: { domains: ['tempo.xyz', 'example.com'] } },
+        identity: { email: { verify: 'https://example.com/api/email/check' } },
       }),
     ).toMatchInlineSnapshot(`
       {
         "identity": {
           "email": {
-            "domains": [
-              "tempo.xyz",
-              "example.com",
-            ],
+            "verify": "https://example.com/api/email/check",
           },
         },
         "method": "login",
