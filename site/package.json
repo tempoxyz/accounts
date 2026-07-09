@@ -30,7 +30,7 @@
     "vite": "catalog:",
     "vocs": "2.0.0",
     "wagmi": "catalog:",
-    "waku": "1.0.0-beta.0"
+    "waku": "1.0.0-beta.1"
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.93",
