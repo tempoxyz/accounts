@@ -1,5 +1,13 @@
 # accounts
 
+## 0.15.2
+
+### Patch Changes
+
+- 9d2bdc8: Skipped EIP-6963 provider announcement when `crypto.randomUUID` is unavailable (e.g. insecure contexts).
+- 29776b4: Added `{ domains }` form to the `wallet_connect` `identity.email` capability for restricting email entry to allowed domains.
+- 5351e1c: Added `paradigm.xyz` to the list of trusted hosts.
+
 ## 0.15.1
 
 ### Patch Changes
