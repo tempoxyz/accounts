@@ -245,6 +245,15 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
   }
 
+  function forwardFeePayer(
+    feePayer: TransactionParameters['feePayer'],
+    account: Awaited<Adapter.getAccount.ReturnType>['account'],
+  ) {
+    if (account.type === 'json-rpc' && feePayer !== undefined) return { feePayer }
+    if (feePayer) return { feePayer: true as const }
+    return {}
+  }
+
   async function prepareRootTransaction(parameters: TransactionParameters) {
     const { feePayer, ...rest } = parameters
     const selected = await getAdapterAccount({ address: parameters.from })
@@ -256,7 +265,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
     const request = {
       ...rest,
-      ...(feePayer ? { feePayer: true as const } : {}),
+      ...forwardFeePayer(feePayer, selected.account),
     }
     if (selected.account.type === 'json-rpc') return { client, request, selected }
     const prepared = await prepareTransactionRequest(client, {
@@ -349,7 +358,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
     return await sendTransaction(client, {
       ...rest,
-      ...(feePayer ? { feePayer: true as never } : {}),
+      ...forwardFeePayer(feePayer, selected.account),
     } as never)
   }
 
@@ -396,7 +405,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
     const request = {
       ...rest,
-      ...(feePayer ? { feePayer: true as const } : {}),
+      ...forwardFeePayer(feePayer, selected.account),
     }
     if (selected.account.type === 'json-rpc')
       return (await client.request({
