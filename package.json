@@ -31,10 +31,10 @@
     }
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^0.6.0",
+    "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.31.0",
-    "@privy-io/react-auth": "3.25.0",
-    "@remix-run/route-pattern": "^0.20.0",
+    "@privy-io/react-auth": "3.34.0",
+    "@remix-run/route-pattern": "^0.23.0",
     "@types/express": "^5.0.6",
     "@types/http-proxy": "^1.17.17",
     "@types/node": "catalog:",
@@ -52,7 +52,7 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-native-mmkv": "^4.3.1",
-    "react-native-nitro-modules": "^0.35.9",
+    "react-native-nitro-modules": "^0.36.1",
     "simple-git-hooks": "^2.13.1",
     "testcontainers": "^11.14.0",
     "tsx": "^4.21.0",
@@ -60,7 +60,7 @@
     "viem": "catalog:",
     "vp": "catalog:",
     "wagmi": "catalog:",
-    "zile": "^0.0.25"
+    "zile": "^0.0.29"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm check"
@@ -93,7 +93,7 @@
     "expo-web-browser": "^55.0.13",
     "react": ">=18",
     "react-native-mmkv": "^4.3.1",
-    "react-native-nitro-modules": "^0.35.9",
+    "react-native-nitro-modules": "^0.36.1",
     "viem": ">=2.54.0",
     "wagmi": ">=0.0.0"
   },
