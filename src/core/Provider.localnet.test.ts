@@ -3553,6 +3553,41 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
       expect(result.receipts?.[0]?.feePayer).toBe(feePayerAccount.address.toLowerCase())
     })
+
+    test('behavior: forwards provider feePayer URL to JSON-RPC wallets', async () => {
+      const wallet = Provider.create({ adapter: adapter(), chains: [chain] })
+      const address = await connect(wallet)
+      await fund(address)
+
+      const jsonRpcAdapter = Adapter.define({ name: 'JSON-RPC Test' }, () => ({
+        actions: {
+          createAccount: async () => ({ accounts: [{ address }] }),
+          loadAccounts: async () => ({ accounts: [{ address }] }),
+        },
+        getAccount: () => ({
+          account: { address, type: 'json-rpc' as const },
+          transport: custom({ request: (request) => wallet.request(request as never) }),
+        }),
+      }))
+      const provider = Provider.create({
+        adapter: jsonRpcAdapter,
+        chains: [chain],
+        feePayer: server.url,
+      })
+      await provider.request({ method: 'wallet_connect' })
+
+      const result = await provider.request({
+        method: 'wallet_sendCalls',
+        params: [
+          {
+            calls: [transfer('1.1')],
+            capabilities: { feePayer: true, sync: true },
+          },
+        ],
+      })
+
+      expect(result.receipts?.[0]?.feePayer).toBe(feePayerAccount.address.toLowerCase())
+    })
   })
 })
 
