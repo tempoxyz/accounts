@@ -1,5 +1,11 @@
 # accounts
 
+## 0.15.3
+
+### Patch Changes
+
+- 7480125: Forward fee payer URLs to JSON-RPC wallets.
+
 ## 0.15.2
 
 ### Patch Changes
