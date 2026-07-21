@@ -72,7 +72,7 @@
   "name": "accounts",
   "description": "Tempo Accounts SDK",
   "type": "module",
-  "version": "0.15.3",
+  "version": "0.15.4",
   "dependencies": {
     "hono": "catalog:",
     "idb-keyval": "^6.2.2",
