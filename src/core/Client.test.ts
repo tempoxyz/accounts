@@ -87,6 +87,12 @@ describe('caching', () => {
       chains: [tempoModerato, tempo],
       storage: Storage.memory(),
     })
+    provider_a.store.setState({
+      accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+    })
+    provider_b.store.setState({
+      accounts: [{ address: '0x0000000000000000000000000000000000000002' }],
+    })
     const client_a = Client.fromChainId(tempo.id, {
       chains: [tempo, tempoModerato],
       provider: provider_a,
@@ -101,12 +107,20 @@ describe('caching', () => {
     // The clients themselves must be distinct.
     expect(client_a).not.toBe(client_b)
 
-    // Each `eth_chainId` is routed back to its own provider's store, so the
-    // returned chain IDs must match each provider's `defaultChain`.
-    const chainId_a = await client_a.request({ method: 'eth_chainId' })
-    const chainId_b = await client_b.request({ method: 'eth_chainId' })
-    expect(chainId_a).toMatchInlineSnapshot(`"0x1079"`)
-    expect(chainId_b).toMatchInlineSnapshot(`"0xa5bf"`)
+    // Provider-owned methods must still route back to the provider that
+    // created each client.
+    const accounts_a = await client_a.request({ method: 'eth_accounts' })
+    const accounts_b = await client_b.request({ method: 'eth_accounts' })
+    expect(accounts_a).toMatchInlineSnapshot(`
+      [
+        "0x0000000000000000000000000000000000000001",
+      ]
+    `)
+    expect(accounts_b).toMatchInlineSnapshot(`
+      [
+        "0x0000000000000000000000000000000000000002",
+      ]
+    `)
   })
 
   test('behavior: different transports objects do not share cached clients', () => {
@@ -203,23 +217,28 @@ describe('caching', () => {
 })
 
 describe('providerTransport', () => {
-  test('default: routes requests through the provider', async () => {
+  test('default: routes chain RPCs through the requested chain transport', async () => {
     const store = setup()
     const provider = Provider.create({
       adapter: secp256k1(),
       chains: [tempoModerato, tempo],
       storage: Storage.memory(),
     })
-    // Wire the client to chain ID `tempo.id` but route through a provider
-    // whose default chain is `tempoModerato`. The returned chain ID must
-    // come from the provider, not the requested chain.
+    const transports = {
+      [tempo.id]: custom({
+        async request() {
+          return '0x1079'
+        },
+      }),
+    }
     const client = Client.fromChainId(tempo.id, {
       chains: [tempo, tempoModerato],
       provider,
       store,
+      transports,
     })
     const result = await client.request({ method: 'eth_chainId' })
-    expect(result).toMatchInlineSnapshot(`"0xa5bf"`)
+    expect(result).toMatchInlineSnapshot(`"0x1079"`)
   })
 
   test('behavior: returns empty accounts before connecting', async () => {

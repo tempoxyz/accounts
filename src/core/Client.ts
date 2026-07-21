@@ -97,6 +97,8 @@ function providerTransport(provider: ox_Provider.Provider, base: Transport): Tra
     return {
       ...baseTransport,
       async request({ method, params: reqParams }) {
+        if (!isProviderMethod(method))
+          return baseTransport.request({ method, params: reqParams } as never)
         return (provider as { request: EIP1193RequestFn }).request({
           method,
           params: reqParams,
@@ -104,6 +106,22 @@ function providerTransport(provider: ox_Provider.Provider, base: Transport): Tra
       },
     } as ReturnType<Transport>
   }
+}
+
+function isProviderMethod(method: string) {
+  return (
+    method.startsWith('wallet_') ||
+    [
+      'eth_accounts',
+      'eth_fillTransaction',
+      'eth_requestAccounts',
+      'eth_sendTransaction',
+      'eth_sendTransactionSync',
+      'eth_signTransaction',
+      'eth_signTypedData_v4',
+      'personal_sign',
+    ].includes(method)
+  )
 }
 
 /**
