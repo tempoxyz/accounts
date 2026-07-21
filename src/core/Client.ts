@@ -53,7 +53,7 @@ export function fromChainId(
   if (!client) {
     const chain = chains.find((c) => c.id === id) ?? chains[0]!
     const base = transports?.[id] ?? http()
-    const transport_base = provider ? providerTransport(provider, base) : base
+    const transport_base = provider ? walletTransport(provider, base) : base
     const transport = feePayerUrl
       ? feePayerTransport(transport_base, feePayerUrl, precedence)
       : transport_base
@@ -78,7 +78,7 @@ export declare namespace fromChainId {
           precedence?: 'fee-payer-first' | 'user-first' | undefined
         }
       | undefined
-    /** Provider instance. When set, the transport routes requests through the provider first, falling back to HTTP for unknown methods. */
+    /** Provider instance. When set, wallet-owned methods route through the provider and all other RPCs use the requested chain transport. */
     provider?: ox_Provider.Provider | undefined
     /** Reactive state store. */
     store: Store.Store
@@ -88,16 +88,16 @@ export declare namespace fromChainId {
 }
 
 /**
- * Creates a transport that routes requests through the provider, falling
- * back to the given base transport for methods the provider proxies to RPC.
+ * Creates a transport that routes wallet-owned methods through the provider.
+ * All other RPCs use the configured transport for the requested chain.
  */
-function providerTransport(provider: ox_Provider.Provider, base: Transport): Transport {
+function walletTransport(provider: ox_Provider.Provider, base: Transport): Transport {
   return (params) => {
     const baseTransport = base(params)
     return {
       ...baseTransport,
       async request({ method, params: reqParams }) {
-        if (!isProviderMethod(method))
+        if (!isWalletMethod(method))
           return baseTransport.request({ method, params: reqParams } as never)
         return (provider as { request: EIP1193RequestFn }).request({
           method,
@@ -108,7 +108,7 @@ function providerTransport(provider: ox_Provider.Provider, base: Transport): Tra
   }
 }
 
-function isProviderMethod(method: string) {
+function isWalletMethod(method: string) {
   return (
     method.startsWith('wallet_') ||
     [

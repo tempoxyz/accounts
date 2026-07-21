@@ -107,8 +107,8 @@ describe('caching', () => {
     // The clients themselves must be distinct.
     expect(client_a).not.toBe(client_b)
 
-    // Provider-owned methods must still route back to the provider that
-    // created each client.
+    // Wallet-owned methods must still route back to the provider that created
+    // each client.
     const accounts_a = await client_a.request({ method: 'eth_accounts' })
     const accounts_b = await client_b.request({ method: 'eth_accounts' })
     expect(accounts_a).toMatchInlineSnapshot(`
@@ -216,7 +216,7 @@ describe('caching', () => {
   })
 })
 
-describe('providerTransport', () => {
+describe('walletTransport', () => {
   test('default: routes chain RPCs through the requested chain transport', async () => {
     const store = setup()
     const provider = Provider.create({
