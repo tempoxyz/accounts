@@ -1,5 +1,7 @@
 import { Hex } from 'ox'
+import { custom } from 'viem'
 import { createSiweMessage } from 'viem/siwe'
+import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import { accounts, privateKeys } from '../../test/config.js'
@@ -34,6 +36,20 @@ describe('getMppxParameters', () => {
       type: 'json-rpc',
     })
     expect((client as { account?: unknown }).account).toBeUndefined()
+  })
+
+  test('behavior: routes chain RPCs to the requested chain', async () => {
+    const provider = Provider.create({
+      chains: [tempo, tempoModerato],
+      storage: Storage.memory(),
+      transports: {
+        [tempoModerato.id]: custom({ request: async () => '0xa5bf' }),
+      },
+    })
+    provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    const client = await provider.getMppxParameters().getClient({ chainId: tempoModerato.id })
+    expect(await client.request({ method: 'eth_chainId' })).toBe('0xa5bf')
   })
 
   test('behavior: resolves existing access key for connected account', async () => {
