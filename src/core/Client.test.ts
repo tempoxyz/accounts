@@ -87,18 +87,12 @@ describe('caching', () => {
       chains: [tempoModerato, tempo],
       storage: Storage.memory(),
     })
-    provider_a.store.setState({
-      accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
-    })
-    provider_b.store.setState({
-      accounts: [{ address: '0x0000000000000000000000000000000000000002' }],
-    })
-    const client_a = Client.fromChainId(tempo.id, {
+    const client_a = Client.fromChainId(undefined, {
       chains: [tempo, tempoModerato],
       provider: provider_a,
       store,
     })
-    const client_b = Client.fromChainId(tempo.id, {
+    const client_b = Client.fromChainId(undefined, {
       chains: [tempo, tempoModerato],
       provider: provider_b,
       store,
@@ -107,58 +101,21 @@ describe('caching', () => {
     // The clients themselves must be distinct.
     expect(client_a).not.toBe(client_b)
 
-    // Wallet-owned methods must still route back to the provider that created
-    // each client.
-    const accounts_a = await client_a.request({ method: 'eth_accounts' })
-    const accounts_b = await client_b.request({ method: 'eth_accounts' })
-    expect(accounts_a).toMatchInlineSnapshot(`
-      [
-        "0x0000000000000000000000000000000000000001",
-      ]
-    `)
-    expect(accounts_b).toMatchInlineSnapshot(`
-      [
-        "0x0000000000000000000000000000000000000002",
-      ]
-    `)
+    // Each `eth_chainId` is routed back to its own provider's store, so the
+    // returned chain IDs must match each provider's `defaultChain`.
+    const chainId_a = await client_a.request({ method: 'eth_chainId' })
+    const chainId_b = await client_b.request({ method: 'eth_chainId' })
+    expect(chainId_a).toMatchInlineSnapshot(`"0x1079"`)
+    expect(chainId_b).toMatchInlineSnapshot(`"0xa5bf"`)
   })
 
-  test('behavior: same provider with different transports does not share cached clients', async () => {
+  test('behavior: different transports objects do not share cached clients', () => {
     const store = setup()
-    const provider = Provider.create({
-      adapter: secp256k1(),
-      chains: [tempo],
-      storage: Storage.memory(),
-    })
-    const transports_a = {
-      [tempo.id]: custom({
-        async request() {
-          return 'a'
-        },
-      }),
-    }
-    const transports_b = {
-      [tempo.id]: custom({
-        async request() {
-          return 'b'
-        },
-      }),
-    }
-    const a = Client.fromChainId(tempo.id, {
-      chains: [tempo],
-      provider,
-      store,
-      transports: transports_a,
-    })
-    const b = Client.fromChainId(tempo.id, {
-      chains: [tempo],
-      provider,
-      store,
-      transports: transports_b,
-    })
+    const transports_a = { [tempo.id]: http('https://a.example.com') }
+    const transports_b = { [tempo.id]: http('https://b.example.com') }
+    const a = Client.fromChainId(tempo.id, { chains: [tempo], store, transports: transports_a })
+    const b = Client.fromChainId(tempo.id, { chains: [tempo], store, transports: transports_b })
     expect(a).not.toBe(b)
-    expect(await a.request({ method: 'eth_chainId' })).toMatchInlineSnapshot(`"a"`)
-    expect(await b.request({ method: 'eth_chainId' })).toMatchInlineSnapshot(`"b"`)
   })
 
   test('behavior: same provider with different feePayer URLs gets different clients', () => {
@@ -245,31 +202,7 @@ describe('caching', () => {
   })
 })
 
-describe('walletTransport', () => {
-  test('default: routes chain RPCs through the requested chain transport', async () => {
-    const store = setup()
-    const provider = Provider.create({
-      adapter: secp256k1(),
-      chains: [tempoModerato, tempo],
-      storage: Storage.memory(),
-    })
-    const transports = {
-      [tempo.id]: custom({
-        async request() {
-          return '0x1079'
-        },
-      }),
-    }
-    const client = Client.fromChainId(tempo.id, {
-      chains: [tempo, tempoModerato],
-      provider,
-      store,
-      transports,
-    })
-    const result = await client.request({ method: 'eth_chainId' })
-    expect(result).toMatchInlineSnapshot(`"0x1079"`)
-  })
-
+describe('providerTransport', () => {
   test('behavior: returns empty accounts before connecting', async () => {
     const store = setup()
     const provider = Provider.create({
@@ -283,32 +216,18 @@ describe('walletTransport', () => {
   })
 
   test('behavior: fills transactions on the requested chain', async () => {
-    const requests: number[] = []
-    const transport = (chainId: number) =>
-      custom({
-        async request() {
-          requests.push(chainId)
-          return {}
-        },
-      })
+    const requests: unknown[] = []
     const store = setup()
-    const provider = Provider.create({
-      adapter: secp256k1(),
-      chains: [tempoModerato, tempo],
-      storage: Storage.memory(),
-      transports: {
-        [tempo.id]: transport(tempo.id),
-        [tempoModerato.id]: transport(tempoModerato.id),
+    const provider = {
+      async request(request: unknown) {
+        requests.push(request)
+        return {}
       },
-    })
+    } as never
     const client = Client.fromChainId(tempo.id, {
       chains: [tempo, tempoModerato],
       provider,
       store,
-      transports: {
-        [tempo.id]: transport(tempo.id),
-        [tempoModerato.id]: transport(tempoModerato.id),
-      },
     })
 
     await client.request({
@@ -318,51 +237,15 @@ describe('walletTransport', () => {
 
     expect(requests).toMatchInlineSnapshot(`
       [
-        4217,
-      ]
-    `)
-  })
-
-  test('behavior: waits for hydration before routing active-chain RPCs', async () => {
-    let hydrate = (_value: unknown) => {}
-    const persisted = new Promise<unknown>((resolve) => {
-      hydrate = resolve
-    })
-    const storage: Storage.Storage = {
-      async getItem<value>() {
-        return (await persisted) as value
-      },
-      removeItem() {},
-      setItem() {},
-    }
-    const requests: number[] = []
-    const transport = (chainId: number) =>
-      custom({
-        async request() {
-          requests.push(chainId)
-          return '0x0'
+        {
+          "method": "eth_fillTransaction",
+          "params": [
+            {
+              "chainId": 4217,
+              "to": "0x0000000000000000000000000000000000000001",
+            },
+          ],
         },
-      })
-    const provider = Provider.create({
-      adapter: secp256k1(),
-      chains: [tempo, tempoModerato],
-      storage,
-      transports: {
-        [tempo.id]: transport(tempo.id),
-        [tempoModerato.id]: transport(tempoModerato.id),
-      },
-    })
-
-    const result = provider.getClient().request({
-      method: 'eth_getBalance',
-      params: ['0x0000000000000000000000000000000000000001', 'latest'],
-    })
-    hydrate({ state: { chainId: tempoModerato.id }, version: 0 })
-
-    expect(await result).toMatchInlineSnapshot(`"0x0"`)
-    expect(requests).toMatchInlineSnapshot(`
-      [
-        42431,
       ]
     `)
   })

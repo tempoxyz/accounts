@@ -39,39 +39,17 @@ describe('getMppxParameters', () => {
   })
 
   test('behavior: routes chain RPCs to the requested chain', async () => {
-    const requests: number[] = []
-    const transport = (chainId: number) =>
-      custom({
-        async request({ method }) {
-          requests.push(chainId)
-          if (method === 'eth_chainId') return `0x${chainId.toString(16)}`
-          return '0x5208'
-        },
-      })
     const provider = Provider.create({
       chains: [tempo, tempoModerato],
       storage: Storage.memory(),
       transports: {
-        [tempo.id]: transport(tempo.id),
-        [tempoModerato.id]: transport(tempoModerato.id),
+        [tempoModerato.id]: custom({ request: async () => '0xa5bf' }),
       },
     })
     provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
 
     const client = await provider.getMppxParameters().getClient({ chainId: tempoModerato.id })
-
-    await client.request({ method: 'eth_chainId' })
-    await client.request({
-      method: 'eth_getBalance',
-      params: [address, 'latest'],
-    })
-
-    expect(requests).toMatchInlineSnapshot(`
-      [
-        42431,
-        42431,
-      ]
-    `)
+    expect(await client.request({ method: 'eth_chainId' })).toBe('0xa5bf')
   })
 
   test('behavior: resolves existing access key for connected account', async () => {

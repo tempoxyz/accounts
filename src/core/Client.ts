@@ -14,7 +14,6 @@ import type * as Store from './Store.js'
 
 const defaultClients = new Map<string, Client>()
 const clients = new WeakMap<object, Map<string, Client>>()
-const clients_pair = new WeakMap<object, WeakMap<object, Map<string, Client>>>()
 
 /** Resolves a viem Client for a given chain ID (cached). */
 export function fromChainId(
@@ -35,21 +34,8 @@ export function fromChainId(
   })()
   const id = chainId ?? store.getState().chainId
   const key = `${id}:${provider ? 'p' : ''}:${feePayerOption === false ? 'no-fp' : (feePayerUrl ?? '')}:${precedence}`
+  const scope = provider ?? transports
   const cache = (() => {
-    if (provider && transports) {
-      let scopes = clients_pair.get(provider)
-      if (!scopes) {
-        scopes = new WeakMap()
-        clients_pair.set(provider, scopes)
-      }
-      let map = scopes.get(transports)
-      if (!map) {
-        map = new Map()
-        scopes.set(transports, map)
-      }
-      return map
-    }
-    const scope = provider ?? transports
     if (!scope) return defaultClients
     let map = clients.get(scope)
     if (!map) {
@@ -63,7 +49,7 @@ export function fromChainId(
     const chain = chains.find((c) => c.id === id) ?? chains[0]!
     const base = transports?.[id] ?? http()
     const transport_base = provider
-      ? walletTransport(provider, base, chainId === undefined ? undefined : chain.id)
+      ? providerTransport(provider, base, chainId === undefined ? undefined : chain.id)
       : base
     const transport = feePayerUrl
       ? feePayerTransport(transport_base, feePayerUrl, precedence)
@@ -89,7 +75,7 @@ export declare namespace fromChainId {
           precedence?: 'fee-payer-first' | 'user-first' | undefined
         }
       | undefined
-    /** Provider instance. When set, wallet-owned methods route through the provider and all other RPCs use the requested chain transport. */
+    /** Provider for account operations and active-chain requests. Explicit-chain RPCs use the matching transport. */
     provider?: ox_Provider.Provider | undefined
     /** Reactive state store. */
     store: Store.Store
@@ -99,10 +85,10 @@ export declare namespace fromChainId {
 }
 
 /**
- * Creates a transport that routes wallet-owned methods through the provider.
- * All other RPCs use the configured transport for the requested chain.
+ * Routes account operations through the provider and explicit-chain RPCs
+ * through the requested chain's transport.
  */
-function walletTransport(
+function providerTransport(
   provider: ox_Provider.Provider,
   base: Transport,
   chainId: number | undefined,
@@ -112,14 +98,8 @@ function walletTransport(
     return {
       ...baseTransport,
       async request({ method, params: reqParams }) {
-        if (!isWalletMethod(method)) {
-          if (chainId === undefined)
-            return (provider as { request: EIP1193RequestFn }).request({
-              method,
-              params: reqParams,
-            } as any)
+        if (chainId !== undefined && !usesProvider(method))
           return baseTransport.request({ method, params: reqParams } as never)
-        }
         const params = (() => {
           if (method !== 'eth_fillTransaction' || chainId === undefined) return reqParams
           const request = (reqParams as readonly unknown[] | undefined)?.[0]
@@ -135,7 +115,7 @@ function walletTransport(
   }
 }
 
-function isWalletMethod(method: string) {
+function usesProvider(method: string) {
   return (
     method.startsWith('wallet_') ||
     [
