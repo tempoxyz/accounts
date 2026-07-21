@@ -123,13 +123,42 @@ describe('caching', () => {
     `)
   })
 
-  test('behavior: different transports objects do not share cached clients', () => {
+  test('behavior: same provider with different transports does not share cached clients', async () => {
     const store = setup()
-    const transports_a = { [tempo.id]: http('https://a.example.com') }
-    const transports_b = { [tempo.id]: http('https://b.example.com') }
-    const a = Client.fromChainId(tempo.id, { chains: [tempo], store, transports: transports_a })
-    const b = Client.fromChainId(tempo.id, { chains: [tempo], store, transports: transports_b })
+    const provider = Provider.create({
+      adapter: secp256k1(),
+      chains: [tempo],
+      storage: Storage.memory(),
+    })
+    const transports_a = {
+      [tempo.id]: custom({
+        async request() {
+          return 'a'
+        },
+      }),
+    }
+    const transports_b = {
+      [tempo.id]: custom({
+        async request() {
+          return 'b'
+        },
+      }),
+    }
+    const a = Client.fromChainId(tempo.id, {
+      chains: [tempo],
+      provider,
+      store,
+      transports: transports_a,
+    })
+    const b = Client.fromChainId(tempo.id, {
+      chains: [tempo],
+      provider,
+      store,
+      transports: transports_b,
+    })
     expect(a).not.toBe(b)
+    expect(await a.request({ method: 'eth_chainId' })).toMatchInlineSnapshot(`"a"`)
+    expect(await b.request({ method: 'eth_chainId' })).toMatchInlineSnapshot(`"b"`)
   })
 
   test('behavior: same provider with different feePayer URLs gets different clients', () => {
@@ -251,6 +280,91 @@ describe('walletTransport', () => {
     const client = Client.fromChainId(tempo.id, { chains: [tempo], provider, store })
     const result = await client.request({ method: 'eth_accounts' })
     expect(result).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: fills transactions on the requested chain', async () => {
+    const requests: number[] = []
+    const transport = (chainId: number) =>
+      custom({
+        async request() {
+          requests.push(chainId)
+          return {}
+        },
+      })
+    const store = setup()
+    const provider = Provider.create({
+      adapter: secp256k1(),
+      chains: [tempoModerato, tempo],
+      storage: Storage.memory(),
+      transports: {
+        [tempo.id]: transport(tempo.id),
+        [tempoModerato.id]: transport(tempoModerato.id),
+      },
+    })
+    const client = Client.fromChainId(tempo.id, {
+      chains: [tempo, tempoModerato],
+      provider,
+      store,
+      transports: {
+        [tempo.id]: transport(tempo.id),
+        [tempoModerato.id]: transport(tempoModerato.id),
+      },
+    })
+
+    await client.request({
+      method: 'eth_fillTransaction' as never,
+      params: [{ to: '0x0000000000000000000000000000000000000001' }] as never,
+    })
+
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        4217,
+      ]
+    `)
+  })
+
+  test('behavior: waits for hydration before routing active-chain RPCs', async () => {
+    let hydrate = (_value: unknown) => {}
+    const persisted = new Promise<unknown>((resolve) => {
+      hydrate = resolve
+    })
+    const storage: Storage.Storage = {
+      async getItem<value>() {
+        return (await persisted) as value
+      },
+      removeItem() {},
+      setItem() {},
+    }
+    const requests: number[] = []
+    const transport = (chainId: number) =>
+      custom({
+        async request() {
+          requests.push(chainId)
+          return '0x0'
+        },
+      })
+    const provider = Provider.create({
+      adapter: secp256k1(),
+      chains: [tempo, tempoModerato],
+      storage,
+      transports: {
+        [tempo.id]: transport(tempo.id),
+        [tempoModerato.id]: transport(tempoModerato.id),
+      },
+    })
+
+    const result = provider.getClient().request({
+      method: 'eth_getBalance',
+      params: ['0x0000000000000000000000000000000000000001', 'latest'],
+    })
+    hydrate({ state: { chainId: tempoModerato.id }, version: 0 })
+
+    expect(await result).toMatchInlineSnapshot(`"0x0"`)
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        42431,
+      ]
+    `)
   })
 })
 
