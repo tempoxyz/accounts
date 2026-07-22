@@ -1,5 +1,11 @@
 # accounts
 
+## 0.15.4
+
+### Patch Changes
+
+- 0a39059: Fixed MPP clients routing chain RPCs through the active chain instead of the requested chain.
+
 ## 0.15.3
 
 ### Patch Changes
