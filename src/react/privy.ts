@@ -82,12 +82,12 @@ export function PrivyAccountsBridge() {
     }
 
     login_started.current = false
-    if (!wallets.ready) return
+    const embedded = wallets.wallets.filter(isEmbeddedEthereumWallet)
+    if (!wallets.ready && embedded.length === 0) return
 
     loading.current = true
     void (async () => {
       try {
-        const embedded = wallets.wallets.filter(isEmbeddedEthereumWallet)
         if (embedded.length === 0)
           throw new Error('Privy React returned no embedded Ethereum wallet.')
 
@@ -190,7 +190,7 @@ const client = {
 function setPrivyReactState(next: PrivyReactState) {
   state = next
   if (next.ready) emitReady()
-  if (next.ready && next.walletsReady) emitWalletsReady()
+  if (next.ready && (next.walletsReady || next.wallets.length > 0)) emitWalletsReady()
 }
 
 function usePrivyAccountsRequest() {
@@ -242,7 +242,11 @@ function getSnapshot() {
 }
 
 function isEmbeddedEthereumWallet(wallet: ConnectedWallet) {
-  return wallet.type === 'ethereum' && wallet.walletClientType === 'privy'
+  return (
+    wallet.type === 'ethereum' &&
+    wallet.walletClientType === 'privy' &&
+    wallet.connectorType === 'embedded'
+  )
 }
 
 function sameAddress(a: string, b: string) {
@@ -261,7 +265,7 @@ function waitForReady() {
 
 async function waitForWallets() {
   await waitForReady()
-  if (state.walletsReady) return
+  if (state.walletsReady || state.wallets.length > 0) return
   return new Promise<void>((resolve) => wallets_ready_listeners.add(resolve))
 }
 
