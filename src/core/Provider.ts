@@ -1821,6 +1821,8 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   if (
     typeof window !== 'undefined' &&
+    typeof window.dispatchEvent === 'function' &&
+    typeof window.addEventListener === 'function' &&
     typeof CustomEvent !== 'undefined' &&
     typeof crypto.randomUUID === 'function'
   ) {
