@@ -87,12 +87,12 @@ describe('caching', () => {
       chains: [tempoModerato, tempo],
       storage: Storage.memory(),
     })
-    const client_a = Client.fromChainId(tempo.id, {
+    const client_a = Client.fromChainId(undefined, {
       chains: [tempo, tempoModerato],
       provider: provider_a,
       store,
     })
-    const client_b = Client.fromChainId(tempo.id, {
+    const client_b = Client.fromChainId(undefined, {
       chains: [tempo, tempoModerato],
       provider: provider_b,
       store,
@@ -203,25 +203,6 @@ describe('caching', () => {
 })
 
 describe('providerTransport', () => {
-  test('default: routes requests through the provider', async () => {
-    const store = setup()
-    const provider = Provider.create({
-      adapter: secp256k1(),
-      chains: [tempoModerato, tempo],
-      storage: Storage.memory(),
-    })
-    // Wire the client to chain ID `tempo.id` but route through a provider
-    // whose default chain is `tempoModerato`. The returned chain ID must
-    // come from the provider, not the requested chain.
-    const client = Client.fromChainId(tempo.id, {
-      chains: [tempo, tempoModerato],
-      provider,
-      store,
-    })
-    const result = await client.request({ method: 'eth_chainId' })
-    expect(result).toMatchInlineSnapshot(`"0xa5bf"`)
-  })
-
   test('behavior: returns empty accounts before connecting', async () => {
     const store = setup()
     const provider = Provider.create({
@@ -232,6 +213,41 @@ describe('providerTransport', () => {
     const client = Client.fromChainId(tempo.id, { chains: [tempo], provider, store })
     const result = await client.request({ method: 'eth_accounts' })
     expect(result).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: fills transactions on the requested chain', async () => {
+    const requests: unknown[] = []
+    const store = setup()
+    const provider = {
+      async request(request: unknown) {
+        requests.push(request)
+        return {}
+      },
+    } as never
+    const client = Client.fromChainId(tempo.id, {
+      chains: [tempo, tempoModerato],
+      provider,
+      store,
+    })
+
+    await client.request({
+      method: 'eth_fillTransaction' as never,
+      params: [{ to: '0x0000000000000000000000000000000000000001' }] as never,
+    })
+
+    expect(requests).toMatchInlineSnapshot(`
+      [
+        {
+          "method": "eth_fillTransaction",
+          "params": [
+            {
+              "chainId": 4217,
+              "to": "0x0000000000000000000000000000000000000001",
+            },
+          ],
+        },
+      ]
+    `)
   })
 })
 

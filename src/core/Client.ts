@@ -34,11 +34,6 @@ export function fromChainId(
   })()
   const id = chainId ?? store.getState().chainId
   const key = `${id}:${provider ? 'p' : ''}:${feePayerOption === false ? 'no-fp' : (feePayerUrl ?? '')}:${precedence}`
-  // Scope the cache by `provider` (preferred) or `transports`, falling back
-  // to a shared module-level map. The cache key only encodes a boolean for
-  // `provider`, so without scoping, two providers sharing the same chainId
-  // would hit each other's cached clients and route requests to the wrong
-  // adapter via `providerTransport`.
   const scope = provider ?? transports
   const cache = (() => {
     if (!scope) return defaultClients
@@ -53,7 +48,9 @@ export function fromChainId(
   if (!client) {
     const chain = chains.find((c) => c.id === id) ?? chains[0]!
     const base = transports?.[id] ?? http()
-    const transport_base = provider ? providerTransport(provider, base) : base
+    const transport_base = provider
+      ? providerTransport(provider, base, chainId === undefined ? undefined : chain.id)
+      : base
     const transport = feePayerUrl
       ? feePayerTransport(transport_base, feePayerUrl, precedence)
       : transport_base
@@ -78,7 +75,7 @@ export declare namespace fromChainId {
           precedence?: 'fee-payer-first' | 'user-first' | undefined
         }
       | undefined
-    /** Provider instance. When set, the transport routes requests through the provider first, falling back to HTTP for unknown methods. */
+    /** Provider for account operations and active-chain requests. Explicit-chain RPCs use the matching transport. */
     provider?: ox_Provider.Provider | undefined
     /** Reactive state store. */
     store: Store.Store
@@ -88,22 +85,50 @@ export declare namespace fromChainId {
 }
 
 /**
- * Creates a transport that routes requests through the provider, falling
- * back to the given base transport for methods the provider proxies to RPC.
+ * Routes account operations through the provider and explicit-chain RPCs
+ * through the requested chain's transport.
  */
-function providerTransport(provider: ox_Provider.Provider, base: Transport): Transport {
+function providerTransport(
+  provider: ox_Provider.Provider,
+  base: Transport,
+  chainId: number | undefined,
+): Transport {
   return (params) => {
     const baseTransport = base(params)
     return {
       ...baseTransport,
       async request({ method, params: reqParams }) {
+        if (chainId !== undefined && !usesProvider(method))
+          return baseTransport.request({ method, params: reqParams } as never)
+        const params = (() => {
+          if (method !== 'eth_fillTransaction' || chainId === undefined) return reqParams
+          const request = (reqParams as readonly unknown[] | undefined)?.[0]
+          if (!request || typeof request !== 'object') return reqParams
+          return [{ ...request, chainId }]
+        })()
         return (provider as { request: EIP1193RequestFn }).request({
           method,
-          params: reqParams,
+          params,
         } as any)
       },
     } as ReturnType<Transport>
   }
+}
+
+function usesProvider(method: string) {
+  return (
+    method.startsWith('wallet_') ||
+    [
+      'eth_accounts',
+      'eth_fillTransaction',
+      'eth_requestAccounts',
+      'eth_sendTransaction',
+      'eth_sendTransactionSync',
+      'eth_signTransaction',
+      'eth_signTypedData_v4',
+      'personal_sign',
+    ].includes(method)
+  )
 }
 
 /**
