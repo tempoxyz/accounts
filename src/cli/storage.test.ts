@@ -208,6 +208,32 @@ describe('filesystem', () => {
     })
   })
 
+  test('behavior: does not restore credentials after clearing storage', async () => {
+    const path = await createPath()
+    const storage = Storage.filesystem({ key: 'test', path })
+    const accessKey = {
+      access: '0x0000000000000000000000000000000000000001',
+      address: '0x0000000000000000000000000000000000000002',
+      chainId: 1,
+      keyType: 'secp256k1',
+      privateKey: `0x${'11'.repeat(32)}`,
+    } as const
+    await storage.setItem('store', {
+      state: { accessKeys: [accessKey], accounts: [], activeAccount: 0, chainId: 1 },
+      version: 0,
+    })
+    const store = Store.create({ chainId: 1, storage })
+    await Store.waitForHydration(store)
+
+    await store.persist.clearStorage()
+    store.setState({ chainId: 2 })
+
+    await expect(storage.getItem('store')).resolves.toEqual({
+      state: { accessKeys: [], accounts: [], activeAccount: 0, chainId: 2 },
+      version: 0,
+    })
+  })
+
   test('behavior: preserves a store created after empty hydration', async () => {
     const path = await createPath()
     const storage = Storage.filesystem({ key: 'test', path })

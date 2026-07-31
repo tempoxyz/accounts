@@ -156,15 +156,22 @@ function transactional(storage: Storage.Storage, initial: PersistedValue): Stora
     setItem(name, value) {
       const before = previous.get(name)
       previous.set(name, value)
-      return Storage.updateItem(storage, name, (current) => mergePersisted(before, value, current))
+      return Storage.updateItem(storage, name, (current) =>
+        mergePersisted(before, value, current, initial),
+      )
     },
   }
 }
 
-function mergePersisted(previous: unknown, next: unknown, current: unknown): unknown {
+function mergePersisted(
+  previous: unknown,
+  next: unknown,
+  current: unknown,
+  initial: PersistedValue,
+): unknown {
   if (!isPersistedValue(previous) || !isPersistedValue(next))
     throw new Error('Cannot transactionally update malformed persisted state.')
-  const current_ = current === null ? previous : current
+  const current_ = current === null ? initial : current
   if (!isPersistedValue(current_))
     throw new Error('Cannot transactionally update malformed persisted state.')
 
