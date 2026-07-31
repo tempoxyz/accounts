@@ -1,3 +1,4 @@
+import { Json } from 'ox'
 import * as z from 'zod/mini'
 import type { Mutate, StoreApi } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -105,29 +106,32 @@ export function create(options: Options): Store {
       : Storage.memory({ key: 'tempo' }),
   } = options
 
+  const initial = { accessKeys: [], accounts: [], activeAccount: 0, chainId }
+  const persisted_initial = {
+    state: serialize(initial, {
+      keystores,
+      maxAccounts,
+      persistCredentials,
+      structuredClone: canStructuredClone(storage),
+    }),
+    version: 0,
+  }
+  const storage_transactional = transactional(storage, persisted_initial)
   const state = createStore(
     subscribeWithSelector(
-      persist<State, [], [], Persisted>(
-        () => ({
-          accessKeys: [],
-          accounts: [],
-          activeAccount: 0,
-          chainId,
-        }),
-        {
-          merge: (persisted, current) => hydrate(persisted, current, { schema }),
-          name: 'store',
-          partialize: (state) =>
-            serialize(state, {
-              keystores,
-              maxAccounts,
-              persistCredentials,
-              structuredClone: canStructuredClone(storage),
-            }),
-          storage,
-          version: 0,
-        },
-      ),
+      persist<State, [], [], Persisted>(() => initial, {
+        merge: (persisted, current) => hydrate(persisted, current, { schema }),
+        name: 'store',
+        partialize: (state) =>
+          serialize(state, {
+            keystores,
+            maxAccounts,
+            persistCredentials,
+            structuredClone: canStructuredClone(storage),
+          }),
+        storage: storage_transactional,
+        version: 0,
+      }),
     ),
   ) as ZustandStore
   const store = state as Store
@@ -135,6 +139,105 @@ export function create(options: Options): Store {
   store.disconnect = () =>
     state.setState({ accessKeys: [], accounts: [], activeAccount: 0, auth: undefined })
   return store
+}
+
+type PersistedValue = { state: Persisted; version?: number | undefined }
+
+function transactional(storage: Storage.Storage, initial: PersistedValue): Storage.Storage {
+  if (!Storage.supportsUpdate(storage)) return storage
+  const previous = new Map<string, unknown>([['store', initial]])
+  return {
+    async getItem<value>(name: string) {
+      const value = await storage.getItem<value>(name)
+      if (value !== null) previous.set(name, value)
+      return value
+    },
+    removeItem: (name) => storage.removeItem(name),
+    setItem(name, value) {
+      const before = previous.get(name)
+      previous.set(name, value)
+      return Storage.updateItem(storage, name, (current) => mergePersisted(before, value, current))
+    },
+  }
+}
+
+function mergePersisted(previous: unknown, next: unknown, current: unknown): unknown {
+  if (!isPersistedValue(previous) || !isPersistedValue(next))
+    throw new Error('Cannot transactionally update malformed persisted state.')
+  const current_ = current === null ? previous : current
+  if (!isPersistedValue(current_))
+    throw new Error('Cannot transactionally update malformed persisted state.')
+
+  const state = { ...current_.state }
+  for (const name of ['accounts', 'activeAccount', 'auth', 'chainId'] as const) {
+    if (equal(previous.state[name], next.state[name])) continue
+    if (typeof next.state[name] === 'undefined') delete state[name]
+    else (state as Record<string, unknown>)[name] = next.state[name]
+  }
+  state.accessKeys = mergeAccessKeys(
+    previous.state.accessKeys,
+    next.state.accessKeys,
+    current_.state.accessKeys,
+  )
+  return { ...current_, ...next, state }
+}
+
+function mergeAccessKeys(
+  previous: Persisted['accessKeys'],
+  next: Persisted['accessKeys'],
+  current: Persisted['accessKeys'],
+): Persisted['accessKeys'] {
+  if (equal(previous, next)) return current
+  if (!Array.isArray(previous) || !Array.isArray(next) || !Array.isArray(current)) return next
+  if (next.length === 0) return []
+
+  const result = [...current]
+  for (const before of previous) {
+    const index_next = next.findIndex((key) => sameAccessKey(key, before))
+    const index_current = result.findIndex((key) => sameAccessKey(key, before))
+    if (index_next === -1) {
+      if (index_current !== -1) result.splice(index_current, 1)
+      continue
+    }
+    if (index_current === -1) continue
+    result[index_current] = patch(result[index_current], before, next[index_next])
+  }
+  for (const key of next)
+    if (!previous.some((before) => sameAccessKey(before, key))) result.unshift(key)
+  return result
+}
+
+function patch(current: unknown, previous: unknown, next: unknown): unknown {
+  if (!isObject(current) || !isObject(previous) || !isObject(next)) return next
+  const result = { ...current }
+  for (const name of new Set([...Object.keys(previous), ...Object.keys(next)])) {
+    if (equal(previous[name], next[name])) continue
+    if (typeof next[name] === 'undefined') delete result[name]
+    else result[name] = next[name]
+  }
+  return result
+}
+
+function sameAccessKey(a: unknown, b: unknown): boolean {
+  if (!isObject(a) || !isObject(b)) return false
+  return (
+    a.address === b.address &&
+    a.access === b.access &&
+    a.chainId === b.chainId &&
+    a.keyType === b.keyType
+  )
+}
+
+function equal(a: unknown, b: unknown): boolean {
+  return Json.stringify(a) === Json.stringify(b)
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isPersistedValue(value: unknown): value is PersistedValue {
+  return isObject(value) && isObject(value.state)
 }
 
 /** Converts runtime provider state into the persisted refresh snapshot. */

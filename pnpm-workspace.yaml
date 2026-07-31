@@ -12,6 +12,7 @@ allowBuilds:
   cpu-features: true
   es5-ext: true
   esbuild: true
+  koffi: true
   keccak: false
   protobufjs: true
   sharp: true
