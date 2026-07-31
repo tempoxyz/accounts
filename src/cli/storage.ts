@@ -14,8 +14,17 @@ const lock_exclusive = 2
 const lock_nonblocking = 4
 const lock_unlock = 8
 const lock_retry_ms = 10
+const windows_error_lock_violation = 33
+const windows_file_attribute_normal = 0x80
+const windows_file_open_always = 4
+const windows_file_read_write = 0xc0000000
+const windows_file_share = 7
+const windows_lock_exclusive = 2
+const windows_lock_nonblocking = 1
+const windows_lock_length = 0xffffffff
 
 let flock_: ((fd: number, operation: number) => number) | undefined
+let windows_lock_: WindowsLock | undefined
 
 /** Returns the default CLI provider storage path. */
 export function defaultPath(): string {
@@ -113,6 +122,8 @@ async function ensureDirectory(path: string) {
 async function withLock<value>(path: string, fn: () => Promise<value>): Promise<value> {
   await ensureDirectory(path)
   const path_lock = `${path}.lock`
+  if (process.platform === 'win32') return withWindowsLock(path_lock, fn)
+
   const handle = await open(path_lock, 'a+', mode_file)
   try {
     await chmod(path_lock, mode_file)
@@ -127,6 +138,33 @@ async function withLock<value>(path: string, fn: () => Promise<value>): Promise<
   }
 }
 
+async function withWindowsLock<value>(path: string, fn: () => Promise<value>): Promise<value> {
+  const windows = windowsLock()
+  const { error, handle } = windows.open(path)
+  if (error !== 0)
+    throw new FilesystemStorageError(path, `Failed to open CLI storage lock (error ${error}).`)
+  let value: value
+  try {
+    await chmod(path, mode_file)
+    await lockWindows(handle, path)
+    try {
+      value = await fn()
+    } finally {
+      unlockWindows(handle, path)
+    }
+  } catch (error) {
+    windows.close(handle)
+    throw error
+  }
+  const closed = windows.close(handle)
+  if (closed.result === 0)
+    throw new FilesystemStorageError(
+      path,
+      `Failed to close CLI storage lock (error ${closed.error}).`,
+    )
+  return value
+}
+
 async function lock(fd: number, path: string): Promise<void> {
   for (;;) {
     const result = flock()(fd, lock_exclusive | lock_nonblocking)
@@ -138,10 +176,26 @@ async function lock(fd: number, path: string): Promise<void> {
   }
 }
 
+async function lockWindows(handle: unknown, path: string): Promise<void> {
+  for (;;) {
+    const { error, result } = windowsLock().lock(handle)
+    if (result !== 0) return
+    if (error !== windows_error_lock_violation)
+      throw new FilesystemStorageError(path, `Failed to acquire CLI storage lock (error ${error}).`)
+    await setTimeout(lock_retry_ms)
+  }
+}
+
 async function unlock(fd: number, path: string): Promise<void> {
   if (flock()(fd, lock_unlock) === 0) return
   const errno = Koffi.errno()
   throw new FilesystemStorageError(path, `Failed to release CLI storage lock (errno ${errno}).`)
+}
+
+function unlockWindows(handle: unknown, path: string): void {
+  const { error, result } = windowsLock().unlock(handle)
+  if (result !== 0) return
+  throw new FilesystemStorageError(path, `Failed to release CLI storage lock (error ${error}).`)
 }
 
 function flock(): (fd: number, operation: number) => number {
@@ -159,6 +213,133 @@ function flock(): (fd: number, operation: number) => number {
     operation: number,
   ) => number
   return flock_
+}
+
+type WindowsLock = {
+  close: (handle: unknown) => { error: number; result: number }
+  lock: (handle: unknown) => { error: number; result: number }
+  open: (path: string) => { error: number; handle: unknown }
+  unlock: (handle: unknown) => { error: number; result: number }
+}
+
+function windowsLock(): WindowsLock {
+  if (windows_lock_) return windows_lock_
+  const kernel = Koffi.load('kernel32.dll')
+  const handle = Koffi.pointer('HANDLE', Koffi.opaque())
+  const overlapped = Koffi.struct('OVERLAPPED', {
+    Internal: 'uintptr_t',
+    InternalHigh: 'uintptr_t',
+    Offset: 'uint32_t',
+    OffsetHigh: 'uint32_t',
+    hEvent: handle,
+  })
+  const overlapped_pointer = Koffi.pointer(overlapped)
+  const closeHandle = kernel.func('__stdcall', 'CloseHandle', 'int32_t', [handle]) as unknown as (
+    handle: unknown,
+  ) => number
+  const createFile = kernel.func('__stdcall', 'CreateFileW', handle, [
+    'str16',
+    'uint32_t',
+    'uint32_t',
+    'void *',
+    'uint32_t',
+    'uint32_t',
+    handle,
+  ]) as unknown as (
+    path: string,
+    access: number,
+    share: number,
+    security: null,
+    creation: number,
+    attributes: number,
+    template: null,
+  ) => unknown
+  const lockFile = kernel.func('__stdcall', 'LockFileEx', 'int32_t', [
+    handle,
+    'uint32_t',
+    'uint32_t',
+    'uint32_t',
+    'uint32_t',
+    overlapped_pointer,
+  ]) as unknown as (
+    handle: unknown,
+    flags: number,
+    reserved: number,
+    length_low: number,
+    length_high: number,
+    overlapped: Record<string, unknown>,
+  ) => number
+  const unlockFile = kernel.func('__stdcall', 'UnlockFileEx', 'int32_t', [
+    handle,
+    'uint32_t',
+    'uint32_t',
+    'uint32_t',
+    overlapped_pointer,
+  ]) as unknown as (
+    handle: unknown,
+    reserved: number,
+    length_low: number,
+    length_high: number,
+    overlapped: Record<string, unknown>,
+  ) => number
+  const getLastError = kernel.func(
+    '__stdcall',
+    'GetLastError',
+    'uint32_t',
+    [],
+  ) as unknown as () => number
+  const invalid_handle = (1n << BigInt(Koffi.sizeof(handle) * 8)) - 1n
+  const createOverlapped = () => ({
+    Internal: 0,
+    InternalHigh: 0,
+    Offset: 0,
+    OffsetHigh: 0,
+    hEvent: null,
+  })
+
+  windows_lock_ = {
+    close(handle) {
+      const result = closeHandle(handle)
+      return { error: result === 0 ? getLastError() : 0, result }
+    },
+    lock(handle) {
+      const result = lockFile(
+        handle,
+        windows_lock_exclusive | windows_lock_nonblocking,
+        0,
+        windows_lock_length,
+        windows_lock_length,
+        createOverlapped(),
+      )
+      return { error: result === 0 ? getLastError() : 0, result }
+    },
+    open(path) {
+      const handle = createFile(
+        path,
+        windows_file_read_write,
+        windows_file_share,
+        null,
+        windows_file_open_always,
+        windows_file_attribute_normal,
+        null,
+      )
+      return {
+        error: Koffi.address(handle) === invalid_handle ? getLastError() : 0,
+        handle,
+      }
+    },
+    unlock(handle) {
+      const result = unlockFile(
+        handle,
+        0,
+        windows_lock_length,
+        windows_lock_length,
+        createOverlapped(),
+      )
+      return { error: result === 0 ? getLastError() : 0, result }
+    },
+  }
+  return windows_lock_
 }
 
 async function read(path: string): Promise<Record<string, unknown>> {

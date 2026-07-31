@@ -135,15 +135,42 @@ describe('filesystem', () => {
           import Koffi from 'koffi'
           import { closeSync, openSync, writeFileSync } from 'node:fs'
           import { setTimeout } from 'node:timers/promises'
-          const library = Koffi.load(process.platform === 'darwin' ? '/usr/lib/libSystem.B.dylib' : 'libc.so.6')
-          const flock = library.func('flock', 'int', ['int', 'int'])
-          const fd = openSync(${JSON.stringify(`${path}.lock`)}, 'a+')
-          flock(fd, 2)
+          let unlock
+          let close
+          if (process.platform === 'win32') {
+            const handle = Koffi.pointer('HANDLE', Koffi.opaque())
+            const overlapped = Koffi.struct('OVERLAPPED', {
+              Internal: 'uintptr_t',
+              InternalHigh: 'uintptr_t',
+              Offset: 'uint32_t',
+              OffsetHigh: 'uint32_t',
+              hEvent: handle,
+            })
+            const pointer = Koffi.pointer(overlapped)
+            const kernel = Koffi.load('kernel32.dll')
+            const createFile = kernel.func('__stdcall', 'CreateFileW', handle, ['str16', 'uint32_t', 'uint32_t', 'void *', 'uint32_t', 'uint32_t', handle])
+            const lockFile = kernel.func('__stdcall', 'LockFileEx', 'int32_t', [handle, 'uint32_t', 'uint32_t', 'uint32_t', 'uint32_t', pointer])
+            const unlockFile = kernel.func('__stdcall', 'UnlockFileEx', 'int32_t', [handle, 'uint32_t', 'uint32_t', 'uint32_t', pointer])
+            const closeHandle = kernel.func('__stdcall', 'CloseHandle', 'int32_t', [handle])
+            const nativeHandle = createFile(${JSON.stringify(`${path}.lock`)}, 0xc0000000, 7, null, 4, 0x80, null)
+            const range = 0xffffffff
+            const createOverlapped = () => ({ Internal: 0, InternalHigh: 0, Offset: 0, OffsetHigh: 0, hEvent: null })
+            if (!lockFile(nativeHandle, 2, 0, range, range, createOverlapped())) throw new Error('failed to lock')
+            unlock = () => unlockFile(nativeHandle, 0, range, range, createOverlapped()) !== 0
+            close = () => closeHandle(nativeHandle)
+          } else {
+            const fd = openSync(${JSON.stringify(`${path}.lock`)}, 'a+')
+            const library = Koffi.load(process.platform === 'darwin' ? '/usr/lib/libSystem.B.dylib' : 'libc.so.6')
+            const flock = library.func('flock', 'int', ['int', 'int'])
+            if (flock(fd, 2) !== 0) throw new Error('failed to lock')
+            unlock = () => flock(fd, 8) === 0
+            close = () => closeSync(fd)
+          }
           process.stdout.write('locked')
           await setTimeout(100)
           writeFileSync(${JSON.stringify(path)}, JSON.stringify({ 'external.store': { state: { chainId: 1 }, version: 0 } }))
-          flock(fd, 8)
-          closeSync(fd)
+          if (!unlock()) throw new Error('failed to unlock')
+          close()
         `,
       ],
       { stdio: ['ignore', 'pipe', 'inherit'] },
