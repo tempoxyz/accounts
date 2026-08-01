@@ -1,12 +1,9 @@
-"use client";
+'use client'
 
-import { useEffect, useRef, useState } from "react";
-import { getDemoProvider, PATH_USD, shorten } from "../demo/sdk";
-import type {
-  AccountsProvider,
-  DemoResult,
-  Status,
-} from "../demo/types";
+import { useEffect, useRef, useState } from 'react'
+
+import { getDemoProvider, PATH_USD, shorten } from '../demo/sdk'
+import type { AccountsProvider, DemoResult, Status } from '../demo/types'
 
 /**
  * Shared session state for landing sections. Mirrors the lifecycle in
@@ -17,88 +14,83 @@ import type {
  * sections plus `DemoSplit` and the browser-mockup `Demo` on one session.
  */
 export function useTempoSession() {
-  const [status, setStatus] = useState<Status>("idle");
-  const [address, setAddress] = useState<`0x${string}` | null>(null);
-  const [balanceDisplay, setBalanceDisplay] = useState<string | null>(null);
-  const [result, setResult] = useState<DemoResult | null>(null);
-  const providerRef = useRef<AccountsProvider | null>(null);
+  const [status, setStatus] = useState<Status>('idle')
+  const [address, setAddress] = useState<`0x${string}` | null>(null)
+  const [balanceDisplay, setBalanceDisplay] = useState<string | null>(null)
+  const [result, setResult] = useState<DemoResult | null>(null)
+  const providerRef = useRef<AccountsProvider | null>(null)
 
   const getProvider = async () => {
-    providerRef.current ??= await getDemoProvider();
-    return providerRef.current;
-  };
+    providerRef.current ??= await getDemoProvider()
+    return providerRef.current
+  }
 
-  const refreshBalance = async (
-    p: AccountsProvider,
-    addr: `0x${string}`,
-  ) => {
+  const refreshBalance = async (p: AccountsProvider, addr: `0x${string}`) => {
     try {
       const balances = (await p.request({
-        method: "wallet_getBalances",
+        method: 'wallet_getBalances',
         params: [{ account: addr, tokens: [PATH_USD] }],
       } as Parameters<typeof p.request>[0])) as ReadonlyArray<{
-        display: string;
-      }>;
-      setBalanceDisplay(balances?.[0]?.display ?? "$0.00");
+        display: string
+      }>
+      setBalanceDisplay(balances?.[0]?.display ?? '$0.00')
     } catch {
-      setBalanceDisplay("$0.00");
+      setBalanceDisplay('$0.00')
     }
-  };
+  }
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
+    let cancelled = false
+    ;(async () => {
       try {
-        const p = await getProvider();
+        const p = await getProvider()
         const accounts = (await p.request({
-          method: "eth_accounts",
-        })) as readonly `0x${string}`[];
-        if (cancelled) return;
-        const addr = accounts?.[0];
+          method: 'eth_accounts',
+        })) as readonly `0x${string}`[]
+        if (cancelled) return
+        const addr = accounts?.[0]
         if (addr) {
-          setAddress(addr);
+          setAddress(addr)
           // Don't touch `status` — hydration is not an action completion.
           // Bodies that want to surface the signed-in state (e.g. the
           // Accounts section's LogInBody) can derive it from `address`.
-          setResult({ summary: `Signed in · ${shorten(addr)}` });
-          await refreshBalance(p, addr);
+          setResult({ summary: `Signed in · ${shorten(addr)}` })
+          await refreshBalance(p, addr)
         }
       } catch {
         // No persisted session — stay idle.
       }
-    })();
+    })()
     return () => {
-      cancelled = true;
-    };
-  }, []);
+      cancelled = true
+    }
+  }, [])
 
-  const run = async (
-    fn: (provider: AccountsProvider) => Promise<DemoResult>,
-  ) => {
-    if (status === "running") return;
-    setStatus("running");
+  const run = async (fn: (provider: AccountsProvider) => Promise<DemoResult>) => {
+    if (status === 'running') return
+    setStatus('running')
     try {
-      const p = await getProvider();
-      const r = await fn(p);
-      setResult(r);
-      setStatus("done");
+      const p = await getProvider()
+      const r = await fn(p)
+      setResult(r)
+      setStatus('done')
       try {
         const accounts = (await p.request({
-          method: "eth_accounts",
-        })) as readonly `0x${string}`[];
-        const addr = accounts?.[0];
+          method: 'eth_accounts',
+        })) as readonly `0x${string}`[]
+        const addr = accounts?.[0]
         if (addr) {
-          setAddress(addr);
-          await refreshBalance(p, addr);
+          setAddress(addr)
+          await refreshBalance(p, addr)
         }
       } catch {
         // ignore — keep prior balance/address.
       }
     } catch {
-      setStatus("idle");
-      setResult(null);
+      setStatus('idle')
+      setResult(null)
     }
-  };
+  }
 
-  return { status, address, balanceDisplay, result, run };
+  return { status, address, balanceDisplay, result, run }
 }

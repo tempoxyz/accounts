@@ -1,40 +1,41 @@
-"use client";
+'use client'
 
-import { useState } from "react";
-import { LogInBody } from "../demo/bodies/LogIn";
-import { connectWallet, shorten } from "../demo/sdk";
-import { SectionFrame } from "./SectionFrame";
-import { TogglePills } from "./TogglePills";
-import { useTempoSession } from "./useTempoSession";
+import { useState } from 'react'
+
+import { LogInBody } from '../demo/bodies/LogIn'
+import { connectWallet, shorten } from '../demo/sdk'
+import { SectionFrame } from './SectionFrame'
+import { TogglePills } from './TogglePills'
+import { useTempoSession } from './useTempoSession'
 
 const LIFECYCLE = [
-  { id: "connect", label: "Connect" },
-  { id: "authorize", label: "Authorize" },
-  { id: "disconnect", label: "Disconnect" },
-] as const;
+  { id: 'connect', label: 'Connect' },
+  { id: 'authorize', label: 'Authorize' },
+  { id: 'disconnect', label: 'Disconnect' },
+] as const
 
-type LifecycleId = (typeof LIFECYCLE)[number]["id"];
+type LifecycleId = (typeof LIFECYCLE)[number]['id']
 
-const noop = () => undefined;
+const noop = () => undefined
 
 export default function Accounts() {
-  const [action, setAction] = useState<LifecycleId>("connect");
-  const { status, address, result, run } = useTempoSession();
+  const [action, setAction] = useState<LifecycleId>('connect')
+  const { status, address, result, run } = useTempoSession()
 
   // The Accounts demo IS about sign-in, so a hydrated session should
   // render as "done" (so the LogInBody CTA shows "Signed in · 0x…"
   // instead of "Continue with Tempo"). `useTempoSession` no longer
   // sets status on hydration, so derive it here.
-  const displayStatus = status === "idle" && address ? "done" : status;
+  const displayStatus = status === 'idle' && address ? 'done' : status
 
   const onSignIn = () => {
     void run(async (provider) => {
-      const address = await connectWallet(provider);
+      const address = await connectWallet(provider)
       return {
-        summary: address ? `Signed in · ${shorten(address)}` : "Signed in",
-      };
-    });
-  };
+        summary: address ? `Signed in · ${shorten(address)}` : 'Signed in',
+      }
+    })
+  }
 
   return (
     <SectionFrame
@@ -88,47 +89,47 @@ export default function Accounts() {
         />
       }
     />
-  );
+  )
 }
 
 const INFO: Record<LifecycleId, { title: string; description: string }> = {
   connect: {
-    title: "Connect",
+    title: 'Connect',
     description:
       "Open the wallet — create the user's stablecoin account on first sign-in, or load an existing one.",
   },
   authorize: {
-    title: "Authorize a session",
+    title: 'Authorize a session',
     description:
-      "Co-sign a scoped session key so follow-up payments settle without re-prompting the passkey, within the limits you set.",
+      'Co-sign a scoped session key so follow-up payments settle without re-prompting the passkey, within the limits you set.',
   },
   disconnect: {
-    title: "Disconnect",
+    title: 'Disconnect',
     description:
-      "End the session and revoke the access key. The wallet keeps the account; the app forgets it.",
+      'End the session and revoke the access key. The wallet keeps the account; the app forgets it.',
   },
-};
+}
 
 /* ─── Syntax tokens (mono color palette matches the adapter section) ─── */
 
 const Keyword = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "var(--syn-red)" }}>{children}</span>
-);
+  <span style={{ color: 'var(--syn-red)' }}>{children}</span>
+)
 const Str = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "var(--syn-blue)" }}>{children}</span>
-);
+  <span style={{ color: 'var(--syn-blue)' }}>{children}</span>
+)
 const Fn = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "var(--syn-purple)" }}>{children}</span>
-);
+  <span style={{ color: 'var(--syn-purple)' }}>{children}</span>
+)
 const Var = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "var(--syn-cyan)" }}>{children}</span>
-);
+  <span style={{ color: 'var(--syn-cyan)' }}>{children}</span>
+)
 const Num = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "var(--syn-orange)" }}>{children}</span>
-);
+  <span style={{ color: 'var(--syn-orange)' }}>{children}</span>
+)
 const Cmnt = ({ children }: { children: React.ReactNode }) => (
-  <span style={{ color: "var(--syn-muted)" }}>{children}</span>
-);
+  <span style={{ color: 'var(--syn-muted)' }}>{children}</span>
+)
 
 function LifecycleCode({ action }: { action: LifecycleId }) {
   return (
@@ -141,42 +142,42 @@ function LifecycleCode({ action }: { action: LifecycleId }) {
       }}
     >
       <code>
-        {action === "connect" ? <ConnectSnippet /> : null}
-        {action === "authorize" ? <AuthorizeSnippet /> : null}
-        {action === "disconnect" ? <DisconnectSnippet /> : null}
+        {action === 'connect' ? <ConnectSnippet /> : null}
+        {action === 'authorize' ? <AuthorizeSnippet /> : null}
+        {action === 'disconnect' ? <DisconnectSnippet /> : null}
       </code>
     </pre>
-  );
+  )
 }
 
 function ConnectSnippet() {
   return (
     <>
       <div>
-        <Keyword>import</Keyword> {"{ Provider } "}
+        <Keyword>import</Keyword> {'{ Provider } '}
         <Keyword>from</Keyword> <Str>{`'accounts'`}</Str>
       </div>
-      <div>{" "}</div>
+      <div> </div>
       <div>
-        <Keyword>const</Keyword> <Var>provider</Var> <Keyword>=</Keyword>{" "}
-        <Var>Provider</Var>.<Fn>create</Fn>()
+        <Keyword>const</Keyword> <Var>provider</Var> <Keyword>=</Keyword> <Var>Provider</Var>.
+        <Fn>create</Fn>()
       </div>
-      <div>{" "}</div>
+      <div> </div>
       <div>
-        <Keyword>const</Keyword> {"{ "}
+        <Keyword>const</Keyword> {'{ '}
         <Var>accounts</Var>
-        {" } = "}
+        {' } = '}
         <Keyword>await</Keyword> <Var>provider</Var>.<Fn>request</Fn>
-        {"({"}
+        {'({'}
       </div>
       <div>
-        {"  method: "}
+        {'  method: '}
         <Str>{`'wallet_connect'`}</Str>
-        {","}
+        {','}
       </div>
-      <div>{"})"}</div>
+      <div>{'})'}</div>
     </>
-  );
+  )
 }
 
 function AuthorizeSnippet() {
@@ -184,47 +185,47 @@ function AuthorizeSnippet() {
     <>
       <div>
         <Keyword>await</Keyword> <Var>provider</Var>.<Fn>request</Fn>
-        {"({"}
+        {'({'}
       </div>
       <div>
-        {"  method: "}
+        {'  method: '}
         <Str>{`'wallet_authorizeAccessKey'`}</Str>
-        {","}
+        {','}
       </div>
-      <div>{"  params: [{"}</div>
+      <div>{'  params: [{'}</div>
       <div>
-        {"    expiry: "}
-        <Var>Math</Var>.<Fn>floor</Fn>({"Date."}
+        {'    expiry: '}
+        <Var>Math</Var>.<Fn>floor</Fn>({'Date.'}
         <Fn>now</Fn>
-        {"() / "}
+        {'() / '}
         <Num>1000</Num>
-        {") + "}
+        {') + '}
         <Num>86_400</Num>
-        {","}
+        {','}
       </div>
-      <div>{"    limits: [{"}</div>
+      <div>{'    limits: [{'}</div>
       <div>
-        {"      token: "}
+        {'      token: '}
         <Var>PATH_USD</Var>
-        {","}
+        {','}
       </div>
       <div>
-        {"      limit: "}
+        {'      limit: '}
         <Num>5_000_000n</Num>
-        {",   "}
-        <Cmnt>{"// $5"}</Cmnt>
+        {',   '}
+        <Cmnt>{'// $5'}</Cmnt>
       </div>
       <div>
-        {"      period: "}
+        {'      period: '}
         <Num>3_600</Num>
-        {",       "}
-        <Cmnt>{"// per hour"}</Cmnt>
+        {',       '}
+        <Cmnt>{'// per hour'}</Cmnt>
       </div>
-      <div>{"    }],"}</div>
-      <div>{"  }],"}</div>
-      <div>{"})"}</div>
+      <div>{'    }],'}</div>
+      <div>{'  }],'}</div>
+      <div>{'})'}</div>
     </>
-  );
+  )
 }
 
 function DisconnectSnippet() {
@@ -232,21 +233,21 @@ function DisconnectSnippet() {
     <>
       <div>
         <Keyword>await</Keyword> <Var>provider</Var>.<Fn>request</Fn>
-        {"({"}
+        {'({'}
       </div>
       <div>
-        {"  method: "}
+        {'  method: '}
         <Str>{`'wallet_disconnect'`}</Str>
-        {","}
+        {','}
       </div>
-      <div>{"})"}</div>
-      <div>{" "}</div>
+      <div>{'})'}</div>
+      <div> </div>
       <div>
-        <Cmnt>{"// Subsequent eth_accounts returns []"}</Cmnt>
+        <Cmnt>{'// Subsequent eth_accounts returns []'}</Cmnt>
       </div>
       <div>
-        <Cmnt>{"// until the user reconnects."}</Cmnt>
+        <Cmnt>{'// until the user reconnects.'}</Cmnt>
       </div>
     </>
-  );
+  )
 }

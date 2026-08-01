@@ -1,4 +1,4 @@
-import { spring } from "animejs";
+import { spring } from 'animejs'
 
 /** Shared Anime.js spring presets for landing page WAAPI motion. */
 export const springs = {
@@ -8,4 +8,4 @@ export const springs = {
   navEntrance: spring({ stiffness: 440, damping: 28, mass: 1 }),
   progress: spring({ stiffness: 220, damping: 24, mass: 1 }),
   scroll: spring({ stiffness: 10, damping: 200, mass: 1 }),
-} as const;
+} as const

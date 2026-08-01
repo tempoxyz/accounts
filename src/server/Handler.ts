@@ -6,7 +6,6 @@ import * as RequestListener from './internal/requestListener.js'
 
 export { auth } from './internal/handlers/auth.js'
 export { type SessionRequest } from './internal/handlers/session.js'
-export { codeAuth } from './internal/handlers/codeAuth.js'
 export { exchange } from './internal/handlers/exchange.js'
 export { oidcProvider } from './internal/handlers/oidcProvider.js'
 export { relay } from './internal/handlers/relay.js'
@@ -51,7 +50,7 @@ export type ComposedSchema<subs extends readonly unknown[], path extends string>
  * import { hc } from 'hono/client'
  *
  * const app = Handler.compose(
- *   [Handler.exchange(), Handler.codeAuth({ store })],
+ *   [Handler.exchange(), Handler.relay()],
  *   { path: '/api' },
  * )
  * type App = typeof app

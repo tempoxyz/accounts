@@ -172,7 +172,6 @@ const config: Config = defineConfig({
                 collapsed: true,
                 items: [
                   { text: '.auth', link: '/docs/server/handler.auth' },
-                  { text: '.codeAuth', link: '/docs/server/handler.codeAuth' },
                   { text: '.compose', link: '/docs/server/handler.compose' },
                   { text: '.exchange', link: '/docs/server/handler.exchange' },
                   { text: '.relay', link: '/docs/server/handler.relay' },

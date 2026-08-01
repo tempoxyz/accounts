@@ -1,18 +1,13 @@
-"use client";
+'use client'
 
-import { stagger, waapi, type WAAPIAnimation } from "animejs";
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
-import { springs } from "../../animation";
-import { LockIcon, TempoLogo } from "../../icons";
-import { PrimaryButton, useBodyAnimation } from "../bodies/shared";
-import { DEMOS, DEMO_STEPS } from "../config";
+import { stagger, waapi, type WAAPIAnimation } from 'animejs'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+
+import { springs } from '../../animation'
+import { LockIcon, TempoLogo } from '../../icons'
+import { PrimaryButton, useBodyAnimation } from '../bodies/shared'
+import { DEMOS, DEMO_STEPS } from '../config'
+import { shorten } from '../sdk'
 import type {
   AccountStatus,
   Adapter,
@@ -21,29 +16,21 @@ import type {
   DemoKind,
   DemoResult,
   Status,
-} from "../types";
-import { shorten } from "../sdk";
-import { ChatBubble } from "./ChatBubble";
+} from '../types'
+import { ChatBubble } from './ChatBubble'
 
-const MESSAGE_STAGGER_MS = 70;
-const MESSAGE_BODY_GAP_MS = 180;
-const INITIAL_LOG_IN_DELAY_MS = 260;
+const MESSAGE_STAGGER_MS = 70
+const MESSAGE_BODY_GAP_MS = 180
+const INITIAL_LOG_IN_DELAY_MS = 260
 const messageInitialStyle: CSSProperties = {
   opacity: 0,
-  translate: "0 12px",
-  willChange: "opacity, translate",
-};
+  translate: '0 12px',
+  willChange: 'opacity, translate',
+}
 
 function ChevronRight() {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      aria-hidden
-      className="shrink-0"
-    >
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden className="shrink-0">
       <path
         d="M5 3L9 7L5 11"
         stroke="currentColor"
@@ -52,48 +39,42 @@ function ChevronRight() {
         strokeLinejoin="round"
       />
     </svg>
-  );
+  )
 }
 
-function DemoGuideCallout({
-  guide,
-  delay,
-}: {
-  guide: DemoGuide;
-  delay: number;
-}) {
-  const [copied, setCopied] = useState(false);
-  const [ready, setReady] = useState(false);
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
+function DemoGuideCallout({ guide, delay }: { guide: DemoGuide; delay: number }) {
+  const [copied, setCopied] = useState(false)
+  const [ready, setReady] = useState(false)
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    setCopied(false);
-    if (!copyTimer.current) return;
-    clearTimeout(copyTimer.current);
-    copyTimer.current = null;
-  }, [guide.prompt]);
+    setCopied(false)
+    if (!copyTimer.current) return
+    clearTimeout(copyTimer.current)
+    copyTimer.current = null
+  }, [guide.prompt])
 
   useEffect(
     () => () => {
-      if (copyTimer.current) clearTimeout(copyTimer.current);
+      if (copyTimer.current) clearTimeout(copyTimer.current)
     },
     [],
-  );
+  )
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(guide.prompt);
-      setCopied(true);
-      if (copyTimer.current) clearTimeout(copyTimer.current);
+      await navigator.clipboard.writeText(guide.prompt)
+      setCopied(true)
+      if (copyTimer.current) clearTimeout(copyTimer.current)
       copyTimer.current = setTimeout(() => {
-        setCopied(false);
-        copyTimer.current = null;
-      }, 1400);
+        setCopied(false)
+        copyTimer.current = null
+      }, 1400)
     } catch {
-      setCopied(false);
+      setCopied(false)
     }
-  };
+  }
 
   // Entrance animation runs once on mount — switching demos shouldn't
   // re-fade the callout, so we intentionally omit `delay`/`guide.prompt`
@@ -101,32 +82,32 @@ function DemoGuideCallout({
   // render, which is fine for a one-shot fade-in.
   // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   useLayoutEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
+    const root = rootRef.current
+    if (!root) return
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setReady(true);
-      return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setReady(true)
+      return
     }
 
-    let disposed = false;
+    let disposed = false
     const animation: WAAPIAnimation = waapi.animate(root, {
       opacity: [0, 1],
-      translate: ["0 12px", "0 0"],
+      translate: ['0 12px', '0 0'],
       delay,
       ease: springs.entrance,
-    });
+    })
 
     void animation.then(() => {
-      if (disposed) return;
-      setReady(true);
-    });
+      if (disposed) return
+      setReady(true)
+    })
 
     return () => {
-      disposed = true;
-      animation.cancel();
-    };
-  }, []);
+      disposed = true
+      animation.cancel()
+    }
+  }, [])
 
   return (
     <div
@@ -141,13 +122,7 @@ function DemoGuideCallout({
         className="inline-flex items-center gap-1 text-[14px] text-foreground-muted outline-none hover:text-foreground active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
       >
         Add {guide.label.toLowerCase()} to your app
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 12 12"
-          fill="none"
-          aria-hidden
-        >
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden>
           <path
             d="M3 9L9 3M9 3H4.5M9 3V7.5"
             stroke="currentColor"
@@ -162,23 +137,17 @@ function DemoGuideCallout({
           type="button"
           onClick={copy}
           aria-live="polite"
-          className={`bg-secondary px-3 py-1.5 text-[12px] text-foreground outline-none hover:bg-secondary-hover active:bg-secondary-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 ${copied ? "text-accent-live" : ""}`}
+          className={`bg-secondary px-3 py-1.5 text-[12px] text-foreground outline-none hover:bg-secondary-hover active:bg-secondary-active focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 ${copied ? 'text-accent-live' : ''}`}
         >
-          {copied ? "Copied" : "Copy prompt"}
+          {copied ? 'Copied' : 'Copy prompt'}
         </button>
       </div>
     </div>
-  );
+  )
 }
 
-function NextDemoMessage({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}) {
-  const body = useBodyAnimation(0);
+function NextDemoMessage({ label, onClick }: { label: string; onClick: () => void }) {
+  const body = useBodyAnimation(0)
 
   return (
     <div
@@ -197,7 +166,7 @@ function NextDemoMessage({
         {label}
       </button>
     </div>
-  );
+  )
 }
 
 function SignInGate({
@@ -206,20 +175,20 @@ function SignInGate({
   onSignIn,
   signInStatus,
 }: {
-  accountStatus: AccountStatus;
-  delay: number;
-  onSignIn: () => void;
-  signInStatus: Status;
+  accountStatus: AccountStatus
+  delay: number
+  onSignIn: () => void
+  signInStatus: Status
 }) {
-  const body = useBodyAnimation(delay);
-  const checking = accountStatus === "checking";
-  const status = checking ? "running" : signInStatus;
+  const body = useBodyAnimation(delay)
+  const checking = accountStatus === 'checking'
+  const status = checking ? 'running' : signInStatus
   const label =
-    accountStatus === "checking"
-      ? "Checking..."
-      : signInStatus === "running"
-        ? "Signing in..."
-        : "Sign in";
+    accountStatus === 'checking'
+      ? 'Checking...'
+      : signInStatus === 'running'
+        ? 'Signing in...'
+        : 'Sign in'
 
   return (
     <div
@@ -241,14 +210,14 @@ function SignInGate({
         className="h-11 w-full"
       />
     </div>
-  );
+  )
 }
 
 export type ConnectedSession = {
-  address: `0x${string}`;
-  balanceDisplay: string;
-  balance: bigint;
-};
+  address: `0x${string}`
+  balanceDisplay: string
+  balance: bigint
+}
 
 export function BrowserMockup({
   demo,
@@ -265,122 +234,116 @@ export function BrowserMockup({
   onChangeDemo,
   onDisconnect,
 }: {
-  demo: DemoKind;
-  def: DemoDef;
-  status: Status;
-  signInStatus: Status;
-  result: DemoResult | null;
-  adapter: Adapter;
-  lastVariant: string | null;
-  connected: ConnectedSession | null;
-  accountStatus: AccountStatus;
-  onAction: (variant?: string) => void;
-  onSignIn: () => void;
-  onChangeDemo: (d: DemoKind) => void;
-  onDisconnect: () => void;
+  demo: DemoKind
+  def: DemoDef
+  status: Status
+  signInStatus: Status
+  result: DemoResult | null
+  adapter: Adapter
+  lastVariant: string | null
+  connected: ConnectedSession | null
+  accountStatus: AccountStatus
+  onAction: (variant?: string) => void
+  onSignIn: () => void
+  onChangeDemo: (d: DemoKind) => void
+  onDisconnect: () => void
 }) {
-  const Body = def.Body;
-  const preludeCount = def.prelude?.length ?? 0;
+  const Body = def.Body
+  const preludeCount = def.prelude?.length ?? 0
   const demoDelayRef = useRef({
     demo,
-    delay: demo === "Log In" ? INITIAL_LOG_IN_DELAY_MS : 0,
-  });
+    delay: demo === 'Log In' ? INITIAL_LOG_IN_DELAY_MS : 0,
+  })
   if (demoDelayRef.current.demo !== demo) {
-    demoDelayRef.current = { demo, delay: 0 };
+    demoDelayRef.current = { demo, delay: 0 }
   }
-  const initialDelay = demoDelayRef.current.delay;
+  const initialDelay = demoDelayRef.current.delay
   const bodyDelay = useMemo(
     () =>
       preludeCount === 0
         ? initialDelay + 120
-        : initialDelay +
-          (preludeCount - 1) * MESSAGE_STAGGER_MS +
-          MESSAGE_BODY_GAP_MS,
+        : initialDelay + (preludeCount - 1) * MESSAGE_STAGGER_MS + MESSAGE_BODY_GAP_MS,
     [initialDelay, preludeCount],
-  );
-  const guideDelay = bodyDelay + MESSAGE_BODY_GAP_MS;
-  const rootRef = useRef<HTMLDivElement>(null);
-  const messagesRef = useRef<HTMLDivElement>(null);
-  const pressedDemoRef = useRef<DemoKind | null>(null);
-  const [animatedMessagesDemo, setAnimatedMessagesDemo] =
-    useState<DemoKind | null>(null);
-  const activeIndex = DEMO_STEPS.indexOf(demo);
-  const previousDemo =
-    DEMO_STEPS[(activeIndex - 1 + DEMO_STEPS.length) % DEMO_STEPS.length];
-  const nextDemo = DEMO_STEPS[(activeIndex + 1) % DEMO_STEPS.length];
-  const previousIndex = previousDemo ? DEMO_STEPS.indexOf(previousDemo) : -1;
-  const nextIndex = nextDemo ? DEMO_STEPS.indexOf(nextDemo) : -1;
-  const previousStep =
-    previousIndex >= 0 ? String(previousIndex + 1).padStart(2, "0") : "";
-  const nextStep = nextIndex >= 0 ? String(nextIndex + 1).padStart(2, "0") : "";
-  const previousLabel = previousDemo ? DEMOS[previousDemo].guide.label : "";
-  const nextLabel = nextDemo ? DEMOS[nextDemo].guide.label : "";
+  )
+  const guideDelay = bodyDelay + MESSAGE_BODY_GAP_MS
+  const rootRef = useRef<HTMLDivElement>(null)
+  const messagesRef = useRef<HTMLDivElement>(null)
+  const pressedDemoRef = useRef<DemoKind | null>(null)
+  const [animatedMessagesDemo, setAnimatedMessagesDemo] = useState<DemoKind | null>(null)
+  const activeIndex = DEMO_STEPS.indexOf(demo)
+  const previousDemo = DEMO_STEPS[(activeIndex - 1 + DEMO_STEPS.length) % DEMO_STEPS.length]
+  const nextDemo = DEMO_STEPS[(activeIndex + 1) % DEMO_STEPS.length]
+  const previousIndex = previousDemo ? DEMO_STEPS.indexOf(previousDemo) : -1
+  const nextIndex = nextDemo ? DEMO_STEPS.indexOf(nextDemo) : -1
+  const previousStep = previousIndex >= 0 ? String(previousIndex + 1).padStart(2, '0') : ''
+  const nextStep = nextIndex >= 0 ? String(nextIndex + 1).padStart(2, '0') : ''
+  const previousLabel = previousDemo ? DEMOS[previousDemo].guide.label : ''
+  const nextLabel = nextDemo ? DEMOS[nextDemo].guide.label : ''
   const nextCtaLabel =
     activeIndex === DEMO_STEPS.length - 1
-      ? "Restart examples"
+      ? 'Restart examples'
       : nextLabel
         ? `Go to ${nextLabel}`
-        : "Next example";
-  const messageStyle =
-    animatedMessagesDemo === demo ? undefined : messageInitialStyle;
-  const needsSignIn = demo !== "Log In" && !connected;
+        : 'Next example'
+  const messageStyle = animatedMessagesDemo === demo ? undefined : messageInitialStyle
+  const needsSignIn = demo !== 'Log In' && !connected
   const changeDemo = (d: DemoKind) => {
-    onChangeDemo(d);
-    if (!window.matchMedia("(min-width: 640px)").matches)
-      rootRef.current?.scrollIntoView({ block: "start", inline: "nearest" });
-  };
+    onChangeDemo(d)
+    if (!window.matchMedia('(min-width: 640px)').matches)
+      rootRef.current?.scrollIntoView({ block: 'start', inline: 'nearest' })
+  }
   const goNextDemo = () => {
-    if (nextDemo) changeDemo(nextDemo);
-  };
+    if (nextDemo) changeDemo(nextDemo)
+  }
   const pressDemo = (d: DemoKind) => {
-    if (pressedDemoRef.current === d) return;
-    pressedDemoRef.current = d;
-    changeDemo(d);
-  };
+    if (pressedDemoRef.current === d) return
+    pressedDemoRef.current = d
+    changeDemo(d)
+  }
   const clickDemo = (d: DemoKind) => {
     if (pressedDemoRef.current === d) {
-      pressedDemoRef.current = null;
-      return;
+      pressedDemoRef.current = null
+      return
     }
-    changeDemo(d);
-  };
+    changeDemo(d)
+  }
 
   useLayoutEffect(() => {
-    const root = messagesRef.current;
+    const root = messagesRef.current
     if (!root) {
-      setAnimatedMessagesDemo(demo);
-      return;
+      setAnimatedMessagesDemo(demo)
+      return
     }
 
-    const items = root.querySelectorAll<HTMLElement>("[data-demo-message]");
+    const items = root.querySelectorAll<HTMLElement>('[data-demo-message]')
     if (items.length === 0) {
-      setAnimatedMessagesDemo(demo);
-      return;
+      setAnimatedMessagesDemo(demo)
+      return
     }
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setAnimatedMessagesDemo(demo);
-      return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setAnimatedMessagesDemo(demo)
+      return
     }
 
-    let disposed = false;
+    let disposed = false
     const animation: WAAPIAnimation = waapi.animate(items, {
       opacity: [0, 1],
-      translate: ["0 12px", "0 0"],
+      translate: ['0 12px', '0 0'],
       delay: stagger(MESSAGE_STAGGER_MS, { start: initialDelay }),
       ease: springs.entrance,
-    });
+    })
 
     void animation.then(() => {
-      if (disposed) return;
-      setAnimatedMessagesDemo(demo);
-    });
+      if (disposed) return
+      setAnimatedMessagesDemo(demo)
+    })
 
     return () => {
-      disposed = true;
-      animation.cancel();
-    };
-  }, [demo, initialDelay, preludeCount]);
+      disposed = true
+      animation.cancel()
+    }
+  }, [demo, initialDelay, preludeCount])
 
   return (
     <div
@@ -399,13 +362,11 @@ export function BrowserMockup({
           <div className="flex min-w-[148px] items-center justify-end gap-2 font-mono text-[12px] sm:min-w-[260px]">
             <span
               aria-hidden
-              className={`size-1.5 rounded-full ${connected ? "bg-accent-live" : "bg-foreground-subtle"}`}
+              className={`size-1.5 rounded-full ${connected ? 'bg-accent-live' : 'bg-foreground-subtle'}`}
             />
             {connected ? (
               <>
-                <span className="text-foreground">
-                  {shorten(connected.address)}
-                </span>
+                <span className="text-foreground">{shorten(connected.address)}</span>
                 {connected.balanceDisplay ? (
                   <>
                     <span className="hidden text-foreground-subtle sm:inline">·</span>
@@ -425,7 +386,7 @@ export function BrowserMockup({
               </>
             ) : (
               <span className="text-foreground-muted">
-                {accountStatus === "checking" ? "Checking…" : "Not connected"}
+                {accountStatus === 'checking' ? 'Checking…' : 'Not connected'}
               </span>
             )}
           </div>
@@ -443,7 +404,7 @@ export function BrowserMockup({
             type="button"
             aria-label={`Previous demo: ${previousLabel}`}
             onClick={() => {
-              if (previousDemo) changeDemo(previousDemo);
+              if (previousDemo) changeDemo(previousDemo)
             }}
             className="flex min-h-14 items-center justify-start gap-3 px-4 text-left text-foreground outline-none hover:bg-surface-hover active:bg-surface-active active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
           >
@@ -464,7 +425,7 @@ export function BrowserMockup({
             type="button"
             aria-label={`Next demo: ${nextLabel}`}
             onClick={() => {
-              if (nextDemo) changeDemo(nextDemo);
+              if (nextDemo) changeDemo(nextDemo)
             }}
             className="flex min-h-14 items-center justify-end gap-3 border-l border-panel-border px-4 text-right text-foreground outline-none hover:bg-surface-hover active:bg-surface-active active:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2"
           >
@@ -472,9 +433,7 @@ export function BrowserMockup({
               <span className="block font-mono text-[12px] tracking-[0.08em] text-foreground-subtle">
                 {nextStep}
               </span>
-              <span className="block truncate text-[14px] text-foreground-muted">
-                {nextLabel}
-              </span>
+              <span className="block truncate text-[14px] text-foreground-muted">{nextLabel}</span>
             </span>
             <ChevronRight />
           </button>
@@ -483,41 +442,38 @@ export function BrowserMockup({
         {/* Desktop: always-visible numbered stepper nav on the left */}
         <nav className="hidden flex-col border-r border-panel-border sm:flex">
           {DEMO_STEPS.map((d, i) => {
-            const active = d === demo;
-            const step = String(i + 1).padStart(2, "0");
-            const label = DEMOS[d].guide.label;
+            const active = d === demo
+            const step = String(i + 1).padStart(2, '0')
+            const label = DEMOS[d].guide.label
             return (
               <button
                 key={d}
                 type="button"
                 onPointerDown={(event) => {
-                  if (event.pointerType === "mouse" && event.button !== 0) return;
-                  pressDemo(d);
+                  if (event.pointerType === 'mouse' && event.button !== 0) return
+                  pressDemo(d)
                 }}
                 onMouseDown={(event) => {
-                  if (event.button !== 0) return;
-                  pressDemo(d);
+                  if (event.button !== 0) return
+                  pressDemo(d)
                 }}
                 onClick={() => clickDemo(d)}
-                className={`group relative flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none hover:bg-surface-hover active:bg-surface-active active:text-foreground focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 last:border-b-0 ${active ? "bg-background text-foreground" : "text-foreground-muted"}`}
+                className={`group relative flex items-center justify-between gap-3 border-b border-panel-border px-5 py-6 text-left outline-none hover:bg-surface-hover active:bg-surface-active active:text-foreground focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 last:border-b-0 ${active ? 'bg-background text-foreground' : 'text-foreground-muted'}`}
               >
                 <div className="flex min-w-0 items-baseline gap-3">
                   <span
                     aria-hidden
-                    className={`font-mono text-[12px] tracking-[0.05em] ${active ? "text-foreground-muted" : "text-foreground-subtle"}`}
+                    className={`font-mono text-[12px] tracking-[0.05em] ${active ? 'text-foreground-muted' : 'text-foreground-subtle'}`}
                   >
                     {step}
                   </span>
                   <span className="truncate text-[14px]">{label}</span>
                 </div>
-                <span
-                  aria-hidden
-                  className="opacity-60 group-hover:opacity-100"
-                >
+                <span aria-hidden className="opacity-60 group-hover:opacity-100">
                   <ChevronRight />
                 </span>
               </button>
-            );
+            )
           })}
         </nav>
 
@@ -533,11 +489,7 @@ export function BrowserMockup({
               {preludeCount > 0 ? (
                 <div ref={messagesRef} className="flex w-full min-w-0 flex-col items-start gap-2">
                   {def.prelude?.map((m, i) => (
-                    <ChatBubble
-                      key={`${demo}-bubble-${i}`}
-                      message={m}
-                      style={messageStyle}
-                    />
+                    <ChatBubble key={`${demo}-bubble-${i}`} message={m} style={messageStyle} />
                   ))}
                 </div>
               ) : null}
@@ -564,7 +516,7 @@ export function BrowserMockup({
                   connectedBalance={connected?.balanceDisplay ?? null}
                 />
               )}
-              {status === "done" && result?.complete !== false ? (
+              {status === 'done' && result?.complete !== false ? (
                 <NextDemoMessage
                   key={`${demo}-next-message`}
                   label={nextCtaLabel}
@@ -577,5 +529,5 @@ export function BrowserMockup({
         </div>
       </div>
     </div>
-  );
+  )
 }

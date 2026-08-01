@@ -1,17 +1,17 @@
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Address, Hex, PublicKey } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import type { Address, Hex } from 'ox'
+import { Hex as ox_Hex } from 'ox'
 import { type Address as ViemAddress, parseUnits } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
-import * as z from 'zod/mini'
+import type * as z from 'zod/mini'
 
 import { accounts, chain, getClient } from '../../test/config.js'
-import { createServer } from '../../test/utils.js'
-import * as CliAuth from '../server/CliAuth.js'
-import * as Handler from '../server/Handler.js'
+import { createDeviceCodeHost, submitVerify } from '../../test/deviceCode.js'
+import { createJsonStorage, createServer } from '../../test/utils.js'
+import type * as Rpc from '../core/zod/rpc.js'
 import * as Provider from './Provider.js'
 import * as Storage from './storage.js'
 
@@ -21,43 +21,12 @@ const accessKey_2 = accounts[2]!
 const expiry = Math.floor(Date.now() / 1000) + 3_600
 const expiry_2 = expiry + 60
 
-async function authorize(
-  code: string,
-  options: {
-    accessKey?: typeof accessKey | undefined
-    expiry?: number | undefined
-  } = {},
-) {
-  const { accessKey: key = accessKey, expiry: expiry_ = expiry } = options
-
-  const signed = await root.signKeyAuthorization(
-    {
-      accessKeyAddress: key.address,
-      keyType: key.keyType,
-    },
-    {
-      chainId: BigInt(chain.id),
-      expiry: expiry_,
-    },
-  )
-  const keyAuthorization = KeyAuthorization.toRpc(signed)
-
-  return z.encode(CliAuth.authorizeRequest, {
-    accountAddress: root.address,
-    code,
-    keyAuthorization: z.decode(CliAuth.keyAuthorization, {
-      ...keyAuthorization,
-      address: keyAuthorization.keyId,
-    }),
-  })
-}
-
 function connectRequest(
   options: {
     accessKey?: typeof accessKey | undefined
     expiry?: number | undefined
     method?: 'login' | 'register' | undefined
-    showDeposit?: z.output<typeof CliAuth.createRequest>['showDeposit'] | undefined
+    showDeposit?: z.output<typeof Rpc.wallet_connect.showDeposit> | undefined
   } = {},
 ) {
   const { accessKey: key = accessKey, expiry: expiry_ = expiry, method, showDeposit } = options
@@ -78,104 +47,6 @@ function connectRequest(
       },
     ],
   } as const
-}
-
-function createHandler() {
-  let random = 0
-
-  return Handler.codeAuth({
-    path: '/cli-auth',
-    chains: [chain],
-    policy: {
-      update({ limits }) {
-        return { limits }
-      },
-      validate({ expiry: requestedExpiry, limits }) {
-        return {
-          expiry: requestedExpiry ?? expiry,
-          ...(limits ? { limits } : {}),
-        }
-      },
-    },
-    random: () => {
-      const out = new Uint8Array(Array.from({ length: 8 }, (_, i) => random + i))
-      random += 8
-      return out
-    },
-  })
-}
-
-async function authorizePending(serverUrl: string, code: string) {
-  const response = await fetch(`${serverUrl}/cli-auth/pending/${code}`)
-  const pending = z.decode(CliAuth.pendingResponse, (await response.json()) as never)
-  if (pending.action === 'updateAccessKey') throw new Error('Expected authorization request.')
-  const signed = await root.signKeyAuthorization(
-    {
-      accessKeyAddress: Address.fromPublicKey(PublicKey.from(pending.pubKey)),
-      keyType: pending.keyType,
-    },
-    {
-      chainId: pending.chainId,
-      expiry: pending.expiry,
-      ...(pending.limits ? { limits: pending.limits } : {}),
-    },
-  )
-  const keyAuthorization = KeyAuthorization.toRpc(signed)
-
-  return z.encode(CliAuth.authorizeRequest, {
-    accountAddress: root.address,
-    code,
-    keyAuthorization: z.decode(CliAuth.keyAuthorization, {
-      ...keyAuthorization,
-      address: keyAuthorization.keyId,
-    }),
-  })
-}
-
-async function completePending(serverUrl: string, code: string) {
-  const response = await fetch(`${serverUrl}/cli-auth/pending/${code}`)
-  const pending = z.decode(CliAuth.pendingResponse, (await response.json()) as never)
-  if (pending.action !== 'updateAccessKey') return authorizePending(serverUrl, code)
-
-  if (pending.keyAuthorization) {
-    const signed = await root.signKeyAuthorization(
-      {
-        accessKeyAddress: pending.accessKeyAddress,
-        keyType: pending.keyAuthorization.keyType,
-      },
-      {
-        chainId: pending.chainId,
-        expiry: pending.keyAuthorization.expiry,
-        limits: pending.limits,
-      },
-    )
-    const replacement = KeyAuthorization.toRpc(signed)
-    return z.encode(CliAuth.authorizeRequest, {
-      action: 'updateAccessKey',
-      accountAddress: root.address,
-      chainId: pending.chainId,
-      code,
-      keyAuthorization: z.decode(CliAuth.keyAuthorization, {
-        ...replacement,
-        address: replacement.keyId,
-      }),
-    })
-  }
-
-  const client = getClient({ account: root })
-  for (const item of pending.limits)
-    await Actions.accessKey.updateLimitSync(client, {
-      accessKey: pending.accessKeyAddress,
-      limit: item.limit,
-      token: item.token,
-    })
-
-  return z.encode(CliAuth.authorizeRequest, {
-    action: 'updateAccessKey',
-    accountAddress: root.address,
-    chainId: pending.chainId,
-    code,
-  })
 }
 
 async function createStoragePath() {
@@ -214,25 +85,28 @@ const transferCall = Actions.token.transfer.call({
   amount: parseUnits('1', 6),
 })
 
+function connectCapabilities(host: ReturnType<typeof createDeviceCodeHost>, index: number) {
+  const params = host.requests()[index]!.params as readonly {
+    capabilities?: Record<string, unknown> | undefined
+  }[]
+  return params[0]?.capabilities
+}
+
 describe('Provider.create', () => {
-  test('default: bootstraps wallet_connect through the device code flow', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
+  test('default: bootstraps wallet_connect through the device-code flow', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
     const opened: string[] = []
 
     try {
       const provider = Provider.create({
         chains: [chain],
-        open: async (url) => {
+        open: async (url, prompt) => {
           opened.push(url)
-          const code = new URL(url).searchParams.get('code')!
-          await fetch(`${server.url}/cli-auth`, {
-            body: JSON.stringify(await authorize(code)),
-            headers: { 'content-type': 'application/json' },
-            method: 'POST',
-          })
+          await submitVerify(prompt)
         },
-        host: `${server.url}/cli-auth`,
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
       })
 
       const result = await provider.request(connectRequest())
@@ -246,22 +120,25 @@ describe('Provider.create', () => {
           }
         : undefined
 
+      expect(opened).toHaveLength(1)
+      expect(opened[0]).toMatch(
+        new RegExp(`^${server.url}/auth/device/verify\\?user_code=[A-Z]{4}-[A-Z]{4}$`),
+      )
       expect({
         account: {
           address: account.address,
           capabilities: keyAuthorization ? { keyAuthorization } : {},
         },
-        opened: opened.map((url) => url.replace(server.url, 'http://service')),
       }).toMatchInlineSnapshot(`
         {
           "account": {
             "address": "${root.address}",
             "capabilities": {
               "keyAuthorization": {
-                "address": "${accessKey.address}",
-                "chainId": "${Hex.fromNumber(chain.id)}",
-                "expiry": "${Hex.fromNumber(expiry)}",
-                "keyId": "${accessKey.address}",
+                "address": "${accessKey.address.toLowerCase()}",
+                "chainId": "${ox_Hex.fromNumber(chain.id)}",
+                "expiry": "${ox_Hex.fromNumber(expiry)}",
+                "keyId": "${accessKey.address.toLowerCase()}",
                 "keyType": "secp256k1",
                 "signature": {
                   "type": "secp256k1",
@@ -269,9 +146,6 @@ describe('Provider.create', () => {
               },
             },
           },
-          "opened": [
-            "http://service/cli-auth?code=ABCDEFGH",
-          ],
         }
       `)
     } finally {
@@ -279,26 +153,18 @@ describe('Provider.create', () => {
     }
   })
 
-  test('behavior: forwards showDeposit through registration device code requests', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
-    const pendingShowDeposit: z.output<typeof CliAuth.pendingResponse>['showDeposit'][] = []
+  test('behavior: forwards showDeposit through registration device-code requests', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
 
     try {
       const provider = Provider.create({
         chains: [chain],
-        open: async (url) => {
-          const code = new URL(url).searchParams.get('code')!
-          const response = await fetch(`${server.url}/cli-auth/pending/${code}`)
-          const pending = z.decode(CliAuth.pendingResponse, (await response.json()) as never)
-          pendingShowDeposit.push(pending.showDeposit)
-          await fetch(`${server.url}/cli-auth`, {
-            body: JSON.stringify(await authorizePending(server.url, code)),
-            headers: { 'content-type': 'application/json' },
-            method: 'POST',
-          })
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
         },
-        host: `${server.url}/cli-auth`,
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
       })
 
       await provider.request(
@@ -313,82 +179,56 @@ describe('Provider.create', () => {
         }),
       )
 
-      expect(pendingShowDeposit).toMatchInlineSnapshot(`
-        [
-          {
-            "amount": "50",
-            "displayName": "DoorDash",
-            "on": "register",
-            "token": "USDC",
-          },
-        ]
+      expect(connectCapabilities(host, 0)?.showDeposit).toMatchInlineSnapshot(`
+        {
+          "amount": "50",
+          "displayName": "DoorDash",
+          "on": "register",
+          "token": "USDC",
+        }
       `)
     } finally {
       await server.closeAsync()
     }
   })
 
-  test('behavior: forwards showDeposit through login device code requests', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
-    const pendingShowDeposit: z.output<typeof CliAuth.pendingResponse>['showDeposit'][] = []
+  test('behavior: forwards showDeposit through login device-code requests', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
 
     try {
       const provider = Provider.create({
         chains: [chain],
-        open: async (url) => {
-          const code = new URL(url).searchParams.get('code')!
-          const response = await fetch(`${server.url}/cli-auth/pending/${code}`)
-          const pending = z.decode(CliAuth.pendingResponse, (await response.json()) as never)
-          pendingShowDeposit.push(pending.showDeposit)
-          await fetch(`${server.url}/cli-auth`, {
-            body: JSON.stringify(await authorizePending(server.url, code)),
-            headers: { 'content-type': 'application/json' },
-            method: 'POST',
-          })
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
         },
-        host: `${server.url}/cli-auth`,
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
       })
 
-      await provider.request(
-        connectRequest({
-          method: 'login',
-          showDeposit: true,
-        }),
-      )
+      await provider.request(connectRequest({ method: 'login', showDeposit: true }))
 
-      expect(pendingShowDeposit).toMatchInlineSnapshot(`
-        [
-          true,
-        ]
-      `)
+      expect(connectCapabilities(host, 0)?.showDeposit).toBe(true)
     } finally {
       await server.closeAsync()
     }
   })
 
-  test('behavior: forwards showDeposit through wallet_authorizeAccessKey device code requests', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
-    const pendingShowDeposit: z.output<typeof CliAuth.pendingResponse>['showDeposit'][] = []
+  test('behavior: forwards showDeposit through wallet_authorizeAccessKey device-code requests', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
 
     try {
       const provider = Provider.create({
         chains: [chain],
-        open: async (url) => {
-          const code = new URL(url).searchParams.get('code')!
-          const response = await fetch(`${server.url}/cli-auth/pending/${code}`)
-          const pending = z.decode(CliAuth.pendingResponse, (await response.json()) as never)
-          pendingShowDeposit.push(pending.showDeposit)
-          await fetch(`${server.url}/cli-auth`, {
-            body: JSON.stringify(await authorizePending(server.url, code)),
-            headers: { 'content-type': 'application/json' },
-            method: 'POST',
-          })
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
         },
-        host: `${server.url}/cli-auth`,
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
       })
 
+      await provider.request(connectRequest())
       await provider.request({
         method: 'wallet_authorizeAccessKey',
         params: [
@@ -401,19 +241,17 @@ describe('Provider.create', () => {
         ],
       })
 
-      expect(pendingShowDeposit).toMatchInlineSnapshot(`
-        [
-          true,
-        ]
-      `)
+      const params = host.requests()[1]!.params as readonly { showDeposit?: unknown }[]
+      expect(host.requests()[1]!.method).toBe('wallet_authorizeAccessKey')
+      expect(params[0]?.showDeposit).toBe(true)
     } finally {
       await server.closeAsync()
     }
   })
 
   test('behavior: browser-open failures surface the URL and code', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
 
     try {
       const provider = Provider.create({
@@ -421,154 +259,90 @@ describe('Provider.create', () => {
         open() {
           throw new Error('browser unavailable')
         },
-        host: `${server.url}/cli-auth`,
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
       })
 
-      await expect(
-        provider
-          .request(connectRequest())
-          .catch((error: { code: number; message: string; name: string }) => {
-            return {
-              code: error.code,
-              message: error.message.replace(server.url, 'http://service'),
-              name: error.name,
-            }
-          }),
-      ).resolves.toMatchInlineSnapshot(`
-        {
-          "code": -32603,
-          "message": "Failed to open browser for device code ABCD-EFGH. Open http://service/cli-auth?code=ABCDEFGH manually.",
-          "name": "RpcResponse.InternalError",
-        }
-      `)
+      const error = await provider.request(connectRequest()).then(
+        () => undefined,
+        (error: Error) => error,
+      )
+      expect(error?.message).toMatch(
+        /^Failed to surface device code [A-Z]{4}-[A-Z]{4}\. Open .*\/auth\/device\/verify\?user_code=[A-Z]{4}-[A-Z]{4} manually\.$/,
+      )
     } finally {
       await server.closeAsync()
     }
   })
 
   test('behavior: times out while waiting for authorization', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
+    const host = createDeviceCodeHost({ pollingInterval: 10 })
+    const server = await createServer(host.listener)
 
     try {
       const provider = Provider.create({
         chains: [chain],
         open() {},
-        pollIntervalMs: 1,
-        host: `${server.url}/cli-auth`,
-        timeoutMs: 10,
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
+        timeout: 100,
       })
 
-      await expect(
-        provider
-          .request(connectRequest())
-          .catch((error: { code: number; message: string; name: string }) => {
-            return {
-              code: error.code,
-              message: error.message.replace(server.url, 'http://service'),
-              name: error.name,
-            }
-          }),
-      ).resolves.toMatchInlineSnapshot(`
-        {
-          "code": -32603,
-          "message": "Timed out waiting for device code ABCD-EFGH. Continue at http://service/cli-auth?code=ABCDEFGH.",
-          "name": "RpcResponse.InternalError",
-        }
-      `)
+      const error = await provider.request(connectRequest()).then(
+        () => undefined,
+        (error: Error) => error,
+      )
+      expect(error?.message).toMatch(
+        /^Timed out waiting for device code [A-Z]{4}-[A-Z]{4}\. Continue at /,
+      )
     } finally {
       await server.closeAsync()
     }
   })
 
-  test('behavior: authorizes an access key while disconnected when publicKey is provided', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
-    const opened: string[] = []
+  test('behavior: wallet_authorizeAccessKey requires a connected account', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
 
     try {
       const provider = Provider.create({
         chains: [chain],
-        open: async (url) => {
-          opened.push(url)
-          const code = new URL(url).searchParams.get('code')!
-          try {
-            await fetch(`${server.url}/cli-auth`, {
-              body: JSON.stringify(
-                await authorize(code, { accessKey: accessKey_2, expiry: expiry_2 }),
-              ),
-              headers: { 'content-type': 'application/json' },
-              method: 'POST',
-            })
-          } catch {}
+        open() {
+          throw new Error('Unexpected browser open.')
         },
-        host: `${server.url}/cli-auth`,
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
       })
 
-      const result = await provider.request({
-        method: 'wallet_authorizeAccessKey',
-        params: [
-          { expiry: expiry_2, keyType: accessKey_2.keyType, publicKey: accessKey_2.publicKey },
-        ],
-      })
-      const keyAuthorization = {
-        ...result.keyAuthorization,
-        signature: {
-          type: result.keyAuthorization.signature.type,
-        },
-      }
-
-      expect({
-        keyAuthorization,
-        rootAddress: result.rootAddress,
-        opened: opened.map((url) => url.replace(server.url, 'http://service')),
-      }).toMatchInlineSnapshot(`
-        {
-          "keyAuthorization": {
-            "address": "${accessKey_2.address}",
-            "chainId": "${Hex.fromNumber(chain.id)}",
-            "expiry": "${Hex.fromNumber(expiry_2)}",
-            "keyId": "${accessKey_2.address}",
-            "keyType": "secp256k1",
-            "signature": {
-              "type": "secp256k1",
-            },
-          },
-          "opened": [
-            "http://service/cli-auth?code=ABCDEFGH",
+      await expect(
+        provider.request({
+          method: 'wallet_authorizeAccessKey',
+          params: [
+            { expiry: expiry_2, keyType: accessKey_2.keyType, publicKey: accessKey_2.publicKey },
           ],
-          "rootAddress": "${root.address}",
-        }
-      `)
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.DisconnectedError: No active account.]`,
+      )
     } finally {
       await server.closeAsync()
     }
   })
 
   test('behavior: authorizes an access key for the active account', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
     const opened: string[] = []
 
     try {
-      const approvals = [
-        (code: string) => authorize(code),
-        (code: string) => authorize(code, { accessKey: accessKey_2, expiry: expiry_2 }),
-      ]
       const provider = Provider.create({
         chains: [chain],
-        open: async (url) => {
+        open: async (url, prompt) => {
           opened.push(url)
-          const approve = approvals.shift()
-          if (!approve) throw new Error('Unexpected device code approval request.')
-          const code = new URL(url).searchParams.get('code')!
-          await fetch(`${server.url}/cli-auth`, {
-            body: JSON.stringify(await approve(code)),
-            headers: { 'content-type': 'application/json' },
-            method: 'POST',
-          })
+          await submitVerify(prompt)
         },
-        host: `${server.url}/cli-auth`,
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
       })
 
       await provider.request(connectRequest())
@@ -586,26 +360,22 @@ describe('Provider.create', () => {
         },
       }
 
+      expect(opened).toHaveLength(2)
       expect({
         keyAuthorization,
         rootAddress: result.rootAddress,
-        opened: opened.map((url) => url.replace(server.url, 'http://service')),
       }).toMatchInlineSnapshot(`
         {
           "keyAuthorization": {
-            "address": "${accessKey_2.address}",
-            "chainId": "${Hex.fromNumber(chain.id)}",
-            "expiry": "${Hex.fromNumber(expiry_2)}",
-            "keyId": "${accessKey_2.address}",
+            "address": "${accessKey_2.address.toLowerCase()}",
+            "chainId": "${ox_Hex.fromNumber(chain.id)}",
+            "expiry": "${ox_Hex.fromNumber(expiry_2)}",
+            "keyId": "${accessKey_2.address.toLowerCase()}",
             "keyType": "secp256k1",
             "signature": {
               "type": "secp256k1",
             },
           },
-          "opened": [
-            "http://service/cli-auth?code=ABCDEFGH",
-            "http://service/cli-auth?code=JKLMNPQR",
-          ],
           "rootAddress": "${root.address}",
         }
       `)
@@ -615,21 +385,17 @@ describe('Provider.create', () => {
   })
 
   test('behavior: rejects unsupported revokeAccessKey after bootstrap', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
 
     try {
       const provider = Provider.create({
         chains: [chain],
-        open: async (url) => {
-          const code = new URL(url).searchParams.get('code')!
-          await fetch(`${server.url}/cli-auth`, {
-            body: JSON.stringify(await authorize(code)),
-            headers: { 'content-type': 'application/json' },
-            method: 'POST',
-          })
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
         },
-        host: `${server.url}/cli-auth`,
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
       })
 
       await provider.request(connectRequest())
@@ -639,32 +405,25 @@ describe('Provider.create', () => {
           method: 'wallet_revokeAccessKey',
           params: [{ accessKeyAddress: accessKey.address, address: root.address }],
         }),
-      ).rejects.toThrowErrorMatchingInlineSnapshot(
-        `[Provider.UnsupportedMethodError: \`wallet_revokeAccessKey\` not supported by CLI adapter.]`,
-      )
+      ).rejects.toThrow('`wallet_revokeAccessKey` not supported by device-code adapter.')
     } finally {
       await server.closeAsync()
     }
   })
 
   test('behavior: generates, persists, and reuses a managed key during wallet_connect', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
     const storagePath = await createStoragePath()
     const storage = Storage.filesystem({ path: storagePath })
 
     try {
       const provider = Provider.create({
         chains: [chain],
-        open: async (url) => {
-          const code = new URL(url).searchParams.get('code')!
-          await fetch(`${server.url}/cli-auth`, {
-            body: JSON.stringify(await authorizePending(server.url, code)),
-            headers: { 'content-type': 'application/json' },
-            method: 'POST',
-          })
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
         },
-        host: `${server.url}/cli-auth`,
+        host: `${server.url}/auth/device`,
         storage,
       })
 
@@ -685,7 +444,7 @@ describe('Provider.create', () => {
         open() {
           throw new Error('Unexpected browser open.')
         },
-        host: `${server.url}/cli-auth`,
+        host: `${server.url}/auth/device`,
         storage: storage_2,
       })
       const receipt_2 = await provider_2.request({
@@ -717,26 +476,25 @@ describe('Provider.create', () => {
   })
 
   test('behavior: generates a managed key for wallet_authorizeAccessKey without publicKey', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
     const storagePath = await createStoragePath()
     const storage = Storage.filesystem({ path: storagePath })
 
     try {
       const provider = Provider.create({
         chains: [chain],
-        open: async (url) => {
-          const code = new URL(url).searchParams.get('code')!
-          await fetch(`${server.url}/cli-auth`, {
-            body: JSON.stringify(await authorizePending(server.url, code)),
-            headers: { 'content-type': 'application/json' },
-            method: 'POST',
-          })
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
         },
-        host: `${server.url}/cli-auth`,
+        host: `${server.url}/auth/device`,
         storage,
       })
 
+      const connected = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: {} }],
+      })
       const result = await provider.request({
         method: 'wallet_authorizeAccessKey',
         params: [{ expiry: expiry_2 }],
@@ -749,6 +507,7 @@ describe('Provider.create', () => {
       })
       const [entry] = await readAccessKeys(storage)
 
+      expect(connected.accounts[0]!.address).toBe(root.address)
       expect(receipt.status).toMatchInlineSnapshot(`"0x1"`)
       expect({
         access: entry!.access,
@@ -765,26 +524,25 @@ describe('Provider.create', () => {
   })
 
   test('behavior: regenerates a managed key when the requested key type changes', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
     const storagePath = await createStoragePath()
     const storage = Storage.filesystem({ path: storagePath })
 
     try {
       const provider = Provider.create({
         chains: [chain],
-        open: async (url) => {
-          const code = new URL(url).searchParams.get('code')!
-          await fetch(`${server.url}/cli-auth`, {
-            body: JSON.stringify(await authorizePending(server.url, code)),
-            headers: { 'content-type': 'application/json' },
-            method: 'POST',
-          })
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
         },
-        host: `${server.url}/cli-auth`,
+        host: `${server.url}/auth/device`,
         storage,
       })
 
+      await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: {} }],
+      })
       // secp256k1 is requested explicitly; p256 is the default — a genuine
       // type change that regenerates the managed key.
       const first = await provider.request({
@@ -808,121 +566,6 @@ describe('Provider.create', () => {
       expect(first.keyAuthorization.keyId).not.toBe(second.keyAuthorization.keyId)
       expect(new Set(keys.map((key) => key.keyType))).toEqual(new Set(['secp256k1', 'p256']))
       expect(receipt.status).toBe('0x1')
-    } finally {
-      await server.closeAsync()
-    }
-  })
-
-  test('wallet_updateAccessKey: replaces an unpublished key authorization', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
-    const storagePath = await createStoragePath()
-    const storage = Storage.filesystem({ path: storagePath })
-
-    try {
-      const provider = Provider.create({
-        chains: [chain],
-        open: async (url) => {
-          const code = new URL(url).searchParams.get('code')!
-          const body = await completePending(server.url, code)
-          const response = await fetch(`${server.url}/cli-auth`, {
-            body: JSON.stringify(body),
-            headers: { 'content-type': 'application/json' },
-            method: 'POST',
-          })
-          if (!response.ok) throw new Error(await response.text())
-        },
-        host: `${server.url}/cli-auth`,
-        storage,
-      })
-      const updated = parseUnits('9', 6)
-      const { keyAuthorization, rootAddress } = await provider.request({
-        method: 'wallet_authorizeAccessKey',
-        params: [{ expiry, limits: [{ limit: Hex.fromNumber(1), token: Addresses.pathUsd }] }],
-      })
-
-      await provider.request({
-        method: 'wallet_updateAccessKey',
-        params: [
-          {
-            address: rootAddress,
-            accessKeyAddress: keyAuthorization.address!,
-            limits: [{ limit: Hex.fromNumber(updated), token: Addresses.pathUsd }],
-          },
-        ],
-      })
-
-      const [stored] = provider.store.accessKeys.list({
-        account: rootAddress,
-        accessKey: keyAuthorization.address!,
-        chainId: chain.id,
-      })
-      expect(stored?.keyAuthorization?.limits).toEqual([
-        { limit: updated, token: Addresses.pathUsd },
-      ])
-      expect(
-        await provider.store.accessKeys.getStatus({
-          account: rootAddress,
-          accessKey: keyAuthorization.address!,
-          chainId: chain.id,
-          client: getClient(),
-        }),
-      ).toBe('pending')
-    } finally {
-      await server.closeAsync()
-    }
-  })
-
-  test('wallet_updateAccessKey: updates published spending limits through browser approval', async () => {
-    const handler = createHandler()
-    const server = await createServer(handler.listener)
-    const storagePath = await createStoragePath()
-    const storage = Storage.filesystem({ path: storagePath })
-
-    try {
-      const provider = Provider.create({
-        chains: [chain],
-        open: async (url) => {
-          const code = new URL(url).searchParams.get('code')!
-          const body = await completePending(server.url, code)
-          const response = await fetch(`${server.url}/cli-auth`, {
-            body: JSON.stringify(body),
-            headers: { 'content-type': 'application/json' },
-            method: 'POST',
-          })
-          if (!response.ok) throw new Error(await response.text())
-        },
-        host: `${server.url}/cli-auth`,
-        storage,
-      })
-      const updated = parseUnits('9', 6)
-      const { keyAuthorization, rootAddress } = await provider.request({
-        method: 'wallet_authorizeAccessKey',
-        params: [{ expiry }],
-      })
-      await fund(rootAddress)
-      await provider.request({
-        method: 'eth_sendTransactionSync',
-        params: [{ calls: [transferCall] }],
-      })
-
-      await provider.request({
-        method: 'wallet_updateAccessKey',
-        params: [
-          {
-            address: rootAddress,
-            accessKeyAddress: keyAuthorization.address!,
-            limits: [{ limit: Hex.fromNumber(updated), token: Addresses.pathUsd }],
-          },
-        ],
-      })
-
-      const { remaining } = await Actions.accessKey.getRemainingLimit(getClient(), {
-        account: rootAddress,
-        accessKey: keyAuthorization.address!,
-        token: Addresses.pathUsd,
-      })
-      expect(remaining).toBe(updated)
     } finally {
       await server.closeAsync()
     }

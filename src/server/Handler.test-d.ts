@@ -1,44 +1,8 @@
 import { hc } from 'hono/client'
 import type { ExtractSchema } from 'hono/types'
-import { http, type Chain, type Transport } from 'viem'
-import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { describe, expectTypeOf, test } from 'vp/test'
 
-import * as CliAuth from './CliAuth.js'
 import * as Handler from './Handler.js'
-
-describe('codeAuth options', () => {
-  test('supports chain-agnostic chains/transports configuration', () => {
-    expectTypeOf<Handler.codeAuth.Options>().toMatchTypeOf<{
-      chains?: readonly [Chain, ...Chain[]] | undefined
-      transports?: Record<number, Transport> | undefined
-    }>()
-  })
-
-  test('accepts derived clients from chains/transports', () => {
-    void Handler.codeAuth({
-      chains: [tempo, tempoModerato],
-      transports: {
-        [tempo.id]: http('https://rpc.tempo.xyz'),
-        [tempoModerato.id]: http('https://rpc.moderato.tempo.xyz'),
-      },
-    })
-  })
-
-  test('accepts a shared rate limiter', () => {
-    void Handler.codeAuth({
-      rateLimit: CliAuth.RateLimit.memory({ max: 120, windowMs: 60_000 }),
-    })
-    void Handler.codeAuth({
-      rateLimit: false,
-    })
-    void Handler.codeAuth({
-      rateLimitKey(request) {
-        return request.headers.get('x-forwarded-for') ?? 'unknown'
-      },
-    })
-  })
-})
 
 describe('auth identity (OIDC)', () => {
   test('Options.identity opts into issuer-based verification', () => {
@@ -125,11 +89,11 @@ describe('compose', () => {
   })
 
   test('handlers without a route schema (legacy `Handler`) compose without errors', () => {
-    // `Handler.codeAuth` returns plain `Handler` (default `Hono`), no route
+    // `Handler.from` returns plain `Handler` (default `Hono`), no route
     // schema. Mixing it with typed handlers must not break inference for the
     // typed siblings.
-    const codeAuth = Handler.codeAuth() as unknown as Handler.Handler
-    const composed = Handler.compose([codeAuth, makeAlpha()], { path: '/api' })
+    const plain = Handler.from() as unknown as Handler.Handler
+    const composed = Handler.compose([plain, makeAlpha()], { path: '/api' })
     const client = hc<typeof composed>('http://localhost')
 
     expectTypeOf(client.api.alpha.ping.$post).toBeFunction()

@@ -175,6 +175,11 @@
       "src": "./src/wagmi/index.ts",
       "default": "./dist/wagmi/index.js"
     },
+    "./deviceCode": {
+      "types": "./dist/core/adapters/deviceCode/index.d.ts",
+      "src": "./src/core/adapters/deviceCode/index.ts",
+      "default": "./dist/core/adapters/deviceCode/index.js"
+    },
     "./mobileWebAuth": {
       "types": "./dist/core/adapters/mobileWebAuth/index.d.ts",
       "src": "./src/core/adapters/mobileWebAuth/index.ts",
