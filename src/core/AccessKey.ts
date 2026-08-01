@@ -434,7 +434,7 @@ export async function getStatus(options: StatusQuery): Promise<Status> {
         accessKey: local.address,
         account,
         now,
-      }).catch(() => status.pending)
+      })
       if (publicationStatus === status.published)
         clearAuthorization({
           accessKey: local.address,

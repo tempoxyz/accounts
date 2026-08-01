@@ -1,14 +1,24 @@
 import * as React from 'react'
 
-type Pending = {
-  account?: string | undefined
-  accessKeyAddress: string
-  chainId: string
-  code: string
-  expiry: number
-  keyType: string
-  limits?: readonly { limit: string; token: string }[] | undefined
-}
+type Pending =
+  | {
+      action?: 'authorizeAccessKey' | undefined
+      account?: string | undefined
+      accessKeyAddress: string
+      chainId: string
+      code: string
+      expiry: number
+      keyType: string
+      limits?: readonly { limit: string; token: string }[] | undefined
+    }
+  | {
+      action: 'updateAccessKey'
+      account: string
+      accessKeyAddress: string
+      chainId: string
+      code: string
+      limits: readonly { limit: string; token: string }[]
+    }
 
 type Approved = {
   accountAddress: string
@@ -54,9 +64,9 @@ function formatLimit(limit: { limit: string; token: string }) {
   const asset = assets[token as keyof typeof assets]
   const amount = BigInt(limit.limit)
 
-  if (!asset) return `${new Intl.NumberFormat().format(amount)} max on asset ${limit.token}`
+  if (!asset) return `${new Intl.NumberFormat().format(amount)} on asset ${limit.token}`
 
-  return `${formatAmount(amount, asset.decimals)} ${asset.symbol} max on asset ${limit.token}`
+  return `${formatAmount(amount, asset.decimals)} ${asset.symbol} on asset ${limit.token}`
 }
 
 function formatExpiry(expiry: number) {
@@ -194,15 +204,23 @@ export function App() {
             )}
             <dt>Chain ID</dt>
             <dd>{pending.pending.chainId}</dd>
-            <dt>Key type</dt>
-            <dd>{pending.pending.keyType}</dd>
-            <dt>Expires</dt>
-            <dd>{formatExpiry(pending.pending.expiry)}</dd>
-            <dt>Time left</dt>
-            <dd>{formatTimeLeft(pending.pending.expiry, now)}</dd>
+            {pending.pending.action !== 'updateAccessKey' && (
+              <>
+                <dt>Key type</dt>
+                <dd>{pending.pending.keyType}</dd>
+                <dt>Expires</dt>
+                <dd>{formatExpiry(pending.pending.expiry)}</dd>
+                <dt>Time left</dt>
+                <dd>{formatTimeLeft(pending.pending.expiry, now)}</dd>
+              </>
+            )}
             {pending.pending.limits && pending.pending.limits.length > 0 && (
               <>
-                <dt>Max spend</dt>
+                <dt>
+                  {pending.pending.action === 'updateAccessKey'
+                    ? 'New remaining limit'
+                    : 'Max spend'}
+                </dt>
                 <dd>
                   <ul>
                     {pending.pending.limits.map((limit) => (
@@ -218,7 +236,15 @@ export function App() {
               {approveState.status === 'error' && <p>{approveState.error}</p>}
               <form action={approve}>
                 <input name="code" type="hidden" value={pending.pending.code} />
-                <button type="submit">{approving ? 'Approving...' : 'Approve'}</button>
+                <button type="submit">
+                  {approving
+                    ? pending.pending.action === 'updateAccessKey'
+                      ? 'Updating...'
+                      : 'Approving...'
+                    : pending.pending.action === 'updateAccessKey'
+                      ? 'Update limits'
+                      : 'Approve'}
+                </button>
               </form>
             </>
           )}

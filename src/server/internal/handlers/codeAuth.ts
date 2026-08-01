@@ -81,9 +81,9 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     try {
       const request = z.decode(CliAuth.createRequest, await readJson(c.req.raw, maxBodyBytes))
       const chainId = request.chainId ?? defaultChain.id
-      getClient(chainId)
       const result = await CliAuth.createDeviceCode({
         chainId,
+        client: getClient(chainId),
         ...(now ? { now } : {}),
         ...(policy ? { policy } : {}),
         ...(random ? { random } : {}),
@@ -123,7 +123,9 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     try {
       const request = z.decode(CliAuth.authorizeRequest, await readJson(c.req.raw, maxBodyBytes))
       const result = await CliAuth.authorize({
-        client: getClient(request.keyAuthorization.chainId),
+        client: getClient(
+          request.action === 'updateAccessKey' ? request.chainId : request.keyAuthorization.chainId,
+        ),
         ...(now ? { now } : {}),
         request,
         store,
