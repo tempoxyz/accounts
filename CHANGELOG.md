@@ -1,5 +1,24 @@
 # accounts
 
+## 0.16.0
+
+### Minor Changes
+
+- 29c91b1: Added CLI device code approval for updating published and pending access key spending limits.
+
+  ```ts
+  await provider.request({
+    method: "wallet_updateAccessKey",
+    params: [
+      {
+        address: accountAddress,
+        accessKeyAddress,
+        limits: [{ token, limit }],
+      },
+    ],
+  });
+  ```
+
 ## 0.15.5
 
 ### Patch Changes
