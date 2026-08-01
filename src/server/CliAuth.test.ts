@@ -1266,6 +1266,84 @@ describe('authorize', () => {
     `)
   })
 
+  test('behavior: replaces a signed authorization for an unpublished access key', async () => {
+    const store = CliAuth.Store.memory()
+    const codeVerifier = 'pending-update-device-code-verifier'
+    const original = (
+      await authorize('unused', {
+        limits: [{ limit: 1n, token }],
+      })
+    ).keyAuthorization
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      request: {
+        action: 'updateAccessKey',
+        accessKeyAddress: accessKey.address,
+        account: root.address,
+        codeChallenge: await createCodeChallenge(codeVerifier),
+        keyAuthorization: original,
+        limits,
+      },
+      store,
+    })
+    const replacement = (await authorize(code, { limits })).keyAuthorization
+
+    await CliAuth.authorize({
+      request: {
+        action: 'updateAccessKey',
+        accountAddress: root.address,
+        chainId: BigInt(chain.id),
+        code,
+        keyAuthorization: replacement,
+      },
+      store,
+    })
+    const polled = await CliAuth.poll({
+      code,
+      request: { codeVerifier },
+      store,
+    })
+
+    expect(polled).toEqual({
+      action: 'updateAccessKey',
+      keyAuthorization: replacement,
+      status: 'authorized',
+    })
+  })
+
+  test('behavior: rejects immutable field changes to a pending key authorization', async () => {
+    const store = CliAuth.Store.memory()
+    const original = (await authorize('unused')).keyAuthorization
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      request: {
+        action: 'updateAccessKey',
+        accessKeyAddress: accessKey.address,
+        account: root.address,
+        codeChallenge: await createCodeChallenge('pending-update-device-code-verifier'),
+        keyAuthorization: original,
+        limits,
+      },
+      store,
+    })
+    const replacement = (await authorize(code, { expiry: expiry + 1 })).keyAuthorization
+
+    await expect(
+      CliAuth.authorize({
+        request: {
+          action: 'updateAccessKey',
+          accountAddress: root.address,
+          chainId: BigInt(chain.id),
+          code,
+          keyAuthorization: replacement,
+        },
+        store,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Replacement key authorization changed immutable access key fields.]`,
+    )
+  })
+
   test('behavior: rejects an access key update before the requested limit is applied', async () => {
     const store = CliAuth.Store.memory()
     const { code } = await CliAuth.createDeviceCode({

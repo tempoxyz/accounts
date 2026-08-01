@@ -2,7 +2,7 @@
 'accounts': minor
 ---
 
-Added CLI device code approval for updating access key spending limits.
+Added CLI device code approval for updating published and pending access key spending limits.
 
 ```ts
 await provider.request({

@@ -32,13 +32,28 @@ export async function approve(request: Request, env: { PRIVATE_KEY: Hex.Hex }) {
   })
   const root = getRoot(env)
   if (pending.action === 'updateAccessKey') {
-    for (const limit of pending.limits)
-      await Actions.accessKey.updateLimitSync(client, {
-        account: root,
-        accessKey: pending.accessKeyAddress,
-        limit: limit.limit,
-        token: limit.token,
-      })
+    const replacement = pending.keyAuthorization
+      ? await root.signKeyAuthorization(
+          {
+            accessKeyAddress: pending.accessKeyAddress,
+            keyType: pending.keyAuthorization.keyType,
+          },
+          {
+            chainId: pending.chainId,
+            expiry: pending.keyAuthorization.expiry,
+            limits: pending.limits,
+          },
+        )
+      : undefined
+    if (!replacement)
+      for (const limit of pending.limits)
+        await Actions.accessKey.updateLimitSync(client, {
+          account: root,
+          accessKey: pending.accessKeyAddress,
+          limit: limit.limit,
+          token: limit.token,
+        })
+    const replacementRpc = replacement ? KeyAuthorization.toRpc(replacement) : undefined
     const result = await CliAuth.authorize({
       chainId: pending.chainId,
       client,
@@ -47,6 +62,14 @@ export async function approve(request: Request, env: { PRIVATE_KEY: Hex.Hex }) {
         accountAddress: root.address,
         chainId: pending.chainId,
         code,
+        ...(replacementRpc
+          ? {
+              keyAuthorization: z.decode(CliAuth.keyAuthorization, {
+                ...replacementRpc,
+                address: replacementRpc.keyId,
+              }),
+            }
+          : {}),
       },
       store,
     })

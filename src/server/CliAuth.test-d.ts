@@ -34,6 +34,7 @@ describe('createRequest', () => {
       account: Hex
       chainId?: bigint | undefined
       codeChallenge: string
+      keyAuthorization?: z.output<typeof CliAuth.keyAuthorization> | undefined
       limits: readonly { token: Hex; limit: bigint }[]
     }>()
   })
@@ -64,10 +65,11 @@ describe('pollResponse', () => {
     }>()
   })
 
-  test('access-key updates return an action-only completion', () => {
+  test('access-key updates can return a replacement authorization', () => {
     type Response = Extract<z.output<typeof CliAuth.pollResponse>, { action: 'updateAccessKey' }>
     expectTypeOf<Response>().toMatchTypeOf<{
       action: 'updateAccessKey'
+      keyAuthorization?: z.output<typeof CliAuth.keyAuthorization> | undefined
       status: 'authorized'
     }>()
   })
@@ -95,6 +97,14 @@ describe('pendingResponse', () => {
           }
         | undefined
       status: 'pending'
+    }>()
+  })
+
+  test('pending access-key updates expose an optional current authorization', () => {
+    type Response = Extract<z.output<typeof CliAuth.pendingResponse>, { action: 'updateAccessKey' }>
+    expectTypeOf<Response>().toMatchTypeOf<{
+      action: 'updateAccessKey'
+      keyAuthorization?: z.output<typeof CliAuth.keyAuthorization> | undefined
     }>()
   })
 })

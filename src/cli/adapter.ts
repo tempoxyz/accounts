@@ -14,7 +14,7 @@ import * as CliAuth from '../server/CliAuth.js'
 export function cli(options: cli.Options): Adapter.Adapter {
   const { name = 'Tempo CLI', rdns = 'xyz.tempo.cli' } = options
 
-  return Adapter.define({ name, rdns }, ({ store }) => {
+  return Adapter.define({ name, rdns }, ({ getClient, store }) => {
     // The CLI persists to string-based filesystem storage, so its p256
     // default opts into an extractable WebCrypto key (a non-extractable one
     // could not survive a restart). secp256k1 stays available for explicit
@@ -141,13 +141,39 @@ export function cli(options: cli.Options): Adapter.Adapter {
         pollIntervalMs = 2_000,
         timeoutMs = 5 * 60 * 1_000,
       } = options
+      const chainId = Number(parameters.chainId ?? store.getState().chainId)
+      const current = store.accessKeys.list({
+        accessKey: parameters.accessKeyAddress,
+        account: parameters.address,
+        chainId,
+      })[0]
+      const status = current?.keyAuthorization
+        ? await store.accessKeys.getStatus({
+            accessKey: parameters.accessKeyAddress,
+            account: parameters.address,
+            chainId,
+            client: getClient({ chainId }),
+          })
+        : undefined
+      const pendingKeyAuthorization =
+        status === 'pending' && current?.keyAuthorization
+          ? KeyAuthorization.toRpc(current.keyAuthorization)
+          : undefined
       const codeVerifier = createCodeVerifier()
       const body = {
         action: 'updateAccessKey',
         accessKeyAddress: parameters.accessKeyAddress,
         account: parameters.address,
-        chainId: parameters.chainId ?? BigInt(store.getState().chainId),
+        chainId: BigInt(chainId),
         codeChallenge: createCodeChallenge(codeVerifier),
+        ...(pendingKeyAuthorization
+          ? {
+              keyAuthorization: z.decode(CliAuth.keyAuthorization, {
+                ...pendingKeyAuthorization,
+                address: pendingKeyAuthorization.keyId,
+              }),
+            }
+          : {}),
         limits: parameters.limits,
       } satisfies z.output<typeof CliAuth.createRequest>
       const created = await post({
@@ -180,6 +206,16 @@ export function cli(options: cli.Options): Adapter.Adapter {
           throw new Error('Device code expired before access key update completed.')
         if (result.action !== 'updateAccessKey')
           throw new Error('Device code action does not match the access key update request.')
+        if (result.keyAuthorization) {
+          store.accessKeys.updateAuthorization({
+            accessKey: parameters.accessKeyAddress,
+            account: parameters.address,
+            authorization: KeyAuthorization.fromRpc(
+              z.encode(CliAuth.keyAuthorization, result.keyAuthorization),
+            ),
+            chainId,
+          })
+        }
         return
       }
 

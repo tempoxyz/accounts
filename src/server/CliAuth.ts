@@ -59,6 +59,7 @@ const updateAccessKeyCreateRequest = z.object({
   account: u.address(),
   chainId: z.optional(u.bigint()),
   codeChallenge: z.string(),
+  keyAuthorization: z.optional(keyAuthorization),
   limits: z.readonly(z.array(limit).check(z.minLength(1), z.maxLength(maxLimits))),
 })
 
@@ -90,6 +91,7 @@ export const pollResponse = u.oneOf([
   }),
   z.object({
     action: z.literal('updateAccessKey'),
+    keyAuthorization: z.optional(keyAuthorization),
     status: z.literal('authorized'),
   }),
   z.object({
@@ -118,6 +120,7 @@ export const pendingResponse = u.oneOf([
     account: u.address(),
     chainId: u.bigint(),
     code: z.string(),
+    keyAuthorization: z.optional(keyAuthorization),
     limits: z.readonly(z.array(limit).check(z.minLength(1), z.maxLength(maxLimits))),
     status: z.literal('pending'),
   }),
@@ -136,6 +139,7 @@ export const authorizeRequest = u.oneOf([
     accountAddress: u.address(),
     chainId: u.bigint(),
     code: z.string(),
+    keyAuthorization: z.optional(keyAuthorization),
   }),
 ])
 
@@ -207,6 +211,7 @@ export const entry = u.oneOf([
     codeChallenge: z.string(),
     createdAt: z.number(),
     expiresAt: z.number(),
+    keyAuthorization: z.optional(keyAuthorization),
     limits: z.readonly(z.array(limit).check(z.minLength(1), z.maxLength(maxLimits))),
     status: z.literal('pending'),
   }),
@@ -221,6 +226,7 @@ export const entry = u.oneOf([
     codeChallenge: z.string(),
     createdAt: z.number(),
     expiresAt: z.number(),
+    keyAuthorization: z.optional(keyAuthorization),
     limits: z.readonly(z.array(limit).check(z.minLength(1), z.maxLength(maxLimits))),
     status: z.literal('authorized'),
   }),
@@ -236,6 +242,7 @@ export const entry = u.oneOf([
     consumedAt: z.number(),
     createdAt: z.number(),
     expiresAt: z.number(),
+    keyAuthorization: z.optional(keyAuthorization),
     limits: z.readonly(z.array(limit).check(z.minLength(1), z.maxLength(maxLimits))),
     status: z.literal('consumed'),
   }),
@@ -311,6 +318,8 @@ export declare namespace Store {
     export type Options = {
       /** Root account that updated the access key. */
       accountAddress: Address.Address
+      /** Replacement authorization for an access key that is still pending publication. */
+      keyAuthorization?: z.output<typeof keyAuthorization> | undefined
       /** Verification code to complete. */
       code: string
     }
@@ -469,6 +478,7 @@ export const Store = {
           ...current,
           accountAddress: options.accountAddress,
           authorizedAt: Date.now(),
+          ...(options.keyAuthorization ? { keyAuthorization: options.keyAuthorization } : {}),
           status: 'authorized',
         } satisfies Entry.Authorized
         entries.set(options.code, next)
@@ -536,6 +546,7 @@ export const Store = {
           ...current,
           accountAddress: options.accountAddress,
           authorizedAt: Date.now(),
+          ...(options.keyAuthorization ? { keyAuthorization: options.keyAuthorization } : {}),
           status: 'authorized',
         } satisfies Entry.Authorized
         await kv.set(toKey(options.code), z.encode(entry, next))
@@ -661,19 +672,50 @@ export function from(options: from.Options = {}): CliAuth {
           throw new Error('Access key update chain does not match the device code request.')
 
         const client = options.client ?? cache.get(current.chainId)
-        for (const limit of current.limits) {
-          const result = await Actions.accessKey.getRemainingLimit(client, {
+        let replacement: z.output<typeof keyAuthorization> | undefined
+        if (current.keyAuthorization) {
+          if (!options.request.keyAuthorization)
+            throw new Error('Pending access key update requires a replacement key authorization.')
+          const previous = normalizeKeyAuthorization(current.keyAuthorization)
+          const next = await verifyKeyAuthorizationSignature({
             account: options.request.accountAddress,
-            accessKey: current.accessKeyAddress,
-            token: limit.token,
+            client,
+            keyAuthorization: options.request.keyAuthorization,
           })
-          if (result.remaining !== limit.limit)
-            throw new Error('Access key spending limits do not match the device code request.')
+          if (
+            next.address.toLowerCase() !== current.accessKeyAddress.toLowerCase() ||
+            next.keyId.toLowerCase() !== current.accessKeyAddress.toLowerCase()
+          )
+            throw new Error('Replacement key authorization does not match the access key request.')
+          if (next.chainId !== current.chainId)
+            throw new Error(
+              'Replacement key authorization chain does not match the device code request.',
+            )
+          if (next.keyType !== previous.keyType || next.expiry !== previous.expiry)
+            throw new Error('Replacement key authorization changed immutable access key fields.')
+          if (!sameLimits(next.limits, current.limits))
+            throw new Error(
+              'Replacement key authorization limits do not match the device code request.',
+            )
+          replacement = toStoredKeyAuthorization(options.request.keyAuthorization, next)
+        } else {
+          if (options.request.keyAuthorization)
+            throw new Error('Published access key update cannot return a key authorization.')
+          for (const limit of current.limits) {
+            const result = await Actions.accessKey.getRemainingLimit(client, {
+              account: options.request.accountAddress,
+              accessKey: current.accessKeyAddress,
+              token: limit.token,
+            })
+            if (result.remaining !== limit.limit)
+              throw new Error('Access key spending limits do not match the device code request.')
+          }
         }
 
         const authorized = await store.update({
           accountAddress: options.request.accountAddress,
           code,
+          ...(replacement ? { keyAuthorization: replacement } : {}),
         })
         if (!authorized) throw new Error('Unable to complete access key update.')
         return { status: 'authorized' }
@@ -754,6 +796,27 @@ export function from(options: from.Options = {}): CliAuth {
           chainId: chainId_resolved,
           limits: options.request.limits,
         })
+        let pendingKeyAuthorization: z.output<typeof keyAuthorization> | undefined
+        if (options.request.keyAuthorization) {
+          const actual = await verifyKeyAuthorizationSignature({
+            account: options.request.account,
+            client: cache.get(chainId_resolved),
+            keyAuthorization: options.request.keyAuthorization,
+          })
+          if (
+            actual.address.toLowerCase() !== options.request.accessKeyAddress.toLowerCase() ||
+            actual.keyId.toLowerCase() !== options.request.accessKeyAddress.toLowerCase()
+          )
+            throw new Error('Pending key authorization does not match the access key request.')
+          if (actual.chainId !== chainId_resolved)
+            throw new Error(
+              'Pending key authorization chain does not match the device code request.',
+            )
+          pendingKeyAuthorization = toStoredKeyAuthorization(
+            options.request.keyAuthorization,
+            actual,
+          )
+        }
         await store.create({
           action: 'updateAccessKey',
           accessKeyAddress: options.request.accessKeyAddress,
@@ -763,6 +826,7 @@ export function from(options: from.Options = {}): CliAuth {
           codeChallenge: options.request.codeChallenge,
           createdAt,
           expiresAt: createdAt + ttlMs,
+          ...(pendingKeyAuthorization ? { keyAuthorization: pendingKeyAuthorization } : {}),
           limits: approved.limits,
           status: 'pending',
         })
@@ -818,6 +882,7 @@ export function from(options: from.Options = {}): CliAuth {
           account: current.account,
           chainId: current.chainId,
           code: current.code,
+          ...(current.keyAuthorization ? { keyAuthorization: current.keyAuthorization } : {}),
           limits: current.limits,
           status: current.status,
         }
@@ -853,7 +918,11 @@ export function from(options: from.Options = {}): CliAuth {
       const authorized = await store.consume(normalized)
       if (!authorized) return { status: 'expired' }
       if (authorized.action === 'updateAccessKey')
-        return { action: authorized.action, status: 'authorized' }
+        return {
+          action: authorized.action,
+          ...(authorized.keyAuthorization ? { keyAuthorization: authorized.keyAuthorization } : {}),
+          status: 'authorized',
+        }
       return {
         accountAddress: authorized.accountAddress,
         keyAuthorization: authorized.keyAuthorization,
@@ -1142,6 +1211,60 @@ function normalizeKeyAuthorization(value: z.output<typeof keyAuthorization>) {
     expiry: value.expiry ?? undefined,
     limits: value.limits ?? undefined,
   }
+}
+
+/** @internal */
+async function verifyKeyAuthorizationSignature(options: {
+  account: Address.Address
+  client: Client<Transport, Chain | undefined>
+  keyAuthorization: z.output<typeof keyAuthorization>
+}) {
+  const actual = normalizeKeyAuthorization(options.keyAuthorization)
+  const unsigned = TempoKeyAuthorization.from({
+    address: actual.address,
+    chainId: actual.chainId,
+    expiry: actual.expiry,
+    ...(actual.limits ? { limits: actual.limits } : {}),
+    type: actual.keyType,
+  })
+  const valid = await verifyHash(options.client, {
+    address: options.account,
+    hash: TempoKeyAuthorization.getSignPayload(unsigned),
+    signature: SignatureEnvelope.serialize(SignatureEnvelope.fromRpc(actual.signature), {
+      magic: actual.signature.type === 'webAuthn',
+    }),
+  })
+  if (!valid) throw new Error('Key authorization signature is invalid.')
+  return actual
+}
+
+/** @internal */
+function toStoredKeyAuthorization(
+  value: z.output<typeof keyAuthorization>,
+  normalized = normalizeKeyAuthorization(value),
+) {
+  return {
+    address: value.address,
+    chainId: value.chainId,
+    expiry: normalized.expiry,
+    keyId: value.keyId,
+    keyType: value.keyType,
+    ...(normalized.limits ? { limits: normalized.limits } : {}),
+    signature: value.signature,
+  } satisfies z.output<typeof keyAuthorization>
+}
+
+/** @internal */
+function sameLimits(
+  actual: readonly { token: Address.Address; limit: bigint }[] | undefined,
+  expected: readonly { token: Address.Address; limit: bigint }[],
+) {
+  if (!actual || actual.length !== expected.length) return false
+  const normalize = (items: readonly { token: Address.Address; limit: bigint }[]) =>
+    items.map((item) => `${item.token.toLowerCase()}:${item.limit}`).sort()
+  const actualNormalized = normalize(actual)
+  const expectedNormalized = normalize(expected)
+  return actualNormalized.every((value, index) => value === expectedNormalized[index])
 }
 
 /** @internal */

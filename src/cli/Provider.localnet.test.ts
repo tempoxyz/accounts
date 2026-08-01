@@ -137,6 +137,31 @@ async function completePending(serverUrl: string, code: string) {
   const pending = z.decode(CliAuth.pendingResponse, (await response.json()) as never)
   if (pending.action !== 'updateAccessKey') return authorizePending(serverUrl, code)
 
+  if (pending.keyAuthorization) {
+    const signed = await root.signKeyAuthorization(
+      {
+        accessKeyAddress: pending.accessKeyAddress,
+        keyType: pending.keyAuthorization.keyType,
+      },
+      {
+        chainId: pending.chainId,
+        expiry: pending.keyAuthorization.expiry,
+        limits: pending.limits,
+      },
+    )
+    const replacement = KeyAuthorization.toRpc(signed)
+    return z.encode(CliAuth.authorizeRequest, {
+      action: 'updateAccessKey',
+      accountAddress: root.address,
+      chainId: pending.chainId,
+      code,
+      keyAuthorization: z.decode(CliAuth.keyAuthorization, {
+        ...replacement,
+        address: replacement.keyId,
+      }),
+    })
+  }
+
   const client = getClient({ account: root })
   for (const item of pending.limits)
     await Actions.accessKey.updateLimitSync(client, {
@@ -788,7 +813,67 @@ describe('Provider.create', () => {
     }
   })
 
-  test('wallet_updateAccessKey: updates spending limits through browser approval', async () => {
+  test('wallet_updateAccessKey: replaces an unpublished key authorization', async () => {
+    const handler = createHandler()
+    const server = await createServer(handler.listener)
+    const storagePath = await createStoragePath()
+    const storage = Storage.filesystem({ path: storagePath })
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (url) => {
+          const code = new URL(url).searchParams.get('code')!
+          const body = await completePending(server.url, code)
+          const response = await fetch(`${server.url}/cli-auth`, {
+            body: JSON.stringify(body),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          })
+          if (!response.ok) throw new Error(await response.text())
+        },
+        host: `${server.url}/cli-auth`,
+        storage,
+      })
+      const updated = parseUnits('9', 6)
+      const { keyAuthorization, rootAddress } = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry, limits: [{ limit: Hex.fromNumber(1), token: Addresses.pathUsd }] }],
+      })
+
+      await provider.request({
+        method: 'wallet_updateAccessKey',
+        params: [
+          {
+            address: rootAddress,
+            accessKeyAddress: keyAuthorization.address!,
+            limits: [{ limit: Hex.fromNumber(updated), token: Addresses.pathUsd }],
+          },
+        ],
+      })
+
+      const [stored] = provider.store.accessKeys.list({
+        account: rootAddress,
+        accessKey: keyAuthorization.address!,
+        chainId: chain.id,
+      })
+      expect(stored?.keyAuthorization?.limits).toEqual([
+        { limit: updated, token: Addresses.pathUsd },
+      ])
+      expect(
+        await provider.store.accessKeys.getStatus({
+          account: rootAddress,
+          accessKey: keyAuthorization.address!,
+          chainId: chain.id,
+          client: getClient(),
+        }),
+      ).toBe('pending')
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('wallet_updateAccessKey: updates published spending limits through browser approval', async () => {
     const handler = createHandler()
     const server = await createServer(handler.listener)
     const storagePath = await createStoragePath()
