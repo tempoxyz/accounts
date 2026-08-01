@@ -1,4 +1,4 @@
-import { Expiry } from 'accounts'
+import { Expiry, Store } from 'accounts'
 import { Provider } from 'accounts/cli'
 import { Cli, z } from 'incur'
 import { pathToFileURL } from 'node:url'
@@ -131,6 +131,7 @@ const cli = Cli.create('accounts-cli')
     async run({ options }) {
       configureLocalTls(options.host)
       const provider = Provider.create({ host: options.host })
+      await Store.waitForHydration(provider.store)
       const account = provider.getAccount()
       const accessKey = await provider.store.accessKeys.select({
         account: account.address,

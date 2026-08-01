@@ -1,6 +1,7 @@
 import { CliAuth } from 'accounts/server'
 import { Address, type Hex, PublicKey } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
+import { sendTransactionSync } from 'viem/actions'
 import { Account, Actions } from 'viem/tempo'
 import * as z from 'zod/mini'
 
@@ -46,13 +47,16 @@ export async function approve(request: Request, env: { PRIVATE_KEY: Hex.Hex }) {
         )
       : undefined
     if (!replacement)
-      for (const limit of pending.limits)
-        await Actions.accessKey.updateLimitSync(client, {
-          account: root,
-          accessKey: pending.accessKeyAddress,
-          limit: limit.limit,
-          token: limit.token,
-        })
+      await sendTransactionSync(client, {
+        account: root,
+        calls: pending.limits.map((limit) =>
+          Actions.accessKey.updateLimit.call({
+            accessKey: pending.accessKeyAddress,
+            limit: limit.limit,
+            token: limit.token,
+          }),
+        ),
+      })
     const replacementRpc = replacement ? KeyAuthorization.toRpc(replacement) : undefined
     const result = await CliAuth.authorize({
       chainId: pending.chainId,

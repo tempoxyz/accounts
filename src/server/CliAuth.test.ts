@@ -309,6 +309,61 @@ describe('createDeviceCode', () => {
     `)
   })
 
+  test('behavior: handler uses its configured client to verify pending authorization', async () => {
+    const calls: string[] = []
+    const original = (
+      await authorizeWebAuthn('unused', {
+        accessKey,
+        limits: [{ limit: 1n, token }],
+      })
+    ).keyAuthorization
+    const handler = Handler.codeAuth({
+      chains: [chain],
+      policy: {
+        update({ limits }) {
+          return { limits }
+        },
+        validate({ expiry, limits }) {
+          return { expiry: expiry ?? 0, ...(limits ? { limits } : {}) }
+        },
+      },
+      transports: {
+        [chain.id]: custom({
+          async request({ method }) {
+            calls.push(method)
+            throw new Error('Configured transport used.')
+          },
+        }),
+      },
+    })
+
+    const result = await post(handler, {
+      body: {
+        action: 'updateAccessKey',
+        accessKeyAddress: accessKey.address,
+        account: webAuthnRoot.address,
+        chainId: BigInt(chain.id),
+        codeChallenge: await createCodeChallenge('pending-update-device-code-verifier'),
+        keyAuthorization: original,
+        limits,
+      },
+      request: CliAuth.createRequest,
+      url: 'http://localhost/auth/pkce/code',
+    })
+
+    expect({ calls, status: result.status }).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          "eth_getCode",
+          "eth_getCode",
+          "eth_getCode",
+          "eth_getCode",
+        ],
+        "status": 400,
+      }
+    `)
+  })
+
   test('behavior: requires an explicit update policy', async () => {
     await expect(
       CliAuth.createDeviceCode({

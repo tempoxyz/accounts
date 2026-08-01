@@ -800,7 +800,7 @@ export function from(options: from.Options = {}): CliAuth {
         if (options.request.keyAuthorization) {
           const actual = await verifyKeyAuthorizationSignature({
             account: options.request.account,
-            client: cache.get(chainId_resolved),
+            client: options.client ?? cache.get(chainId_resolved),
             keyAuthorization: options.request.keyAuthorization,
           })
           if (
@@ -987,13 +987,18 @@ export declare namespace from {
 export async function createDeviceCode(
   options: createDeviceCode.Options,
 ): Promise<createDeviceCode.ReturnType> {
-  const { request, ...rest } = options
-  return from(rest).createDeviceCode({ request })
+  const { client, request, ...rest } = options
+  return from(rest).createDeviceCode({
+    ...(client ? { client } : {}),
+    request,
+  })
 }
 
 export declare namespace createDeviceCode {
   /** Parameters for creating a new device code. */
   export type Parameters = {
+    /** Client used to verify a pending key authorization. */
+    client?: Client<Transport, Chain | undefined> | undefined
     /** Incoming device code creation request. */
     request: z.output<typeof createRequest>
   }
