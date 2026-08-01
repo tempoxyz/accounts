@@ -1,6 +1,7 @@
 import { Base64 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { Account as TempoAccount } from 'viem/tempo'
+import { createClient, custom, encodeFunctionResult } from 'viem'
+import { Abis, Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
@@ -175,7 +176,7 @@ async function get<response extends z.ZodMiniType>(
 }
 
 describe('from', () => {
-  test('default: shares defaults across the device-code flow', async () => {
+  test('default: shares defaults across the device code flow', async () => {
     const store = CliAuth.Store.memory()
     const now = () => 1_000
     const { codeVerifier, request } = await createRequest()
@@ -272,6 +273,62 @@ describe('createDeviceCode', () => {
         "status": "pending",
       }
     `)
+  })
+
+  test('behavior: creates an access key update request', async () => {
+    const store = CliAuth.Store.memory()
+    const codeVerifier = 'update-device-code-verifier'
+    const result = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      random: () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
+      request: {
+        action: 'updateAccessKey',
+        accessKeyAddress: accessKey.address,
+        account: root.address,
+        codeChallenge: await createCodeChallenge(codeVerifier),
+        limits,
+      },
+      store,
+    })
+
+    expect(await CliAuth.pending({ code: result.code, store })).toMatchInlineSnapshot(`
+      {
+        "accessKeyAddress": "${accessKey.address}",
+        "account": "${root.address}",
+        "action": "updateAccessKey",
+        "chainId": 1337n,
+        "code": "ABCDEFGH",
+        "limits": [
+          {
+            "limit": 1000n,
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+        "status": "pending",
+      }
+    `)
+  })
+
+  test('behavior: requires an explicit update policy', async () => {
+    await expect(
+      CliAuth.createDeviceCode({
+        chainId: chain.id,
+        policy: {
+          validate({ expiry: requestedExpiry, limits: requestedLimits }) {
+            return { expiry: requestedExpiry ?? expiry, limits: requestedLimits }
+          },
+        },
+        request: {
+          action: 'updateAccessKey',
+          accessKeyAddress: accessKey.address,
+          account: root.address,
+          codeChallenge: await createCodeChallenge('update-device-code-verifier'),
+          limits,
+        },
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Access key updates are not supported by this policy.]`,
+    )
   })
 
   test('behavior: policy rejection returns an error from the handler', async () => {
@@ -435,7 +492,77 @@ describe('createDeviceCode', () => {
     const body = await response.json()
 
     expect(body.error).toMatchInlineSnapshot(`
-      "[\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "codeChallenge"\n    ],\n    "message": "Invalid input"\n  },\n  {\n    "expected": "string",\n    "code": "invalid_type",\n    "path": [\n      "pubKey"\n    ],\n    "message": "Expected hex value"\n  }\n]"
+      "[
+        {
+          "code": "invalid_union",
+          "errors": [
+            [
+              {
+                "expected": "string",
+                "code": "invalid_type",
+                "path": [
+                  "codeChallenge"
+                ],
+                "message": "Invalid input"
+              },
+              {
+                "expected": "string",
+                "code": "invalid_type",
+                "path": [
+                  "pubKey"
+                ],
+                "message": "Expected hex value"
+              }
+            ],
+            [
+              {
+                "code": "invalid_value",
+                "values": [
+                  "updateAccessKey"
+                ],
+                "path": [
+                  "action"
+                ],
+                "message": "Invalid input"
+              },
+              {
+                "expected": "string",
+                "code": "invalid_type",
+                "path": [
+                  "accessKeyAddress"
+                ],
+                "message": "Expected address"
+              },
+              {
+                "expected": "string",
+                "code": "invalid_type",
+                "path": [
+                  "account"
+                ],
+                "message": "Expected address"
+              },
+              {
+                "expected": "string",
+                "code": "invalid_type",
+                "path": [
+                  "codeChallenge"
+                ],
+                "message": "Invalid input"
+              },
+              {
+                "expected": "array",
+                "code": "invalid_type",
+                "path": [
+                  "limits"
+                ],
+                "message": "Invalid input"
+              }
+            ]
+          ],
+          "path": [],
+          "message": "Invalid input"
+        }
+      ]"
     `)
     expect(response.status).toMatchInlineSnapshot(`400`)
   })
@@ -544,22 +671,70 @@ Received 2 bytes.]`)
     })
 
     expect(result).toMatchInlineSnapshot(`
-    	{
-    	  "error": [$ZodError: [
-    	  {
-    	    "code": "invalid_format",
-    	    "format": "template_literal",
-    	    "pattern": "^0x[0-9a-fA-F]{40}$",
-    	    "path": [
-    	      "limits",
-    	      0,
-    	      "token"
-    	    ],
-    	    "message": "Expected address"
-    	  }
-    	]],
-    	  "success": false,
-    	}
+      {
+        "error": [$ZodError: [
+        {
+          "code": "invalid_union",
+          "errors": [
+            [
+              {
+                "code": "invalid_format",
+                "format": "template_literal",
+                "pattern": "^0x[0-9a-fA-F]{40}$",
+                "path": [
+                  "limits",
+                  0,
+                  "token"
+                ],
+                "message": "Expected address"
+              }
+            ],
+            [
+              {
+                "code": "invalid_value",
+                "values": [
+                  "updateAccessKey"
+                ],
+                "path": [
+                  "action"
+                ],
+                "message": "Invalid input"
+              },
+              {
+                "expected": "string",
+                "code": "invalid_type",
+                "path": [
+                  "accessKeyAddress"
+                ],
+                "message": "Expected address"
+              },
+              {
+                "expected": "string",
+                "code": "invalid_type",
+                "path": [
+                  "account"
+                ],
+                "message": "Expected address"
+              },
+              {
+                "code": "invalid_format",
+                "format": "template_literal",
+                "pattern": "^0x[0-9a-fA-F]{40}$",
+                "path": [
+                  "limits",
+                  0,
+                  "token"
+                ],
+                "message": "Expected address"
+              }
+            ]
+          ],
+          "path": [],
+          "message": "Invalid input"
+        }
+      ]],
+        "success": false,
+      }
     `)
   })
 
@@ -907,7 +1082,7 @@ describe('poll', () => {
     })
 
     const first_ =
-      first.status === 'authorized'
+      first.status === 'authorized' && first.action !== 'updateAccessKey'
         ? {
             ...first,
             keyAuthorization: {
@@ -1035,6 +1210,104 @@ describe('authorize', () => {
     expect(polled.status).toMatchInlineSnapshot(`"authorized"`)
   })
 
+  test('behavior: completes a verified access key update', async () => {
+    const store = CliAuth.Store.memory()
+    const codeVerifier = 'update-device-code-verifier'
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      request: {
+        action: 'updateAccessKey',
+        accessKeyAddress: accessKey.address,
+        account: root.address,
+        codeChallenge: await createCodeChallenge(codeVerifier),
+        limits,
+      },
+      store,
+    })
+    const client = createClient({
+      chain,
+      transport: custom({
+        async request() {
+          return encodeFunctionResult({
+            abi: Abis.accountKeychain,
+            functionName: 'getRemainingLimitWithPeriod',
+            result: [limit, 0n],
+          })
+        },
+      }),
+    })
+
+    const authorized = await CliAuth.authorize({
+      client,
+      request: {
+        action: 'updateAccessKey',
+        accountAddress: root.address,
+        chainId: BigInt(chain.id),
+        code,
+      },
+      store,
+    })
+    const polled = await CliAuth.poll({
+      code,
+      request: { codeVerifier },
+      store,
+    })
+
+    expect({ authorized, polled }).toMatchInlineSnapshot(`
+      {
+        "authorized": {
+          "status": "authorized",
+        },
+        "polled": {
+          "action": "updateAccessKey",
+          "status": "authorized",
+        },
+      }
+    `)
+  })
+
+  test('behavior: rejects an access key update before the requested limit is applied', async () => {
+    const store = CliAuth.Store.memory()
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      request: {
+        action: 'updateAccessKey',
+        accessKeyAddress: accessKey.address,
+        account: root.address,
+        codeChallenge: await createCodeChallenge('update-device-code-verifier'),
+        limits,
+      },
+      store,
+    })
+    const client = createClient({
+      chain,
+      transport: custom({
+        async request() {
+          return encodeFunctionResult({
+            abi: Abis.accountKeychain,
+            functionName: 'getRemainingLimitWithPeriod',
+            result: [limit - 1n, 0n],
+          })
+        },
+      }),
+    })
+
+    await expect(
+      CliAuth.authorize({
+        client,
+        request: {
+          action: 'updateAccessKey',
+          accountAddress: root.address,
+          chainId: BigInt(chain.id),
+          code,
+        },
+        store,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Access key spending limits do not match the device code request.]`,
+    )
+  })
+
   test('behavior: accepts user-approved expiry and limit changes', async () => {
     const store = CliAuth.Store.memory()
     const { codeVerifier, request } = await createRequest()
@@ -1063,7 +1336,8 @@ describe('authorize', () => {
       store,
     })
 
-    if (polled.status !== 'authorized') throw new Error('Expected device code to be authorized.')
+    if (polled.status !== 'authorized' || polled.action === 'updateAccessKey')
+      throw new Error('Expected device code to be authorized.')
 
     expect(authorized).toMatchInlineSnapshot(`
       {
@@ -1139,7 +1413,7 @@ describe('authorize', () => {
         store,
       }),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: Key authorization key does not match the device-code request.]`,
+      `[Error: Key authorization key does not match the device code request.]`,
     )
   })
 
@@ -1200,7 +1474,7 @@ describe('authorize', () => {
     })
 
     const keyAuthorization =
-      polled.status === 'authorized'
+      polled.status === 'authorized' && polled.action !== 'updateAccessKey'
         ? {
             ...polled.keyAuthorization,
             signature: {

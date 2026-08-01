@@ -123,7 +123,9 @@ export function codeAuth(options: codeAuth.Options = {}): Handler {
     try {
       const request = z.decode(CliAuth.authorizeRequest, await readJson(c.req.raw, maxBodyBytes))
       const result = await CliAuth.authorize({
-        client: getClient(request.keyAuthorization.chainId),
+        client: getClient(
+          request.action === 'updateAccessKey' ? request.chainId : request.keyAuthorization.chainId,
+        ),
         ...(now ? { now } : {}),
         request,
         store,

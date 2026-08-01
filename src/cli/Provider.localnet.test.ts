@@ -87,6 +87,9 @@ function createHandler() {
     path: '/cli-auth',
     chains: [chain],
     policy: {
+      update({ limits }) {
+        return { limits }
+      },
       validate({ expiry: requestedExpiry, limits }) {
         return {
           expiry: requestedExpiry ?? expiry,
@@ -105,6 +108,7 @@ function createHandler() {
 async function authorizePending(serverUrl: string, code: string) {
   const response = await fetch(`${serverUrl}/cli-auth/pending/${code}`)
   const pending = z.decode(CliAuth.pendingResponse, (await response.json()) as never)
+  if (pending.action === 'updateAccessKey') throw new Error('Expected authorization request.')
   const signed = await root.signKeyAuthorization(
     {
       accessKeyAddress: Address.fromPublicKey(PublicKey.from(pending.pubKey)),
@@ -125,6 +129,27 @@ async function authorizePending(serverUrl: string, code: string) {
       ...keyAuthorization,
       address: keyAuthorization.keyId,
     }),
+  })
+}
+
+async function completePending(serverUrl: string, code: string) {
+  const response = await fetch(`${serverUrl}/cli-auth/pending/${code}`)
+  const pending = z.decode(CliAuth.pendingResponse, (await response.json()) as never)
+  if (pending.action !== 'updateAccessKey') return authorizePending(serverUrl, code)
+
+  const client = getClient({ account: root })
+  for (const item of pending.limits)
+    await Actions.accessKey.updateLimitSync(client, {
+      accessKey: pending.accessKeyAddress,
+      limit: item.limit,
+      token: item.token,
+    })
+
+  return z.encode(CliAuth.authorizeRequest, {
+    action: 'updateAccessKey',
+    accountAddress: root.address,
+    chainId: pending.chainId,
+    code,
   })
 }
 
@@ -165,7 +190,7 @@ const transferCall = Actions.token.transfer.call({
 })
 
 describe('Provider.create', () => {
-  test('default: bootstraps wallet_connect through the device-code flow', async () => {
+  test('default: bootstraps wallet_connect through the device code flow', async () => {
     const handler = createHandler()
     const server = await createServer(handler.listener)
     const opened: string[] = []
@@ -229,7 +254,7 @@ describe('Provider.create', () => {
     }
   })
 
-  test('behavior: forwards showDeposit through registration device-code requests', async () => {
+  test('behavior: forwards showDeposit through registration device code requests', async () => {
     const handler = createHandler()
     const server = await createServer(handler.listener)
     const pendingShowDeposit: z.output<typeof CliAuth.pendingResponse>['showDeposit'][] = []
@@ -278,7 +303,7 @@ describe('Provider.create', () => {
     }
   })
 
-  test('behavior: forwards showDeposit through login device-code requests', async () => {
+  test('behavior: forwards showDeposit through login device code requests', async () => {
     const handler = createHandler()
     const server = await createServer(handler.listener)
     const pendingShowDeposit: z.output<typeof CliAuth.pendingResponse>['showDeposit'][] = []
@@ -317,7 +342,7 @@ describe('Provider.create', () => {
     }
   })
 
-  test('behavior: forwards showDeposit through wallet_authorizeAccessKey device-code requests', async () => {
+  test('behavior: forwards showDeposit through wallet_authorizeAccessKey device code requests', async () => {
     const handler = createHandler()
     const server = await createServer(handler.listener)
     const pendingShowDeposit: z.output<typeof CliAuth.pendingResponse>['showDeposit'][] = []
@@ -510,7 +535,7 @@ describe('Provider.create', () => {
         open: async (url) => {
           opened.push(url)
           const approve = approvals.shift()
-          if (!approve) throw new Error('Unexpected device-code approval request.')
+          if (!approve) throw new Error('Unexpected device code approval request.')
           const code = new URL(url).searchParams.get('code')!
           await fetch(`${server.url}/cli-auth`, {
             body: JSON.stringify(await approve(code)),
@@ -758,6 +783,61 @@ describe('Provider.create', () => {
       expect(first.keyAuthorization.keyId).not.toBe(second.keyAuthorization.keyId)
       expect(new Set(keys.map((key) => key.keyType))).toEqual(new Set(['secp256k1', 'p256']))
       expect(receipt.status).toBe('0x1')
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('wallet_updateAccessKey: updates spending limits through browser approval', async () => {
+    const handler = createHandler()
+    const server = await createServer(handler.listener)
+    const storagePath = await createStoragePath()
+    const storage = Storage.filesystem({ path: storagePath })
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (url) => {
+          const code = new URL(url).searchParams.get('code')!
+          const body = await completePending(server.url, code)
+          const response = await fetch(`${server.url}/cli-auth`, {
+            body: JSON.stringify(body),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          })
+          if (!response.ok) throw new Error(await response.text())
+        },
+        host: `${server.url}/cli-auth`,
+        storage,
+      })
+      const updated = parseUnits('9', 6)
+      const { keyAuthorization, rootAddress } = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry }],
+      })
+      await fund(rootAddress)
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      await provider.request({
+        method: 'wallet_updateAccessKey',
+        params: [
+          {
+            address: rootAddress,
+            accessKeyAddress: keyAuthorization.address!,
+            limits: [{ limit: Hex.fromNumber(updated), token: Addresses.pathUsd }],
+          },
+        ],
+      })
+
+      const { remaining } = await Actions.accessKey.getRemainingLimit(getClient(), {
+        account: rootAddress,
+        accessKey: keyAuthorization.address!,
+        token: Addresses.pathUsd,
+      })
+      expect(remaining).toBe(updated)
     } finally {
       await server.closeAsync()
     }
