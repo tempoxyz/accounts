@@ -6,6 +6,7 @@ import { Actions } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
 import * as z from 'zod/mini'
 
+import * as AccessKey from '../core/AccessKey.js'
 import * as u from '../core/zod/utils.js'
 import type { MaybePromise } from '../internal/types.js'
 import type { Kv } from './Kv.js'
@@ -674,6 +675,17 @@ export function from(options: from.Options = {}): CliAuth {
         const client = options.client ?? cache.get(current.chainId)
         let replacement: z.output<typeof keyAuthorization> | undefined
         if (current.keyAuthorization) {
+          const metadata = await Actions.accessKey
+            .getMetadata(client, {
+              account: options.request.accountAddress,
+              accessKey: current.accessKeyAddress,
+            })
+            .catch((error) => {
+              if (AccessKey.isUnavailableError(error)) return undefined
+              throw error
+            })
+          if (metadata?.address.toLowerCase() === current.accessKeyAddress.toLowerCase())
+            throw new Error('Access key was published while the update was pending.')
           if (!options.request.keyAuthorization)
             throw new Error('Pending access key update requires a replacement key authorization.')
           const previous = normalizeKeyAuthorization(current.keyAuthorization)
@@ -796,6 +808,12 @@ export function from(options: from.Options = {}): CliAuth {
           chainId: chainId_resolved,
           limits: options.request.limits,
         })
+        const tokens = new Set<string>()
+        for (const limit of approved.limits) {
+          const token = limit.token.toLowerCase()
+          if (tokens.has(token)) throw new Error('Access key update limits must use unique tokens.')
+          tokens.add(token)
+        }
         let pendingKeyAuthorization: z.output<typeof keyAuthorization> | undefined
         if (options.request.keyAuthorization) {
           const actual = await verifyKeyAuthorizationSignature({

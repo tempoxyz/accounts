@@ -1,6 +1,6 @@
 import { Base64 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { createClient, custom, encodeFunctionResult } from 'viem'
+import { createClient, custom, encodeErrorResult, encodeFunctionResult } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
@@ -22,6 +22,23 @@ const limits = [
     token,
   },
 ] as const
+
+function createMissingAccessKeyClient() {
+  return createClient({
+    chain,
+    transport: custom({
+      async request() {
+        throw Object.assign(new Error('reverted'), {
+          data: encodeErrorResult({
+            abi: Abis.abis,
+            errorName: 'KeyNotFound',
+            args: [],
+          } as never),
+        })
+      },
+    }),
+  })
+}
 
 async function authorize(
   code: string,
@@ -383,6 +400,34 @@ describe('createDeviceCode', () => {
       }),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[Error: Access key updates are not supported by this policy.]`,
+    )
+  })
+
+  test('behavior: rejects duplicate access key update tokens', async () => {
+    await expect(
+      CliAuth.createDeviceCode({
+        chainId: chain.id,
+        policy: {
+          update({ limits }) {
+            return { limits }
+          },
+          validate({ expiry, limits }) {
+            return { expiry: expiry ?? 0, ...(limits ? { limits } : {}) }
+          },
+        },
+        request: {
+          action: 'updateAccessKey',
+          accessKeyAddress: accessKey.address,
+          account: root.address,
+          codeChallenge: await createCodeChallenge('update-device-code-verifier'),
+          limits: [
+            { limit: 1n, token },
+            { limit: 2n, token: `0x${token.slice(2).toUpperCase()}` as typeof token },
+          ],
+        },
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Access key update limits must use unique tokens.]`,
     )
   })
 
@@ -1344,6 +1389,7 @@ describe('authorize', () => {
     const replacement = (await authorize(code, { limits })).keyAuthorization
 
     await CliAuth.authorize({
+      client: createMissingAccessKeyClient(),
       request: {
         action: 'updateAccessKey',
         accountAddress: root.address,
@@ -1366,6 +1412,64 @@ describe('authorize', () => {
     })
   })
 
+  test('behavior: rejects a replacement after the access key is published', async () => {
+    const store = CliAuth.Store.memory()
+    const original = (
+      await authorize('unused', {
+        limits: [{ limit: 1n, token }],
+      })
+    ).keyAuthorization
+    const { code } = await CliAuth.createDeviceCode({
+      chainId: chain.id,
+      request: {
+        action: 'updateAccessKey',
+        accessKeyAddress: accessKey.address,
+        account: root.address,
+        codeChallenge: await createCodeChallenge('pending-update-device-code-verifier'),
+        keyAuthorization: original,
+        limits,
+      },
+      store,
+    })
+    const replacement = (await authorize(code, { limits })).keyAuthorization
+    const client = createClient({
+      chain,
+      transport: custom({
+        async request({ method }) {
+          if (method === 'eth_call')
+            return encodeFunctionResult({
+              abi: Abis.accountKeychain,
+              functionName: 'getKey',
+              result: {
+                enforceLimits: true,
+                expiry: BigInt(expiry),
+                isRevoked: false,
+                keyId: accessKey.address,
+                signatureType: 1,
+              },
+            } as never)
+          throw new Error('Contract lookup unavailable.')
+        },
+      }),
+    })
+
+    await expect(
+      CliAuth.authorize({
+        client,
+        request: {
+          action: 'updateAccessKey',
+          accountAddress: root.address,
+          chainId: BigInt(chain.id),
+          code,
+          keyAuthorization: replacement,
+        },
+        store,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Access key was published while the update was pending.]`,
+    )
+  })
+
   test('behavior: rejects immutable field changes to a pending key authorization', async () => {
     const store = CliAuth.Store.memory()
     const original = (await authorize('unused')).keyAuthorization
@@ -1385,6 +1489,7 @@ describe('authorize', () => {
 
     await expect(
       CliAuth.authorize({
+        client: createMissingAccessKeyClient(),
         request: {
           action: 'updateAccessKey',
           accountAddress: root.address,
