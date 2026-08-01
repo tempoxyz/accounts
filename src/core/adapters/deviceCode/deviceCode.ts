@@ -15,6 +15,7 @@ import { fromRequest } from '../internal/fromRequest.js'
  */
 export function deviceCode(options: deviceCode.Options): Adapter.Adapter {
   const {
+    actions,
     fetch,
     icon,
     keystores,
@@ -29,6 +30,7 @@ export function deviceCode(options: deviceCode.Options): Adapter.Adapter {
   } = options
 
   return fromRequest({
+    ...(actions ? { actions } : {}),
     ...(icon ? { icon } : {}),
     ...(keystores ? { keystores } : {}),
     name,
@@ -90,6 +92,8 @@ export function deviceCode(options: deviceCode.Options): Adapter.Adapter {
 export declare namespace deviceCode {
   /** Options for {@link deviceCode}. */
   export type Options = {
+    /** Adapter-specific action overrides layered over the request-forwarding defaults. */
+    actions?: fromRequest.Options['actions'] | undefined
     /** Override the transport `fetch` implementation. */
     fetch?: typeof globalThis.fetch | undefined
     /** Data URI of the provider icon, announced via EIP-6963. */

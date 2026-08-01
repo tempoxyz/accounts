@@ -1,9 +1,12 @@
 import { spawn } from 'node:child_process'
+import { KeyAuthorization } from 'ox/tempo'
 import type { DeviceCode } from 'wata'
+import * as z from 'zod/mini'
 
 import type * as Adapter from '../core/Adapter.js'
 import { deviceCode } from '../core/adapters/deviceCode/deviceCode.js'
 import * as Keystore from '../core/Keystore.js'
+import * as Rpc from '../core/zod/rpc.js'
 
 /**
  * Creates a CLI bootstrap adapter backed by the Wata device-code transport
@@ -23,6 +26,54 @@ export function cli(options: cli.Options): Adapter.Adapter {
   } = options
 
   return deviceCode({
+    actions: ({ getClient, request, store }) => ({
+      // Limit updates run their own ceremony: the wallet returns a
+      // replacement signed authorization for a pending (unpublished) key,
+      // or applies the update on-chain for a published one.
+      async updateAccessKey(parameters) {
+        const chainId = Number(parameters.chainId ?? store.getState().chainId)
+        const current = store.accessKeys.list({
+          accessKey: parameters.accessKeyAddress,
+          account: parameters.address,
+          chainId,
+        })[0]
+        const status = current?.keyAuthorization
+          ? await store.accessKeys.getStatus({
+              accessKey: parameters.accessKeyAddress,
+              account: parameters.address,
+              chainId,
+              client: getClient({ chainId }),
+            })
+          : undefined
+        const pendingKeyAuthorization =
+          status === 'pending' && current?.keyAuthorization
+            ? KeyAuthorization.toRpc(current.keyAuthorization)
+            : undefined
+
+        const encoded = z.encode(Rpc.wallet_updateAccessKey.parameters, {
+          ...parameters,
+          chainId: BigInt(chainId),
+        })
+        const result = (await request({
+          context: { account: parameters.address, chainId },
+          method: 'wallet_updateAccessKey',
+          params: [
+            {
+              ...encoded,
+              ...(pendingKeyAuthorization ? { keyAuthorization: pendingKeyAuthorization } : {}),
+            },
+          ],
+        })) as { keyAuthorization?: KeyAuthorization.Rpc | undefined } | null | undefined
+
+        if (result?.keyAuthorization)
+          store.accessKeys.updateAuthorization({
+            accessKey: parameters.accessKeyAddress,
+            account: parameters.address,
+            authorization: KeyAuthorization.fromRpc(result.keyAuthorization),
+            chainId,
+          })
+      },
+    }),
     // The CLI persists to string-based filesystem storage, so its p256
     // default opts into an extractable WebCrypto key (a non-extractable one
     // could not survive a restart). secp256k1 stays available for explicit
@@ -32,9 +83,9 @@ export function cli(options: cli.Options): Adapter.Adapter {
       secp256k1: Keystore.secp256k1(),
     },
     meta: { name },
-    // Only the bootstrap ceremonies open a browser; everything else signs
-    // locally with the stored access key or fails fast.
-    methods: ['wallet_connect', 'wallet_authorizeAccessKey'],
+    // Only the ceremonies (bootstrap and limit updates) open a browser;
+    // everything else signs locally with the stored access key or fails fast.
+    methods: ['wallet_connect', 'wallet_authorizeAccessKey', 'wallet_updateAccessKey'],
     name,
     async onPrompt(prompt) {
       await open(prompt.verificationUriFull ?? prompt.verificationUri, prompt)

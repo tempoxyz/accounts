@@ -523,6 +523,122 @@ describe('Provider.create', () => {
     }
   })
 
+  test('behavior: wallet_updateAccessKey replaces an unpublished key authorization', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
+    const storagePath = await createStoragePath()
+    const storage = Storage.filesystem({ path: storagePath })
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
+        },
+        host: `${server.url}/auth/device`,
+        storage,
+      })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [
+          {
+            capabilities: {
+              authorizeAccessKey: {
+                expiry: expiry_2,
+                limits: [{ limit: ox_Hex.fromNumber(1n), token: Addresses.pathUsd }],
+              },
+            },
+          },
+        ],
+      })
+      const account = result.accounts[0]!
+      const accessKeyAddress = account.capabilities.keyAuthorization!.keyId
+
+      const updated = parseUnits('9', 6)
+      await provider.request({
+        method: 'wallet_updateAccessKey',
+        params: [
+          {
+            address: account.address,
+            accessKeyAddress,
+            limits: [{ limit: ox_Hex.fromNumber(updated), token: Addresses.pathUsd }],
+          },
+        ],
+      })
+
+      const [stored] = provider.store.accessKeys.list({
+        accessKey: accessKeyAddress,
+        account: account.address,
+        chainId: chain.id,
+      })
+      expect(stored?.keyAuthorization?.limits).toEqual([
+        { limit: updated, token: Addresses.pathUsd },
+      ])
+      expect(
+        await provider.store.accessKeys.getStatus({
+          accessKey: accessKeyAddress,
+          account: account.address,
+          chainId: chain.id,
+          client: getClient(),
+        }),
+      ).toBe('pending')
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('behavior: wallet_updateAccessKey updates published spending limits through approval', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
+    const storagePath = await createStoragePath()
+    const storage = Storage.filesystem({ path: storagePath })
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
+        },
+        host: `${server.url}/auth/device`,
+        storage,
+      })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { authorizeAccessKey: { expiry: expiry_2 } } }],
+      })
+      const account = result.accounts[0]!
+      const accessKeyAddress = account.capabilities.keyAuthorization!.keyId
+      await fund(account.address)
+      await provider.request({
+        method: 'eth_sendTransactionSync',
+        params: [{ calls: [transferCall] }],
+      })
+
+      const updated = parseUnits('9', 6)
+      await provider.request({
+        method: 'wallet_updateAccessKey',
+        params: [
+          {
+            address: account.address,
+            accessKeyAddress,
+            limits: [{ limit: ox_Hex.fromNumber(updated), token: Addresses.pathUsd }],
+          },
+        ],
+      })
+
+      const { remaining } = await Actions.accessKey.getRemainingLimit(getClient(), {
+        account: account.address,
+        accessKey: accessKeyAddress,
+        token: Addresses.pathUsd,
+      })
+      expect(remaining).toBe(updated)
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
   test('behavior: regenerates a managed key when the requested key type changes', async () => {
     const host = createDeviceCodeHost()
     const server = await createServer(host.listener)
