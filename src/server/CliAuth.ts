@@ -12,7 +12,11 @@ import type { MaybePromise } from '../internal/types.js'
 import type { Kv } from './Kv.js'
 
 const maxLimits = 10
-const limit = z.object({ token: u.address(), limit: u.bigint() })
+const limit = z.object({
+  token: u.address(),
+  limit: u.bigint(),
+  period: z.optional(u.number()),
+})
 const limits = z.readonly(z.array(limit).check(z.maxLength(maxLimits)))
 const showDeposit = z.optional(
   z.union([
