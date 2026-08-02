@@ -6,6 +6,7 @@ import * as RequestListener from './internal/requestListener.js'
 
 export { auth } from './internal/handlers/auth.js'
 export { type SessionRequest } from './internal/handlers/session.js'
+export { deviceCode } from './internal/handlers/deviceCode.js'
 export { exchange } from './internal/handlers/exchange.js'
 export { oidcProvider } from './internal/handlers/oidcProvider.js'
 export { relay } from './internal/handlers/relay.js'

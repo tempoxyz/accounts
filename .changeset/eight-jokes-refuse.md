@@ -2,7 +2,7 @@
 'accounts': minor
 ---
 
-**Breaking:** Rewrote `accounts/cli` onto the Wata device-code transport and removed `CliAuth` and `Handler.codeAuth` from `accounts/server`; wallets host the `wata` device-code transport instead.
+Rewrote `accounts/cli` onto the Wata device-code transport and replaced `CliAuth` and `Handler.codeAuth` with `Handler.deviceCode`.
 
 ```diff
 - Provider.create({

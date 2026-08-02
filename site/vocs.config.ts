@@ -173,6 +173,7 @@ const config: Config = defineConfig({
                 items: [
                   { text: '.auth', link: '/docs/server/handler.auth' },
                   { text: '.compose', link: '/docs/server/handler.compose' },
+                  { text: '.deviceCode', link: '/docs/server/handler.deviceCode' },
                   { text: '.exchange', link: '/docs/server/handler.exchange' },
                   { text: '.relay', link: '/docs/server/handler.relay' },
                   { text: '.webAuthn', link: '/docs/server/handler.webAuthn' },

@@ -1,8 +1,23 @@
 import { hc } from 'hono/client'
 import type { ExtractSchema } from 'hono/types'
 import { describe, expectTypeOf, test } from 'vp/test'
+import { Store } from 'wata/host'
 
 import * as Handler from './Handler.js'
+
+describe('deviceCode', () => {
+  test('accepts host deployment options', () => {
+    const handler = Handler.deviceCode({
+      baseUrl: (request) => new URL(request.url).origin,
+      html: {
+        render: () => new Response('verify'),
+      },
+      store: Store.memory(),
+    })
+
+    expectTypeOf(handler).toMatchTypeOf<Handler.Handler>()
+  })
+})
 
 describe('auth identity (OIDC)', () => {
   test('Options.identity opts into issuer-based verification', () => {
