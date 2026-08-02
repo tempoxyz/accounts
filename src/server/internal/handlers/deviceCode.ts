@@ -14,7 +14,10 @@ const verifyRequest = z.object({
 })
 
 type PendingRequest = {
+  context?: { account?: string | undefined; chainId?: number | undefined } | undefined
   id: string | number
+  method: string
+  params?: unknown
 }
 
 /**
@@ -38,6 +41,7 @@ export function deviceCode(options: deviceCode.Options): Handler {
     path = '/auth/device',
     pollingInterval,
     store = Store.memory(),
+    validate,
     ...rest
   } = options
 
@@ -102,6 +106,14 @@ export function deviceCode(options: deviceCode.Options): Handler {
                   { status: 400 },
                 )
 
+              const validation = await validate?.({
+                record,
+                request: pending,
+                result: submittedResult,
+                userCode,
+              })
+              if (validation) return validation
+
               results.set(pending.id, submittedResult)
               await actions.approve(userCode)
               await responded
@@ -111,7 +123,7 @@ export function deviceCode(options: deviceCode.Options): Handler {
           },
           path,
           ...(pollingInterval !== undefined ? { pollingInterval } : {}),
-          store,
+          store: normalizeStore(store),
         }),
       ],
     })
@@ -129,7 +141,7 @@ export function deviceCode(options: deviceCode.Options): Handler {
       }
     })
 
-    return await wata.fetch(request)
+    return await normalizeRegisterResponse(await wata.fetch(request), request, path)
   })
 
   return router
@@ -157,6 +169,19 @@ export declare namespace deviceCode {
     pollingInterval?: number | undefined
     /** Device-code persistence. @default in-memory */
     store?: Store.Store | undefined
+    /** Host policy applied before an approved result is relayed to the consumer. */
+    validate?:
+      | ((options: {
+          /** Pending device-code record. */
+          record: DeviceCode.PendingRecord
+          /** Pending JSON-RPC request matched to the submitted result. */
+          request: PendingRequest
+          /** Browser-submitted result. */
+          result: unknown
+          /** Normalized raw user code. */
+          userCode: string
+        }) => Promise<Response | undefined> | Response | undefined)
+      | undefined
   }
 }
 
@@ -168,9 +193,53 @@ function pendingRequests(record: DeviceCode.PendingRecord): PendingRequest[] {
 }
 
 function normalizeUserCode(value: string): string {
-  const compact = value.replace(/[\s-]/g, '').toUpperCase()
-  if (compact.length !== 8) return value.trim().toUpperCase()
-  return `${compact.slice(0, 4)}-${compact.slice(4)}`
+  return value.replace(/[\s-]/g, '').toUpperCase()
+}
+
+function normalizeStore(store: Store.Store): Store.Store {
+  function key(value: string) {
+    if (!value.startsWith('user:')) return value
+    return `user:${normalizeUserCode(value.slice('user:'.length))}`
+  }
+
+  return Store.from({
+    delete: (value) => store.delete(key(value)),
+    get: <value = unknown>(name: string) => store.get<value>(key(name)),
+    set: (name, value, options) => store.set(key(name), value, options),
+    ...(store.take
+      ? { take: <value = unknown>(name: string) => store.take!<value>(key(name)) }
+      : {}),
+  })
+}
+
+async function normalizeRegisterResponse(response: Response, request: Request, path: string) {
+  if (!response.ok || new URL(request.url).pathname !== `${path}/register`) return response
+
+  const body = (await response.json()) as {
+    user_code?: unknown
+    verification_uri_complete?: unknown
+  }
+  if (typeof body.user_code !== 'string') return response
+
+  const userCode = normalizeUserCode(body.user_code)
+  const verificationUriComplete =
+    typeof body.verification_uri_complete === 'string'
+      ? (() => {
+          const url = new URL(body.verification_uri_complete)
+          url.searchParams.set('user_code', userCode)
+          return url.toString()
+        })()
+      : body.verification_uri_complete
+  const headers = new Headers(response.headers)
+  headers.delete('content-length')
+  return Response.json(
+    {
+      ...body,
+      user_code: userCode,
+      ...(verificationUriComplete ? { verification_uri_complete: verificationUriComplete } : {}),
+    },
+    { headers, status: response.status },
+  )
 }
 
 async function readVerifyBody(

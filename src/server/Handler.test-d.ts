@@ -13,6 +13,13 @@ describe('deviceCode', () => {
         render: () => new Response('verify'),
       },
       store: Store.memory(),
+      validate(options) {
+        expectTypeOf(options.record).toEqualTypeOf<import('wata/host').DeviceCode.PendingRecord>()
+        expectTypeOf(options.request.id).toEqualTypeOf<string | number>()
+        expectTypeOf(options.result).toBeUnknown()
+        expectTypeOf(options.userCode).toBeString()
+        return undefined
+      },
     })
 
     expectTypeOf(handler).toMatchTypeOf<Handler.Handler>()
