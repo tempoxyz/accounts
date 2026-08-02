@@ -115,6 +115,20 @@ describe('deviceCode', () => {
     }
   })
 
+  test('behavior: preserves a null username capability', async () => {
+    const host = createDeviceCodeHost({ username: null })
+    const server = await createServer(host.listener)
+
+    try {
+      const provider = createProvider({ url: `${server.url}/auth/device` })
+      const result = await provider.request(connectRequest())
+
+      expect(result.accounts[0]!.capabilities.username).toBeNull()
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
   test('behavior: denial rejects with a user-rejected error', async () => {
     const host = createDeviceCodeHost()
     const server = await createServer(host.listener)

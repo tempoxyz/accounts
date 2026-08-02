@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
+import { Provider as core_Provider } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
+import { hashMessage, hashTypedData } from 'viem'
 import type { DeviceCode } from 'wata'
 import * as z from 'zod/mini'
 
@@ -26,54 +28,78 @@ export function cli(options: cli.Options): Adapter.Adapter {
   } = options
 
   return deviceCode({
-    actions: ({ getClient, request, store }) => ({
-      // Limit updates run their own ceremony: the wallet returns a
-      // replacement signed authorization for a pending (unpublished) key,
-      // or applies the update on-chain for a published one.
-      async updateAccessKey(parameters) {
-        const chainId = Number(parameters.chainId ?? store.getState().chainId)
-        const current = store.accessKeys.list({
-          accessKey: parameters.accessKeyAddress,
-          account: parameters.address,
-          chainId,
-        })[0]
-        const status = current?.keyAuthorization
-          ? await store.accessKeys.getStatus({
-              accessKey: parameters.accessKeyAddress,
-              account: parameters.address,
-              chainId,
-              client: getClient({ chainId }),
-            })
-          : undefined
-        const pendingKeyAuthorization =
-          status === 'pending' && current?.keyAuthorization
-            ? KeyAuthorization.toRpc(current.keyAuthorization)
-            : undefined
-
-        const encoded = z.encode(Rpc.wallet_updateAccessKey.parameters, {
-          ...parameters,
-          chainId: BigInt(chainId),
+    actions: ({ getClient, request, store }) => {
+      async function getAccessKey(address: `0x${string}`) {
+        const account = await store.accessKeys.select({
+          account: address,
+          chainId: store.getState().chainId,
         })
-        const result = (await request({
-          context: { account: parameters.address, chainId },
-          method: 'wallet_updateAccessKey',
-          params: [
-            {
-              ...encoded,
-              ...(pendingKeyAuthorization ? { keyAuthorization: pendingKeyAuthorization } : {}),
-            },
-          ],
-        })) as { keyAuthorization?: KeyAuthorization.Rpc | undefined } | null | undefined
+        if (!account)
+          throw new core_Provider.UnauthorizedError({
+            message: `Account "${address}" cannot sign with an access key.`,
+          })
+        return account
+      }
 
-        if (result?.keyAuthorization)
-          store.accessKeys.updateAuthorization({
+      return {
+        async signPersonalMessage(parameters) {
+          const account = await getAccessKey(parameters.address)
+          return await account.sign({ hash: hashMessage({ raw: parameters.data }) })
+        },
+        async signTypedData(parameters) {
+          const account = await getAccessKey(parameters.address)
+          return await account.sign({
+            hash: hashTypedData(JSON.parse(parameters.data) as never),
+          })
+        },
+        // Limit updates run their own ceremony: the wallet returns a
+        // replacement signed authorization for a pending (unpublished) key,
+        // or applies the update on-chain for a published one.
+        async updateAccessKey(parameters) {
+          const chainId = Number(parameters.chainId ?? store.getState().chainId)
+          const current = store.accessKeys.list({
             accessKey: parameters.accessKeyAddress,
             account: parameters.address,
-            authorization: KeyAuthorization.fromRpc(result.keyAuthorization),
             chainId,
+          })[0]
+          const status = current?.keyAuthorization
+            ? await store.accessKeys.getStatus({
+                accessKey: parameters.accessKeyAddress,
+                account: parameters.address,
+                chainId,
+                client: getClient({ chainId }),
+              })
+            : undefined
+          const pendingKeyAuthorization =
+            status === 'pending' && current?.keyAuthorization
+              ? KeyAuthorization.toRpc(current.keyAuthorization)
+              : undefined
+
+          const encoded = z.encode(Rpc.wallet_updateAccessKey.parameters, {
+            ...parameters,
+            chainId: BigInt(chainId),
           })
-      },
-    }),
+          const result = (await request({
+            context: { account: parameters.address, chainId },
+            method: 'wallet_updateAccessKey',
+            params: [
+              {
+                ...encoded,
+                ...(pendingKeyAuthorization ? { keyAuthorization: pendingKeyAuthorization } : {}),
+              },
+            ],
+          })) as { keyAuthorization?: KeyAuthorization.Rpc | undefined } | null | undefined
+
+          if (result?.keyAuthorization)
+            store.accessKeys.updateAuthorization({
+              accessKey: parameters.accessKeyAddress,
+              account: parameters.address,
+              authorization: KeyAuthorization.fromRpc(result.keyAuthorization),
+              chainId,
+            })
+        },
+      }
+    },
     // The CLI persists to string-based filesystem storage, so its p256
     // default opts into an extractable WebCrypto key (a non-extractable one
     // could not survive a restart). secp256k1 stays available for explicit
@@ -88,6 +114,8 @@ export function cli(options: cli.Options): Adapter.Adapter {
     methods: ['wallet_connect', 'wallet_authorizeAccessKey', 'wallet_updateAccessKey'],
     name,
     async onPrompt(prompt) {
+      if (!prompt.verificationUriFull)
+        process.stdout.write(`Enter code ${prompt.userCode} at ${prompt.verificationUri}\n`)
       await open(prompt.verificationUriFull ?? prompt.verificationUri, prompt)
     },
     rdns,

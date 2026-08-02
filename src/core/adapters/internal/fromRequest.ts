@@ -64,6 +64,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
             : {}),
           ...(capabilities?.personalSign ? { personalSign: capabilities.personalSign } : {}),
           ...(capabilities?.signature ? { signature: capabilities.signature } : {}),
+          ...(capabilities?.username !== undefined ? { username: capabilities.username } : {}),
         }
       }
 

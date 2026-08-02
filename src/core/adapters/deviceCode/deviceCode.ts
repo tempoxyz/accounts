@@ -101,7 +101,14 @@ export declare namespace deviceCode {
     /** Keystores backing locally generated access keys (SDK default otherwise). */
     keystores?: Keystore.Keystores | undefined
     /** Consumer metadata shown on the host's approval page. */
-    meta?: { name: string; description?: string; icon?: string; websiteUrl?: string } | undefined
+    meta?:
+      | {
+          name: string
+          description?: string | undefined
+          icon?: string | undefined
+          websiteUrl?: string | undefined
+        }
+      | undefined
     /** Allowlist of RPC methods forwarded over the transport. Forwards all when omitted. */
     methods?: readonly string[] | undefined
     /** Provider display name. */

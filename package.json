@@ -178,6 +178,7 @@
     "./deviceCode": {
       "types": "./dist/core/adapters/deviceCode/index.d.ts",
       "src": "./src/core/adapters/deviceCode/index.ts",
+      "react-native": "./dist/core/adapters/deviceCode/index.js",
       "default": "./dist/core/adapters/deviceCode/index.js"
     },
     "./mobileWebAuth": {

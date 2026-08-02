@@ -17,7 +17,12 @@ const root = accounts[0]!
  * on `/verify` returns the pending record, JSON POST approves or denies.
  */
 export function createDeviceCodeHost(options: createDeviceCodeHost.Options = {}) {
-  const { path = '/auth/device', pollingInterval = 50 } = options
+  const {
+    omitVerificationUriFull = false,
+    path = '/auth/device',
+    pollingInterval = 50,
+    username,
+  } = options
   const store = Store.memory()
   const requests: { method: string; params: unknown }[] = []
 
@@ -56,7 +61,7 @@ export function createDeviceCodeHost(options: createDeviceCodeHost.Options = {})
                 for (const message of record.message.payload) {
                   if (typeof message !== 'object' || message === null || !('id' in message))
                     continue
-                  results.set(message.id, await respondTo(message))
+                  results.set(message.id, await respondTo(message, { username }))
                 }
               await actions.approve(userCode)
               await responded
@@ -89,7 +94,13 @@ export function createDeviceCodeHost(options: createDeviceCodeHost.Options = {})
       }
     })
 
-    return await wata.fetch(request)
+    const response = await wata.fetch(request)
+    if (!omitVerificationUriFull || !new URL(request.url).pathname.endsWith('/register'))
+      return response
+
+    const body = (await response.json()) as Record<string, unknown>
+    delete body.verification_uri_complete
+    return Response.json(body, { status: response.status })
   }
 
   return {
@@ -101,10 +112,14 @@ export function createDeviceCodeHost(options: createDeviceCodeHost.Options = {})
 
 export declare namespace createDeviceCodeHost {
   type Options = {
+    /** Omits the optional complete verification URI from registration responses. */
+    omitVerificationUriFull?: boolean | undefined
     /** Mount path for the device-code routes. @default '/auth/device' */
     path?: string | undefined
     /** Advertised poll interval in milliseconds. @default 50 */
     pollingInterval?: number | undefined
+    /** Username capability returned by `wallet_connect`. */
+    username?: string | null | undefined
   }
 }
 
@@ -148,7 +163,10 @@ function accessKeyAddress(
 }
 
 /** Produces the signed response for a queued request, before approval. */
-async function respondTo(message: { method: string; params?: unknown }): Promise<unknown> {
+async function respondTo(
+  message: { method: string; params?: unknown },
+  options: { username?: string | null | undefined } = {},
+): Promise<unknown> {
   if (message.method === 'wallet_connect') {
     const [parameters] = z.decode(Rpc.wallet_connect.schema.params!, message.params as never) ?? []
     const authorization = parameters?.capabilities?.authorizeAccessKey
@@ -159,8 +177,11 @@ async function respondTo(message: { method: string; params?: unknown }): Promise
           capabilities: authorization
             ? {
                 keyAuthorization: KeyAuthorization.toRpc(await signKeyAuthorization(authorization)),
+                ...(options.username !== undefined ? { username: options.username } : {}),
               }
-            : {},
+            : options.username !== undefined
+              ? { username: options.username }
+              : {},
         },
       ],
     }

@@ -5,7 +5,7 @@ import type { Address, Hex } from 'ox'
 import { Hex as ox_Hex } from 'ox'
 import { type Address as ViemAddress, parseUnits } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
-import { describe, expect, test } from 'vp/test'
+import { describe, expect, test, vi } from 'vp/test'
 import type * as z from 'zod/mini'
 
 import { accounts, chain, getClient } from '../../test/config.js'
@@ -275,6 +275,31 @@ describe('Provider.create', () => {
     }
   })
 
+  test('behavior: prints the user code when the complete verification URI is absent', async () => {
+    const host = createDeviceCodeHost({ omitVerificationUriFull: true })
+    const server = await createServer(host.listener)
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (url, prompt) => {
+          expect(url).toBe(prompt.verificationUri)
+          await submitVerify(prompt)
+        },
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
+      })
+
+      await provider.request(connectRequest())
+
+      expect(write).toHaveBeenCalledWith(expect.stringMatching(/^Enter code .+ at http/))
+    } finally {
+      write.mockRestore()
+      await server.closeAsync()
+    }
+  })
+
   test('behavior: times out while waiting for authorization', async () => {
     const host = createDeviceCodeHost({ pollingInterval: 10 })
     const server = await createServer(host.listener)
@@ -470,6 +495,53 @@ describe('Provider.create', () => {
       // which survives the filesystem storage round-trip above.
       expect(entry!.handle).toMatchObject({ kind: 'webcrypto-p256' })
       expect((entry!.handle as { jwk?: { d?: string } }).jwk?.d).toBeTruthy()
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('behavior: signs messages locally with the managed access key', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
+        },
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
+      })
+      const connected = await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { authorizeAccessKey: { expiry: expiry_2 } } }],
+      })
+      const address = connected.accounts[0]!.address
+
+      const personal = await provider.request({
+        method: 'personal_sign',
+        params: ['0x68656c6c6f', address],
+      })
+      const typedData = await provider.request({
+        method: 'eth_signTypedData_v4',
+        params: [
+          address,
+          JSON.stringify({
+            domain: {},
+            message: { contents: 'hello' },
+            primaryType: 'Message',
+            types: {
+              EIP712Domain: [],
+              Message: [{ name: 'contents', type: 'string' }],
+            },
+          }),
+        ],
+      })
+
+      expect(personal).toMatch(/^0x/)
+      expect(typedData).toMatch(/^0x/)
+      expect(host.requests()).toHaveLength(1)
     } finally {
       await server.closeAsync()
     }
