@@ -2,7 +2,7 @@
 'accounts': minor
 ---
 
-Rewrote `accounts/cli` onto the Wata device-code transport and replaced `CliAuth` and `Handler.codeAuth` with `Handler.deviceCode`.
+Rewrote `accounts/cli` onto the Wata device-code transport and deprecated `CliAuth` and `Handler.codeAuth` in favor of `Handler.deviceCode`.
 
 ```diff
 - Provider.create({
