@@ -293,7 +293,9 @@ describe('Provider.create', () => {
 
       await provider.request(connectRequest())
 
-      expect(write).toHaveBeenCalledWith(expect.stringMatching(/^Enter code .+ at http/))
+      expect(write).toHaveBeenCalledWith(
+        expect.stringMatching(/^Enter code [A-Z]{4}-[A-Z]{4} at http/),
+      )
     } finally {
       write.mockRestore()
       await server.closeAsync()

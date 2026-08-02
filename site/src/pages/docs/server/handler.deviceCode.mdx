@@ -29,6 +29,12 @@ const handler = Handler.deviceCode({
     },
   },
   store: Store.memory(),
+  validate({ request, result }) {
+    if (request.method !== 'wallet_connect')
+      return Response.json({ error: 'unsupported_method' }, { status: 400 })
+    // Verify the submitted result against the pending request here.
+    return undefined
+  },
 })
 ```
 
@@ -52,14 +58,14 @@ await fetch('/auth/device/verify', {
   body: JSON.stringify({
     action: 'approve',
     results: [{ id: request.id, result }],
-    user_code: 'ABCD-EFGH',
+    user_code: 'ABCDEFGH',
   }),
   headers: { 'content-type': 'application/json' },
   method: 'POST',
 })
 ```
 
-The handler matches the submitted result to the pending request by `id` before releasing the response. To deny the request, omit `results` and send `action: 'deny'`.
+The handler matches the submitted result to the pending request by `id` before releasing the response. To relay an RPC failure, submit `{ id, error: { code, message, data? } }` instead of a result. To deny the request, omit `results` and send `action: 'deny'`.
 
 ## Parameters
 
@@ -118,3 +124,10 @@ Suggested polling interval in milliseconds returned to the client.
 - **Default:** `Store.memory()`
 
 Wata store used for pending device codes and response envelopes. Use a shared persistent adapter for multi-instance deployments.
+
+### `validate`
+
+- **Type:** `(options) => Response | undefined | Promise<Response | undefined>`
+- **Required**
+
+Applies host policy before the handler approves a submitted result. Protect the approval route with the host's authentication, allow only supported methods, and verify the result against the pending request. Return a response to reject the submission, or `undefined` to approve it.

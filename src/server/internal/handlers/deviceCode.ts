@@ -8,7 +8,19 @@ const maxVerifyBodyBytes = 65_536
 const verifyRequest = z.object({
   action: z.union([z.literal('approve'), z.literal('deny')]),
   results: z.optional(
-    z.array(z.object({ id: z.union([z.string(), z.number()]), result: z.unknown() })),
+    z.array(
+      z.union([
+        z.object({
+          error: z.object({
+            code: z.number(),
+            data: z.optional(z.json()),
+            message: z.string(),
+          }),
+          id: z.union([z.string(), z.number()]),
+        }),
+        z.object({ id: z.union([z.string(), z.number()]), result: z.json() }),
+      ]),
+    ),
   ),
   user_code: z.string(),
 })
@@ -49,7 +61,10 @@ export function deviceCode(options: deviceCode.Options): Handler {
   router.all(`${path}/*`, async (c) => {
     const request = c.req.raw
     const origin = typeof baseUrl === 'function' ? baseUrl(request) : baseUrl
-    const results = new Map<string | number, unknown>()
+    const results = new Map<
+      string | number,
+      { result: unknown } | { error: { code: number; data?: unknown; message: string } }
+    >()
     let settle: ((error?: Error) => void) | undefined
     const responded = new Promise<void>((resolve, reject) => {
       settle = (error) => (error ? reject(error) : resolve())
@@ -96,25 +111,27 @@ export function deviceCode(options: deviceCode.Options): Handler {
                   { status: 400 },
                 )
 
-              const submittedResult = submitted?.find((entry) => entry.id === pending.id)?.result
-              if (submittedResult === undefined)
+              const response = submitted?.find((entry) => entry.id === pending.id)
+              if (!response)
                 return Response.json(
                   {
                     error: 'invalid_request',
-                    error_description: 'Missing result for pending request.',
+                    error_description: 'Missing response for pending request.',
                   },
                   { status: 400 },
                 )
 
-              const validation = await validate?.({
-                record,
-                request: pending,
-                result: submittedResult,
-                userCode,
-              })
-              if (validation) return validation
+              if ('result' in response) {
+                const validation = await validate({
+                  record,
+                  request: pending,
+                  result: response.result,
+                  userCode,
+                })
+                if (validation) return validation
+              }
 
-              results.set(pending.id, submittedResult)
+              results.set(pending.id, response)
               await actions.approve(userCode)
               await responded
               return Response.json({ status: 'approved' })
@@ -130,11 +147,12 @@ export function deviceCode(options: deviceCode.Options): Handler {
 
     const session = wata.start()
     session.onRequest(async (event) => {
-      const result = results.get(event.id)
+      const response = results.get(event.id)
       try {
-        if (result === undefined)
+        if (!response)
           await event.reject({ code: -32603, message: 'No result supplied for request.' })
-        else await event.respond(result)
+        else if ('error' in response) await event.reject(response.error)
+        else await event.respond(response.result)
         settle?.()
       } catch (error) {
         settle?.(error as Error)
@@ -170,18 +188,16 @@ export declare namespace deviceCode {
     /** Device-code persistence. @default in-memory */
     store?: Store.Store | undefined
     /** Host policy applied before an approved result is relayed to the consumer. */
-    validate?:
-      | ((options: {
-          /** Pending device-code record. */
-          record: DeviceCode.PendingRecord
-          /** Pending JSON-RPC request matched to the submitted result. */
-          request: PendingRequest
-          /** Browser-submitted result. */
-          result: unknown
-          /** Normalized raw user code. */
-          userCode: string
-        }) => Promise<Response | undefined> | Response | undefined)
-      | undefined
+    validate: (options: {
+      /** Pending device-code record. */
+      record: DeviceCode.PendingRecord
+      /** Pending JSON-RPC request matched to the submitted result. */
+      request: PendingRequest
+      /** Browser-submitted result. */
+      result: unknown
+      /** Normalized raw user code. */
+      userCode: string
+    }) => Promise<Response | undefined> | Response | undefined
   }
 }
 
@@ -215,7 +231,7 @@ function normalizeStore(store: Store.Store): Store.Store {
 async function normalizeRegisterResponse(response: Response, request: Request, path: string) {
   if (!response.ok || new URL(request.url).pathname !== `${path}/register`) return response
 
-  const body = (await response.json()) as {
+  const body = (await response.clone().json()) as {
     user_code?: unknown
     verification_uri_complete?: unknown
   }

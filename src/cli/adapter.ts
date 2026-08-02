@@ -114,8 +114,10 @@ export function cli(options: cli.Options): Adapter.Adapter {
     methods: ['wallet_connect', 'wallet_authorizeAccessKey', 'wallet_updateAccessKey'],
     name,
     async onPrompt(prompt) {
-      if (!prompt.verificationUriFull)
-        process.stdout.write(`Enter code ${prompt.userCode} at ${prompt.verificationUri}\n`)
+      if (!prompt.verificationUriFull) {
+        const code = prompt.userCode.replace(/^(.{4})(.{4})$/, '$1-$2')
+        process.stdout.write(`Enter code ${code} at ${prompt.verificationUri}\n`)
+      }
       await open(prompt.verificationUriFull ?? prompt.verificationUri, prompt)
     },
     rdns,
