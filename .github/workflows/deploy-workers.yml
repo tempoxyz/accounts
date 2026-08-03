@@ -51,7 +51,9 @@ jobs:
         run: |
           if [ -n "$BUILD_ENV" ]; then
             while IFS='=' read -r name value; do
-              export "$name=$value"
+              if [ -n "$name" ]; then
+                export "$name=$value"
+              fi
             done <<< "$BUILD_ENV"
           fi
           pnpm build
