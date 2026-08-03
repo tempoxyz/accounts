@@ -218,9 +218,14 @@ describe('filesystem', () => {
       complete = true
     })
     await setTimeout(30)
-    expect(complete).toBe(false)
+    const blocked = !complete
     const [code] = await exit
-    expect(code).toBe(0)
+    expect({ blocked, code }).toMatchInlineSnapshot(`
+      {
+        "blocked": true,
+        "code": 0,
+      }
+    `)
     await write
 
     await expect(
@@ -264,6 +269,55 @@ describe('filesystem', () => {
       state: { accessKeys: [retired], accounts: [], activeAccount: 0, chainId: 2 },
       version: 0,
     })
+  })
+
+  test('behavior: retires credentials across address casing differences', async () => {
+    const path = await createPath()
+    const storage = Storage.filesystem({ key: 'test', path })
+    const accessKey = {
+      access: '0x00000000000000000000000000000000000000AB',
+      address: '0x00000000000000000000000000000000000000CD',
+      chainId: 1,
+      keyType: 'secp256k1',
+      privateKey: `0x${'11'.repeat(32)}`,
+    } as const
+    await storage.setItem('store', {
+      state: { accessKeys: [accessKey], accounts: [], activeAccount: 0, chainId: 1 },
+      version: 0,
+    })
+    const store = Store.create({ chainId: 1, storage })
+    await Store.waitForHydration(store)
+
+    const current = {
+      ...accessKey,
+      access: accessKey.access.toLowerCase(),
+      address: accessKey.address.toLowerCase(),
+    }
+    await Storage.filesystem({ key: 'test', path }).setItem('store', {
+      state: { accessKeys: [current], accounts: [], activeAccount: 0, chainId: 1 },
+      version: 0,
+    })
+    const { privateKey: _, ...retired } = accessKey
+    store.setState({ accessKeys: [retired] })
+
+    await expect(storage.getItem('store')).resolves.toMatchInlineSnapshot(`
+      {
+        "state": {
+          "accessKeys": [
+            {
+              "access": "0x00000000000000000000000000000000000000ab",
+              "address": "0x00000000000000000000000000000000000000cd",
+              "chainId": 1,
+              "keyType": "secp256k1",
+            },
+          ],
+          "accounts": [],
+          "activeAccount": 0,
+          "chainId": 1,
+        },
+        "version": 0,
+      }
+    `)
   })
 
   test('behavior: does not restore credentials after clearing storage', async () => {

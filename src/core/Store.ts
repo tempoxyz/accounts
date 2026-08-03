@@ -155,10 +155,14 @@ function transactional(storage: Storage.Storage, initial: PersistedValue): Stora
     removeItem: (name) => storage.removeItem(name),
     setItem(name, value) {
       const before = previous.get(name)
-      previous.set(name, value)
-      return Storage.updateItem(storage, name, (current) =>
+      const result = Storage.updateItem(storage, name, (current) =>
         mergePersisted(before, value, current, initial),
       )
+      if (result instanceof Promise)
+        return result.then(() => {
+          previous.set(name, value)
+        })
+      previous.set(name, value)
     },
   }
 }
@@ -227,11 +231,16 @@ function patch(current: unknown, previous: unknown, next: unknown): unknown {
 function sameAccessKey(a: unknown, b: unknown): boolean {
   if (!isObject(a) || !isObject(b)) return false
   return (
-    a.address === b.address &&
-    a.access === b.access &&
+    sameHex(a.address, b.address) &&
+    sameHex(a.access, b.access) &&
     a.chainId === b.chainId &&
     a.keyType === b.keyType
   )
+}
+
+function sameHex(a: unknown, b: unknown): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return a === b
+  return a.toLowerCase() === b.toLowerCase()
 }
 
 function equal(a: unknown, b: unknown): boolean {

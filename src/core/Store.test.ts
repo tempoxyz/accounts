@@ -467,6 +467,42 @@ describe('persistence', () => {
 
     expect((await getPersistedState(storage))?.chainId).toMatchInlineSnapshot(`789`)
   })
+
+  test('behavior: retries changes after a failed transactional update', async () => {
+    const memory = Storage.memory()
+    let fail = true
+    const storage = Storage.withUpdate(
+      memory,
+      <value>(name: string, update: (value: value | null) => value) => {
+        if (fail) {
+          fail = false
+          throw new Error('write failed')
+        }
+        const current = memory.getItem<value>(name)
+        if (current instanceof Promise) throw new Error('unexpected asynchronous storage')
+        memory.setItem(name, update(current))
+      },
+    )
+    const { store } = await setup({ storage })
+
+    expect(() =>
+      store.setState({ accounts: [{ address: account }], chainId: 456 }),
+    ).toThrowErrorMatchingInlineSnapshot(`[Error: write failed]`)
+    store.setState({ chainId: 789 })
+
+    expect(await getPersistedState(storage)).toMatchInlineSnapshot(`
+      {
+        "accessKeys": [],
+        "accounts": [
+          {
+            "address": "0x0000000000000000000000000000000000000001",
+          },
+        ],
+        "activeAccount": 0,
+        "chainId": 789,
+      }
+    `)
+  })
 })
 
 describe('waitForHydration', () => {
