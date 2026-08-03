@@ -124,6 +124,37 @@ describe('filesystem', () => {
     `)
   })
 
+  test('behavior: preserves the order of access keys added together', async () => {
+    const path = await createPath()
+    const storage = Storage.filesystem({ key: 'test', path })
+    const store = Store.create({ chainId: 1, storage })
+    await Store.waitForHydration(store)
+    const access = '0x0000000000000000000000000000000000000001'
+    const accessKeys = [
+      {
+        access,
+        address: '0x0000000000000000000000000000000000000002',
+        chainId: 1,
+        keyType: 'secp256k1',
+        privateKey: `0x${'11'.repeat(32)}`,
+      },
+      {
+        access,
+        address: '0x0000000000000000000000000000000000000003',
+        chainId: 1,
+        keyType: 'secp256k1',
+        privateKey: `0x${'22'.repeat(32)}`,
+      },
+    ] as const
+
+    store.setState({ accessKeys })
+
+    await expect(storage.getItem('store')).resolves.toEqual({
+      state: { accessKeys, accounts: [], activeAccount: 0, chainId: 1 },
+      version: 0,
+    })
+  })
+
   test('behavior: waits for another process and rereads after locking', async () => {
     const path = await createPath()
     const child = spawn(

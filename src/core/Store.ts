@@ -209,9 +209,8 @@ function mergeAccessKeys(
     if (index_current === -1) continue
     result[index_current] = patch(result[index_current], before, next[index_next])
   }
-  for (const key of next)
-    if (!previous.some((before) => sameAccessKey(before, key))) result.unshift(key)
-  return result
+  const added = next.filter((key) => !previous.some((before) => sameAccessKey(before, key)))
+  return [...added, ...result]
 }
 
 function patch(current: unknown, previous: unknown, next: unknown): unknown {
