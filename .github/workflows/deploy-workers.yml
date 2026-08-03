@@ -50,7 +50,9 @@ jobs:
         working-directory: ${{ matrix.worker.directory }}
         run: |
           if [ -n "$BUILD_ENV" ]; then
-            export ${BUILD_ENV}
+            while IFS='=' read -r name value; do
+              export "$name=$value"
+            done <<< "$BUILD_ENV"
           fi
           pnpm build
         env:
