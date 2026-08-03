@@ -89,7 +89,7 @@ jobs:
 
       - name: Run tests
         run: |
-          if [[ "${{ matrix.tag }}" == sha-* ]]; then
+          if [[ "$VITE_NODE_TAG" == sha-* ]]; then
             pnpm test src/server/internal/handlers/multisig.localnet.test.ts --bail=1
           else
             pnpm test --bail=1
