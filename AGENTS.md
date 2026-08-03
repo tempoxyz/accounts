@@ -2,6 +2,12 @@
 
 > **Update after learnings or mistakes** — when a correction, new convention, or hard-won lesson emerges during development, append it to the relevant section of this file immediately. AGENTS.md is the source of truth for project conventions and should grow as the project does.
 
+## Friction Logging
+
+- Log papercuts and friction (tooling, docs, APIs, tests, conventions) as you hit them with `pnpx frog log`.
+- Do not add global, system, or internal friction.
+- Run `pnpx frog list` first to see what is already known.
+
 ## TypeScript Conventions
 
 - **Exact optional properties** — `exactOptionalPropertyTypes` is enabled in tsconfig. Optional properties must include `| undefined` in their type if they can be assigned `undefined` (e.g. `foo?: string | undefined`, not `foo?: string`).

@@ -1046,6 +1046,42 @@ describe('getStatus', () => {
     expect(store.getState().accessKeys[0]!.keyAuthorization).toMatchInlineSnapshot(`undefined`)
   })
 
+  test('error: propagates publication lookup failures', async () => {
+    const store = createStore()
+    const accessKey = TempoAccount.fromP256(privateKeys[1]!)
+    const keyAuthorization = createKeyAuthorization(accessKey.address)
+
+    await addAuthorization({
+      address: rootAddress,
+      keyAuthorization,
+      privateKey: privateKeys[1],
+      store,
+    })
+
+    await expect(
+      store.accessKeys.getStatus({
+        account: rootAddress,
+        chainId: 1,
+        client: {
+          call: async () => {
+            throw new Error('RPC unavailable.')
+          },
+        } as never,
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`
+      [ContractFunctionExecutionError: An unknown error occurred while executing the contract function "getKey".
+
+      Contract Call:
+        address:   0xaAAAaaAA00000000000000000000000000000000
+        function:  getKey(address account, address keyId)
+        args:            (0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266, 0xB08a557649C30B96c28825748da6a940D6c8972e)
+
+      Docs: https://viem.sh/docs/contract/readContract
+      Details: RPC unavailable.
+      Version: viem@2.54.6]
+    `)
+  })
+
   test('behavior: returns published for local key without stored authorization', async () => {
     const store = createStore()
     const keyPair = await WebCryptoP256.createKeyPair()

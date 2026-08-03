@@ -25,7 +25,7 @@ const cliAuth = Handler.codeAuth({
   store,
 })
 
-/** Minimal Cloudflare Worker reference for CLI device-code approval. */
+/** Minimal Cloudflare Worker reference for CLI device code approval. */
 export default {
   async fetch(request: Request, env: Bindings) {
     const url = new URL(request.url)
