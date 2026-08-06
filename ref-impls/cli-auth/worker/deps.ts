@@ -8,5 +8,5 @@ export const client = createClient({
   transport: http(tempoModerato.rpcUrls.default.http[0]),
 })
 
-/** In-memory pending device-code store shared by the worker handler and approve route. */
+/** In-memory pending device code store shared by the worker handler and approve route. */
 export const store = CliAuth.Store.memory()

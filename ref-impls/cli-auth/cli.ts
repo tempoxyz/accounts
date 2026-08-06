@@ -1,4 +1,4 @@
-import { Expiry, Storage } from 'accounts'
+import { Expiry, Store } from 'accounts'
 import { Provider } from 'accounts/cli'
 import { Cli, z } from 'incur'
 import { pathToFileURL } from 'node:url'
@@ -9,7 +9,7 @@ import { tempoMainnet, tempoTestnet, tempoDevnet } from 'viem/tempo/chains'
 const defaultHost = 'https://wallet.tempo.xyz/api/auth/cli' as const
 const defaultToken = '0x20c0000000000000000000000000000000000000' as const
 
-const options = z.object({
+const sharedOptions = z.object({
   host: z.string().default(defaultHost).describe('CLI auth host URL'),
   chain: z
     .string()
@@ -25,12 +25,30 @@ const options = z.object({
     .refine((value) => value > 0, '`--limit` must be a positive integer.')
     .default(1_000)
     .describe('Token spend limit'),
+  token: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]+$/, '`--token` must be a hex string.')
+    .default(defaultToken)
+    .describe('TIP-20 token address for the spend limit'),
+})
+
+const options = sharedOptions.extend({
   expiry: z
     .number()
     .int()
     .refine((value) => value > 0, '`--expiry` must be a positive number of seconds.')
     .default(3_600)
-    .describe('Access-key expiry in seconds'),
+    .describe('Access key expiry in seconds'),
+})
+
+const updateOptions = z.object({
+  host: z.string().default(defaultHost).describe('CLI auth host URL'),
+  limit: z
+    .number()
+    .int()
+    .refine((value) => value > 0, '`--limit` must be a positive integer.')
+    .default(1_000)
+    .describe('Token spend limit'),
   token: z
     .string()
     .regex(/^0x[0-9a-fA-F]+$/, '`--token` must be a hex string.')
@@ -55,7 +73,6 @@ const cli = Cli.create('accounts-cli')
 
       const provider = Provider.create({
         host: options.host,
-        storage: Storage.memory(),
         testnet: chain.testnet,
       })
       const authorizeAccessKey = {
@@ -90,7 +107,6 @@ const cli = Cli.create('accounts-cli')
 
       const provider = Provider.create({
         host: options.host,
-        storage: Storage.memory(),
         testnet: chain.testnet,
       })
       const authorizeAccessKey = {
@@ -107,6 +123,38 @@ const cli = Cli.create('accounts-cli')
         method: 'wallet_authorizeAccessKey',
         params: [authorizeAccessKey],
       })
+    },
+  })
+  .command('update-access-key', {
+    description: 'Update an access key spend limit through the CLI auth provider',
+    options: updateOptions,
+    async run({ options }) {
+      configureLocalTls(options.host)
+      const provider = Provider.create({ host: options.host })
+      await Store.waitForHydration(provider.store)
+      const account = provider.getAccount()
+      const accessKey = await provider.store.accessKeys.select({
+        account: account.address,
+        chainId: provider.getClient().chain.id,
+      })
+      if (!accessKey) throw new Error('No connected access key found.')
+
+      await provider.request({
+        method: 'wallet_updateAccessKey',
+        params: [
+          {
+            address: account.address,
+            accessKeyAddress: accessKey.accessKeyAddress,
+            limits: [
+              {
+                limit: Hex.fromNumber(options.limit),
+                token: options.token as Hex.Hex,
+              },
+            ],
+          },
+        ],
+      })
+      return { status: 'updated' }
     },
   })
 export default cli

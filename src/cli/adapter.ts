@@ -9,16 +9,16 @@ import * as Keystore from '../core/Keystore.js'
 import * as CliAuth from '../server/CliAuth.js'
 
 /**
- * Creates a CLI bootstrap adapter backed by the device-code protocol.
+ * Creates a CLI bootstrap adapter backed by the device code protocol.
  */
 export function cli(options: cli.Options): Adapter.Adapter {
   const { name = 'Tempo CLI', rdns = 'xyz.tempo.cli' } = options
 
-  return Adapter.define({ name, rdns }, ({ store }) => {
+  return Adapter.define({ name, rdns }, ({ getClient, store }) => {
     // The CLI persists to string-based filesystem storage, so its p256
     // default opts into an extractable WebCrypto key (a non-extractable one
     // could not survive a restart). secp256k1 stays available for explicit
-    // requests. Shared between the device-code ceremony and the instance
+    // requests. Shared between the device code ceremony and the instance
     // declaration so records hydrate through the same keystores.
     const keystores = {
       p256: Keystore.webCryptoP256({ extractable: true }),
@@ -118,6 +118,8 @@ export function cli(options: cli.Options): Adapter.Adapter {
         }
         if (result.status === 'expired')
           throw new Error('Device code expired before authorization completed.')
+        if (result.action === 'updateAccessKey')
+          throw new Error('Device code action does not match the authorization request.')
 
         if (generatedAccessKey)
           await saveGeneratedAccessKey(
@@ -127,6 +129,94 @@ export function cli(options: cli.Options): Adapter.Adapter {
           )
 
         return result
+      }
+
+      throw new TimeoutError(url, created.code)
+    }
+
+    async function update(parameters: Adapter.updateAccessKey.Parameters) {
+      const {
+        host,
+        open = defaultOpen,
+        pollIntervalMs = 2_000,
+        timeoutMs = 5 * 60 * 1_000,
+      } = options
+      const chainId = Number(parameters.chainId ?? store.getState().chainId)
+      const current = store.accessKeys.list({
+        accessKey: parameters.accessKeyAddress,
+        account: parameters.address,
+        chainId,
+      })[0]
+      const status = current?.keyAuthorization
+        ? await store.accessKeys.getStatus({
+            accessKey: parameters.accessKeyAddress,
+            account: parameters.address,
+            chainId,
+            client: getClient({ chainId }),
+          })
+        : undefined
+      const pendingKeyAuthorization =
+        status === 'pending' && current?.keyAuthorization
+          ? KeyAuthorization.toRpc(current.keyAuthorization)
+          : undefined
+      const codeVerifier = createCodeVerifier()
+      const body = {
+        action: 'updateAccessKey',
+        accessKeyAddress: parameters.accessKeyAddress,
+        account: parameters.address,
+        chainId: BigInt(chainId),
+        codeChallenge: createCodeChallenge(codeVerifier),
+        ...(pendingKeyAuthorization
+          ? {
+              keyAuthorization: z.decode(CliAuth.keyAuthorization, {
+                ...pendingKeyAuthorization,
+                address: pendingKeyAuthorization.keyId,
+              }),
+            }
+          : {}),
+        limits: parameters.limits,
+      } satisfies z.output<typeof CliAuth.createRequest>
+      const created = await post({
+        body,
+        request: CliAuth.createRequest,
+        response: CliAuth.createResponse,
+        url: getApiUrl(host, 'code'),
+      })
+      const url = getBrowserUrl(host, created.code)
+
+      try {
+        await open(url)
+      } catch (error) {
+        throw new OpenError(url, created.code, error)
+      }
+
+      const startedAt = Date.now()
+      while (Date.now() - startedAt < timeoutMs) {
+        const result = await post({
+          body: { codeVerifier },
+          request: CliAuth.pollRequest,
+          response: CliAuth.pollResponse,
+          url: getApiUrl(host, `poll/${created.code}`),
+        })
+        if (result.status === 'pending') {
+          await sleep(pollIntervalMs)
+          continue
+        }
+        if (result.status === 'expired')
+          throw new Error('Device code expired before access key update completed.')
+        if (result.action !== 'updateAccessKey')
+          throw new Error('Device code action does not match the access key update request.')
+        if (result.keyAuthorization) {
+          store.accessKeys.updateAuthorization({
+            accessKey: parameters.accessKeyAddress,
+            account: parameters.address,
+            authorization: KeyAuthorization.fromRpc(
+              z.encode(CliAuth.keyAuthorization, result.keyAuthorization),
+            ),
+            chainId,
+          })
+        }
+        return
       }
 
       throw new TimeoutError(url, created.code)
@@ -204,8 +294,8 @@ export function cli(options: cli.Options): Adapter.Adapter {
         async revokeAccessKey() {
           throw unsupported('`wallet_revokeAccessKey` not supported by CLI adapter.')
         },
-        async updateAccessKey() {
-          throw unsupported('`wallet_updateAccessKey` not supported by CLI adapter.')
+        async updateAccessKey(parameters) {
+          await update(parameters)
         },
       },
       async getAccount(options = {}) {
@@ -226,7 +316,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
 
 export declare namespace cli {
   export type Options = {
-    /** Host URL for the device-code flow. API calls are made under the same base path. */
+    /** Host URL for the device code flow. API calls are made under the same base path. */
     host: string
     /** Provider display name. @default "Tempo CLI" */
     name?: string | undefined

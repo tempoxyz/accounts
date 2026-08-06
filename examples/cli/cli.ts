@@ -8,13 +8,14 @@ import { Actions } from 'viem/tempo'
 import { Provider } from '../../src/cli/index.js'
 
 const provider = Provider.create({
+  host: process.env.WALLET_HOST,
   mpp: true,
   testnet: true,
 })
 
 const token = '0x20c0000000000000000000000000000000000000' as const
 
-Cli.create('example', {
+const cli = Cli.create('example', {
   async run() {
     const client = provider.getClient()
 
@@ -36,7 +37,6 @@ Cli.create('example', {
         },
       },
     })
-
     // 2. Perform a TIP-20 transfer.
     const account = provider.getAccount()
     const { receipt } = await Actions.token.transferSync(client, {
@@ -55,4 +55,33 @@ Cli.create('example', {
       ping: data,
     }
   },
-}).serve()
+}).command('update-access-key', {
+  description: 'Update the connected access key spend limit',
+  async run() {
+    const account = provider.getAccount()
+    const accessKey = await provider.store.accessKeys.select({
+      account: account.address,
+      chainId: provider.getClient().chain.id,
+    })
+    if (!accessKey) throw new Error('No connected access key found.')
+
+    await provider.request({
+      method: 'wallet_updateAccessKey',
+      params: [
+        {
+          address: account.address,
+          accessKeyAddress: accessKey.accessKeyAddress,
+          limits: [
+            {
+              limit: Hex.fromNumber(parseUnits('250', 6)),
+              token,
+            },
+          ],
+        },
+      ],
+    })
+    return { status: 'updated' }
+  },
+})
+
+cli.serve()
