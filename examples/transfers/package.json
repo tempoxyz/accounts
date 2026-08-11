@@ -15,7 +15,7 @@
     "@tanstack/react-query": "^5.97.0",
     "accounts": "latest",
     "hono": "catalog:",
-    "mppx": "^0.6.27",
+    "mppx": "^0.8.15",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "viem": "latest",

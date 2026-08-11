@@ -11,13 +11,13 @@
     "preview": "vp preview"
   },
   "dependencies": {
-    "@privy-io/react-auth": "3.25.0",
+    "@privy-io/react-auth": "3.36.1",
     "@turnkey/core": "1.13.0",
     "accounts": "workspace:*",
     "mppx": "catalog:",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "regen-ui": "^0.3.0",
+    "regen-ui": "^0.5.0",
     "use-sync-external-store": "^1.6.0",
     "viem": "catalog:"
   },
