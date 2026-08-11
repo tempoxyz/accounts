@@ -16,7 +16,7 @@
     "expo": "~55.0.12",
     "expo-secure-store": "~55.0.12",
     "expo-status-bar": "~55.0.5",
-    "expo-web-browser": "~55.0.13",
+    "expo-web-browser": "~57.0.2",
     "ox": "catalog:",
     "react": "catalog:",
     "react-native": "0.83.4",
