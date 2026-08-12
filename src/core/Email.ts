@@ -5,7 +5,7 @@ type Response = {
   Status: number
 }
 
-/** Checks whether an email domain can receive mail using its MX or address records. */
+/** Checks client-side whether an email domain can receive mail using its MX or address records. */
 export async function acceptsMail(email: string) {
   const domain = email.slice(email.lastIndexOf('@') + 1)
 

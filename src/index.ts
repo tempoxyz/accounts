@@ -1,6 +1,7 @@
 export * as Adapter from './core/Adapter.js'
 export * as IntersectionObserver from './core/IntersectionObserver.js'
 export * as Dialog from './core/Dialog.js'
+export * as Email from './core/Email.js'
 export * as ExecutionError from './core/ExecutionError.js'
 export * as Keystore from './core/Keystore.js'
 export * as Messenger from './core/Messenger.js'
