@@ -1,9 +1,11 @@
 import { Hono } from 'hono'
-import { Secp256k1 } from 'ox'
+import { P256, Secp256k1 } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { hashMessage } from 'viem'
+import { createClient, custom, hashMessage } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { parseSiweMessage } from 'viem/siwe'
+import { Account } from 'viem/tempo'
+import { tempoModerato } from 'viem/tempo/chains'
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vp/test'
 
 import { createServer } from '../../../../test/utils.js'
@@ -341,6 +343,88 @@ describe('verify (EOA, cookie mode)', () => {
     expect(await res.json()).toMatchInlineSnapshot(`
       {
         "error": "signature does not match address",
+      }
+    `)
+  })
+
+  test('resolves the verification client from the challenge chain', async () => {
+    const account = Account.fromHeadlessWebAuthn(P256.randomPrivateKey(), {
+      origin: 'http://wallet.example',
+      rpId: 'wallet.example',
+    })
+    const client = createClient({
+      chain: tempoModerato,
+      transport: custom({
+        request: async () => {
+          throw new Error('RPC unavailable')
+        },
+      }),
+    })
+    let chainId_seen: number | undefined
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const result = await (async () => {
+      try {
+        const { app } = setup({
+          getClient: (chainId) => {
+            chainId_seen = chainId
+            return client
+          },
+        })
+        const { body: challengeBody } = await getChallenge(app, {
+          chainId: tempoModerato.id,
+        })
+        const message = challengeBody.message!
+        const signature = await account.signMessage({ message })
+        const res = await postVerify(app, { address: account.address, message, signature })
+
+        return {
+          body: await res.json(),
+          chainId: chainId_seen,
+          logs: log.mock.calls.map(([message]) => message),
+          status: res.status,
+        }
+      } finally {
+        log.mockRestore()
+      }
+    })()
+
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "signature verification unavailable",
+        },
+        "chainId": 42431,
+        "logs": [
+          "[accounts/auth] signature verification dependency failed",
+        ],
+        "status": 502,
+      }
+    `)
+  })
+
+  test('keeps malformed signatures as authentication errors', async () => {
+    let clientCalled = false
+    const { app } = setup({
+      getClient: () => {
+        clientCalled = true
+        throw new Error('unexpected client resolution')
+      },
+    })
+    const { body: challengeBody } = await getChallenge(app, { chainId: 1 })
+    const message = challengeBody.message!
+    const res = await postVerify(app, {
+      address: account.address,
+      message,
+      signature: '0xdeadbeef',
+    })
+
+    expect({ body: await res.json(), clientCalled, status: res.status }).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "invalid signature",
+        },
+        "clientCalled": false,
+        "status": 401,
       }
     `)
   })

@@ -1,6 +1,6 @@
 import { Hex } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
-import type { Address, Transport } from 'viem'
+import type { Address, Client, Transport } from 'viem'
 import { createClient, hashMessage, http, zeroAddress } from 'viem'
 import { verifyHash, verifyMessage } from 'viem/actions'
 import { createSiweMessage, generateSiweNonce, parseSiweMessage } from 'viem/siwe'
@@ -156,6 +156,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     cookie = true,
     cookieName = defaults.cookieName,
     domain,
+    getClient: getClient_option,
     identity = {},
     onAuthenticate,
     path = '/',
@@ -203,6 +204,7 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
   const resolveReqOrigin = (req: Request) => resolveOrigin(req, { pinnedOrigin, trustProxy })
 
   const client = createClient({ chain: tempo, transport })
+  const getClient = getClient_option ?? (() => client)
 
   const router = from(rest)
   const verifyPath = path === '/' ? '/' : path
@@ -301,26 +303,41 @@ export function auth(options: auth.Options = {}): auth.ReturnType {
     //     message. Tempo's chain override unwraps `SignatureEnvelope` for
     //     WebAuthn / P256 / keychain sigs and falls back to ECDSA for EOAs.
     let valid: boolean
-    try {
-      if (keyAuthorization) {
+    if (keyAuthorization) {
+      try {
         const decoded = KeyAuthorization.deserialize(keyAuthorization)
         if (!decoded.signature) return c.json({ error: 'key authorization missing signature' }, 400)
         if (Number(decoded.chainId) !== challenge.chainId)
           return c.json({ error: 'chainId mismatch' }, 400)
         if (!decoded.witness || decoded.witness !== hashMessage(message))
           return c.json({ error: 'witness mismatch' }, 401)
-        valid = await verifyHash(client, {
-          address,
-          hash: KeyAuthorization.getSignPayload(decoded),
-          signature: SignatureEnvelope.serialize(decoded.signature, {
-            magic: decoded.signature.type === 'webAuthn',
-          }),
-        })
-      } else {
-        valid = await verifyMessage(client, { address, message, signature })
+        try {
+          valid = await verifyHash(getClient(challenge.chainId), {
+            address,
+            hash: KeyAuthorization.getSignPayload(decoded),
+            signature: SignatureEnvelope.serialize(decoded.signature, {
+              magic: decoded.signature.type === 'webAuthn',
+            }),
+          })
+        } catch (error) {
+          console.error('[accounts/auth] signature verification dependency failed', error)
+          return c.json({ error: 'signature verification unavailable' }, 502)
+        }
+      } catch {
+        return c.json({ error: 'invalid signature' }, 401)
       }
-    } catch {
-      return c.json({ error: 'invalid signature' }, 401)
+    } else {
+      try {
+        SignatureEnvelope.deserialize(signature)
+      } catch {
+        return c.json({ error: 'invalid signature' }, 401)
+      }
+      try {
+        valid = await verifyMessage(getClient(challenge.chainId), { address, message, signature })
+      } catch (error) {
+        console.error('[accounts/auth] signature verification dependency failed', error)
+        return c.json({ error: 'signature verification unavailable' }, 502)
+      }
     }
     if (!valid) return c.json({ error: 'signature does not match address' }, 401)
 
@@ -470,6 +487,8 @@ export declare namespace auth {
     cookieName?: string | undefined
     /** Domain echoed into challenge messages. @default request `Host` header */
     domain?: string | undefined
+    /** Resolves the Viem client used to verify a SIWE signature for its chain. */
+    getClient?: ((chainId: number) => Client) | undefined
     /**
      * OIDC identity verification (verified email), enabled by default. A verify
      * request carrying an `idToken` is checked against the issuer's JWKS, with
@@ -548,7 +567,8 @@ export declare namespace auth {
      */
     store?: Kv.Kv | undefined
     /**
-     * Viem transport for the Tempo client used to verify signatures. The
+     * Viem transport for the default Tempo client used to verify signatures. Ignored when
+     * `getClient` is provided. The
      * client is always built against the `tempo` chain — Tempo's
      * `chain.verifyHash` natively understands `SignatureEnvelope` and
      * falls back to ECDSA recovery for plain EOAs.
