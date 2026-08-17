@@ -452,14 +452,13 @@ export namespace wallet_authorizeAccessKey {
    * Shows an optional funding prompt after `wallet_authorizeAccessKey`
    * succeeds.
    *
-   * `true` prompts after approval. Object form supplies a desired balance and
-   * deposit UI hints.
+   * `true` prompts after approval. Object form pre-fills deposit UI hints.
    */
   export const showDeposit = z.optional(
     z.union([
       z.boolean(),
       z.object({
-        /** Human-readable minimum token balance to request (e.g. `"50"`). */
+        /** Human-readable amount to pre-fill (e.g. `"50"`). */
         amount: z.optional(z.string()),
         /** Display name shown in the deposit UI (e.g. the app name). */
         displayName: z.optional(z.string()),
@@ -584,7 +583,7 @@ export namespace wallet_connect {
     z.union([
       z.boolean(),
       z.object({
-        /** Human-readable minimum token balance to request (e.g. `"50"`). */
+        /** Human-readable amount to pre-fill (e.g. `"50"`). */
         amount: z.optional(z.string()),
         /** Display name shown in the deposit UI (e.g. the app name). */
         displayName: z.optional(z.string()),

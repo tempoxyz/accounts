@@ -169,65 +169,8 @@ connect.connect({
 
 :::
 
-When `amount` and `token` are provided, the wallet treats the amount as the
-desired minimum balance for that token. It skips the prompt when the connected
-account already has enough and asks for only the remaining amount when it is
-partially funded.
-
-### Authorize and Fund in One Flow
-
-Keep access-key authorization and funding as sibling capabilities on
-`wallet_connect`. This lets browser and CLI consumers use the same account
-creation, authorization, and funding ceremony.
-
-```tsx twoslash [Connect.tsx]
-// @noErrors
-import { Expiry } from 'accounts'
-import { parseUnits } from 'viem'
-import { useConnect, useConnectors } from 'wagmi'
-
-declare const machineUsd: `0x${string}`
-
-export function ConnectFunded() {
-  const connect = useConnect()
-  const [connector] = useConnectors()
-
-  return (
-    <button
-      onClick={() =>
-        connect.connect({
-          connector,
-          capabilities: { // [!code focus]
-            authorizeAccessKey: { // [!code focus]
-              expiry: Expiry.days(7), // [!code focus]
-              limits: [{ // [!code focus]
-                limit: parseUnits('10', 6), // [!code focus]
-                token: machineUsd, // [!code focus]
-              }], // [!code focus]
-              scopes: [{ // [!code focus]
-                address: machineUsd, // [!code focus]
-                selector: 'transfer(address,uint256)', // [!code focus]
-              }], // [!code focus]
-            }, // [!code focus]
-            showDeposit: { // [!code focus]
-              amount: '10', // [!code focus]
-              displayName: 'My App', // [!code focus]
-              token: 'MACHUSD', // [!code focus]
-            }, // [!code focus]
-          }, // [!code focus]
-        })
-      }
-    >
-      Create funded account
-    </button>
-  )
-}
-```
-
-The funding prompt remains optional. A successful connection means the account
-and requested access key are ready; if the user skips funding, check the token
-balance before an action that requires funds and call `wallet_deposit` again
-when needed.
+Use `token: 'MACHUSD'` the same way as `pathUSD` or `USDC.e`. Accounts forwards
+the token symbol to the wallet, which selects the matching deposit flow.
 
 ## Next Steps
 

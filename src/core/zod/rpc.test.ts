@@ -598,58 +598,6 @@ describe('wallet_connect.capabilities.result: identity', () => {
 })
 
 describe('wallet_connect.capabilities.request: showDeposit', () => {
-  test('accepts funded access-key onboarding as sibling capabilities', () => {
-    expect(
-      z.parse(Rpc.wallet_connect.capabilities.request, {
-        authorizeAccessKey: {
-          expiry: 123,
-          limits: [
-            {
-              limit: 10_000_000n,
-              token: '0x20c0000000000000000000000000000000000001',
-            },
-          ],
-          scopes: [
-            {
-              address: '0x20c0000000000000000000000000000000000001',
-              selector: 'transfer(address,uint256)',
-            },
-          ],
-        },
-        method: 'login',
-        showDeposit: {
-          amount: '10',
-          displayName: 'Example app',
-          token: 'MACHUSD',
-        },
-      }),
-    ).toMatchInlineSnapshot(`
-      {
-        "authorizeAccessKey": {
-          "expiry": 123,
-          "limits": [
-            {
-              "limit": 10000000n,
-              "token": "0x20c0000000000000000000000000000000000001",
-            },
-          ],
-          "scopes": [
-            {
-              "address": "0x20c0000000000000000000000000000000000001",
-              "selector": "transfer(address,uint256)",
-            },
-          ],
-        },
-        "method": "login",
-        "showDeposit": {
-          "amount": "10",
-          "displayName": "Example app",
-          "token": "MACHUSD",
-        },
-      }
-    `)
-  })
-
   test('accepts true on the register branch', () => {
     expect(
       z.parse(Rpc.wallet_connect.capabilities.request, {

@@ -305,10 +305,10 @@ describe('Provider.create', () => {
         connectRequest({
           method: 'register',
           showDeposit: {
-            amount: '10',
-            displayName: 'Funded CLI',
+            amount: '50',
+            displayName: 'DoorDash',
             on: 'register',
-            token: 'MACHUSD',
+            token: 'USDC',
           },
         }),
       )
@@ -316,10 +316,10 @@ describe('Provider.create', () => {
       expect(pendingShowDeposit).toMatchInlineSnapshot(`
         [
           {
-            "amount": "10",
-            "displayName": "Funded CLI",
+            "amount": "50",
+            "displayName": "DoorDash",
             "on": "register",
-            "token": "MACHUSD",
+            "token": "USDC",
           },
         ]
       `)
