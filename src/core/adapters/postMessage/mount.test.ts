@@ -36,7 +36,7 @@ describe('auto', () => {
     vi.stubGlobal('window', {
       isSecureContext: true,
       location: {
-        hostname: 'app.polyhedge.capital',
+        hostname: 'mercator.tempoxyz.dev',
         protocol: 'https:',
       },
     })
