@@ -50,9 +50,18 @@ await connect(client, { // [!code focus]
         selector: 'transfer(address,uint256)', // [!code focus]
       }], // [!code focus]
     }, // [!code focus]
+    showDeposit: { // [!code focus]
+      amount: '10', // [!code focus]
+      displayName: 'My CLI', // [!code focus]
+      token: 'MACHUSD', // [!code focus]
+    }, // [!code focus]
   }, // [!code focus]
 }) // [!code focus]
 ```
+
+`showDeposit` belongs beside `authorizeAccessKey`, not inside it. The browser
+approval carries the same funding request used by web integrations, while the
+authorized key remains available to the CLI after the browser closes.
 
 ## Parameters
 
