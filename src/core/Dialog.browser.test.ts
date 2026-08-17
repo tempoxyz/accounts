@@ -72,6 +72,7 @@ describe('Dialog.iframe', () => {
     const allow = iframe.getAttribute('allow')!
     expect(allow).toContain('publickey-credentials-get')
     expect(allow).toContain('publickey-credentials-create')
+    expect(allow).toContain('payment *')
   })
 
   test('behavior: iframe src points to host', () => {

@@ -122,7 +122,7 @@ export function iframe(): Factory {
           `publickey-credentials-get ${origin}`,
           `publickey-credentials-create ${origin}`,
           'clipboard-write',
-          'payment',
+          'payment *',
         ].join('; '),
       )
       frame.setAttribute('allowtransparency', 'true')
