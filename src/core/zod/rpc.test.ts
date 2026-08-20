@@ -132,6 +132,25 @@ describe('transactionRequest.keyAuthorization', () => {
   })
 })
 
+describe('wallet_connect.capabilities.request: credentials', () => {
+  test('accepts multiple credential IDs for login', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        credentialId: ['cred-1', 'cred-2'],
+        method: 'login',
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "credentialId": [
+          "cred-1",
+          "cred-2",
+        ],
+        "method": "login",
+      }
+    `)
+  })
+})
+
 describe('wallet_connect.capabilities.request: auth', () => {
   test('accepts string shorthand', () => {
     expect(

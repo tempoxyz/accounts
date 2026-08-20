@@ -139,8 +139,8 @@ importers:
         specifier: 0.4.0
         version: 0.4.0(react@19.2.8)(typescript@5.9.3)
       webauthx:
-        specifier: ~0.1.1
-        version: 0.1.1(typescript@5.9.3)(zod@4.3.6)
+        specifier: ~0.1.2
+        version: 0.1.2(typescript@5.9.3)(zod@4.3.6)
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -11280,8 +11280,8 @@ packages:
   wcwidth@1.0.1:
     resolution: {integrity: sha512-XHPEwS0q6TaxcvG85+8EYkbiCux2XtWG2mkc47Ng2A77BQu9+DqIOJldST4HgPkuea7dvKSj5VgX3P1d4rW8Tg==}
 
-  webauthx@0.1.1:
-    resolution: {integrity: sha512-3jiskZl0jiTUoO8r3ySUYItdXNDBpfzxnxPx7XM0giF2dIY7S4KqHVbH04Qglz98nP8RaSV1/+3eDCx1s3WDiQ==}
+  webauthx@0.1.2:
+    resolution: {integrity: sha512-J0H9/BOW/aRtWa/rKsGjf1+YQ5xkfgycTT455fsHyqG4+hYJ5dPDrNcIXrjGnjBKGru/qxY75m68iHg27rHoUg==}
 
   webextension-polyfill@0.10.0:
     resolution: {integrity: sha512-c5s35LgVa5tFaHhrZDnr3FpQpjj1BB+RXhLTYUxGqBVN460HkbM8TBtEqdXWbpTKfzwCcjAZVF7zXCYSKtcp9g==}
@@ -26974,7 +26974,7 @@ snapshots:
     dependencies:
       defaults: 1.0.4
 
-  webauthx@0.1.1(typescript@5.9.3)(zod@4.3.6):
+  webauthx@0.1.2(typescript@5.9.3)(zod@4.3.6):
     dependencies:
       ox: 0.14.30(typescript@5.9.3)(zod@4.3.6)
     transitivePeerDependencies:

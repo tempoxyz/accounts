@@ -77,7 +77,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         }
       },
       async loadAccounts(parameters = {}) {
-        const { selectAccount, digest } = parameters
+        const { digest, selectAccount } = parameters
 
         const credentialId = selectAccount
           ? undefined

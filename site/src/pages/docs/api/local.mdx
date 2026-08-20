@@ -103,8 +103,8 @@ Discover existing accounts (e.g. via WebAuthn assertion or key lookup).
 declare function loadAccounts(parameters?: {
   /** Access key to grant during the ceremony. */
   authorizeAccessKey?: Adapter.authorizeAccessKey.Parameters | undefined
-  /** Restrict authentication to a specific credential (WebAuthn). */
-  credentialId?: string | undefined
+  /** Restrict authentication to one or more credentials (WebAuthn). */
+  credentialId?: string | readonly string[] | undefined
   /** Digest the caller asked the wallet to sign during the load-accounts ceremony. */
   digest?: Hex | undefined
   /**

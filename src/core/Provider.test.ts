@@ -257,6 +257,38 @@ describe('getMppxParameters', () => {
 })
 
 describe('wallet_connect', () => {
+  test('behavior: forwards allowed credential IDs to the adapter', async () => {
+    const loadAccounts = vi.fn(async (_parameters?: Adapter.loadAccounts.Parameters) => ({
+      accounts: [{ address }] as const,
+    }))
+    const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+      actions: {
+        async createAccount() {
+          return { accounts: [{ address }] }
+        },
+        loadAccounts,
+      },
+    }))
+    const provider = Provider.create({ adapter, storage: Storage.memory() })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { credentialId: ['cred-1', 'cred-2'] } }],
+    })
+
+    expect(loadAccounts.mock.calls[0]?.[0]).toMatchInlineSnapshot(`
+      {
+        "authorizeAccessKey": undefined,
+        "credentialId": [
+          "cred-1",
+          "cred-2",
+        ],
+        "digest": undefined,
+        "selectAccount": undefined,
+      }
+    `)
+  })
+
   test('behavior: validates auth before preparing access key material', async () => {
     const createKey = vi.fn(() => {
       throw new Error('createKey called')
