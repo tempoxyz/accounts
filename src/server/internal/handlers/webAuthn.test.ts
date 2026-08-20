@@ -1,5 +1,5 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 import { vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 import { Registration } from 'webauthx/server'
 
 import { createServer, type Server } from '../../../../test/utils.js'
