@@ -1,4 +1,4 @@
-import { Base64, Bytes, Cbor, Hex } from 'ox'
+import { Base64, Bytes, Hex } from 'ox'
 import { Credential } from 'ox/webauthn'
 import {
   Authentication,
@@ -19,16 +19,6 @@ const defaults = {
 } as const
 
 const sessionKey = (token: string) => `session:${token}`
-
-/** Extracts the authenticator model identifier from a verified attestation object. */
-export function getAaguid(attestationObject: ArrayBuffer) {
-  const { authData } = Cbor.decode<{ authData: Uint8Array }>(
-    new Uint8Array(attestationObject),
-  )
-  const value = Hex.fromBytes(authData.slice(37, 53)).slice(2)
-  if (value.length !== 32 || /^0+$/.test(value)) return undefined
-  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`
-}
 
 async function createCredential(
   kv: Kv.Kv,
@@ -162,8 +152,8 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
         rpId,
       })
 
+      const { aaguid } = result
       const { publicKey } = result.credential
-      const aaguid = getAaguid(deserialized.attestationObject)
       const credentialId = credential.id
       // Base64url-encode the userId we registered with so it matches
       // the `userHandle` shape the authenticator emits on `/login`.
