@@ -1,5 +1,20 @@
 # accounts
 
+## 0.16.1
+
+### Patch Changes
+
+- 22c1471: Added multiple-credential passkey targeting and exposed verified authenticator model identifiers to registration hooks.
+
+  ```ts
+  await provider.request({
+    method: "wallet_connect",
+    params: [
+      { capabilities: { credentialId: ["credential-a", "credential-b"] } },
+    ],
+  });
+  ```
+
 ## 0.16.0
 
 ### Minor Changes
