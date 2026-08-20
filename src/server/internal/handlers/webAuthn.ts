@@ -161,23 +161,29 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       const userId = stored.userId
         ? Base64.fromBytes(Bytes.fromString(stored.userId), { pad: false, url: true })
         : undefined
-      const created = await createCredential(kv, `credential:${credentialId}`, {
+      const key = `credential:${credentialId}`
+      const created = await createCredential(kv, key, {
         publicKey,
         ...(userId ? { userId } : {}),
       })
       if (!created) throw new Error('Credential already exists')
 
-      const [hook] = await Promise.all([
-        onRegister?.({
-          ...(aaguid ? { aaguid } : {}),
-          credentialId,
-          name: stored.name,
-          publicKey,
-          request: c.req.raw,
-          ...(userId ? { userId } : {}),
-        }),
-        kv.delete(`challenge:${challenge}`),
-      ])
+      const hook = await (async () => {
+        try {
+          return await onRegister?.({
+            ...(aaguid ? { aaguid } : {}),
+            credentialId,
+            name: stored.name,
+            publicKey,
+            request: c.req.raw,
+            ...(userId ? { userId } : {}),
+          })
+        } catch (error) {
+          await Promise.all([kv.delete(key), kv.delete(`challenge:${challenge}`)])
+          throw error
+        }
+      })()
+      await kv.delete(`challenge:${challenge}`)
 
       // Successful registration is also a successful authentication for
       // the freshly-minted credential. Issue a session here so the
@@ -416,7 +422,11 @@ export declare namespace webAuthn {
      * best-effort `get` then `set` storage.
      */
     kv: Kv.Kv
-    /** Called after a successful registration. The returned response is merged onto the default JSON response. */
+    /**
+     * Called after a successful registration. The returned response is merged
+     * onto the default JSON response. Throwing rejects the request and removes
+     * the newly stored credential.
+     */
     onRegister?: (parameters: {
       /** Authenticator model identifier, when the authenticator reports one. */
       aaguid?: string | undefined

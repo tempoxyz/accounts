@@ -171,7 +171,7 @@ const handler = Handler.webAuthn({
 - **Type:** `(params: { aaguid?: string; credentialId: string; name: string; publicKey: string; request: Request }) => Response | Promise<Response> | void | Promise<void>`
 - **Optional**
 
-Called after a successful registration. `aaguid` is the authenticator model identifier when reported, and `name` is the value passed to `POST /register/options`. Returning a `Response` merges its JSON body and status onto the default registration response; throwing surfaces as a `400` error response.
+Called after a successful registration. `aaguid` is the authenticator model identifier when reported, and `name` is the value passed to `POST /register/options`. Returning a `Response` merges its JSON body and status onto the default registration response. Throwing removes the new credential and surfaces as a `400` error response.
 
 ```ts twoslash
 import { Handler, Kv } from 'accounts/server'
