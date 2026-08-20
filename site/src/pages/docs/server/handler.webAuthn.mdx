@@ -168,10 +168,10 @@ const handler = Handler.webAuthn({
 
 ### onRegister
 
-- **Type:** `(params: { credentialId: string; name: string; publicKey: string; request: Request }) => Response | Promise<Response> | void | Promise<void>`
+- **Type:** `(params: { aaguid?: string; credentialId: string; name: string; publicKey: string; request: Request }) => Response | Promise<Response> | void | Promise<void>`
 - **Optional**
 
-Called after a successful registration. `name` is the value passed to `POST /register/options`. Returning a `Response` merges its JSON body and status onto the default registration response; throwing surfaces as a `400` error response.
+Called after a successful registration. `aaguid` is the authenticator model identifier when reported, and `name` is the value passed to `POST /register/options`. Returning a `Response` merges its JSON body and status onto the default registration response; throwing surfaces as a `400` error response.
 
 ```ts twoslash
 import { Handler, Kv } from 'accounts/server'
@@ -180,8 +180,8 @@ const handler = Handler.webAuthn({
   kv: Kv.memory(),
   origin: 'https://example.com',
   rpId: 'example.com',
-  onRegister: ({ credentialId, name, publicKey }) => { // [!code focus]
-    console.log('Registered:', name, credentialId) // [!code focus]
+  onRegister: ({ aaguid, credentialId, name, publicKey }) => { // [!code focus]
+    console.log('Registered:', name, credentialId, aaguid) // [!code focus]
   }, // [!code focus]
 })
 ```

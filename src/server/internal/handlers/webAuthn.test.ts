@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
 import { createServer, type Server } from '../../../../test/utils.js'
 import * as WebAuthnCeremony from '../../../core/WebAuthnCeremony.js'
 import * as Kv from '../../Kv.js'
-import { type SessionPayload, webAuthn } from './webAuthn.js'
+import { getAaguid, type SessionPayload, webAuthn } from './webAuthn.js'
 
 let server: Server
 let ceremony: WebAuthnCeremony.WebAuthnCeremony
@@ -36,6 +36,27 @@ describe('POST /register/options', () => {
     const { options: a } = await ceremony.getRegistrationOptions({ name: 'Test' })
     const { options: b } = await ceremony.getRegistrationOptions({ name: 'Test' })
     expect(a.publicKey!.challenge).not.toBe(b.publicKey!.challenge)
+  })
+})
+
+describe('getAaguid', () => {
+  test('extracts the authenticator model identifier', () => {
+    const authenticatorData = new Uint8Array(53)
+    authenticatorData.set(
+      [
+        0xfb, 0xfc, 0x30, 0x07, 0x15, 0x4e, 0x4e, 0xcc, 0x8c, 0x0b, 0x6e, 0x02, 0x05, 0x57, 0xd7,
+        0xbd,
+      ],
+      37,
+    )
+
+    expect(getAaguid(authenticatorData.buffer as ArrayBuffer)).toBe(
+      'fbfc3007-154e-4ecc-8c0b-6e020557d7bd',
+    )
+  })
+
+  test('omits an anonymous authenticator identifier', () => {
+    expect(getAaguid(new Uint8Array(53).buffer as ArrayBuffer)).toBeUndefined()
   })
 })
 

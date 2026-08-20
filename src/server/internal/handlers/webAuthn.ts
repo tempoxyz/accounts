@@ -20,6 +20,14 @@ const defaults = {
 
 const sessionKey = (token: string) => `session:${token}`
 
+/** Extracts the authenticator model identifier from verified authenticator data. */
+export function getAaguid(authenticatorData: ArrayBuffer | undefined) {
+  if (!authenticatorData) return undefined
+  const value = Hex.fromBytes(new Uint8Array(authenticatorData).slice(37, 53)).slice(2)
+  if (value.length !== 32 || /^0+$/.test(value)) return undefined
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`
+}
+
 async function createCredential(
   kv: Kv.Kv,
   key: string,
@@ -153,6 +161,9 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       })
 
       const { publicKey } = result.credential
+      const aaguid = getAaguid(
+        (deserialized.raw.response as { authenticatorData?: ArrayBuffer }).authenticatorData,
+      )
       const credentialId = credential.id
       // Base64url-encode the userId we registered with so it matches
       // the `userHandle` shape the authenticator emits on `/login`.
@@ -168,6 +179,7 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
 
       const [hook] = await Promise.all([
         onRegister?.({
+          ...(aaguid ? { aaguid } : {}),
           credentialId,
           name: stored.name,
           publicKey,
@@ -416,6 +428,8 @@ export declare namespace webAuthn {
     kv: Kv.Kv
     /** Called after a successful registration. The returned response is merged onto the default JSON response. */
     onRegister?: (parameters: {
+      /** Authenticator model identifier, when the authenticator reports one. */
+      aaguid?: string | undefined
       credentialId: string
       /** The name provided during `/register/options` (e.g. user email). */
       name: string
