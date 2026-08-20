@@ -710,7 +710,7 @@ export namespace wallet_connect {
         }),
         z.object({
           digest: z.optional(u.hex()),
-          credentialId: z.optional(z.string()),
+          credentialId: z.optional(z.union([z.string(), z.array(z.string())])),
           authorizeAccessKey,
           auth,
           identity,
@@ -829,7 +829,7 @@ export namespace wallet_connect_strict {
         }),
         z.object({
           digest: z.optional(u.hex()),
-          credentialId: z.optional(z.string()),
+          credentialId: z.optional(z.union([z.string(), z.array(z.string())])),
           authorizeAccessKey,
           auth,
           identity,

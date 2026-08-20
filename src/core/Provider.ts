@@ -752,8 +752,13 @@ export function create(options: create.Options = {}): create.ReturnType {
     if (capabilities && 'selectAccount' in capabilities && capabilities.selectAccount)
       return undefined
     if (capabilities && 'credentialId' in capabilities && capabilities.credentialId) {
+      if (Array.isArray(capabilities.credentialId) && capabilities.credentialId.length !== 1)
+        return undefined
+      const credentialId = Array.isArray(capabilities.credentialId)
+        ? capabilities.credentialId[0]
+        : capabilities.credentialId
       const account = state.accounts.find(
-        (a) => 'credential' in a && a.credential?.id === capabilities.credentialId,
+        (a) => 'credential' in a && a.credential?.id === credentialId,
       )
       return account?.address
     }

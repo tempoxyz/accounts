@@ -52,6 +52,25 @@ describe('POST /login/options', () => {
     const { options: b } = await ceremony.getAuthenticationOptions()
     expect(a.publicKey!.challenge).not.toBe(b.publicKey!.challenge)
   })
+
+  test('behavior: restricts authentication to multiple credentials', async () => {
+    const { options } = await ceremony.getAuthenticationOptions({
+      credentialId: ['Y3JlZC0x', 'Y3JlZC0y'],
+    })
+
+    expect(options.publicKey?.allowCredentials).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "Y3JlZC0x",
+          "type": "public-key",
+        },
+        {
+          "id": "Y3JlZC0y",
+          "type": "public-key",
+        },
+      ]
+    `)
+  })
 })
 
 describe('POST /register', () => {

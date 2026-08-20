@@ -44,6 +44,27 @@ describe('local', () => {
     expect(typeof options.publicKey!.challenge).toMatchInlineSnapshot(`"string"`)
   })
 
+  test('behavior: getAuthenticationOptions restricts authentication to multiple credentials', async () => {
+    const ceremony = WebAuthnCeremony.local({ rpId: 'example.com' })
+
+    const { options } = await ceremony.getAuthenticationOptions({
+      credentialId: ['Y3JlZC0x', 'Y3JlZC0y'],
+    })
+
+    expect(options.publicKey?.allowCredentials).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "Y3JlZC0x",
+          "type": "public-key",
+        },
+        {
+          "id": "Y3JlZC0y",
+          "type": "public-key",
+        },
+      ]
+    `)
+  })
+
   test('behavior: verifyRegistration stores credential and returns publicKey', async () => {
     const ceremony = WebAuthnCeremony.local({ rpId: 'example.com' })
 

@@ -231,13 +231,13 @@ export function webAuthn(options: webAuthn.Options): webAuthn.ReturnType {
       } = body as {
         allowCredentialIds?: string[]
         challenge?: Hex.Hex
-        credentialId?: string
+        credentialId?: string | string[]
         mediation?: string
       }
 
       const { challenge, options: authOptions } = Authentication.getOptions({
         challenge: requestChallenge,
-        credentialId: allowCredentialIds ?? credentialId,
+        credentialId: credentialId ?? allowCredentialIds,
         rpId,
       })
       const options = mediation ? { ...authOptions, mediation } : authOptions

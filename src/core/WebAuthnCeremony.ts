@@ -54,12 +54,10 @@ export declare namespace verifyRegistration {
 
 export declare namespace getAuthenticationOptions {
   type Parameters = {
-    /** Credential IDs to allow (restricts which credentials can be used). */
-    allowCredentialIds?: readonly string[] | undefined
     /** Challenge to use. */
     challenge?: `0x${string}` | undefined
-    /** Credential ID to restrict authentication to a specific credential. */
-    credentialId?: string | undefined
+    /** Credential ID or IDs to restrict authentication to. */
+    credentialId?: string | readonly string[] | undefined
     /** Mediation hint for passkey autofill / conditional UI. */
     mediation?: 'conditional' | 'optional' | 'required' | 'silent' | undefined
   }
@@ -124,10 +122,15 @@ export function local(options: local.Options = {}): WebAuthnCeremony {
     },
 
     async getAuthenticationOptions(parameters = {}) {
-      const { allowCredentialIds, challenge, credentialId } = parameters
+      const { challenge, credentialId } = parameters
       const { options } = Authentication.getOptions({
         challenge,
-        credentialId: (allowCredentialIds as string[] | undefined) ?? credentialId,
+        credentialId:
+          typeof credentialId === 'string'
+            ? credentialId
+            : credentialId
+              ? [...credentialId]
+              : undefined,
         rpId,
       })
       return { options }
@@ -189,8 +192,8 @@ export function server(options: server.Options): WebAuthnCeremony {
     },
 
     async getAuthenticationOptions(parameters = {}) {
-      const { allowCredentialIds, challenge, credentialId, mediation } = parameters
-      return request('/login/options', { allowCredentialIds, challenge, credentialId, mediation })
+      const { challenge, credentialId, mediation } = parameters
+      return request('/login/options', { challenge, credentialId, mediation })
     },
 
     async verifyAuthentication(response) {

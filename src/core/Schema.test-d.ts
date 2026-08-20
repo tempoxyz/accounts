@@ -77,7 +77,7 @@ describe('Encoded', () => {
                 }
               | {
                   digest?: Hex | undefined
-                  credentialId?: string | undefined
+                  credentialId?: string | string[] | undefined
                   authorizeAccessKey?:
                     | {
                         address?: Hex | undefined
