@@ -1,5 +1,5 @@
 ---
-'accounts': minor
+'accounts': patch
 ---
 
 Added multiple-credential passkey targeting and exposed verified authenticator model identifiers to registration hooks.
