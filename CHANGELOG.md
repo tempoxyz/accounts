@@ -1,5 +1,11 @@
 # accounts
 
+## 0.16.2
+
+### Patch Changes
+
+- 830c6fb: Preserved partial fee payer requests when signing transactions without a configured fee payer service.
+
 ## 0.16.1
 
 ### Patch Changes
