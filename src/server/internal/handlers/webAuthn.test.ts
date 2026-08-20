@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
+import { Cbor } from 'ox'
 
 import { createServer, type Server } from '../../../../test/utils.js'
 import * as WebAuthnCeremony from '../../../core/WebAuthnCeremony.js'
@@ -50,13 +51,17 @@ describe('getAaguid', () => {
       37,
     )
 
-    expect(getAaguid(authenticatorData.buffer as ArrayBuffer)).toBe(
+    const attestationObject = Cbor.encode({ authData: authenticatorData }, { as: 'Bytes' })
+
+    expect(getAaguid(attestationObject.buffer as ArrayBuffer)).toBe(
       'fbfc3007-154e-4ecc-8c0b-6e020557d7bd',
     )
   })
 
   test('omits an anonymous authenticator identifier', () => {
-    expect(getAaguid(new Uint8Array(53).buffer as ArrayBuffer)).toBeUndefined()
+    const attestationObject = Cbor.encode({ authData: new Uint8Array(53) }, { as: 'Bytes' })
+
+    expect(getAaguid(attestationObject.buffer as ArrayBuffer)).toBeUndefined()
   })
 })
 
