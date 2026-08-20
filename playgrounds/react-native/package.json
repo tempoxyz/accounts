@@ -19,12 +19,12 @@
     "expo-web-browser": "~55.0.13",
     "ox": "catalog:",
     "react": "catalog:",
-    "react-native": "0.83.4",
+    "react-native": "0.87.0",
     "react-native-get-random-values": "~2.0.0",
     "react-native-mmkv": "^4.3.1",
-    "react-native-nitro-modules": "^0.35.9",
-    "react-native-safe-area-context": "~5.7.0",
-    "react-native-screens": "~4.24.0",
+    "react-native-nitro-modules": "^0.36.5",
+    "react-native-safe-area-context": "~5.9.0",
+    "react-native-screens": "~4.27.0",
     "viem": "catalog:"
   },
   "devDependencies": {
