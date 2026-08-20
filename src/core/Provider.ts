@@ -1076,7 +1076,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                         chainId: decoded.chainId ?? state.chainId,
                         from: decoded.from ?? state.accounts[state.activeAccount]?.address,
                         ...(calls ? { calls } : {}),
-                        feePayer: resolveFeePayer(decoded.feePayer),
+                        feePayer:
+                          decoded.feePayer === true && !feePayerConfig
+                            ? true
+                            : resolveFeePayer(decoded.feePayer),
                       },
                       request,
                     )) satisfies Rpc.eth_signTransaction.Encoded['returns']

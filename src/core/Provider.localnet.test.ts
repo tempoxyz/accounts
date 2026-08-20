@@ -1175,6 +1175,20 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       expect(signed).toMatch(/^0x/)
     })
 
+    test('behavior: preserves partial fee payer requests without a configured fee payer', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const signed = await provider.request({
+        method: 'eth_signTransaction',
+        params: [{ calls: [transferCall], feePayer: true }],
+      })
+
+      expect(signed).toMatch(/^0x78/)
+    })
+
     test('behavior: signed transaction can be sent via eth_sendRawTransactionSync', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
