@@ -1,6 +1,7 @@
 import type { RequestListener } from 'node:http'
 import { Address, Hex, PublicKey } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { hashMessage } from 'viem'
 import { Actions } from 'viem/tempo'
 import { Store, Wata, deviceCode } from 'wata/host'
 import { Server } from 'wata/server'
@@ -139,6 +140,7 @@ export async function submitVerify(
 
 async function signKeyAuthorization(
   parameters: NonNullable<Rpc.wallet_authorizeAccessKey.Decoded['params']>[number],
+  options: { witness?: Hex.Hex | undefined } = {},
 ) {
   return await root.signKeyAuthorization(
     {
@@ -149,6 +151,8 @@ async function signKeyAuthorization(
       chainId: parameters.chainId ?? BigInt(chain.id),
       expiry: parameters.expiry,
       ...(parameters.limits ? { limits: parameters.limits } : {}),
+      ...(parameters.scopes ? { scopes: parameters.scopes } : {}),
+      ...(options.witness ? { witness: options.witness } : {}),
     },
   )
 }
@@ -169,19 +173,44 @@ async function respondTo(
 ): Promise<unknown> {
   if (message.method === 'wallet_connect') {
     const [parameters] = z.decode(Rpc.wallet_connect.schema.params!, message.params as never) ?? []
-    const authorization = parameters?.capabilities?.authorizeAccessKey
+    const capabilities = parameters?.capabilities
+    const authorization = capabilities?.authorizeAccessKey
+    const personalSign = await resolvePersonalSign({
+      capabilities,
+      chainId: parameters?.chainId ?? chain.id,
+    })
+    const keyAuthorization = authorization
+      ? await signKeyAuthorization(
+          authorization,
+          personalSign ? { witness: hashMessage(personalSign.message) } : {},
+        )
+      : undefined
+    const signature = await (async () => {
+      if (!personalSign) return undefined
+      if (keyAuthorization) return SignatureEnvelope.serialize(keyAuthorization.signature)
+      return await root.signMessage({ message: personalSign.message })
+    })()
     return {
       accounts: [
         {
           address: root.address,
-          capabilities: authorization
-            ? {
-                keyAuthorization: KeyAuthorization.toRpc(await signKeyAuthorization(authorization)),
-                ...(options.username !== undefined ? { username: options.username } : {}),
-              }
-            : options.username !== undefined
-              ? { username: options.username }
-              : {},
+          capabilities: {
+            ...(keyAuthorization
+              ? { keyAuthorization: KeyAuthorization.toRpc(keyAuthorization) }
+              : {}),
+            ...(personalSign
+              ? {
+                  personalSign: {
+                    message: personalSign.message,
+                    ...(keyAuthorization
+                      ? { keyAuthorization: KeyAuthorization.serialize(keyAuthorization) }
+                      : {}),
+                  },
+                }
+              : {}),
+            ...(signature ? { signature } : {}),
+            ...(options.username !== undefined ? { username: options.username } : {}),
+          },
         },
       ],
     }
@@ -198,6 +227,29 @@ async function respondTo(
   }
   if (message.method === 'wallet_updateAccessKey') return await completeUpdate(message.params)
   throw new Error(`unsupported method \`${message.method}\``)
+}
+
+async function resolvePersonalSign(options: {
+  capabilities:
+    | NonNullable<NonNullable<Rpc.wallet_connect.Decoded['params']>[number]['capabilities']>
+    | undefined
+  chainId: number
+}) {
+  const { capabilities, chainId } = options
+  if (capabilities?.personalSign) return capabilities.personalSign
+  const auth = capabilities?.auth
+  if (!auth || typeof auth === 'string' || !auth.challenge) return undefined
+
+  const response = await fetch(auth.challenge, {
+    body: JSON.stringify({
+      chainId,
+      ...(auth.resources ? { resources: auth.resources } : {}),
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  })
+  if (!response.ok) throw new Error(`auth challenge failed: ${response.status}`)
+  return (await response.json()) as { message: string }
 }
 
 /**
