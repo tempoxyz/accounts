@@ -1,5 +1,38 @@
 # accounts
 
+## 0.17.0
+
+### Minor Changes
+
+- 9e77565: Rewrote `accounts/cli` onto the Wata device-code transport and deprecated `CliAuth` and `Handler.codeAuth` in favor of `Handler.deviceCode`.
+
+  ```diff
+  - Provider.create({
+  -   host: 'https://wallet.example.com/api/auth/cli',
+  -   pollIntervalMs: 1000,
+  -   timeoutMs: 60_000,
+  - })
+  + Provider.create({
+  +   host: 'https://wallet.example.com/auth/device',
+  +   pollingInterval: 1000,
+  +   timeout: 60_000,
+  + })
+  ```
+
+- 9e77565: Added a `deviceCode` adapter (`accounts/deviceCode`) that forwards wallet RPC through the Wata device-code transport (RFC 8628 with PKCE), with a `tempoWallet` preset.
+
+  ```ts
+  import { deviceCode } from "accounts/deviceCode";
+
+  const adapter = deviceCode({
+    name: "Example CLI",
+    onPrompt: ({ userCode, verificationUriFull }) =>
+      console.log(userCode, verificationUriFull),
+    rdns: "com.example.cli",
+    url: "https://wallet.tempo.xyz/auth/device",
+  });
+  ```
+
 ## 0.16.2
 
 ### Patch Changes
