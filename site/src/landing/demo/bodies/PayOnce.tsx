@@ -1,13 +1,13 @@
-"use client";
+'use client'
 
-import type { DemoBodyProps } from "../types";
-import { PrimaryButton, useBodyAnimation } from "./shared";
+import type { DemoBodyProps } from '../types'
+import { PrimaryButton, useBodyAnimation } from './shared'
 
 export function PayOnceBody(props: DemoBodyProps) {
-  const { status, result, onAction, delay } = props;
-  const body = useBodyAnimation(delay);
-  const done = status === "done";
-  const buttonLabel = done ? "Transfer sent" : "Send transfer";
+  const { status, result, onAction, delay } = props
+  const body = useBodyAnimation(delay)
+  const done = status === 'done'
+  const buttonLabel = done ? 'Transfer sent' : 'Send transfer'
 
   return (
     <div
@@ -17,27 +17,21 @@ export function PayOnceBody(props: DemoBodyProps) {
     >
       <div className="flex flex-col gap-1">
         <p className="text-[14px] text-foreground-muted">Transfer</p>
-        <p className="font-mono text-[36px] leading-none text-foreground">
-          $240
-        </p>
+        <p className="font-mono text-[36px] leading-none text-foreground">$240</p>
       </div>
       <div className="grid gap-2">
         <div className="flex items-center justify-between bg-panel-3 px-4 py-3">
           <span className="text-[12px] text-foreground-muted">Recipient</span>
-          <span className="font-mono text-[12px] text-foreground">
-            Main account
-          </span>
+          <span className="font-mono text-[12px] text-foreground">Main account</span>
         </div>
         <div className="flex items-center justify-between bg-panel-3 px-4 py-3">
           <span className="text-[12px] text-foreground-muted">Memo</span>
-          <span className="font-mono text-[12px] text-foreground">
-            Monthly transfer
-          </span>
+          <span className="font-mono text-[12px] text-foreground">Monthly transfer</span>
         </div>
       </div>
       <PrimaryButton
         label={buttonLabel}
-        status={done ? "idle" : status}
+        status={done ? 'idle' : status}
         disabled={done}
         onClick={onAction}
         className="mt-2 h-11 w-full"
@@ -45,7 +39,7 @@ export function PayOnceBody(props: DemoBodyProps) {
       {result?.summary ? (
         result.href && result.hrefLabel ? (
           <p className="font-mono text-[12px] text-foreground-subtle">
-            {result.summary}{" "}
+            {result.summary}{' '}
             <a
               href={result.href}
               target="_blank"
@@ -60,5 +54,5 @@ export function PayOnceBody(props: DemoBodyProps) {
         )
       ) : null}
     </div>
-  );
+  )
 }

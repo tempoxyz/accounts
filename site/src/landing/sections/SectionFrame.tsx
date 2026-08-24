@@ -1,9 +1,10 @@
-"use client";
+'use client'
 
-import type { ReactNode } from "react";
-import AsciiBackground from "../ascii-bg";
+import type { ReactNode } from 'react'
 
-const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
+import AsciiBackground from '../ascii-bg'
+
+const easeOut = 'cubic-bezier(0.23, 1, 0.32, 1)'
 
 export function SectionFrame({
   title,
@@ -11,10 +12,10 @@ export function SectionFrame({
   left,
   right,
 }: {
-  title: string;
-  subheading: ReactNode;
-  left: ReactNode;
-  right: ReactNode;
+  title: string
+  subheading: ReactNode
+  left: ReactNode
+  right: ReactNode
 }) {
   return (
     <section className="relative px-6 pt-20 pb-0 sm:pt-[80px]">
@@ -45,5 +46,5 @@ export function SectionFrame({
         </div>
       </div>
     </section>
-  );
+  )
 }

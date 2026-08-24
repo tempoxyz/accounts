@@ -9,7 +9,7 @@ import { Cards, Card } from 'vocs'
 
 Build a command-line tool that asks a user to approve a scoped access key in the browser, then signs future commands locally from the terminal.
 
-The CLI provider uses a device-code flow. The command creates an access-key request, opens a Tempo Wallet approval page, polls until the user approves it, and stores the signed key in provider storage. After that, matching transfers or paid API calls can run without reopening the browser until the key expires.
+The CLI provider uses the Wata device-code flow (OAuth 2.0 Device Authorization Grant, RFC 8628). The command registers an access-key request, opens a Tempo Wallet approval page, polls until the user approves it, and stores the signed key in provider storage. After that, matching transfers or paid API calls can run without reopening the browser until the key expires.
 
 ## Example
 
@@ -126,7 +126,7 @@ cli.command('connect', {
 })
 ```
 
-When this runs, the provider creates a device code, opens the approval URL, and polls the code-auth service until Tempo Wallet returns the signed key authorization.
+When this runs, the provider registers a device code, opens the verification URL, and polls the token endpoint until Tempo Wallet returns the signed key authorization.
 
 ### Submit a Transfer
 
@@ -216,14 +216,20 @@ const provider = Provider.create({
 
 ### Use a Durable Code Store
 
-If you host your own CLI approval flow, back [`Handler.codeAuth`](/docs/server/handler.codeAuth) with durable storage. A memory store is fine for local development, but production device codes should survive process restarts while they are pending.
+If you host your own CLI approval flow, mount the [`wata`](https://github.com/wevm/wata) device-code host transport and back it with durable storage. A memory store is fine for local development, but production device codes should survive process restarts while they are pending.
 
 ```ts twoslash [server.ts]
 // @noErrors
-import { CliAuth, Handler } from 'accounts/server'
+import { Store, Wata, deviceCode } from 'wata/host'
 
-const handler = Handler.codeAuth({
-  store: CliAuth.Store.kv(env.KV),
+const wata = Wata.create({
+  transports: [
+    deviceCode({
+      html: { render, authenticate },
+      path: '/auth/device',
+      store: Store.cloudflare(env.KV),
+    }),
+  ],
 })
 ```
 
@@ -235,12 +241,6 @@ const handler = Handler.codeAuth({
     icon="lucide:terminal"
     to="/docs/cli/provider"
     title="CLI Provider"
-  />
-  <Card
-    description="Mount the server-side device-code handler for custom CLI approval flows."
-    icon="lucide:server"
-    to="/docs/server/handler.codeAuth"
-    title="Handler.codeAuth"
   />
   <Card
     description="Design bounded access-key policies with limits, scopes, recipients, and expiries."

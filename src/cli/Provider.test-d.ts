@@ -1,4 +1,5 @@
 import { describe, expectTypeOf, test } from 'vp/test'
+import type { DeviceCode } from 'wata'
 
 import type * as CoreProvider from '../core/Provider.js'
 import type { cli } from './adapter.js'
@@ -8,9 +9,9 @@ describe('create', () => {
   test('accepts CLI bootstrap options', () => {
     expectTypeOf<Parameters<typeof Provider.create>[0]>().toMatchTypeOf<{
       host?: string | undefined
-      open?: ((url: string) => Promise<void> | void) | undefined
-      pollIntervalMs?: number | undefined
-      timeoutMs?: number | undefined
+      open?: ((url: string, prompt: DeviceCode.Prompt) => Promise<void> | void) | undefined
+      pollingInterval?: number | undefined
+      timeout?: number | undefined
     }>()
   })
 

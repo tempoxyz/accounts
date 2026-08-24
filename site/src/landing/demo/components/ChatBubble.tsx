@@ -1,23 +1,20 @@
-"use client";
+'use client'
 
-import type { CSSProperties } from "react";
-import type { DemoPreludeMessage } from "../types";
+import type { CSSProperties } from 'react'
+
+import type { DemoPreludeMessage } from '../types'
 
 export function ChatBubble({
   message,
   style,
 }: {
-  message: DemoPreludeMessage;
-  style?: CSSProperties | undefined;
+  message: DemoPreludeMessage
+  style?: CSSProperties | undefined
 }) {
   return (
-    <div
-      data-demo-message
-      className="max-w-full bg-panel-2 px-3 py-2"
-      style={style}
-    >
+    <div data-demo-message className="max-w-full bg-panel-2 px-3 py-2" style={style}>
       <p className="text-[14px] break-words text-foreground sm:whitespace-nowrap">
-        {typeof message === "string" ? (
+        {typeof message === 'string' ? (
           message
         ) : (
           <>
@@ -35,5 +32,5 @@ export function ChatBubble({
         )}
       </p>
     </div>
-  );
+  )
 }

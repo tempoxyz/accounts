@@ -21,9 +21,9 @@ type SubscriptionResponse =
 
 type Subscriptions = {
   tempo: {
-    subscription: ((options: typeof subscriptionPlan) => (
-      request: Request,
-    ) => Promise<SubscriptionResponse>) & {
+    subscription: ((
+      options: typeof subscriptionPlan,
+    ) => (request: Request) => Promise<SubscriptionResponse>) & {
       renew: (parameters: { subscriptionId: string }) => Promise<{
         receipt: unknown
       } | null>

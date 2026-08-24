@@ -21,10 +21,7 @@ function getNextRenewalAt(receipt: Receipt.Receipt) {
   return timestamp + subscriptionPeriodMs
 }
 
-export function SubscriptionStepLabel(props: {
-  badge: 'Server' | 'User'
-  children: ReactNode
-}) {
+export function SubscriptionStepLabel(props: { badge: 'Server' | 'User'; children: ReactNode }) {
   const badgeClass =
     props.badge === 'User'
       ? '[background-color:color-mix(in_srgb,var(--color-info)_16%,transparent)] [color:light-dark(oklch(0.58_0.26_251.8),oklch(0.84_0.26_251.8))]'
@@ -93,12 +90,12 @@ function SubscribeStep(props: {
   })
   const balanceAmount =
     balance.data !== undefined
-      ? {
+      ? ({
           amount: toHex(balance.data.amount),
           decimals: balance.data.decimals,
           formatted: balance.data.formatted,
           symbol: pathUsdSymbol,
-        } satisfies Amount.Amount
+        } satisfies Amount.Amount)
       : undefined
 
   return (
@@ -125,7 +122,12 @@ function SubscribeStep(props: {
           <span className="shrink-0">Balance</span>
           <div className="min-w-0 text-right">
             {balanceAmount ? (
-              <Amount amount={balanceAmount} align="right" className="text-primary" maxDecimals={6} />
+              <Amount
+                amount={balanceAmount}
+                align="right"
+                className="text-primary"
+                maxDecimals={6}
+              />
             ) : (
               <span className="text-primary">{balance.isLoading ? 'Loading...' : '-'}</span>
             )}
@@ -250,7 +252,9 @@ function CollectStep(props: {
           </div>
         ) : null}
         {collect.data ? (
-          <pre className="text-[12px] overflow-auto">{stringify({ collection: collect.data }, null, 2)}</pre>
+          <pre className="text-[12px] overflow-auto">
+            {stringify({ collection: collect.data }, null, 2)}
+          </pre>
         ) : null}
         {collect.error ? (
           <pre className="text-danger overflow-auto">{`${collect.error.name}: ${collect.error.message}`}</pre>

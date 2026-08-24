@@ -12,7 +12,11 @@ import type { MaybePromise } from '../internal/types.js'
 import type { Kv } from './Kv.js'
 
 const maxLimits = 10
-const limit = z.object({ token: u.address(), limit: u.bigint() })
+const limit = z.object({
+  token: u.address(),
+  limit: u.bigint(),
+  period: z.optional(u.number()),
+})
 const limits = z.readonly(z.array(limit).check(z.maxLength(maxLimits)))
 const showDeposit = z.optional(
   z.union([
@@ -249,7 +253,10 @@ export const entry = u.oneOf([
   }),
 ])
 
-/** Shared CLI auth helper with pre-bound defaults and cached clients. */
+/**
+ * Shared CLI auth helper with pre-bound defaults and cached clients.
+ * @deprecated Use `Handler.deviceCode` with the Wata device-code transport.
+ */
 export type CliAuth = {
   /** Creates and stores a new device code. */
   createDeviceCode: (options: createDeviceCode.Parameters) => Promise<createDeviceCode.ReturnType>
@@ -622,6 +629,7 @@ export const RateLimit = {
  * Instantiates a CLI auth helper with shared defaults and cached clients.
  *
  *
+ * @deprecated Use `Handler.deviceCode` with the Wata device-code transport.
  * @param {from.Options} options - Shared CLI auth defaults.
  * @returns {CliAuth} CLI auth helper.
  *

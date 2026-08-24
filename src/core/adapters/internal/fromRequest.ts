@@ -16,106 +16,133 @@ import * as Rpc from '../../zod/rpc.js'
  * `request`.
  */
 export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
-  const { bind, cleanup, close, icon, keystores, name, rdns, request: requestRemote } = options
+  const {
+    actions,
+    bind,
+    cleanup,
+    close,
+    icon,
+    keystores,
+    name,
+    rdns,
+    request: requestRemote,
+  } = options
 
-  return Adapter.define({ ...(icon ? { icon } : {}), name, rdns }, ({ getAccount, store }) => {
-    // Late-bind the store so the request channel can reconcile local
-    // connection state (e.g. a wallet `accountsChanged` notification).
-    bind?.({ store })
+  return Adapter.define(
+    { ...(icon ? { icon } : {}), name, rdns },
+    ({ getAccount, getClient, store }) => {
+      // Late-bind the store so the request channel can reconcile local
+      // connection state (e.g. a wallet `accountsChanged` notification).
+      bind?.({ store })
 
-    const provider = core_Provider.from({
-      async request(request) {
-        const { accounts, activeAccount, chainId } = store.getState()
-        if (request.method === 'eth_chainId') return Hex.fromNumber(chainId)
-        // Forward the active account + chain as request context so the wallet
-        // acts against the session the app believes it is using rather than
-        // whatever the wallet last selected for itself.
-        const account = accounts[activeAccount]?.address
-        return await requestRemote({
-          method: request.method,
-          params: request.params as readonly unknown[] | undefined,
-          context: { chainId, ...(account ? { account } : {}) },
-        })
-      },
-    })
+      const provider = core_Provider.from({
+        async request(request) {
+          const { accounts, activeAccount, chainId } = store.getState()
+          if (request.method === 'eth_chainId') return Hex.fromNumber(chainId)
+          // Forward the active account + chain as request context so the wallet
+          // acts against the session the app believes it is using rather than
+          // whatever the wallet last selected for itself.
+          const account = accounts[activeAccount]?.address
+          return await requestRemote({
+            method: request.method,
+            params: request.params as readonly unknown[] | undefined,
+            context: { chainId, ...(account ? { account } : {}) },
+          })
+        },
+      })
 
-    // Connect capabilities are read from the first account only: the remote
-    // wallet connects a single account per exchange.
-    function toConnectReturn(result: Rpc.wallet_connect.Encoded['returns']) {
-      const capabilities = result.accounts[0]?.capabilities
-      return {
-        accounts: result.accounts.map((account) => ({ address: account.address })),
-        ...(capabilities?.auth ? { auth: capabilities.auth } : {}),
-        ...(capabilities?.identity ? { identity: capabilities.identity } : {}),
-        ...(capabilities?.keyAuthorization
-          ? { keyAuthorization: capabilities.keyAuthorization }
-          : {}),
-        ...(capabilities?.personalSign ? { personalSign: capabilities.personalSign } : {}),
-        ...(capabilities?.signature ? { signature: capabilities.signature } : {}),
-      }
-    }
-
-    return {
-      forwardsAuth: true,
-      ...(keystores ? { accessKey: { keystores } } : {}),
-      actions: {
-        async createAccount(_parameters, request) {
-          return toConnectReturn(
-            (await provider.request(request)) as Rpc.wallet_connect.Encoded['returns'],
-          )
-        },
-        async loadAccounts(_parameters, request) {
-          return toConnectReturn(
-            (await provider.request(request)) as Rpc.wallet_connect.Encoded['returns'],
-          )
-        },
-        async deposit(_parameters, request) {
-          return (await provider.request(request)) as Rpc.wallet_deposit.Encoded['returns']
-        },
-        async depositZone(parameters, request) {
-          return (await provider.request({
-            ...request,
-            params: [z.encode(Rpc.wallet_depositZone.parameters, parameters)] as const,
-          })) as Rpc.wallet_depositZone.Encoded['returns']
-        },
-        // `disconnect` (when `close` is set) only tears down the local
-        // wallet session — it is never forwarded. No `switchChain` action:
-        // chain selection is local state the provider handles itself, and
-        // forwarding it would open a wallet session for nothing.
-        ...(close ? { disconnect: close } : {}),
-        async swap(_parameters, request) {
-          return (await provider.request(request)) as Rpc.wallet_swap.Encoded['returns']
-        },
-        async transfer(parameters, request) {
-          return (await provider.request({
-            ...request,
-            params: [z.encode(Rpc.wallet_transfer.parameters, parameters)] as const,
-          })) as Rpc.wallet_transfer.Encoded['returns']
-        },
-        async withdrawZone(parameters, request) {
-          return (await provider.request({
-            ...request,
-            params: [z.encode(Rpc.wallet_withdrawZone.parameters, parameters)] as const,
-          })) as Rpc.wallet_withdrawZone.Encoded['returns']
-        },
-      },
-      ...(cleanup ? { cleanup } : close ? { cleanup: () => void close() } : {}),
-      getAccount(parameters = {}) {
+      // Connect capabilities are read from the first account only: the remote
+      // wallet connects a single account per exchange.
+      function toConnectReturn(result: Rpc.wallet_connect.Encoded['returns']) {
+        const capabilities = result.accounts[0]?.capabilities
         return {
-          account: {
-            address: parameters.address ?? getAccount({ signable: false }).address,
-            type: 'json-rpc' as const,
-          },
-          transport: custom(provider),
+          accounts: result.accounts.map((account) => ({ address: account.address })),
+          ...(capabilities?.auth ? { auth: capabilities.auth } : {}),
+          ...(capabilities?.identity ? { identity: capabilities.identity } : {}),
+          ...(capabilities?.keyAuthorization
+            ? { keyAuthorization: capabilities.keyAuthorization }
+            : {}),
+          ...(capabilities?.personalSign ? { personalSign: capabilities.personalSign } : {}),
+          ...(capabilities?.signature ? { signature: capabilities.signature } : {}),
+          ...(capabilities?.username !== undefined ? { username: capabilities.username } : {}),
         }
-      },
-    }
-  })
+      }
+
+      return {
+        forwardsAuth: true,
+        ...(keystores ? { accessKey: { keystores } } : {}),
+        actions: {
+          async createAccount(_parameters, request) {
+            return toConnectReturn(
+              (await provider.request(request)) as Rpc.wallet_connect.Encoded['returns'],
+            )
+          },
+          async loadAccounts(_parameters, request) {
+            return toConnectReturn(
+              (await provider.request(request)) as Rpc.wallet_connect.Encoded['returns'],
+            )
+          },
+          async deposit(_parameters, request) {
+            return (await provider.request(request)) as Rpc.wallet_deposit.Encoded['returns']
+          },
+          async depositZone(parameters, request) {
+            return (await provider.request({
+              ...request,
+              params: [z.encode(Rpc.wallet_depositZone.parameters, parameters)] as const,
+            })) as Rpc.wallet_depositZone.Encoded['returns']
+          },
+          // `disconnect` (when `close` is set) only tears down the local
+          // wallet session — it is never forwarded. No `switchChain` action:
+          // chain selection is local state the provider handles itself, and
+          // forwarding it would open a wallet session for nothing.
+          ...(close ? { disconnect: close } : {}),
+          async swap(_parameters, request) {
+            return (await provider.request(request)) as Rpc.wallet_swap.Encoded['returns']
+          },
+          async transfer(parameters, request) {
+            return (await provider.request({
+              ...request,
+              params: [z.encode(Rpc.wallet_transfer.parameters, parameters)] as const,
+            })) as Rpc.wallet_transfer.Encoded['returns']
+          },
+          async withdrawZone(parameters, request) {
+            return (await provider.request({
+              ...request,
+              params: [z.encode(Rpc.wallet_withdrawZone.parameters, parameters)] as const,
+            })) as Rpc.wallet_withdrawZone.Encoded['returns']
+          },
+          ...actions?.({ getClient, request: requestRemote, store }),
+        },
+        ...(cleanup ? { cleanup } : close ? { cleanup: () => void close() } : {}),
+        getAccount(parameters = {}) {
+          return {
+            account: {
+              address: parameters.address ?? getAccount({ signable: false }).address,
+              type: 'json-rpc' as const,
+            },
+            transport: custom(provider),
+          }
+        },
+      }
+    },
+  )
 }
 
 export declare namespace fromRequest {
   /** Options for {@link fromRequest}. */
   export type Options = {
+    /**
+     * Adapter-specific action overrides layered over the request-forwarding
+     * defaults. Receives the request channel plus the adapter's client and
+     * store for actions that need local bookkeeping around an exchange.
+     */
+    actions?:
+      | ((context: {
+          getClient: Adapter.SetupFn.Parameters['getClient']
+          request: Options['request']
+          store: Adapter.SetupFn.Parameters['store']
+        }) => Partial<Adapter.Instance['actions']>)
+      | undefined
     /**
      * Called once during setup with the adapter's store, for late wiring
      * that needs to mutate local state (e.g. reconciling connection state

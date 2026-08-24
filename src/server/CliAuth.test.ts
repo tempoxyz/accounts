@@ -1,4 +1,4 @@
-import { Base64 } from 'ox'
+import { Base64, Hex } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { createClient, custom, encodeErrorResult, encodeFunctionResult } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
@@ -22,6 +22,22 @@ const limits = [
     token,
   },
 ] as const
+
+describe('keyAuthorization', () => {
+  test('behavior: preserves spending limit periods', () => {
+    const authorization = z.decode(CliAuth.keyAuthorization, {
+      address: accessKey.address,
+      chainId: '0xa5bf',
+      expiry: Hex.fromNumber(expiry),
+      keyId: accessKey.address,
+      keyType: accessKey.keyType,
+      limits: [{ limit: '0x3e8', period: Hex.fromNumber(86_400), token }],
+      signature: { r: '0x1', s: '0x2', type: 'secp256k1', yParity: '0x0' },
+    })
+
+    expect(authorization.limits).toEqual([{ limit, period: 86_400, token }])
+  })
+})
 
 function createMissingAccessKeyClient() {
   return createClient({
@@ -744,23 +760,18 @@ Received 2 bytes.]`)
       limits: Array.from({ length: 11 }, () => item),
     })
 
-    expect(result).toMatchInlineSnapshot(`
-    	{
-    	  "error": [$ZodError: [
-    	  {
-    	    "origin": "array",
-    	    "code": "too_big",
-    	    "maximum": 10,
-    	    "inclusive": true,
-    	    "path": [
-    	      "limits"
-    	    ],
-    	    "message": "Invalid input"
-    	  }
-    	]],
-    	  "success": false,
-    	}
-    `)
+    expect(result.success).toBe(false)
+    if (result.success) return
+    expect(result.error.issues).toEqual([
+      {
+        code: 'too_big',
+        inclusive: true,
+        maximum: 10,
+        message: 'Invalid input',
+        origin: 'array',
+        path: ['limits'],
+      },
+    ])
   })
 
   test('behavior: rejects malformed limit tokens', async () => {
