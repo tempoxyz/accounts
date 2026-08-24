@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Address, Hex } from 'ox'
 import { Hex as ox_Hex } from 'ox'
-import { type Address as ViemAddress, parseUnits } from 'viem'
+import { KeyAuthorization } from 'ox/tempo'
+import { type Address as ViemAddress, hashMessage, parseUnits } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
 import { describe, expect, test, vi } from 'vp/test'
 import type * as z from 'zod/mini'
@@ -12,6 +13,7 @@ import { accounts, chain, getClient } from '../../test/config.js'
 import { createDeviceCodeHost, submitVerify } from '../../test/deviceCode.js'
 import { createJsonStorage, createServer } from '../../test/utils.js'
 import type * as Rpc from '../core/zod/rpc.js'
+import * as Handler from '../server/Handler.js'
 import * as Provider from './Provider.js'
 import * as Storage from './storage.js'
 
@@ -87,7 +89,9 @@ const transferCall = Actions.token.transfer.call({
 
 function connectCapabilities(host: ReturnType<typeof createDeviceCodeHost>, index: number) {
   const params = host.requests()[index]!.params as readonly {
-    capabilities?: Record<string, unknown> | undefined
+    capabilities?:
+      | NonNullable<Rpc.wallet_connect.Decoded['params']>[number]['capabilities']
+      | undefined
   }[]
   return params[0]?.capabilities
 }
@@ -149,6 +153,113 @@ describe('Provider.create', () => {
         }
       `)
     } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('behavior: preserves wallet_connect authorization capabilities', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
+    let listener: Parameters<typeof createServer>[0] | undefined
+    const authServer = await createServer((request, response) => {
+      if (!listener) {
+        const auth = Handler.auth({ origin: authServer.url })
+        listener = Handler.compose([auth], { path: '/auth' }).listener
+      }
+      return listener(request, response)
+    })
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
+        },
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
+      })
+
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [
+          {
+            capabilities: {
+              auth: {
+                resources: [
+                  'urn:nanocodex:memory:read',
+                  'urn:nanocodex:connector:github:repo:read',
+                ],
+                returnToken: true,
+                url: `${authServer.url}/auth`,
+              },
+              authorizeAccessKey: {
+                expiry,
+                keyType: accessKey.keyType,
+                publicKey: accessKey.publicKey,
+                scopes: [
+                  {
+                    address: Addresses.pathUsd,
+                    selector: 'transfer(address,uint256)',
+                  },
+                ],
+              },
+              identity: { email: true },
+              method: 'login',
+            },
+          },
+        ],
+      })
+
+      const capabilities = connectCapabilities(host, 0)
+      const connected = result.accounts[0]!.capabilities
+      const message = connected.personalSign?.message
+      expect({
+        auth: capabilities?.auth,
+        authToken: connected.auth?.token ? 'present' : 'missing',
+        identity: capabilities?.identity,
+        personalSign: {
+          keyAuthorization: connected.personalSign?.keyAuthorization ? 'present' : 'missing',
+          message: message ? 'present' : 'missing',
+          signature: connected.signature ? 'present' : 'missing',
+          witness:
+            message && connected.personalSign?.keyAuthorization
+              ? KeyAuthorization.deserialize(connected.personalSign.keyAuthorization).witness ===
+                hashMessage(message)
+              : false,
+        },
+        scopes: capabilities?.authorizeAccessKey?.scopes,
+      }).toMatchInlineSnapshot(`
+        {
+          "auth": {
+            "challenge": "${authServer.url}/auth/challenge",
+            "logout": "${authServer.url}/auth/logout",
+            "resources": [
+              "urn:nanocodex:memory:read",
+              "urn:nanocodex:connector:github:repo:read",
+            ],
+            "returnToken": true,
+            "verify": "${authServer.url}/auth",
+          },
+          "authToken": "present",
+          "identity": {
+            "email": true,
+          },
+          "personalSign": {
+            "keyAuthorization": "present",
+            "message": "present",
+            "signature": "present",
+            "witness": true,
+          },
+          "scopes": [
+            {
+              "address": "${Addresses.pathUsd}",
+              "selector": "transfer(address,uint256)",
+            },
+          ],
+        }
+      `)
+    } finally {
+      await authServer.closeAsync()
       await server.closeAsync()
     }
   })
