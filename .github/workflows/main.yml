@@ -23,10 +23,13 @@ jobs:
     needs: verify
     outputs:
       hasChangesets: ${{ steps.changesets.outputs.hasChangesets }}
+    # The release commits (commitMode: github-api) and the release pull
+    # request are created with a short-lived GitHub App token minted via the
+    # github-sts action (authorized by .github/sts/changesets.sts.yaml); the
+    # built-in GITHUB_TOKEN is not allowed to create pull requests.
     permissions:
-      contents: write # to create release commits through changesets/action
-      issues: write # to post issue comments through changesets/action
-      pull-requests: write # to create or update the release pull request
+      contents: read # to clone repository contents
+      id-token: write # to request the OIDC token the STS exchange verifies
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -41,6 +44,12 @@ jobs:
         with:
           skip-cache: 'true' # avoid cache poisoning attacks
 
+      - name: Fetch GitHub token via STS
+        id: sts
+        uses: tempoxyz/gh-actions/actions/github-sts@183a02178c660ce295e9a262edc5857cb7135f06 # main
+        with:
+          policy: changesets
+
       - name: Create or update release pull request
         id: changesets
         uses: changesets/action@63a615b9cd06ba9a3e6d13796c7fbcb080a60a0b # 06245a4e0a36c064a573d4150030f5ec548e4fcc
@@ -50,7 +59,7 @@ jobs:
           commit: 'chore: version packages'
           version: pnpm changeset:version
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.sts.outputs.token }}
 
   publish:
     name: Publish

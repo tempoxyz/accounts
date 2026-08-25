@@ -171,6 +171,7 @@ export const transactionRequest = z.object({
     z.array(z.object({ address: u.address(), storageKeys: z.array(u.hex()) })),
   ),
   calls: z.optional(z.readonly(z.array(call))),
+  capabilities: z.optional(z.record(z.string(), z.unknown())),
   chainId: z.optional(u.number()),
   data: z.optional(u.hex()),
   feePayer: z.optional(z.union([z.boolean(), z.string()])),

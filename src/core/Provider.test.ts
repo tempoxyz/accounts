@@ -11,6 +11,54 @@ import * as Storage from './Storage.js'
 
 const address = '0x0000000000000000000000000000000000000001'
 
+describe('eth_fillTransaction', () => {
+  test('behavior: forwards Tempo-formatted request capabilities', async () => {
+    const capabilities: unknown[] = []
+    const request = tempo.formatters.transactionRequest.format(
+      {
+        capabilities: { balanceDiffs: false, errors: true },
+        from: address,
+        to: address,
+        type: 'tempo',
+      },
+      'fillTransaction',
+    )
+    const provider = Provider.create({
+      chains: [tempo],
+      storage: Storage.memory(),
+      transports: {
+        [tempo.id]: custom(
+          {
+            async request(request) {
+              if (request.method === 'eth_fillTransaction')
+                capabilities.push(
+                  (request.params?.[0] as { capabilities?: unknown } | undefined)?.capabilities,
+                )
+              throw new Error('capture complete')
+            },
+          },
+          { retryCount: 0 },
+        ),
+      },
+    })
+
+    await expect(
+      provider.request({
+        method: 'eth_fillTransaction',
+        params: [request as never],
+      }),
+    ).rejects.toThrow('capture complete')
+    expect(capabilities).toMatchInlineSnapshot(`
+      [
+        {
+          "balanceDiffs": false,
+          "errors": true,
+        },
+      ]
+    `)
+  })
+})
+
 describe('getMppxParameters', () => {
   test('error: rejects unsupported chain IDs', () => {
     const provider = Provider.create({ storage: Storage.memory() })
