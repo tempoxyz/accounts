@@ -1,5 +1,11 @@
 # accounts
 
+## 0.17.2
+
+### Patch Changes
+
+- 027ceb7: Allowed the CLI device-code adapter to forward all wallet RPC methods.
+
 ## 0.17.1
 
 ### Patch Changes
