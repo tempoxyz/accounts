@@ -574,7 +574,7 @@ export function create(options: create.Options = {}): create.ReturnType {
       })
     } else {
       try {
-        await Actions.accessKey.revoke(getClient(), {
+        await Actions.accessKey.revokeSync(getClient(), {
           account: selected.account as TempoAccount.Account,
           accessKey: parameters.accessKeyAddress,
         })
