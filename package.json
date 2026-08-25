@@ -5,7 +5,7 @@
     "changeset:version": "changeset version && pnpm check",
     "check": "vp lint --fix --ignore-pattern package.json && vp fmt src examples playgrounds ref-impls scripts test",
     "dev": "docker compose up -d",
-    "dev:cli": "pnpm --filter './playgrounds/cli' cli",
+    "dev:cli": "pnpm --filter './playgrounds/cli' dev",
     "docs:build": "pnpm --filter site build",
     "docs:dev": "pnpm --filter site dev",
     "docs:preview": "pnpm --filter site preview",
