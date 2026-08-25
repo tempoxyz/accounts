@@ -107,9 +107,11 @@ describe('Provider.create', () => {
         chains: [chain],
         open: async (url, prompt) => {
           opened.push(url)
+          await fetch(url)
           await submitVerify(prompt)
         },
         host: `${server.url}/auth/device`,
+        name: 'Accounts playground',
         storage: createJsonStorage(),
       })
 
@@ -125,6 +127,7 @@ describe('Provider.create', () => {
         : undefined
 
       expect(opened).toHaveLength(1)
+      expect(host.metas()).toEqual([{ name: 'Accounts playground' }])
       expect(opened[0]).toMatch(
         new RegExp(`^${server.url}/auth/device/verify\\?user_code=[A-Z]{4}-[A-Z]{4}$`),
       )
@@ -467,6 +470,34 @@ describe('Provider.create', () => {
     }
   })
 
+  test('behavior: personal_sign requires a connected account without opening the browser', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open() {
+          throw new Error('Unexpected browser open.')
+        },
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
+      })
+
+      await expect(
+        provider.request({
+          method: 'personal_sign',
+          params: ['0x68656c6c6f', root.address],
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.DisconnectedError: No accounts connected.]`,
+      )
+      expect(host.requests()).toHaveLength(0)
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
   test('behavior: authorizes an access key for the active account', async () => {
     const host = createDeviceCodeHost()
     const server = await createServer(host.listener)
@@ -522,7 +553,7 @@ describe('Provider.create', () => {
     }
   })
 
-  test('behavior: rejects unsupported revokeAccessKey after bootstrap', async () => {
+  test('behavior: forwards revokeAccessKey after bootstrap', async () => {
     const host = createDeviceCodeHost()
     const server = await createServer(host.listener)
 
@@ -538,12 +569,15 @@ describe('Provider.create', () => {
 
       await provider.request(connectRequest())
 
-      await expect(
-        provider.request({
-          method: 'wallet_revokeAccessKey',
-          params: [{ accessKeyAddress: accessKey.address, address: root.address }],
-        }),
-      ).rejects.toThrow('`wallet_revokeAccessKey` not supported by device-code adapter.')
+      await provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [{ accessKeyAddress: accessKey.address, address: root.address }],
+      })
+
+      expect(host.requests().map(({ method }) => method)).toEqual([
+        'wallet_connect',
+        'wallet_revokeAccessKey',
+      ])
     } finally {
       await server.closeAsync()
     }
@@ -613,7 +647,7 @@ describe('Provider.create', () => {
     }
   })
 
-  test('behavior: signs messages locally with the managed access key', async () => {
+  test('behavior: forwards signing even when a managed access key is available', async () => {
     const host = createDeviceCodeHost()
     const server = await createServer(host.listener)
 
@@ -654,7 +688,88 @@ describe('Provider.create', () => {
 
       expect(personal).toMatch(/^0x/)
       expect(typedData).toMatch(/^0x/)
-      expect(host.requests()).toHaveLength(1)
+      expect(host.requests().map((request) => request.method)).toMatchInlineSnapshot(`
+        [
+          "wallet_connect",
+          "personal_sign",
+          "eth_signTypedData_v4",
+        ]
+      `)
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
+  test('behavior: forwards signing with a scoped access key', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
+
+    try {
+      const provider = Provider.create({
+        chains: [chain],
+        open: async (_url, prompt) => {
+          await submitVerify(prompt)
+        },
+        host: `${server.url}/auth/device`,
+        storage: createJsonStorage(),
+      })
+      const connected = await provider.request({
+        method: 'wallet_connect',
+        params: [
+          {
+            capabilities: {
+              authorizeAccessKey: {
+                expiry: expiry_2,
+                keyType: accessKey.keyType,
+                publicKey: accessKey.publicKey,
+                scopes: [
+                  {
+                    address: Addresses.pathUsd,
+                    selector: 'transfer(address,uint256)',
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      })
+      const address = connected.accounts[0]!.address
+
+      const personal = await provider.request({
+        method: 'personal_sign',
+        params: ['0x68656c6c6f', address],
+      })
+      const typedData = await provider.request({
+        method: 'eth_signTypedData_v4',
+        params: [
+          address,
+          JSON.stringify({
+            domain: {},
+            message: { contents: 'hello' },
+            primaryType: 'Message',
+            types: {
+              EIP712Domain: [],
+              Message: [{ name: 'contents', type: 'string' }],
+            },
+          }),
+        ],
+      })
+
+      expect({
+        methods: host.requests().map((request) => request.method),
+        personal: personal ? expect.any(String) : personal,
+        typedData: typedData ? expect.any(String) : typedData,
+      }).toMatchInlineSnapshot(`
+        {
+          "methods": [
+            "wallet_connect",
+            "personal_sign",
+            "eth_signTypedData_v4",
+          ],
+          "personal": Any<String>,
+          "typedData": Any<String>,
+        }
+      `)
     } finally {
       await server.closeAsync()
     }

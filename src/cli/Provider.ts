@@ -9,8 +9,10 @@ import * as Storage from './storage.js'
 export function create(options: create.Options): create.ReturnType {
   const {
     host = 'https://wallet.tempo.xyz/auth/device',
+    name,
     open,
     pollingInterval,
+    rdns,
     storage = Storage.filesystem(),
     timeout,
     ...rest
@@ -27,8 +29,10 @@ export function create(options: create.Options): create.ReturnType {
     ...rest,
     adapter: cli({
       host,
+      ...(name ? { name } : {}),
       ...(open ? { open } : {}),
       ...(pollingInterval !== undefined ? { pollingInterval } : {}),
+      ...(rdns ? { rdns } : {}),
       ...(timeout !== undefined ? { timeout } : {}),
     }),
     ...(mpp ? { mpp } : {}),
