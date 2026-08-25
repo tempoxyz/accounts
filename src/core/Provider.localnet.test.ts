@@ -34,8 +34,6 @@ import * as Keystore from './Keystore.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 
-type ProviderOptions = Omit<Provider.create.Options, 'adapter'>
-
 beforeAll(cli.setup)
 afterAll(cli.teardown)
 
@@ -46,10 +44,6 @@ const adapters = [
 ] as const
 
 describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) => {
-  function createProvider(options: ProviderOptions = {}) {
-    return Provider.create({ ...options, adapter: adapter(options) })
-  }
-
   function transfer(amount: string) {
     return Actions.token.transfer.call({
       to: '0x0000000000000000000000000000000000000001',
@@ -85,14 +79,14 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('create', () => {
     test('default: returns an EIP-1193 provider', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
       expect(typeof provider.request).toMatch(/function/)
     })
   })
 
   describe('eth_chainId', () => {
     test('default: returns configured chain ID as hex', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
       const chainId = await provider.request({ method: 'eth_chainId' })
       expect(chainId).toMatchInlineSnapshot(`"0x1079"`)
     })
@@ -100,13 +94,13 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('eth_accounts', () => {
     test('default: returns empty array initially', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
       const accounts = await provider.request({ method: 'eth_accounts' })
       expect(accounts).toMatchInlineSnapshot(`[]`)
     })
 
     test('behavior: returns accounts after connecting', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       await connect(provider)
       const result = await provider.request({ method: 'eth_accounts' })
@@ -116,7 +110,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('eth_requestAccounts', () => {
     test('default: returns accounts after connecting', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
       await connect(provider)
       const result = await provider.request({ method: 'eth_requestAccounts' })
       expect(result.length).toBeGreaterThanOrEqual(1)
@@ -143,7 +137,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_connect', () => {
     test('default: without capabilities calls loadAccounts', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
       const result = await provider.request({ method: 'wallet_connect' })
       for (const account of result.accounts) {
         expect(account.address).toMatch(/^0x[0-9a-f]{40}$/i)
@@ -152,7 +146,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: with register capability calls createAccount', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       const result = await provider.request({
         method: 'wallet_connect',
@@ -164,7 +158,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: register passes name to createAccount', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       await provider.request({
         method: 'wallet_connect',
@@ -174,7 +168,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: register defaults name to "default"', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       await provider.request({
         method: 'wallet_connect',
@@ -184,7 +178,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: login sets activeAccount to loaded account', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       await provider.request({
         method: 'wallet_connect',
@@ -196,7 +190,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: login with digest returns signature in account capabilities', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       await connect(provider)
       const result = await provider.request({
@@ -207,7 +201,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: digest signature is verifiable on-chain', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const client = provider.getClient()
 
       await connect(provider)
@@ -226,14 +220,14 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: login without digest returns empty capabilities', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
       await connect(provider)
       const result = await provider.request({ method: 'wallet_connect' })
       expect(result.accounts[0]!.capabilities).toMatchInlineSnapshot(`{}`)
     })
 
     test('behavior: register without digest returns empty capabilities', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       const result = await provider.request({
         method: 'wallet_connect',
@@ -243,7 +237,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: register with digest returns signature in capabilities', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const result = await provider.request({
         method: 'wallet_connect',
@@ -253,7 +247,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: register digest signature is verifiable on-chain', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const client = provider.getClient()
 
       const digest = '0x00000000000000000000000000000000000000000000000000000000deadbeef' as const
@@ -271,7 +265,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: login with personalSign echoes { message } and surfaces signature at root', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       await connect(provider)
       const result = await provider.request({
@@ -284,7 +278,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: login personalSign signature is verifiable via verifyMessage', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const client = provider.getClient()
 
       await connect(provider)
@@ -302,7 +296,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: register with personalSign echoes { message } and surfaces signature at root', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       const result = await provider.request({
         method: 'wallet_connect',
@@ -318,7 +312,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: register personalSign signature is verifiable via verifyMessage', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const client = provider.getClient()
 
       const result = await provider.request({
@@ -339,7 +333,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('error: personalSign + digest is rejected as invalid params', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
       await connect(provider)
 
       await expect(
@@ -422,7 +416,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('default: auth as string shorthand fetches challenge, signs once, posts verify', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         const result = await provider.request({
           method: 'wallet_connect',
@@ -438,7 +432,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('default: object-form auth with url derives challenge and verify', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         const result = await provider.request({
           method: 'wallet_connect',
@@ -454,7 +448,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('default: object-form auth with explicit endpoints uses the override URLs', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         const result = await provider.request({
           method: 'wallet_connect',
@@ -475,7 +469,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('default: forwarded auth without verify returns signature for downstream verify', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         const result = await provider.request({
           method: 'wallet_connect',
@@ -501,7 +495,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('error: verify endpoint returns 401 → InternalError; user already signed', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         await expect(
           provider.request({
@@ -524,7 +518,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('error: auth + personalSign throws InvalidParamsError synchronously', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         await expect(
           provider.request({
@@ -545,7 +539,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('default: auth + authorizeAccessKey surfaces both capabilities (one witness-bound ceremony)', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         const result = await provider.request({
           method: 'wallet_connect',
@@ -572,7 +566,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('error: challenge endpoint returns 500 → InvalidParamsError; no verify', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         await expect(
           provider.request({
@@ -595,7 +589,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('error: challenge response missing `message` → InvalidParamsError', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         await expect(
           provider.request({
@@ -618,7 +612,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('error: challenge bound to a different domain → InvalidParamsError; never signs', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         await expect(
           provider.request({
@@ -642,7 +636,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         // Phishing guard: a malicious dapp must not be able to point
         // `challenge` at the victim and `verify` at attacker.com to
         // harvest a valid signed payload.
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         await expect(
           provider.request({
@@ -665,7 +659,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('error: `logout` on a different origin → InvalidParamsError', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         await expect(
           provider.request({
@@ -689,7 +683,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('default: no auth capability → no auth/personalSign on result', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         const result = await provider.request({
           method: 'wallet_connect',
@@ -701,7 +695,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('default: login (post-register) + auth populates capabilities.auth', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         // Register first so login has an account to load.
         await provider.request({
@@ -722,7 +716,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('end-to-end: connect → call protected /me with bearer token', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
 
         // Token mode: the server returns the session token in the body
         // (no cookie) and the SDK surfaces it on `capabilities.auth.token`.
@@ -817,7 +811,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       afterAll(() => server.close())
 
       test('end-to-end: connect → mint verified-email id_token → verify via discovery + JWKS', async () => {
-        const provider = createProvider()
+        const provider = Provider.create({ adapter: adapter() })
         const address = await connect(provider)
 
         const audience = 'https://app.example.com'
@@ -865,7 +859,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('behavior: provider mints identity when configured with an issuer', async () => {
-        const provider = createProvider({
+        const provider = Provider.create({
+          adapter: adapter({ identity: { audience: 'https://app.example.com', issuer } }),
           identity: { audience: 'https://app.example.com', issuer },
         })
 
@@ -897,7 +892,10 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('behavior: provider identity mint is best-effort (failure omits the claim)', async () => {
-        const provider = createProvider({
+        const provider = Provider.create({
+          adapter: adapter({
+            identity: { audience: 'https://app.example.com', issuer: `${server.url}/nowhere` },
+          }),
           identity: { audience: 'https://app.example.com', issuer: `${server.url}/nowhere` },
         })
 
@@ -911,7 +909,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       })
 
       test('behavior: provider identity is not minted unless requested', async () => {
-        const provider = createProvider({
+        const provider = Provider.create({
+          adapter: adapter({ identity: { audience: 'https://app.example.com', issuer } }),
           identity: { audience: 'https://app.example.com', issuer },
         })
 
@@ -926,7 +925,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_disconnect', () => {
     test('default: disconnects and clears accounts', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       await connect(provider)
       await provider.request({ method: 'wallet_disconnect' })
@@ -938,7 +937,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_switchEthereumChain', () => {
     test('default: switches chain', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       await provider.request({
         method: 'wallet_switchEthereumChain',
@@ -950,7 +949,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('error: throws for unconfigured chain', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       await expect(
         provider.request({
@@ -965,7 +964,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('events', () => {
     test('behavior: emits accountsChanged on connect', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       const events: unknown[] = []
       provider.on('accountsChanged', (accounts) => events.push(accounts))
@@ -976,7 +975,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: emits connect on status change', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       const events: unknown[] = []
       provider.on('connect', (info) => events.push(info))
@@ -993,7 +992,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: emits disconnect on disconnect', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       await connect(provider)
 
@@ -1007,7 +1006,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: does not emit accountsChanged on duplicate login', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       await connect(provider)
 
@@ -1020,7 +1019,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: emits chainChanged on switch', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       const events: unknown[] = []
       provider.on('chainChanged', (chainId) => events.push(chainId))
@@ -1040,7 +1039,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('eth_sendTransaction', () => {
     test('default: sends transaction and returns hash', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -1054,7 +1053,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: accepts standard to/data fields', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -1068,7 +1067,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: transaction is confirmed on-chain', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -1120,7 +1119,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('eth_sendTransactionSync', () => {
     test('default: sends transaction and returns receipt', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -1169,7 +1168,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('eth_signTransaction', () => {
     test('default: signs transaction and returns serialized', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -1183,7 +1182,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: preserves partial fee payer requests without a configured fee payer', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -1197,7 +1196,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: signed transaction can be sent via eth_sendRawTransactionSync', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -1250,7 +1249,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: signing attaches stored keyAuthorization', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -1281,7 +1280,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('error: throws when not connected', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       await expect(
         provider.request({
@@ -1296,7 +1295,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_sendCalls', () => {
     test('default: sends calls and returns id', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -1310,7 +1309,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: with sync capability returns id and receipt is available', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -1394,7 +1393,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_getCallsStatus', () => {
     test('default: returns encoded status for a sent call batch', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -1423,7 +1422,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('error: throws for unsupported id format', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       await expect(
         provider.request({
@@ -1438,7 +1437,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_transfer', () => {
     test('error: throws UnsupportedMethodError when adapter has no transfer action', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       await connect(provider)
 
       await expect(
@@ -1461,7 +1460,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_swap', () => {
     test('error: throws UnsupportedMethodError when adapter has no swap action', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       await connect(provider)
 
       await expect(
@@ -1477,7 +1476,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_getCapabilities', () => {
     test('default: returns atomic supported for all chains', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       const result = await provider.request({ method: 'wallet_getCapabilities' })
       expect(result).toMatchInlineSnapshot(`
@@ -1511,7 +1510,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: filters by chainIds', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       const connected = await connect(provider)
 
@@ -1534,7 +1533,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: returns empty object for unknown chainIds', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       const connected = await connect(provider)
 
@@ -1546,7 +1545,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('error: throws UnauthorizedError for unconnected address', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       await expect(
         provider.request({
@@ -1557,7 +1556,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: succeeds with connected address', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       const connected = await connect(provider)
 
@@ -1570,7 +1569,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: includes feePayer when configured', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: 'https://fee-payer.example.com' }),
         feePayer: 'https://fee-payer.example.com',
       })
 
@@ -1583,7 +1583,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: excludes feePayer when not configured', async () => {
-      const provider = createProvider()
+      const provider = Provider.create({ adapter: adapter() })
 
       const result = await provider.request({ method: 'wallet_getCapabilities' })
       expect(result[Hex.fromNumber(tempo.id)]!.feePayer).toBeUndefined()
@@ -1592,7 +1592,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_getBalances', () => {
     test('error: throws when no tokens provided', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       await connect(provider)
 
@@ -1604,7 +1604,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('default: returns token balances with metadata', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       await connect(provider)
 
@@ -1624,7 +1624,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: accepts explicit account param', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
 
@@ -1643,7 +1643,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('error: throws DisconnectedError when no accounts connected', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       await expect(
         provider.request({
@@ -1670,7 +1670,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     }
 
     test('default: signs typed data and returns signature', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
 
@@ -1683,7 +1683,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: signature is verifiable on-chain', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const client = provider.getClient()
 
       const connected = await connect(provider)
@@ -1702,7 +1702,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('error: throws when not connected', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       await expect(
         provider.request({
@@ -1717,7 +1717,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('personal_sign', () => {
     test('default: signs a message and returns signature', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
 
@@ -1731,7 +1731,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: signature is verifiable on-chain', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const client = provider.getClient()
 
       const connected = await connect(provider)
@@ -1751,7 +1751,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('error: throws when not connected', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       await expect(
         provider.request({
@@ -1768,14 +1768,14 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     test('behavior: new provider hydrates accounts from shared storage', async () => {
       const storage = Storage.memory({ key: 'persist-test' })
 
-      const provider1 = createProvider({ storage })
+      const provider1 = Provider.create({ adapter: adapter(), storage })
       await connect(provider1)
 
       const accts1 = await provider1.request({ method: 'eth_accounts' })
       expect(accts1.length).toBeGreaterThanOrEqual(1)
 
       // Create a second provider with the same storage — it should hydrate.
-      const provider2 = createProvider({ storage })
+      const provider2 = Provider.create({ adapter: adapter(), storage })
 
       // Wait for hydration + reconnection.
       await new Promise((resolve) => setTimeout(resolve, 200))
@@ -1796,7 +1796,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         version: 0,
       })
 
-      const provider = createProvider({ chains: [chain], storage })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain], storage })
       await new Promise((resolve) => setTimeout(resolve, 200))
 
       await expect(provider.request({ method: 'eth_accounts' })).resolves.toMatchInlineSnapshot(
@@ -1805,10 +1805,12 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: concurrent providers with different storage keys are isolated', async () => {
-      const providerA = createProvider({
+      const providerA = Provider.create({
+        adapter: adapter(),
         storage: Storage.memory({ key: 'provider-a' }),
       })
-      const providerB = createProvider({
+      const providerB = Provider.create({
+        adapter: adapter(),
         storage: Storage.memory({ key: 'provider-b' }),
       })
 
@@ -1826,10 +1828,10 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     test('behavior: hydrated provider has accounts available', async () => {
       const storage = Storage.memory({ key: 'reconnect' })
 
-      const provider1 = createProvider({ storage })
+      const provider1 = Provider.create({ adapter: adapter(), storage })
       await connect(provider1)
 
-      const provider2 = createProvider({ storage })
+      const provider2 = Provider.create({ adapter: adapter(), storage })
 
       // Wait for hydration.
       await new Promise((resolve) => setTimeout(resolve, 200))
@@ -1841,7 +1843,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('viem compatibility', () => {
     test('behavior: works with viem custom() transport', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -1853,7 +1855,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: WalletClient can sign messages', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
 
       const client = createClient({
@@ -1870,7 +1872,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: WalletClient can send transactions', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -1891,7 +1893,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_authorizeAccessKey', () => {
     test('behavior: without publicKey or address requires a connected account', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       await expect(
         provider.request({
@@ -1904,7 +1906,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('default: grants an access key and returns its address', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const rootAddress = await connect(provider)
 
       const result = await provider.request({
@@ -1916,7 +1918,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: granted access key is used for sendTransactionSync', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -1933,7 +1935,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: access key status moves from pending to published', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -1953,7 +1955,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: with expiry option', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       await connect(provider)
 
       const expiry = Math.floor(Date.now() / 1000) + 3600
@@ -1966,7 +1968,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: expired access key falls back to root account', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -1999,7 +2001,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: with limits option', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -2030,7 +2032,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('exceeding access key limits falls back to root account', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -2055,7 +2057,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: access key is preserved after recoverable key-auth error', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -2083,7 +2085,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: stale access key is removed and send retries with root account', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -2121,7 +2123,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_updateAccessKey', () => {
     test('default: updates spending limits in place', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -2170,7 +2172,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('error: rejects for an unknown access key', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -2191,7 +2193,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_revokeAccessKey', () => {
     test('default: revokes a granted access key on-chain', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       await connect(provider)
 
       const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
@@ -2230,7 +2232,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: removes key from local store', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       await connect(provider)
 
       const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
@@ -2258,7 +2260,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: root key still works after revoking access key', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       await connect(provider)
 
       const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
@@ -2309,7 +2311,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: includes the root account key type for gas estimation', async () => {
       const captures: Record<string, unknown>[] = []
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         transports: { [chain.id]: recordingTransport(captures) },
       })
@@ -2336,7 +2339,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: does not override a caller-provided key type', async () => {
       const captures: Record<string, unknown>[] = []
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         transports: { [chain.id]: recordingTransport(captures) },
       })
@@ -2354,7 +2358,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: includes the access key type for gas estimation', async () => {
       const captures: Record<string, unknown>[] = []
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         transports: { [chain.id]: recordingTransport(captures) },
       })
@@ -2380,7 +2385,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('default: proxies to the node without modification', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -2397,7 +2402,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: fills stored keyAuthorization for access key accounts', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -2419,7 +2424,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: fills stored keyAuthorization with the active account when from is omitted', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -2437,7 +2442,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: does not inject keyAuthorization when already on params', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(provider)
       await fund(address)
 
@@ -2465,7 +2470,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: published access key uses its key type without re-authorizing', async () => {
       const captures: Record<string, unknown>[] = []
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         transports: { [chain.id]: recordingTransport(captures) },
       })
@@ -2501,7 +2507,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('Provider.create keystore option', () => {
     test('default: the built-in keystore provisions handle-backed records', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         storage: Storage.memory(),
       })
@@ -2528,7 +2535,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('default: provisions a p256 access key backed by the keystore', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage: createJsonStorage(),
@@ -2550,7 +2558,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: keystore-backed key signs transactions', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage: createJsonStorage(),
@@ -2577,7 +2586,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     test('behavior: key survives reload through string-based storage without re-auth', async () => {
       const storage = createJsonStorage()
 
-      const provider1 = createProvider({
+      const provider1 = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage,
@@ -2591,7 +2601,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       const accessKeyAddress = provider1.store.getState().accessKeys[0]!.address
 
       // Simulate an app restart: fresh provider, same storage and keystore.
-      const provider2 = createProvider({
+      const provider2 = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         accessKey: { keystores: { p256: Keystore.webCryptoP256({ extractable: true }) } },
         storage,
@@ -2751,7 +2762,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_connect with authorizeAccessKey', () => {
     test('default: grants access key during register', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const result = await provider.request({
         method: 'wallet_connect',
@@ -2780,7 +2791,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: authorizeAccessKey with expiry during register', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const expiry = Math.floor(Date.now() / 1000) + 3600
       const result = await provider.request({
@@ -2791,7 +2802,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: authorizeAccessKey during login', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       // Register first
       await provider.request({
@@ -2823,7 +2834,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('Provider.create accessKey.authorize option', () => {
     test('default: wallet_connect auto-authorizes access key', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         accessKey: { authorize: () => ({ expiry: Expiry.days(1) }) },
       })
@@ -2838,7 +2850,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('default: deprecated `authorizeAccessKey` alias still applies', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         authorizeAccessKey: { expiry: Expiry.days(1) },
       })
@@ -2853,7 +2866,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: auto-authorized access key can send transactions', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         accessKey: { authorize: () => ({ expiry: Expiry.days(1) }) },
       })
@@ -2874,7 +2888,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: sendTransactionSync authorizes matching default access key just-in-time', async () => {
       let authorize = false
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         accessKey: {
           authorize: () => {
@@ -2911,7 +2926,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: sendTransactionSync skips default access key when scopes do not cover transaction', async () => {
       let authorize = false
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         accessKey: {
           authorize: () => {
@@ -2955,7 +2971,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: wallet_sendCalls authorizes matching default access key just-in-time', async () => {
       let authorize = false
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         accessKey: {
           authorize: () => {
@@ -2999,7 +3016,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: explicit authorizeAccessKey overrides default', async () => {
       const expiry = Math.floor(Date.now() / 1000) + 3600
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         accessKey: { authorize: () => ({ expiry: Expiry.days(7) }) },
       })
@@ -3012,7 +3030,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: login reuses matching default access key', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter(),
         chains: [chain],
         accessKey: { authorize: () => ({ expiry: Expiry.days(1) }) },
       })
@@ -3023,7 +3042,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: without option, wallet_connect does not auto-authorize', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const result = await provider.request({
         method: 'wallet_connect',
@@ -3035,7 +3054,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_authorizeAccessKey with external key', () => {
     test('behavior: external key authorization can be used to send a transaction', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       const rootAddress = await connect(provider)
       await fund(rootAddress)
 
@@ -3059,7 +3078,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('wallet_connect with external authorizeAccessKey', () => {
     test('default: external key authorization via register', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const keyPair = await WebCryptoP256.createKeyPair()
       const accessKeyAccount = TempoAccount.fromWebCryptoP256(keyPair)
@@ -3094,7 +3113,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: external key authorization via login', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const rootAddress = await connect(provider)
       await fund(rootAddress)
@@ -3148,7 +3167,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('default: feePayer URL on eth_sendTransaction', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -3167,7 +3186,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: feePayer URL on eth_sendTransactionSync', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -3186,7 +3205,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: feePayer URL on eth_signTransaction', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -3200,7 +3219,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: feePayer URL on eth_fillTransaction', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -3214,7 +3233,11 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: feePayer: true uses default from Provider.create', async () => {
-      const provider = createProvider({ chains: [chain], feePayer: server.url })
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: server.url }),
+        chains: [chain],
+        feePayer: server.url,
+      })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -3233,7 +3256,11 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: feePayer: true on eth_sendTransactionSync', async () => {
-      const provider = createProvider({ chains: [chain], feePayer: server.url })
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: server.url }),
+        chains: [chain],
+        feePayer: server.url,
+      })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -3252,7 +3279,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: no feePayer does not use fee payer', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -3271,7 +3298,11 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: precedence fee-payer-first (default) on eth_sendTransaction', async () => {
-      const provider = createProvider({ chains: [chain], feePayer: server.url })
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: server.url }),
+        chains: [chain],
+        feePayer: server.url,
+      })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -3288,7 +3319,11 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: precedence fee-payer-first (default) on eth_sendTransactionSync', async () => {
-      const provider = createProvider({ chains: [chain], feePayer: server.url })
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: server.url }),
+        chains: [chain],
+        feePayer: server.url,
+      })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -3307,7 +3342,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: precedence user-first on eth_sendTransaction', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: { url: server.url, precedence: 'user-first' } }),
         chains: [chain],
         feePayer: { url: server.url, precedence: 'user-first' },
       })
@@ -3327,7 +3363,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: precedence user-first on eth_sendTransactionSync', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: { url: server.url, precedence: 'user-first' } }),
         chains: [chain],
         feePayer: { url: server.url, precedence: 'user-first' },
       })
@@ -3349,7 +3386,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: precedence user-first on eth_signTransaction', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: { url: server.url, precedence: 'user-first' } }),
         chains: [chain],
         feePayer: { url: server.url, precedence: 'user-first' },
       })
@@ -3366,7 +3404,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: feePayer: false opts out on eth_sendTransaction', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3388,7 +3427,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: feePayer: false opts out on eth_sendTransactionSync', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3410,7 +3450,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: feePayer: false opts out on eth_signTransaction', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3427,7 +3468,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: wallet_sendCalls with feePayer capability', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -3452,7 +3493,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: wallet_sendCalls with feePayer: true uses provider default', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3480,7 +3522,8 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: wallet_sendCalls with feePayer: false opts out', async () => {
-      const provider = createProvider({
+      const provider = Provider.create({
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3508,7 +3551,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: wallet_sendCalls with sync and feePayer capability', async () => {
-      const provider = createProvider({ chains: [chain] })
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
       const connected = await connect(provider)
       await fund(connected)
@@ -3532,7 +3575,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
     })
 
     test('behavior: forwards provider feePayer URL to JSON-RPC wallets', async () => {
-      const wallet = createProvider({ chains: [chain] })
+      const wallet = Provider.create({ adapter: adapter(), chains: [chain] })
       const address = await connect(wallet)
       await fund(address)
 
