@@ -83,8 +83,8 @@ class FilesystemStorageError extends Error {
 
 async function ensureDirectory(path: string) {
   const dir = dirname(path)
-  await mkdir(dir, { mode: mode_directory, recursive: true })
-  await chmod(dir, mode_directory)
+  const created = await mkdir(dir, { mode: mode_directory, recursive: true })
+  if (created) await chmod(dir, mode_directory)
 }
 
 async function read(path: string): Promise<Record<string, unknown>> {

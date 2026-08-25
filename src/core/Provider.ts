@@ -176,6 +176,7 @@ export function create(options: create.Options = {}): create.ReturnType {
   Object.assign(keystores, keystores_configured ?? Keystore.defaults)
 
   const emitter = ox_Provider.createEmitter()
+  const requestCache = new Map<string, Promise<unknown>>()
 
   // Emit EIP-1193 events on state changes.
   store.subscribe(
@@ -1157,7 +1158,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         calls,
                         chainId,
                         from: from_,
-                        ...(feePayer ? { feePayer } : {}),
+                        ...(feePayer !== undefined ? { feePayer } : {}),
                       }
                       if (!sync) {
                         const hash = await sendTransactionAction(txRequest, {
@@ -1783,6 +1784,7 @@ export function create(options: create.Options = {}): create.ReturnType {
               return result
             },
             {
+              cache: requestCache,
               enabled: shouldDedupe,
               id: Json.stringify({ method, params }),
             },

@@ -5,11 +5,11 @@
     "changeset:version": "changeset version && pnpm check",
     "check": "vp lint --fix --ignore-pattern package.json && vp fmt src examples playgrounds ref-impls scripts test",
     "dev": "docker compose up -d",
-    "dev:cli": "pnpm --filter './playgrounds/cli' connect",
+    "dev:cli": "pnpm --filter './playgrounds/cli' dev",
     "docs:build": "pnpm --filter site build",
     "docs:dev": "pnpm --filter site dev",
     "docs:preview": "pnpm --filter site preview",
-    "check:types": "tsc -b --noEmit && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types",
+    "check:types": "tsc -b --noEmit && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types && pnpm --filter './playgrounds/cli' check:types",
     "dev:dialog": "pnpm --filter tempo-app dev",
     "dev:dialog-ref": "pnpm --filter dialog-ref dev",
     "dev:hosts": "./scripts/dev:hosts.sh",
@@ -83,7 +83,7 @@
     "ox": "~0.14.30",
     "wata": "0.4.0",
     "webauthx": "~0.1.2",
-    "zod": "^4.3.6",
+    "zod": "^4.4.3",
     "zustand": "^5.0.12"
   },
   "peerDependencies": {

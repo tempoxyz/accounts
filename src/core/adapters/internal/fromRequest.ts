@@ -5,6 +5,7 @@ import { z } from 'zod/mini'
 import * as Adapter from '../../Adapter.js'
 import type * as Keystore from '../../Keystore.js'
 import * as Rpc from '../../zod/rpc.js'
+import * as u from '../../zod/utils.js'
 
 /**
  * Builds an adapter that forwards wallet RPC to a remote wallet through a
@@ -29,7 +30,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
   } = options
 
   return Adapter.define(
-    { ...(icon ? { icon } : {}), name, rdns },
+    { ...(icon ? { icon } : {}), name, rdns, schema: z.object({ address: u.address() }) },
     ({ getAccount, getClient, store }) => {
       // Late-bind the store so the request channel can reconcile local
       // connection state (e.g. a wallet `accountsChanged` notification).

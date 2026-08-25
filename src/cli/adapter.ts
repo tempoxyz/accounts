@@ -1,7 +1,5 @@
 import { spawn } from 'node:child_process'
-import { Provider as core_Provider } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
-import { hashMessage, hashTypedData } from 'viem'
 import type { DeviceCode } from 'wata'
 import * as z from 'zod/mini'
 
@@ -29,29 +27,10 @@ export function cli(options: cli.Options): Adapter.Adapter {
 
   return deviceCode({
     actions: ({ getClient, request, store }) => {
-      async function getAccessKey(address: `0x${string}`) {
-        const account = await store.accessKeys.select({
-          account: address,
-          chainId: store.getState().chainId,
-        })
-        if (!account)
-          throw new core_Provider.UnauthorizedError({
-            message: `Account "${address}" cannot sign with an access key.`,
-          })
-        return account
-      }
-
       return {
-        async signPersonalMessage(parameters) {
-          const account = await getAccessKey(parameters.address)
-          return await account.sign({ hash: hashMessage({ raw: parameters.data }) })
-        },
-        async signTypedData(parameters) {
-          const account = await getAccessKey(parameters.address)
-          return await account.sign({
-            hash: hashTypedData(JSON.parse(parameters.data) as never),
-          })
-        },
+        // TODO: Move pending access-key replacement into the shared provider once
+        // all remote adapters support the extended request and response.
+
         // Limit updates run their own ceremony: the wallet returns a
         // replacement signed authorization for a pending (unpublished) key,
         // or applies the update on-chain for a published one.
@@ -109,9 +88,6 @@ export function cli(options: cli.Options): Adapter.Adapter {
       secp256k1: Keystore.secp256k1(),
     },
     meta: { name },
-    // Only the ceremonies (bootstrap and limit updates) open a browser;
-    // everything else signs locally with the stored access key or fails fast.
-    methods: ['wallet_connect', 'wallet_authorizeAccessKey', 'wallet_updateAccessKey'],
     name,
     async onPrompt(prompt) {
       if (!prompt.verificationUriFull) {
