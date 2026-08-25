@@ -1,5 +1,11 @@
 # accounts
 
+## 0.17.1
+
+### Patch Changes
+
+- 13da2eb: Preserved fill-transaction capabilities so insufficient balances return structured funding requirements.
+
 ## 0.17.0
 
 ### Minor Changes
