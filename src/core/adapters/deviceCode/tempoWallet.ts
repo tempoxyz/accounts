@@ -7,7 +7,7 @@ export function tempoWallet(options: tempoWallet.Options): Adapter.Adapter {
     ...options,
     name: 'Tempo Wallet',
     rdns: 'xyz.tempo',
-    url: 'https://wallet.tempo.xyz/auth/device',
+    url: 'https://wallet.tempo.xyz/api/auth/device',
   })
 }
 
