@@ -359,5 +359,38 @@ const cli = Cli.create('accounts-playground', {
       })
     },
   })
+  .command('update-access-key', {
+    description: 'Update a pathUSD access-key spending limit',
+    options: z.object({
+      accessKeyAddress: z
+        .string()
+        .optional()
+        .describe('Access-key address; defaults to the active account’s first key'),
+      amount: z.string().default('50').describe('New pathUSD spending limit'),
+    }),
+    async run(c) {
+      const provider = c.var.provider!
+      const accounts = await provider.request({ method: 'eth_accounts' })
+      const address = accounts[0]
+      if (!address) throw new Error('No connected account. Run connect first.')
+      const chainId = provider.store.getState().chainId
+      const accessKeyAddress =
+        c.options.accessKeyAddress ??
+        provider.store.accessKeys.list({ account: address, chainId })[0]?.address
+      if (!accessKeyAddress)
+        throw new Error(
+          'No access key found for the active account. Run connect --authorize-access-key first.',
+        )
+      const parameters = z.encode(Rpc.wallet_updateAccessKey.parameters, {
+        accessKeyAddress: Address.from(accessKeyAddress),
+        address,
+        limits: [{ limit: parseUnits(c.options.amount, 6), token: pathUsd }],
+      })
+      return await provider.request({
+        method: 'wallet_updateAccessKey',
+        params: [parameters],
+      })
+    },
+  })
 
 await cli.serve()
