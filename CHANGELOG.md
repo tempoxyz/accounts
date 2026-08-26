@@ -1,5 +1,11 @@
 # accounts
 
+## 0.17.3
+
+### Patch Changes
+
+- d9183cc: Updated Tempo Wallet CLI device-code defaults to use `/api/auth/device`.
+
 ## 0.17.2
 
 ### Patch Changes
