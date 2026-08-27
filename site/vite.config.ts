@@ -43,6 +43,12 @@ export default defineConfig(({ command }) => {
 
   return {
     ...(dev ? { define: disableUserTiming } : {}),
+    resolve: {
+      alias: {
+        // Wagmi <=3.7 imports this removed entrypoint for Zone APIs that are not used here.
+        'viem/tempo/zones': 'viem/tempo',
+      },
+    },
     optimizeDeps: {
       include: ['mermaid', 'vocs > @codesandbox/sandpack-react > anser'],
       ...(dev
