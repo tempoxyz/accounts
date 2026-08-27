@@ -5,6 +5,7 @@ import { defineConfig } from 'vp'
 export default defineConfig({
   resolve: {
     alias: {
+      // TODO: Remove after Wagmi releases support for Viem 2.56.
       // Wagmi <=3.7 imports this removed entrypoint for Zone APIs that are not used here.
       'viem/tempo/zones': 'viem/tempo',
     },
