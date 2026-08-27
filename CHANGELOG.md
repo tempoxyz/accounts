@@ -1,5 +1,11 @@
 # accounts
 
+## 0.18.0
+
+### Minor Changes
+
+- 99bf197: **Breaking**: Updated the minimum Viem version to 2.56.0
+
 ## 0.17.3
 
 ### Patch Changes
