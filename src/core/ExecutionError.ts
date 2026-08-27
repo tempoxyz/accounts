@@ -3,7 +3,9 @@ import { Abis } from 'viem/tempo'
 
 import type { OneOf, UnionOmit } from '../internal/types.js'
 
-type AllAbis = typeof Abis.abis
+const abis = Object.values(Abis).flat()
+
+type AllAbis = (typeof Abis)[keyof typeof Abis]
 type AbiErrorName = Extract<AllAbis[number], { type: 'error' }>['name']
 
 /** Decoded execution error from a Tempo precompile revert. */
@@ -156,7 +158,7 @@ export function parse(error: Error): ExecutionError {
   const data = extractRevertData(error)
   if (data) {
     try {
-      const decoded = decodeErrorResult({ abi: Abis.abis, data })
+      const decoded = decodeErrorResult({ abi: abis, data })
       const template = messages[decoded.errorName as AbiErrorName]
       return {
         ...decoded,

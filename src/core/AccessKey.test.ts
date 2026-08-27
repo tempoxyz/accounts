@@ -43,7 +43,7 @@ function createKeyAuthorization(
 
 function createRevert(errorName: string) {
   return Object.assign(new Error('reverted'), {
-    data: encodeErrorResult({ abi: Abis.abis, errorName, args: [] } as never),
+    data: encodeErrorResult({ abi: Object.values(Abis).flat(), errorName, args: [] } as never),
   })
 }
 
