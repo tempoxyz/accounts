@@ -1,5 +1,5 @@
 import { AbiFunction, Address, Hex, PublicKey, RpcResponse, WebCryptoP256 } from 'ox'
-import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { KeyAuthorization } from 'ox/tempo'
 import { BaseError, type Client, type Transport } from 'viem'
 import {
   Account as TempoAccount,
@@ -363,8 +363,8 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
   const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
   const signature = await account.sign({ hash: digest })
   const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
-    signature: SignatureEnvelope.from(signature),
-  } as never) as KeyAuthorization.Signed
+    signature,
+  })
 
   add({
     account: account.address,

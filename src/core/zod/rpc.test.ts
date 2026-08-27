@@ -1,4 +1,4 @@
-import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { KeyAuthorization } from 'ox/tempo'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
@@ -24,8 +24,8 @@ describe('transactionRequest.keyAuthorization', () => {
         ],
         type: 'p256',
       },
-      { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) } as never,
-    ) as never
+      { signature: `0x${'00'.repeat(65)}` },
+    )
     const rpc = KeyAuthorization.toRpc(authorization)
 
     expect(
@@ -83,8 +83,8 @@ describe('transactionRequest.keyAuthorization', () => {
         ],
         type: 'p256',
       },
-      { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) } as never,
-    ) as never
+      { signature: `0x${'00'.repeat(65)}` },
+    )
 
     expect(
       z.encode(Rpc.transactionRequest, {
