@@ -45,7 +45,7 @@ jobs:
       matrix:
         tag:
           - latest
-          - sha-8968664
+          - sha-7825976
           - https://rpc.moderato.tempo.xyz
 
     steps:

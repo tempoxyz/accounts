@@ -1,5 +1,5 @@
 import { Provider as ox_Provider, type WebCryptoP256 } from 'ox'
-import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { KeyAuthorization } from 'ox/tempo'
 import { hashMessage } from 'viem'
 import { Account as TempoAccount } from 'viem/tempo'
 import * as z from 'zod/mini'
@@ -152,7 +152,7 @@ export function local(options: local.Options): Adapter.Adapter {
                 ? await (async () => {
                     const signed = KeyAuthorization.from(
                       keyAuthorization_unsigned.keyAuthorization,
-                      { signature: SignatureEnvelope.from(signature_) },
+                      { signature: signature_ },
                     )
                     store.accessKeys.add({
                       account: account.address,
@@ -284,9 +284,7 @@ export function local(options: local.Options): Adapter.Adapter {
                   : signature_
               const keyAuthorization = KeyAuthorization.from(
                 keyAuthorization_unsigned.keyAuthorization,
-                {
-                  signature: SignatureEnvelope.from(signature_keyAuthorization),
-                },
+                { signature: signature_keyAuthorization },
               )
               store.accessKeys.add({
                 account: account.address,
