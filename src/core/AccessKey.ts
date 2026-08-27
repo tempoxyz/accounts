@@ -364,7 +364,7 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
   const signature = await account.sign({ hash: digest })
   const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
     signature: SignatureEnvelope.from(signature),
-  })
+  } as never) as KeyAuthorization.Signed
 
   add({
     account: account.address,

@@ -3,9 +3,7 @@ import { Abis } from 'viem/tempo'
 
 import type { OneOf, UnionOmit } from '../internal/types.js'
 
-const abis = Object.values(Abis).flat()
-
-type AllAbis = (typeof Abis)[keyof typeof Abis]
+type AllAbis = typeof Abis.all
 type AbiErrorName = Extract<AllAbis[number], { type: 'error' }>['name']
 
 /** Decoded execution error from a Tempo precompile revert. */
@@ -21,7 +19,7 @@ export type ExecutionError = OneOf<
 export type Rpc = UnionOmit<ExecutionError, 'args'>
 
 /** Human-readable messages keyed by ABI error name. */
-export const messages: Record<AbiErrorName, string> = {
+export const messages: Partial<Record<AbiErrorName, string>> = {
   AddressAlreadyHasValidator: 'This address already has a validator.',
   AddressNotReserved: 'Address is not reserved.',
   AddressReserved: 'Address is reserved.',
@@ -36,7 +34,6 @@ export const messages: Record<AbiErrorName, string> = {
   ChannelNotFound: 'Channel not found.',
   CloseNotReady: 'Channel is not ready to close.',
   ContractPaused: 'Contract is paused.',
-  DelegateCallNotAllowed: 'Delegate calls are not allowed.',
   DepositOverflow: 'Deposit overflow.',
   DivisionByZero: 'Division by zero.',
   EmptyV1ValidatorSet: 'Validator set is empty.',
@@ -158,7 +155,7 @@ export function parse(error: Error): ExecutionError {
   const data = extractRevertData(error)
   if (data) {
     try {
-      const decoded = decodeErrorResult({ abi: abis, data })
+      const decoded = decodeErrorResult({ abi: Abis.all, data })
       const template = messages[decoded.errorName as AbiErrorName]
       return {
         ...decoded,

@@ -59,12 +59,12 @@ export const addresses = {
   alphaUsd: '0x20c0000000000000000000000000000000000001',
 } as const
 
-export const chain = (() => {
+export const chain: typeof tempoModerato | typeof tempoLocalnet = (() => {
   if (nodeEnv === 'testnet') return tempoModerato
   return defineChain({
     ...tempoLocalnet,
     rpcUrls: { default: { http: [rpcUrl] } },
-  })
+  }) as never
 })()
 
 export const chainId = (() => {

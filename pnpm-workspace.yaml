@@ -38,15 +38,15 @@ catalog:
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.6.0
   hono: ^4.12.34
-  mppx: ^0.8.6
-  ox: 0.14.30
+  mppx: ^0.9.0
+  ox: 0.14.34
   prool: ~0.2.4
   react: ^19.2.8
   react-dom: ^19.2.8
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: 2.54.6
+  viem: 2.56.0
   vite: ^8.0.16
   vite-plus: ~0.1.24
   vp: npm:vite-plus@~0.1.24
@@ -117,7 +117,7 @@ overrides:
   esbuild: '0.28.1'
   # GHSA-v2hh-gcrm-f6hx: host confusion via a literal backslash authority delimiter.
   'fast-uri@>=3.0.0 <3.1.5': '3.1.5'
-  viem: 2.54.6
+  viem: 2.56.0
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
@@ -133,7 +133,7 @@ overrides:
   js-yaml@4: '4.3.1'
   mermaid: '11.16.1'
   'nanoid@<3.3.18': '3.3.18'
-  ox: 0.14.30
+  ox: 0.14.34
   postcss: '8.5.23'
   protobufjs: '7.6.5'
   '@protobufjs/utf8': '1.1.1'

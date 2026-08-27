@@ -46,7 +46,7 @@ function createMissingAccessKeyClient() {
       async request() {
         throw Object.assign(new Error('reverted'), {
           data: encodeErrorResult({
-            abi: Object.values(Abis).flat(),
+            abi: Abis.all,
             errorName: 'KeyNotFound',
             args: [],
           } as never),

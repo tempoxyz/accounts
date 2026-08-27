@@ -152,8 +152,8 @@ export function local(options: local.Options): Adapter.Adapter {
                 ? await (async () => {
                     const signed = KeyAuthorization.from(
                       keyAuthorization_unsigned.keyAuthorization,
-                      { signature: SignatureEnvelope.from(signature_) },
-                    )
+                      { signature: SignatureEnvelope.from(signature_) } as never,
+                    ) as KeyAuthorization.Signed
                     store.accessKeys.add({
                       account: account.address,
                       authorization: signed,
@@ -286,8 +286,8 @@ export function local(options: local.Options): Adapter.Adapter {
                 keyAuthorization_unsigned.keyAuthorization,
                 {
                   signature: SignatureEnvelope.from(signature_keyAuthorization),
-                },
-              )
+                } as never,
+              ) as KeyAuthorization.Signed
               store.accessKeys.add({
                 account: account.address,
                 authorization: keyAuthorization,
