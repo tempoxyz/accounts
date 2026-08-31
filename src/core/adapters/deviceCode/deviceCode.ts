@@ -1,6 +1,7 @@
 import { Provider as core_Provider } from 'ox'
 import { DeviceCode, Transport, Wata, deviceCode as core_deviceCode } from 'wata'
 
+import { normalizePendingApprovalResponse } from '../../../internal/deviceCode.js'
 import type * as Adapter from '../../Adapter.js'
 import type * as Keystore from '../../Keystore.js'
 import { fromRequest } from '../internal/fromRequest.js'
@@ -92,21 +93,7 @@ export function deviceCode(options: deviceCode.Options): Adapter.Adapter {
 function retryPendingApproval(fetch: typeof globalThis.fetch): typeof globalThis.fetch {
   return async (input, init) => {
     const response = await fetch(input, init)
-    if (response.status !== 500) return response
-
-    const body = (await response
-      .clone()
-      .json()
-      .catch(() => undefined)) as { error?: unknown; error_description?: unknown } | undefined
-    if (
-      body?.error !== 'server_error' ||
-      body.error_description !== 'approved but no response queued'
-    )
-      return response
-
-    const headers = new Headers(response.headers)
-    headers.delete('content-length')
-    return Response.json({ error: 'authorization_pending' }, { headers, status: 400 })
+    return await normalizePendingApprovalResponse(response)
   }
 }
 

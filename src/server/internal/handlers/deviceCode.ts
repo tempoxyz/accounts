@@ -1,6 +1,7 @@
 import { type DeviceCode, Store, Wata, deviceCode as core_deviceCode } from 'wata/host'
 import * as z from 'zod/mini'
 
+import { normalizePendingApprovalResponse } from '../../../internal/deviceCode.js'
 import { type Handler, from } from '../../Handler.js'
 
 const maxVerifyBodyBytes = 65_536
@@ -160,11 +161,11 @@ export function deviceCode(options: deviceCode.Options): Handler {
     })
 
     const response = await wata.fetch(request)
-    return await normalizeRegisterResponse(
-      await retryPendingApproval(response, request, path),
-      request,
-      path,
-    )
+    const pending =
+      new URL(request.url).pathname === `${path}/token`
+        ? await normalizePendingApprovalResponse(response)
+        : response
+    return await normalizeRegisterResponse(pending, request, path)
   })
 
   return router
@@ -231,24 +232,6 @@ function normalizeStore(store: Store.Store): Store.Store {
       ? { take: <value = unknown>(name: string) => store.take!<value>(key(name)) }
       : {}),
   })
-}
-
-async function retryPendingApproval(response: Response, request: Request, path: string) {
-  if (response.status !== 500 || new URL(request.url).pathname !== `${path}/token`) return response
-
-  const body = (await response
-    .clone()
-    .json()
-    .catch(() => undefined)) as { error?: unknown; error_description?: unknown } | undefined
-  if (
-    body?.error !== 'server_error' ||
-    body.error_description !== 'approved but no response queued'
-  )
-    return response
-
-  const headers = new Headers(response.headers)
-  headers.delete('content-length')
-  return Response.json({ error: 'authorization_pending' }, { headers, status: 400 })
 }
 
 async function normalizeRegisterResponse(response: Response, request: Request, path: string) {

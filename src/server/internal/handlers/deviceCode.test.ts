@@ -171,13 +171,33 @@ describe('deviceCode', () => {
     await responseWrite.promise
 
     try {
-      await expect(token(handler, registered.device_code)).resolves.toMatchInlineSnapshot(`
-        {
-          "body": {
-            "error": "authorization_pending",
+      await expect(
+        Promise.all([
+          token(handler, registered.device_code),
+          token(handler, registered.device_code),
+          token(handler, registered.device_code),
+        ]),
+      ).resolves.toMatchInlineSnapshot(`
+        [
+          {
+            "body": {
+              "error": "authorization_pending",
+            },
+            "status": 400,
           },
-          "status": 400,
-        }
+          {
+            "body": {
+              "error": "authorization_pending",
+            },
+            "status": 400,
+          },
+          {
+            "body": {
+              "error": "authorization_pending",
+            },
+            "status": 400,
+          },
+        ]
       `)
     } finally {
       resumeWrite.resolve()

@@ -155,17 +155,17 @@ describe('deviceCode', () => {
     }
   })
 
-  test('behavior: retries while an approved response is being persisted', async () => {
+  test('behavior: keeps retrying while an approved response is being persisted', async () => {
     const host = createDeviceCodeHost()
     const server = await createServer(host.listener)
-    let intercepted = false
+    let pendingApprovalResponses = 0
 
     try {
       const provider = createProvider({
         fetch: async (input, init) => {
           const url = input instanceof Request ? input.url : String(input)
-          if (!intercepted && url.endsWith('/token')) {
-            intercepted = true
+          if (pendingApprovalResponses < 3 && url.endsWith('/token')) {
+            pendingApprovalResponses++
             return Response.json(
               {
                 error: 'server_error',
@@ -181,10 +181,11 @@ describe('deviceCode', () => {
 
       const result = await provider.request(connectRequest())
 
-      expect({ address: result.accounts[0]?.address, intercepted }).toMatchInlineSnapshot(`
+      expect({ address: result.accounts[0]?.address, pendingApprovalResponses })
+        .toMatchInlineSnapshot(`
         {
           "address": "${root.address}",
-          "intercepted": true,
+          "pendingApprovalResponses": 3,
         }
       `)
     } finally {
