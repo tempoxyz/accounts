@@ -1,5 +1,5 @@
 ---
-"accounts": minor
+"accounts": patch
 ---
 
 Added chain-aware SIWE signature verification and surfaced RPC failures separately from invalid signatures.
