@@ -159,7 +159,12 @@ export function deviceCode(options: deviceCode.Options): Handler {
       }
     })
 
-    return await normalizeRegisterResponse(await wata.fetch(request), request, path)
+    const response = await wata.fetch(request)
+    return await normalizeRegisterResponse(
+      await retryPendingApproval(response, request, path),
+      request,
+      path,
+    )
   })
 
   return router
@@ -226,6 +231,24 @@ function normalizeStore(store: Store.Store): Store.Store {
       ? { take: <value = unknown>(name: string) => store.take!<value>(key(name)) }
       : {}),
   })
+}
+
+async function retryPendingApproval(response: Response, request: Request, path: string) {
+  if (response.status !== 500 || new URL(request.url).pathname !== `${path}/token`) return response
+
+  const body = (await response
+    .clone()
+    .json()
+    .catch(() => undefined)) as { error?: unknown; error_description?: unknown } | undefined
+  if (
+    body?.error !== 'server_error' ||
+    body.error_description !== 'approved but no response queued'
+  )
+    return response
+
+  const headers = new Headers(response.headers)
+  headers.delete('content-length')
+  return Response.json({ error: 'authorization_pending' }, { headers, status: 400 })
 }
 
 async function normalizeRegisterResponse(response: Response, request: Request, path: string) {

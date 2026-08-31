@@ -155,6 +155,43 @@ describe('deviceCode', () => {
     }
   })
 
+  test('behavior: retries while an approved response is being persisted', async () => {
+    const host = createDeviceCodeHost()
+    const server = await createServer(host.listener)
+    let intercepted = false
+
+    try {
+      const provider = createProvider({
+        fetch: async (input, init) => {
+          const url = input instanceof Request ? input.url : String(input)
+          if (!intercepted && url.endsWith('/token')) {
+            intercepted = true
+            return Response.json(
+              {
+                error: 'server_error',
+                error_description: 'approved but no response queued',
+              },
+              { status: 500 },
+            )
+          }
+          return await fetch(input, init)
+        },
+        url: `${server.url}/auth/device`,
+      })
+
+      const result = await provider.request(connectRequest())
+
+      expect({ address: result.accounts[0]?.address, intercepted }).toMatchInlineSnapshot(`
+        {
+          "address": "${root.address}",
+          "intercepted": true,
+        }
+      `)
+    } finally {
+      await server.closeAsync()
+    }
+  })
+
   test('behavior: times out while waiting for authorization', async () => {
     const host = createDeviceCodeHost({ pollingInterval: 10 })
     const server = await createServer(host.listener)

@@ -46,7 +46,7 @@ export function deviceCode(options: deviceCode.Options): Adapter.Adapter {
       const wata = Wata.create({
         transports: [
           core_deviceCode({
-            ...(fetch !== undefined ? { fetch } : {}),
+            fetch: retryPendingApproval(fetch ?? globalThis.fetch.bind(globalThis)),
             ...(meta ? { meta } : {}),
             ...(pollingInterval !== undefined ? { pollingInterval } : {}),
             url,
@@ -87,6 +87,27 @@ export function deviceCode(options: deviceCode.Options): Adapter.Adapter {
       }
     },
   })
+}
+
+function retryPendingApproval(fetch: typeof globalThis.fetch): typeof globalThis.fetch {
+  return async (input, init) => {
+    const response = await fetch(input, init)
+    if (response.status !== 500) return response
+
+    const body = (await response
+      .clone()
+      .json()
+      .catch(() => undefined)) as { error?: unknown; error_description?: unknown } | undefined
+    if (
+      body?.error !== 'server_error' ||
+      body.error_description !== 'approved but no response queued'
+    )
+      return response
+
+    const headers = new Headers(response.headers)
+    headers.delete('content-length')
+    return Response.json({ error: 'authorization_pending' }, { headers, status: 400 })
+  }
 }
 
 export declare namespace deviceCode {

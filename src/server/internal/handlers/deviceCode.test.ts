@@ -1,15 +1,18 @@
 import { Base64, Bytes, Hash } from 'ox'
 import { describe, expect, test, vi } from 'vp/test'
+import { Store } from 'wata/host'
 
 import { deviceCode } from './deviceCode.js'
 
 const verifier = 'test-device-code-verifier-0123456789'
 
-function createHandler(validate = vi.fn(() => undefined)) {
+function createHandler(options: { store?: Store.Store | undefined } = {}) {
+  const validate = vi.fn(() => undefined)
   return {
     handler: deviceCode({
       html: { render: () => new Response('verify') },
       pollingInterval: 1,
+      ...(options.store ? { store: options.store } : {}),
       validate,
     }),
     validate,
@@ -129,6 +132,67 @@ describe('deviceCode', () => {
               },
               "id": 1,
               "jsonrpc": "2.0",
+            },
+          ],
+          "type": "rpc-responses",
+        },
+        "status": 200,
+      }
+    `)
+  })
+
+  test('behavior: keeps polls pending while an approved response is being persisted', async () => {
+    const backing = Store.memory()
+    const responseWrite = Promise.withResolvers<void>()
+    const resumeWrite = Promise.withResolvers<void>()
+    const store = Store.from({
+      delete: (key: string) => backing.delete(key),
+      async get<value = unknown>(key: string) {
+        const value = await backing.get<value>(key)
+        return value === undefined ? undefined : structuredClone(value)
+      },
+      async set(key: string, value: unknown, options?: { ttl?: number | undefined }) {
+        if (
+          key.startsWith('device:') &&
+          value !== null &&
+          typeof value === 'object' &&
+          'response' in value
+        ) {
+          responseWrite.resolve()
+          await resumeWrite.promise
+        }
+        await backing.set(key, structuredClone(value), options)
+      },
+    })
+    const { handler } = createHandler({ store })
+    const registered = await register(handler)
+
+    const verification = verify(handler, registered.user_code, { id: 1, result: '0x1' })
+    await responseWrite.promise
+
+    try {
+      await expect(token(handler, registered.device_code)).resolves.toMatchInlineSnapshot(`
+        {
+          "body": {
+            "error": "authorization_pending",
+          },
+          "status": 400,
+        }
+      `)
+    } finally {
+      resumeWrite.resolve()
+    }
+    await expect(verification.then((response) => response.status)).resolves.toMatchInlineSnapshot(
+      `200`,
+    )
+    await expect(token(handler, registered.device_code)).resolves.toMatchInlineSnapshot(`
+      {
+        "body": {
+          "payload": [
+            {
+              "id": 1,
+              "jsonrpc": "2.0",
+              "result": "0x1",
             },
           ],
           "type": "rpc-responses",
