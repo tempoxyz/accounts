@@ -2,4 +2,4 @@
 'accounts': patch
 ---
 
-Included browser credentials in server-backed WebAuthn ceremonies and OIDC identity token requests.
+Added opt-in browser credentials for server-backed WebAuthn ceremonies and OIDC identity token requests.

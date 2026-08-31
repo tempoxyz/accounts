@@ -174,7 +174,7 @@ describe('local', () => {
 })
 
 describe('server', () => {
-  test('includes credentials in ceremony requests', async () => {
+  test('uses the default credential mode when omitted', async () => {
     let request: RequestInit | undefined
     vi.stubGlobal('fetch', async (_input: string | URL, init?: RequestInit) => {
       request = init
@@ -182,6 +182,22 @@ describe('server', () => {
     })
 
     const ceremony = WebAuthnCeremony.server({ url: 'https://wallet.example.com/webauthn' })
+    await ceremony.getRegistrationOptions({ name: 'Test' })
+
+    expect(request?.credentials).toMatchInlineSnapshot(`undefined`)
+  })
+
+  test('includes configured credentials in ceremony requests', async () => {
+    let request: RequestInit | undefined
+    vi.stubGlobal('fetch', async (_input: string | URL, init?: RequestInit) => {
+      request = init
+      return Response.json({ options: {} })
+    })
+
+    const ceremony = WebAuthnCeremony.server({
+      credentials: 'include',
+      url: 'https://wallet.example.com/webauthn',
+    })
     await ceremony.getRegistrationOptions({ name: 'Test' })
 
     expect({ credentials: request?.credentials, method: request?.method }).toMatchInlineSnapshot(`

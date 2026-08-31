@@ -168,12 +168,12 @@ export declare namespace local {
  * ```
  */
 export function server(options: server.Options): WebAuthnCeremony {
-  const { url } = options
+  const { credentials, url } = options
 
   async function request<returnType>(path: string, body: unknown): Promise<returnType> {
     const response = await fetch(`${url}${path}`, {
       body: JSON.stringify(body),
-      credentials: 'include',
+      ...(credentials ? { credentials } : {}),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
     })
@@ -205,6 +205,8 @@ export function server(options: server.Options): WebAuthnCeremony {
 
 export declare namespace server {
   type Options = {
+    /** Credential mode for ceremony requests. @default "same-origin" */
+    credentials?: RequestCredentials | undefined
     /** Base URL of the WebAuthn handler (e.g. `"https://example.com/webauthn"`). */
     url: string
   }
