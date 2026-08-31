@@ -1475,8 +1475,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                         const nonce =
                           (typeof email === 'object' ? email.nonce : undefined) ??
                           (auth ? parseAuthNonce(auth.message) : undefined)
-                        return await mintIdentity(options.identity.issuer, {
+                        return await mintIdentity({
                           audience,
+                          credentials: options.identity.credentials,
+                          issuer: options.identity.issuer,
                           nonce,
                           subject: accountAddress,
                         }).catch(() => undefined)
@@ -1955,6 +1957,8 @@ export declare namespace create {
       | {
           /** Audience (`aud`) bound into minted tokens. @default `location.origin` */
           audience?: string | undefined
+          /** Credential mode for token requests. @default "same-origin" */
+          credentials?: RequestCredentials | undefined
           /** OIDC issuer whose `/token` route mints the id token. */
           issuer: string
         }
@@ -2319,16 +2323,21 @@ function parseAuthNonce(message: string) {
  * without a wallet host, so the provider mints the token itself when
  * configured (see `create.Options.identity`).
  */
-async function mintIdentity(
-  issuer: string,
-  body: { audience: string; nonce?: string | undefined; subject: string },
-): Promise<{ email: string | null; idToken: string }> {
+async function mintIdentity(options: {
+  audience: string
+  credentials?: RequestCredentials | undefined
+  issuer: string
+  nonce?: string | undefined
+  subject: string
+}): Promise<{ email: string | null; idToken: string }> {
+  const { audience, credentials, issuer, nonce, subject } = options
   const res = await fetch(`${issuer.replace(/\/+$/, '')}/token`, {
     body: JSON.stringify({
-      audience: body.audience,
-      ...(body.nonce ? { nonce: body.nonce } : {}),
-      subject: body.subject,
+      audience,
+      ...(nonce ? { nonce } : {}),
+      subject,
     }),
+    ...(credentials ? { credentials } : {}),
     headers: { 'content-type': 'application/json' },
     method: 'POST',
   })

@@ -416,6 +416,79 @@ describe('wallet_connect', () => {
   describe('identity + auth', () => {
     afterEach(() => vi.unstubAllGlobals())
 
+    test('uses the default credential mode when omitted', async () => {
+      let request: RequestInit | undefined
+      vi.stubGlobal('fetch', async (_input: string | URL, init?: RequestInit) => {
+        request = init
+        return Response.json({
+          idToken: 'eyJhbGciOiJub25lIn0.eyJlbWFpbCI6ImFsaWNlQGV4YW1wbGUuY29tIn0.sig',
+        })
+      })
+
+      const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address }] }
+          },
+          async loadAccounts() {
+            return { accounts: [{ address }] }
+          },
+        },
+      }))
+      const provider = Provider.create({
+        adapter,
+        identity: {
+          audience: 'https://console.example.com',
+          issuer: 'https://wallet.example.com/oidc',
+        },
+        storage: Storage.memory(),
+      })
+
+      await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { identity: { email: true } } }],
+      })
+
+      expect(request?.credentials).toMatchInlineSnapshot(`undefined`)
+    })
+
+    test('includes configured credentials when minting identity tokens', async () => {
+      let request: RequestInit | undefined
+      vi.stubGlobal('fetch', async (_input: string | URL, init?: RequestInit) => {
+        request = init
+        return Response.json({
+          idToken: 'eyJhbGciOiJub25lIn0.eyJlbWFpbCI6ImFsaWNlQGV4YW1wbGUuY29tIn0.sig',
+        })
+      })
+
+      const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address }] }
+          },
+          async loadAccounts() {
+            return { accounts: [{ address }] }
+          },
+        },
+      }))
+      const provider = Provider.create({
+        adapter,
+        identity: {
+          audience: 'https://console.example.com',
+          credentials: 'include',
+          issuer: 'https://wallet.example.com/oidc',
+        },
+        storage: Storage.memory(),
+      })
+
+      await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { identity: { email: true } } }],
+      })
+
+      expect(request?.credentials).toMatchInlineSnapshot(`"include"`)
+    })
+
     test('behavior: forwards identity.idToken into the auth verify request body', async () => {
       // Capture the body POSTed to the verify endpoint. The challenge endpoint
       // echoes the SDK-sent chainId into a valid SIWE message so the SDK's
