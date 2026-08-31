@@ -1,6 +1,8 @@
-import { describe, expect, test } from 'vp/test'
+import { afterEach, describe, expect, test, vi } from 'vp/test'
 
 import * as WebAuthnCeremony from './WebAuthnCeremony.js'
+
+afterEach(() => vi.unstubAllGlobals())
 
 describe('from', () => {
   test('default: returns the ceremony', () => {
@@ -168,5 +170,25 @@ describe('local', () => {
     const { options: a } = await ceremony.getAuthenticationOptions()
     const { options: b } = await ceremony.getAuthenticationOptions()
     expect(a.publicKey!.challenge).not.toBe(b.publicKey!.challenge)
+  })
+})
+
+describe('server', () => {
+  test('includes credentials in ceremony requests', async () => {
+    let request: RequestInit | undefined
+    vi.stubGlobal('fetch', async (_input: string | URL, init?: RequestInit) => {
+      request = init
+      return Response.json({ options: {} })
+    })
+
+    const ceremony = WebAuthnCeremony.server({ url: 'https://wallet.example.com/webauthn' })
+    await ceremony.getRegistrationOptions({ name: 'Test' })
+
+    expect({ credentials: request?.credentials, method: request?.method }).toMatchInlineSnapshot(`
+      {
+        "credentials": "include",
+        "method": "POST",
+      }
+    `)
   })
 })

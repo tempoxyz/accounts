@@ -172,9 +172,10 @@ export function server(options: server.Options): WebAuthnCeremony {
 
   async function request<returnType>(path: string, body: unknown): Promise<returnType> {
     const response = await fetch(`${url}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
     })
     const json = await response.json()
     if (!response.ok) throw new Error((json as { error?: string }).error ?? 'Request failed')

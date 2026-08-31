@@ -2329,6 +2329,7 @@ async function mintIdentity(
       ...(body.nonce ? { nonce: body.nonce } : {}),
       subject: body.subject,
     }),
+    credentials: 'include',
     headers: { 'content-type': 'application/json' },
     method: 'POST',
   })
