@@ -1,5 +1,11 @@
 # accounts
 
+## 0.18.3
+
+### Patch Changes
+
+- 042f584: Added opt-in browser credentials for server-backed WebAuthn ceremonies and OIDC identity token requests.
+
 ## 0.18.2
 
 ### Patch Changes
