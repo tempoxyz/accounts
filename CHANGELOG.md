@@ -1,5 +1,11 @@
 # accounts
 
+## 0.18.1
+
+### Patch Changes
+
+- 98968f1: Updated `wata` to 0.4.1.
+
 ## 0.18.0
 
 ### Minor Changes
