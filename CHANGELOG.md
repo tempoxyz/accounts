@@ -1,5 +1,17 @@
 # accounts
 
+## 0.18.2
+
+### Patch Changes
+
+- b07bd65: Added chain-aware SIWE signature verification and surfaced RPC failures separately from invalid signatures.
+
+  ```ts
+  Handler.auth({
+    getClient: (chainId) => clients.get(chainId)!,
+  });
+  ```
+
 ## 0.18.1
 
 ### Patch Changes
