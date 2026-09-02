@@ -115,13 +115,14 @@ describe('validate', () => {
     `)
   })
 
-  test('default: validates wallet_deposit with amount and token symbol', () => {
+  test('default: validates wallet_deposit with MACH intent and pre-filled fields', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'wallet_deposit',
       params: [
         {
           amount: '50',
           displayName: 'DoorDash',
+          intent: 'mach',
           token: 'USDC',
         },
       ],
@@ -133,6 +134,7 @@ describe('validate', () => {
           {
             "amount": "50",
             "displayName": "DoorDash",
+            "intent": "mach",
             "token": "USDC",
           },
         ],

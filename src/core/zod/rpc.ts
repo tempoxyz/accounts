@@ -1021,6 +1021,7 @@ export namespace wallet_deposit {
                 z.literal('credits'),
                 z.literal('crypto'),
                 z.literal('faucet'),
+                z.literal('mach'),
                 z.literal('referralCode'),
                 z.literal('x'),
               ]),
