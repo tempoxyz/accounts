@@ -58,7 +58,7 @@ jobs:
 
       - name: Deploy
         if: github.event_name != 'pull_request'
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
+        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@6f436eb3a168279692739e8c0c9fdb52b94bfae7
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -67,7 +67,7 @@ jobs:
       - name: Preview
         id: preview
         if: github.event_name == 'pull_request'
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
+        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@6f436eb3a168279692739e8c0c9fdb52b94bfae7
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
