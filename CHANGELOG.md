@@ -1,5 +1,12 @@
 # accounts
 
+## 0.18.4
+
+### Patch Changes
+
+- 9146cef: Matched the postMessage iframe color scheme to the wallet theme so transparent backdrops remain translucent.
+- 9531cc2: Added the `mach` wallet deposit intent.
+
 ## 0.18.3
 
 ### Patch Changes
