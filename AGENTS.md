@@ -121,3 +121,4 @@
 - **Privy React embedded wallets can precede hook readiness** — `useWallets()` may expose a usable embedded wallet while `ready` is still false. Select it with both `walletClientType === 'privy'` and `connectorType === 'embedded'`, and treat its presence as wallet readiness.
 - **Standalone access-key deposit prompts have no event filter** -- `wallet_authorizeAccessKey.showDeposit` supports boolean or deposit hints and intentionally omits `on`; use `wallet_connect.capabilities.showDeposit.on` for login/register filtering.
 - **Connect access-key params do not carry deposit prompts** -- `wallet_connect.capabilities.authorizeAccessKey` omits `showDeposit`; connect deposit prompts belong on `wallet_connect.capabilities.showDeposit` only.
+- **PostMessage iframe color schemes must match the wallet page** — read the explicit `scheme` URL parameter when mounting the iframe. A mismatched scheme can make its transparent canvas opaque black on light macOS.
