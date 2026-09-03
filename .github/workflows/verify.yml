@@ -60,7 +60,7 @@ jobs:
           playwright: 'true'
 
       - name: Setup Docker
-        uses: docker/setup-docker-action@b2189fbf2a6592b51fee7cdd93ee2bfaeba733db # v5.1.0
+        uses: tempoxyz/gh-actions/vendor/docker/setup-docker-action@487be2d19b0ba9ae1903143016444ab752c3e939
 
       - name: Resolve Tempo image digest
         if: "!startsWith(matrix.tag, 'http')"
