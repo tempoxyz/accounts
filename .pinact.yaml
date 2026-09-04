@@ -1,0 +1,7 @@
+version: 3
+
+rules:
+  - ignore: true
+    conditions:
+      - expr: |
+          ActionRepoFullName == "tempoxyz/gh-actions"
