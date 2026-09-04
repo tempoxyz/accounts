@@ -171,6 +171,7 @@ export const transactionRequest = z.object({
     z.array(z.object({ address: u.address(), storageKeys: z.array(u.hex()) })),
   ),
   calls: z.optional(z.readonly(z.array(call))),
+  capabilities: z.optional(z.record(z.string(), z.unknown())),
   chainId: z.optional(u.number()),
   data: z.optional(u.hex()),
   feePayer: z.optional(z.union([z.boolean(), z.string()])),
@@ -710,7 +711,7 @@ export namespace wallet_connect {
         }),
         z.object({
           digest: z.optional(u.hex()),
-          credentialId: z.optional(z.string()),
+          credentialId: z.optional(z.union([z.string(), z.array(z.string())])),
           authorizeAccessKey,
           auth,
           identity,
@@ -829,7 +830,7 @@ export namespace wallet_connect_strict {
         }),
         z.object({
           digest: z.optional(u.hex()),
-          credentialId: z.optional(z.string()),
+          credentialId: z.optional(z.union([z.string(), z.array(z.string())])),
           authorizeAccessKey,
           auth,
           identity,
@@ -1020,6 +1021,7 @@ export namespace wallet_deposit {
                 z.literal('credits'),
                 z.literal('crypto'),
                 z.literal('faucet'),
+                z.literal('mach'),
                 z.literal('referralCode'),
                 z.literal('x'),
               ]),

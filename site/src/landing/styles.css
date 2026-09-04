@@ -1,99 +1,99 @@
-@import "tailwindcss/theme.css";
-@import "tailwindcss/utilities.css";
+@import 'tailwindcss/theme.css';
+@import 'tailwindcss/utilities.css';
 
 @source "./**/*.{ts,tsx}";
 
 @font-face {
-  font-family: "Pilat";
-  src: url("/fonts/Pilat/Pilat-Thin.woff2") format("woff2");
+  font-family: 'Pilat';
+  src: url('/fonts/Pilat/Pilat-Thin.woff2') format('woff2');
   font-display: swap;
   font-style: normal;
   font-weight: 100;
 }
 
 @font-face {
-  font-family: "Pilat";
-  src: url("/fonts/Pilat/Pilat-Light.woff2") format("woff2");
+  font-family: 'Pilat';
+  src: url('/fonts/Pilat/Pilat-Light.woff2') format('woff2');
   font-display: swap;
   font-style: normal;
   font-weight: 300;
 }
 
 @font-face {
-  font-family: "Pilat";
-  src: url("/fonts/Pilat/Pilat-Book.woff2") format("woff2");
+  font-family: 'Pilat';
+  src: url('/fonts/Pilat/Pilat-Book.woff2') format('woff2');
   font-display: swap;
   font-style: normal;
   font-weight: 350;
 }
 
 @font-face {
-  font-family: "Pilat";
-  src: url("/fonts/Pilat/Pilat-Regular.woff2") format("woff2");
+  font-family: 'Pilat';
+  src: url('/fonts/Pilat/Pilat-Regular.woff2') format('woff2');
   font-display: swap;
   font-style: normal;
   font-weight: 400;
 }
 
 @font-face {
-  font-family: "Pilat";
-  src: url("/fonts/Pilat/Pilat-Demi.woff2") format("woff2");
+  font-family: 'Pilat';
+  src: url('/fonts/Pilat/Pilat-Demi.woff2') format('woff2');
   font-display: swap;
   font-style: normal;
   font-weight: 600;
 }
 
 @font-face {
-  font-family: "Pilat";
-  src: url("/fonts/Pilat/Pilat-Bold.woff2") format("woff2");
+  font-family: 'Pilat';
+  src: url('/fonts/Pilat/Pilat-Bold.woff2') format('woff2');
   font-display: swap;
   font-style: normal;
   font-weight: 700;
 }
 
 @font-face {
-  font-family: "Pilat";
-  src: url("/fonts/Pilat/Pilat-Heavy.woff2") format("woff2");
+  font-family: 'Pilat';
+  src: url('/fonts/Pilat/Pilat-Heavy.woff2') format('woff2');
   font-display: swap;
   font-style: normal;
   font-weight: 800;
 }
 
 @font-face {
-  font-family: "Pilat";
-  src: url("/fonts/Pilat/Pilat-Black.woff2") format("woff2");
+  font-family: 'Pilat';
+  src: url('/fonts/Pilat/Pilat-Black.woff2') format('woff2');
   font-display: swap;
   font-style: normal;
   font-weight: 900;
 }
 
 @font-face {
-  font-family: "HBSet";
-  src: url("/fonts/Hbset/HBSetv0.96-Light.woff2") format("woff2");
+  font-family: 'HBSet';
+  src: url('/fonts/Hbset/HBSetv0.96-Light.woff2') format('woff2');
   font-display: swap;
   font-style: normal;
   font-weight: 300;
 }
 
 @font-face {
-  font-family: "JetBrains Mono";
-  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-Light.woff2") format("woff2");
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/Jetbrains-Mono/JetBrainsMono-Light.woff2') format('woff2');
   font-display: swap;
   font-style: normal;
   font-weight: 300;
 }
 
 @font-face {
-  font-family: "JetBrains Mono";
-  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-Regular.woff2") format("woff2");
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/Jetbrains-Mono/JetBrainsMono-Regular.woff2') format('woff2');
   font-display: swap;
   font-style: normal;
   font-weight: 400;
 }
 
 @font-face {
-  font-family: "JetBrains Mono";
-  src: url("/fonts/Jetbrains-Mono/JetBrainsMono-Medium.woff2") format("woff2");
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/Jetbrains-Mono/JetBrainsMono-Medium.woff2') format('woff2');
   font-display: swap;
   font-style: normal;
   font-weight: 500;
@@ -283,9 +283,9 @@
   --canvas-dot-alpha-hover: 0.1;
 
   /* Fonts + motion */
-  --font-pilat: "Pilat", Arial, Helvetica, sans-serif;
-  --font-hbset: "HBSet", "Pilat", Arial, Helvetica, sans-serif;
-  --font-jetbrains-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-pilat: 'Pilat', Arial, Helvetica, sans-serif;
+  --font-hbset: 'HBSet', 'Pilat', Arial, Helvetica, sans-serif;
+  --font-jetbrains-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
 }
 
 /* Light-mode overrides key off the `color-scheme` that vocs writes onto
@@ -293,7 +293,7 @@
  * landing tokens flip in lockstep with the rest of the page and there is no
  * flash-of-dark on first paint. We piggyback on vocs's single theme source
  * of truth instead of maintaining a parallel `data-theme` attribute. */
-html[style*="color-scheme: light"] .accounts-landing {
+html[style*='color-scheme: light'] .accounts-landing {
   /* Tier 1 — chrome */
   --background: #ffffff;
   --surface: #f8f8f8;
@@ -367,8 +367,8 @@ html[style*="color-scheme: light"] .accounts-landing {
    * outline on a near-black page; on a white page that same colour
    * reads as a heavy black stroke around the demo cards. */
   --preview-dark-border: rgba(0, 0, 0, 0.16);
-  --preview-pizza-border: rgba(0, 0, 0, 0.10);
-  --preview-reload-border: rgba(0, 0, 0, 0.10);
+  --preview-pizza-border: rgba(0, 0, 0, 0.1);
+  --preview-reload-border: rgba(0, 0, 0, 0.1);
 
   /* Tier 7 — dino-game canvas (orange + skin stay constant; greys invert
    * so the miner/salt/bird stay visible against a white sky). */
@@ -450,18 +450,18 @@ html[style*="color-scheme: light"] .accounts-landing {
   --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
-[data-layout="blank"]:has(.accounts-landing) [data-v-main],
-[data-layout="blank"]:has(.accounts-landing) [data-v-content] {
+[data-layout='blank']:has(.accounts-landing) [data-v-main],
+[data-layout='blank']:has(.accounts-landing) [data-v-content] {
   max-width: none;
   width: 100%;
   padding: 0;
 }
 
-[data-layout="blank"]:has(.accounts-landing) [data-v-main] {
+[data-layout='blank']:has(.accounts-landing) [data-v-main] {
   padding-bottom: 0;
 }
 
-[data-layout="blank"]:has(.accounts-landing) [data-v-content] {
+[data-layout='blank']:has(.accounts-landing) [data-v-content] {
   margin: 0;
 }
 
@@ -507,9 +507,7 @@ html[style*="color-scheme: light"] .accounts-landing {
 }
 
 .accounts-landing .text-halo svg {
-  filter:
-    drop-shadow(0 0 3px var(--background))
-    drop-shadow(0 0 3px var(--background))
+  filter: drop-shadow(0 0 3px var(--background)) drop-shadow(0 0 3px var(--background))
     drop-shadow(0 0 6px var(--background));
 }
 
@@ -584,7 +582,7 @@ html[style*="color-scheme: light"] .accounts-landing {
 .accounts-landing .dash-y::before,
 .accounts-landing .dash-y::after,
 .accounts-landing .dash-l::before {
-  content: "";
+  content: '';
   position: absolute;
   top: 0;
   bottom: 0;
@@ -609,7 +607,7 @@ html[style*="color-scheme: light"] .accounts-landing {
 
 .accounts-landing .dash-t::before,
 .accounts-landing .dash-b::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
   right: 0;

@@ -41,6 +41,23 @@ describe('withDedupe', () => {
     expect(b).toMatchInlineSnapshot(`2`)
   })
 
+  test('behavior: separate caches execute independently', async () => {
+    let calls = 0
+    const fn = () => Promise.resolve(++calls)
+
+    const [a, b] = await Promise.all([
+      withDedupe(fn, { cache: new Map(), id: 'same' }),
+      withDedupe(fn, { cache: new Map(), id: 'same' }),
+    ])
+
+    expect([a, b]).toMatchInlineSnapshot(`
+      [
+        1,
+        2,
+      ]
+    `)
+  })
+
   test('behavior: cache is cleared after promise resolves', async () => {
     const fn = () => Promise.resolve('ok')
 

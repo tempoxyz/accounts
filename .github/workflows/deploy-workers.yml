@@ -58,7 +58,7 @@ jobs:
 
       - name: Deploy
         if: github.event_name != 'pull_request'
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
+        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@6f436eb3a168279692739e8c0c9fdb52b94bfae7
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -67,7 +67,7 @@ jobs:
       - name: Preview
         id: preview
         if: github.event_name == 'pull_request'
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
+        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@6f436eb3a168279692739e8c0c9fdb52b94bfae7
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -76,7 +76,7 @@ jobs:
 
       - name: Preview URL
         if: github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+        uses: tempoxyz/gh-actions/actions/pr-comment@ab45d76f6e7420a094281a22aee1973ecc0754f8
         with:
           header: deploy-${{ matrix.worker.name }}
           message: |

@@ -98,7 +98,6 @@ type Page =
   | { path: '/docs/rpc/wallet_switchEthereumChain'; render: 'static' }
   | { path: '/docs/rpc/wallet_withdrawZone'; render: 'static' }
   | { path: '/docs/server/handler.auth'; render: 'static' }
-  | { path: '/docs/server/handler.codeAuth'; render: 'static' }
   | { path: '/docs/server/handler.compose'; render: 'static' }
   | { path: '/docs/server/handler.exchange'; render: 'static' }
   | { path: '/docs/server/handler.feePayer'; render: 'static' }

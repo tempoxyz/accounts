@@ -99,6 +99,7 @@
 
 ## Learned Workspace Facts
 
+- **Fill-transaction capabilities must survive request decoding** — `Provider` forwards decoded `eth_fillTransaction` parameters, so the transaction request schema must retain capabilities such as `errors` for relay recovery.
 - **Expo/Metro should get built entrypoints via `react-native` export conditions** — React Native consumers may resolve package `exports` before `default`, and loading `src/*.ts` directly can fail on `.js`-suffixed relative imports. For mobile consumers, add a `react-native` condition that points at `dist/*` entrypoints.
 - **Expo playgrounds under `pnpm` need a local app entry** — relying on Expo's default `expo/AppEntry` can resolve `../../App` from the symlinked package-store path instead of the playground directory. Set a local `main` (for example `./index.js`) and register the root component there.
 - **`zile dev` symlinked `dist/*` is not Metro-safe** — when local `dist/*.js` entrypoints symlink back to `src/*.ts`, Metro will follow them and choke on `.js`-suffixed relative imports inside source. For React Native playgrounds in this workspace, use a local Metro resolver shim (or real built files) instead of assuming symlinked `dist` is consumable.
@@ -120,3 +121,4 @@
 - **Privy React embedded wallets can precede hook readiness** — `useWallets()` may expose a usable embedded wallet while `ready` is still false. Select it with both `walletClientType === 'privy'` and `connectorType === 'embedded'`, and treat its presence as wallet readiness.
 - **Standalone access-key deposit prompts have no event filter** -- `wallet_authorizeAccessKey.showDeposit` supports boolean or deposit hints and intentionally omits `on`; use `wallet_connect.capabilities.showDeposit.on` for login/register filtering.
 - **Connect access-key params do not carry deposit prompts** -- `wallet_connect.capabilities.authorizeAccessKey` omits `showDeposit`; connect deposit prompts belong on `wallet_connect.capabilities.showDeposit` only.
+- **PostMessage iframe color schemes must match the wallet page** — read the explicit `scheme` URL parameter when mounting the iframe. A mismatched scheme can make its transparent canvas opaque black on light macOS.

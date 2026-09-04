@@ -176,6 +176,7 @@ export function create(options: create.Options = {}): create.ReturnType {
   Object.assign(keystores, keystores_configured ?? Keystore.defaults)
 
   const emitter = ox_Provider.createEmitter()
+  const requestCache = new Map<string, Promise<unknown>>()
 
   // Emit EIP-1193 events on state changes.
   store.subscribe(
@@ -573,7 +574,7 @@ export function create(options: create.Options = {}): create.ReturnType {
       })
     } else {
       try {
-        await Actions.accessKey.revoke(getClient(), {
+        await Actions.accessKey.revokeSync(getClient(), {
           account: selected.account as TempoAccount.Account,
           accessKey: parameters.accessKeyAddress,
         })
@@ -752,8 +753,13 @@ export function create(options: create.Options = {}): create.ReturnType {
     if (capabilities && 'selectAccount' in capabilities && capabilities.selectAccount)
       return undefined
     if (capabilities && 'credentialId' in capabilities && capabilities.credentialId) {
+      if (Array.isArray(capabilities.credentialId) && capabilities.credentialId.length !== 1)
+        return undefined
+      const credentialId = Array.isArray(capabilities.credentialId)
+        ? capabilities.credentialId[0]
+        : capabilities.credentialId
       const account = state.accounts.find(
-        (a) => 'credential' in a && a.credential?.id === capabilities.credentialId,
+        (a) => 'credential' in a && a.credential?.id === credentialId,
       )
       return account?.address
     }
@@ -1071,7 +1077,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                         chainId: decoded.chainId ?? state.chainId,
                         from: decoded.from ?? state.accounts[state.activeAccount]?.address,
                         ...(calls ? { calls } : {}),
-                        feePayer: resolveFeePayer(decoded.feePayer),
+                        feePayer:
+                          decoded.feePayer === true && !feePayerConfig
+                            ? true
+                            : resolveFeePayer(decoded.feePayer),
                       },
                       request,
                     )) satisfies Rpc.eth_signTransaction.Encoded['returns']
@@ -1149,7 +1158,7 @@ export function create(options: create.Options = {}): create.ReturnType {
                         calls,
                         chainId,
                         from: from_,
-                        ...(feePayer ? { feePayer } : {}),
+                        ...(feePayer !== undefined ? { feePayer } : {}),
                       }
                       if (!sync) {
                         const hash = await sendTransactionAction(txRequest, {
@@ -1466,8 +1475,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                         const nonce =
                           (typeof email === 'object' ? email.nonce : undefined) ??
                           (auth ? parseAuthNonce(auth.message) : undefined)
-                        return await mintIdentity(options.identity.issuer, {
+                        return await mintIdentity({
                           audience,
+                          credentials: options.identity.credentials,
+                          issuer: options.identity.issuer,
                           nonce,
                           subject: accountAddress,
                         }).catch(() => undefined)
@@ -1775,6 +1786,7 @@ export function create(options: create.Options = {}): create.ReturnType {
               return result
             },
             {
+              cache: requestCache,
               enabled: shouldDedupe,
               id: Json.stringify({ method, params }),
             },
@@ -1945,6 +1957,8 @@ export declare namespace create {
       | {
           /** Audience (`aud`) bound into minted tokens. @default `location.origin` */
           audience?: string | undefined
+          /** Credential mode for token requests. @default "same-origin" */
+          credentials?: RequestCredentials | undefined
           /** OIDC issuer whose `/token` route mints the id token. */
           issuer: string
         }
@@ -2309,16 +2323,21 @@ function parseAuthNonce(message: string) {
  * without a wallet host, so the provider mints the token itself when
  * configured (see `create.Options.identity`).
  */
-async function mintIdentity(
-  issuer: string,
-  body: { audience: string; nonce?: string | undefined; subject: string },
-): Promise<{ email: string | null; idToken: string }> {
+async function mintIdentity(options: {
+  audience: string
+  credentials?: RequestCredentials | undefined
+  issuer: string
+  nonce?: string | undefined
+  subject: string
+}): Promise<{ email: string | null; idToken: string }> {
+  const { audience, credentials, issuer, nonce, subject } = options
   const res = await fetch(`${issuer.replace(/\/+$/, '')}/token`, {
     body: JSON.stringify({
-      audience: body.audience,
-      ...(body.nonce ? { nonce: body.nonce } : {}),
-      subject: body.subject,
+      audience,
+      ...(nonce ? { nonce } : {}),
+      subject,
     }),
+    ...(credentials ? { credentials } : {}),
     headers: { 'content-type': 'application/json' },
     method: 'POST',
   })

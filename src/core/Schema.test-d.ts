@@ -77,7 +77,7 @@ describe('Encoded', () => {
                 }
               | {
                   digest?: Hex | undefined
-                  credentialId?: string | undefined
+                  credentialId?: string | string[] | undefined
                   authorizeAccessKey?:
                     | {
                         address?: Hex | undefined
@@ -214,6 +214,15 @@ describe('Encoded', () => {
               amount?: string | undefined
               chainId?: Hex | undefined
               displayName?: string | undefined
+              intent?:
+                | 'applePay'
+                | 'credits'
+                | 'crypto'
+                | 'faucet'
+                | 'mach'
+                | 'referralCode'
+                | 'x'
+                | undefined
               token?: Hex | string | undefined
             },
           ]

@@ -1,5 +1,5 @@
 import { Address, Hex, PublicKey, WebCryptoP256 } from 'ox'
-import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { KeyAuthorization } from 'ox/tempo'
 import { BaseError, encodeErrorResult, encodeFunctionResult } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
@@ -37,13 +37,13 @@ function createKeyAuthorization(
       scopes: options.scopes,
       type: options.keyType ?? 'p256',
     },
-    { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
+    { signature: `0x${'00'.repeat(65)}` },
   )
 }
 
 function createRevert(errorName: string) {
   return Object.assign(new Error('reverted'), {
-    data: encodeErrorResult({ abi: Abis.abis, errorName, args: [] } as never),
+    data: encodeErrorResult({ abi: Abis.all, errorName, args: [] } as never),
   })
 }
 
@@ -1078,7 +1078,7 @@ describe('getStatus', () => {
 
       Docs: https://viem.sh/docs/contract/readContract
       Details: RPC unavailable.
-      Version: viem@2.54.6]
+      Version: viem@2.56.0]
     `)
   })
 

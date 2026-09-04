@@ -23,7 +23,7 @@ import { Account as TempoAccount, Actions, Addresses, Transaction } from 'viem/t
 import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
 
-import { headlessWebAuthn, secp256k1 } from '../../test/adapters.js'
+import { cli, headlessWebAuthn, secp256k1 } from '../../test/adapters.js'
 import { accounts, chain, getClient, http } from '../../test/config.js'
 import { createJsonStorage, createServer, type Server } from '../../test/utils.js'
 import * as Handler from '../server/Handler.js'
@@ -34,7 +34,11 @@ import * as Keystore from './Keystore.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
 
+beforeAll(cli.setup)
+afterAll(cli.teardown)
+
 const adapters = [
+  { name: 'cli', adapter: cli },
   { name: 'headlessWebAuthn', adapter: headlessWebAuthn },
   { name: 'secp256k1', adapter: secp256k1 },
 ] as const
@@ -856,7 +860,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
       test('behavior: provider mints identity when configured with an issuer', async () => {
         const provider = Provider.create({
-          adapter: adapter(),
+          adapter: adapter({ identity: { audience: 'https://app.example.com', issuer } }),
           identity: { audience: 'https://app.example.com', issuer },
         })
 
@@ -889,7 +893,9 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
       test('behavior: provider identity mint is best-effort (failure omits the claim)', async () => {
         const provider = Provider.create({
-          adapter: adapter(),
+          adapter: adapter({
+            identity: { audience: 'https://app.example.com', issuer: `${server.url}/nowhere` },
+          }),
           identity: { audience: 'https://app.example.com', issuer: `${server.url}/nowhere` },
         })
 
@@ -904,7 +910,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
       test('behavior: provider identity is not minted unless requested', async () => {
         const provider = Provider.create({
-          adapter: adapter(),
+          adapter: adapter({ identity: { audience: 'https://app.example.com', issuer } }),
           identity: { audience: 'https://app.example.com', issuer },
         })
 
@@ -1175,6 +1181,20 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       expect(signed).toMatch(/^0x/)
     })
 
+    test('behavior: preserves partial fee payer requests without a configured fee payer', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+
+      const connected = await connect(provider)
+      await fund(connected)
+
+      const signed = await provider.request({
+        method: 'eth_signTransaction',
+        params: [{ calls: [transferCall], feePayer: true }],
+      })
+
+      expect(signed).toMatch(/^0x78/)
+    })
+
     test('behavior: signed transaction can be sent via eth_sendRawTransactionSync', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
 
@@ -1366,7 +1386,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
           from:  0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
         Details: plain send failure
-        Version: viem@2.54.6]
+        Version: viem@2.56.0]
       `)
     })
   })
@@ -1550,7 +1570,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: includes feePayer when configured', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: 'https://fee-payer.example.com' }),
         feePayer: 'https://fee-payer.example.com',
       })
 
@@ -1769,7 +1789,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       const storage = Storage.memory({ key: 'persist-invalid' })
       storage.setItem('store', {
         state: {
-          accounts: [{ address: '0x0000000000000000000000000000000000000001' }],
+          accounts: [{ address: 'invalid' }],
           activeAccount: 0,
           chainId: chain.id,
         },
@@ -3214,7 +3234,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: feePayer: true uses default from Provider.create', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3237,7 +3257,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: feePayer: true on eth_sendTransactionSync', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3279,7 +3299,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: precedence fee-payer-first (default) on eth_sendTransaction', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3300,7 +3320,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: precedence fee-payer-first (default) on eth_sendTransactionSync', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3323,7 +3343,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: precedence user-first on eth_sendTransaction', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: { url: server.url, precedence: 'user-first' } }),
         chains: [chain],
         feePayer: { url: server.url, precedence: 'user-first' },
       })
@@ -3344,7 +3364,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: precedence user-first on eth_sendTransactionSync', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: { url: server.url, precedence: 'user-first' } }),
         chains: [chain],
         feePayer: { url: server.url, precedence: 'user-first' },
       })
@@ -3367,7 +3387,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: precedence user-first on eth_signTransaction', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: { url: server.url, precedence: 'user-first' } }),
         chains: [chain],
         feePayer: { url: server.url, precedence: 'user-first' },
       })
@@ -3385,7 +3405,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: feePayer: false opts out on eth_sendTransaction', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3408,7 +3428,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: feePayer: false opts out on eth_sendTransactionSync', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3431,7 +3451,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: feePayer: false opts out on eth_signTransaction', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3474,7 +3494,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: wallet_sendCalls with feePayer: true uses provider default', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })
@@ -3503,7 +3523,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
     test('behavior: wallet_sendCalls with feePayer: false opts out', async () => {
       const provider = Provider.create({
-        adapter: adapter(),
+        adapter: adapter({ feePayer: server.url }),
         chains: [chain],
         feePayer: server.url,
       })

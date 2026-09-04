@@ -1,5 +1,114 @@
 # accounts
 
+## 0.18.4
+
+### Patch Changes
+
+- 9146cef: Matched the postMessage iframe color scheme to the wallet theme so transparent backdrops remain translucent.
+- 9531cc2: Added the `mach` wallet deposit intent.
+
+## 0.18.3
+
+### Patch Changes
+
+- 042f584: Added opt-in browser credentials for server-backed WebAuthn ceremonies and OIDC identity token requests.
+
+## 0.18.2
+
+### Patch Changes
+
+- b07bd65: Added chain-aware SIWE signature verification and surfaced RPC failures separately from invalid signatures.
+
+  ```ts
+  Handler.auth({
+    getClient: (chainId) => clients.get(chainId)!,
+  });
+  ```
+
+## 0.18.1
+
+### Patch Changes
+
+- 98968f1: Updated `wata` to 0.4.1.
+
+## 0.18.0
+
+### Minor Changes
+
+- 99bf197: **Breaking**: Updated the minimum Viem version to 2.56.0
+
+## 0.17.3
+
+### Patch Changes
+
+- d9183cc: Updated Tempo Wallet CLI device-code defaults to use `/api/auth/device`.
+
+## 0.17.2
+
+### Patch Changes
+
+- 027ceb7: Allowed the CLI device-code adapter to forward all wallet RPC methods.
+
+## 0.17.1
+
+### Patch Changes
+
+- 13da2eb: Preserved fill-transaction capabilities so insufficient balances return structured funding requirements.
+
+## 0.17.0
+
+### Minor Changes
+
+- 9e77565: Rewrote `accounts/cli` onto the Wata device-code transport and deprecated `CliAuth` and `Handler.codeAuth` in favor of `Handler.deviceCode`.
+
+  ```diff
+  - Provider.create({
+  -   host: 'https://wallet.example.com/api/auth/cli',
+  -   pollIntervalMs: 1000,
+  -   timeoutMs: 60_000,
+  - })
+  + Provider.create({
+  +   host: 'https://wallet.example.com/auth/device',
+  +   pollingInterval: 1000,
+  +   timeout: 60_000,
+  + })
+  ```
+
+- 9e77565: Added a `deviceCode` adapter (`accounts/deviceCode`) that forwards wallet RPC through the Wata device-code transport (RFC 8628 with PKCE), with a `tempoWallet` preset.
+
+  ```ts
+  import { deviceCode } from "accounts/deviceCode";
+
+  const adapter = deviceCode({
+    name: "Example CLI",
+    onPrompt: ({ userCode, verificationUriFull }) =>
+      console.log(userCode, verificationUriFull),
+    rdns: "com.example.cli",
+    url: "https://wallet.tempo.xyz/auth/device",
+  });
+  ```
+
+## 0.16.2
+
+### Patch Changes
+
+- 830c6fb: Preserved partial fee payer requests when signing transactions without a configured fee payer service.
+
+## 0.16.1
+
+### Patch Changes
+
+- 22c1471: Added multiple-credential passkey targeting and exposed verified authenticator model identifiers to registration hooks.
+
+  ```ts
+  await provider.request({
+    method: "wallet_connect",
+    params: [
+      { capabilities: { credentialId: ["credential-a", "credential-b"] } },
+    ],
+  });
+  ```
+
 ## 0.16.0
 
 ### Minor Changes

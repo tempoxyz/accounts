@@ -54,12 +54,10 @@ export declare namespace verifyRegistration {
 
 export declare namespace getAuthenticationOptions {
   type Parameters = {
-    /** Credential IDs to allow (restricts which credentials can be used). */
-    allowCredentialIds?: readonly string[] | undefined
     /** Challenge to use. */
     challenge?: `0x${string}` | undefined
-    /** Credential ID to restrict authentication to a specific credential. */
-    credentialId?: string | undefined
+    /** Credential ID or IDs to restrict authentication to. */
+    credentialId?: string | readonly string[] | undefined
     /** Mediation hint for passkey autofill / conditional UI. */
     mediation?: 'conditional' | 'optional' | 'required' | 'silent' | undefined
   }
@@ -124,10 +122,15 @@ export function local(options: local.Options = {}): WebAuthnCeremony {
     },
 
     async getAuthenticationOptions(parameters = {}) {
-      const { allowCredentialIds, challenge, credentialId } = parameters
+      const { challenge, credentialId } = parameters
       const { options } = Authentication.getOptions({
         challenge,
-        credentialId: (allowCredentialIds as string[] | undefined) ?? credentialId,
+        credentialId:
+          typeof credentialId === 'string'
+            ? credentialId
+            : credentialId
+              ? [...credentialId]
+              : undefined,
         rpId,
       })
       return { options }
@@ -165,13 +168,14 @@ export declare namespace local {
  * ```
  */
 export function server(options: server.Options): WebAuthnCeremony {
-  const { url } = options
+  const { credentials, url } = options
 
   async function request<returnType>(path: string, body: unknown): Promise<returnType> {
     const response = await fetch(`${url}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      ...(credentials ? { credentials } : {}),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
     })
     const json = await response.json()
     if (!response.ok) throw new Error((json as { error?: string }).error ?? 'Request failed')
@@ -189,8 +193,8 @@ export function server(options: server.Options): WebAuthnCeremony {
     },
 
     async getAuthenticationOptions(parameters = {}) {
-      const { allowCredentialIds, challenge, credentialId, mediation } = parameters
-      return request('/login/options', { allowCredentialIds, challenge, credentialId, mediation })
+      const { challenge, credentialId, mediation } = parameters
+      return request('/login/options', { challenge, credentialId, mediation })
     },
 
     async verifyAuthentication(response) {
@@ -201,6 +205,8 @@ export function server(options: server.Options): WebAuthnCeremony {
 
 export declare namespace server {
   type Options = {
+    /** Credential mode for ceremony requests. @default "same-origin" */
+    credentials?: RequestCredentials | undefined
     /** Base URL of the WebAuthn handler (e.g. `"https://example.com/webauthn"`). */
     url: string
   }

@@ -1,7 +1,0 @@
-node_modules
-dist
-dist-ssr
-.wrangler
-.env
-tmp
-worker-configuration.d.ts

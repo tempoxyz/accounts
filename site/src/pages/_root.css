@@ -1,7 +1,7 @@
-@import "tailwindcss";
-@import "regen-ui/tailwind.css";
-@import "./_vocs.generated.css";
-@import "../landing/styles.css";
+@import 'tailwindcss';
+@import 'regen-ui/tailwind.css';
+@import './_vocs.generated.css';
+@import '../landing/styles.css';
 
 @source "../";
 
@@ -24,8 +24,8 @@ button {
 }
 
 [data-active],
-[data-v-active="true"],
-[aria-current="page"] {
+[data-v-active='true'],
+[aria-current='page'] {
   border-style: solid;
 }
 
@@ -53,8 +53,16 @@ table[data-v] th {
   --background-color-surface: light-dark(#ffffff, #141414);
   --vocs-background-color-primary: var(--background-color-background);
   --vocs-background-color-surface: var(--background-color-surface);
-  --vocs-background-color-code-block: color-mix(in srgb, var(--background-color-secondary) 50%, transparent);
-  --vocs-background-color-inline-code: color-mix(in srgb, var(--background-color-secondary) 50%, transparent);
+  --vocs-background-color-code-block: color-mix(
+    in srgb,
+    var(--background-color-secondary) 50%,
+    transparent
+  );
+  --vocs-background-color-inline-code: color-mix(
+    in srgb,
+    var(--background-color-secondary) 50%,
+    transparent
+  );
 }
 
 /*
@@ -65,11 +73,11 @@ table[data-v] th {
  * Override the polyfill variables (--lightningcss-light / --lightningcss-dark)
  * to respect the inline color-scheme attribute that Vocs sets on <html>.
  */
-html[style*="color-scheme: light"] {
+html[style*='color-scheme: light'] {
   --lightningcss-light: initial;
   --lightningcss-dark: ;
 }
-html[style*="color-scheme: dark"] {
+html[style*='color-scheme: dark'] {
   --lightningcss-light: ;
   --lightningcss-dark: initial;
 }

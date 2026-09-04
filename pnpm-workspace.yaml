@@ -38,21 +38,21 @@ catalog:
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.6.0
   hono: ^4.12.34
-  mppx: ^0.8.6
-  ox: 0.14.30
+  mppx: ^0.9.0
+  ox: 0.14.34
   prool: ~0.2.4
   react: ^19.2.8
   react-dom: ^19.2.8
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: 2.54.6
+  viem: 2.56.0
   vite: ^8.0.16
   vite-plus: ~0.1.24
   vp: npm:vite-plus@~0.1.24
   wagmi: ^3.7.0
   wrangler: ^4.98.0
-  zod: ^4.3.6
+  zod: ^4.4.3
 
 minimumReleaseAge: 1440
 
@@ -76,7 +76,7 @@ minimumReleaseAgeExclude:
   - ip-address@10.3.1
   - js-yaml@3.15.1
   - js-yaml@4.3.1
-  - nanoid@3.3.17
+  - nanoid@3.3.18
   - postcss@8.5.23
   - socket.io-parser@4.2.7
   - undici@7.29.0
@@ -102,6 +102,8 @@ overrides:
   accounts: 'workspace:*'
   # GHSA-4x5r-pxfx-6jf8: @babel/core arbitrary file read via sourceMappingURL (7.29.1 unpublished; 7.29.6 is first patched release).
   '@babel/core@<=7.29.0': '7.29.6'
+  # GHSA-c83g-rgw3-j3cx and GHSA-73wf-gq98-2v4g: Browserslist path traversal and ReDoS.
+  'browserslist@<=4.28.6': '4.28.7'
   '@grpc/grpc-js': '1.14.4'
   # GHSA-frvp-7c67-39w9 and GHSA-9mqv-5hh9-4cgg: v2 preserves the getRequestListener API used by wata.
   '@hono/node-server@>=1.0.0 <2.0.10': '2.0.10'
@@ -114,10 +116,12 @@ overrides:
   'brace-expansion@>=3.0.0 <5.0.9': '5.0.9'
   # GHSA-rp9w-3fw7-7cwq et al: DOMPurify hook/config sanitization bypasses.
   'dompurify@<=3.4.12': '3.4.13'
+  # GHSA-vcc3-ghjq-m6fr: decode-uri-component malformed-input DoS; the advisory's 0.4.3 floor is unpublished.
+  'decode-uri-component@<=0.4.2': '0.5.0'
   esbuild: '0.28.1'
-  # GHSA-v2hh-gcrm-f6hx: host confusion via a literal backslash authority delimiter.
-  'fast-uri@>=3.0.0 <3.1.5': '3.1.5'
-  viem: 2.54.6
+  # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname and scheme confusion.
+  'fast-uri@>=3.0.0 <3.1.6': '3.1.6'
+  viem: 2.56.0
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
@@ -132,12 +136,13 @@ overrides:
   js-yaml@^3: '3.15.1'
   js-yaml@4: '4.3.1'
   mermaid: '11.16.1'
-  'nanoid@<3.3.17': '3.3.17'
-  ox: 0.14.30
+  'nanoid@<3.3.18': '3.3.18'
+  ox: 0.14.34
   postcss: '8.5.23'
   protobufjs: '7.6.5'
   '@protobufjs/utf8': '1.1.1'
-  qs: '6.15.2'
+  # GHSA-x5fp-wj9c-mxmx and GHSA-4mjr-xmp4-gh2g: qs arrayLimit bypass and prototype pollution.
+  qs: '6.16.0'
   react-server-dom-webpack: '19.2.8'
   # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
   reselect: '5.1.0'
@@ -156,6 +161,9 @@ overrides:
   'undici@>=8.0.0 <8.9.0': '8.9.0'
   'uuid@<11.1.1': '11.1.1'
   valibot: '1.4.2'
+  # GHSA-6gmq-8vp8-gcm6: xmldom XML namespace confusion.
+  '@xmldom/xmldom@>=0.7.0 <0.8.15': '0.8.15'
+  '@xmldom/xmldom@>=0.9.0 <0.9.12': '0.9.12'
   # GHSA-fx2h-pf6j-xcff: vite server.fs.deny bypass on Windows alternate paths (dev tooling).
   # Unconditional pin: range-keyed override does not rewrite `latest` importer specifiers (examples/basic).
   'vite@8': '8.0.16'

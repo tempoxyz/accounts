@@ -1,4 +1,4 @@
-import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { KeyAuthorization } from 'ox/tempo'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
@@ -24,7 +24,7 @@ describe('transactionRequest.keyAuthorization', () => {
         ],
         type: 'p256',
       },
-      { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
+      { signature: `0x${'00'.repeat(65)}` },
     )
     const rpc = KeyAuthorization.toRpc(authorization)
 
@@ -83,7 +83,7 @@ describe('transactionRequest.keyAuthorization', () => {
         ],
         type: 'p256',
       },
-      { signature: SignatureEnvelope.from(`0x${'00'.repeat(65)}`) },
+      { signature: `0x${'00'.repeat(65)}` },
     )
 
     expect(
@@ -127,6 +127,25 @@ describe('transactionRequest.keyAuthorization', () => {
           "type": "secp256k1",
           "yParity": "0x0",
         },
+      }
+    `)
+  })
+})
+
+describe('wallet_connect.capabilities.request: credentials', () => {
+  test('accepts multiple credential IDs for login', () => {
+    expect(
+      z.parse(Rpc.wallet_connect.capabilities.request, {
+        credentialId: ['cred-1', 'cred-2'],
+        method: 'login',
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "credentialId": [
+          "cred-1",
+          "cred-2",
+        ],
+        "method": "login",
       }
     `)
   })

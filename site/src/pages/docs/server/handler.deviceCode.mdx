@@ -1,0 +1,133 @@
+---
+title: Handler.deviceCode
+description: Host Wata device-code authorization for wallet RPC requests.
+---
+
+# `Handler.deviceCode`
+
+Creates a Wata device-code handler for cross-device wallet RPC requests. The handler implements the OAuth 2.0 Device Authorization Grant with PKCE and returns approval-page RPC responses to the polling client.
+
+The handler is method-agnostic. The consuming host must decide which methods its approval UI accepts, as it does for window and `postMessage` transports.
+
+## Usage
+
+```ts
+import { Handler } from 'accounts/server'
+import { Store } from 'wata/host'
+
+const handler = Handler.deviceCode({
+  baseUrl: 'https://wallet.example.com',
+  html: {
+    render({ record, request, userCode }) {
+      if (request.headers.get('accept')?.includes('application/json'))
+        return Response.json({ record, user_code: userCode })
+      const search = userCode ? `?user_code=${encodeURIComponent(userCode)}` : ''
+      return new Response(null, {
+        headers: { location: `https://wallet.example.com/approve${search}` },
+        status: 302,
+      })
+    },
+  },
+  store: Store.memory(),
+  validate({ request, result }) {
+    if (request.method !== 'wallet_connect')
+      return Response.json({ error: 'unsupported_method' }, { status: 400 })
+    // Verify the submitted result against the pending request here.
+    return undefined
+  },
+})
+```
+
+Mount `handler.fetch` in any server framework that accepts Fetch API handlers. The default endpoint prefix is `/auth/device`:
+
+- `POST /auth/device/register` registers the authorization request.
+- `POST /auth/device/token` polls for the approved response.
+- `GET /auth/device/verify` calls `html.render`.
+- `POST /auth/device/verify` approves or denies the request.
+
+Use persistent shared storage in production. `Store.memory()` is suitable only for tests and single-process development.
+
+## Approval Page Contract
+
+The `html.render` hook receives the pending record and consumer metadata. Render the approval page directly, or expose that data to a separate approval UI. The usage example returns the record as JSON when the request accepts JSON.
+
+Submit the approved result to `POST {path}/verify`:
+
+```ts
+await fetch('/auth/device/verify', {
+  body: JSON.stringify({
+    action: 'approve',
+    results: [{ id: request.id, result }],
+    user_code: 'ABCDEFGH',
+  }),
+  headers: { 'content-type': 'application/json' },
+  method: 'POST',
+})
+```
+
+The handler matches the submitted result to the pending request by `id` before releasing the response. To relay an RPC failure, submit `{ id, error: { code, message, data? } }` instead of a result. To deny the request, omit `results` and send `action: 'deny'`.
+
+## Parameters
+
+### `baseUrl`
+
+- **Type:** `string | ((request: Request) => string)`
+- **Optional**
+
+Public origin used to build the verification URL. Use a function when a proxy or tenant determines the origin from each request.
+
+### `expiresIn`
+
+- **Type:** `number`
+- **Default:** `600`
+
+Authorization intent lifetime in seconds.
+
+### `fetch`
+
+- **Type:** `typeof globalThis.fetch`
+- **Optional**
+
+Fetch implementation used to resolve consumer discovery metadata.
+
+### `html.render`
+
+- **Type:** `(options) => Response | Promise<Response>`
+- **Required**
+
+Renders or redirects the approval page for `GET {path}/verify`. The options include the pending record, consumer metadata, request, and user code.
+
+### `maxBodyBytes`
+
+- **Type:** `number`
+- **Default:** `65536`
+
+Maximum JSON body size accepted by `POST {path}/verify`.
+
+### `path`
+
+- **Type:** `string`
+- **Default:** `'/auth/device'`
+
+Endpoint prefix for device-code registration, polling, and verification.
+
+### `pollingInterval`
+
+- **Type:** `number`
+- **Optional**
+
+Suggested polling interval in milliseconds returned to the client.
+
+### `store`
+
+- **Type:** `Store`
+- **Default:** `Store.memory()`
+
+Wata store used for pending device codes and response envelopes. Use a shared persistent adapter for multi-instance deployments.
+
+### `validate`
+
+- **Type:** `(options) => Response | undefined | Promise<Response | undefined>`
+- **Required**
+
+Applies host policy before the handler approves a submitted result. Protect the approval route with the host's authentication, allow only supported methods, and verify the result against the pending request. Return a response to reject the submission, or `undefined` to approve it.

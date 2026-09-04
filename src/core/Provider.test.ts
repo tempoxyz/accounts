@@ -11,6 +11,54 @@ import * as Storage from './Storage.js'
 
 const address = '0x0000000000000000000000000000000000000001'
 
+describe('eth_fillTransaction', () => {
+  test('behavior: forwards Tempo-formatted request capabilities', async () => {
+    const capabilities: unknown[] = []
+    const request = tempo.formatters.transactionRequest.format(
+      {
+        capabilities: { balanceDiffs: false, errors: true },
+        from: address,
+        to: address,
+        type: 'tempo',
+      },
+      'fillTransaction',
+    )
+    const provider = Provider.create({
+      chains: [tempo],
+      storage: Storage.memory(),
+      transports: {
+        [tempo.id]: custom(
+          {
+            async request(request) {
+              if (request.method === 'eth_fillTransaction')
+                capabilities.push(
+                  (request.params?.[0] as { capabilities?: unknown } | undefined)?.capabilities,
+                )
+              throw new Error('capture complete')
+            },
+          },
+          { retryCount: 0 },
+        ),
+      },
+    })
+
+    await expect(
+      provider.request({
+        method: 'eth_fillTransaction',
+        params: [request as never],
+      }),
+    ).rejects.toThrow('capture complete')
+    expect(capabilities).toMatchInlineSnapshot(`
+      [
+        {
+          "balanceDiffs": false,
+          "errors": true,
+        },
+      ]
+    `)
+  })
+})
+
 describe('getMppxParameters', () => {
   test('error: rejects unsupported chain IDs', () => {
     const provider = Provider.create({ storage: Storage.memory() })
@@ -257,6 +305,38 @@ describe('getMppxParameters', () => {
 })
 
 describe('wallet_connect', () => {
+  test('behavior: forwards allowed credential IDs to the adapter', async () => {
+    const loadAccounts = vi.fn(async (_parameters?: Adapter.loadAccounts.Parameters) => ({
+      accounts: [{ address }] as const,
+    }))
+    const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+      actions: {
+        async createAccount() {
+          return { accounts: [{ address }] }
+        },
+        loadAccounts,
+      },
+    }))
+    const provider = Provider.create({ adapter, storage: Storage.memory() })
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { credentialId: ['cred-1', 'cred-2'] } }],
+    })
+
+    expect(loadAccounts.mock.calls[0]?.[0]).toMatchInlineSnapshot(`
+      {
+        "authorizeAccessKey": undefined,
+        "credentialId": [
+          "cred-1",
+          "cred-2",
+        ],
+        "digest": undefined,
+        "selectAccount": undefined,
+      }
+    `)
+  })
+
   test('behavior: validates auth before preparing access key material', async () => {
     const createKey = vi.fn(() => {
       throw new Error('createKey called')
@@ -335,6 +415,79 @@ describe('wallet_connect', () => {
 
   describe('identity + auth', () => {
     afterEach(() => vi.unstubAllGlobals())
+
+    test('uses the default credential mode when omitted', async () => {
+      let request: RequestInit | undefined
+      vi.stubGlobal('fetch', async (_input: string | URL, init?: RequestInit) => {
+        request = init
+        return Response.json({
+          idToken: 'eyJhbGciOiJub25lIn0.eyJlbWFpbCI6ImFsaWNlQGV4YW1wbGUuY29tIn0.sig',
+        })
+      })
+
+      const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address }] }
+          },
+          async loadAccounts() {
+            return { accounts: [{ address }] }
+          },
+        },
+      }))
+      const provider = Provider.create({
+        adapter,
+        identity: {
+          audience: 'https://console.example.com',
+          issuer: 'https://wallet.example.com/oidc',
+        },
+        storage: Storage.memory(),
+      })
+
+      await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { identity: { email: true } } }],
+      })
+
+      expect(request?.credentials).toMatchInlineSnapshot(`undefined`)
+    })
+
+    test('includes configured credentials when minting identity tokens', async () => {
+      let request: RequestInit | undefined
+      vi.stubGlobal('fetch', async (_input: string | URL, init?: RequestInit) => {
+        request = init
+        return Response.json({
+          idToken: 'eyJhbGciOiJub25lIn0.eyJlbWFpbCI6ImFsaWNlQGV4YW1wbGUuY29tIn0.sig',
+        })
+      })
+
+      const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+        actions: {
+          async createAccount() {
+            return { accounts: [{ address }] }
+          },
+          async loadAccounts() {
+            return { accounts: [{ address }] }
+          },
+        },
+      }))
+      const provider = Provider.create({
+        adapter,
+        identity: {
+          audience: 'https://console.example.com',
+          credentials: 'include',
+          issuer: 'https://wallet.example.com/oidc',
+        },
+        storage: Storage.memory(),
+      })
+
+      await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { identity: { email: true } } }],
+      })
+
+      expect(request?.credentials).toMatchInlineSnapshot(`"include"`)
+    })
 
     test('behavior: forwards identity.idToken into the auth verify request body', async () => {
       // Capture the body POSTed to the verify endpoint. The challenge endpoint

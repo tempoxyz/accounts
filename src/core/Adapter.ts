@@ -333,8 +333,8 @@ export declare namespace loadAccounts {
   type Parameters = {
     /** Grant an access key during the ceremony. */
     authorizeAccessKey?: authorizeAccessKey.Parameters | undefined
-    /** Credential ID to restrict authentication to a specific credential. */
-    credentialId?: string | undefined
+    /** Credential ID or IDs to restrict authentication to. */
+    credentialId?: string | readonly string[] | undefined
     /** Digest to sign. */
     digest?: Hex | undefined
     /**

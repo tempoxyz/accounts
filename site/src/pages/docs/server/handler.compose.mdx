@@ -113,7 +113,7 @@ Because the composed `Handler` is a Hono app, you can pass `typeof handler` to `
 import { Handler, hc } from 'accounts/server'
 
 const handler = Handler.compose(
-  [Handler.exchange(), Handler.codeAuth({ store })],
+  [Handler.exchange(), Handler.relay()],
   { path: '/api' },
 )
 
