@@ -35,6 +35,23 @@ jobs:
       - name: Check types
         run: pnpm check:types
 
+  test-windows-storage:
+    name: Test Windows storage
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
+
+      - name: Run storage tests
+        run: pnpm test src/cli/storage.test.ts --run
+
   test-localnet:
     name: 'Test Runtime (env: localnet, tag: ${{ matrix.tag }})'
     runs-on: ubuntu-latest
