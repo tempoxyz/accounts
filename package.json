@@ -78,6 +78,7 @@
     "hono": "catalog:",
     "idb-keyval": "^6.2.2",
     "jose": "^6.2.3",
+    "koffi": "3.1.2",
     "mipd": "^0.0.7",
     "mppx": "catalog:",
     "ox": "~0.14.34",
