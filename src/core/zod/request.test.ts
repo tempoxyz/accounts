@@ -81,8 +81,18 @@ describe('validate', () => {
       ],
     })
 
-    if (result._decoded.method !== 'wallet_revokeAccessKey') throw new Error('Unexpected method')
-    expect(result._decoded.params[0].feePayer).toBe('https://app.example.com/fee-payer')
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_revokeAccessKey",
+        "params": [
+          {
+            "accessKeyAddress": "0x2222222222222222222222222222222222222222",
+            "address": "0x1111111111111111111111111111111111111111",
+            "feePayer": "https://app.example.com/fee-payer",
+          },
+        ],
+      }
+    `)
   })
 
   test('default: validates wallet_switchEthereumChain with hex chainId', () => {

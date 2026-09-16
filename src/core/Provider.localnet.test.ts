@@ -3264,7 +3264,12 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
       if (!transaction || typeof transaction === 'string')
         throw new Error('Expected the revocation transaction in the latest block.')
       const receipt = await getTransactionReceipt(rpc, { hash: transaction.hash })
-      expect(receipt.feePayer).toBe(feePayerAccount.address.toLowerCase())
+      expect({ feePayer: receipt.feePayer, status: receipt.status }).toMatchInlineSnapshot(`
+        {
+          "feePayer": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+          "status": "success",
+        }
+      `)
     })
 
     test('behavior: feePayer: true uses default from Provider.create', async () => {
