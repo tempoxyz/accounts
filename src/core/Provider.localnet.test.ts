@@ -11,8 +11,6 @@ import {
 } from 'viem'
 import {
   getBalance,
-  getBlock,
-  getTransactionReceipt,
   sendCalls,
   sendTransactionSync,
   signMessage,
@@ -3150,6 +3148,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('feePayer', () => {
     const feePayerAccount = accounts[0]!
+    let sponsoredFills = 0
     let server: Server
 
     beforeAll(async () => {
@@ -3158,6 +3157,9 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
           chains: [chain],
           feePayer: {
             account: feePayerAccount,
+          },
+          async onRequest(request) {
+            if (request.method === 'eth_fillTransaction') sponsoredFills++
           },
           transports: { [chain.id]: http() },
         }).listener,
@@ -3246,6 +3248,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         method: 'eth_sendTransactionSync',
         params: [{ calls: [transferCall] }],
       })
+      sponsoredFills = 0
 
       await provider.request({
         method: 'wallet_revokeAccessKey',
@@ -3258,18 +3261,12 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         ],
       })
 
-      const rpc = getClient()
-      const block = await getBlock(rpc, { blockTag: 'latest', includeTransactions: true })
-      const transaction = block.transactions.at(-1)
-      if (!transaction || typeof transaction === 'string')
-        throw new Error('Expected the revocation transaction in the latest block.')
-      const receipt = await getTransactionReceipt(rpc, { hash: transaction.hash })
-      expect({ feePayer: receipt.feePayer, status: receipt.status }).toMatchInlineSnapshot(`
-        {
-          "feePayer": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
-          "status": "success",
-        }
-      `)
+      const metadata = await Actions.accessKey.getMetadata(getClient(), {
+        account: connected,
+        accessKey: keyAuthorization.address!,
+      })
+      expect(sponsoredFills).toBeGreaterThan(0)
+      expect(metadata.isRevoked).toBe(true)
     })
 
     test('behavior: feePayer: true uses default from Provider.create', async () => {
