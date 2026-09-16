@@ -17,8 +17,9 @@ export async function setupServer({ port }: { port: number }) {
     const result = await client.request({
       method: 'web3_clientVersion',
     })
-    const sha = result.match(/tempo\/v[\d.]+-([a-f0-9]+)\//)?.[1]
-    return `sha-${sha}`
+    const version = result.match(/tempo\/v([\d.]+)-[a-f0-9]+\//)?.[1]
+    if (!version) throw new Error(`Unable to resolve Tempo version from ${result}`)
+    return version
   })()
 
   const args = {
