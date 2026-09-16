@@ -1,5 +1,12 @@
 # accounts
 
+## 0.18.5
+
+### Patch Changes
+
+- a578c58: Applied remote color schemes to wallet theme selectors.
+- c47231a: Allow applications to sponsor access-key revocation transactions.
+
 ## 0.18.4
 
 ### Patch Changes
