@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { Instance, Server } from 'prool'
 import * as TestContainers from 'prool/testcontainers'
 import { http } from 'viem'
@@ -17,9 +18,18 @@ export async function setupServer({ port }: { port: number }) {
     const result = await client.request({
       method: 'web3_clientVersion',
     })
-    const version = result.match(/tempo\/v([\d.]+)-[a-f0-9]+\//)?.[1]
-    if (!version) throw new Error(`Unable to resolve Tempo version from ${result}`)
-    return version
+    const match = result.match(/tempo\/v([\d.]+)-([a-f0-9]+)\//)
+    if (!match) throw new Error(`Unable to resolve Tempo version from ${result}`)
+
+    const tag = `sha-${match[2]}`
+    try {
+      execFileSync('docker', ['manifest', 'inspect', `ghcr.io/tempoxyz/tempo:${tag}`], {
+        stdio: 'ignore',
+      })
+      return tag
+    } catch {
+      return match[1]!
+    }
   })()
 
   const args = {

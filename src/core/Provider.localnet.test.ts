@@ -11,6 +11,9 @@ import {
 } from 'viem'
 import {
   getBalance,
+  getBlockNumber,
+  getLogs,
+  getTransactionReceipt,
   sendCalls,
   sendTransactionSync,
   signMessage,
@@ -3148,7 +3151,6 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
 
   describe('feePayer', () => {
     const feePayerAccount = accounts[0]!
-    let sponsoredFills = 0
     let server: Server
 
     beforeAll(async () => {
@@ -3157,9 +3159,6 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
           chains: [chain],
           feePayer: {
             account: feePayerAccount,
-          },
-          async onRequest(request) {
-            if (request.method === 'eth_fillTransaction') sponsoredFills++
           },
           transports: { [chain.id]: http() },
         }).listener,
@@ -3248,7 +3247,9 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         method: 'eth_sendTransactionSync',
         params: [{ calls: [transferCall] }],
       })
-      sponsoredFills = 0
+
+      const rpc = getClient()
+      const blockNumber = await getBlockNumber(rpc)
 
       await provider.request({
         method: 'wallet_revokeAccessKey',
@@ -3261,12 +3262,28 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         ],
       })
 
-      const metadata = await Actions.accessKey.getMetadata(getClient(), {
+      const logs = await getLogs(rpc, {
+        address: Addresses.accountKeychain,
+        fromBlock: blockNumber,
+        toBlock: 'latest',
+      })
+      const event = Actions.accessKey.revoke.extractEvent(logs)
+      const receipt = await getTransactionReceipt(rpc, { hash: event.transactionHash })
+      const metadata = await Actions.accessKey.getMetadata(rpc, {
         account: connected,
         accessKey: keyAuthorization.address!,
       })
-      expect(sponsoredFills).toBeGreaterThan(0)
-      expect(metadata.isRevoked).toBe(true)
+      expect({
+        feePayer: receipt.feePayer,
+        isRevoked: metadata.isRevoked,
+        status: receipt.status,
+      }).toMatchInlineSnapshot(`
+        {
+          "feePayer": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+          "isRevoked": true,
+          "status": "success",
+        }
+      `)
     })
 
     test('behavior: feePayer: true uses default from Provider.create', async () => {
