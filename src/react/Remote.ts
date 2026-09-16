@@ -126,7 +126,10 @@ function applyTheme(theme: {
     root.setAttribute('data-theme-accent', getAccentName(accent))
     if (!isAccentPreset(accent)) root.style.setProperty('--theme-accent', accent)
   }
-  if (scheme) root.style.colorScheme = scheme
+  if (scheme) {
+    root.style.colorScheme = scheme
+    root.setAttribute('data-theme', scheme)
+  }
   if (radius) root.setAttribute('data-theme-radius', radius)
 }
 
@@ -137,11 +140,13 @@ function captureTheme(): ThemeSnapshot {
     accentValue: root.style.getPropertyValue('--theme-accent'),
     colorScheme: root.style.colorScheme,
     radius: root.getAttribute('data-theme-radius'),
+    scheme: root.getAttribute('data-theme'),
   }
 }
 
 function restoreTheme(snapshot: ThemeSnapshot) {
   const root = document.documentElement
+  restoreAttribute(root, 'data-theme', snapshot.scheme)
   restoreAttribute(root, 'data-theme-accent', snapshot.accentPreset)
   restoreAttribute(root, 'data-theme-radius', snapshot.radius)
   if (snapshot.accentValue) root.style.setProperty('--theme-accent', snapshot.accentValue)
@@ -175,6 +180,7 @@ type ThemeSnapshot = {
   accentValue: string
   colorScheme: string
   radius: string | null
+  scheme: string | null
 }
 
 export declare namespace useEnsureVisibility {
