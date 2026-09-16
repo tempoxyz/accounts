@@ -323,6 +323,86 @@ describe('privy', () => {
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: revokeAccessKey forwards a fee payer URL', async () => {
+    const { adapter, client, store } = setup()
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: other, address, feePayer: 'https://example.com/fee-payer' },
+      {
+        method: 'wallet_revokeAccessKey',
+        params: [{ accessKeyAddress: other, address, feePayer: 'https://example.com/fee-payer' }],
+      },
+    )
+
+    expect({
+      clientOptions: client.clientOptions,
+      transactions: client.transactions,
+    }).toMatchInlineSnapshot(`
+      {
+        "clientOptions": [
+          {
+            "feePayer": "https://example.com/fee-payer",
+          },
+        ],
+        "transactions": [
+          {
+            "account": {
+              "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+              "sign": [Function],
+              "signTransaction": [Function],
+              "source": "privy",
+              "type": "local",
+            },
+            "data": "0x5ae7ab320000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf",
+            "feePayer": true,
+            "to": "0xaAAAaaAA00000000000000000000000000000000",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('behavior: revokeAccessKey forwards default fee sponsorship', async () => {
+    const { adapter, client, store } = setup()
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: other, address, feePayer: true },
+      {
+        method: 'wallet_revokeAccessKey',
+        params: [{ accessKeyAddress: other, address, feePayer: true }],
+      },
+    )
+
+    expect({
+      clientOptions: client.clientOptions,
+      transactions: client.transactions,
+    }).toMatchInlineSnapshot(`
+      {
+        "clientOptions": [
+          {
+            "feePayer": undefined,
+          },
+        ],
+        "transactions": [
+          {
+            "account": {
+              "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+              "sign": [Function],
+              "signTransaction": [Function],
+              "source": "privy",
+              "type": "local",
+            },
+            "data": "0x5ae7ab320000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf",
+            "feePayer": true,
+            "to": "0xaAAAaaAA00000000000000000000000000000000",
+          },
+        ],
+      }
+    `)
+  })
+
   test('behavior: signing silently restores wallet accounts via the Privy SDK', async () => {
     const { adapter, client, store } = setup()
     store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -642,13 +722,16 @@ function setup(options: setup.Options = {}) {
     getAccount: (() => {
       throw new Error('not implemented')
     }) as never,
-    getClient: (() => ({
-      chain: { id: 1 },
-      sendTransaction: async (parameters: unknown) => {
-        client.transactions.push(parameters)
-        return Hex.padLeft('0x1', 32)
-      },
-    })) as never,
+    getClient: ((options: unknown) => {
+      client.clientOptions.push(options)
+      return {
+        chain: { id: 1 },
+        sendTransaction: async (parameters: unknown) => {
+          client.transactions.push(parameters)
+          return Hex.padLeft('0x1', 32)
+        },
+      }
+    }) as never,
     storage,
     store,
   })
@@ -683,6 +766,7 @@ declare namespace setup {
 }
 
 type MockClient = privy.Client & {
+  clientOptions: unknown[]
   createCalls: number
   initCalls: number
   loadCalls: number
@@ -699,6 +783,7 @@ type MockClient = privy.Client & {
 
 function createClient(options: setup.Options = {}) {
   const client: MockClient = {
+    clientOptions: [] as unknown[],
     createCalls: 0,
     initCalls: 0,
     loadCalls: 0,

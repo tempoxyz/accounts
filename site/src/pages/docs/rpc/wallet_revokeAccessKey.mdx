@@ -17,7 +17,11 @@ type Request = {
     address: Address
     /** Address of the access key to revoke. */
     accessKeyAddress: Address
-    /** App-provided fee sponsorship for the revocation transaction. */
+    /**
+     * Fee sponsorship for the revocation transaction. `true` uses the
+     * provider or remote wallet's configured sponsor, `false` opts out,
+     * and a URL requests sponsorship from that endpoint.
+     */
     feePayer?: boolean | string
   }]
 }
