@@ -37,7 +37,7 @@ catalog:
   '@vitejs/devtools': ^0.2.0
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.6.0
-  hono: ^4.12.34
+  hono: ^4.13.5
   mppx: ^0.9.0
   ox: 0.14.34
   prool: ~0.2.4
@@ -72,10 +72,10 @@ minimumReleaseAgeExclude:
   - ox
   - dompurify@3.4.13
   - fast-uri@3.1.5
-  - hono@4.12.34
+  - hono@4.13.5
   - ip-address@10.3.1
-  - js-yaml@3.15.1
-  - js-yaml@4.3.1
+  - js-yaml@3.15.2
+  - js-yaml@4.3.2
   - nanoid@3.3.18
   - postcss@8.5.23
   - socket.io-parser@4.2.7
@@ -108,6 +108,8 @@ overrides:
   # GHSA-frvp-7c67-39w9 and GHSA-9mqv-5hh9-4cgg: v2 preserves the getRequestListener API used by wata.
   '@hono/node-server@>=1.0.0 <2.0.10': '2.0.10'
   '@sinclair/typebox': '^0.34.0'
+  # GHSA-p95v-992w-h6c3: prototype pollution via nested decoder keys.
+  '@toon-format/toon@<2.3.1': '2.3.1'
   'axios@>=1.0.0 <1.18.0': '1.18.0'
   'body-parser@>=2.0.0 <2.3.0': '2.3.0'
   # GHSA-3jxr-9vmj-r5cp and GHSA-mh99-v99m-4gvg: brace-expansion DoS.
@@ -126,15 +128,15 @@ overrides:
   follow-redirects: '1.16.0'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
   'form-data@>=4.0.0 <4.0.6': '4.0.6'
-  # Patch Hono CORS, static serving, adapter, header, JSX, and API Gateway advisories.
-  'hono@>=4.0.0 <4.12.34': '4.12.34'
+  # Patch Hono static-generation traversal, body-parser exhaustion, and query parsing advisories.
+  'hono@>=4.0.0 <4.13.5': '4.13.5'
   'ip-address@<=10.3.0': '10.3.1'
   # GHSA-v6wh-96g9-6wx3: launch-editor NTLMv2 hash disclosure via UNC path (dev tooling).
   'launch-editor@<=2.14.0': '2.14.1'
   'js-cookie@<=3.0.5': '3.0.7'
-  # GHSA-52cp-r559-cp3m: quadratic-complexity DoS in merge-key chains.
-  js-yaml@^3: '3.15.1'
-  js-yaml@4: '4.3.1'
+  # GHSA-2883-xcg3-v3hh: maxTotalMergeKeys bypass with empty merge sources.
+  js-yaml@^3: '3.15.2'
+  js-yaml@4: '4.3.2'
   mermaid: '11.16.1'
   'nanoid@<3.3.18': '3.3.18'
   ox: 0.14.34
@@ -148,13 +150,15 @@ overrides:
   reselect: '5.1.0'
   seroval: '1.5.3'
   'socket.io-parser@>=4.0.0 <4.2.7': '4.2.7'
-  # GHSA-f88m-g3jw-g9cj: inherited libvips vulnerabilities.
-  'sharp@<0.35.0': '0.35.0'
+  # GHSA-rgj7-g3m4-5g8c: inherited libheif vulnerabilities.
+  'sharp@<0.35.4': '0.35.4'
   # GHSA-395f-4hp3-45gv: quadratic-complexity DoS in shell-quote parse().
   'shell-quote@>=1.1.0 <1.9.0': '1.9.0'
   react: 'catalog:'
   react-dom: 'catalog:'
   tar: '7.5.21'
+  # GHSA-82x6-q7mm-w9cf and GHSA-v5mp-jgw5-2x6j: prototype pollution in dotted key paths.
+  'toml@<4.2.0': '4.2.0'
   'tmp@<0.2.7': '0.2.7'
   # GHSA-vmh5-mc38-953g + GHSA-38rv-x7px-6hhq + GHSA-pr7r-676h-xcf6: undici proxy TLS/cache/WebSocket advisories.
   'undici@>=7.0.0 <7.29.0': '7.29.0'
