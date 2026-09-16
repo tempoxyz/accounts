@@ -579,7 +579,7 @@ export function create(options: create.Options = {}): create.ReturnType {
           ...(feePayer ? { feePayer: true as never } : {}),
         })
       } catch (error) {
-        if (!AccessKey.isUnavailableError(error)) throw error
+        if (typeof feePayer === 'string' || !AccessKey.isUnavailableError(error)) throw error
       }
     }
     store.accessKeys.remove({

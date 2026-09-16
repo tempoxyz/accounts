@@ -581,7 +581,7 @@ export function privy<const client extends privy.Client>(
               },
             )
           } catch (error) {
-            if (!AccessKey.isUnavailableError(error)) throw error
+            if (typeof feePayer === 'string' || !AccessKey.isUnavailableError(error)) throw error
           }
           store.accessKeys.remove({
             accessKey: parameters.accessKeyAddress,
