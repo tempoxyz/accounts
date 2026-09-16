@@ -558,13 +558,12 @@ export function create(options: create.Options = {}): create.ReturnType {
     })
   }
 
-  async function revokeAccessKey(parameters: {
-    address: Address.Address
-    accessKeyAddress: Address.Address
-  }) {
+  async function revokeAccessKey(parameters: Adapter.revokeAccessKey.Parameters) {
     const selected = await getAdapterAccount({ address: parameters.address })
+    const feePayer = parameters.feePayer
     const client = getWalletClient({
       account: selected.account,
+      feePayer: feePayer === true ? undefined : feePayer,
       transport: selected.transport,
     })
     if (selected.account.type === 'json-rpc') {
@@ -574,9 +573,10 @@ export function create(options: create.Options = {}): create.ReturnType {
       })
     } else {
       try {
-        await Actions.accessKey.revokeSync(getClient(), {
+        await Actions.accessKey.revokeSync(client, {
           account: selected.account as TempoAccount.Account,
           accessKey: parameters.accessKeyAddress,
+          ...(feePayer ? { feePayer: true as never } : {}),
         })
       } catch (error) {
         if (!AccessKey.isUnavailableError(error)) throw error
@@ -711,6 +711,12 @@ export function create(options: create.Options = {}): create.ReturnType {
     if (url.startsWith('http://') || url.startsWith('https://')) return url
     if (typeof window !== 'undefined') return new URL(url, window.location.origin).href
     return url
+  }
+
+  function resolveRevocationFeePayer(
+    feePayer: string | boolean | undefined,
+  ): Adapter.revokeAccessKey.Parameters['feePayer'] {
+    return resolveFeePayer(feePayer) ?? (feePayer === true ? true : undefined)
   }
 
   function stripAuthorizeAccessKey(
@@ -1608,7 +1614,10 @@ export function create(options: create.Options = {}): create.ReturnType {
                   case 'wallet_revokeAccessKey': {
                     assertConnected()
                     const [decoded] = request._decoded.params
-                    await revokeAccessKeyAction({ ...decoded }, request)
+                    await revokeAccessKeyAction(
+                      { ...decoded, feePayer: resolveRevocationFeePayer(decoded.feePayer) },
+                      request,
+                    )
                     return
                   }
 

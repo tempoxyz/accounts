@@ -309,6 +309,18 @@ describe('Request', () => {
     expectTypeOf<SwitchChain['params']>().toEqualTypeOf<readonly [{ chainId: number }]>()
   })
 
+  test('wallet_revokeAccessKey supports app-provided fee sponsorship', () => {
+    expectTypeOf<Rpc.wallet_revokeAccessKey.Decoded['params']>().toEqualTypeOf<
+      readonly [
+        {
+          accessKeyAddress: Hex
+          address: Hex
+          feePayer?: boolean | string | undefined
+        },
+      ]
+    >()
+  })
+
   test('eth_accounts has no params', () => {
     type EthAccounts = Extract<Schema.Request, { method: 'eth_accounts' }>
     expectTypeOf<EthAccounts>().not.toHaveProperty('params')

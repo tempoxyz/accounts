@@ -17,6 +17,8 @@ type Request = {
     address: Address
     /** Address of the access key to revoke. */
     accessKeyAddress: Address
+    /** App-provided fee sponsorship for the revocation transaction. */
+    feePayer?: boolean | string
   }]
 }
 ```
@@ -35,6 +37,7 @@ await provider.request({
   params: [{
     address: '0x...',
     accessKeyAddress: '0x...',
+    feePayer: 'https://example.com/fee-payer',
   }],
 })
 ```

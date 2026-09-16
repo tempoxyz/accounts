@@ -540,11 +540,19 @@ export namespace wallet_authorizeAccessKey_strict {
 }
 
 export namespace wallet_revokeAccessKey {
+  /** Parameters for revoking an access key. */
+  export const parameters = z.object({
+    /** Root account address. */
+    address: u.address(),
+    /** Address of the access key to revoke. */
+    accessKeyAddress: u.address(),
+    /** App-provided fee sponsorship for the revocation transaction. */
+    feePayer: z.optional(z.union([z.boolean(), z.string()])),
+  })
+
   export const schema = Schema.defineItem({
     method: z.literal('wallet_revokeAccessKey'),
-    params: z.readonly(
-      z.tuple([z.object({ address: u.address(), accessKeyAddress: u.address() })]),
-    ),
+    params: z.readonly(z.tuple([parameters])),
     returns: undefined,
   })
   export type Encoded = Schema.Encoded<typeof schema>
