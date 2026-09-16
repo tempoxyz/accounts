@@ -2,4 +2,4 @@
 'accounts': patch
 ---
 
-Apply remote color schemes to wallet theme selectors.
+Applied remote color schemes to wallet theme selectors.
