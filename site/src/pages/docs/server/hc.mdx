@@ -47,7 +47,7 @@ if (res.ok) {
 import { Handler, hc } from 'accounts/server'
 
 const handler = Handler.compose(
-  [Handler.exchange(), Handler.codeAuth()],
+  [Handler.exchange(), Handler.relay()],
   { path: '/api' },
 )
 

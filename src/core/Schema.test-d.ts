@@ -77,7 +77,7 @@ describe('Encoded', () => {
                 }
               | {
                   digest?: Hex | undefined
-                  credentialId?: string | undefined
+                  credentialId?: string | string[] | undefined
                   authorizeAccessKey?:
                     | {
                         address?: Hex | undefined
@@ -214,6 +214,15 @@ describe('Encoded', () => {
               amount?: string | undefined
               chainId?: Hex | undefined
               displayName?: string | undefined
+              intent?:
+                | 'applePay'
+                | 'credits'
+                | 'crypto'
+                | 'faucet'
+                | 'mach'
+                | 'referralCode'
+                | 'x'
+                | undefined
               token?: Hex | string | undefined
             },
           ]
@@ -298,6 +307,18 @@ describe('Request', () => {
   test('wallet_switchEthereumChain has decoded params', () => {
     type SwitchChain = Extract<Schema.Request, { method: 'wallet_switchEthereumChain' }>
     expectTypeOf<SwitchChain['params']>().toEqualTypeOf<readonly [{ chainId: number }]>()
+  })
+
+  test('wallet_revokeAccessKey supports app-provided fee sponsorship', () => {
+    expectTypeOf<Rpc.wallet_revokeAccessKey.Decoded['params']>().toEqualTypeOf<
+      readonly [
+        {
+          accessKeyAddress: Hex
+          address: Hex
+          feePayer?: boolean | string | undefined
+        },
+      ]
+    >()
   })
 
   test('eth_accounts has no params', () => {

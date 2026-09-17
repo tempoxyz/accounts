@@ -1,9 +1,9 @@
-"use client";
+'use client'
 
 export function GridBackdrop() {
   // Concentric horizontal dashed lines centered on the browser frame.
   // Extends past the section's px-6 so lines reach the container edges.
-  const heights = [588, 487, 381, 265, 145];
+  const heights = [588, 487, 381, 265, 145]
   return (
     <div
       aria-hidden
@@ -22,5 +22,5 @@ export function GridBackdrop() {
         ))}
       </div>
     </div>
-  );
+  )
 }

@@ -97,6 +97,22 @@ export function rpcErrorJson(request: RpcRequest.RpcRequest, error: unknown) {
     )
 
   const inner = resolveError(error)
+  if (
+    inner.code === RpcResponse.InternalError.code &&
+    inner.message !== undefined &&
+    /^Revm error: transaction expired\.?$/.test(inner.message)
+  )
+    return RpcResponse.from(
+      {
+        error: {
+          code: -32003,
+          data: { code: 'transaction_expired' },
+          message: 'Transaction expired.',
+        },
+      },
+      { request },
+    )
+
   const message = inner.message ?? (error as Error).message
   const code = inner.code ?? -32603
   const data = inner.data

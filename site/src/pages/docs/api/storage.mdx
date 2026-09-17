@@ -73,13 +73,13 @@ React Native adapters ship as optional subpaths so apps only install the native 
 
 ## Comparison
 
-| Adapter | Persistence | Environment | Notes |
-| --- | --- | --- | --- |
-| [`Storage.idb`](/docs/api/storage.idb) | Persistent | Browser | Default in the browser. Stores raw values (no JSON serialization). |
-| [`Storage.localStorage`](/docs/api/storage.localStorage) | Persistent | Browser | Synchronous; values are JSON-serialized. |
-| [`Storage.cookie`](/docs/api/storage.cookie) | Persistent | Browser | Uses `SameSite=None; Secure`. Deep objects are flattened to stay within the 4 KB-per-cookie limit. |
-| [`Storage.memory`](/docs/api/storage.memory) | Ephemeral | Any | Default outside the browser. Useful for SSR and tests. |
-| [`asyncStorage`](/docs/api/storage.asyncStorage) | Persistent | React Native | Plain-text AsyncStorage; for non-sensitive state. |
-| [`secureMmkv`](/docs/api/storage.secureMmkv) | Persistent | React Native | AES-256-encrypted MMKV with the key in the Keychain/Keystore; use when the provider manages access keys. |
-| [`Storage.combine`](/docs/api/storage.combine) | — | Any | Reads return the first non-null result; writes propagate to every storage. |
-| [`Storage.from`](/docs/api/storage.from) | — | Any | Wraps a custom implementation, optionally scoping all keys under a prefix. |
+| Adapter                                                  | Persistence | Environment  | Notes                                                                                                    |
+| -------------------------------------------------------- | ----------- | ------------ | -------------------------------------------------------------------------------------------------------- |
+| [`Storage.idb`](/docs/api/storage.idb)                   | Persistent  | Browser      | Default in the browser. Stores raw values (no JSON serialization).                                       |
+| [`Storage.localStorage`](/docs/api/storage.localStorage) | Persistent  | Browser      | Synchronous; values are JSON-serialized.                                                                 |
+| [`Storage.cookie`](/docs/api/storage.cookie)             | Persistent  | Browser      | Uses `SameSite=None; Secure`. Deep objects are flattened to stay within the 4 KB-per-cookie limit.       |
+| [`Storage.memory`](/docs/api/storage.memory)             | Ephemeral   | Any          | Default outside the browser. Useful for SSR and tests.                                                   |
+| [`asyncStorage`](/docs/api/storage.asyncStorage)         | Persistent  | React Native | Plain-text AsyncStorage; for non-sensitive state.                                                        |
+| [`secureMmkv`](/docs/api/storage.secureMmkv)             | Persistent  | React Native | AES-256-encrypted MMKV with the key in the Keychain/Keystore; use when the provider manages access keys. |
+| [`Storage.combine`](/docs/api/storage.combine)           | —           | Any          | Reads return the first non-null result; writes propagate to every storage.                               |
+| [`Storage.from`](/docs/api/storage.from)                 | —           | Any          | Wraps a custom implementation, optionally scoping all keys under a prefix.                               |

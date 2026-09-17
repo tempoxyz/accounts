@@ -1,11 +1,11 @@
-"use client";
+'use client'
 
-import Customize from "./customize";
-import Demo from "./demo/Demo";
-import Footer from "./footer";
-import Guides from "./guides";
-import Hero from "./hero";
-import { ThemeProvider } from "./useTheme";
+import Customize from './customize'
+import Demo from './demo/Demo'
+import Footer from './footer'
+import Guides from './guides'
+import Hero from './hero'
+import { ThemeProvider } from './useTheme'
 
 export default function Home() {
   return (
@@ -21,5 +21,5 @@ export default function Home() {
         </div>
       </ThemeProvider>
     </main>
-  );
+  )
 }

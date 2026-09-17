@@ -32,13 +32,32 @@ describe('filesystem', () => {
     `)
   })
 
-  test('behavior: tightens directory and file permissions', async () => {
+  test('behavior: preserves existing directory permissions and tightens file permissions', async () => {
     const path = await createPath()
     const storage = Storage.filesystem({ key: 'test', path })
 
     await chmod(dirname(path), 0o755)
     await writeFile(path, '{}', { encoding: 'utf8', mode: 0o644 })
     await chmod(path, 0o644)
+    await storage.setItem('store', { state: { chainId: 1 }, version: 0 })
+
+    if (process.platform === 'win32') return
+
+    expect({
+      directory: ((await stat(dirname(path))).mode & 0o777).toString(8),
+      file: ((await stat(path)).mode & 0o777).toString(8),
+    }).toMatchInlineSnapshot(`
+      {
+        "directory": "755",
+        "file": "600",
+      }
+    `)
+  })
+
+  test('behavior: secures directories it creates', async () => {
+    const path = join(await mkdtemp(join(tmpdir(), 'accounts-storage-')), 'wallet', 'store.json')
+    const storage = Storage.filesystem({ key: 'test', path })
+
     await storage.setItem('store', { state: { chainId: 1 }, version: 0 })
 
     if (process.platform === 'win32') return

@@ -24,7 +24,7 @@ type Request = {
     /** Display name shown in the deposit UI (e.g. the app name). */
     displayName?: string
     /** Preferred funding path to show first. */
-    intent?: 'applePay' | 'credits' | 'crypto' | 'faucet' | 'referralCode' | 'x'
+    intent?: 'applePay' | 'credits' | 'crypto' | 'faucet' | 'mach' | 'referralCode' | 'x'
     /** Token contract address to pre-fill. Omit to let the user choose. */
     token?: `0x${string}`
     /** Human-readable amount to pre-fill (e.g. `"1.5"`). */
@@ -48,12 +48,13 @@ type Response = {
 
 ## Example
 
+Request the wallet's MACH purchase path with the `mach` intent.
+
 ```ts
 const result = await provider.request({
   method: 'wallet_deposit',
   params: [{
-    token: '0x20c0000000000000000000000000000000000001',
-    value: '10',
+    intent: 'mach',
   }],
 })
 ```

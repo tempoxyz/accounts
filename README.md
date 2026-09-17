@@ -105,10 +105,9 @@ Set `VITE_BASE_URL` to the production docs origin when using a custom domain.
 
 The `ref-impls/` directory contains reference implementations for building with Tempo Accounts SDK:
 
-| Directory             | Description                                                                                                                                                                              |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ref-impls/dialog/`   | Minimal, unstyled embed dialog app demonstrating how to build a custom embed using the `Remote` API. Select `dialogRefImpl` in the web playground's adapter dropdown to test against it. |
-| `ref-impls/cli-auth/` | Minimal React + Cloudflare/Vite host reference for device-code CLI auth: built-in code-auth endpoints plus a single unstyled approval screen and local smoke client.                     |
+| Directory           | Description                                                                                                                                                                              |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ref-impls/dialog/` | Minimal, unstyled embed dialog app demonstrating how to build a custom embed using the `Remote` API. Select `dialogRefImpl` in the web playground's adapter dropdown to test against it. |
 
 ## License
 

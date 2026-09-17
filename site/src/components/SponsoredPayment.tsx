@@ -35,7 +35,8 @@ function toFeeAmount(receipt: {
 }) {
   if (receipt.effectiveGasPrice === undefined || receipt.gasUsed === undefined) return undefined
   const value =
-    (toBigInt(receipt.effectiveGasPrice) * toBigInt(receipt.gasUsed)) / 10n ** BigInt(18 - pathUsdDecimals)
+    (toBigInt(receipt.effectiveGasPrice) * toBigInt(receipt.gasUsed)) /
+    10n ** BigInt(18 - pathUsdDecimals)
   return toPathUsdAmount(value)
 }
 
@@ -92,7 +93,12 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
           <span className="shrink-0">Balance</span>
           <div className="min-w-0 text-right">
             {balanceAmount ? (
-              <Amount amount={balanceAmount} align="right" className="text-primary" maxDecimals={6} />
+              <Amount
+                amount={balanceAmount}
+                align="right"
+                className="text-primary"
+                maxDecimals={6}
+              />
             ) : (
               <span className="text-primary">{balance.isLoading ? 'Loading...' : '-'}</span>
             )}
@@ -114,12 +120,22 @@ export function SponsoredPayment(props: SponsoredPayment.Props) {
             </div>
             <div className="flex items-center justify-between gap-x-6 text-secondary">
               <span className="shrink-0">Spent</span>
-              <Amount amount={spentAmount} align="right" className="font-medium text-primary" maxDecimals={6} />
+              <Amount
+                amount={spentAmount}
+                align="right"
+                className="font-medium text-primary"
+                maxDecimals={6}
+              />
             </div>
             {feeAmount ? (
               <div className="flex items-center justify-between gap-x-6 text-secondary">
                 <span className="shrink-0">Sponsor paid</span>
-                <Amount amount={feeAmount} align="right" className="font-medium text-primary" maxDecimals={6} />
+                <Amount
+                  amount={feeAmount}
+                  align="right"
+                  className="font-medium text-primary"
+                  maxDecimals={6}
+                />
               </div>
             ) : null}
             {transfer.data.receipt.feePayer ? (

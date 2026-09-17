@@ -570,13 +570,18 @@ export function privy<const client extends privy.Client>(
         },
         async revokeAccessKey(parameters) {
           const account = await getSigningAccount(parameters.address)
+          const { feePayer } = parameters
           try {
-            await Actions.accessKey.revoke(getClient(), {
-              account: account as never,
-              accessKey: parameters.accessKeyAddress,
-            })
+            await Actions.accessKey.revoke(
+              getClient({ feePayer: feePayer === true ? undefined : feePayer }),
+              {
+                account: account as never,
+                accessKey: parameters.accessKeyAddress,
+                ...(feePayer ? { feePayer: true } : {}),
+              },
+            )
           } catch (error) {
-            if (!AccessKey.isUnavailableError(error)) throw error
+            if (typeof feePayer === 'string' || !AccessKey.isUnavailableError(error)) throw error
           }
           store.accessKeys.remove({
             accessKey: parameters.accessKeyAddress,

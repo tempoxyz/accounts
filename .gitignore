@@ -21,6 +21,7 @@ _
 mise.toml
 _TODO
 .pi
+.agents/tmp
 worker-configuration.d.ts
 _TODO
 .pnpm-store

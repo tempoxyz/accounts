@@ -153,6 +153,36 @@ describe('wallet_connect', () => {
     expect(result.accounts[0]!.capabilities).toMatchInlineSnapshot(`{}`)
   })
 
+  test('behavior: login targets multiple credentials', async () => {
+    const provider = getProvider()
+
+    const first = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register' } }],
+    })
+    const second = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register' } }],
+    })
+    const credentialId = provider.store
+      .getState()
+      .accounts.flatMap((account) =>
+        'credential' in account && account.credential ? [account.credential.id] : [],
+      )
+
+    expect(credentialId.length).toMatchInlineSnapshot(`2`)
+
+    await provider.request({ method: 'wallet_disconnect' })
+
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { credentialId } }],
+    })
+    const registered = [first.accounts[0]!.address, second.accounts[0]!.address]
+
+    expect(registered.includes(result.accounts[0]!.address)).toMatchInlineSnapshot(`true`)
+  })
+
   test('behavior: register without digest returns empty capabilities', async () => {
     const provider = getProvider()
 

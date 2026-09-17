@@ -1,17 +1,17 @@
-"use client";
+'use client'
 
-import type { DemoBodyProps } from "../types";
-import { PrimaryButton, useBodyAnimation } from "./shared";
+import type { DemoBodyProps } from '../types'
+import { PrimaryButton, useBodyAnimation } from './shared'
 
 /** Preset deposit amounts (USD), surfaced as selectable chips in the body. */
 export const DEPOSIT_AMOUNTS = [
-  { id: "10", label: "$10" },
-  { id: "50", label: "$50" },
-  { id: "100", label: "$100" },
-  { id: "500", label: "$500" },
-] as const;
+  { id: '10', label: '$10' },
+  { id: '50', label: '$50' },
+  { id: '100', label: '$100' },
+  { id: '500', label: '$500' },
+] as const
 
-export type DepositAmountId = (typeof DEPOSIT_AMOUNTS)[number]["id"];
+export type DepositAmountId = (typeof DEPOSIT_AMOUNTS)[number]['id']
 
 export function LocalPaymentsBody({
   status,
@@ -23,16 +23,14 @@ export function LocalPaymentsBody({
   onSelectAmount,
   methodLabel,
 }: DemoBodyProps & {
-  selectedAmountId: DepositAmountId;
-  onSelectAmount: (id: DepositAmountId) => void;
-  methodLabel: string;
+  selectedAmountId: DepositAmountId
+  onSelectAmount: (id: DepositAmountId) => void
+  methodLabel: string
 }) {
-  const body = useBodyAnimation(delay);
-  const selected =
-    DEPOSIT_AMOUNTS.find((a) => a.id === selectedAmountId) ??
-    DEPOSIT_AMOUNTS[0];
+  const body = useBodyAnimation(delay)
+  const selected = DEPOSIT_AMOUNTS.find((a) => a.id === selectedAmountId) ?? DEPOSIT_AMOUNTS[0]
 
-  const buttonLabel = `Add ${selected.label} with ${methodLabel}`;
+  const buttonLabel = `Add ${selected.label} with ${methodLabel}`
 
   return (
     <div
@@ -43,7 +41,7 @@ export function LocalPaymentsBody({
       <div className="flex flex-col gap-1">
         <p className="text-[13px] text-foreground-muted">Available balance</p>
         <p className="font-mono text-[28px] tabular-nums text-foreground">
-          {connectedBalance ?? "$0.00"}
+          {connectedBalance ?? '$0.00'}
         </p>
       </div>
 
@@ -51,21 +49,21 @@ export function LocalPaymentsBody({
         <p className="text-[12px] text-foreground-muted">Amount</p>
         <div className="grid grid-cols-4 gap-1.5">
           {DEPOSIT_AMOUNTS.map((a) => {
-            const active = a.id === selectedAmountId;
+            const active = a.id === selectedAmountId
             return (
               <button
                 key={a.id}
                 type="button"
                 onClick={() => onSelectAmount(a.id)}
-                className={`relative flex items-center justify-center border py-2.5 text-left outline-none hover:bg-secondary-hover active:bg-secondary-active focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 ${active ? "border-panel-edge bg-secondary-hover" : "border-transparent bg-secondary"}`}
+                className={`relative flex items-center justify-center border py-2.5 text-left outline-none hover:bg-secondary-hover active:bg-secondary-active focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 ${active ? 'border-panel-edge bg-secondary-hover' : 'border-transparent bg-secondary'}`}
               >
                 <span
-                  className={`font-mono text-[14px] tabular-nums ${active ? "text-foreground" : "text-foreground-muted"}`}
+                  className={`font-mono text-[14px] tabular-nums ${active ? 'text-foreground' : 'text-foreground-muted'}`}
                 >
                   {a.label}
                 </span>
               </button>
-            );
+            )
           })}
         </div>
       </div>
@@ -80,5 +78,5 @@ export function LocalPaymentsBody({
         <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
       ) : null}
     </div>
-  );
+  )
 }

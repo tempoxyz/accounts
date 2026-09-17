@@ -66,12 +66,10 @@ Get credential request options for `navigator.credentials.get(){:js}`.
 
 ```ts
 declare function getAuthenticationOptions(parameters?: {
-  /** Credential IDs to allow (restricts which credentials can be used). */
-  allowCredentialIds?: readonly string[] | undefined
   /** Challenge to use. */
   challenge?: Hex | undefined
-  /** Credential ID to restrict authentication to a specific credential. */
-  credentialId?: string | undefined
+  /** Credential ID or IDs to restrict authentication to. */
+  credentialId?: string | readonly string[] | undefined
   /** Mediation hint for passkey autofill / conditional UI. */
   mediation?: 'conditional' | 'optional' | 'required' | 'silent' | undefined
 } | undefined): Promise<{ options: Authentication.Options }>

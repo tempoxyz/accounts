@@ -1,8 +1,9 @@
-"use client";
+'use client'
 
-import { useEffect, useRef } from "react";
-import * as THREE from "three";
-import { readCssVar, useTheme } from "./useTheme";
+import { useEffect, useRef } from 'react'
+import * as THREE from 'three'
+
+import { readCssVar, useTheme } from './useTheme'
 
 /* ─── Tweakables ──────────────────────────────────────────────────────── *
  *
@@ -14,43 +15,43 @@ import { readCssVar, useTheme } from "./useTheme";
  * ───────────────────────────────────────────────────────────────────── */
 
 /** Size of each rendered pixel in CSS pixels. */
-const PIXEL_SIZE = 2.5;
+const PIXEL_SIZE = 2.5
 /** Spatial scale of the FBM noise (higher = smaller wisps). */
-const PATTERN_SCALE = 4;
+const PATTERN_SCALE = 4
 /** Density bias: 0.5 ≈ balanced, lower = sparser, higher = denser. */
-const PATTERN_DENSITY = 0.5;
+const PATTERN_DENSITY = 0.5
 /** Per-pixel size jitter on the dust grid. */
-const PIXEL_JITTER = 0;
+const PIXEL_JITTER = 0
 /** Flow speed multiplier for the noise field. */
-const FLOW_SPEED = 2;
+const FLOW_SPEED = 2
 /** Soft fade toward the edges (0 = no fade, larger = wider fade). */
-const EDGE_FADE = 0.25;
+const EDGE_FADE = 0.25
 /** Multiplier applied on top of `--canvas-dot-alpha-base` so the binary
  *  dither has enough contrast to read. */
-const ALPHA_GAIN = 8;
+const ALPHA_GAIN = 8
 
 /** Radius around the cursor (in CSS px) where the dust lifts. */
-const CURSOR_RADIUS = 180;
+const CURSOR_RADIUS = 180
 /** Strength of the cursor brightness boost (added to the dither feed). */
-const CURSOR_STRENGTH = 0.5;
+const CURSOR_STRENGTH = 0.5
 /** Cursor follow lag (ms). Higher = laggier / smoother. */
-const CURSOR_RESPONSE_MS = 90;
+const CURSOR_RESPONSE_MS = 90
 /** Max simultaneous click ripples kept in the shader. */
-const MAX_CLICKS = 8;
+const MAX_CLICKS = 8
 /** Ripple speed in fragCoord units / second. */
-const RIPPLE_SPEED = 90;
+const RIPPLE_SPEED = 90
 /** Ripple ring thickness (smaller = thinner / crisper). */
-const RIPPLE_THICKNESS = 90;
+const RIPPLE_THICKNESS = 90
 /** Strength of a fresh ripple. Fades over time. */
-const RIPPLE_STRENGTH = 1.1;
+const RIPPLE_STRENGTH = 1.1
 /** Lifetime of one ripple in seconds (visual decay). */
-const RIPPLE_LIFETIME = 1.3;
+const RIPPLE_LIFETIME = 1.3
 
 const VERTEX_SRC = /* glsl */ `
 void main() {
   gl_Position = vec4(position, 1.0);
 }
-`;
+`
 
 const FRAGMENT_SRC = /* glsl */ `
 precision highp float;
@@ -182,11 +183,11 @@ void main(){
 
   fragColor = vec4(uColor, coverage * fade * uAlpha);
 }
-`;
+`
 
 function parseRgbVar(value: string): [number, number, number] {
-  const parts = value.split(",").map((s) => Number.parseFloat(s.trim()));
-  const [r, g, b] = parts;
+  const parts = value.split(',').map((s) => Number.parseFloat(s.trim()))
+  const [r, g, b] = parts
   if (
     r === undefined ||
     g === undefined ||
@@ -195,51 +196,43 @@ function parseRgbVar(value: string): [number, number, number] {
     Number.isNaN(g) ||
     Number.isNaN(b)
   )
-    return [0.49, 0.49, 0.49];
-  return [r / 255, g / 255, b / 255];
+    return [0.49, 0.49, 0.49]
+  return [r / 255, g / 255, b / 255]
 }
 
 type Props = {
-  className?: string;
-};
+  className?: string
+}
 
 export default function AsciiBackground({ className }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { resolved } = useTheme();
+  const containerRef = useRef<HTMLDivElement>(null)
+  const { resolved } = useTheme()
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const container = containerRef.current
+    if (!container) return
 
-    const reduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-    const canvas = document.createElement("canvas");
+    const canvas = document.createElement('canvas')
     const renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: false,
       alpha: true,
-      powerPreference: "low-power",
-    });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setClearAlpha(0);
-    canvas.style.width = "100%";
-    canvas.style.height = "100%";
-    canvas.style.display = "block";
-    container.appendChild(canvas);
+      powerPreference: 'low-power',
+    })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    renderer.setClearAlpha(0)
+    canvas.style.width = '100%'
+    canvas.style.height = '100%'
+    canvas.style.display = 'block'
+    container.appendChild(canvas)
 
-    const [r, g, b] = parseRgbVar(
-      readCssVar(container, "--canvas-dot-rgb") || "125, 125, 125",
-    );
-    const baseAlpha =
-      Number(readCssVar(container, "--canvas-dot-alpha-base")) || 0.07;
+    const [r, g, b] = parseRgbVar(readCssVar(container, '--canvas-dot-rgb') || '125, 125, 125')
+    const baseAlpha = Number(readCssVar(container, '--canvas-dot-alpha-base')) || 0.07
 
-    const clickPositions = Array.from(
-      { length: MAX_CLICKS },
-      () => new THREE.Vector2(-1, -1),
-    );
-    const clickTimes = new Float32Array(MAX_CLICKS);
+    const clickPositions = Array.from({ length: MAX_CLICKS }, () => new THREE.Vector2(-1, -1))
+    const clickTimes = new Float32Array(MAX_CLICKS)
 
     const uniforms = {
       uResolution: { value: new THREE.Vector2(0, 0) },
@@ -264,10 +257,10 @@ export default function AsciiBackground({ className }: Props) {
       },
       uRippleStrength: { value: reduced ? 0 : RIPPLE_STRENGTH },
       uRippleLifetime: { value: RIPPLE_LIFETIME },
-    };
+    }
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const scene = new THREE.Scene()
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
     const material = new THREE.ShaderMaterial({
       vertexShader: VERTEX_SRC,
       fragmentShader: FRAGMENT_SRC,
@@ -276,142 +269,136 @@ export default function AsciiBackground({ className }: Props) {
       depthTest: false,
       depthWrite: false,
       glslVersion: THREE.GLSL3,
-    });
-    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
-    scene.add(quad);
+    })
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material)
+    scene.add(quad)
 
-    const clock = new THREE.Clock();
-    const timeOffset = Math.random() * 1000;
+    const clock = new THREE.Clock()
+    const timeOffset = Math.random() * 1000
 
     const setSize = () => {
-      const w = container.clientWidth || 1;
-      const h = container.clientHeight || 1;
-      renderer.setSize(w, h, false);
-      uniforms.uResolution.value.set(canvas.width, canvas.height);
-      uniforms.uPixelSize.value = PIXEL_SIZE * renderer.getPixelRatio();
-      uniforms.uCursorRadius.value =
-        CURSOR_RADIUS * renderer.getPixelRatio();
-      uniforms.uRippleSpeed.value = RIPPLE_SPEED * renderer.getPixelRatio();
-      uniforms.uRippleThickness.value =
-        RIPPLE_THICKNESS * renderer.getPixelRatio();
-    };
-    setSize();
-    const ro = new ResizeObserver(setSize);
-    ro.observe(container);
+      const w = container.clientWidth || 1
+      const h = container.clientHeight || 1
+      renderer.setSize(w, h, false)
+      uniforms.uResolution.value.set(canvas.width, canvas.height)
+      uniforms.uPixelSize.value = PIXEL_SIZE * renderer.getPixelRatio()
+      uniforms.uCursorRadius.value = CURSOR_RADIUS * renderer.getPixelRatio()
+      uniforms.uRippleSpeed.value = RIPPLE_SPEED * renderer.getPixelRatio()
+      uniforms.uRippleThickness.value = RIPPLE_THICKNESS * renderer.getPixelRatio()
+    }
+    setSize()
+    const ro = new ResizeObserver(setSize)
+    ro.observe(container)
 
     // Pause work when the field is offscreen — avoids painting an idle
     // landing tab forever.
-    let visible = true;
+    let visible = true
     const io = new IntersectionObserver(
       ([entry]) => {
-        visible = entry?.isIntersecting ?? true;
+        visible = entry?.isIntersecting ?? true
       },
-      { rootMargin: "200px" },
-    );
-    io.observe(container);
+      { rootMargin: '200px' },
+    )
+    io.observe(container)
 
     // Cursor follow + click ripples — listen on window so pointer events
     // reach us even though the container is pointer-events:none.
-    const target = { x: -9999, y: -9999, active: false };
-    const smooth = { x: -9999, y: -9999 };
-    let clickIx = 0;
+    const target = { x: -9999, y: -9999, active: false }
+    const smooth = { x: -9999, y: -9999 }
+    let clickIx = 0
 
     const toCanvasPx = (clientX: number, clientY: number) => {
-      const rect = container.getBoundingClientRect();
+      const rect = container.getBoundingClientRect()
       const inside =
         clientX >= rect.left &&
         clientX <= rect.right &&
         clientY >= rect.top &&
-        clientY <= rect.bottom;
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const fx = (clientX - rect.left) * scaleX;
+        clientY <= rect.bottom
+      const scaleX = canvas.width / rect.width
+      const scaleY = canvas.height / rect.height
+      const fx = (clientX - rect.left) * scaleX
       // WebGL fragCoord origin is bottom-left, so flip Y.
-      const fy = (rect.height - (clientY - rect.top)) * scaleY;
-      return { fx, fy, inside };
-    };
+      const fy = (rect.height - (clientY - rect.top)) * scaleY
+      return { fx, fy, inside }
+    }
 
     const onMove = (e: MouseEvent) => {
-      const { fx, fy, inside } = toCanvasPx(e.clientX, e.clientY);
+      const { fx, fy, inside } = toCanvasPx(e.clientX, e.clientY)
       if (inside) {
-        target.x = fx;
-        target.y = fy;
+        target.x = fx
+        target.y = fy
         if (!target.active) {
-          smooth.x = fx;
-          smooth.y = fy;
+          smooth.x = fx
+          smooth.y = fy
         }
-        target.active = true;
+        target.active = true
       } else {
-        target.active = false;
+        target.active = false
       }
-    };
+    }
     const onLeave = () => {
-      target.active = false;
-    };
+      target.active = false
+    }
     const onPointerDown = (e: PointerEvent) => {
-      if (reduced) return;
-      const { fx, fy, inside } = toCanvasPx(e.clientX, e.clientY);
-      if (!inside) return;
-      const slot = clickPositions[clickIx];
-      if (slot) slot.set(fx, fy);
-      clickTimes[clickIx] = uniforms.uTime.value;
-      clickIx = (clickIx + 1) % MAX_CLICKS;
-    };
+      if (reduced) return
+      const { fx, fy, inside } = toCanvasPx(e.clientX, e.clientY)
+      if (!inside) return
+      const slot = clickPositions[clickIx]
+      if (slot) slot.set(fx, fy)
+      clickTimes[clickIx] = uniforms.uTime.value
+      clickIx = (clickIx + 1) % MAX_CLICKS
+    }
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseleave", onLeave);
-    window.addEventListener("blur", onLeave);
-    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseleave', onLeave)
+    window.addEventListener('blur', onLeave)
+    window.addEventListener('pointerdown', onPointerDown)
 
-    let raf = 0;
-    let lastFrame = 0;
+    let raf = 0
+    let lastFrame = 0
     const animate = (now: number) => {
       if (!visible) {
-        lastFrame = now;
-        raf = requestAnimationFrame(animate);
-        return;
+        lastFrame = now
+        raf = requestAnimationFrame(animate)
+        return
       }
-      const dt = lastFrame ? Math.min(now - lastFrame, 100) : 16;
-      lastFrame = now;
+      const dt = lastFrame ? Math.min(now - lastFrame, 100) : 16
+      lastFrame = now
 
       // Exponential smoothing toward the target so the lift trails the
       // cursor naturally instead of snapping.
-      const damping = 1 - Math.exp(-dt / CURSOR_RESPONSE_MS);
-      smooth.x += (target.x - smooth.x) * damping;
-      smooth.y += (target.y - smooth.y) * damping;
-      uniforms.uCursor.value.set(
-        target.active ? smooth.x : -9999,
-        target.active ? smooth.y : -9999,
-      );
+      const damping = 1 - Math.exp(-dt / CURSOR_RESPONSE_MS)
+      smooth.x += (target.x - smooth.x) * damping
+      smooth.y += (target.y - smooth.y) * damping
+      uniforms.uCursor.value.set(target.active ? smooth.x : -9999, target.active ? smooth.y : -9999)
 
-      uniforms.uTime.value =
-        timeOffset + clock.getElapsedTime() * (reduced ? 0 : FLOW_SPEED);
-      renderer.render(scene, camera);
-      raf = requestAnimationFrame(animate);
-    };
-    raf = requestAnimationFrame(animate);
+      uniforms.uTime.value = timeOffset + clock.getElapsedTime() * (reduced ? 0 : FLOW_SPEED)
+      renderer.render(scene, camera)
+      raf = requestAnimationFrame(animate)
+    }
+    raf = requestAnimationFrame(animate)
 
     return () => {
-      cancelAnimationFrame(raf);
-      ro.disconnect();
-      io.disconnect();
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseleave", onLeave);
-      window.removeEventListener("blur", onLeave);
-      window.removeEventListener("pointerdown", onPointerDown);
-      quad.geometry.dispose();
-      material.dispose();
-      renderer.dispose();
-      renderer.forceContextLoss();
-      if (canvas.parentElement === container) container.removeChild(canvas);
-    };
-  }, [resolved]);
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+      io.disconnect()
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseleave', onLeave)
+      window.removeEventListener('blur', onLeave)
+      window.removeEventListener('pointerdown', onPointerDown)
+      quad.geometry.dispose()
+      material.dispose()
+      renderer.dispose()
+      renderer.forceContextLoss()
+      if (canvas.parentElement === container) container.removeChild(canvas)
+    }
+  }, [resolved])
 
   return (
     <div
       ref={containerRef}
       aria-hidden
-      className={`pointer-events-none absolute inset-0 ${className ?? ""}`}
+      className={`pointer-events-none absolute inset-0 ${className ?? ''}`}
     />
-  );
+  )
 }

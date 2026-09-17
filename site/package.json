@@ -17,7 +17,7 @@
     "accounts": "workspace:*",
     "animejs": "^4.4.1",
     "cuer": "^0.0.3",
-    "mermaid": "^11.14.0",
+    "mermaid": "^11.16.1",
     "mppx": "catalog:",
     "ox": "catalog:",
     "react": "catalog:",

@@ -34,8 +34,7 @@ export function ServerTransfer() {
             try {
               const res = await fetch('/api/transfer')
               const body = await res.json()
-              if (!res.ok)
-                throw new Error(`${res.status}: ${JSON.stringify(body)}`)
+              if (!res.ok) throw new Error(`${res.status}: ${JSON.stringify(body)}`)
               setData(body)
             } catch (e) {
               setError(e as Error)
@@ -52,9 +51,7 @@ export function ServerTransfer() {
         <div className="text-[14px] inline-flex items-center gap-x-1.5">
           <LucideCircleCheck aria-hidden className="size-4 text-success shrink-0" />
           <span className="text-success font-medium">Settled.</span>
-          {data.message ? (
-            <span className="text-secondary">{data.message}</span>
-          ) : null}
+          {data.message ? <span className="text-secondary">{data.message}</span> : null}
         </div>
       ) : null}
       {error ? (

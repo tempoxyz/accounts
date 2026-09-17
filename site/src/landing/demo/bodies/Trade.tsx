@@ -1,17 +1,11 @@
-"use client";
+'use client'
 
-import type { DemoBodyProps } from "../types";
-import { PrimaryButton, useBodyAnimation } from "./shared";
+import type { DemoBodyProps } from '../types'
+import { PrimaryButton, useBodyAnimation } from './shared'
 
 function SwapArrow() {
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      aria-hidden
-    >
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
       <path
         d="M5 2v10M5 12L2 9M5 12l3-3M11 14V4M11 4l-3 3M11 4l3 3"
         stroke="currentColor"
@@ -20,43 +14,29 @@ function SwapArrow() {
         strokeLinejoin="round"
       />
     </svg>
-  );
+  )
 }
 
-function TokenRow({
-  label,
-  amount,
-  token,
-}: {
-  label: string;
-  amount: string;
-  token: string;
-}) {
+function TokenRow({ label, amount, token }: { label: string; amount: string; token: string }) {
   return (
     <div className="flex flex-col gap-2 bg-panel-3 px-4 py-3 sm:px-5 sm:py-4">
       <p className="text-[12px] text-foreground-muted">{label}</p>
       <div className="flex items-baseline justify-between gap-2.5">
-        <p className="font-mono text-[28px] leading-none tabular-nums text-foreground">
-          {amount}
-        </p>
+        <p className="font-mono text-[28px] leading-none tabular-nums text-foreground">{amount}</p>
         <span className="bg-panel-4 px-2 py-0.5 font-mono text-[12px] tracking-wide text-foreground-muted">
           {token}
         </span>
       </div>
     </div>
-  );
+  )
 }
 
 export function TradeBody(props: DemoBodyProps) {
-  const { status, result, onAction, delay } = props;
-  const body = useBodyAnimation(delay);
-  const done = status === "done";
+  const { status, result, onAction, delay } = props
+  const body = useBodyAnimation(delay)
+  const done = status === 'done'
   const buttonLabel =
-    status === "running"
-      ? "Reviewing..."
-      : done
-        ? "Exchange submitted"
-        : "Review exchange";
+    status === 'running' ? 'Reviewing...' : done ? 'Exchange submitted' : 'Review exchange'
 
   return (
     <div
@@ -73,9 +53,7 @@ export function TradeBody(props: DemoBodyProps) {
       <div className="grid gap-2">
         <div className="flex items-center justify-between bg-panel-3 px-4 py-3">
           <span className="text-[12px] text-foreground-muted">Route</span>
-          <span className="font-mono text-[12px] text-foreground">
-            Stablecoin DEX
-          </span>
+          <span className="font-mono text-[12px] text-foreground">Stablecoin DEX</span>
         </div>
         <div className="flex items-center justify-between bg-panel-3 px-4 py-3">
           <span className="text-[12px] text-foreground-muted">Max slippage</span>
@@ -85,7 +63,7 @@ export function TradeBody(props: DemoBodyProps) {
 
       <PrimaryButton
         label={buttonLabel}
-        status={status === "running" ? "running" : "idle"}
+        status={status === 'running' ? 'running' : 'idle'}
         disabled={done}
         onClick={onAction}
         className="mt-2 h-11 w-full"
@@ -93,7 +71,7 @@ export function TradeBody(props: DemoBodyProps) {
       {result?.summary ? (
         result.href && result.hrefLabel ? (
           <p className="font-mono text-[12px] text-foreground-subtle">
-            {result.summary}{" "}
+            {result.summary}{' '}
             <a
               href={result.href}
               target="_blank"
@@ -104,11 +82,9 @@ export function TradeBody(props: DemoBodyProps) {
             </a>
           </p>
         ) : (
-          <p className="font-mono text-[12px] text-foreground-subtle">
-            {result.summary}
-          </p>
+          <p className="font-mono text-[12px] text-foreground-subtle">{result.summary}</p>
         )
       ) : null}
     </div>
-  );
+  )
 }

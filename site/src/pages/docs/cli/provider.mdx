@@ -5,11 +5,11 @@ description: Create a Provider for CLI environments.
 
 # `Provider`
 
-Creates a Provider that bootstraps account access from the terminal via the device-code flow.
+Creates a Provider that bootstraps account access from the terminal via the Wata device-code flow (OAuth 2.0 Device Authorization Grant, RFC 8628 with PKCE).
 
 When `wallet_connect` or `wallet_authorizeAccessKey` runs, the provider:
 
-- opens the configured `host` in the user's default browser
+- registers a device code at the configured `host` and opens the verification page in the user's default browser
 - prompts them to approve the access key
 - persists the resulting key in provider storage for re-use across CLI invocations
 
@@ -105,17 +105,17 @@ const provider = Provider.create({
 ### host
 
 - **Type:** `string`
-- **Default:** `'https://wallet.tempo.xyz/api/auth/cli'`
+- **Default:** `'https://wallet.tempo.xyz/api/auth/device'`
 
-Host URL for the device-code flow. The browser is opened at `${host}?code=<code>` and the CLI polls `${host}/poll/<code>` for completion.
+Base URL of the host's device-code endpoints. The CLI registers at `${host}/register`, opens the browser at `${host}/verify?user_code=<code>`, and polls `${host}/token` for completion.
 
-Designed to point at a service exposing the `CliAuth` handlers from `accounts/server`.
+Designed to point at a host mounting the [`wata`](https://github.com/wevm/wata) device-code transport.
 
 ```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
-  host: 'https://myapp.com/api/auth/cli', // [!code focus]
+  host: 'https://myapp.com/auth/device', // [!code focus]
 })
 ```
 
@@ -180,17 +180,17 @@ const provider = Provider.create({
 
 ### open
 
-- **Type:** `(url: string) => Promise<void> | void`
+- **Type:** `(url: string, prompt: DeviceCode.Prompt) => Promise<void> | void`
 - **Default:** `open`/`xdg-open`/`start` depending on platform
 
-Browser opener override. Useful for headless environments, CI, or to intercept the URL before opening (e.g. to print it to the terminal).
+Browser opener override. Useful for headless environments, CI, or to intercept the URL before opening (e.g. to print it to the terminal). The second argument carries the full pairing prompt (`userCode`, `verificationUri`, expiry, poll interval).
 
 ```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
-  open: (url) => { // [!code focus]
-    console.log(`Open ${url} in your browser to continue.`) // [!code focus]
+  open: (url, prompt) => { // [!code focus]
+    console.log(`Open ${url} and confirm code ${prompt.userCode}.`) // [!code focus]
   }, // [!code focus]
 })
 ```
@@ -210,18 +210,18 @@ const provider = Provider.create({
 })
 ```
 
-### pollIntervalMs
+### pollingInterval
 
 - **Type:** `number`
-- **Default:** `2000`
+- **Default:** the host-advertised `interval` (5000 when the host omits one)
 
-How often (in milliseconds) the CLI polls the device-code endpoint while waiting for the user to approve the request in the browser.
+How often (in milliseconds) the CLI polls the device-code token endpoint while waiting for the user to approve the request in the browser.
 
 ```ts twoslash [cli.ts]
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
-  pollIntervalMs: 1000, // [!code focus]
+  pollingInterval: 1000, // [!code focus]
 })
 ```
 
@@ -287,7 +287,7 @@ const provider = Provider.create({
 })
 ```
 
-### timeoutMs
+### timeout
 
 - **Type:** `number`
 - **Default:** `300000` (5 minutes)
@@ -298,7 +298,7 @@ How long (in milliseconds) the CLI waits for the user to complete the device-cod
 import { Provider } from 'accounts/cli'
 
 const provider = Provider.create({
-  timeoutMs: 60_000, // [!code focus]
+  timeout: 60_000, // [!code focus]
 })
 ```
 

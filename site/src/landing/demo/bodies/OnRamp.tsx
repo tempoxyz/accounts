@@ -1,16 +1,10 @@
-"use client";
+'use client'
 
-import type { DemoBodyProps } from "../types";
-import { PrimaryButton, useBodyAnimation } from "./shared";
+import type { DemoBodyProps } from '../types'
+import { PrimaryButton, useBodyAnimation } from './shared'
 
-export function OnRampBody({
-  status,
-  result,
-  onAction,
-  delay,
-  connectedBalance,
-}: DemoBodyProps) {
-  const body = useBodyAnimation(delay);
+export function OnRampBody({ status, result, onAction, delay, connectedBalance }: DemoBodyProps) {
+  const body = useBodyAnimation(delay)
 
   return (
     <div
@@ -21,22 +15,16 @@ export function OnRampBody({
       <div className="flex flex-col gap-1">
         <p className="text-[14px] text-foreground-muted">Available balance</p>
         <p className="font-mono text-[28px] tabular-nums text-foreground">
-          {connectedBalance ?? "$0.00"}
+          {connectedBalance ?? '$0.00'}
         </p>
       </div>
       <p className="text-[14px] text-foreground-muted">
-        Open the wallet deposit flow with cards, Apple Pay, crypto, and X
-        verification.
+        Open the wallet deposit flow with cards, Apple Pay, crypto, and X verification.
       </p>
-      <PrimaryButton
-        label="Add funds"
-        status={status}
-        onClick={onAction}
-        className="h-11 w-full"
-      />
+      <PrimaryButton label="Add funds" status={status} onClick={onAction} className="h-11 w-full" />
       {result?.summary ? (
         <p className="font-mono text-[12px] text-foreground-muted">{result.summary}</p>
       ) : null}
     </div>
-  );
+  )
 }

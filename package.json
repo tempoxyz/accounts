@@ -5,11 +5,11 @@
     "changeset:version": "changeset version && pnpm check",
     "check": "vp lint --fix --ignore-pattern package.json && vp fmt src examples playgrounds ref-impls scripts test",
     "dev": "docker compose up -d",
-    "dev:cli": "pnpm --filter './playgrounds/cli' connect",
+    "dev:cli": "pnpm --filter './playgrounds/cli' dev",
     "docs:build": "pnpm --filter site build",
     "docs:dev": "pnpm --filter site dev",
     "docs:preview": "pnpm --filter site preview",
-    "check:types": "tsc -b --noEmit && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types",
+    "check:types": "tsc -b --noEmit && pnpm --filter './examples/*' check:types && pnpm --filter './playgrounds/web' check:types && pnpm --filter './playgrounds/cli' check:types",
     "dev:dialog": "pnpm --filter tempo-app dev",
     "dev:dialog-ref": "pnpm --filter dialog-ref dev",
     "dev:hosts": "./scripts/dev:hosts.sh",
@@ -73,17 +73,17 @@
   "name": "accounts",
   "description": "Tempo Accounts SDK",
   "type": "module",
-  "version": "0.16.0",
+  "version": "0.18.4",
   "dependencies": {
     "hono": "catalog:",
     "idb-keyval": "^6.2.2",
     "jose": "^6.2.3",
     "mipd": "^0.0.7",
     "mppx": "catalog:",
-    "ox": "~0.14.30",
-    "wata": "0.4.0",
-    "webauthx": "~0.1.1",
-    "zod": "^4.3.6",
+    "ox": "~0.14.34",
+    "wata": "0.4.1",
+    "webauthx": "~0.1.2",
+    "zod": "^4.4.3",
     "zustand": "^5.0.12"
   },
   "peerDependencies": {
@@ -95,7 +95,7 @@
     "react": ">=18",
     "react-native-mmkv": "^4.3.1",
     "react-native-nitro-modules": "^0.35.9",
-    "viem": ">=2.54.0",
+    "viem": ">=2.56.0",
     "wagmi": ">=0.0.0"
   },
   "peerDependenciesMeta": {
@@ -174,6 +174,12 @@
       "types": "./dist/wagmi/index.d.ts",
       "src": "./src/wagmi/index.ts",
       "default": "./dist/wagmi/index.js"
+    },
+    "./deviceCode": {
+      "types": "./dist/core/adapters/deviceCode/index.d.ts",
+      "src": "./src/core/adapters/deviceCode/index.ts",
+      "react-native": "./dist/core/adapters/deviceCode/index.js",
+      "default": "./dist/core/adapters/deviceCode/index.js"
     },
     "./mobileWebAuth": {
       "types": "./dist/core/adapters/mobileWebAuth/index.d.ts",

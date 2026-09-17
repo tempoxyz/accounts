@@ -1,9 +1,13 @@
+import { vi } from 'vitest'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vp/test'
+import { Registration } from 'webauthx/server'
 
 import { createServer, type Server } from '../../../../test/utils.js'
 import * as WebAuthnCeremony from '../../../core/WebAuthnCeremony.js'
 import * as Kv from '../../Kv.js'
 import { type SessionPayload, webAuthn } from './webAuthn.js'
+
+vi.mock('webauthx/server', { spy: true })
 
 let server: Server
 let ceremony: WebAuthnCeremony.WebAuthnCeremony
@@ -51,6 +55,25 @@ describe('POST /login/options', () => {
     const { options: a } = await ceremony.getAuthenticationOptions()
     const { options: b } = await ceremony.getAuthenticationOptions()
     expect(a.publicKey!.challenge).not.toBe(b.publicKey!.challenge)
+  })
+
+  test('behavior: restricts authentication to multiple credentials', async () => {
+    const { options } = await ceremony.getAuthenticationOptions({
+      credentialId: ['Y3JlZC0x', 'Y3JlZC0y'],
+    })
+
+    expect(options.publicKey?.allowCredentials).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "Y3JlZC0x",
+          "type": "public-key",
+        },
+        {
+          "id": "Y3JlZC0y",
+          "type": "public-key",
+        },
+      ]
+    `)
   })
 })
 
@@ -150,6 +173,59 @@ describe('hooks', () => {
     expect(called).toBe(false)
 
     await hookServer.closeAsync()
+  })
+
+  test('behavior: onRegister rejection removes the credential', async () => {
+    const kv = Kv.memory()
+    await kv.set('challenge:0x01', { created: Date.now(), name: 'Test' })
+    const publicKey =
+      '0x04ab891400140fc4f8e941ce0ff90e419de9470acaca613bbd717a4775435031a7d884318e919fd3b3e5a631d866d8a380b44063e70f0c381ee16e0652f7f97554'
+    vi.mocked(Registration.verify).mockReturnValueOnce({
+      aaguid: 'fbfc3007-154e-4ecc-8c0b-6e020557d7bd',
+      credential: { publicKey },
+    } as never)
+    const hookServer = await createServer(
+      webAuthn({
+        kv,
+        origin: 'http://localhost',
+        rpId: 'localhost',
+        onRegister() {
+          throw new Error('Authenticator not allowed')
+        },
+      }).listener,
+    )
+
+    try {
+      const clientDataJSON = 'eyJjaGFsbGVuZ2UiOiJBUSJ9'
+      const response = await fetch(`${hookServer.url}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          attestationObject: 'AA',
+          clientDataJSON,
+          id: 'credential',
+          publicKey,
+          raw: {
+            authenticatorAttachment: null,
+            id: 'credential',
+            rawId: 'Y3JlZGVudGlhbA',
+            response: { clientDataJSON },
+            type: 'public-key',
+          },
+        }),
+      })
+
+      expect(response.status).toMatchInlineSnapshot(`400`)
+      expect(await response.json()).toMatchInlineSnapshot(`
+        {
+          "error": "Authenticator not allowed",
+        }
+      `)
+      expect(await kv.get('credential:credential')).toBeUndefined()
+      expect(await kv.get('challenge:0x01')).toBeUndefined()
+    } finally {
+      await hookServer.closeAsync()
+    }
   })
 
   test('behavior: onAuthenticate error does not call hook', async () => {

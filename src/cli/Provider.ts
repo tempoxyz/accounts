@@ -8,11 +8,13 @@ import * as Storage from './storage.js'
  */
 export function create(options: create.Options): create.ReturnType {
   const {
-    host = 'https://wallet.tempo.xyz/api/auth/cli',
+    host = 'https://wallet.tempo.xyz/api/auth/device',
+    name,
     open,
-    pollIntervalMs,
+    pollingInterval,
+    rdns,
     storage = Storage.filesystem(),
-    timeoutMs,
+    timeout,
     ...rest
   } = options
 
@@ -27,9 +29,11 @@ export function create(options: create.Options): create.ReturnType {
     ...rest,
     adapter: cli({
       host,
+      ...(name ? { name } : {}),
       ...(open ? { open } : {}),
-      ...(typeof pollIntervalMs !== 'undefined' ? { pollIntervalMs } : {}),
-      ...(typeof timeoutMs !== 'undefined' ? { timeoutMs } : {}),
+      ...(pollingInterval !== undefined ? { pollingInterval } : {}),
+      ...(rdns ? { rdns } : {}),
+      ...(timeout !== undefined ? { timeout } : {}),
     }),
     ...(mpp ? { mpp } : {}),
     storage,
@@ -41,7 +45,7 @@ export declare namespace create {
     CoreProvider.create.Options & cli.Options,
     'adapter' | 'authorizeAccessKey' | 'host'
   > & {
-    /** Host URL for the device-code flow. @default "https://wallet.tempo.xyz/api/auth/cli" */
+    /** Base URL of the wallet's device-code endpoints. @default "https://wallet.tempo.xyz/api/auth/device" */
     host?: string | undefined
   }
   export type ReturnType = CoreProvider.create.ReturnType

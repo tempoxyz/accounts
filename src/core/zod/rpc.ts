@@ -171,6 +171,7 @@ export const transactionRequest = z.object({
     z.array(z.object({ address: u.address(), storageKeys: z.array(u.hex()) })),
   ),
   calls: z.optional(z.readonly(z.array(call))),
+  capabilities: z.optional(z.record(z.string(), z.unknown())),
   chainId: z.optional(u.number()),
   data: z.optional(u.hex()),
   feePayer: z.optional(z.union([z.boolean(), z.string()])),
@@ -539,11 +540,19 @@ export namespace wallet_authorizeAccessKey_strict {
 }
 
 export namespace wallet_revokeAccessKey {
+  /** Parameters for revoking an access key. */
+  export const parameters = z.object({
+    /** Root account address. */
+    address: u.address(),
+    /** Address of the access key to revoke. */
+    accessKeyAddress: u.address(),
+    /** App-provided fee sponsorship for the revocation transaction. */
+    feePayer: z.optional(z.union([z.boolean(), z.string()])),
+  })
+
   export const schema = Schema.defineItem({
     method: z.literal('wallet_revokeAccessKey'),
-    params: z.readonly(
-      z.tuple([z.object({ address: u.address(), accessKeyAddress: u.address() })]),
-    ),
+    params: z.readonly(z.tuple([parameters])),
     returns: undefined,
   })
   export type Encoded = Schema.Encoded<typeof schema>
@@ -710,7 +719,7 @@ export namespace wallet_connect {
         }),
         z.object({
           digest: z.optional(u.hex()),
-          credentialId: z.optional(z.string()),
+          credentialId: z.optional(z.union([z.string(), z.array(z.string())])),
           authorizeAccessKey,
           auth,
           identity,
@@ -829,7 +838,7 @@ export namespace wallet_connect_strict {
         }),
         z.object({
           digest: z.optional(u.hex()),
-          credentialId: z.optional(z.string()),
+          credentialId: z.optional(z.union([z.string(), z.array(z.string())])),
           authorizeAccessKey,
           auth,
           identity,
@@ -1020,6 +1029,7 @@ export namespace wallet_deposit {
                 z.literal('credits'),
                 z.literal('crypto'),
                 z.literal('faucet'),
+                z.literal('mach'),
                 z.literal('referralCode'),
                 z.literal('x'),
               ]),

@@ -1,4 +1,4 @@
-const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
+const easeOut = 'cubic-bezier(0.23, 1, 0.32, 1)'
 
 // Tailwind v4 wasn't picking up the custom `.dash-tl` / `.dash-frame`
 // utilities from globals.css, so we inline the dash background-images
@@ -8,20 +8,19 @@ const HORIZONTAL_DASH = `repeating-linear-gradient(
   to right,
   var(--dash-color) 0 var(--dash-length),
   transparent var(--dash-length) calc(var(--dash-length) + var(--dash-gap))
-)`;
+)`
 const VERTICAL_DASH = `repeating-linear-gradient(
   to bottom,
   var(--dash-color) 0 var(--dash-length),
   transparent var(--dash-length) calc(var(--dash-length) + var(--dash-gap))
-)`;
+)`
 
 const cardDashStyle: React.CSSProperties = {
   backgroundImage: `${HORIZONTAL_DASH}, ${VERTICAL_DASH}`,
-  backgroundSize:
-    "100% var(--dash-thickness), var(--dash-thickness) 100%",
-  backgroundPosition: "top left, top left",
-  backgroundRepeat: "no-repeat",
-};
+  backgroundSize: '100% var(--dash-thickness), var(--dash-thickness) 100%',
+  backgroundPosition: 'top left, top left',
+  backgroundRepeat: 'no-repeat',
+}
 
 // Only paint the bottom + right of the outer frame. The cards already
 // contribute the top and left edges via `cardDashStyle`, so painting
@@ -31,64 +30,58 @@ const cardDashStyle: React.CSSProperties = {
 // noticeably darker stroke than the rest of the page).
 const frameDashStyle: React.CSSProperties = {
   backgroundImage: `${HORIZONTAL_DASH}, ${VERTICAL_DASH}`,
-  backgroundSize:
-    "100% var(--dash-thickness), var(--dash-thickness) 100%",
-  backgroundPosition: "bottom left, top right",
-  backgroundRepeat: "no-repeat",
-};
+  backgroundSize: '100% var(--dash-thickness), var(--dash-thickness) 100%',
+  backgroundPosition: 'bottom left, top right',
+  backgroundRepeat: 'no-repeat',
+}
 
 type Guide = {
-  title: string;
-  href: string;
-};
+  title: string
+  href: string
+}
 
 const GUIDES: readonly Guide[] = [
   {
-    title: "Getting Started",
-    href: "/docs",
+    title: 'Getting Started',
+    href: '/docs',
   },
   {
-    title: "Authentication",
-    href: "/docs/guides/connect-accounts",
+    title: 'Authentication',
+    href: '/docs/guides/connect-accounts',
   },
   {
-    title: "Transfers",
-    href: "/docs/guides/transfers",
+    title: 'Transfers',
+    href: '/docs/guides/transfers',
   },
   {
-    title: "Spend Permissions",
-    href: "/docs/guides/spend-permissions",
+    title: 'Spend Permissions',
+    href: '/docs/guides/spend-permissions',
   },
   {
-    title: "Subscriptions",
-    href: "/docs/guides/subscriptions",
+    title: 'Subscriptions',
+    href: '/docs/guides/subscriptions',
   },
   {
-    title: "Fee Sponsorship",
-    href: "/docs/guides/fee-sponsorship",
+    title: 'Fee Sponsorship',
+    href: '/docs/guides/fee-sponsorship',
   },
   {
-    title: "Exchange Currencies",
-    href: "/docs/guides/swaps",
+    title: 'Exchange Currencies',
+    href: '/docs/guides/swaps',
   },
   {
-    title: "Deposits",
-    href: "/docs/guides/deposits",
+    title: 'Deposits',
+    href: '/docs/guides/deposits',
   },
   {
-    title: "Themes",
-    href: "/docs/guides/theming",
+    title: 'Themes',
+    href: '/docs/guides/theming',
   },
-];
+]
 
 function ArrowUpRight() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden
-      className="size-4 sm:size-6"
-    >
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="size-4 sm:size-6">
       <path
         d="M8 17L17 8M17 8H9M17 8V16"
         stroke="currentColor"
@@ -97,7 +90,7 @@ function ArrowUpRight() {
         strokeLinejoin="round"
       />
     </svg>
-  );
+  )
 }
 
 export default function Guides() {
@@ -111,14 +104,11 @@ export default function Guides() {
           Guides
         </h2>
         <p className="text-[18px] text-foreground-muted">
-          Learn the core SDK flows, from authentication and deposits to
-          transfers, subscriptions, exchange, and theming.
+          Learn the core SDK flows, from authentication and deposits to transfers, subscriptions,
+          exchange, and theming.
         </p>
       </div>
-      <div
-        className="-mx-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-        style={frameDashStyle}
-      >
+      <div className="-mx-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={frameDashStyle}>
         {GUIDES.map((g) => (
           <a
             key={g.title}
@@ -129,9 +119,7 @@ export default function Guides() {
             <span className="relative z-10 order-2 inline-flex text-foreground-muted sm:order-none sm:text-foreground">
               <ArrowUpRight />
             </span>
-            <span className="relative z-10 min-w-0 text-[18px] leading-tight">
-              {g.title}
-            </span>
+            <span className="relative z-10 min-w-0 text-[18px] leading-tight">{g.title}</span>
           </a>
         ))}
         <div
@@ -141,5 +129,5 @@ export default function Guides() {
         />
       </div>
     </section>
-  );
+  )
 }

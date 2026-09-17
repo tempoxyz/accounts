@@ -25,6 +25,19 @@ const payment = ServerMppx.create({
   secretKey: 'test-secret-key-test-secret-key-32',
 })
 
+const sponsoredPayment = ServerMppx.create({
+  methods: [
+    tempo({
+      account: accounts[1]!,
+      currency: Addresses.pathUsd,
+      feePayer: accounts[0]!,
+      getClient: () => client,
+    }),
+  ],
+  realm: 'mppx-sponsored-test',
+  secretKey: 'sponsored-test-secret-key-32-bytes',
+})
+
 let server: Server
 
 beforeAll(async () => {
@@ -88,6 +101,44 @@ describe('mppx integration', () => {
 
     const res = await mppx.fetch(`${server.url}/fortune`)
     expect(res.status).toMatchInlineSnapshot(`200`)
+  })
+
+  test('pull mode preserves server-sponsored transactions', async () => {
+    const sponsoredServer = await createServer(async (req, res) => {
+      const result = await ServerMppx.toNodeListener(sponsoredPayment.charge({ amount: '1' }))(
+        req,
+        res,
+      )
+      if (result.status === 402) return
+      res.writeHead(200)
+      res.end()
+    })
+
+    try {
+      const provider = Provider.create({
+        adapter: headlessWebAuthn(),
+        chains: [chain],
+        mpp: false,
+      })
+      const address = await connect(provider)
+      await fund(address, '1')
+
+      const mppx = ClientMppx.create({
+        methods: [
+          clientTempo({
+            account: provider.getAccount(),
+            ...provider.getMppxParameters(),
+            mode: 'pull',
+          }),
+        ],
+        polyfill: false,
+      })
+
+      const res = await mppx.fetch(`${sponsoredServer.url}/fortune`)
+      expect(res.status).toMatchInlineSnapshot(`200`)
+    } finally {
+      await sponsoredServer.closeAsync()
+    }
   })
 
   test('mppx global front door uses provider access keys', async () => {
@@ -267,12 +318,12 @@ async function connect(provider: ReturnType<typeof Provider.create>) {
   return register.accounts[0]!.address
 }
 
-async function fund(address: `0x${string}`) {
+async function fund(address: `0x${string}`, amount = '10') {
   await Actions.token.transferSync(client, {
     account: accounts[0]!,
     feeToken: Addresses.pathUsd,
     to: address,
     token: Addresses.pathUsd,
-    amount: parseUnits('10', 6),
+    amount: parseUnits(amount, 6),
   })
 }

@@ -1,5 +1,7 @@
 auditConfig:
   ignoreGhsas:
+    - GHSA-5p2g-fcmc-qvqq # transitive image-size build-tooling DoS; patched 2.0.3 is not published on npm.
+    - GHSA-w3rx-r6r6-pgpr # transitive image-size build-tooling DoS; patched 2.0.3 is not published on npm.
     - GHSA-rmmr-r34h-pfm5 # affected versions have been removed from npm.
     - GHSA-w5hq-g745-h8pq # transitive Expo xcode uuid usage; no direct runtime exposure.
     - GHSA-qjx8-664m-686j # transitive Privy js-cookie usage in playground.
@@ -35,22 +37,22 @@ catalog:
   '@vitejs/devtools': ^0.2.0
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.6.0
-  hono: ^4.12.27
-  mppx: ^0.8.6
-  ox: 0.14.30
+  hono: ^4.13.5
+  mppx: ^0.9.0
+  ox: 0.14.34
   prool: ~0.2.4
   react: ^19.2.8
   react-dom: ^19.2.8
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: 2.54.6
+  viem: 2.56.0
   vite: ^8.0.16
   vite-plus: ~0.1.24
   vp: npm:vite-plus@~0.1.24
   wagmi: ^3.7.0
   wrangler: ^4.98.0
-  zod: ^4.3.6
+  zod: ^4.4.3
 
 minimumReleaseAge: 1440
 
@@ -60,15 +62,25 @@ minimumReleaseAgeExclude:
   - '@voidzero-dev/*'
   - '@wagmi/connectors'
   - '@wagmi/core'
-  - brace-expansion@1.1.17
-  - brace-expansion@2.1.3
-  - brace-expansion@5.0.8
+  - brace-expansion@1.1.18
+  - brace-expansion@2.1.4
+  - brace-expansion@5.0.9
   - esbuild
   - incur
   - mermaid
   - mppx
   - ox
-  - postcss@8.5.18
+  - dompurify@3.4.13
+  - fast-uri@3.1.5
+  - hono@4.13.5
+  - ip-address@10.3.1
+  - js-yaml@3.15.2
+  - js-yaml@4.3.2
+  - nanoid@3.3.18
+  - postcss@8.5.23
+  - socket.io-parser@4.2.7
+  - undici@7.29.0
+  - undici@8.9.0
   - react@19.2.8
   - react-dom@19.2.8
   - react-server-dom-webpack@19.2.8
@@ -90,57 +102,72 @@ overrides:
   accounts: 'workspace:*'
   # GHSA-4x5r-pxfx-6jf8: @babel/core arbitrary file read via sourceMappingURL (7.29.1 unpublished; 7.29.6 is first patched release).
   '@babel/core@<=7.29.0': '7.29.6'
+  # GHSA-c83g-rgw3-j3cx and GHSA-73wf-gq98-2v4g: Browserslist path traversal and ReDoS.
+  'browserslist@<=4.28.6': '4.28.7'
   '@grpc/grpc-js': '1.14.4'
   # GHSA-frvp-7c67-39w9 and GHSA-9mqv-5hh9-4cgg: v2 preserves the getRequestListener API used by wata.
   '@hono/node-server@>=1.0.0 <2.0.10': '2.0.10'
   '@sinclair/typebox': '^0.34.0'
+  # GHSA-p95v-992w-h6c3: prototype pollution via nested decoder keys.
+  '@toon-format/toon@<2.3.1': '2.3.1'
   'axios@>=1.0.0 <1.18.0': '1.18.0'
   'body-parser@>=2.0.0 <2.3.0': '2.3.0'
   # GHSA-3jxr-9vmj-r5cp and GHSA-mh99-v99m-4gvg: brace-expansion DoS.
-  'brace-expansion@<1.1.17': '1.1.17'
-  'brace-expansion@>=2.0.0 <2.1.3': '2.1.3'
-  'brace-expansion@>=3.0.0 <5.0.8': '5.0.8'
+  'brace-expansion@<1.1.18': '1.1.18'
+  'brace-expansion@>=2.0.0 <2.1.4': '2.1.4'
+  'brace-expansion@>=3.0.0 <5.0.9': '5.0.9'
   # GHSA-rp9w-3fw7-7cwq et al: DOMPurify hook/config sanitization bypasses.
-  'dompurify@<=3.4.11': '3.4.12'
+  'dompurify@<=3.4.12': '3.4.13'
+  # GHSA-vcc3-ghjq-m6fr: decode-uri-component malformed-input DoS; the advisory's 0.4.3 floor is unpublished.
+  'decode-uri-component@<=0.4.2': '0.5.0'
   esbuild: '0.28.1'
-  # GHSA-v2hh-gcrm-f6hx: host confusion via a literal backslash authority delimiter.
-  'fast-uri@>=3.0.0 <3.1.4': '3.1.4'
-  viem: 2.54.6
+  # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname and scheme confusion.
+  'fast-uri@>=3.0.0 <3.1.6': '3.1.6'
+  viem: 2.56.0
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
   'form-data@>=4.0.0 <4.0.6': '4.0.6'
-  # Patch Hono CORS, static serving, adapter, header, JSX, and API Gateway advisories.
-  'hono@>=4.0.0 <4.12.27': '4.12.27'
+  # Patch Hono static-generation traversal, body-parser exhaustion, and query parsing advisories.
+  'hono@>=4.0.0 <4.13.5': '4.13.5'
+  'ip-address@<=10.3.0': '10.3.1'
   # GHSA-v6wh-96g9-6wx3: launch-editor NTLMv2 hash disclosure via UNC path (dev tooling).
   'launch-editor@<=2.14.0': '2.14.1'
   'js-cookie@<=3.0.5': '3.0.7'
-  # GHSA-52cp-r559-cp3m: quadratic-complexity DoS in merge-key chains.
-  js-yaml@^3: '3.15.0'
-  js-yaml@4: '4.3.0'
-  mermaid: '^11.14.1'
-  ox: 0.14.30
-  postcss: '8.5.18'
+  # GHSA-2883-xcg3-v3hh: maxTotalMergeKeys bypass with empty merge sources.
+  js-yaml@^3: '3.15.2'
+  js-yaml@4: '4.3.2'
+  mermaid: '11.16.1'
+  'nanoid@<3.3.18': '3.3.18'
+  ox: 0.14.34
+  postcss: '8.5.23'
   protobufjs: '7.6.5'
   '@protobufjs/utf8': '1.1.1'
-  qs: '6.15.2'
+  # GHSA-x5fp-wj9c-mxmx and GHSA-4mjr-xmp4-gh2g: qs arrayLimit bypass and prototype pollution.
+  qs: '6.16.0'
   react-server-dom-webpack: '19.2.8'
   # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
   reselect: '5.1.0'
   seroval: '1.5.3'
-  # GHSA-f88m-g3jw-g9cj: inherited libvips vulnerabilities.
-  'sharp@<0.35.0': '0.35.0'
+  'socket.io-parser@>=4.0.0 <4.2.7': '4.2.7'
+  # GHSA-rgj7-g3m4-5g8c: inherited libheif vulnerabilities.
+  'sharp@<0.35.4': '0.35.4'
   # GHSA-395f-4hp3-45gv: quadratic-complexity DoS in shell-quote parse().
   'shell-quote@>=1.1.0 <1.9.0': '1.9.0'
   react: 'catalog:'
   react-dom: 'catalog:'
   tar: '7.5.21'
+  # GHSA-82x6-q7mm-w9cf and GHSA-v5mp-jgw5-2x6j: prototype pollution in dotted key paths.
+  'toml@<4.2.0': '4.2.0'
   'tmp@<0.2.7': '0.2.7'
   # GHSA-vmh5-mc38-953g + GHSA-38rv-x7px-6hhq + GHSA-pr7r-676h-xcf6: undici proxy TLS/cache/WebSocket advisories.
-  'undici@>=7.0.0 <7.28.0': '7.28.0'
-  'undici@>=8.0.0 <8.5.0': '8.5.0'
+  'undici@>=7.0.0 <7.29.0': '7.29.0'
+  'undici@>=8.0.0 <8.9.0': '8.9.0'
   'uuid@<11.1.1': '11.1.1'
   valibot: '1.4.2'
+  # GHSA-6gmq-8vp8-gcm6: xmldom XML namespace confusion.
+  '@xmldom/xmldom@>=0.7.0 <0.8.15': '0.8.15'
+  '@xmldom/xmldom@>=0.9.0 <0.9.12': '0.9.12'
   # GHSA-fx2h-pf6j-xcff: vite server.fs.deny bypass on Windows alternate paths (dev tooling).
   # Unconditional pin: range-keyed override does not rewrite `latest` importer specifiers (examples/basic).
   'vite@8': '8.0.16'

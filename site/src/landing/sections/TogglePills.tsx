@@ -1,8 +1,8 @@
-"use client";
+'use client'
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from 'react'
 
-const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
+const easeOut = 'cubic-bezier(0.23, 1, 0.32, 1)'
 
 /**
  * Animated toggle pill group with a sliding active highlight. Modeled on
@@ -15,31 +15,29 @@ export function TogglePills<const T extends string>({
   onChange,
   label,
 }: {
-  options: readonly { id: T; label: string }[];
-  value: T;
-  onChange: (next: T) => void;
-  label?: string;
+  options: readonly { id: T; label: string }[]
+  value: T
+  onChange: (next: T) => void
+  label?: string
 }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null)
   const [highlight, setHighlight] = useState({
     left: 0,
     width: 0,
     ready: false,
-  });
+  })
 
   useEffect(() => {
-    const container = ref.current;
-    if (!container) return;
-    const button = container.querySelector<HTMLButtonElement>(
-      `button[data-toggle="${value}"]`,
-    );
-    if (!button) return;
+    const container = ref.current
+    if (!container) return
+    const button = container.querySelector<HTMLButtonElement>(`button[data-toggle="${value}"]`)
+    if (!button) return
     setHighlight({
       left: button.offsetLeft,
       width: button.offsetWidth,
       ready: true,
-    });
-  }, [value]);
+    })
+  }, [value])
 
   return (
     <div className="flex items-stretch gap-3">
@@ -58,24 +56,24 @@ export function TogglePills<const T extends string>({
             opacity: highlight.ready ? 1 : 0,
             transition: highlight.ready
               ? `transform 280ms ${easeOut}, width 280ms ${easeOut}, opacity 200ms ease-out`
-              : "opacity 200ms ease-out",
+              : 'opacity 200ms ease-out',
           }}
         />
         {options.map((o) => {
-          const active = value === o.id;
+          const active = value === o.id
           return (
             <button
               key={o.id}
               type="button"
               data-toggle={o.id}
               onClick={() => onChange(o.id)}
-              className={`relative z-10 flex items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[color] duration-150 ${active ? "text-foreground" : "text-foreground-muted"}`}
+              className={`relative z-10 flex items-center justify-center px-2.5 py-1.5 font-mono text-[14px] outline-none focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-info focus-visible:outline-offset-2 transition-[color] duration-150 ${active ? 'text-foreground' : 'text-foreground-muted'}`}
             >
               {o.label}
             </button>
-          );
+          )
         })}
       </div>
     </div>
-  );
+  )
 }

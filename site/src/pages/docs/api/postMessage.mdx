@@ -5,8 +5,7 @@ description: Connect to wallet from anywhere on the web
 
 # `postMessage`
 
-Connect to a wallet hosted on another domain from anywhere on the web. Communication happens over the [uRPC window](https://github.com/tempoxyz/urpc/blob/main/specs/transport-window.md) transport. 
-
+Connect to a wallet hosted on another domain from anywhere on the web. Communication happens over the [uRPC window](https://github.com/tempoxyz/urpc/blob/main/specs/transport-window.md) transport.
 
 ## Usage
 
@@ -27,7 +26,7 @@ const provider = Provider.create({
 
 To connect to the Tempo Wallet, use the preconfigured [`tempoWallet`](#tempowallet) below.
 
-```ts twoslash
+````ts twoslash
 import { Provider, tempoWallet } from 'accounts'
 
 const provider = Provider.create({
@@ -80,4 +79,4 @@ const adapter = postMessage({
   name: 'Example Wallet',
   rdns: 'com.example.wallet',
 })
-```
+````

@@ -15,6 +15,7 @@ import { type Handler, from } from '../../Handler.js'
  * - `POST /auth/pkce/poll/:code`
  * - `POST /auth/pkce`
  *
+ * @deprecated Use `Handler.deviceCode` with the Wata device-code transport.
  * @param {codeAuth.Options} options - Options.
  * @returns {Handler} Request handler.
  */

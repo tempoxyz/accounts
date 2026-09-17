@@ -1,5 +1,5 @@
 import { Address as core_Address, Hex, Secp256k1, Signature } from 'ox'
-import { decodeFunctionData } from 'viem'
+import { BaseError, decodeFunctionData } from 'viem'
 import type { Address } from 'viem/accounts'
 import { Abis } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
@@ -323,6 +323,140 @@ describe('privy', () => {
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: revokeAccessKey forwards a fee payer URL', async () => {
+    const { adapter, client, store } = setup()
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: other, address, feePayer: 'https://example.com/fee-payer' },
+      {
+        method: 'wallet_revokeAccessKey',
+        params: [{ accessKeyAddress: other, address, feePayer: 'https://example.com/fee-payer' }],
+      },
+    )
+
+    expect({
+      clientOptions: client.clientOptions,
+      transactions: client.transactions,
+    }).toMatchInlineSnapshot(`
+      {
+        "clientOptions": [
+          {
+            "feePayer": "https://example.com/fee-payer",
+          },
+        ],
+        "transactions": [
+          {
+            "account": {
+              "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+              "sign": [Function],
+              "signTransaction": [Function],
+              "source": "privy",
+              "type": "local",
+            },
+            "data": "0x5ae7ab320000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf",
+            "feePayer": true,
+            "to": "0xaAAAaaAA00000000000000000000000000000000",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('error: revokeAccessKey preserves local state on external fee payer errors', async () => {
+    const transactionError = new BaseError('revoke failed', {
+      cause: Object.assign(new Error('execution reverted'), {
+        data: { errorName: 'KeyAlreadyRevoked' },
+      }),
+    })
+    const { adapter, store } = setup({ transactionError })
+    store.setState({
+      accounts: [{ address }],
+      activeAccount: 0,
+      accessKeys: [
+        {
+          access: address,
+          address: other,
+          chainId: 1,
+          keyType: 'secp256k1',
+        } as never,
+      ],
+    })
+
+    await expect(
+      adapter.actions.revokeAccessKey!(
+        { accessKeyAddress: other, address, feePayer: 'https://example.com/fee-payer' },
+        {
+          method: 'wallet_revokeAccessKey',
+          params: [{ accessKeyAddress: other, address, feePayer: 'https://example.com/fee-payer' }],
+        },
+      ),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`
+      [ContractFunctionExecutionError: revoke failed
+
+      Contract Call:
+        address:   0xaAAAaaAA00000000000000000000000000000000
+        function:  revokeKey(address keyId)
+        args:               (0x2b5ad5c4795c026514f8317c7a215e218dccd6cf)
+        sender:    0x7e5f4552091a69125d5dfcb7b8c2659029395bdf
+
+      Docs: https://viem.sh/docs/contract/writeContract
+      Details: execution reverted
+      Version: viem@2.56.0]
+    `)
+
+    expect(store.getState().accessKeys).toMatchInlineSnapshot(`
+      [
+        {
+          "access": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+          "address": "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+          "chainId": 1,
+          "keyType": "secp256k1",
+        },
+      ]
+    `)
+  })
+
+  test('behavior: revokeAccessKey forwards default fee sponsorship', async () => {
+    const { adapter, client, store } = setup()
+    store.setState({ accounts: [{ address }], activeAccount: 0 })
+
+    await adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: other, address, feePayer: true },
+      {
+        method: 'wallet_revokeAccessKey',
+        params: [{ accessKeyAddress: other, address, feePayer: true }],
+      },
+    )
+
+    expect({
+      clientOptions: client.clientOptions,
+      transactions: client.transactions,
+    }).toMatchInlineSnapshot(`
+      {
+        "clientOptions": [
+          {
+            "feePayer": undefined,
+          },
+        ],
+        "transactions": [
+          {
+            "account": {
+              "address": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+              "sign": [Function],
+              "signTransaction": [Function],
+              "source": "privy",
+              "type": "local",
+            },
+            "data": "0x5ae7ab320000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf",
+            "feePayer": true,
+            "to": "0xaAAAaaAA00000000000000000000000000000000",
+          },
+        ],
+      }
+    `)
+  })
+
   test('behavior: signing silently restores wallet accounts via the Privy SDK', async () => {
     const { adapter, client, store } = setup()
     store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -642,13 +776,17 @@ function setup(options: setup.Options = {}) {
     getAccount: (() => {
       throw new Error('not implemented')
     }) as never,
-    getClient: (() => ({
-      chain: { id: 1 },
-      sendTransaction: async (parameters: unknown) => {
-        client.transactions.push(parameters)
-        return Hex.padLeft('0x1', 32)
-      },
-    })) as never,
+    getClient: ((clientOptions: unknown) => {
+      client.clientOptions.push(clientOptions)
+      return {
+        chain: { id: 1 },
+        sendTransaction: async (parameters: unknown) => {
+          client.transactions.push(parameters)
+          if (options.transactionError) throw options.transactionError
+          return Hex.padLeft('0x1', 32)
+        },
+      }
+    }) as never,
     storage,
     store,
   })
@@ -675,6 +813,8 @@ declare namespace setup {
     restoreError?: unknown
     token?: string | null | undefined
     signError?: unknown
+    /** Make the mock wallet client transaction fail. */
+    transactionError?: unknown
     /** Override the value returned by the embedded provider's `secp256k1_sign`. */
     signResult?: unknown
     /** Force the test wallet to sign with this private key (for wrong-signer tests). */
@@ -683,6 +823,7 @@ declare namespace setup {
 }
 
 type MockClient = privy.Client & {
+  clientOptions: unknown[]
   createCalls: number
   initCalls: number
   loadCalls: number
@@ -699,6 +840,7 @@ type MockClient = privy.Client & {
 
 function createClient(options: setup.Options = {}) {
   const client: MockClient = {
+    clientOptions: [] as unknown[],
     createCalls: 0,
     initCalls: 0,
     loadCalls: 0,
