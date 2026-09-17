@@ -12,7 +12,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && (github.event.label.name == 'cyclops' || github.event.label.name == 'agentic-audit')
+    permissions:
+      id-token: write
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@6a4184039b7a7537d35ace0badc96764d5a1d4d0
+
       - name: Publish event
         run: |
           set -euo pipefail
@@ -46,9 +51,13 @@ jobs:
       )
     permissions:
       contents: read
+      id-token: write
       issues: write
       pull-requests: write
     steps:
+      - name: Secure runner
+        uses: tempoxyz/gh-actions/actions/secure-runner@6a4184039b7a7537d35ace0badc96764d5a1d4d0
+
       - name: Check commenter permission
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
