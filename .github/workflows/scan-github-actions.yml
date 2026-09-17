@@ -2,8 +2,6 @@ name: Scan GitHub Actions
 
 on:
   pull_request:
-    paths:
-      - ".github/**"
   push:
     branches:
       - main
