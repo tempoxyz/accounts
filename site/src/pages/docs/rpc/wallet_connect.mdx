@@ -106,7 +106,8 @@ type AuthorizeAccessKeyCapability = {
   address?: Address
   /** Hex on the wire, decoded to `bigint`. */
   chainId?: bigint
-  expiry: number
+  /** Unix timestamp (seconds) when the key expires. Omit to keep it valid until revoked. */
+  expiry?: number
   keyType?: 'secp256k1' | 'p256' | 'webAuthn'
   limits?: {
     token: Address

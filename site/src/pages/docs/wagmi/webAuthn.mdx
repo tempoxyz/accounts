@@ -60,10 +60,12 @@ export const config = createConfig({
 
 ### accessKey.authorize
 
-- **Type:** `{ address?: Address; chainId?: bigint; expiry: number; keyType?: 'secp256k1' | 'p256' | 'webAuthn'; limits?: { token: Address; limit: bigint; period?: number }[]; privateKey?: Hex; publicKey?: Hex; scopes?: { address: Address; recipients?: Address[]; selector?: Hex | string }[] } | (() => { ... } | undefined)`
+- **Type:** `{ address?: Address; chainId?: bigint; expiry?: number; keyType?: 'secp256k1' | 'p256' | 'webAuthn'; limits?: { token: Address; limit: bigint; period?: number }[]; privateKey?: Hex; publicKey?: Hex; scopes?: { address: Address; recipients?: Address[]; selector?: Hex | string }[] } | (() => { ... } | undefined)`
 - **Optional**
 
 Access-key parameters to authorize automatically when no stored key satisfies a request. Pass an object to use the same parameters for every request, or a function to compute them per request — return `undefined` to skip authorization for that request.
+
+Omit `expiry` to keep the access key valid until it is revoked.
 
 This matches [`Provider`'s `accessKey.authorize`](/docs/api/provider#accesskeyauthorize).
 

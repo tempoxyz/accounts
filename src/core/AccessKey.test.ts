@@ -313,7 +313,7 @@ describe('prepareAuthorization', () => {
   test('default: omits expiry for a non-expiring key authorization', async () => {
     const result = await AccessKey.prepareAuthorization({ chainId: 1 })
 
-    expect(result.keyAuthorization.expiry).toBeUndefined()
+    expect(result.keyAuthorization.expiry).toMatchInlineSnapshot(`undefined`)
   })
 
   test('default: prepares generated p256 key authorization', async () => {

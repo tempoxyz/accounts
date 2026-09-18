@@ -5,7 +5,7 @@ description: Authorize an access key for delegated transaction signing.
 
 # `wallet_authorizeAccessKey`
 
-Authorizes an access key with an expiry, spending limits, and optional call scopes for delegated transaction signing.
+Authorizes an access key with an optional expiry, spending limits, and optional call scopes for delegated transaction signing.
 
 ## Request
 
@@ -20,8 +20,8 @@ type Request = {
      * Hex-encoded (`0x...`) on the wire, decoded to `bigint`.
      */
     chainId?: bigint
-    /** Unix timestamp (seconds) when the key expires. */
-    expiry: number
+    /** Unix timestamp (seconds) when the key expires. Omit to keep it valid until revoked. */
+    expiry?: number
     /** Key type. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn'
     /** TIP-20 spending limits. */
@@ -78,7 +78,7 @@ type KeyAuthorization = {
   address: Address
   /** Chain ID the authorization is scoped to. Hex on the wire. */
   chainId: bigint
-  /** Unix timestamp (seconds) when the authorization expires. May be `null`. */
+  /** Unix timestamp (seconds) when the authorization expires. Omitted means no expiry. */
   expiry: number | null | undefined
   /** Address derived from the key. */
   keyId: Address
