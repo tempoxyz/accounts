@@ -78,7 +78,7 @@ type KeyAuthorization = {
   address: Address
   /** Chain ID the authorization is scoped to. Hex on the wire. */
   chainId: bigint
-  /** Unix timestamp (seconds) when the authorization expires. Omitted means no expiry. */
+  /** Unix timestamp (seconds) when the authorization expires. `null` means no expiry. */
   expiry: number | null | undefined
   /** Address derived from the key. */
   keyId: Address
