@@ -83,7 +83,48 @@ describe('validateSearch', () => {
     expect(remote.rejectAll).not.toHaveBeenCalled()
   })
 
-  test('default: validates wallet_connect with authorizeAccessKey containing limits', () => {
+  test('default: validates wallet_authorizeAccessKey without expiry', () => {
+    const remote = createMockRemote()
+    const result = Remote.validateSearch(
+      remote,
+      {
+        method: 'wallet_authorizeAccessKey',
+        id: 3,
+        jsonrpc: '2.0',
+        params: [
+          {
+            limits: [{ token: '0x0000000000000000000000000000000000000001', limit: '0xa' }],
+            scopes: [{ address: '0x0000000000000000000000000000000000000002' }],
+          },
+        ],
+      },
+      { method: 'wallet_authorizeAccessKey' },
+    )
+
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_authorizeAccessKey",
+        "params": [
+          {
+            "limits": [
+              {
+                "limit": 10n,
+                "token": "0x0000000000000000000000000000000000000001",
+              },
+            ],
+            "scopes": [
+              {
+                "address": "0x0000000000000000000000000000000000000002",
+              },
+            ],
+          },
+        ],
+      }
+    `)
+    expect(remote.rejectAll).not.toHaveBeenCalled()
+  })
+
+  test('default: validates wallet_connect with non-expiring authorizeAccessKey', () => {
     const remote = createMockRemote()
     const result = Remote.validateSearch(
       remote,
@@ -96,7 +137,6 @@ describe('validateSearch', () => {
             capabilities: {
               method: 'register',
               authorizeAccessKey: {
-                expiry: 100,
                 limits: [{ token: '0x0000000000000000000000000000000000000001', limit: '0xa' }],
                 scopes: [{ address: '0x0000000000000000000000000000000000000002' }],
               },

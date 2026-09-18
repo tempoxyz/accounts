@@ -315,8 +315,8 @@ export declare namespace prepareAuthorization {
     address?: Address.Address | undefined
     /** Chain ID the key authorization is scoped to. */
     chainId: bigint | number
-    /** Unix timestamp when the key expires. */
-    expiry: number
+    /** Unix timestamp when the key expires. Omit for a non-expiring key. */
+    expiry?: number | undefined
     /**
      * Keystores used to create key material when none is provided.
      * @default Keystore.defaults

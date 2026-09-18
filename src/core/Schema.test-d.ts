@@ -65,7 +65,7 @@ describe('Encoded', () => {
                   authorizeAccessKey?:
                     | {
                         address?: Hex | undefined
-                        expiry: number
+                        expiry?: number | undefined
                         keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
                         limits?: readonly { token: Hex; limit: Hex }[] | undefined
                         publicKey?: Hex | undefined
@@ -81,7 +81,7 @@ describe('Encoded', () => {
                   authorizeAccessKey?:
                     | {
                         address?: Hex | undefined
-                        expiry: number
+                        expiry?: number | undefined
                         keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
                         limits?: readonly { token: Hex; limit: Hex }[] | undefined
                         publicKey?: Hex | undefined

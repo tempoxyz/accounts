@@ -475,7 +475,7 @@ export namespace wallet_authorizeAccessKey {
   export const parameters = z.object({
     address: z.optional(u.address()),
     chainId: z.optional(u.bigint()),
-    expiry: z.number(),
+    expiry: z.optional(z.number()),
     keyType: z.optional(keyType),
     limits: z.optional(
       z.readonly(
@@ -516,7 +516,7 @@ export namespace wallet_authorizeAccessKey {
 export namespace wallet_authorizeAccessKey_strict {
   export const parameters = z.object({
     address: z.optional(u.address()),
-    expiry: z.number(),
+    expiry: z.optional(z.number()),
     keyType: z.optional(keyType),
     limits: z.readonly(
       z

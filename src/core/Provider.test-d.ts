@@ -72,6 +72,10 @@ describe('create options', () => {
     })
 
     Provider.create({
+      authorizeAccessKey: {},
+    })
+
+    Provider.create({
       authorizeAccessKey: () => undefined,
     })
   })

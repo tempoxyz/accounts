@@ -409,8 +409,8 @@ export declare namespace authorizeAccessKey {
     address?: Address | undefined
     /** Chain ID the key authorization is scoped to. Defaults to the active chain. */
     chainId?: bigint | undefined
-    /** Unix timestamp (seconds) when the key expires. */
-    expiry: number
+    /** Unix timestamp (seconds) when the key expires. Omit for a non-expiring key. */
+    expiry?: number | undefined
     /** External key type. Defaults to `secp256k1` for external keys. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
