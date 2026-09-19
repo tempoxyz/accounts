@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@6a4184039b7a7537d35ace0badc96764d5a1d4d0
+        uses: tempoxyz/gh-actions/actions/secure-runner@0a60d757d0f4725a34f22f7b9ebf7b91b4b00bcf
 
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -50,13 +50,13 @@ jobs:
 
       - name: Fetch GitHub token via STS
         id: sts
-        uses: tempoxyz/gh-actions/actions/github-sts@c0292122e255def866c64c55e5844d1e7d5fe7ad # main
+        uses: tempoxyz/gh-actions/actions/github-sts@0a60d757d0f4725a34f22f7b9ebf7b91b4b00bcf # main
         with:
           policy: changesets
 
       - name: Create or update release pull request
         id: changesets
-        uses: tempoxyz/gh-actions/vendor/changesets/action@6f436eb3a168279692739e8c0c9fdb52b94bfae7
+        uses: tempoxyz/gh-actions/vendor/changesets/action@0a60d757d0f4725a34f22f7b9ebf7b91b4b00bcf
         with:
           commitMode: github-api
           title: 'chore: version packages'
@@ -78,7 +78,7 @@ jobs:
 
     steps:
       - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@6a4184039b7a7537d35ace0badc96764d5a1d4d0
+        uses: tempoxyz/gh-actions/actions/secure-runner@0a60d757d0f4725a34f22f7b9ebf7b91b4b00bcf
 
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -91,7 +91,7 @@ jobs:
           skip-cache: 'true' # avoid cache poisoning attacks
 
       - name: Publish to npm
-        uses: tempoxyz/gh-actions/vendor/changesets/action@6f436eb3a168279692739e8c0c9fdb52b94bfae7
+        uses: tempoxyz/gh-actions/vendor/changesets/action@0a60d757d0f4725a34f22f7b9ebf7b91b4b00bcf
         with:
           publish: pnpm changeset:publish
         env:

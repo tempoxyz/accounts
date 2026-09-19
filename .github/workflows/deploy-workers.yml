@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@6a4184039b7a7537d35ace0badc96764d5a1d4d0
+        uses: tempoxyz/gh-actions/actions/secure-runner@0a60d757d0f4725a34f22f7b9ebf7b91b4b00bcf
 
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -62,7 +62,7 @@ jobs:
 
       - name: Deploy
         if: github.event_name != 'pull_request'
-        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@6f436eb3a168279692739e8c0c9fdb52b94bfae7
+        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@0a60d757d0f4725a34f22f7b9ebf7b91b4b00bcf
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -71,7 +71,7 @@ jobs:
       - name: Preview
         id: preview
         if: github.event_name == 'pull_request'
-        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@6f436eb3a168279692739e8c0c9fdb52b94bfae7
+        uses: tempoxyz/gh-actions/vendor/cloudflare/wrangler-action@0a60d757d0f4725a34f22f7b9ebf7b91b4b00bcf
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -80,7 +80,7 @@ jobs:
 
       - name: Preview URL
         if: github.event_name == 'pull_request'
-        uses: tempoxyz/gh-actions/actions/pr-comment@ab45d76f6e7420a094281a22aee1973ecc0754f8
+        uses: tempoxyz/gh-actions/actions/pr-comment@0a60d757d0f4725a34f22f7b9ebf7b91b4b00bcf
         with:
           header: deploy-${{ matrix.worker.name }}
           message: |
