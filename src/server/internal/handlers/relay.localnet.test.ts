@@ -1698,7 +1698,7 @@ describe('behavior: fee token resolution', () => {
     expect(transaction.feeToken).toBe(preferredToken)
   })
 
-  test('behavior: resolves to highest-balance token from token list', async () => {
+  test('behavior: skips highest-balance token until its fee pool has liquidity', async () => {
     // Create a fresh TIP20 token "betaUsd" so we can test highest-balance
     // selection without depending on a pre-deployed second token.
     const freshAccount = accounts[5]!
@@ -1751,10 +1751,23 @@ describe('behavior: fee token resolution', () => {
       account: freshAccount.address,
       calls: [transferCall()],
     })
-    customServer.close()
+    // betaUsd has the larger balance but no fee pool yet.
+    expect(transaction.feeToken?.toLowerCase()).toBe(addresses.alphaUsd.toLowerCase())
 
-    // betaUsd has higher balance (500 > 100).
-    expect(transaction.feeToken?.toLowerCase()).toBe(betaUsd.toLowerCase())
+    await Actions.amm.mintSync(rpc, {
+      account: accounts[0]!,
+      feeToken: Addresses.pathUsd,
+      userTokenAddress: betaUsd,
+      validatorTokenAddress: Addresses.pathUsd,
+      validatorTokenAmount: parseUnits('1', 6),
+      to: accounts[0]!.address,
+    })
+    const funded = await fillTransaction(customClient, {
+      account: freshAccount.address,
+      calls: [transferCall()],
+    })
+    customServer.close()
+    expect(funded.transaction.feeToken?.toLowerCase()).toBe(betaUsd.toLowerCase())
   })
 
   test('behavior: falls back to pathUSD when no preference or balances', async () => {
