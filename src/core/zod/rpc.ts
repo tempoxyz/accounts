@@ -548,6 +548,8 @@ export namespace wallet_revokeAccessKey {
     accessKeyAddress: u.address(),
     /** App-provided fee sponsorship for the revocation transaction. */
     feePayer: z.optional(z.union([z.boolean(), z.string()])),
+    /** Signed authorization for an access key that has not been published on-chain. */
+    keyAuthorization: z.optional(keyAuthorization),
   })
 
   export const schema = Schema.defineItem({

@@ -2195,6 +2195,66 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
   })
 
   describe('wallet_revokeAccessKey', () => {
+    test('error: rejects an authorization for a different access key', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      await connect(provider)
+
+      const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
+      const first = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+      const second = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      await expect(
+        provider.request({
+          method: 'wallet_revokeAccessKey',
+          params: [
+            {
+              address: connected,
+              accessKeyAddress: first.keyAuthorization.address!,
+              keyAuthorization: second.keyAuthorization,
+            },
+          ],
+        }),
+      ).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[RpcResponse.InvalidParamsError: \`keyAuthorization\` must authorize \`accessKeyAddress\`.]`,
+      )
+    })
+
+    test('behavior: atomically authorizes and revokes an unpublished access key', async () => {
+      const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+      await connect(provider)
+
+      const connected = (await provider.request({ method: 'eth_accounts' }))[0]!
+      await fund(connected)
+
+      const { keyAuthorization } = await provider.request({
+        method: 'wallet_authorizeAccessKey',
+        params: [{ expiry: Expiry.days(1) }],
+      })
+
+      await provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [
+          {
+            address: connected,
+            accessKeyAddress: keyAuthorization.address!,
+            keyAuthorization,
+          },
+        ],
+      })
+
+      const metadata = await Actions.accessKey.getMetadata(getClient(), {
+        account: connected,
+        accessKey: keyAuthorization.address!,
+      })
+      expect(metadata.isRevoked).toMatchInlineSnapshot(`true`)
+    })
+
     test('default: revokes a granted access key on-chain', async () => {
       const provider = Provider.create({ adapter: adapter(), chains: [chain] })
       await connect(provider)

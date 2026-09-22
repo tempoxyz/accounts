@@ -569,7 +569,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     if (selected.account.type === 'json-rpc') {
       await client.request({
         method: 'wallet_revokeAccessKey' as never,
-        params: [parameters] as never,
+        params: [z.encode(Rpc.wallet_revokeAccessKey.parameters, parameters)] as never,
       })
     } else {
       try {
@@ -577,6 +577,7 @@ export function create(options: create.Options = {}): create.ReturnType {
           account: selected.account as TempoAccount.Account,
           accessKey: parameters.accessKeyAddress,
           ...(feePayer ? { feePayer: true as never } : {}),
+          ...(parameters.keyAuthorization ? { keyAuthorization: parameters.keyAuthorization } : {}),
         })
       } catch (error) {
         if (typeof feePayer === 'string' || !AccessKey.isUnavailableError(error)) throw error
@@ -677,6 +678,13 @@ export function create(options: create.Options = {}): create.ReturnType {
     parameters: Adapter.revokeAccessKey.Parameters,
     request: Pick<Rpc.wallet_revokeAccessKey.Encoded, 'method' | 'params'>,
   ) {
+    if (
+      parameters.keyAuthorization &&
+      !AddressUtil.isEqual(parameters.keyAuthorization.address, parameters.accessKeyAddress)
+    )
+      throw new RpcResponse.InvalidParamsError({
+        message: '`keyAuthorization` must authorize `accessKeyAddress`.',
+      })
     if (actions.revokeAccessKey) return await actions.revokeAccessKey(parameters, request)
     if (instance.getAccount) return await revokeAccessKey(parameters)
     unsupported('revokeAccessKey')
