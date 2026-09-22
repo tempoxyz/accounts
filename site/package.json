@@ -36,8 +36,9 @@
     "@iconify-json/lucide": "^1.2.93",
     "@types/node": "catalog:",
     "@types/three": "^0.184.1",
+    "@typescript/native": "npm:typescript@7.0.2",
     "eventemitter3": "^5.0.1",
-    "typescript": "catalog:",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
     "unplugin-icons": "^23.0.1",
     "vite-plugin-mkcert": "^2.0.0"
   }
