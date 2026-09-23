@@ -23,11 +23,11 @@ jobs:
     name: Version
     needs: verify
     outputs:
-      hasChangesets: ${{ steps.changesets.outputs['has-changesets'] }}
-    # The release commits and pull request are created through the GitHub API
-    # with a short-lived GitHub App token minted via the github-sts action
-    # (authorized by .github/sts/changesets.sts.yaml); the built-in
-    # GITHUB_TOKEN is not allowed to create pull requests.
+      hasChangesets: ${{ steps.changesets.outputs.hasChangesets }}
+    # The release commits (commitMode: github-api) and the release pull
+    # request are created with a short-lived GitHub App token minted via the
+    # github-sts action (authorized by .github/sts/changesets.sts.yaml); the
+    # built-in GITHUB_TOKEN is not allowed to create pull requests.
     permissions:
       contents: read # to clone repository contents
       id-token: write # to request the OIDC token the STS exchange verifies
@@ -56,12 +56,14 @@ jobs:
 
       - name: Create or update release pull request
         id: changesets
-        uses: tempoxyz/gh-actions/vendor/changesets/action@d39baa2b43f5eba5d261c047521a4fbd56101129 # 2026-09-23T04-31-11Z-d39baa2b
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
-          github-token: ${{ steps.sts.outputs.token }}
-          pr-title: 'chore: version packages'
-          commit-message: 'chore: version packages'
-          version-script: pnpm changeset:version
+          commitMode: github-api
+          title: 'chore: version packages'
+          commit: 'chore: version packages'
+          version: pnpm changeset:version
+        env:
+          GITHUB_TOKEN: ${{ steps.sts.outputs.token }}
 
   publish:
     name: Publish
@@ -89,6 +91,8 @@ jobs:
           skip-cache: 'true' # avoid cache poisoning attacks
 
       - name: Publish to npm
-        uses: tempoxyz/gh-actions/vendor/changesets/action@d39baa2b43f5eba5d261c047521a4fbd56101129 # 2026-09-23T04-31-11Z-d39baa2b
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
-          publish-script: pnpm changeset:publish
+          publish: pnpm changeset:publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
