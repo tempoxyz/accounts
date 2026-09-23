@@ -34,11 +34,11 @@ catalog:
   '@types/node': ^25.6.0
   '@types/react': ^19.2.14
   '@types/react-dom': ^19.2.3
-  '@vitejs/devtools': ^0.2.0
+  '@vitejs/devtools': ^0.7.5
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.6.0
   hono: ^4.13.5
-  mppx: ^0.9.0
+  mppx: ^0.10.1
   ox: 0.14.34
   prool: ~0.2.4
   react: ^19.2.8
