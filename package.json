@@ -22,7 +22,7 @@
     "test": "vp test",
     "vp": "vp"
   },
-  "packageManager": "pnpm@11.0.8",
+  "packageManager": "pnpm@11.0.9",
   "devEngines": {
     "runtime": {
       "name": "node",
