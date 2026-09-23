@@ -610,8 +610,8 @@ importers:
         specifier: 'catalog:'
         version: 4.13.5
       mppx:
-        specifier: ^0.6.27
-        version: 0.6.27(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.13.5)(typescript@5.9.3)(viem@2.56.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))
+        specifier: 'catalog:'
+        version: 0.9.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.13.5)(typescript@5.9.3)(viem@2.56.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -662,8 +662,8 @@ importers:
         specifier: 'catalog:'
         version: 4.13.5
       mppx:
-        specifier: ^0.6.27
-        version: 0.6.27(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.13.5)(typescript@5.9.3)(viem@2.56.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))
+        specifier: 'catalog:'
+        version: 0.9.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.13.5)(typescript@5.9.3)(viem@2.56.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -754,8 +754,8 @@ importers:
         specifier: 'catalog:'
         version: 4.13.5
       mppx:
-        specifier: ^0.6.27
-        version: 0.6.27(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.13.5)(typescript@5.9.3)(viem@2.56.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))
+        specifier: 'catalog:'
+        version: 0.9.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(elysia@1.4.28(@sinclair/typebox@0.34.41)(exact-mirror@0.2.5(@sinclair/typebox@0.34.41))(file-type@22.0.1)(openapi-types@12.1.3)(typescript@5.9.3))(express@5.2.1)(hono@4.13.5)(typescript@5.9.3)(viem@2.56.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))
       react:
         specifier: ^19.2.8
         version: 19.2.8
