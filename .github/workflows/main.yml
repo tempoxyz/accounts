@@ -56,7 +56,7 @@ jobs:
 
       - name: Create or update release pull request
         id: changesets
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        uses: tempoxyz/gh-actions/vendor/changesets/action@6f436eb3a168279692739e8c0c9fdb52b94bfae7 # v1.9.0 zizmor: ignore[ref-version-mismatch] vendored commit has no tag
         with:
           commitMode: github-api
           title: 'chore: version packages'
@@ -91,7 +91,7 @@ jobs:
           skip-cache: 'true' # avoid cache poisoning attacks
 
       - name: Publish to npm
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        uses: tempoxyz/gh-actions/vendor/changesets/action@6f436eb3a168279692739e8c0c9fdb52b94bfae7 # v1.9.0 zizmor: ignore[ref-version-mismatch] vendored commit has no tag
         with:
           publish: pnpm changeset:publish
         env:
