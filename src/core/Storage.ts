@@ -4,6 +4,9 @@ import { Json } from 'ox'
 import type { MaybePromise } from '../internal/types.js'
 
 const supportsStructuredClone = Symbol.for('accounts.storage.supportsStructuredClone')
+const update = Symbol.for('accounts.storage.update')
+
+type Update = <value>(name: string, update: (value: value | null) => value) => MaybePromise<void>
 
 /** Pluggable storage adapter. */
 export type Storage = {
@@ -13,6 +16,8 @@ export type Storage = {
   setItem: (name: string, value: unknown) => MaybePromise<void>
   /** Removes a stored value. */
   removeItem: (name: string) => MaybePromise<void>
+  /** Atomically updates a stored value when supported by the adapter. */
+  [update]?: Update | undefined
 }
 
 type StructuredStorage = Storage & { [supportsStructuredClone]?: true | undefined }
@@ -25,6 +30,12 @@ export function from(storage: Storage, options: from.Options = {}): Storage {
     getItem: <value>(name: string) => storage.getItem<value>(`${prefix}${name}`),
     setItem: (name: string, value: unknown) => storage.setItem(`${prefix}${name}`, value),
     removeItem: (name: string) => storage.removeItem(`${prefix}${name}`),
+    ...(storage[update]
+      ? {
+          [update]: <value>(name: string, fn: (value: value | null) => value) =>
+            storage[update]!(`${prefix}${name}`, fn),
+        }
+      : {}),
   }
   if (canStructuredClone(storage)) return markStructuredClone(scoped)
   return scoped
@@ -44,6 +55,29 @@ function canStructuredClone(storage: Storage): boolean {
 
 function markStructuredClone(storage: Storage): Storage {
   return Object.assign(storage, { [supportsStructuredClone]: true as const })
+}
+
+/** Atomically updates a value when the storage adapter supports transactions. */
+export function updateItem<value>(
+  storage: Storage,
+  name: string,
+  fn: (value: value | null) => value,
+): MaybePromise<void> {
+  const update_ = storage[update]
+  if (update_) return update_(name, fn)
+  return Promise.resolve(storage.getItem<value>(name)).then((value) =>
+    storage.setItem(name, fn(value)),
+  )
+}
+
+/** Returns whether a storage adapter supports atomic updates. */
+export function supportsUpdate(storage: Storage): boolean {
+  return typeof storage[update] === 'function'
+}
+
+/** Adds atomic update support to a storage implementation. */
+export function withUpdate(storage: Storage, update_: Update): Storage {
+  return Object.assign(storage, { [update]: update_ })
 }
 
 /**
