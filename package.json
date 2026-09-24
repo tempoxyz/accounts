@@ -1,7 +1,6 @@
 {
   "scripts": {
     "build": "zile",
-    "changeset:publish": "zile publish:prepare && changeset publish && zile publish:post",
     "changeset:version": "changeset version && pnpm check",
     "check": "vp lint --fix --ignore-pattern package.json && vp fmt src examples playgrounds ref-impls scripts test",
     "dev": "docker compose up -d",
@@ -32,7 +31,7 @@
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.6.0",
-    "@changesets/cli": "^2.31.0",
+    "@changesets/cli": "^3.0.3",
     "@privy-io/react-auth": "3.25.0",
     "@remix-run/route-pattern": "^0.20.0",
     "@types/express": "^5.0.6",
