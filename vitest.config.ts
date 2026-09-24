@@ -22,6 +22,8 @@ export default defineConfig({
             '!./src/**/*.localnet.test.ts',
           ],
           name: 'lib/pure',
+          // Hoisted vi.mock calls need the mocks API before vp/test is imported.
+          globals: true,
         },
       },
       {
