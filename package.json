@@ -1,7 +1,7 @@
 {
   "scripts": {
     "build": "zile",
-    "changeset:publish": "zile publish:prepare && changeset publish && zile publish:post",
+    "changeset:publish": "node --experimental-strip-types ./scripts/publish.ts",
     "changeset:version": "changeset version && pnpm check",
     "check": "vp lint --fix --ignore-pattern package.json && vp fmt src examples playgrounds ref-impls scripts test",
     "dev": "docker compose up -d",
@@ -20,6 +20,7 @@
     "postinstall": "pnpm preconstruct",
     "preconstruct": "zile dev",
     "test": "vp test",
+    "test:publish": "node --experimental-strip-types --test ./scripts/publish.test.ts",
     "vp": "vp"
   },
   "packageManager": "pnpm@11.0.8",
