@@ -35,6 +35,9 @@ jobs:
       - name: Check code
         run: pnpm -w check
 
+      - name: Test publishing
+        run: pnpm test:publish
+
       - name: Check build
         run: pnpm -w build
 
