@@ -1,7 +1,1 @@
 version: 3
-
-ignore_actions:
-  # This vendored action is byte-identical to changesets/action v1.9.0, but
-  # the gh-actions repository did not tag the vendoring commit.
-  - name: tempoxyz/gh-actions/vendor/changesets/action
-    ref: 6f436eb3a168279692739e8c0c9fdb52b94bfae7
