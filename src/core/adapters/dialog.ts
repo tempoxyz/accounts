@@ -1,4 +1,4 @@
-import { Hex, Provider as ox_Provider } from 'ox'
+import { Hex, Provider as ox_Provider, RpcResponse } from 'ox'
 import { custom } from 'viem'
 import { z } from 'zod/mini'
 
@@ -59,6 +59,16 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
     const provider = ox_Provider.from(
       {
         async request(r) {
+          const fundingPolicy =
+            r.method === 'wallet_connect'
+              ? r.params?.[0]?.capabilities?.authorizeAccessKey?.fundingPolicy
+              : r.method === 'wallet_authorizeAccessKey'
+                ? r.params?.[0]?.fundingPolicy
+                : undefined
+          if (fundingPolicy !== undefined)
+            throw new RpcResponse.InvalidParamsError({
+              message: '`fundingPolicy` is not supported by the dialog adapter.',
+            })
           if (r.method === 'eth_chainId') return Hex.fromNumber(store.getState().chainId)
           return RemoteRequests.request(host, {
             account: getActiveAccount(),

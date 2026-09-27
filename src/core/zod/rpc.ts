@@ -64,6 +64,7 @@ const fundingPolicyId = u.bigint().check(z.minimum(1n), z.maximum(0xffffffffffff
 
 const fundingPolicy = z.union([fundingPolicyId, fundingPolicyInline])
 const fundingPolicyRequest = z.union([
+  z.literal(true),
   fundingPolicyId,
   z.object({ ...fundingPolicyInline.shape, admins: z.optional(fundingPolicyInline.shape.admins) }),
 ])

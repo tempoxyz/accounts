@@ -1191,7 +1191,7 @@ describe('funding policy authorization', () => {
   })
 
   test('rejects explicit empty admins and invalid policy IDs', () => {
-    for (const fundingPolicy of [{ admins: [], rules }, '0x0', '0x10000000000000000'])
+    for (const fundingPolicy of [false, { admins: [], rules }, '0x0', '0x10000000000000000'])
       expect(
         z.safeParse(Rpc.wallet_authorizeAccessKey.parameters, { expiry: 123, fundingPolicy })
           .success,
@@ -1214,4 +1214,34 @@ describe('funding policy authorization', () => {
       z.safeParse(Rpc.keyAuthorization, { ...authorization, fundingPolicy: { rules } }).success,
     ).toMatchInlineSnapshot(`false`)
   })
+})
+
+test('funding policy intent is accepted only on unsigned requests', () => {
+  const parameters = { expiry: 123, fundingPolicy: true } as const
+  for (const schema of [
+    Rpc.wallet_authorizeAccessKey.parameters,
+    Rpc.wallet_connect.authorizeAccessKey,
+  ])
+    expect(z.decode(schema, z.encode(schema, parameters))).toEqual(parameters)
+  expect(
+    z.parse(Rpc.wallet_authorizeAccessKey_strict.parameters, {
+      ...parameters,
+      limits: [{ token, limit: '0x1' }],
+      scopes: [{ address: contract }],
+    }).fundingPolicy,
+  ).toMatchInlineSnapshot(`true`)
+  const authorization = KeyAuthorization.toRpc(
+    KeyAuthorization.from(
+      {
+        address: accessKey,
+        chainId: 1n,
+        expiry: 123,
+        type: 'p256',
+      },
+      { signature: `0x${'00'.repeat(65)}` },
+    ),
+  )
+  expect(
+    z.safeParse(Rpc.keyAuthorization, { ...authorization, fundingPolicy: true }).success,
+  ).toMatchInlineSnapshot(`false`)
 })

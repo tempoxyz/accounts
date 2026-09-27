@@ -1,5 +1,4 @@
 import { Provider as ox_Provider } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
 import { tempoLocalnet } from 'viem/tempo/chains'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vp/test'
 
@@ -480,11 +479,11 @@ describe('dialog', () => {
   })
 })
 
-describe('funding policy forwarding', () => {
+describe('funding policies', () => {
   const rules = { maxSlippageBps: 100, sources: {} }
-  for (const method of ['wallet_connect', 'wallet_authorizeAccessKey'] as const)
-    test.each(['0x7', { rules }, { admins: [address], rules }] as const)(
-      `${method} preserves requested and signed policies: %s`,
+  for (const method of ['login', 'register', 'wallet_authorizeAccessKey'] as const)
+    test.each([true, '0x7', { rules }, { admins: [address], rules }] as const)(
+      `${method} rejects funding policies before forwarding: %s`,
       async (fundingPolicy) => {
         const dialog_ = createDialog()
         const provider = Provider.create({
@@ -495,38 +494,24 @@ describe('funding policy forwarding', () => {
         provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
         const parameters = { address: accessKey, expiry: 123, fundingPolicy } as const
         const promise =
-          method === 'wallet_connect'
-            ? provider.request({
-                method,
-                params: [{ capabilities: { authorizeAccessKey: parameters } }],
+          method === 'wallet_authorizeAccessKey'
+            ? provider.request({ method, params: [parameters] })
+            : provider.request({
+                method: 'wallet_connect',
+                params: [
+                  {
+                    capabilities: {
+                      method,
+                      ...(method === 'register' ? { name: 'new' } : { selectAccount: true }),
+                      authorizeAccessKey: parameters,
+                    },
+                  },
+                ],
               })
-            : provider.request({ method, params: [parameters] })
-        const request = await dialog_.takeRequest()
-        expect(request.request).toMatchObject({
-          method,
-          params:
-            method === 'wallet_connect'
-              ? [{ capabilities: { authorizeAccessKey: { fundingPolicy } } }]
-              : [{ fundingPolicy }],
-        })
-        const authorization = KeyAuthorization.from(
-          {
-            address: accessKey,
-            chainId: BigInt(tempoLocalnet.id),
-            expiry: 123,
-            type: 'secp256k1',
-            fundingPolicy:
-              typeof fundingPolicy === 'string' ? 7n : { ...fundingPolicy, admins: [address] },
-          },
-          { signature: `0x${'00'.repeat(65)}` },
+        await expect(promise).rejects.toThrow(
+          '`fundingPolicy` is not supported by the dialog adapter.',
         )
-        const keyAuthorization = { ...KeyAuthorization.toRpc(authorization), address: accessKey }
-        const result =
-          method === 'wallet_connect'
-            ? { accounts: [{ address, capabilities: { keyAuthorization } }] }
-            : { rootAddress: address, keyAuthorization }
-        dialog_.success(request, result)
-        expect(await promise).toEqual(result)
+        expect(dialog_.synced.flat()).toMatchInlineSnapshot(`[]`)
       },
     )
 })

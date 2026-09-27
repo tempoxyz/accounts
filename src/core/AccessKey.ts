@@ -118,8 +118,9 @@ export type ReusePolicy = {
   minLimits?: readonly KeyAuthorization.TokenLimit[] | undefined
 }
 
-/** Funding policy request. Omitted admins default to the authorizing root account. */
+/** Funding policy request. `true` selects the handler default; omitted admins default to the root account. */
 export type FundingPolicy =
+  | true
   | bigint
   | {
       /** Policy admins. Defaults to the authorizing root account; an empty list is invalid. */
@@ -376,7 +377,7 @@ export declare namespace prepareAuthorization {
 
 /** Prepares, signs, and saves an access key authorization. */
 export async function authorize(options: authorize.Options): Promise<authorize.ReturnType> {
-  const { account, chainId, parameters } = options
+  const { account, chainId, client, parameters } = options
   const { store } = options
   const prepared = await prepareAuthorization({
     ...parameters,
@@ -387,9 +388,32 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
             ...parameters.fundingPolicy,
             admins: parameters.fundingPolicy.admins ?? [account.address],
           }
-        : parameters.fundingPolicy,
+        : parameters.fundingPolicy === true
+          ? undefined
+          : parameters.fundingPolicy,
     keystores: store.keystores,
   })
+  if (parameters.fundingPolicy === true) {
+    if (!client)
+      throw new RpcResponse.InvalidParamsError({
+        message: '`fundingPolicy: true` requires a client connected to a funding handler.',
+      })
+    const authorization = prepared.keyAuthorization
+    const resolved = await Actions.accessKey.prepareAuthorization(client, {
+      account: account.address,
+      accessKey: { address: authorization.address, type: authorization.type },
+      chainId: Number(authorization.chainId),
+      expiry: authorization.expiry ?? undefined,
+      fundingPolicy: true,
+      limits: authorization.limits ? [...authorization.limits] : undefined,
+      scopes: authorization.scopes ? [...authorization.scopes] : undefined,
+      witness: authorization.witness,
+    })
+    prepared.keyAuthorization = KeyAuthorization.from({
+      ...authorization,
+      fundingPolicy: resolved.fundingPolicy,
+    })
+  }
   const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
   const signature = await account.sign({ hash: digest })
   const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
@@ -414,6 +438,8 @@ export declare namespace authorize {
     account: Pick<TempoAccount.Account, 'address' | 'sign'>
     /** Default chain ID for the authorization when `parameters.chainId` is not set. */
     chainId: bigint | number
+    /** Client connected to the funding handler. Required for `fundingPolicy: true`. */
+    client?: Client<Transport> | undefined
     /** Access key authorization parameters. */
     parameters: Omit<prepareAuthorization.Options, 'chainId' | 'keystores' | 'fundingPolicy'> & {
       /** Funding policy. Omitted inline admins default to the authorizing root account. */

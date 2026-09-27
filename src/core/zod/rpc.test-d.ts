@@ -79,6 +79,8 @@ describe('funding policy authorization', () => {
     >['fundingPolicy']
     type Signed = z.output<typeof Rpc.keyAuthorization>['fundingPolicy']
     expectTypeOf<Request>().toEqualTypeOf<Connect>()
+    expectTypeOf<Extract<Request, boolean>>().toEqualTypeOf<true>()
+    expectTypeOf<Extract<Signed, boolean>>().toEqualTypeOf<never>()
     expectTypeOf<Extract<Request, object>['admins']>().toEqualTypeOf<
       readonly `0x${string}`[] | undefined
     >()

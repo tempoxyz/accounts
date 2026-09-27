@@ -1,5 +1,6 @@
 import { Bytes, Cbor, Hex, P256, PublicKey, Signature } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { custom } from 'viem'
 import { tempoModerato } from 'viem/tempo/chains'
 import { afterEach, describe, expect, test, vi } from 'vp/test'
 
@@ -75,6 +76,21 @@ async function setup() {
   const provider = Provider.create({
     adapter: webAuthn({ ceremony }),
     chains: [tempoModerato],
+    transports: {
+      [tempoModerato.id]: custom(
+        {
+          async request({ method, params }) {
+            expect(method).toMatchInlineSnapshot(`"eth_fillKeyAuthorization"`)
+            const [request] = params as [
+              { account: Hex.Hex; keyAuthorization: KeyAuthorization.UnsignedRpc },
+            ]
+            expect(request.account).toBe(root.address)
+            return { keyAuthorization: { ...request.keyAuthorization, fundingPolicy: '0x7' } }
+          },
+        },
+        { retryCount: 0 },
+      ),
+    },
     storage,
   })
   provider.store.setState({
@@ -173,3 +189,37 @@ describe('WebAuthn funding authorization', () => {
     })
   })
 })
+
+for (const method of ['login', 'register'] as const)
+  test(`${method} resolves the default policy after discovering the root`, async () => {
+    const { provider, get, authenticate } = await setup()
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: {
+            method,
+            ...(method === 'register' ? { name: 'new' } : { selectAccount: true }),
+            authorizeAccessKey: {
+              address: accounts[3].address,
+              keyType: 'p256',
+              expiry: 123,
+              fundingPolicy: true,
+            },
+          },
+        },
+      ],
+    })
+    const authorization = KeyAuthorization.fromRpc(
+      result.accounts[0]!.capabilities.keyAuthorization!,
+    )
+    expect(authorization.fundingPolicy).toMatchInlineSnapshot(`7n`)
+    expect(
+      SignatureEnvelope.verify(authorization.signature, {
+        address: root.address,
+        payload: KeyAuthorization.getSignPayload(authorization),
+      }),
+    ).toMatchInlineSnapshot(`true`)
+    expect(authenticate.mock.calls[0]?.[0]?.challenge).toBeUndefined()
+    expect(get.mock.calls.length).toBe(method === 'login' ? 2 : 1)
+  })

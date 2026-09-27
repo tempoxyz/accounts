@@ -23,7 +23,7 @@ type Request = {
     /** Unix timestamp (seconds) when the key expires. */
     expiry: number
     /** Funding policy ID or inline permissions. */
-    fundingPolicy?: Hex | {
+    fundingPolicy?: true | Hex | {
       admins?: readonly Address[]
       rules: {
         maxSlippageBps: number
@@ -130,7 +130,9 @@ const result = await provider.request({
 
 ## Funding policies
 
-Pass `fundingPolicy` to this method or to `wallet_connect.capabilities.authorizeAccessKey`. An existing policy ID is a nonzero `uint64`, encoded as hex over RPC. Inline policies commit the complete `rules` and `admins` in the authorization signature.
+With a local signing adapter, pass `fundingPolicy` to this method or to `wallet_connect.capabilities.authorizeAccessKey`. An existing policy ID is a nonzero `uint64`, encoded as hex over RPC. Inline policies commit the complete `rules` and `admins` in the authorization signature.
+
+Set `fundingPolicy: true` to select the funding handler's default policy. The chain transport must support `eth_fillKeyAuthorization` and have an existing default policy configured. Accounts resolves and validates the policy ID before requesting a signature. Resolution failures stop authorization. The dialog adapter does not support funding-policy requests.
 
 For inline policies, omitting `admins` defaults to `[rootAccount.address]`, using the account that authorizes the key. Explicit admins override this default. An empty admin list is invalid. Returned signed authorizations always contain explicit admins.
 
@@ -149,6 +151,6 @@ const { keyAuthorization, rootAddress } = await provider.request({
 
 The app can keep its WebCrypto key and install the returned authorization in its Viem `keyAuthorizationManager`. Signing stays inside the Accounts adapter, including when the root account is already connected.
 
-With the WebAuthn adapter, omitted admins require discovering the authenticated root before preparing the authorization. Login therefore requires a second assertion, including when a credential ID is cached. Explicit admins and existing policy IDs retain the combined login assertion. Registration resolves the created root before signing.
+With the WebAuthn adapter, `fundingPolicy: true` and omitted admins require discovering the authenticated root before preparing the authorization. Login therefore requires a second assertion, including when a credential ID is cached. Explicit admins and existing policy IDs retain the combined login assertion. Registration resolves the created root before signing.
 
 Configured authorization requests containing a funding policy request fresh approval instead of reusing a stored key whose current policy cannot be confirmed.

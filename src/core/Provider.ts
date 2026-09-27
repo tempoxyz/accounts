@@ -455,6 +455,7 @@ export function create(options: create.Options = {}): create.ReturnType {
       const keyAuthorization = await store.accessKeys.authorize({
         account: selected.account as Pick<TempoAccount.Account, 'address' | 'sign'>,
         chainId,
+        client: getClient({ chainId: Number(chainId) }),
         parameters,
       })
       return { keyAuthorization, rootAddress: selected.account.address }

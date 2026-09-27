@@ -97,8 +97,9 @@ export function local(options: local.Options): Adapter.Adapter {
             const { authorizeAccessKey: grantOptions, personalSign, ...rest } = parameters
 
             const deferred =
-              typeof grantOptions?.fundingPolicy === 'object' &&
-              grantOptions.fundingPolicy.admins === undefined
+              grantOptions?.fundingPolicy === true ||
+              (typeof grantOptions?.fundingPolicy === 'object' &&
+                grantOptions.fundingPolicy.admins === undefined)
 
             // `personalSign` claims the ceremony's challenge slot. It conflicts
             // with a caller-supplied `digest` because both target the single
@@ -135,7 +136,9 @@ export function local(options: local.Options): Adapter.Adapter {
                             ...grantOptions.fundingPolicy,
                             admins: grantOptions.fundingPolicy.admins!,
                           }
-                        : grantOptions.fundingPolicy,
+                        : grantOptions.fundingPolicy === true
+                          ? undefined
+                          : grantOptions.fundingPolicy,
                     chainId,
                     witness,
                   })
@@ -195,7 +198,8 @@ export function local(options: local.Options): Adapter.Adapter {
               // (a second ceremony when `personalSign` claimed the first).
               return await store.accessKeys.authorize({
                 account,
-                chainId: getClient().chain.id,
+                chainId,
+                client,
                 parameters: grantOptions,
               })
             })()
@@ -221,10 +225,11 @@ export function local(options: local.Options): Adapter.Adapter {
             const { authorizeAccessKey, personalSign, ...rest } =
               parameters ?? ({} as Adapter.loadAccounts.Parameters)
 
-            // Resolve default admins only after the selected account is known.
+            // Resolve the default policy or admins only after the selected account is known.
             const deferred =
-              typeof authorizeAccessKey?.fundingPolicy === 'object' &&
-              authorizeAccessKey.fundingPolicy.admins === undefined
+              authorizeAccessKey?.fundingPolicy === true ||
+              (typeof authorizeAccessKey?.fundingPolicy === 'object' &&
+                authorizeAccessKey.fundingPolicy.admins === undefined)
 
             // `personalSign` claims the ceremony's challenge slot. It conflicts
             // with a caller-supplied `digest` because both target the single
@@ -268,7 +273,9 @@ export function local(options: local.Options): Adapter.Adapter {
                             ...authorizeAccessKey.fundingPolicy,
                             admins: authorizeAccessKey.fundingPolicy.admins!,
                           }
-                        : authorizeAccessKey.fundingPolicy,
+                        : authorizeAccessKey.fundingPolicy === true
+                          ? undefined
+                          : authorizeAccessKey.fundingPolicy,
                     chainId,
                     ...(witness ? { witness } : {}),
                   })
@@ -315,6 +322,7 @@ export function local(options: local.Options): Adapter.Adapter {
                   await store.accessKeys.authorize({
                     account,
                     chainId,
+                    client,
                     parameters: authorizeAccessKey,
                   }),
                 )
