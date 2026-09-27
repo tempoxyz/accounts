@@ -269,7 +269,7 @@ const provider = Provider.create({
 
 ### feePayer
 
-- **Type:** `string | false | { url: string; precedence?: 'fee-payer-first' | 'user-first' }`
+- **Type:** `LocalAccount | string | false | { url: string; precedence?: 'fee-payer-first' | 'user-first' }`
 - **Optional**
 
 Fee payer configuration for interacting with a service running [`Handler.relay`](/docs/server/handler.relay) from `accounts/server`. Pass a URL string, an object with `url` and optional `precedence` to control whether the fee payer or the user pays first, or `false` to opt out.
@@ -294,6 +294,20 @@ const provider = Provider.create({
   }, // [!code focus]
 })
 ```
+
+For an account that signs locally, such as a passkey or managed access key, pass a local secp256k1 account to sign transaction fees in the SDK:
+
+```ts twoslash
+import { Provider, webAuthn } from 'accounts'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const provider = Provider.create({
+  adapter: webAuthn(),
+  feePayer: privateKeyToAccount('0x...'), // [!code focus]
+})
+```
+
+Configured sponsorship applies by default. Set `feePayer: false` on a transaction to opt out, or pass a URL to use a different service. RPC requests continue to accept `feePayer: true`; the local signer stays in the provider configuration. Local sponsorship requires a locally signable sender and does not apply to an external wallet's JSON-RPC account.
 
 ### identity
 

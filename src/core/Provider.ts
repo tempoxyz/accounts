@@ -13,7 +13,7 @@ import {
   type Client as ViemClient,
   type Transport,
 } from 'viem'
-import type { JsonRpcAccount } from 'viem/accounts'
+import type { JsonRpcAccount, LocalAccount } from 'viem/accounts'
 import {
   prepareTransactionRequest,
   sendTransaction,
@@ -126,6 +126,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
   const feePayerConfig = (() => {
     if (!options.feePayer) return undefined
+    if (typeof options.feePayer === 'object' && 'type' in options.feePayer) return options.feePayer
     if (typeof options.feePayer === 'string')
       return { precedence: 'fee-payer-first' as const, url: options.feePayer }
     return {
@@ -153,14 +154,21 @@ export function create(options: create.Options = {}): create.ReturnType {
   let providerRef: ox_Provider.Provider | undefined
 
   function getClient(
-    options: { chainId?: number | undefined; feePayer?: string | false | undefined } = {},
+    options: { chainId?: number | undefined; feePayer?: string | boolean | undefined } = {},
   ) {
     const { chainId, feePayer } = options
     return Client.fromChainId(chainId, {
       chains,
       feePayer: (() => {
         if (feePayer === false) return false
-        if (feePayer) return { url: feePayer, precedence: feePayerConfig?.precedence }
+        if (typeof feePayer === 'string')
+          return {
+            url: feePayer,
+            precedence:
+              feePayerConfig && 'precedence' in feePayerConfig
+                ? feePayerConfig.precedence
+                : undefined,
+          }
         return undefined
       })(),
       store,
@@ -235,7 +243,7 @@ export function create(options: create.Options = {}): create.ReturnType {
   function getWalletClient(options: {
     account: Awaited<Adapter.getAccount.ReturnType>['account']
     chainId?: number | undefined
-    feePayer?: string | false | undefined
+    feePayer?: string | boolean | undefined
     transport?: Transport | undefined
   }) {
     const client = getClient({ chainId: options.chainId, feePayer: options.feePayer })
@@ -250,8 +258,12 @@ export function create(options: create.Options = {}): create.ReturnType {
     feePayer: TransactionParameters['feePayer'],
     account: Awaited<Adapter.getAccount.ReturnType>['account'],
   ) {
-    if (account.type === 'json-rpc' && feePayer !== undefined) return { feePayer }
-    if (feePayer) return { feePayer: true as const }
+    if (account.type === 'json-rpc' && feePayer !== undefined) {
+      if (feePayer === true && feePayerConfig && 'type' in feePayerConfig)
+        throw new Error('A local fee payer requires a locally signable sender account.')
+      return { feePayer }
+    }
+    if (feePayer) return { feePayer: resolveLocalFeePayer(feePayer) }
     return {}
   }
 
@@ -304,7 +316,7 @@ export function create(options: create.Options = {}): create.ReturnType {
           const { feePayer, ...rest } = parameters
           const prepared = await transaction.prepare({
             ...rest,
-            ...(feePayer ? { feePayer: true as never } : {}),
+            ...(feePayer ? { feePayer: resolveLocalFeePayer(feePayer) } : {}),
           })
           return await prepared.sign()
         } catch {}
@@ -343,7 +355,7 @@ export function create(options: create.Options = {}): create.ReturnType {
           const { feePayer, ...rest } = parameters
           const prepared = await transaction.prepare({
             ...rest,
-            ...(feePayer ? { feePayer: true as never } : {}),
+            ...(feePayer ? { feePayer: resolveLocalFeePayer(feePayer) } : {}),
           })
           return await prepared.send()
         } catch {}
@@ -390,7 +402,7 @@ export function create(options: create.Options = {}): create.ReturnType {
           const { feePayer, ...rest } = parameters
           const prepared = await transaction.prepare({
             ...rest,
-            ...(feePayer ? { feePayer: true as never } : {}),
+            ...(feePayer ? { feePayer: resolveLocalFeePayer(feePayer) } : {}),
           })
           return await prepared.sendSync()
         } catch {}
@@ -411,7 +423,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     if (selected.account.type === 'json-rpc')
       return (await client.request({
         method: 'eth_sendTransactionSync' as never,
-        params: [z.encode(Rpc.transactionRequest, request)] as never,
+        params: [z.encode(Rpc.transactionRequest, { ...request, feePayer })] as never,
       })) as Rpc.eth_sendTransactionSync.Encoded['returns']
     const receipt = await viem_sendTransactionSync(client, {
       account: selected.account,
@@ -580,7 +592,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         await Actions.accessKey.revokeSync(client, {
           account: selected.account as TempoAccount.Account,
           accessKey: parameters.accessKeyAddress,
-          ...(feePayer ? { feePayer: true as never } : {}),
+          ...(feePayer ? { feePayer: resolveLocalFeePayer(feePayer) } : {}),
           ...(parameters.keyAuthorization ? { keyAuthorization: parameters.keyAuthorization } : {}),
         })
       } catch (error) {
@@ -712,12 +724,18 @@ export function create(options: create.Options = {}): create.ReturnType {
     return merged
   }
 
-  /** Resolves the `feePayer` field from a transaction request into an absolute URL string or `undefined`. */
-  function resolveFeePayer(feePayer: string | boolean | undefined): string | false | undefined {
+  function resolveLocalFeePayer(feePayer: string | boolean) {
+    if (feePayer === true && feePayerConfig && 'type' in feePayerConfig) return feePayerConfig
+    return true as const
+  }
+
+  /** Resolves sponsorship to the configured local signer or service URL. */
+  function resolveFeePayer(feePayer: string | boolean | undefined): string | boolean | undefined {
     if (feePayer === false) return false
+    if (typeof feePayer !== 'string' && feePayerConfig && 'type' in feePayerConfig) return true
     const url = (() => {
       if (typeof feePayer === 'string') return feePayer
-      return feePayerConfig?.url
+      return feePayerConfig && 'url' in feePayerConfig ? feePayerConfig.url : undefined
     })()
     if (!url) return undefined
     if (url.startsWith('http://') || url.startsWith('https://')) return url
@@ -1964,8 +1982,8 @@ export declare namespace create {
      * @default [tempo, tempoModerato, tempoDevnet]
      */
     chains?: readonly [Chain, ...Chain[]] | undefined
-    /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */
-    feePayer?: Client.fromChainId.Options['feePayer']
+    /** Local fee payer for locally signable accounts, service configuration, or `false` to disable sponsorship. */
+    feePayer?: LocalAccount | Client.fromChainId.Options['feePayer']
     /**
      * Identity (verified email) token minting for local adapters. When a
      * `wallet_connect` request asks for `identity.email` and the adapter

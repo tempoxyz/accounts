@@ -207,6 +207,35 @@ describe('caching', () => {
 })
 
 describe('providerTransport', () => {
+  test.each([undefined, tempo.id])(
+    'behavior: keeps local payer signers out of fill RPCs (%s)',
+    async (chainId) => {
+      const request = vi.fn(async () => ({}))
+      const client = Client.fromChainId(chainId, {
+        chains: [tempo],
+        provider: { request } as never,
+        store: setup(),
+      })
+      const feePayer = privateKeyToAccount(
+        '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      )
+      const transaction = {
+        from: feePayer.address,
+        feePayer,
+        feeToken: '0x20c0000000000000000000000000000000000000',
+      }
+      await client.request({
+        method: 'eth_fillTransaction' as never,
+        params: [transaction] as never,
+      })
+      expect(request).toHaveBeenCalledExactlyOnceWith({
+        method: 'eth_fillTransaction',
+        params: [{ ...transaction, feePayer: true, ...(chainId === undefined ? {} : { chainId }) }],
+      })
+      expect(transaction.feePayer).toBe(feePayer)
+    },
+  )
+
   test('behavior: returns empty accounts before connecting', async () => {
     const store = setup()
     const provider = Provider.create({
