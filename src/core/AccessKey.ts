@@ -1,5 +1,5 @@
 import { AbiFunction, Address, Hex, PublicKey, RpcResponse, WebCryptoP256 } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { type FundingPolicy as TempoFundingPolicy, KeyAuthorization } from 'ox/tempo'
 import { BaseError, type Client, type Transport } from 'viem'
 import {
   Account as TempoAccount,
@@ -118,10 +118,25 @@ export type ReusePolicy = {
   minLimits?: readonly KeyAuthorization.TokenLimit[] | undefined
 }
 
+/** Funding policy request. Omitted admins default to the authorizing root account. */
+export type FundingPolicy =
+  | bigint
+  | {
+      /** Policy admins. Defaults to the authorizing root account; an empty list is invalid. */
+      admins?: readonly Address.Address[] | undefined
+      /** Funding permissions committed by the authorization signature. */
+      rules: TempoFundingPolicy.Rules
+    }
+
 /** Access key authorization parameters plus SDK-only reuse policy. */
-export type ReusableAuthorization = Omit<prepareAuthorization.Options, 'chainId' | 'keystores'> & {
+export type ReusableAuthorization = Omit<
+  prepareAuthorization.Options,
+  'chainId' | 'keystores' | 'fundingPolicy'
+> & {
   /** Chain ID the key authorization is scoped to. */
   chainId?: bigint | number | undefined
+  /** Funding policy to authorize. */
+  fundingPolicy?: FundingPolicy | undefined
   /** SDK-only reuse policy. Not sent over RPC. */
   reuse?: ReusePolicy | undefined
 }
@@ -239,6 +254,7 @@ export async function prepareAuthorization(
     address,
     chainId,
     expiry,
+    fundingPolicy,
     keystores,
     keyType,
     limits,
@@ -266,6 +282,7 @@ export async function prepareAuthorization(
       address: accessKey.address,
       chainId: BigInt(chainId),
       expiry,
+      ...(fundingPolicy !== undefined ? { fundingPolicy } : {}),
       limits,
       scopes,
       type,
@@ -279,6 +296,7 @@ export async function prepareAuthorization(
       address: address ?? Address.fromPublicKey(PublicKey.from(publicKey!)),
       chainId: BigInt(chainId),
       expiry,
+      ...(fundingPolicy !== undefined ? { fundingPolicy } : {}),
       limits,
       scopes,
       type: keyType ?? 'secp256k1',
@@ -300,6 +318,7 @@ export async function prepareAuthorization(
     address: Address.fromPublicKey(PublicKey.fromHex(key.publicKey)),
     chainId: BigInt(chainId),
     expiry,
+    ...(fundingPolicy !== undefined ? { fundingPolicy } : {}),
     limits,
     scopes,
     type,
@@ -317,6 +336,8 @@ export declare namespace prepareAuthorization {
     chainId: bigint | number
     /** Unix timestamp when the key expires. */
     expiry: number
+    /** Canonical funding policy. Inline policies require explicit admins before signing. */
+    fundingPolicy?: TempoFundingPolicy.Authorization | undefined
     /**
      * Keystores used to create key material when none is provided.
      * @default Keystore.defaults
@@ -345,7 +366,9 @@ export declare namespace prepareAuthorization {
     /** Keystore-created key material reference. */
     key?: { handle: Keystore.Handle; publicKey: Hex.Hex } | undefined
     /** Unsigned key authorization to sign with the root account. */
-    keyAuthorization: KeyAuthorization.KeyAuthorization<false>
+    keyAuthorization: KeyAuthorization.KeyAuthorization<false> & {
+      type: 'secp256k1' | 'p256' | 'webAuthn'
+    }
     /** Exported private key backing an external access key. */
     privateKey?: Hex.Hex | undefined
   }
@@ -358,6 +381,13 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
   const prepared = await prepareAuthorization({
     ...parameters,
     chainId: parameters.chainId ?? chainId,
+    fundingPolicy:
+      typeof parameters.fundingPolicy === 'object'
+        ? {
+            ...parameters.fundingPolicy,
+            admins: parameters.fundingPolicy.admins ?? [account.address],
+          }
+        : parameters.fundingPolicy,
     keystores: store.keystores,
   })
   const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
@@ -385,7 +415,9 @@ export declare namespace authorize {
     /** Default chain ID for the authorization when `parameters.chainId` is not set. */
     chainId: bigint | number
     /** Access key authorization parameters. */
-    parameters: Omit<prepareAuthorization.Options, 'chainId' | 'keystores'> & {
+    parameters: Omit<prepareAuthorization.Options, 'chainId' | 'keystores' | 'fundingPolicy'> & {
+      /** Funding policy. Omitted inline admins default to the authorizing root account. */
+      fundingPolicy?: FundingPolicy | undefined
       /** Chain ID the key authorization is scoped to. */
       chainId?: bigint | number | undefined
     }
@@ -715,6 +747,8 @@ function scopesMatch(
 }
 
 function authorizationMatches(key: AccessKey, parameters: ReusableAuthorization): boolean {
+  // Stored keys do not establish the current funding policy.
+  if (parameters.fundingPolicy !== undefined) return false
   if (!scopesCover(key.scopes, parameters.scopes)) return false
   if (
     typeof parameters.reuse?.minExpiry === 'number' &&

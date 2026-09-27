@@ -47,7 +47,32 @@ export const signatureEnvelope = z.custom<SignatureEnvelope.SignatureEnvelopeRpc
 
 export const keyType = z.union([z.literal('secp256k1'), z.literal('p256'), z.literal('webAuthn')])
 
-type KeyAuthorizationRpcDecoded = Omit<KeyAuthorization.Rpc, 'chainId' | 'expiry' | 'limits'> & {
+const fundingPolicyRules = z.object({
+  maxSlippageBps: z.number().check(z.int(), z.minimum(0), z.maximum(10_000)),
+  sources: z.record(
+    u.address(),
+    z.readonly(z.array(z.object({ target: u.address(), data: u.hex() }))),
+  ),
+})
+
+const fundingPolicyInline = z.object({
+  admins: z.readonly(z.array(u.address()).check(z.minLength(1))),
+  rules: fundingPolicyRules,
+})
+
+const fundingPolicyId = u.bigint().check(z.minimum(1n), z.maximum(0xffffffffffffffffn))
+
+const fundingPolicy = z.union([fundingPolicyId, fundingPolicyInline])
+const fundingPolicyRequest = z.union([
+  fundingPolicyId,
+  z.object({ ...fundingPolicyInline.shape, admins: z.optional(fundingPolicyInline.shape.admins) }),
+])
+
+type KeyAuthorizationRpcDecoded = Omit<
+  KeyAuthorization.Rpc,
+  'chainId' | 'expiry' | 'limits' | 'fundingPolicy'
+> & {
+  fundingPolicy?: z.output<typeof fundingPolicy> | undefined
   address?: KeyAuthorization.Rpc['keyId'] | undefined
   chainId: bigint
   expiry: number | null | undefined
@@ -81,8 +106,12 @@ const keyAuthorizationRpc = z.object({
     ),
   ),
   address: z.optional(u.address()),
+  account: z.optional(z.nullable(u.address())),
+  isAdmin: z.optional(z.nullable(z.boolean())),
+  witness: z.optional(z.nullable(u.hex())),
   chainId: u.bigint(),
   expiry: z.union([u.number(), z.null(), z.undefined()]),
+  fundingPolicy: z.optional(fundingPolicy),
   keyId: u.address(),
   keyType,
   limits: z.optional(
@@ -101,6 +130,9 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
     const authorization = {
       chainId: Hex.fromNumber(value.chainId),
       expiry: value.expiry == null ? null : Hex.fromNumber(value.expiry),
+      ...(value.fundingPolicy !== undefined
+        ? { fundingPolicy: z.encode(fundingPolicy, value.fundingPolicy) }
+        : {}),
       keyId: value.keyId,
       keyType: value.keyType,
       limits: value.limits?.map(({ limit, period, token }) => ({
@@ -109,6 +141,9 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
         ...(typeof period === 'number' ? { period: Hex.fromNumber(period) } : {}),
       })),
       signature: value.signature,
+      ...(value.account != null ? { account: value.account } : {}),
+      ...(value.isAdmin != null ? { isAdmin: value.isAdmin } : {}),
+      ...(value.witness != null ? { witness: value.witness } : {}),
       ...(value.allowedCalls
         ? {
             allowedCalls: value.allowedCalls.map(({ selectorRules, target }) => ({
@@ -132,6 +167,9 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
     return {
       chainId: keyAuthorization.chainId === '0x' ? 0n : Hex.toBigInt(keyAuthorization.chainId),
       expiry: keyAuthorization.expiry == null ? null : Hex.toNumber(keyAuthorization.expiry),
+      ...(keyAuthorization.fundingPolicy !== undefined
+        ? { fundingPolicy: z.decode(fundingPolicy, keyAuthorization.fundingPolicy) }
+        : {}),
       keyId: keyAuthorization.keyId,
       keyType: keyAuthorization.keyType,
       limits: keyAuthorization.limits?.map(({ limit, period, token }) => ({
@@ -140,6 +178,9 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
         ...(period ? { period: Hex.toNumber(period) } : {}),
       })),
       signature: keyAuthorization.signature,
+      ...(keyAuthorization.account != null ? { account: keyAuthorization.account } : {}),
+      ...(keyAuthorization.isAdmin != null ? { isAdmin: keyAuthorization.isAdmin } : {}),
+      ...(keyAuthorization.witness != null ? { witness: keyAuthorization.witness } : {}),
       address: keyAuthorization.keyId,
       ...(keyAuthorization.allowedCalls
         ? {
@@ -491,6 +532,7 @@ export namespace wallet_authorizeAccessKey {
     address: z.optional(u.address()),
     chainId: z.optional(u.bigint()),
     expiry: z.number(),
+    fundingPolicy: z.optional(fundingPolicyRequest),
     keyType: z.optional(keyType),
     limits: z.optional(
       z.readonly(
@@ -532,6 +574,7 @@ export namespace wallet_authorizeAccessKey_strict {
   export const parameters = z.object({
     address: z.optional(u.address()),
     expiry: z.number(),
+    fundingPolicy: z.optional(fundingPolicyRequest),
     keyType: z.optional(keyType),
     limits: z.readonly(
       z

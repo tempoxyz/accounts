@@ -1116,3 +1116,102 @@ describe('transactionRequest.requireFunds', () => {
     `)
   })
 })
+
+describe('funding policy authorization', () => {
+  const rules = {
+    maxSlippageBps: 100,
+    sources: { [token]: [{ target: contract, data: '0x1234' }] },
+  } as const
+
+  test.each([7n, { admins: [account], rules }] as const)(
+    'round trips signed policies through connect, standalone, and transaction codecs: %s',
+    (fundingPolicy) => {
+      const authorization = KeyAuthorization.from(
+        {
+          address: accessKey,
+          chainId: 1n,
+          expiry: 123,
+          type: 'p256',
+          fundingPolicy,
+          witness: `0x${'ab'.repeat(32)}`,
+          limits: [{ token, limit: 100n, period: 60 }],
+          scopes: [{ address: contract }],
+        },
+        { signature: `0x${'00'.repeat(65)}` },
+      )
+      const encoded = z.encode(Rpc.keyAuthorization, authorization)
+      expect(encoded.fundingPolicy).toEqual(
+        typeof fundingPolicy === 'bigint' ? '0x7' : fundingPolicy,
+      )
+      expect(z.decode(Rpc.keyAuthorization, encoded)).toEqual(authorization)
+      const result = { keyAuthorization: authorization, rootAddress: account } as const
+      expect(
+        z.decode(
+          Rpc.wallet_authorizeAccessKey.returns,
+          z.encode(Rpc.wallet_authorizeAccessKey.returns, result),
+        ),
+      ).toEqual(result)
+      const capabilities = { keyAuthorization: authorization }
+      expect(
+        z.decode(
+          Rpc.wallet_connect.capabilities.result,
+          z.encode(Rpc.wallet_connect.capabilities.result, capabilities),
+        ),
+      ).toEqual(capabilities)
+      expect(
+        z.decode(
+          Rpc.transactionRequest,
+          z.encode(Rpc.transactionRequest, { keyAuthorization: authorization }),
+        ).keyAuthorization,
+      ).toEqual(authorization)
+    },
+  )
+
+  test.each([undefined, [account]] as const)('preserves request admins: %s', (admins) => {
+    const parameters = { expiry: 123, fundingPolicy: { ...(admins ? { admins } : {}), rules } }
+    expect(
+      z.decode(
+        Rpc.wallet_authorizeAccessKey.parameters,
+        z.encode(Rpc.wallet_authorizeAccessKey.parameters, parameters),
+      ),
+    ).toEqual(parameters)
+    expect(
+      z.decode(
+        Rpc.wallet_connect.authorizeAccessKey,
+        z.encode(Rpc.wallet_connect.authorizeAccessKey, parameters),
+      ),
+    ).toEqual(parameters)
+    expect(
+      z.parse(Rpc.wallet_authorizeAccessKey_strict.parameters, {
+        ...parameters,
+        limits: [{ token, limit: '0x1' }],
+        scopes: [{ address: contract }],
+      }).fundingPolicy,
+    ).toEqual(parameters.fundingPolicy)
+  })
+
+  test('rejects explicit empty admins and invalid policy IDs', () => {
+    for (const fundingPolicy of [{ admins: [], rules }, '0x0', '0x10000000000000000'])
+      expect(
+        z.safeParse(Rpc.wallet_authorizeAccessKey.parameters, { expiry: 123, fundingPolicy })
+          .success,
+      ).toMatchInlineSnapshot(`false`)
+  })
+
+  test('requires explicit admins on signed RPC data', () => {
+    const authorization = KeyAuthorization.toRpc(
+      KeyAuthorization.from(
+        {
+          address: accessKey,
+          chainId: 1n,
+          expiry: 123,
+          type: 'p256',
+        },
+        { signature: `0x${'00'.repeat(65)}` },
+      ),
+    )
+    expect(
+      z.safeParse(Rpc.keyAuthorization, { ...authorization, fundingPolicy: { rules } }).success,
+    ).toMatchInlineSnapshot(`false`)
+  })
+})

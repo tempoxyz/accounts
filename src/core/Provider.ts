@@ -487,9 +487,11 @@ export function create(options: create.Options = {}): create.ReturnType {
     privateKey?: Hex.Hex | undefined
   }> {
     const chainId_ = parameters.chainId ?? chainId ?? getClient().chain.id
+    // Resolve key material here; the authorizing adapter resolves the policy after selecting the root.
     if (parameters.privateKey || parameters.address || parameters.publicKey) {
       const prepared = await AccessKey.prepareAuthorization({
         ...parameters,
+        fundingPolicy: undefined,
         chainId: chainId_,
       })
       return {
@@ -505,6 +507,7 @@ export function create(options: create.Options = {}): create.ReturnType {
 
     const { key, keyAuthorization } = await AccessKey.prepareAuthorization({
       ...parameters,
+      fundingPolicy: undefined,
       chainId: chainId_,
       keystores,
     })
