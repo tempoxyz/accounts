@@ -1,4 +1,5 @@
 import { Provider as ox_Provider } from 'ox'
+import { KeyAuthorization } from 'ox/tempo'
 import { tempoLocalnet } from 'viem/tempo/chains'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vp/test'
 
@@ -477,4 +478,55 @@ describe('dialog', () => {
     `)
     expect(typeof result.transport).toMatchInlineSnapshot(`"function"`)
   })
+})
+
+describe('funding policy forwarding', () => {
+  const rules = { maxSlippageBps: 100, sources: {} }
+  for (const method of ['wallet_connect', 'wallet_authorizeAccessKey'] as const)
+    test.each(['0x7', { rules }, { admins: [address], rules }] as const)(
+      `${method} preserves requested and signed policies: %s`,
+      async (fundingPolicy) => {
+        const dialog_ = createDialog()
+        const provider = Provider.create({
+          adapter: dialog({ dialog: dialog_.dialog, host }),
+          chains: [tempoLocalnet],
+          storage: Storage.memory(),
+        })
+        provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+        const parameters = { address: accessKey, expiry: 123, fundingPolicy } as const
+        const promise =
+          method === 'wallet_connect'
+            ? provider.request({
+                method,
+                params: [{ capabilities: { authorizeAccessKey: parameters } }],
+              })
+            : provider.request({ method, params: [parameters] })
+        const request = await dialog_.takeRequest()
+        expect(request.request).toMatchObject({
+          method,
+          params:
+            method === 'wallet_connect'
+              ? [{ capabilities: { authorizeAccessKey: { fundingPolicy } } }]
+              : [{ fundingPolicy }],
+        })
+        const authorization = KeyAuthorization.from(
+          {
+            address: accessKey,
+            chainId: BigInt(tempoLocalnet.id),
+            expiry: 123,
+            type: 'secp256k1',
+            fundingPolicy:
+              typeof fundingPolicy === 'string' ? 7n : { ...fundingPolicy, admins: [address] },
+          },
+          { signature: `0x${'00'.repeat(65)}` },
+        )
+        const keyAuthorization = { ...KeyAuthorization.toRpc(authorization), address: accessKey }
+        const result =
+          method === 'wallet_connect'
+            ? { accounts: [{ address, capabilities: { keyAuthorization } }] }
+            : { rootAddress: address, keyAuthorization }
+        dialog_.success(request, result)
+        expect(await promise).toEqual(result)
+      },
+    )
 })

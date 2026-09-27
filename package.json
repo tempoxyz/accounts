@@ -79,7 +79,7 @@
     "jose": "^6.2.3",
     "mipd": "^0.0.7",
     "mppx": "catalog:",
-    "ox": "~0.14.34",
+    "ox": "https://pkg.pr.new/ox@7ac06e9f",
     "wata": "0.4.1",
     "webauthx": "~0.1.2",
     "zod": "^4.4.3",

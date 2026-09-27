@@ -96,6 +96,10 @@ export function local(options: local.Options): Adapter.Adapter {
               })
             const { authorizeAccessKey: grantOptions, personalSign, ...rest } = parameters
 
+            const deferred =
+              typeof grantOptions?.fundingPolicy === 'object' &&
+              grantOptions.fundingPolicy.admins === undefined
+
             // `personalSign` claims the ceremony's challenge slot. It conflicts
             // with a caller-supplied `digest` because both target the single
             // WebAuthn challenge in the create-account ceremony.
@@ -114,14 +118,27 @@ export function local(options: local.Options): Adapter.Adapter {
             // message into the access-key authorization and sign both in the
             // single create-account ceremony.
             const witness =
-              personalSign && grantOptions ? hashMessage(personalSign.message) : undefined
+              personalSign && grantOptions && !deferred
+                ? hashMessage(personalSign.message)
+                : undefined
 
             const peronsalSign_digest =
               personalSign && !witness ? hashMessage(personalSign.message) : undefined
 
             const keyAuthorization_unsigned =
               witness && grantOptions
-                ? await store.accessKeys.prepareAuthorization({ ...grantOptions, chainId, witness })
+                ? await store.accessKeys.prepareAuthorization({
+                    ...grantOptions,
+                    fundingPolicy:
+                      typeof grantOptions.fundingPolicy === 'object'
+                        ? {
+                            ...grantOptions.fundingPolicy,
+                            admins: grantOptions.fundingPolicy.admins!,
+                          }
+                        : grantOptions.fundingPolicy,
+                    chainId,
+                    witness,
+                  })
                 : undefined
 
             const keyAuthorization_digest = keyAuthorization_unsigned
@@ -204,6 +221,11 @@ export function local(options: local.Options): Adapter.Adapter {
             const { authorizeAccessKey, personalSign, ...rest } =
               parameters ?? ({} as Adapter.loadAccounts.Parameters)
 
+            // Resolve default admins only after the selected account is known.
+            const deferred =
+              typeof authorizeAccessKey?.fundingPolicy === 'object' &&
+              authorizeAccessKey.fundingPolicy.admins === undefined
+
             // `personalSign` claims the ceremony's challenge slot. It conflicts
             // with a caller-supplied `digest` because both target the single
             // WebAuthn challenge in the load-accounts ceremony.
@@ -226,7 +248,9 @@ export function local(options: local.Options): Adapter.Adapter {
             // signed key authorization doubles as the auth proof. Otherwise fall
             // back to the two-ceremony path below.
             const witness =
-              personalSign && authorizeAccessKey ? hashMessage(personalSign.message) : undefined
+              personalSign && authorizeAccessKey && !deferred
+                ? hashMessage(personalSign.message)
+                : undefined
 
             // Only claim the ceremony slot with the `personalSign` digest when
             // NOT binding via witness — the witness path signs the key-auth
@@ -234,13 +258,21 @@ export function local(options: local.Options): Adapter.Adapter {
             const peronsalSign_digest =
               personalSign && !witness ? hashMessage(personalSign.message) : undefined
 
-            const keyAuthorization_unsigned = authorizeAccessKey
-              ? await store.accessKeys.prepareAuthorization({
-                  ...authorizeAccessKey,
-                  chainId,
-                  ...(witness ? { witness } : {}),
-                })
-              : undefined
+            const keyAuthorization_unsigned =
+              authorizeAccessKey && !deferred
+                ? await store.accessKeys.prepareAuthorization({
+                    ...authorizeAccessKey,
+                    fundingPolicy:
+                      typeof authorizeAccessKey.fundingPolicy === 'object'
+                        ? {
+                            ...authorizeAccessKey.fundingPolicy,
+                            admins: authorizeAccessKey.fundingPolicy.admins!,
+                          }
+                        : authorizeAccessKey.fundingPolicy,
+                    chainId,
+                    ...(witness ? { witness } : {}),
+                  })
+                : undefined
 
             const keyAuthorization_digest = keyAuthorization_unsigned
               ? KeyAuthorization.getSignPayload(keyAuthorization_unsigned.keyAuthorization)
@@ -277,7 +309,16 @@ export function local(options: local.Options): Adapter.Adapter {
             //   - Else (key-auth digest took the slot — witness path or
             //     `authorizeAccessKey`-only), reuse `signature_`.
             const keyAuthorization_signed = await (async () => {
-              if (!keyAuthorization_unsigned || !account) return undefined
+              if (!account) return undefined
+              if (deferred && authorizeAccessKey)
+                return KeyAuthorization.fromRpc(
+                  await store.accessKeys.authorize({
+                    account,
+                    chainId,
+                    parameters: authorizeAccessKey,
+                  }),
+                )
+              if (!keyAuthorization_unsigned) return undefined
               const signature_keyAuthorization =
                 peronsalSign_digest || !signature_
                   ? await account.sign({ hash: keyAuthorization_digest! })

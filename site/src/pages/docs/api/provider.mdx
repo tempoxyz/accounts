@@ -105,6 +105,8 @@ declare function authorize(): {
   chainId?: bigint | undefined
   /** Unix timestamp (seconds) when the key expires. */
   expiry: number
+  /** Funding policy ID or inline policy. Omitted admins default to the authorizing root. */
+  fundingPolicy?: bigint | { admins?: readonly Address[]; rules: FundingPolicy.Rules }
   /** Key type of the external public key. Required when `publicKey` or `address` is provided. */
   keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
   /** TIP-20 spending limits. Optional `period` (seconds) makes the limit roll over each period. */

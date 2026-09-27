@@ -23,7 +23,7 @@ function createKeyAuthorization(
   options: {
     chainId?: bigint | undefined
     expiry?: number | undefined
-    keyType?: KeyAuthorization.KeyAuthorization['type'] | undefined
+    keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     limits?: { token: `0x${string}`; limit: bigint; period?: number | undefined }[] | undefined
     scopes?: KeyAuthorization.Scope[] | undefined
   } = {},
@@ -959,6 +959,27 @@ describe('hasReusableAuthorization', () => {
   })
 })
 
+test('funding policy requests do not reuse keys with unknown policy state', async () => {
+  const store = createStore()
+  const keyPair = await WebCryptoP256.createKeyPair()
+  const key = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+  addAuthorization({
+    address: rootAddress,
+    keyPair,
+    store,
+    keyAuthorization: createKeyAuthorization(key.accessKeyAddress, { expiry: 200 }),
+  })
+  expect(
+    await AccessKey.hasReusableAuthorization({
+      account: rootAddress,
+      chainId: 1,
+      now: 100,
+      parameters: { expiry: 200, fundingPolicy: 7n },
+      store: { state: store, keystores: Keystore.defaults },
+    }),
+  ).toMatchInlineSnapshot(`false`)
+})
+
 describe('canAuthorizeCalls', () => {
   test('behavior: checks whether requested scopes cover calls', () => {
     const token = '0x0000000000000000000000000000000000000abc' as const
@@ -1078,7 +1099,7 @@ describe('getStatus', () => {
 
       Docs: https://viem.sh/docs/contract/readContract
       Details: RPC unavailable.
-      Version: viem@2.56.0]
+      Version: viem@2.56.9]
     `)
   })
 
