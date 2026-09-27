@@ -195,18 +195,7 @@ export const transactionRequest = z.object({
           policyRules: z.optional(u.hex()),
           slippageBps: z.optional(u.number()),
           sources: z.optional(
-            z.readonly(
-              z.array(
-                z.codec(
-                  z.object({ target: u.address(), data: u.hex() }),
-                  z.object({ to: u.address(), data: u.hex() }),
-                  {
-                    decode: ({ target, data }) => ({ to: target, data }),
-                    encode: ({ to, data }) => ({ target: to, data }),
-                  },
-                ),
-              ),
-            ),
+            z.readonly(z.array(z.object({ target: u.address(), data: u.hex() }))),
           ),
           token: u.address(),
         }),

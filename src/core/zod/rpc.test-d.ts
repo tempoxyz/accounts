@@ -63,7 +63,7 @@ describe('transactionRequest.requireFunds', () => {
           amount: bigint
           policyRules?: `0x${string}` | undefined
           slippageBps?: number | undefined
-          sources?: readonly { to: `0x${string}`; data: `0x${string}` }[] | undefined
+          sources?: readonly { target: `0x${string}`; data: `0x${string}` }[] | undefined
           token: `0x${string}`
         }[]
       | undefined
