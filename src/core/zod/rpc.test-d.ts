@@ -54,3 +54,19 @@ describe('wallet_connect.identity', () => {
     >()
   })
 })
+
+describe('transactionRequest.requireFunds', () => {
+  test('decodes quantities and source addresses for Viem', () => {
+    type Request = z.output<typeof Rpc.transactionRequest>
+    expectTypeOf<Request['requireFunds']>().toEqualTypeOf<
+      | readonly {
+          amount: bigint
+          policyRules?: `0x${string}` | undefined
+          slippageBps?: number | undefined
+          sources?: readonly { to: `0x${string}`; data: `0x${string}` }[] | undefined
+          token: `0x${string}`
+        }[]
+      | undefined
+    >()
+  })
+})

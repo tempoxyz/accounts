@@ -1013,3 +1013,106 @@ describe('wallet_connect_strict.parameters: showDeposit', () => {
     `)
   })
 })
+
+describe('transactionRequest.requireFunds', () => {
+  test('decodes concrete funding requirements', () => {
+    expect(
+      z.decode(Rpc.transactionRequest, {
+        requireFunds: [
+          {
+            token,
+            amount: '0x32',
+            slippageBps: '0x0',
+            policyRules: '0x1234',
+            sources: [{ to: contract, data: '0xabcd' }],
+          },
+        ],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "requireFunds": [
+          {
+            "amount": 50n,
+            "policyRules": "0x1234",
+            "slippageBps": 0,
+            "sources": [
+              {
+                "data": "0xabcd",
+                "to": "0x0000000000000000000000000000000000000004",
+              },
+            ],
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('encodes concrete funding requirements', () => {
+    expect(
+      z.encode(Rpc.transactionRequest, {
+        requireFunds: [
+          {
+            token,
+            amount: 50n,
+            slippageBps: 0,
+            policyRules: '0x1234',
+            sources: [{ to: contract, data: '0xabcd' }],
+          },
+        ],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "requireFunds": [
+          {
+            "amount": "0x32",
+            "policyRules": "0x1234",
+            "slippageBps": "0x0",
+            "sources": [
+              {
+                "data": "0xabcd",
+                "to": "0x0000000000000000000000000000000000000004",
+              },
+            ],
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('preserves omitted sources for wallet funding resolution', () => {
+    expect(
+      z.decode(Rpc.transactionRequest, {
+        requireFunds: [{ token, amount: '0x32' }],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "requireFunds": [
+          {
+            "amount": 50n,
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('preserves empty sources', () => {
+    expect(
+      z.encode(Rpc.transactionRequest, {
+        requireFunds: [{ token, amount: 50n, sources: [] }],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "requireFunds": [
+          {
+            "amount": "0x32",
+            "sources": [],
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+      }
+    `)
+  })
+})

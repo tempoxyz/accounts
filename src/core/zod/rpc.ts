@@ -187,6 +187,19 @@ export const transactionRequest = z.object({
   maxPriorityFeePerGas: z.optional(u.bigint()),
   nonce: z.optional(u.number()),
   nonceKey: z.optional(u.bigint()),
+  requireFunds: z.optional(
+    z.readonly(
+      z.array(
+        z.object({
+          amount: u.bigint(),
+          policyRules: z.optional(u.hex()),
+          slippageBps: z.optional(u.number()),
+          sources: z.optional(z.readonly(z.array(z.object({ to: u.address(), data: u.hex() })))),
+          token: u.address(),
+        }),
+      ),
+    ),
+  ),
   to: z.optional(u.address()),
   validAfter: z.optional(u.number()),
   validBefore: z.optional(u.number()),
