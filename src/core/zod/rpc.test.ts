@@ -1024,7 +1024,7 @@ describe('transactionRequest.requireFunds', () => {
             amount: '0x32',
             slippageBps: '0x0',
             policyRules: '0x1234',
-            sources: [{ to: contract, data: '0xabcd' }],
+            sources: [{ target: contract, data: '0xabcd' }],
           },
         ],
       }),
@@ -1071,7 +1071,7 @@ describe('transactionRequest.requireFunds', () => {
             "sources": [
               {
                 "data": "0xabcd",
-                "to": "0x0000000000000000000000000000000000000004",
+                "target": "0x0000000000000000000000000000000000000004",
               },
             ],
             "token": "0x20c0000000000000000000000000000000000001",
