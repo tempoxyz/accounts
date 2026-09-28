@@ -124,4 +124,4 @@
 - **Funding-policy admins resolve before signing** — omitted inline admins default to the authenticated root account. Cached account or credential hints do not establish the selected root; discover it before preparing the signed authorization.
 - **Resolve funding intent before signing** — `fundingPolicy: true` selects the funding handler default through `eth_fillKeyAuthorization`; keep booleans out of signed authorizations. The dialog adapter does not accept funding-policy requests.
 
-- **Retain declaration-only module augmentations** — runtime middleware imports can disappear during declaration emission. Preserve an explicit side-effect import and check the built package in an isolated TypeScript project.
+- **Retain declaration-only module augmentations** — runtime middleware imports can disappear during declaration emission. Preserve an explicit side-effect import.

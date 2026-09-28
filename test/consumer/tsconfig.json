@@ -1,8 +1,0 @@
-{
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "customConditions": [],
-    "noEmit": true
-  },
-  "include": ["./*.test-d.ts"]
-}
