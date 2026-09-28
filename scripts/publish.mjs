@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const runCommand = (command, args, options) =>
-  new Promise((resolvePromise, reject) => {
+const execute = (command, args, options) =>
+  new Promise((fulfill, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: { ...process.env, ...options.env },
@@ -24,13 +24,13 @@ const runCommand = (command, args, options) =>
     })
     child.on('error', reject)
     child.on('close', (code) => {
-      if (code === 0) resolvePromise({ stderr, stdout })
+      if (code === 0) fulfill({ stderr, stdout })
       else
         reject(Object.assign(new Error(`${command} exited with code ${code}`), { stderr, stdout }))
     })
   })
 
-function commandOutput(error) {
+function output_error(error) {
   if (typeof error !== 'object' || error === null) return ''
   const stderr = 'stderr' in error && typeof error.stderr === 'string' ? error.stderr : ''
   const stdout = 'stdout' in error && typeof error.stdout === 'string' ? error.stdout : ''
@@ -49,13 +49,13 @@ function commandOutput(error) {
  * @param {string} parameters.cwd Package directory.
  * @param {string} parameters.name Expected package name.
  * @param {string} parameters.version Expected package version.
- * @param {typeof runCommand} [parameters.run] Command runner override for tests.
+ * @param {typeof execute} [parameters.run] Command runner override for tests.
  * @returns {Promise<'published' | 'already-published'>} Whether npm received the package or already
  * had the exact version.
  */
 export async function publishPackage(parameters) {
   const { cwd, name, version } = parameters
-  const run = parameters.run ?? runCommand
+  const run = parameters.run ?? execute
   const spec = `${name}@${version}`
 
   try {
@@ -68,11 +68,11 @@ export async function publishPackage(parameters) {
     console.log(`${spec} is already published; continuing release finalization.`)
     return 'already-published'
   } catch (error) {
-    if (!/\bE404\b/.test(commandOutput(error))) throw error
+    if (!/\bE404\b/.test(output_error(error))) throw error
   }
 
-  const publishDirectory = await mkdtemp(join(tmpdir(), 'accounts-publish-'))
-  const archive = join(publishDirectory, 'package.tgz')
+  const directory = await mkdtemp(join(tmpdir(), 'accounts-publish-'))
+  const archive = join(directory, 'package.tgz')
 
   try {
     await run('pnpm', ['pack', '--out', archive, '--json'], {
@@ -85,26 +85,26 @@ export async function publishPackage(parameters) {
       cwd,
       silent: true,
     })
-    const packedPackage = JSON.parse(stdout)
-    if (packedPackage.name !== name || packedPackage.version !== version)
+    const package_packed = JSON.parse(stdout)
+    if (package_packed.name !== name || package_packed.version !== version)
       throw new Error(
-        `packed package identity does not match ${spec}: ${packedPackage.name}@${packedPackage.version}`,
+        `packed package identity does not match ${spec}: ${package_packed.name}@${package_packed.version}`,
       )
 
-    const dependencyFields = [
+    const fields_dependency = [
       'dependencies',
       'devDependencies',
       'optionalDependencies',
       'peerDependencies',
     ]
-    const unresolvedCatalogs = dependencyFields.flatMap((field) =>
-      Object.entries(packedPackage[field] ?? {})
+    const catalogs_unresolved = fields_dependency.flatMap((field) =>
+      Object.entries(package_packed[field] ?? {})
         .filter(([, range]) => typeof range === 'string' && range.startsWith('catalog:'))
         .map(([dependency]) => `${field}.${dependency}`),
     )
-    if (unresolvedCatalogs.length > 0)
+    if (catalogs_unresolved.length > 0)
       throw new Error(
-        `packed package contains unresolved catalogs: ${unresolvedCatalogs.join(', ')}`,
+        `packed package contains unresolved catalogs: ${catalogs_unresolved.join(', ')}`,
       )
 
     await run(
@@ -114,16 +114,16 @@ export async function publishPackage(parameters) {
     )
     return 'published'
   } finally {
-    await rm(publishDirectory, { force: true, recursive: true })
+    await rm(directory, { force: true, recursive: true })
   }
 }
 
 async function main() {
   const cwd = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-  const packageJson = JSON.parse(await readFile(resolve(cwd, 'package.json'), 'utf8'))
-  if (typeof packageJson.name !== 'string' || typeof packageJson.version !== 'string')
+  const package_json = JSON.parse(await readFile(resolve(cwd, 'package.json'), 'utf8'))
+  if (typeof package_json.name !== 'string' || typeof package_json.version !== 'string')
     throw new Error('package.json must contain string name and version fields')
-  await publishPackage({ cwd, name: packageJson.name, version: packageJson.version })
+  await publishPackage({ cwd, name: package_json.name, version: package_json.version })
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)

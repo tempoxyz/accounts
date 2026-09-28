@@ -8,7 +8,7 @@ const parameters = {
   version: '1.2.3',
 }
 
-const packedPackage = JSON.stringify({
+const package_packed = JSON.stringify({
   name: parameters.name,
   version: parameters.version,
   dependencies: { hono: '^4.13.5', mppx: '^0.11.0' },
@@ -20,7 +20,7 @@ describe('publishPackage', () => {
       .fn()
       .mockRejectedValueOnce(Object.assign(new Error('not found'), { stderr: 'npm error E404' }))
       .mockResolvedValueOnce({ stderr: '', stdout: '{}' })
-      .mockResolvedValueOnce({ stderr: '', stdout: packedPackage })
+      .mockResolvedValueOnce({ stderr: '', stdout: package_packed })
       .mockResolvedValueOnce({ stderr: '', stdout: '' })
 
     const result = await publishPackage({ ...parameters, run })
