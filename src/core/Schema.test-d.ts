@@ -1,7 +1,7 @@
 import type { RpcSchema } from 'ox'
+import type { KeyAuthorization } from 'ox/tempo'
 import type { Hex } from 'viem'
 import { describe, expectTypeOf, test } from 'vp/test'
-import type * as z from 'zod/mini'
 
 import type * as Schema from './Schema.js'
 import type * as Rpc from './zod/rpc.js'
@@ -317,7 +317,7 @@ describe('Request', () => {
           accessKeyAddress: Hex
           address: Hex
           feePayer?: boolean | string | undefined
-          keyAuthorization?: z.output<typeof Rpc.keyAuthorization> | undefined
+          keyAuthorization?: KeyAuthorization.Signed | undefined
         },
       ]
     >()

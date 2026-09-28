@@ -1,19 +1,17 @@
 import { AbiFunction, Address, Hex, PublicKey, RpcResponse, WebCryptoP256 } from 'ox'
-import { KeyAuthorization, type SignatureEnvelope } from 'ox/tempo'
+import { KeyAuthorization } from 'ox/tempo'
 import { BaseError, type Client, type Transport } from 'viem'
 import {
   Account as TempoAccount,
   Actions,
   KeyAuthorizationManager as TempoKeyAuthorizationManager,
 } from 'viem/tempo'
-import type * as z from 'zod/mini'
 import type { StoreApi } from 'zustand'
 
 import type { OneOf } from '../internal/types.js'
 import * as ExecutionError from './ExecutionError.js'
 import * as Keystore from './Keystore.js'
 import type * as Store from './Store.js'
-import type * as Rpc from './zod/rpc.js'
 
 const status = {
   /** No matching usable access key was found. */
@@ -347,10 +345,9 @@ export declare namespace prepareAuthorization {
     /** Keystore-created key material reference. */
     key?: { handle: Keystore.Handle; publicKey: Hex.Hex } | undefined
     /** Unsigned key authorization to sign with the root account. */
-    keyAuthorization: Extract<
-      KeyAuthorization.KeyAuthorization<false>,
-      { type: SignatureEnvelope.Type }
-    >
+    keyAuthorization: KeyAuthorization.KeyAuthorization<false> & {
+      type: NonNullable<Options['keyType']>
+    }
     /** Exported private key backing an external access key. */
     privateKey?: Hex.Hex | undefined
   }
@@ -379,7 +376,7 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
     store,
   })
 
-  return KeyAuthorization.toRpc(keyAuthorization) as authorize.ReturnType
+  return KeyAuthorization.toRpc(keyAuthorization)
 }
 
 export declare namespace authorize {
@@ -399,7 +396,7 @@ export declare namespace authorize {
   }
 
   /** Signed key authorization in RPC form. */
-  type ReturnType = z.input<typeof Rpc.keyAuthorization>
+  type ReturnType = KeyAuthorization.Rpc
 }
 
 /** Returns whether a local access key satisfies reusable authorization parameters. */

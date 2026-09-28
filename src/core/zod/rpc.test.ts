@@ -1,9 +1,7 @@
 import { KeyAuthorization } from 'ox/tempo'
-import { Account } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
 import * as z from 'zod/mini'
 
-import { accounts, privateKeys, webAuthnAccounts } from '../../../test/config.js'
 import * as Rpc from './rpc.js'
 
 const account = '0x0000000000000000000000000000000000000001'
@@ -31,7 +29,7 @@ describe('transactionRequest.keyAuthorization', () => {
     const rpc = KeyAuthorization.toRpc(authorization)
 
     expect(
-      z.parse(Rpc.transactionRequest, {
+      z.decode(Rpc.transactionRequest, {
         from: account,
         keyAuthorization: { ...rpc, address: rpc.keyId },
       }).keyAuthorization,
@@ -73,18 +71,20 @@ describe('transactionRequest.keyAuthorization', () => {
   })
 
   test('encodes ox key authorizations into rpc key authorizations', () => {
-    const authorization = KeyAuthorization.from({
-      address: accessKey,
-      chainId: 1n,
-      expiry: 123,
-      limits: [{ token, limit: 100n, period: 60 }],
-      scopes: [
-        { address: contract },
-        { address: token, selector: 'transfer(address,uint256)', recipients: [recipient] },
-      ],
-      type: 'p256',
-      signature: { type: 'secp256k1', signature: { r: 0n, s: 0n, yParity: 0 } },
-    })
+    const authorization = KeyAuthorization.from(
+      {
+        address: accessKey,
+        chainId: 1n,
+        expiry: 123,
+        limits: [{ token, limit: 100n, period: 60 }],
+        scopes: [
+          { address: contract },
+          { address: token, selector: 'transfer(address,uint256)', recipients: [recipient] },
+        ],
+        type: 'p256',
+      },
+      { signature: `0x${'00'.repeat(65)}` },
+    )
 
     expect(
       z.encode(Rpc.transactionRequest, {
@@ -1012,38 +1012,4 @@ describe('wallet_connect_strict.parameters: showDeposit', () => {
       }
     `)
   })
-})
-
-describe('keyAuthorization', () => {
-  test.each([
-    { type: 'secp256k1', account: accounts[0] },
-    { type: 'p256', account: Account.fromP256(privateKeys[0]) },
-    { type: 'webAuthn', account: webAuthnAccounts[0] },
-  ] as const)('preserves $type RPC signatures', async ({ account, type }) => {
-    const authorization = await account.signKeyAuthorization(
-      { accessKeyAddress: accessKey, keyType: 'p256' },
-      { chainId: 1n, expiry: 123 },
-    )
-    const rpc = KeyAuthorization.toRpc(authorization)
-    const decoded = z.parse(Rpc.keyAuthorization, rpc)
-    const encoded = z.encode(Rpc.keyAuthorization, decoded)
-
-    expect(encoded).toEqual({ ...rpc, address: rpc.keyId })
-    expect(encoded.signature.type).toBe(type)
-  })
-
-  test.each([{ keyType: 'multisig' }, { signature: '0xc0' }, { signature: { type: 'multisig' } }])(
-    'rejects unsupported authorization fields: %o',
-    (fields) => {
-      const authorization = KeyAuthorization.from(
-        { address: accessKey, chainId: 1n, type: 'p256' },
-        { signature: { type: 'secp256k1', signature: { r: 0n, s: 0n, yParity: 0 } } },
-      )
-      const result = z.safeParse(Rpc.keyAuthorization, {
-        ...KeyAuthorization.toRpc(authorization),
-        ...fields,
-      })
-      expect(result.success).toMatchInlineSnapshot('false')
-    },
-  )
 })

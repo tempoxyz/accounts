@@ -25,7 +25,6 @@ import {
 import { Account as TempoAccount, Actions, Addresses, Transaction } from 'viem/tempo'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
 import { afterAll, beforeAll, describe, expect, test } from 'vp/test'
-import * as z from 'zod/mini'
 
 import { cli, headlessWebAuthn, secp256k1 } from '../../test/adapters.js'
 import { accounts, chain, getClient, http } from '../../test/config.js'
@@ -37,7 +36,6 @@ import * as Expiry from './Expiry.js'
 import * as Keystore from './Keystore.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
-import * as Rpc from './zod/rpc.js'
 
 beforeAll(cli.setup)
 afterAll(cli.teardown)
@@ -2527,10 +2525,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
           {
             from: address,
             ...fillTx,
-            keyAuthorization: z.encode(
-              Rpc.keyAuthorization,
-              z.parse(Rpc.keyAuthorization, rpcKeyAuth),
-            ),
+            keyAuthorization: { ...rpcKeyAuth, address: rpcKeyAuth.keyId },
           },
         ],
       })
