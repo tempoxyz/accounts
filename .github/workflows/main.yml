@@ -83,48 +83,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Resolve publication
-        id: release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          name="$(node -p "require('./package.json').name")"
-          version="$(node -p "require('./package.json').version")"
-          tag="${name}@${version}"
-          publish_npm=true
-          publish_release=true
-          if npm view "$tag" version >/dev/null 2>&1; then
-            publish_npm=false
-          fi
-          if gh release view "$tag" >/dev/null 2>&1; then
-            publish_release=false
-          fi
-          {
-            echo "tag=$tag"
-            echo "publish_npm=$publish_npm"
-            echo "publish_release=$publish_release"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Install dependencies
-        if: steps.release.outputs.publish_npm == 'true'
         uses: ./.github/actions/install-dependencies
         with:
           skip-cache: 'true' # avoid cache poisoning attacks
 
-      - name: Publish npm package
-        if: steps.release.outputs.publish_npm == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          ./node_modules/.bin/zile publish:prepare
-          npm publish --access public
-          ./node_modules/.bin/zile publish:post
-
-      - name: Create GitHub release
-        if: steps.release.outputs.publish_release == 'true'
+      - name: Publish to npm
+        uses: tempoxyz/gh-actions/vendor/changesets/action@ee2960a6cc25d99bda45614135bfe1197d879bac # 2026-09-26T06-46-03Z-ee2960a6
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs.tag }}
-        run: gh release create "$TAG" --generate-notes --target "$GITHUB_SHA" --title "$TAG"
+          NPM_CONFIG_IGNORE_SCRIPTS: 'true'
+        with:
+          create-github-releases: true
+          publish-script: pnpm changeset:publish
