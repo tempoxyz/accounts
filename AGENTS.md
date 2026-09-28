@@ -116,7 +116,6 @@
 - **CLI auth example URL inputs** — the example CLI flow is expected to support both `--url` and `AUTH_URL`-based defaults, and should avoid hardcoded personal hostnames in source.
 - **Test RPC port selection should auto-fallback** — localnet test setup should start from `VITE_RPC_PORT` (or `8545`) and select the next available port to avoid `EADDRINUSE` collisions.
 - **Force localnet env when running localnet tests from a testnet shell** — if `VITE_NODE_ENV=testnet` is exported, `*.localnet.test.ts` files will still target testnet RPCs; prefix targeted localnet runs with `VITE_NODE_ENV=localnet VITE_NODE_TAG=sha-...` to exercise the pinned Docker node.
-- **Relay multisig bootstrap must preserve init after store claims** — persistent `Handler.relay({ multisig })` stores may return a claimed operation without the in-memory `initConfig` field even though the current raw approval still carries `multisig_init`. Finalization should fall back to the locally resolved init config so the first native multisig transaction does not drop `multisig_init`.
 - **Turnkey adapter stays structurally typed** — avoid importing `@turnkey/core` directly from the root SDK adapter so non-Turnkey consumers do not inherit a hard dependency; accept an app-provided client with the minimal client shape instead.
 - **Privy React embedded wallets can precede hook readiness** — `useWallets()` may expose a usable embedded wallet while `ready` is still false. Select it with both `walletClientType === 'privy'` and `connectorType === 'embedded'`, and treat its presence as wallet readiness.
 - **Standalone access-key deposit prompts have no event filter** -- `wallet_authorizeAccessKey.showDeposit` supports boolean or deposit hints and intentionally omits `on`; use `wallet_connect.capabilities.showDeposit.on` for login/register filtering.
@@ -124,7 +123,5 @@
 - **PostMessage iframe color schemes must match the wallet page** — read the explicit `scheme` URL parameter when mounting the iframe. A mismatched scheme can make its transparent canvas opaque black on light macOS.
 - **Funding-policy admins resolve before signing** — omitted inline admins default to the authenticated root account. Cached account or credential hints do not establish the selected root; discover it before preparing the signed authorization.
 - **Resolve funding intent before signing** — `fundingPolicy: true` selects the funding handler default through `eth_fillKeyAuthorization`; keep booleans out of signed authorizations. The dialog adapter does not accept funding-policy requests.
-
-- **Current multisig envelopes always carry config** — use `signature.config` and bind approval digests to its version. Derive version-zero addresses with `Addresses.nativeMultisigFactory`; preserve current configs during relay finalization.
 
 - **Retain declaration-only module augmentations** — runtime middleware imports can disappear during declaration emission. Preserve an explicit side-effect import and check the built package in an isolated TypeScript project.

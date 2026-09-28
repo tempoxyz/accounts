@@ -77,6 +77,7 @@ type KeyAuthorizationRpcDecoded = Omit<
   address?: KeyAuthorization.Rpc['keyId'] | undefined
   chainId: bigint
   expiry: number | null | undefined
+  keyType: z.output<typeof keyType>
   limits?:
     | readonly {
         token: KeyAuthorization.RpcTokenLimit['token']
@@ -172,7 +173,7 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
         ? { fundingPolicy: z.decode(fundingPolicy, keyAuthorization.fundingPolicy) }
         : {}),
       keyId: keyAuthorization.keyId,
-      keyType: keyAuthorization.keyType,
+      keyType: z.parse(keyType, keyAuthorization.keyType),
       limits: keyAuthorization.limits?.map(({ limit, period, token }) => ({
         token,
         limit: Hex.toBigInt(limit),

@@ -90,6 +90,7 @@ async function authorize(
     code,
     keyAuthorization: z.decode(CliAuth.keyAuthorization, {
       ...keyAuthorization,
+      keyType: key.keyType,
       address: keyAuthorization.keyId,
     }),
   } satisfies z.output<typeof CliAuth.authorizeRequest>
@@ -128,6 +129,7 @@ async function authorizeWebAuthn(
     code,
     keyAuthorization: z.decode(CliAuth.keyAuthorization, {
       ...keyAuthorization,
+      keyType: key.keyType,
       address: keyAuthorization.keyId,
     }),
   } satisfies z.output<typeof CliAuth.authorizeRequest>

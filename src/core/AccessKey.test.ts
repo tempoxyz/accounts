@@ -23,7 +23,7 @@ function createKeyAuthorization(
   options: {
     chainId?: bigint | undefined
     expiry?: number | undefined
-    keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
+    keyType?: AccessKey.prepareAuthorization.Options['keyType'] | undefined
     limits?: { token: `0x${string}`; limit: bigint; period?: number | undefined }[] | undefined
     scopes?: KeyAuthorization.Scope[] | undefined
   } = {},

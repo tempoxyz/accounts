@@ -121,8 +121,7 @@ export async function handleRawTransaction(options: handleRawTransaction.Options
     })
 
   const transaction = Transaction.deserialize(serialized)
-  // Prefer sender recovered from raw envelope; multisig finalize path supplies fallback sender.
-  const sender = transaction.from ?? options.sender
+  const sender = transaction.from
 
   // Sponsorship only applies after sender has signed original transaction.
   if (!transaction.signature || !sender)
@@ -178,8 +177,6 @@ export declare namespace handleRawTransaction {
     method: 'eth_signRawTransaction' | 'eth_sendRawTransaction' | 'eth_sendRawTransactionSync'
     /** Incoming JSON-RPC request. */
     request: { params?: readonly unknown[] | undefined }
-    /** Sender address to use if it cannot be recovered from the raw envelope. */
-    sender?: Address | undefined
     /** Optional sponsorship approval callback. */
     validate?: ((request: Transaction.TransactionRequest) => boolean | Promise<boolean>) | undefined
   }

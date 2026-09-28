@@ -375,6 +375,7 @@ describe('dialog', () => {
               },
             ],
             "chainId": "0x539",
+            "feePayer": undefined,
             "from": "0x0000000000000000000000000000000000000001",
           },
         ],

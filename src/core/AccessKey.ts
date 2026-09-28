@@ -368,7 +368,7 @@ export declare namespace prepareAuthorization {
     key?: { handle: Keystore.Handle; publicKey: Hex.Hex } | undefined
     /** Unsigned key authorization to sign with the root account. */
     keyAuthorization: KeyAuthorization.KeyAuthorization<false> & {
-      type: 'secp256k1' | 'p256' | 'webAuthn'
+      type: NonNullable<Options['keyType']>
     }
     /** Exported private key backing an external access key. */
     privateKey?: Hex.Hex | undefined
