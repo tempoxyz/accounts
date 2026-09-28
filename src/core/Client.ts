@@ -102,10 +102,23 @@ function providerTransport(
         if (chainId !== undefined && !usesProvider(method))
           return baseTransport.request({ method, params: reqParams } as never)
         const params = (() => {
-          if (method !== 'eth_fillTransaction' || chainId === undefined) return reqParams
+          if (method !== 'eth_fillTransaction') return reqParams
           const request = (reqParams as readonly unknown[] | undefined)?.[0]
           if (!request || typeof request !== 'object') return reqParams
-          return [{ ...request, chainId }]
+          const feePayer = 'feePayer' in request ? request.feePayer : undefined
+          return [
+            {
+              ...request,
+              ...(chainId === undefined ? {} : { chainId }),
+              // Local callers retain their signer; only the sponsorship flag crosses RPC.
+              ...(feePayer &&
+              typeof feePayer === 'object' &&
+              'type' in feePayer &&
+              feePayer.type === 'local'
+                ? { feePayer: true }
+                : {}),
+            },
+          ]
         })()
         return (provider as { request: EIP1193RequestFn }).request({
           method,

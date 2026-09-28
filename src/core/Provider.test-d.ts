@@ -1,5 +1,7 @@
 import { tempo } from 'mppx/client'
 import type { RpcSchema } from 'ox'
+import { privateKeyToAccount } from 'viem/accounts'
+import { Account } from 'viem/tempo'
 import { describe, expectTypeOf, test } from 'vp/test'
 
 import * as Provider from './Provider.js'
@@ -62,6 +64,20 @@ describe('request', () => {
 })
 
 describe('create options', () => {
+  test('feePayer accepts local accounts without changing the RPC contract', () => {
+    const key = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    Provider.create({ feePayer: privateKeyToAccount(key) })
+    Provider.create({ feePayer: Account.fromSecp256k1(key) })
+    Provider.create({ feePayer: false })
+    Provider.create({ feePayer: { url: '/relay', precedence: 'user-first' } })
+    const provider = Provider.create()
+    provider.request({
+      method: 'eth_sendTransaction',
+      // @ts-expect-error Signers belong in configuration, never RPC parameters.
+      params: [{ feePayer: privateKeyToAccount(key) }],
+    })
+  })
+
   test('authorizeAccessKey accepts a literal value or function', () => {
     expectTypeOf<NonNullable<Parameters<typeof Provider.create>[0]>>().toMatchTypeOf<{
       authorizeAccessKey?: Provider.create.AuthorizeAccessKey | undefined
