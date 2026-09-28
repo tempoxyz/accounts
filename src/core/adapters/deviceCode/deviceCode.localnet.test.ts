@@ -1,5 +1,4 @@
 import { Hex } from 'ox'
-import { SignatureEnvelope } from 'ox/tempo'
 import { describe, expect, test } from 'vp/test'
 import type { DeviceCode } from 'wata'
 
@@ -62,9 +61,7 @@ describe('deviceCode', () => {
       const keyAuthorization = account.capabilities.keyAuthorization
         ? {
             ...account.capabilities.keyAuthorization,
-            signature: {
-              type: SignatureEnvelope.fromRpc(account.capabilities.keyAuthorization.signature).type,
-            },
+            signature: { type: account.capabilities.keyAuthorization.signature.type },
           }
         : undefined
 

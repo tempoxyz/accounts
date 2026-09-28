@@ -172,7 +172,10 @@ export function local(options: local.Options): Adapter.Adapter {
                 : undefined
 
             const keyAuthorization = await (async () => {
-              if (keyAuthorization_signed) return KeyAuthorization.toRpc(keyAuthorization_signed)
+              if (keyAuthorization_signed)
+                return KeyAuthorization.toRpc(
+                  keyAuthorization_signed,
+                ) as Adapter.authorizeAccessKey.ReturnType['keyAuthorization']
               if (!grantOptions) return undefined
               // Non-witness fallback: sign the key authorization on its own
               // (a second ceremony when `personalSign` claimed the first).
@@ -303,7 +306,9 @@ export function local(options: local.Options): Adapter.Adapter {
             })()
 
             const keyAuthorization = keyAuthorization_signed
-              ? KeyAuthorization.toRpc(keyAuthorization_signed)
+              ? (KeyAuthorization.toRpc(
+                  keyAuthorization_signed,
+                ) as Adapter.authorizeAccessKey.ReturnType['keyAuthorization'])
               : undefined
 
             return {

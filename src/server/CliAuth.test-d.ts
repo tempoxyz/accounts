@@ -120,3 +120,13 @@ describe('from', () => {
     expectTypeOf(CliAuth.from).returns.toMatchTypeOf<CliAuth.CliAuth>()
   })
 })
+
+describe('keyAuthorization', () => {
+  test('preserves single-signer RPC properties', () => {
+    type Authorization = z.output<typeof CliAuth.keyAuthorization>
+    expectTypeOf<Authorization['keyType']>().toEqualTypeOf<'secp256k1' | 'p256' | 'webAuthn'>()
+    expectTypeOf<Authorization['signature']['type']>().toEqualTypeOf<
+      'secp256k1' | 'p256' | 'webAuthn'
+    >()
+  })
+})

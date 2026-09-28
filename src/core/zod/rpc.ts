@@ -43,17 +43,27 @@ export const receipt = z.object({
   type: u.hex(),
 })
 
-export const signatureEnvelope = z.custom<SignatureEnvelope.SignatureEnvelopeRpc>()
+export const signatureEnvelope = z.custom<SignatureEnvelope.PrimitiveRpc>(
+  (value) =>
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    z.safeParse(keyType, value.type).success,
+)
 
 export const keyType = z.union([z.literal('secp256k1'), z.literal('p256'), z.literal('webAuthn')])
 
-type KeyAuthorizationRpcDecoded = Omit<
-  KeyAuthorization.Rpc,
-  'chainId' | 'expiry' | 'keyType' | 'limits'
-> & {
+type KeyAuthorizationRpc = Extract<KeyAuthorization.Rpc, { keyType: SignatureEnvelope.Type }> & {
+  signature: SignatureEnvelope.PrimitiveRpc
+}
+
+type KeyAuthorizationSigned = Extract<KeyAuthorization.Signed, { type: SignatureEnvelope.Type }> & {
+  signature: SignatureEnvelope.Primitive
+}
+
+type KeyAuthorizationRpcDecoded = Omit<KeyAuthorizationRpc, 'chainId' | 'expiry' | 'limits'> & {
   address?: KeyAuthorization.Rpc['keyId'] | undefined
   chainId: bigint
-  keyType: z.output<typeof keyType>
   expiry: number | null | undefined
   limits?:
     | readonly {
@@ -97,10 +107,20 @@ const keyAuthorizationRpc = z.object({
   signature: signatureEnvelope,
 }) as z.ZodMiniType<
   KeyAuthorizationRpcDecoded,
-  KeyAuthorization.Rpc & { address?: KeyAuthorization.Rpc['keyId'] | undefined }
+  KeyAuthorizationRpc & { address?: KeyAuthorization.Rpc['keyId'] | undefined }
 >
 
-export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthorization.Signed>(), {
+const keyAuthorizationSigned = z.custom<KeyAuthorizationSigned>(
+  (value) =>
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    z.safeParse(keyType, value.type).success &&
+    'signature' in value &&
+    z.safeParse(signatureEnvelope, value.signature).success,
+)
+
+export const keyAuthorization = z.codec(keyAuthorizationRpc, keyAuthorizationSigned, {
   decode(value) {
     const authorization = {
       chainId: Hex.fromNumber(value.chainId),
@@ -129,15 +149,16 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
           }
         : {}),
     } satisfies KeyAuthorization.Rpc
-    return KeyAuthorization.fromRpc(authorization)
+    // The schema has already restricted both the key and signature to primitive types.
+    return KeyAuthorization.fromRpc(authorization) as KeyAuthorizationSigned
   },
   encode(value) {
-    const keyAuthorization = KeyAuthorization.toRpc(value)
+    const keyAuthorization = KeyAuthorization.toRpc(value) as KeyAuthorizationRpc
     return {
       chainId: keyAuthorization.chainId === '0x' ? 0n : Hex.toBigInt(keyAuthorization.chainId),
       expiry: keyAuthorization.expiry == null ? null : Hex.toNumber(keyAuthorization.expiry),
       keyId: keyAuthorization.keyId,
-      keyType: z.parse(keyType, keyAuthorization.keyType),
+      keyType: keyAuthorization.keyType,
       limits: keyAuthorization.limits?.map(({ limit, period, token }) => ({
         token,
         limit: Hex.toBigInt(limit),

@@ -54,3 +54,21 @@ describe('wallet_connect.identity', () => {
     >()
   })
 })
+
+describe('keyAuthorization', () => {
+  test('preserves single-signer RPC properties', () => {
+    type Authorization = Rpc.wallet_authorizeAccessKey.Encoded['returns']['keyAuthorization']
+    expectTypeOf<Authorization['keyType']>().toEqualTypeOf<'secp256k1' | 'p256' | 'webAuthn'>()
+    expectTypeOf<Authorization['signature']['type']>().toEqualTypeOf<
+      'secp256k1' | 'p256' | 'webAuthn'
+    >()
+  })
+
+  test('preserves single-signer decoded properties', () => {
+    type Authorization = z.output<typeof Rpc.keyAuthorization>
+    expectTypeOf<Authorization['type']>().toEqualTypeOf<'secp256k1' | 'p256' | 'webAuthn'>()
+    expectTypeOf<Authorization['signature']['type']>().toEqualTypeOf<
+      'secp256k1' | 'p256' | 'webAuthn'
+    >()
+  })
+})

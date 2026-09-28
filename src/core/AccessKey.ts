@@ -6,12 +6,14 @@ import {
   Actions,
   KeyAuthorizationManager as TempoKeyAuthorizationManager,
 } from 'viem/tempo'
+import type * as z from 'zod/mini'
 import type { StoreApi } from 'zustand'
 
 import type { OneOf } from '../internal/types.js'
 import * as ExecutionError from './ExecutionError.js'
 import * as Keystore from './Keystore.js'
 import type * as Store from './Store.js'
+import type * as Rpc from './zod/rpc.js'
 
 const status = {
   /** No matching usable access key was found. */
@@ -377,7 +379,7 @@ export async function authorize(options: authorize.Options): Promise<authorize.R
     store,
   })
 
-  return KeyAuthorization.toRpc(keyAuthorization)
+  return KeyAuthorization.toRpc(keyAuthorization) as authorize.ReturnType
 }
 
 export declare namespace authorize {
@@ -397,7 +399,7 @@ export declare namespace authorize {
   }
 
   /** Signed key authorization in RPC form. */
-  type ReturnType = KeyAuthorization.Rpc
+  type ReturnType = z.input<typeof Rpc.keyAuthorization>
 }
 
 /** Returns whether a local access key satisfies reusable authorization parameters. */

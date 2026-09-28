@@ -1,4 +1,3 @@
-import type { KeyAuthorization } from 'ox/tempo'
 import type { Client, Hex, Transport } from 'viem'
 import type { Address, JsonRpcAccount } from 'viem/accounts'
 import type { Account as TempoAccount } from 'viem/tempo'
@@ -279,7 +278,7 @@ export declare namespace createAccount {
   type ReturnType = {
     accounts: readonly Store.Account[]
     /** Signed key authorization, if an access key was granted. */
-    keyAuthorization?: KeyAuthorization.Rpc | undefined
+    keyAuthorization?: z.input<typeof Rpc.keyAuthorization> | undefined
     /** Server Authentication result, if the auth capability was requested. */
     auth?: AuthCapability | undefined
     /**
@@ -353,7 +352,7 @@ export declare namespace loadAccounts {
     /** Loaded accounts. */
     accounts: readonly Store.Account[]
     /** Signed key authorization, if an access key was granted. */
-    keyAuthorization?: KeyAuthorization.Rpc | undefined
+    keyAuthorization?: z.input<typeof Rpc.keyAuthorization> | undefined
     /** Server Authentication result, if the auth capability was requested. */
     auth?: AuthCapability | undefined
     /**
@@ -432,7 +431,7 @@ export declare namespace authorizeAccessKey {
   }
 
   type ReturnType = {
-    keyAuthorization: KeyAuthorization.Rpc
+    keyAuthorization: z.input<typeof Rpc.keyAuthorization>
     rootAddress: Address
   }
 }
@@ -446,7 +445,7 @@ export declare namespace revokeAccessKey {
     /** App-provided fee sponsorship for the revocation transaction. */
     feePayer?: boolean | string | undefined
     /** Signed authorization for an access key that has not been published on-chain. */
-    keyAuthorization?: KeyAuthorization.Signed | undefined
+    keyAuthorization?: z.output<typeof Rpc.keyAuthorization> | undefined
   }
 }
 

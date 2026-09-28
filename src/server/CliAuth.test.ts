@@ -1,5 +1,5 @@
 import { Base64, Hex } from 'ox'
-import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { KeyAuthorization } from 'ox/tempo'
 import { createClient, custom, encodeErrorResult, encodeFunctionResult } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
@@ -24,6 +24,18 @@ const limits = [
 ] as const
 
 describe('keyAuthorization', () => {
+  test.each([{ keyType: 'multisig' }, { signature: '0xc0' }, { signature: { type: 'multisig' } }])(
+    'rejects unsupported authorization fields: %o',
+    async (fields) => {
+      const request = await authorize('ABCDEFGH')
+      const result = z.safeParse(CliAuth.keyAuthorization, {
+        ...request.keyAuthorization,
+        ...fields,
+      })
+      expect(result.success).toMatchInlineSnapshot('false')
+    },
+  )
+
   test('behavior: preserves spending limit periods', () => {
     const authorization = z.decode(CliAuth.keyAuthorization, {
       address: accessKey.address,
@@ -87,9 +99,8 @@ async function authorize(
   return {
     accountAddress: root.address,
     code,
-    keyAuthorization: z.decode(CliAuth.keyAuthorization, {
+    keyAuthorization: z.parse(CliAuth.keyAuthorization, {
       ...keyAuthorization,
-      keyType: key.keyType,
       address: keyAuthorization.keyId,
     }),
   } satisfies z.output<typeof CliAuth.authorizeRequest>
@@ -125,9 +136,8 @@ async function authorizeWebAuthn(
   return {
     accountAddress: webAuthnRoot.address,
     code,
-    keyAuthorization: z.decode(CliAuth.keyAuthorization, {
+    keyAuthorization: z.parse(CliAuth.keyAuthorization, {
       ...keyAuthorization,
-      keyType: key.keyType,
       address: keyAuthorization.keyId,
     }),
   } satisfies z.output<typeof CliAuth.authorizeRequest>
@@ -1201,7 +1211,7 @@ describe('poll', () => {
             keyAuthorization: {
               ...first.keyAuthorization,
               signature: {
-                type: SignatureEnvelope.fromRpc(first.keyAuthorization.signature).type,
+                type: first.keyAuthorization.signature.type,
               },
             },
           }
@@ -1729,7 +1739,7 @@ describe('authorize', () => {
         ? {
             ...polled.keyAuthorization,
             signature: {
-              type: SignatureEnvelope.fromRpc(polled.keyAuthorization.signature).type,
+              type: polled.keyAuthorization.signature.type,
             },
           }
         : undefined
