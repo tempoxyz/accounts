@@ -345,7 +345,9 @@ export declare namespace prepareAuthorization {
     /** Keystore-created key material reference. */
     key?: { handle: Keystore.Handle; publicKey: Hex.Hex } | undefined
     /** Unsigned key authorization to sign with the root account. */
-    keyAuthorization: KeyAuthorization.KeyAuthorization<false>
+    keyAuthorization: KeyAuthorization.KeyAuthorization<false> & {
+      type: NonNullable<Options['keyType']>
+    }
     /** Exported private key backing an external access key. */
     privateKey?: Hex.Hex | undefined
   }

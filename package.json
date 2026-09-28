@@ -79,7 +79,7 @@
     "jose": "^6.2.3",
     "mipd": "^0.0.7",
     "mppx": "catalog:",
-    "ox": "~0.14.34",
+    "ox": "~0.14.45",
     "wata": "0.4.1",
     "webauthx": "~0.1.2",
     "zod": "^4.4.3",
@@ -94,7 +94,7 @@
     "react": ">=18",
     "react-native-mmkv": "^4.3.1",
     "react-native-nitro-modules": "^0.35.9",
-    "viem": ">=2.56.0",
+    "viem": ">=2.56.9",
     "wagmi": ">=0.0.0"
   },
   "peerDependenciesMeta": {

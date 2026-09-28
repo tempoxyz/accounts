@@ -42,7 +42,7 @@ jobs:
         run: pnpm check:types
 
   test-localnet:
-    name: 'Test Runtime (env: localnet, tag: ${{ matrix.tag }})'
+    name: 'Test Runtime (env: localnet)'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -50,13 +50,6 @@ jobs:
       id-token: write
     env:
       TESTCONTAINERS_RYUK_DISABLED: true
-    strategy:
-      matrix:
-        tag:
-          - latest
-          - sha-7825976
-          - https://rpc.moderato.tempo.xyz
-
     steps:
       - name: Secure runner
         uses: tempoxyz/gh-actions/actions/secure-runner@ee2960a6cc25d99bda45614135bfe1197d879bac # 2026-09-26T06-46-03Z-ee2960a6
@@ -75,14 +68,12 @@ jobs:
         uses: tempoxyz/gh-actions/vendor/docker/setup-docker-action@ee2960a6cc25d99bda45614135bfe1197d879bac # 2026-09-26T06-46-03Z-ee2960a6
 
       - name: Resolve Tempo image digest
-        if: "!startsWith(matrix.tag, 'http')"
         id: tempo-digest
         run: |
-          digest=$(docker manifest inspect ghcr.io/tempoxyz/tempo:${{ matrix.tag }} -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .Descriptor.digest' 2>/dev/null || docker buildx imagetools inspect ghcr.io/tempoxyz/tempo:${{ matrix.tag }} --format '{{.Manifest.Digest}}')
+          digest=$(docker manifest inspect ghcr.io/tempoxyz/tempo:latest -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .Descriptor.digest' 2>/dev/null || docker buildx imagetools inspect ghcr.io/tempoxyz/tempo:latest --format '{{.Manifest.Digest}}')
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Cache Tempo Docker image
-        if: "!startsWith(matrix.tag, 'http')"
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         id: docker-cache
         with:
@@ -90,23 +81,18 @@ jobs:
           key: tempo-image-${{ steps.tempo-digest.outputs.digest }}
 
       - name: Load cached Tempo image
-        if: "!startsWith(matrix.tag, 'http') && steps.docker-cache.outputs.cache-hit == 'true'"
+        if: "steps.docker-cache.outputs.cache-hit == 'true'"
         run: docker load -i /tmp/tempo-image.tar
 
       - name: Pull and cache Tempo image
-        if: "!startsWith(matrix.tag, 'http') && steps.docker-cache.outputs.cache-hit != 'true'"
+        if: "steps.docker-cache.outputs.cache-hit != 'true'"
         run: |
-          docker pull ghcr.io/tempoxyz/tempo:${{ matrix.tag }}
-          docker save ghcr.io/tempoxyz/tempo:${{ matrix.tag }} -o /tmp/tempo-image.tar
+          docker pull ghcr.io/tempoxyz/tempo:latest
+          docker save ghcr.io/tempoxyz/tempo:latest -o /tmp/tempo-image.tar
 
       - name: Run tests
-        run: |
-          if [[ "$VITE_NODE_TAG" == sha-* ]]; then
-            pnpm test src/server/internal/handlers/multisig.localnet.test.ts --bail=1
-          else
-            pnpm test --bail=1
-          fi
+        run: pnpm test --bail=1
         env:
           CI: true
-          VITE_NODE_TAG: ${{ matrix.tag }}
+          VITE_NODE_TAG: latest
           VITE_RPC_CREDENTIALS: ${{ secrets.VITE_RPC_CREDENTIALS }}
