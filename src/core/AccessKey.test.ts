@@ -506,18 +506,19 @@ describe('authorize', () => {
     `)
     expect(store.getState().accessKeys.map(({ keyAuthorization: _, ...accessKey }) => accessKey))
       .toMatchInlineSnapshot(`
-      [
-        {
-          "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-          "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
-          "chainId": 1,
-          "expiry": 123,
-          "keyType": "secp256k1",
-          "limits": undefined,
-          "scopes": undefined,
-        },
-      ]
-    `)
+        [
+          {
+            "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "address": "0x8C8d35429F74ec245F8Ef2f4Fd1e551cFF97d650",
+            "chainId": 1,
+            "expiry": 123,
+            "keyType": "secp256k1",
+            "limits": undefined,
+            "permissionSemantics": 1,
+            "scopes": undefined,
+          },
+        ]
+      `)
   })
 
   test('behavior: provisions a handle-backed record via the keystore', async () => {
@@ -590,19 +591,20 @@ describe('authorize', () => {
 
     expect(store.getState().accessKeys.map(({ keyAuthorization: _, ...accessKey }) => accessKey))
       .toMatchInlineSnapshot(`
-      [
-        {
-          "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-          "address": "${accessKey.address}",
-          "chainId": 1,
-          "expiry": 123,
-          "keyType": "secp256k1",
-          "limits": undefined,
-          "privateKey": "${privateKeys[1]}",
-          "scopes": undefined,
-        },
-      ]
-    `)
+        [
+          {
+            "access": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "address": "${accessKey.address}",
+            "chainId": 1,
+            "expiry": 123,
+            "keyType": "secp256k1",
+            "limits": undefined,
+            "permissionSemantics": 1,
+            "privateKey": "${privateKeys[1]}",
+            "scopes": undefined,
+          },
+        ]
+      `)
   })
 })
 

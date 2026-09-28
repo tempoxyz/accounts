@@ -44,6 +44,8 @@ export type AccessKey = {
   keyType: 'secp256k1' | 'p256' | 'webAuthn' | 'webCrypto'
   /** TIP-20 spending limits for the access key. */
   limits?: { token: Address.Address; limit: bigint; period?: number | undefined }[] | undefined
+  /** Version of stored permission semantics: omitted fields are unrestricted, empty arrays deny all. Absent on legacy records. */
+  permissionSemantics?: 1 | undefined
   /** Call scopes restricting which contracts/selectors this key can call. */
   scopes?:
     | {
@@ -560,6 +562,7 @@ export function add(options: add.Options): add.ReturnType {
     expiry: authorization.expiry ?? undefined,
     keyAuthorization: authorization,
     keyType: authorization.type,
+    permissionSemantics: 1 as const,
     limits: authorization.limits as AccessKey['limits'],
     scopes: authorization.scopes as AccessKey['scopes'],
   }
@@ -626,6 +629,7 @@ function updateAuthorization(options: updateAuthorization.Options): void {
     patch: {
       expiry: authorization.expiry ?? undefined,
       keyAuthorization: authorization,
+      permissionSemantics: 1,
       limits: authorization.limits as AccessKey['limits'],
       scopes: authorization.scopes as AccessKey['scopes'],
     },
