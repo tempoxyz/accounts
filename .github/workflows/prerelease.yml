@@ -27,4 +27,7 @@ jobs:
       - name: Build
         run: pnpm zile publish:prepare
 
+      - name: Check package declarations
+        run: ./node_modules/.bin/tsc -p test/consumer/tsconfig.json
+
       - run: pnpx pkg-pr-new@0.0.70 publish --pnpm

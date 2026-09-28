@@ -1,5 +1,7 @@
 import * as z from 'zod/mini'
 import type { Mutate, StoreApi } from 'zustand'
+// Retain middleware augmentations in emitted declarations for consumers of Store.
+import 'zustand/middleware'
 import { persist } from 'zustand/middleware'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { createStore } from 'zustand/vanilla'

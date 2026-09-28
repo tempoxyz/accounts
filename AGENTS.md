@@ -126,3 +126,5 @@
 - **Resolve funding intent before signing** — `fundingPolicy: true` selects the funding handler default through `eth_fillKeyAuthorization`; keep booleans out of signed authorizations. The dialog adapter does not accept funding-policy requests.
 
 - **Current multisig envelopes always carry config** — use `signature.config` and bind approval digests to its version. Derive version-zero addresses with `Addresses.nativeMultisigFactory`; preserve current configs during relay finalization.
+
+- **Retain declaration-only module augmentations** — runtime middleware imports can disappear during declaration emission. Preserve an explicit side-effect import and check the built package in an isolated TypeScript project.
