@@ -47,9 +47,13 @@ export const signatureEnvelope = z.custom<SignatureEnvelope.SignatureEnvelopeRpc
 
 export const keyType = z.union([z.literal('secp256k1'), z.literal('p256'), z.literal('webAuthn')])
 
-type KeyAuthorizationRpcDecoded = Omit<KeyAuthorization.Rpc, 'chainId' | 'expiry' | 'limits'> & {
+type KeyAuthorizationRpcDecoded = Omit<
+  KeyAuthorization.Rpc,
+  'chainId' | 'expiry' | 'keyType' | 'limits'
+> & {
   address?: KeyAuthorization.Rpc['keyId'] | undefined
   chainId: bigint
+  keyType: z.output<typeof keyType>
   expiry: number | null | undefined
   limits?:
     | readonly {
@@ -133,7 +137,7 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
       chainId: keyAuthorization.chainId === '0x' ? 0n : Hex.toBigInt(keyAuthorization.chainId),
       expiry: keyAuthorization.expiry == null ? null : Hex.toNumber(keyAuthorization.expiry),
       keyId: keyAuthorization.keyId,
-      keyType: keyAuthorization.keyType,
+      keyType: z.parse(keyType, keyAuthorization.keyType),
       limits: keyAuthorization.limits?.map(({ limit, period, token }) => ({
         token,
         limit: Hex.toBigInt(limit),

@@ -1,5 +1,5 @@
 import { AbiFunction, Address, Hex, PublicKey, RpcResponse, WebCryptoP256 } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { KeyAuthorization, type SignatureEnvelope } from 'ox/tempo'
 import { BaseError, type Client, type Transport } from 'viem'
 import {
   Account as TempoAccount,
@@ -345,7 +345,10 @@ export declare namespace prepareAuthorization {
     /** Keystore-created key material reference. */
     key?: { handle: Keystore.Handle; publicKey: Hex.Hex } | undefined
     /** Unsigned key authorization to sign with the root account. */
-    keyAuthorization: KeyAuthorization.KeyAuthorization<false>
+    keyAuthorization: Extract<
+      KeyAuthorization.KeyAuthorization<false>,
+      { type: SignatureEnvelope.Type }
+    >
     /** Exported private key backing an external access key. */
     privateKey?: Hex.Hex | undefined
   }

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Address, Hex } from 'ox'
 import { Hex as ox_Hex } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { type Address as ViemAddress, hashMessage, parseUnits } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
 import { describe, expect, test, vi } from 'vp/test'
@@ -121,7 +121,7 @@ describe('Provider.create', () => {
         ? {
             ...account.capabilities.keyAuthorization,
             signature: {
-              type: account.capabilities.keyAuthorization.signature.type,
+              type: SignatureEnvelope.fromRpc(account.capabilities.keyAuthorization.signature).type,
             },
           }
         : undefined
@@ -525,7 +525,7 @@ describe('Provider.create', () => {
       const keyAuthorization = {
         ...result.keyAuthorization,
         signature: {
-          type: result.keyAuthorization.signature.type,
+          type: SignatureEnvelope.fromRpc(result.keyAuthorization.signature).type,
         },
       }
 

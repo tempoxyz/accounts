@@ -1112,6 +1112,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         {
           "contractAddress": null,
           "feeToken": "0x20c0000000000000000000000000000000000000",
+          "multisig": undefined,
           "status": "success",
           "to": "0x20c0000000000000000000000000000000000000",
           "type": "0x76",
@@ -1389,7 +1390,7 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
           from:  0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
         Details: plain send failure
-        Version: viem@2.56.0]
+        Version: viem@2.56.9]
       `)
     })
   })

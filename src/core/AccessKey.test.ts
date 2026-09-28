@@ -23,7 +23,7 @@ function createKeyAuthorization(
   options: {
     chainId?: bigint | undefined
     expiry?: number | undefined
-    keyType?: KeyAuthorization.KeyAuthorization['type'] | undefined
+    keyType?: AccessKey.prepareAuthorization.Options['keyType'] | undefined
     limits?: { token: `0x${string}`; limit: bigint; period?: number | undefined }[] | undefined
     scopes?: KeyAuthorization.Scope[] | undefined
   } = {},
@@ -1078,7 +1078,7 @@ describe('getStatus', () => {
 
       Docs: https://viem.sh/docs/contract/readContract
       Details: RPC unavailable.
-      Version: viem@2.56.0]
+      Version: viem@2.56.9]
     `)
   })
 
