@@ -1,5 +1,15 @@
 # accounts
 
+## 0.19.0
+
+### Minor Changes
+
+- f059161: Removed multisig relay support and updated Viem to 2.56.9.
+
+### Patch Changes
+
+- 90c760a: Mark newly recorded access-key permissions so consumers can distinguish omitted and empty fields from legacy metadata.
+
 ## 0.18.5
 
 ### Patch Changes
