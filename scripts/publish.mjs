@@ -1,14 +1,14 @@
 import { spawn } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const runCommand = (command, args, options) =>
   new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
-      env: process.env,
+      env: { ...process.env, ...options.env },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let stderr = ''
@@ -55,8 +55,51 @@ export async function publishPackage(parameters) {
     if (!/\bE404\b/.test(commandOutput(error))) throw error
   }
 
-  await run('npm', ['publish', '--access', 'public', '--loglevel=verbose'], { cwd })
-  return 'published'
+  const publishDirectory = await mkdtemp(join(tmpdir(), 'accounts-publish-'))
+  const archive = join(publishDirectory, 'package.tgz')
+
+  try {
+    await run('pnpm', ['pack', '--out', archive, '--json'], {
+      cwd,
+      env: { NPM_CONFIG_IGNORE_SCRIPTS: 'true' },
+      silent: true,
+    })
+
+    const { stdout } = await run('tar', ['-xOf', archive, 'package/package.json'], {
+      cwd,
+      silent: true,
+    })
+    const packedPackage = JSON.parse(stdout)
+    if (packedPackage.name !== name || packedPackage.version !== version)
+      throw new Error(
+        `packed package identity does not match ${spec}: ${packedPackage.name}@${packedPackage.version}`,
+      )
+
+    const dependencyFields = [
+      'dependencies',
+      'devDependencies',
+      'optionalDependencies',
+      'peerDependencies',
+    ]
+    const unresolvedCatalogs = dependencyFields.flatMap((field) =>
+      Object.entries(packedPackage[field] ?? {})
+        .filter(([, range]) => typeof range === 'string' && range.startsWith('catalog:'))
+        .map(([dependency]) => `${field}.${dependency}`),
+    )
+    if (unresolvedCatalogs.length > 0)
+      throw new Error(
+        `packed package contains unresolved catalogs: ${unresolvedCatalogs.join(', ')}`,
+      )
+
+    await run(
+      'npm',
+      ['publish', archive, '--access', 'public', '--ignore-scripts', '--loglevel=verbose'],
+      { cwd },
+    )
+    return 'published'
+  } finally {
+    await rm(publishDirectory, { force: true, recursive: true })
+  }
 }
 
 async function main() {

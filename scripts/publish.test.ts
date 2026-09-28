@@ -8,20 +8,59 @@ const parameters = {
   version: '1.2.3',
 }
 
+const packedPackage = JSON.stringify({
+  name: parameters.name,
+  version: parameters.version,
+  dependencies: { hono: '^4.13.5', mppx: '^0.11.0' },
+})
+
 describe('publishPackage', () => {
   test('publishes an unpublished version with the npm CLI', async () => {
     const run = vi
       .fn()
       .mockRejectedValueOnce(Object.assign(new Error('not found'), { stderr: 'npm error E404' }))
+      .mockResolvedValueOnce({ stderr: '', stdout: '{}' })
+      .mockResolvedValueOnce({ stderr: '', stdout: packedPackage })
       .mockResolvedValueOnce({ stderr: '', stdout: '' })
 
     await expect(publishPackage({ ...parameters, run })).resolves.toBe('published')
+    expect(run.mock.calls[1]?.[0]).toBe('pnpm')
+    expect(run.mock.calls[1]?.[1]).toEqual(
+      expect.arrayContaining(['pack', '--out', expect.stringMatching(/package\.tgz$/), '--json']),
+    )
     expect(run).toHaveBeenNthCalledWith(
-      2,
+      4,
       'npm',
-      ['publish', '--access', 'public', '--loglevel=verbose'],
+      [
+        'publish',
+        expect.stringMatching(/package\.tgz$/),
+        '--access',
+        'public',
+        '--ignore-scripts',
+        '--loglevel=verbose',
+      ],
       { cwd: '/repo' },
     )
+  })
+
+  test('does not publish a tarball with unresolved catalog dependencies', async () => {
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error('not found'), { stderr: 'npm error E404' }))
+      .mockResolvedValueOnce({ stderr: '', stdout: '{}' })
+      .mockResolvedValueOnce({
+        stderr: '',
+        stdout: JSON.stringify({
+          name: parameters.name,
+          version: parameters.version,
+          dependencies: { hono: 'catalog:' },
+        }),
+      })
+
+    await expect(publishPackage({ ...parameters, run })).rejects.toThrow(
+      'packed package contains unresolved catalogs: dependencies.hono',
+    )
+    expect(run).toHaveBeenCalledTimes(3)
   })
 
   test('skips publication when the exact version already exists', async () => {
