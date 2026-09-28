@@ -23,24 +23,75 @@ describe('publishPackage', () => {
       .mockResolvedValueOnce({ stderr: '', stdout: packedPackage })
       .mockResolvedValueOnce({ stderr: '', stdout: '' })
 
-    await expect(publishPackage({ ...parameters, run })).resolves.toBe('published')
-    expect(run.mock.calls[1]?.[0]).toBe('pnpm')
-    expect(run.mock.calls[1]?.[1]).toEqual(
-      expect.arrayContaining(['pack', '--out', expect.stringMatching(/package\.tgz$/), '--json']),
-    )
-    expect(run).toHaveBeenNthCalledWith(
-      4,
-      'npm',
-      [
-        'publish',
-        expect.stringMatching(/package\.tgz$/),
-        '--access',
-        'public',
-        '--ignore-scripts',
-        '--loglevel=verbose',
-      ],
-      { cwd: '/repo' },
-    )
+    const result = await publishPackage({ ...parameters, run })
+    const calls = run.mock.calls.map(([command, args, options]) => ({
+      args: args.map((arg) =>
+        typeof arg === 'string' && arg.endsWith('/package.tgz') ? '<archive>' : arg,
+      ),
+      command,
+      cwd: options.cwd === parameters.cwd ? '<repo>' : '<temp>',
+      env: options.env,
+      silent: options.silent,
+    }))
+
+    expect({ calls, result }).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          {
+            "args": [
+              "view",
+              "accounts@1.2.3",
+              "version",
+              "--json",
+            ],
+            "command": "npm",
+            "cwd": "<temp>",
+            "env": undefined,
+            "silent": true,
+          },
+          {
+            "args": [
+              "pack",
+              "--out",
+              "<archive>",
+              "--json",
+            ],
+            "command": "pnpm",
+            "cwd": "<repo>",
+            "env": {
+              "NPM_CONFIG_IGNORE_SCRIPTS": "true",
+            },
+            "silent": true,
+          },
+          {
+            "args": [
+              "-xOf",
+              "<archive>",
+              "package/package.json",
+            ],
+            "command": "tar",
+            "cwd": "<repo>",
+            "env": undefined,
+            "silent": true,
+          },
+          {
+            "args": [
+              "publish",
+              "<archive>",
+              "--access",
+              "public",
+              "--ignore-scripts",
+              "--loglevel=verbose",
+            ],
+            "command": "npm",
+            "cwd": "<repo>",
+            "env": undefined,
+            "silent": undefined,
+          },
+        ],
+        "result": "published",
+      }
+    `)
   })
 
   test('does not publish a tarball with unresolved catalog dependencies', async () => {
@@ -57,33 +108,79 @@ describe('publishPackage', () => {
         }),
       })
 
-    await expect(publishPackage({ ...parameters, run })).rejects.toThrow(
-      'packed package contains unresolved catalogs: dependencies.hono',
+    await expect(publishPackage({ ...parameters, run })).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: packed package contains unresolved catalogs: dependencies.hono]`,
     )
-    expect(run).toHaveBeenCalledTimes(3)
+    expect(run.mock.calls.map(([command]) => command)).toMatchInlineSnapshot(`
+      [
+        "npm",
+        "pnpm",
+        "tar",
+      ]
+    `)
+  })
+
+  test('does not publish a tarball with an unexpected identity', async () => {
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error('not found'), { stderr: 'npm error E404' }))
+      .mockResolvedValueOnce({ stderr: '', stdout: '{}' })
+      .mockResolvedValueOnce({
+        stderr: '',
+        stdout: JSON.stringify({ name: 'other-package', version: parameters.version }),
+      })
+
+    await expect(publishPackage({ ...parameters, run })).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: packed package identity does not match accounts@1.2.3: other-package@1.2.3]`,
+    )
+    expect(run.mock.calls.map(([command]) => command)).toMatchInlineSnapshot(`
+      [
+        "npm",
+        "pnpm",
+        "tar",
+      ]
+    `)
   })
 
   test('skips publication when the exact version already exists', async () => {
     const run = vi.fn().mockResolvedValue({ stderr: '', stdout: '"1.2.3"\n' })
 
-    await expect(publishPackage({ ...parameters, run })).resolves.toBe('already-published')
-    expect(run).toHaveBeenCalledTimes(1)
+    const result = await publishPackage({ ...parameters, run })
+
+    expect({ commands: run.mock.calls.map(([command]) => command), result }).toMatchInlineSnapshot(`
+        {
+          "commands": [
+            "npm",
+          ],
+          "result": "already-published",
+        }
+      `)
   })
 
   test('does not publish when the registry lookup fails unexpectedly', async () => {
     const error = Object.assign(new Error('registry unavailable'), { stderr: 'npm error E500' })
     const run = vi.fn().mockRejectedValue(error)
 
-    await expect(publishPackage({ ...parameters, run })).rejects.toBe(error)
-    expect(run).toHaveBeenCalledTimes(1)
+    await expect(publishPackage({ ...parameters, run })).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: registry unavailable]`,
+    )
+    expect(run.mock.calls.map(([command]) => command)).toMatchInlineSnapshot(`
+      [
+        "npm",
+      ]
+    `)
   })
 
   test('does not publish when npm returns a different version', async () => {
     const run = vi.fn().mockResolvedValue({ stderr: '', stdout: '"0.18.5"\n' })
 
-    await expect(publishPackage({ ...parameters, run })).rejects.toThrow(
-      'npm returned an unexpected version',
+    await expect(publishPackage({ ...parameters, run })).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: npm returned an unexpected version for accounts@1.2.3: "0.18.5"]`,
     )
-    expect(run).toHaveBeenCalledTimes(1)
+    expect(run.mock.calls.map(([command]) => command)).toMatchInlineSnapshot(`
+      [
+        "npm",
+      ]
+    `)
   })
 })
