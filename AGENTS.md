@@ -124,3 +124,5 @@
 - **PostMessage iframe color schemes must match the wallet page** — read the explicit `scheme` URL parameter when mounting the iframe. A mismatched scheme can make its transparent canvas opaque black on light macOS.
 - **Funding-policy admins resolve before signing** — omitted inline admins default to the authenticated root account. Cached account or credential hints do not establish the selected root; discover it before preparing the signed authorization.
 - **Resolve funding intent before signing** — `fundingPolicy: true` selects the funding handler default through `eth_fillKeyAuthorization`; keep booleans out of signed authorizations. The dialog adapter does not accept funding-policy requests.
+
+- **Current multisig envelopes always carry config** — use `signature.config` and bind approval digests to its version. Derive version-zero addresses with `Addresses.nativeMultisigFactory`; preserve current configs during relay finalization.

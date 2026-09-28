@@ -239,6 +239,7 @@ async function replacePendingAccessKey(
   // Pending updates use a wallet-only extension that the public Provider schema cannot decode yet.
   const parameters = z.decode(Rpc.wallet_updateAccessKey.parameters, raw as never)
   const current = KeyAuthorization.fromRpc(raw.keyAuthorization as KeyAuthorization.Rpc)
+  if (current.type === 'multisig') throw new Error('Expected a primitive access key.')
   const authorization = await account.signKeyAuthorization(
     {
       accessKeyAddress: parameters.accessKeyAddress,

@@ -64,38 +64,6 @@ describe('memoryStore', () => {
 })
 
 describe('handleRawTransaction', () => {
-  test('behavior: rejects first approvals when no config can be resolved', async () => {
-    const owner = Account.fromSecp256k1(privateKey_1)
-    const account = Account.fromMultisig({
-      threshold: 1,
-      owners: [{ owner: owner.address, weight: 1 }],
-    })
-    const transaction = {
-      calls: [{ to: '0xcafebabecafebabecafebabecafebabecafebabe', value: 1n }],
-      chainId: tempoDevnet.id,
-      gas: 21_000n,
-      maxFeePerGas: 1n,
-      maxPriorityFeePerGas: 0n,
-      multisig: account.config,
-      nonce: 0n,
-    }
-    const signature = await owner.signTransaction(transaction as never)
-    const serialized = withoutInit(
-      await account.signTransaction({ ...transaction, signatures: [signature] } as never),
-    )
-
-    await expect(
-      Multisig.handleRawTransaction({
-        getClient: (() => undefined) as never,
-        method: 'eth_sendRawTransaction',
-        request: { params: [serialized] },
-        store: Multisig.memoryStore(),
-      }),
-    ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[RpcResponse.InvalidParamsError: Multisig config is required to collect approvals. Provide it in the bootstrap transaction or configure \`multisig.resolveConfig\`.]`,
-    )
-  })
-
   test('behavior: finalize submitted preserves async broadcast method', async () => {
     const owner = Account.fromSecp256k1(privateKey_1)
     const account = Account.fromMultisig({
@@ -108,7 +76,8 @@ describe('handleRawTransaction', () => {
       gas: 21_000n,
       maxFeePerGas: 1n,
       maxPriorityFeePerGas: 0n,
-      multisig: account.config,
+      from: account.address,
+      multisigSimulation: { config: account.config },
       nonce: 0n,
     }
     const signature = await owner.signTransaction(transaction as never)
@@ -141,7 +110,7 @@ describe('handleRawTransaction', () => {
 })
 
 describe('config resolution', () => {
-  test('behavior: reuses pending bootstrap config when a later approval omits init', async () => {
+  test('behavior: collects approvals carrying the same current config', async () => {
     const store = Multisig.memoryStore()
     const owner_1 = Account.fromSecp256k1(privateKey_1)
     const owner_2 = Account.fromSecp256k1(privateKey_2)
@@ -158,7 +127,8 @@ describe('config resolution', () => {
       gas: 21_000n,
       maxFeePerGas: 1n,
       maxPriorityFeePerGas: 0n,
-      multisig: account.config,
+      from: account.address,
+      multisigSimulation: { config: account.config },
       nonce: 0n,
     }
     const signature_1 = await owner_1.signTransaction(transaction as never)
@@ -167,9 +137,10 @@ describe('config resolution', () => {
       ...transaction,
       signatures: [signature_1],
     } as never)
-    const second = withoutInit(
-      await account.signTransaction({ ...transaction, signatures: [signature_2] } as never),
-    )
+    const second = await account.signTransaction({
+      ...transaction,
+      signatures: [signature_2],
+    } as never)
 
     await Multisig.handleRawTransaction({
       getClient: (() => undefined) as never,
@@ -189,7 +160,7 @@ describe('config resolution', () => {
     expect(hash).toMatchInlineSnapshot(`"${hash}"`)
   })
 
-  test('behavior: preserves bootstrap init when it arrives after a resolver-backed pending approval', async () => {
+  test('behavior: preserves the config with resolver-backed approvals', async () => {
     const store = Multisig.memoryStore()
     const owner_1 = Account.fromSecp256k1(privateKey_1)
     const owner_2 = Account.fromSecp256k1(privateKey_2)
@@ -206,14 +177,16 @@ describe('config resolution', () => {
       gas: 21_000n,
       maxFeePerGas: 1n,
       maxPriorityFeePerGas: 0n,
-      multisig: account.config,
+      from: account.address,
+      multisigSimulation: { config: account.config },
       nonce: 0n,
     }
     const signature_1 = await owner_1.signTransaction(transaction as never)
     const signature_2 = await owner_2.signTransaction(transaction as never)
-    const first = withoutInit(
-      await account.signTransaction({ ...transaction, signatures: [signature_1] } as never),
-    )
+    const first = await account.signTransaction({
+      ...transaction,
+      signatures: [signature_1],
+    } as never)
     const second = await account.signTransaction({
       ...transaction,
       signatures: [signature_2],
@@ -227,73 +200,7 @@ describe('config resolution', () => {
       resolveConfig: () => account.config,
       store,
     })
-    const hash = await Multisig.handleRawTransaction({
-      getClient: (() => ({
-        request: async ({ params }: { params: unknown }) => {
-          submitted = Array.isArray(params) ? (params[0] as `0x${string}`) : undefined
-          return hashRawTransaction(params)
-        },
-      })) as never,
-      method: 'eth_sendRawTransaction',
-      request: { params: [second] },
-      resolveConfig: () => account.config,
-      store,
-    })
-
-    const transaction_submitted = Transaction.deserialize(submitted! as never) as {
-      signature: SignatureEnvelope.Multisig
-    }
-    expect({
-      hash,
-      init: transaction_submitted.signature.init
-        ? MultisigConfig.getAddress(transaction_submitted.signature.init)
-        : undefined,
-    }).toMatchInlineSnapshot(`
-      {
-        "hash": "${hash}",
-        "init": "${MultisigConfig.getAddress(account.config)}",
-      }
-    `)
-  })
-
-  test('behavior: attaches resolver-provided bootstrap config when approvals omit init', async () => {
-    const store = Multisig.memoryStore()
-    const owner_1 = Account.fromSecp256k1(privateKey_1)
-    const owner_2 = Account.fromSecp256k1(privateKey_2)
-    const account = Account.fromMultisig({
-      threshold: 2,
-      owners: [
-        { owner: owner_1.address, weight: 1 },
-        { owner: owner_2.address, weight: 1 },
-      ],
-    })
-    const transaction = {
-      calls: [{ to: '0xcafebabecafebabecafebabecafebabecafebabe', value: 1n }],
-      chainId: tempoDevnet.id,
-      gas: 21_000n,
-      maxFeePerGas: 1n,
-      maxPriorityFeePerGas: 0n,
-      multisig: account.config,
-      nonce: 0n,
-    }
-    const signature_1 = await owner_1.signTransaction(transaction as never)
-    const signature_2 = await owner_2.signTransaction(transaction as never)
-    const first = withoutInit(
-      await account.signTransaction({ ...transaction, signatures: [signature_1] } as never),
-    )
-    const second = withoutInit(
-      await account.signTransaction({ ...transaction, signatures: [signature_2] } as never),
-    )
-    let submitted: `0x${string}` | undefined
-
     await Multisig.handleRawTransaction({
-      getClient: (() => undefined) as never,
-      method: 'eth_sendRawTransaction',
-      request: { params: [first] },
-      resolveConfig: () => account.config,
-      store,
-    })
-    const hash = await Multisig.handleRawTransaction({
       getClient: (() => ({
         request: async ({ params }: { params: unknown }) => {
           submitted = Array.isArray(params) ? (params[0] as `0x${string}`) : undefined
@@ -309,27 +216,33 @@ describe('config resolution', () => {
     const transaction_submitted = Transaction.deserialize(submitted! as never) as {
       signature: SignatureEnvelope.Multisig
     }
-    expect({
-      hash,
-      init: transaction_submitted.signature.init
-        ? MultisigConfig.getAddress(transaction_submitted.signature.init)
-        : undefined,
-    }).toMatchInlineSnapshot(`
+    expect(transaction_submitted.signature.config).toMatchInlineSnapshot(`
       {
-        "hash": "${hash}",
-        "init": "${MultisigConfig.getAddress(account.config)}",
+        "owners": [
+          {
+            "owner": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+            "weight": 1,
+          },
+          {
+            "owner": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+            "weight": 1,
+          },
+        ],
+        "salt": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "threshold": 2,
+        "version": 0n,
       }
     `)
   })
 
-  test('behavior: preserves bootstrap init when claimed operation omits stored init config', async () => {
+  test('behavior: preserves the config when the claimed operation omits stored config', async () => {
     const base = Multisig.memoryStore()
     const store: Multisig.Store = {
       claimSubmission: async (operation, options) => {
         const result = await base.claimSubmission(operation, options)
         if (result.status !== 'claimed') return result
         return {
-          operation: { ...result.operation, initConfig: undefined },
+          operation: { ...result.operation, config: undefined, initConfig: undefined },
           status: result.status,
         }
       },
@@ -349,7 +262,8 @@ describe('config resolution', () => {
       gas: 21_000n,
       maxFeePerGas: 1n,
       maxPriorityFeePerGas: 0n,
-      multisig: account.config,
+      from: account.address,
+      multisigSimulation: { config: account.config },
       nonce: 0n,
     }
     const signature = await owner.signTransaction(transaction as never)
@@ -359,7 +273,7 @@ describe('config resolution', () => {
     } as never)
     let submitted: `0x${string}` | undefined
 
-    const hash = await Multisig.handleRawTransaction({
+    await Multisig.handleRawTransaction({
       getClient: (() => ({
         request: async ({ params }: { params: unknown }) => {
           submitted = Array.isArray(params) ? (params[0] as `0x${string}`) : undefined
@@ -374,15 +288,17 @@ describe('config resolution', () => {
     const transaction_submitted = Transaction.deserialize(submitted! as never) as {
       signature: SignatureEnvelope.Multisig
     }
-    expect({
-      hash,
-      init: transaction_submitted.signature.init
-        ? MultisigConfig.getAddress(transaction_submitted.signature.init)
-        : undefined,
-    }).toMatchInlineSnapshot(`
+    expect(transaction_submitted.signature.config).toMatchInlineSnapshot(`
       {
-        "hash": "${hash}",
-        "init": "${MultisigConfig.getAddress(account.config)}",
+        "owners": [
+          {
+            "owner": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+            "weight": 1,
+          },
+        ],
+        "salt": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "threshold": 1,
+        "version": 0n,
       }
     `)
   })
@@ -404,7 +320,8 @@ describe('config resolution', () => {
       gas: 21_000n,
       maxFeePerGas: 1n,
       maxPriorityFeePerGas: 0n,
-      multisig: account.config,
+      from: account.address,
+      multisigSimulation: { config: account.config },
       nonce: 0n,
     }
     const signature = await owner_1.signTransaction(transaction as never)
@@ -422,7 +339,7 @@ describe('config resolution', () => {
         store: Multisig.memoryStore(),
       }),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[RpcResponse.InvalidParamsError: Signature from non-owner 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266.]`,
+      `[RpcResponse.InvalidParamsError: Resolved multisig config does not match the transaction config.]`,
     )
   })
 
@@ -439,6 +356,7 @@ describe('config resolution', () => {
         { owner: owner_2.address, weight: 1 },
       ],
       threshold: 1,
+      version: 1n,
     })
     const transaction = {
       calls: [{ to: '0xcafebabecafebabecafebabecafebabecafebabe', value: 1n }],
@@ -446,16 +364,15 @@ describe('config resolution', () => {
       gas: 21_000n,
       maxFeePerGas: 1n,
       maxPriorityFeePerGas: 0n,
-      multisig: account.config,
+      from: account.address,
+      multisigSimulation: { config: current },
       nonce: 1n,
     }
     const signature = await owner_2.signTransaction(transaction as never)
-    const serialized = withoutInit(
-      await account.signTransaction({
-        ...transaction,
-        signatures: [signature],
-      } as never),
-    )
+    const serialized = await account.signTransaction({
+      ...transaction,
+      signatures: [signature],
+    } as never)
     let submitted: `0x${string}` | undefined
 
     const hash = await Multisig.handleRawTransaction({
@@ -477,18 +394,53 @@ describe('config resolution', () => {
     expect({
       account: transaction_submitted.signature.account,
       hash,
-      init: transaction_submitted.signature.init,
+      version: transaction_submitted.signature.config.version,
     }).toMatchInlineSnapshot(`
       {
-        "account": "${MultisigConfig.getAddress(account.config)}",
+        "account": "${account.address.toLowerCase()}",
         "hash": "${hash}",
-        "init": undefined,
+        "version": 1n,
       }
     `)
   })
 })
 
 describe('approval validation', () => {
+  test('behavior: rejects approvals signed for another config version', async () => {
+    const owner = Account.fromP256(privateKey_1)
+    const account = Account.fromMultisig({
+      owners: [{ owner: owner.address, weight: 1 }],
+      threshold: 1,
+    })
+    const transaction = {
+      calls: [{ to: '0xcafebabecafebabecafebabecafebabecafebabe', value: 1n }],
+      chainId: tempoDevnet.id,
+      from: account.address,
+      gas: 21_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 0n,
+      multisigSimulation: { config: account.config },
+      nonce: 1n,
+    }
+    const signature = await owner.signTransaction(transaction as never)
+    const serialized = await account.signTransaction({
+      ...transaction,
+      multisigSimulation: { config: { ...account.config, version: 1n } },
+      signatures: [signature],
+    } as never)
+
+    await expect(
+      Multisig.handleRawTransaction({
+        getClient: (() => undefined) as never,
+        method: 'eth_sendRawTransaction',
+        request: { params: [serialized] },
+        store: Multisig.memoryStore(),
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[RpcResponse.InvalidParamsError: Invalid signature from owner ${owner.address.toLowerCase()}.]`,
+    )
+  })
+
   test('behavior: rejects P256 approvals whose embedded owner key did not sign the operation', async () => {
     const privateKey = P256.randomPrivateKey()
     const publicKey = P256.getPublicKey({ privateKey })
@@ -503,7 +455,8 @@ describe('approval validation', () => {
       gas: 21_000n,
       maxFeePerGas: 1n,
       maxPriorityFeePerGas: 0n,
-      multisig: account.config,
+      from: account.address,
+      multisigSimulation: { config: account.config },
       nonce: 0n,
     }
     const signature = SignatureEnvelope.serialize(
@@ -553,7 +506,8 @@ describe('handleRawTransaction with sponsor', () => {
       gas: 21_000n,
       maxFeePerGas: 1n,
       maxPriorityFeePerGas: 0n,
-      multisig: account.config,
+      from: account.address,
+      multisigSimulation: { config: account.config },
       nonce: 0n,
     }
     const signature_1 = await owner_1.signTransaction(transaction as never)
@@ -603,20 +557,20 @@ describe('handleRawTransaction with sponsor', () => {
       string,
       unknown
     >
-    const signature = transaction_broadcasted.signature as { init?: unknown; type?: string }
+    const signature = transaction_broadcasted.signature as SignatureEnvelope.Multisig
     expect({
       feePayerSignature: Boolean(transaction_broadcasted.feePayerSignature),
       feeToken: (transaction_broadcasted.feeToken as string).toLowerCase(),
       hash,
-      init: Boolean(signature.init),
+      version: signature.config.version,
       signature: signature.type,
     }).toMatchInlineSnapshot(`
       {
         "feePayerSignature": true,
         "feeToken": "0x20c0000000000000000000000000000000000000",
         "hash": "${hash}",
-        "init": true,
         "signature": "multisig",
+        "version": 0n,
       }
     `)
   })
@@ -636,7 +590,8 @@ describe('handleRawTransaction with sponsor', () => {
       gas: 21_000n,
       maxFeePerGas: 1n,
       maxPriorityFeePerGas: 0n,
-      multisig: account.config,
+      from: account.address,
+      multisigSimulation: { config: account.config },
       nonce: 0n,
     }
     const signature = await owner.signTransaction(transaction as never)
@@ -728,16 +683,4 @@ function hashRawTransaction(params: unknown) {
   return TxEnvelopeTempo.hash(
     TxEnvelopeTempo.deserialize(serialized as TxEnvelopeTempo.Serialized) as TxEnvelopeTempo.Signed,
   )
-}
-
-function withoutInit(serialized: `0x${string}`) {
-  const transaction = Transaction.deserialize(serialized as never) as Record<string, unknown>
-  const signature = transaction.signature as SignatureEnvelope.Multisig
-  const { signature: _, ...unsigned } = transaction
-  return TxEnvelopeTempo.serialize(TxEnvelopeTempo.from(unsigned as never), {
-    signature: SignatureEnvelope.from({
-      account: signature.account,
-      signatures: signature.signatures,
-    }),
-  })
 }

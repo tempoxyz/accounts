@@ -1,5 +1,5 @@
 import { Base64, Hex } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { createClient, custom, encodeErrorResult, encodeFunctionResult } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
@@ -83,6 +83,7 @@ async function authorize(
     },
   )
   const keyAuthorization = KeyAuthorization.toRpc(signed)
+  if (keyAuthorization.keyType === 'multisig') throw new Error('Expected a primitive access key.')
 
   return {
     accountAddress: root.address,
@@ -120,6 +121,7 @@ async function authorizeWebAuthn(
     },
   )
   const keyAuthorization = KeyAuthorization.toRpc(signed)
+  if (keyAuthorization.keyType === 'multisig') throw new Error('Expected a primitive access key.')
 
   return {
     accountAddress: webAuthnRoot.address,
@@ -1199,7 +1201,7 @@ describe('poll', () => {
             keyAuthorization: {
               ...first.keyAuthorization,
               signature: {
-                type: first.keyAuthorization.signature.type,
+                type: SignatureEnvelope.fromRpc(first.keyAuthorization.signature).type,
               },
             },
           }
@@ -1727,7 +1729,7 @@ describe('authorize', () => {
         ? {
             ...polled.keyAuthorization,
             signature: {
-              type: polled.keyAuthorization.signature.type,
+              type: SignatureEnvelope.fromRpc(polled.keyAuthorization.signature).type,
             },
           }
         : undefined

@@ -2,7 +2,7 @@ import { Hex, RpcResponse, Signature } from 'ox'
 import { MultisigConfig, SignatureEnvelope, TxEnvelopeTempo } from 'ox/tempo'
 import type { Address, Client } from 'viem'
 import type { LocalAccount } from 'viem/accounts'
-import { Transaction } from 'viem/tempo'
+import { Addresses, Transaction } from 'viem/tempo'
 
 import * as Sponsorship from './sponsorship.js'
 import * as Utils from './utils.js'
@@ -64,6 +64,7 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   const config = await resolveValidatedConfig({
     account: input.account,
     chainId: input.chainId,
+    config: input.config,
     init: input.init,
     pending,
     resolveConfig,
@@ -73,12 +74,6 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
       message:
         'Multisig config is required to collect approvals. Provide it in the bootstrap transaction or configure `multisig.resolveConfig`.',
     })
-  const initConfig = resolveInitConfig({
-    config,
-    init: input.init,
-    nonce: input.nonce,
-    pending,
-  })
 
   const now = Date.now()
   let operation: Operation = {
@@ -88,8 +83,8 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
     config,
     createdAt: pending?.createdAt ?? now,
     id: input.id,
-    init: pending?.init || !!initConfig,
-    initConfig,
+    init: !!input.init,
+    initConfig: input.init,
     payload: input.payload,
     signatures: mergeSignatures([...(pending?.signatures ?? []), ...input.signatures]),
     status: pending?.status === 'submitted' ? 'submitted' : 'pending',
@@ -135,7 +130,7 @@ async function collect(options: collect.Options): Promise<collect.ReturnType> {
   const client = getClient(operation.chainId)
   const final = await serializeFinal({
     account: operation.account,
-    init: operation.initConfig ?? initConfig,
+    config,
     signatures: approvals.signatures,
     transaction: input.transaction,
   })
@@ -261,7 +256,7 @@ declare namespace collect {
     method: 'eth_sendRawTransaction' | 'eth_sendRawTransactionSync'
     /** Incoming JSON-RPC request. */
     request: { params?: readonly unknown[] | undefined }
-    /** Resolves the genesis multisig config for quorum checks. */
+    /** Resolves the current multisig config for quorum checks. */
     resolveConfig?: ResolveConfig | undefined
     /** Optional fee payer used to sponsor finalized multisig transactions. */
     sponsor?: Sponsor | undefined
@@ -310,7 +305,7 @@ export declare namespace getStatus {
   type Options = {
     /** Operation id returned by a pending multisig submission. */
     id: Hex.Hex
-    /** Resolves the genesis multisig config for quorum status. */
+    /** Resolves the current multisig config for quorum status. */
     resolveConfig?: ResolveConfig | undefined
     /** Pending multisig operation store. */
     store: Store
@@ -353,7 +348,7 @@ export declare namespace listStatuses {
   type Options = {
     /** Native multisig account address. */
     account: Address
-    /** Resolves the genesis multisig config for quorum status. */
+    /** Resolves the current multisig config for quorum status. */
     resolveConfig?: ResolveConfig | undefined
     /** Pending multisig operation store. */
     store: Store
@@ -424,13 +419,13 @@ export type Options = {
   claimTtl?: number | undefined
   /** How to broadcast once quorum is met. @default 'sync' */
   finalize?: 'submitted' | 'sync' | undefined
-  /** Resolves the genesis multisig config for quorum checks. */
+  /** Resolves the current multisig config for quorum checks. */
   resolveConfig?: ResolveConfig | undefined
   /** Pending multisig operation store. */
   store: Store
 }
 
-/** Resolves the genesis multisig config for quorum checks. */
+/** Resolves the current multisig config for quorum checks. */
 export type ResolveConfig = (request: {
   /** Native multisig account address. */
   account: Address
@@ -503,15 +498,15 @@ export type Operation = {
   chainId: number
   /** Submission claim expiry timestamp in milliseconds. */
   claimExpiresAt?: number | undefined
-  /** Resolved genesis config used for approval checks. */
+  /** Resolved current config used for approval checks. */
   config?: MultisigConfig.Config | undefined
   /** Creation timestamp in milliseconds. */
   createdAt: number
   /** Deterministic operation id. */
   id: Hex.Hex
-  /** Whether the finalized transaction must carry the genesis init config. */
+  /** Whether the operation uses a version-zero config. */
   init?: boolean | undefined
-  /** Genesis init config to attach when finalizing a bootstrap transaction. */
+  /** Version-zero config recorded for the operation. */
   initConfig?: MultisigConfig.Config | undefined
   /** Unsigned Tempo transaction sign payload. */
   payload: Hex.Hex
@@ -560,17 +555,18 @@ function parse(serialized: Hex.Hex) {
   const chainId = Number(transaction.chainId)
   const id = MultisigConfig.getSignPayload({
     account: signature.account,
+    config: signature.config,
     payload,
   })
-  const init = signature.init ? MultisigConfig.from(signature.init) : undefined
-  const nonce = typeof transaction.nonce === 'number' ? transaction.nonce : undefined
+  const config = MultisigConfig.from(signature.config)
+  const init = config.version === 0n ? config : undefined
 
   return {
     account: signature.account,
     chainId,
+    config,
     id,
     init,
-    nonce,
     payload,
     signatures: signature.signatures.map((value) => SignatureEnvelope.serialize(value)),
     transaction,
@@ -590,39 +586,34 @@ function isMultisigSignature(value: unknown): value is SignatureEnvelope.Multisi
 async function resolveValidatedConfig(options: {
   account: Address
   chainId: number
+  config?: MultisigConfig.Config | undefined
   init?: MultisigConfig.Config | undefined
   pending?: Operation | undefined
   resolveConfig?: ResolveConfig | undefined
 }) {
   const { account, chainId, init, pending, resolveConfig } = options
-  const config = (await resolveConfig?.({ account, chainId, init })) ?? pending?.config ?? init
+  const config =
+    (await resolveConfig?.({ account, chainId, init })) ?? pending?.config ?? options.config ?? init
   if (!config) return undefined
 
   const normalized = MultisigConfig.from(config)
-  // The multisig account address derives from the genesis config, so a
-  // bootstrap init config must derive the transaction's account.
+  if (
+    options.config &&
+    MultisigConfig.getCommitment(normalized) !== MultisigConfig.getCommitment(options.config)
+  )
+    throw new RpcResponse.InvalidParamsError({
+      message: 'Resolved multisig config does not match the transaction config.',
+    })
+  // Version-zero configs must derive the account through the recovery factory.
   if (
     init &&
-    MultisigConfig.getAddress(MultisigConfig.from(init)).toLowerCase() !== account.toLowerCase()
+    MultisigConfig.getAddress(init, { factory: Addresses.nativeMultisigFactory }).toLowerCase() !==
+      account.toLowerCase()
   )
     throw new RpcResponse.InvalidParamsError({
       message: 'Bootstrap multisig init config does not match the multisig account.',
     })
   return normalized
-}
-
-function resolveInitConfig(options: {
-  config: MultisigConfig.Config
-  init?: MultisigConfig.Config | undefined
-  nonce?: number | undefined
-  pending?: Operation | undefined
-}) {
-  const { config, init, nonce, pending } = options
-  if (pending?.initConfig) return pending.initConfig
-  if (pending?.init && pending.config) return pending.config
-  if (init) return init
-  if (nonce === 0) return config
-  return undefined
 }
 
 function mergeSignatures(signatures: readonly Hex.Hex[]) {
@@ -644,7 +635,7 @@ function getApprovals(options: {
   signatures: readonly Hex.Hex[]
 }) {
   const { account, config, payload } = options
-  const digest = MultisigConfig.getSignPayload({ account, payload })
+  const digest = MultisigConfig.getSignPayload({ account, config, payload })
   const owners = new Map(
     config.owners.map((owner) => [
       owner.owner.toLowerCase(),
@@ -656,7 +647,7 @@ function getApprovals(options: {
   let weight = 0
 
   for (const value of options.signatures) {
-    const signature = SignatureEnvelope.from(value)
+    const signature = parseApproval(value)
     const owner = SignatureEnvelope.extractAddress({ payload: digest, signature })
     const key = owner.toLowerCase()
     const configured = owners.get(key)
@@ -682,9 +673,18 @@ function getApprovals(options: {
   return { signatures, threshold: Number(config.threshold), weight }
 }
 
+function parseApproval(value: Hex.Hex) {
+  const signature = SignatureEnvelope.from(value)
+  if (signature.type === 'keychain' || signature.type === 'multisig')
+    throw new RpcResponse.InvalidParamsError({
+      message: 'Multisig approvals must use primitive signatures.',
+    })
+  return signature
+}
+
 async function serializeFinal(options: {
   account: Address
-  init?: MultisigConfig.Config | undefined
+  config: MultisigConfig.Config
   signatures: readonly Hex.Hex[]
   transaction: Record<string, unknown>
 }) {
@@ -720,16 +720,17 @@ async function serializeFinal(options: {
     })(),
   } as never)
   const payload = TxEnvelopeTempo.getSignPayload(envelope)
-  const signatures = options.signatures.map((approval) => SignatureEnvelope.from(approval))
+  const signatures = options.signatures.map(parseApproval)
   const sorted = SignatureEnvelope.sortMultisigApprovals({
     account: options.account,
+    config: options.config,
     payload,
     signatures,
   })
   const signature = SignatureEnvelope.from({
     account: options.account,
+    config: options.config,
     signatures: sorted,
-    ...(options.init ? { init: options.init } : {}),
   })
   return TxEnvelopeTempo.serialize(envelope, {
     ...('feePayerSignature' in transaction
