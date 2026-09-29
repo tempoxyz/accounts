@@ -1013,3 +1013,303 @@ describe('wallet_connect_strict.parameters: showDeposit', () => {
     `)
   })
 })
+
+describe('transactionRequest.requireFunds', () => {
+  test('preserves automatic funding inference', () => {
+    expect(z.decode(Rpc.transactionRequest, { requireFunds: true })).toMatchInlineSnapshot(`
+      {
+        "requireFunds": true,
+      }
+    `)
+    expect(z.encode(Rpc.transactionRequest, { requireFunds: true })).toMatchInlineSnapshot(`
+      {
+        "requireFunds": true,
+      }
+    `)
+  })
+
+  test('preserves partial requirements and explicit zero amounts', () => {
+    expect(
+      z.decode(Rpc.transactionRequest, {
+        requireFunds: [{}, { sources: [] }, { token }, { amount: '0x0' }],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "requireFunds": [
+          {},
+          {
+            "sources": [],
+          },
+          {
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+          {
+            "amount": 0n,
+          },
+        ],
+      }
+    `)
+    expect(
+      z.encode(Rpc.transactionRequest, {
+        requireFunds: [{}, { sources: [] }, { token }, { amount: 0n }],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "requireFunds": [
+          {},
+          {
+            "sources": [],
+          },
+          {
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+          {
+            "amount": "0x0",
+          },
+        ],
+      }
+    `)
+  })
+
+  test.each([
+    false,
+    {},
+    [{ token: 'invalid' }],
+    [{ amount: 'invalid' }],
+    [{ sources: [{ target: contract }] }],
+  ])('rejects malformed funding intent: %j', (requireFunds) => {
+    expect(
+      z.safeDecode(Rpc.transactionRequest, { requireFunds } as never).success,
+    ).toMatchInlineSnapshot('false')
+  })
+
+  test('decodes concrete funding requirements', () => {
+    expect(
+      z.decode(Rpc.transactionRequest, {
+        requireFunds: [
+          {
+            token,
+            amount: '0x32',
+            slippageBps: '0x0',
+            policyRules: '0x1234',
+            sources: [{ target: contract, data: '0xabcd' }],
+          },
+        ],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "requireFunds": [
+          {
+            "amount": 50n,
+            "policyRules": "0x1234",
+            "slippageBps": 0,
+            "sources": [
+              {
+                "data": "0xabcd",
+                "target": "0x0000000000000000000000000000000000000004",
+              },
+            ],
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('encodes concrete funding requirements', () => {
+    expect(
+      z.encode(Rpc.transactionRequest, {
+        requireFunds: [
+          {
+            token,
+            amount: 50n,
+            slippageBps: 0,
+            policyRules: '0x1234',
+            sources: [{ target: contract, data: '0xabcd' }],
+          },
+        ],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "requireFunds": [
+          {
+            "amount": "0x32",
+            "policyRules": "0x1234",
+            "slippageBps": "0x0",
+            "sources": [
+              {
+                "data": "0xabcd",
+                "target": "0x0000000000000000000000000000000000000004",
+              },
+            ],
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('preserves omitted sources for wallet funding resolution', () => {
+    expect(
+      z.decode(Rpc.transactionRequest, {
+        requireFunds: [{ token, amount: '0x32' }],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "requireFunds": [
+          {
+            "amount": 50n,
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+      }
+    `)
+  })
+
+  test('preserves empty sources', () => {
+    expect(
+      z.encode(Rpc.transactionRequest, {
+        requireFunds: [{ token, amount: 50n, sources: [] }],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "requireFunds": [
+          {
+            "amount": "0x32",
+            "sources": [],
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+        ],
+      }
+    `)
+  })
+})
+
+describe('funding policy authorization', () => {
+  const rules = {
+    maxSlippageBps: 100,
+    sources: { [token]: [{ target: contract, data: '0x1234' }] },
+  } as const
+
+  test.each([7n, { admins: [account], rules }] as const)(
+    'round trips signed policies through connect, standalone, and transaction codecs: %s',
+    (fundingPolicy) => {
+      const authorization = KeyAuthorization.from(
+        {
+          address: accessKey,
+          chainId: 1n,
+          expiry: 123,
+          type: 'p256',
+          fundingPolicy,
+          witness: `0x${'ab'.repeat(32)}`,
+          limits: [{ token, limit: 100n, period: 60 }],
+          scopes: [{ address: contract }],
+        },
+        { signature: `0x${'00'.repeat(65)}` },
+      )
+      const encoded = z.encode(Rpc.keyAuthorization, authorization)
+      expect(encoded.fundingPolicy).toEqual(
+        typeof fundingPolicy === 'bigint' ? '0x7' : fundingPolicy,
+      )
+      expect(z.decode(Rpc.keyAuthorization, encoded)).toEqual(authorization)
+      const result = { keyAuthorization: authorization, rootAddress: account } as const
+      expect(
+        z.decode(
+          Rpc.wallet_authorizeAccessKey.returns,
+          z.encode(Rpc.wallet_authorizeAccessKey.returns, result),
+        ),
+      ).toEqual(result)
+      const capabilities = { keyAuthorization: authorization }
+      expect(
+        z.decode(
+          Rpc.wallet_connect.capabilities.result,
+          z.encode(Rpc.wallet_connect.capabilities.result, capabilities),
+        ),
+      ).toEqual(capabilities)
+      expect(
+        z.decode(
+          Rpc.transactionRequest,
+          z.encode(Rpc.transactionRequest, { keyAuthorization: authorization }),
+        ).keyAuthorization,
+      ).toEqual(authorization)
+    },
+  )
+
+  test.each([undefined, [account]] as const)('preserves request admins: %s', (admins) => {
+    const parameters = { expiry: 123, fundingPolicy: { ...(admins ? { admins } : {}), rules } }
+    expect(
+      z.decode(
+        Rpc.wallet_authorizeAccessKey.parameters,
+        z.encode(Rpc.wallet_authorizeAccessKey.parameters, parameters),
+      ),
+    ).toEqual(parameters)
+    expect(
+      z.decode(
+        Rpc.wallet_connect.authorizeAccessKey,
+        z.encode(Rpc.wallet_connect.authorizeAccessKey, parameters),
+      ),
+    ).toEqual(parameters)
+    expect(
+      z.parse(Rpc.wallet_authorizeAccessKey_strict.parameters, {
+        ...parameters,
+        limits: [{ token, limit: '0x1' }],
+        scopes: [{ address: contract }],
+      }).fundingPolicy,
+    ).toEqual(parameters.fundingPolicy)
+  })
+
+  test('rejects explicit empty admins and invalid policy IDs', () => {
+    for (const fundingPolicy of [false, { admins: [], rules }, '0x0', '0x10000000000000000'])
+      expect(
+        z.safeParse(Rpc.wallet_authorizeAccessKey.parameters, { expiry: 123, fundingPolicy })
+          .success,
+      ).toMatchInlineSnapshot(`false`)
+  })
+
+  test('requires explicit admins on signed RPC data', () => {
+    const authorization = KeyAuthorization.toRpc(
+      KeyAuthorization.from(
+        {
+          address: accessKey,
+          chainId: 1n,
+          expiry: 123,
+          type: 'p256',
+        },
+        { signature: `0x${'00'.repeat(65)}` },
+      ),
+    )
+    expect(
+      z.safeParse(Rpc.keyAuthorization, { ...authorization, fundingPolicy: { rules } }).success,
+    ).toMatchInlineSnapshot(`false`)
+  })
+})
+
+test('funding policy intent is accepted only on unsigned requests', () => {
+  const parameters = { expiry: 123, fundingPolicy: true } as const
+  for (const schema of [
+    Rpc.wallet_authorizeAccessKey.parameters,
+    Rpc.wallet_connect.authorizeAccessKey,
+  ])
+    expect(z.decode(schema, z.encode(schema, parameters))).toEqual(parameters)
+  expect(
+    z.parse(Rpc.wallet_authorizeAccessKey_strict.parameters, {
+      ...parameters,
+      limits: [{ token, limit: '0x1' }],
+      scopes: [{ address: contract }],
+    }).fundingPolicy,
+  ).toMatchInlineSnapshot(`true`)
+  const authorization = KeyAuthorization.toRpc(
+    KeyAuthorization.from(
+      {
+        address: accessKey,
+        chainId: 1n,
+        expiry: 123,
+        type: 'p256',
+      },
+      { signature: `0x${'00'.repeat(65)}` },
+    ),
+  )
+  expect(
+    z.safeParse(Rpc.keyAuthorization, { ...authorization, fundingPolicy: true }).success,
+  ).toMatchInlineSnapshot(`false`)
+})

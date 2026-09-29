@@ -1,5 +1,5 @@
 import { AbiFunction, Address, Hex, PublicKey, RpcResponse, WebCryptoP256 } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { type FundingPolicy as TempoFundingPolicy, KeyAuthorization } from 'ox/tempo'
 import { BaseError, type Client, type Transport } from 'viem'
 import {
   Account as TempoAccount,
@@ -120,10 +120,26 @@ export type ReusePolicy = {
   minLimits?: readonly KeyAuthorization.TokenLimit[] | undefined
 }
 
+/** Funding policy request. `true` selects the handler default; omitted admins default to the root account. */
+export type FundingPolicy =
+  | true
+  | bigint
+  | {
+      /** Policy admins. Defaults to the authorizing root account; an empty list is invalid. */
+      admins?: readonly Address.Address[] | undefined
+      /** Funding permissions committed by the authorization signature. */
+      rules: TempoFundingPolicy.Rules
+    }
+
 /** Access key authorization parameters plus SDK-only reuse policy. */
-export type ReusableAuthorization = Omit<prepareAuthorization.Options, 'chainId' | 'keystores'> & {
+export type ReusableAuthorization = Omit<
+  prepareAuthorization.Options,
+  'chainId' | 'keystores' | 'fundingPolicy'
+> & {
   /** Chain ID the key authorization is scoped to. */
   chainId?: bigint | number | undefined
+  /** Funding policy to authorize. */
+  fundingPolicy?: FundingPolicy | undefined
   /** SDK-only reuse policy. Not sent over RPC. */
   reuse?: ReusePolicy | undefined
 }
@@ -241,6 +257,7 @@ export async function prepareAuthorization(
     address,
     chainId,
     expiry,
+    fundingPolicy,
     keystores,
     keyType,
     limits,
@@ -268,6 +285,7 @@ export async function prepareAuthorization(
       address: accessKey.address,
       chainId: BigInt(chainId),
       expiry,
+      ...(fundingPolicy !== undefined ? { fundingPolicy } : {}),
       limits,
       scopes,
       type,
@@ -281,6 +299,7 @@ export async function prepareAuthorization(
       address: address ?? Address.fromPublicKey(PublicKey.from(publicKey!)),
       chainId: BigInt(chainId),
       expiry,
+      ...(fundingPolicy !== undefined ? { fundingPolicy } : {}),
       limits,
       scopes,
       type: keyType ?? 'secp256k1',
@@ -302,6 +321,7 @@ export async function prepareAuthorization(
     address: Address.fromPublicKey(PublicKey.fromHex(key.publicKey)),
     chainId: BigInt(chainId),
     expiry,
+    ...(fundingPolicy !== undefined ? { fundingPolicy } : {}),
     limits,
     scopes,
     type,
@@ -319,6 +339,8 @@ export declare namespace prepareAuthorization {
     chainId: bigint | number
     /** Unix timestamp when the key expires. */
     expiry: number
+    /** Canonical funding policy. Inline policies require explicit admins before signing. */
+    fundingPolicy?: TempoFundingPolicy.Authorization | undefined
     /**
      * Keystores used to create key material when none is provided.
      * @default Keystore.defaults
@@ -357,13 +379,43 @@ export declare namespace prepareAuthorization {
 
 /** Prepares, signs, and saves an access key authorization. */
 export async function authorize(options: authorize.Options): Promise<authorize.ReturnType> {
-  const { account, chainId, parameters } = options
+  const { account, chainId, client, parameters } = options
   const { store } = options
   const prepared = await prepareAuthorization({
     ...parameters,
     chainId: parameters.chainId ?? chainId,
+    fundingPolicy:
+      typeof parameters.fundingPolicy === 'object'
+        ? {
+            ...parameters.fundingPolicy,
+            admins: parameters.fundingPolicy.admins ?? [account.address],
+          }
+        : parameters.fundingPolicy === true
+          ? undefined
+          : parameters.fundingPolicy,
     keystores: store.keystores,
   })
+  if (parameters.fundingPolicy === true) {
+    if (!client)
+      throw new RpcResponse.InvalidParamsError({
+        message: '`fundingPolicy: true` requires a client connected to a funding handler.',
+      })
+    const authorization = prepared.keyAuthorization
+    const resolved = await Actions.accessKey.prepareAuthorization(client, {
+      account: account.address,
+      accessKey: { address: authorization.address, type: authorization.type },
+      chainId: Number(authorization.chainId),
+      expiry: authorization.expiry ?? undefined,
+      fundingPolicy: true,
+      limits: authorization.limits ? [...authorization.limits] : undefined,
+      scopes: authorization.scopes ? [...authorization.scopes] : undefined,
+      witness: authorization.witness,
+    })
+    prepared.keyAuthorization = KeyAuthorization.from({
+      ...authorization,
+      fundingPolicy: resolved.fundingPolicy,
+    })
+  }
   const digest = KeyAuthorization.getSignPayload(prepared.keyAuthorization)
   const signature = await account.sign({ hash: digest })
   const keyAuthorization = KeyAuthorization.from(prepared.keyAuthorization, {
@@ -388,8 +440,12 @@ export declare namespace authorize {
     account: Pick<TempoAccount.Account, 'address' | 'sign'>
     /** Default chain ID for the authorization when `parameters.chainId` is not set. */
     chainId: bigint | number
+    /** Client connected to the funding handler. Required for `fundingPolicy: true`. */
+    client?: Client<Transport> | undefined
     /** Access key authorization parameters. */
-    parameters: Omit<prepareAuthorization.Options, 'chainId' | 'keystores'> & {
+    parameters: Omit<prepareAuthorization.Options, 'chainId' | 'keystores' | 'fundingPolicy'> & {
+      /** Funding policy. Omitted inline admins default to the authorizing root account. */
+      fundingPolicy?: FundingPolicy | undefined
       /** Chain ID the key authorization is scoped to. */
       chainId?: bigint | number | undefined
     }
@@ -721,6 +777,8 @@ function scopesMatch(
 }
 
 function authorizationMatches(key: AccessKey, parameters: ReusableAuthorization): boolean {
+  // Stored keys do not establish the current funding policy.
+  if (parameters.fundingPolicy !== undefined) return false
   if (!scopesCover(key.scopes, parameters.scopes)) return false
   if (
     typeof parameters.reuse?.minExpiry === 'number' &&

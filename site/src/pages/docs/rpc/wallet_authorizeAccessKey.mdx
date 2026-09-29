@@ -22,6 +22,14 @@ type Request = {
     chainId?: bigint
     /** Unix timestamp (seconds) when the key expires. */
     expiry: number
+    /** Funding policy ID or inline permissions. */
+    fundingPolicy?: true | Hex | {
+      admins?: readonly Address[]
+      rules: {
+        maxSlippageBps: number
+        sources: Record<Address, readonly { target: Address; data: Hex }[]>
+      }
+    }
     /** Key type. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn'
     /** TIP-20 spending limits. */
@@ -90,6 +98,11 @@ type KeyAuthorization = {
     limit: bigint
     period?: number
   }[]
+  /** Signed policy ID or inline policy with explicit admins. */
+  fundingPolicy?: Hex | { admins: readonly Address[]; rules: {
+    maxSlippageBps: number
+    sources: Record<Address, readonly { target: Address; data: Hex }[]>
+  } }
   /** Signature envelope from the root account. */
   signature: SignatureEnvelope
 }

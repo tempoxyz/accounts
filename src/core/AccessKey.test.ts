@@ -961,6 +961,27 @@ describe('hasReusableAuthorization', () => {
   })
 })
 
+test('funding policy requests do not reuse keys with unknown policy state', async () => {
+  const store = createStore()
+  const keyPair = await WebCryptoP256.createKeyPair()
+  const key = TempoAccount.fromWebCryptoP256(keyPair, { access: rootAddress })
+  addAuthorization({
+    address: rootAddress,
+    keyPair,
+    store,
+    keyAuthorization: createKeyAuthorization(key.accessKeyAddress, { expiry: 200 }),
+  })
+  expect(
+    await AccessKey.hasReusableAuthorization({
+      account: rootAddress,
+      chainId: 1,
+      now: 100,
+      parameters: { expiry: 200, fundingPolicy: 7n },
+      store: { state: store, keystores: Keystore.defaults },
+    }),
+  ).toMatchInlineSnapshot(`false`)
+})
+
 describe('canAuthorizeCalls', () => {
   test('behavior: checks whether requested scopes cover calls', () => {
     const token = '0x0000000000000000000000000000000000000abc' as const

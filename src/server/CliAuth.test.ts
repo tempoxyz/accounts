@@ -83,6 +83,7 @@ async function authorize(
     },
   )
   const keyAuthorization = KeyAuthorization.toRpc(signed)
+  if (keyAuthorization.keyType === 'multisig') throw new Error('Expected a primitive access key.')
 
   return {
     accountAddress: root.address,
@@ -121,6 +122,7 @@ async function authorizeWebAuthn(
     },
   )
   const keyAuthorization = KeyAuthorization.toRpc(signed)
+  if (keyAuthorization.keyType === 'multisig') throw new Error('Expected a primitive access key.')
 
   return {
     accountAddress: webAuthnRoot.address,

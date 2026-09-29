@@ -54,3 +54,41 @@ describe('wallet_connect.identity', () => {
     >()
   })
 })
+
+describe('transactionRequest.requireFunds', () => {
+  test('decodes quantities and source addresses for Viem', () => {
+    type Request = z.output<typeof Rpc.transactionRequest>
+    expectTypeOf<Request['requireFunds']>().toEqualTypeOf<
+      | true
+      | readonly {
+          amount?: bigint | undefined
+          policyRules?: `0x${string}` | undefined
+          slippageBps?: number | undefined
+          sources?: readonly { target: `0x${string}`; data: `0x${string}` }[] | undefined
+          token?: `0x${string}` | undefined
+        }[]
+      | undefined
+    >()
+  })
+})
+
+describe('funding policy authorization', () => {
+  test('requests allow omitted admins, signed data requires explicit admins', () => {
+    type Request = z.output<typeof Rpc.wallet_authorizeAccessKey.parameters>['fundingPolicy']
+    type Connect = NonNullable<
+      z.output<typeof Rpc.wallet_connect.authorizeAccessKey>
+    >['fundingPolicy']
+    type Signed = z.output<typeof Rpc.keyAuthorization>['fundingPolicy']
+    expectTypeOf<Request>().toEqualTypeOf<Connect>()
+    expectTypeOf<Extract<Request, boolean>>().toEqualTypeOf<true>()
+    expectTypeOf<Extract<Signed, boolean>>().toEqualTypeOf<never>()
+    expectTypeOf<Extract<Request, object>['admins']>().toEqualTypeOf<
+      readonly `0x${string}`[] | undefined
+    >()
+    expectTypeOf<Extract<Signed, object>['admins']>().toEqualTypeOf<readonly `0x${string}`[]>()
+    expectTypeOf<
+      Extract<z.input<typeof Rpc.wallet_authorizeAccessKey.parameters>['fundingPolicy'], string>
+    >().toEqualTypeOf<`0x${string}`>()
+    expectTypeOf<Extract<Request, bigint>>().toEqualTypeOf<bigint>()
+  })
+})

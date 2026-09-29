@@ -22,7 +22,8 @@ allowBuilds:
   utf-8-validate: false
   workerd: true
 
-blockExoticSubdeps: true
+# Funding prereleases use pinned URL dependencies until their registry release.
+blockExoticSubdeps: false
 
 catalog:
   '@cloudflare/vite-plugin': ^1.31.2
@@ -39,14 +40,14 @@ catalog:
   '@wagmi/core': ^3.6.0
   hono: ^4.13.5
   mppx: ^0.11.0
-  ox: 0.14.45
+  ox: https://pkg.pr.new/ox@1089162d
   prool: ~0.2.4
   react: ^19.2.8
   react-dom: ^19.2.8
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: 2.56.9
+  viem: https://pkg.pr.new/viem@8f5d5e8d530da77b757e266aae0a942af3777d22
   vite: ^8.0.16
   vite-plus: ~0.1.24
   vp: npm:vite-plus@~0.1.24
@@ -123,7 +124,7 @@ overrides:
   esbuild: '0.28.1'
   # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname and scheme confusion.
   'fast-uri@>=3.0.0 <3.1.6': '3.1.6'
-  viem: 2.56.9
+  viem: https://pkg.pr.new/viem@8f5d5e8d530da77b757e266aae0a942af3777d22
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
@@ -139,7 +140,7 @@ overrides:
   js-yaml@4: '4.3.2'
   mermaid: '11.16.1'
   'nanoid@<3.3.18': '3.3.18'
-  ox: 0.14.45
+  ox: https://pkg.pr.new/ox@1089162d
   postcss: '8.5.23'
   protobufjs: '7.6.5'
   '@protobufjs/utf8': '1.1.1'

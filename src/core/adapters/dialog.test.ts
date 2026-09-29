@@ -375,6 +375,7 @@ describe('dialog', () => {
               },
             ],
             "chainId": "0x539",
+            "feePayer": undefined,
             "from": "0x0000000000000000000000000000000000000001",
           },
         ],
@@ -477,4 +478,41 @@ describe('dialog', () => {
     `)
     expect(typeof result.transport).toMatchInlineSnapshot(`"function"`)
   })
+})
+
+describe('funding policies', () => {
+  const rules = { maxSlippageBps: 100, sources: {} }
+  for (const method of ['login', 'register', 'wallet_authorizeAccessKey'] as const)
+    test.each([true, '0x7', { rules }, { admins: [address], rules }] as const)(
+      `${method} rejects funding policies before forwarding: %s`,
+      async (fundingPolicy) => {
+        const dialog_ = createDialog()
+        const provider = Provider.create({
+          adapter: dialog({ dialog: dialog_.dialog, host }),
+          chains: [tempoLocalnet],
+          storage: Storage.memory(),
+        })
+        provider.store.setState({ accounts: [{ address }], activeAccount: 0 })
+        const parameters = { address: accessKey, expiry: 123, fundingPolicy } as const
+        const promise =
+          method === 'wallet_authorizeAccessKey'
+            ? provider.request({ method, params: [parameters] })
+            : provider.request({
+                method: 'wallet_connect',
+                params: [
+                  {
+                    capabilities: {
+                      method,
+                      ...(method === 'register' ? { name: 'new' } : { selectAccount: true }),
+                      authorizeAccessKey: parameters,
+                    },
+                  },
+                ],
+              })
+        await expect(promise).rejects.toThrow(
+          '`fundingPolicy` is not supported by the dialog adapter.',
+        )
+        expect(dialog_.synced.flat()).toMatchInlineSnapshot(`[]`)
+      },
+    )
 })

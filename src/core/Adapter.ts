@@ -5,6 +5,7 @@ import type { Account as TempoAccount } from 'viem/tempo'
 import type { tempo } from 'viem/tempo/chains'
 import type * as z from 'zod/mini'
 
+import type * as AccessKey from './AccessKey.js'
 import type * as Account from './Account.js'
 import type * as Keystore from './Keystore.js'
 import type * as Schema from './Schema.js'
@@ -411,6 +412,8 @@ export declare namespace authorizeAccessKey {
     chainId?: bigint | undefined
     /** Unix timestamp (seconds) when the key expires. */
     expiry: number
+    /** Funding policy. Omitted inline admins default to the authorizing root account. */
+    fundingPolicy?: AccessKey.FundingPolicy | undefined
     /** External key type. Defaults to `secp256k1` for external keys. */
     keyType?: 'secp256k1' | 'p256' | 'webAuthn' | undefined
     /** TIP-20 spending limits for this key. */
