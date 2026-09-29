@@ -1015,6 +1015,74 @@ describe('wallet_connect_strict.parameters: showDeposit', () => {
 })
 
 describe('transactionRequest.requireFunds', () => {
+  test('preserves automatic funding inference', () => {
+    expect(z.decode(Rpc.transactionRequest, { requireFunds: true })).toMatchInlineSnapshot(`
+      {
+        "requireFunds": true,
+      }
+    `)
+    expect(z.encode(Rpc.transactionRequest, { requireFunds: true })).toMatchInlineSnapshot(`
+      {
+        "requireFunds": true,
+      }
+    `)
+  })
+
+  test('preserves partial requirements and explicit zero amounts', () => {
+    expect(
+      z.decode(Rpc.transactionRequest, {
+        requireFunds: [{}, { sources: [] }, { token }, { amount: '0x0' }],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "requireFunds": [
+          {},
+          {
+            "sources": [],
+          },
+          {
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+          {
+            "amount": 0n,
+          },
+        ],
+      }
+    `)
+    expect(
+      z.encode(Rpc.transactionRequest, {
+        requireFunds: [{}, { sources: [] }, { token }, { amount: 0n }],
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "requireFunds": [
+          {},
+          {
+            "sources": [],
+          },
+          {
+            "token": "0x20c0000000000000000000000000000000000001",
+          },
+          {
+            "amount": "0x0",
+          },
+        ],
+      }
+    `)
+  })
+
+  test.each([
+    false,
+    {},
+    [{ token: 'invalid' }],
+    [{ amount: 'invalid' }],
+    [{ sources: [{ target: contract }] }],
+  ])('rejects malformed funding intent: %j', (requireFunds) => {
+    expect(
+      z.safeDecode(Rpc.transactionRequest, { requireFunds } as never).success,
+    ).toMatchInlineSnapshot('false')
+  })
+
   test('decodes concrete funding requirements', () => {
     expect(
       z.decode(Rpc.transactionRequest, {

@@ -231,19 +231,22 @@ export const transactionRequest = z.object({
   nonce: z.optional(u.number()),
   nonceKey: z.optional(u.bigint()),
   requireFunds: z.optional(
-    z.readonly(
-      z.array(
-        z.object({
-          amount: u.bigint(),
-          policyRules: z.optional(u.hex()),
-          slippageBps: z.optional(u.number()),
-          sources: z.optional(
-            z.readonly(z.array(z.object({ target: u.address(), data: u.hex() }))),
-          ),
-          token: u.address(),
-        }),
+    z.union([
+      z.literal(true),
+      z.readonly(
+        z.array(
+          z.object({
+            amount: z.optional(u.bigint()),
+            policyRules: z.optional(u.hex()),
+            slippageBps: z.optional(u.number()),
+            sources: z.optional(
+              z.readonly(z.array(z.object({ target: u.address(), data: u.hex() }))),
+            ),
+            token: z.optional(u.address()),
+          }),
+        ),
       ),
-    ),
+    ]),
   ),
   to: z.optional(u.address()),
   validAfter: z.optional(u.number()),

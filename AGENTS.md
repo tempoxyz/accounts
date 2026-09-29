@@ -125,3 +125,4 @@
 - **Resolve funding intent before signing** — `fundingPolicy: true` selects the funding handler default through `eth_fillKeyAuthorization`; keep booleans out of signed authorizations. The dialog adapter does not accept funding-policy requests.
 
 - **Retain declaration-only module augmentations** — runtime middleware imports can disappear during declaration emission. Preserve an explicit side-effect import.
+- **Funding intent stays unresolved at the provider boundary** — transaction requests accept `requireFunds: true` and partial requirements; preserve omitted token/amount fields for relay inference and explicit zero amounts unchanged.

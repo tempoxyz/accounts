@@ -59,12 +59,13 @@ describe('transactionRequest.requireFunds', () => {
   test('decodes quantities and source addresses for Viem', () => {
     type Request = z.output<typeof Rpc.transactionRequest>
     expectTypeOf<Request['requireFunds']>().toEqualTypeOf<
+      | true
       | readonly {
-          amount: bigint
+          amount?: bigint | undefined
           policyRules?: `0x${string}` | undefined
           slippageBps?: number | undefined
           sources?: readonly { target: `0x${string}`; data: `0x${string}` }[] | undefined
-          token: `0x${string}`
+          token?: `0x${string}` | undefined
         }[]
       | undefined
     >()

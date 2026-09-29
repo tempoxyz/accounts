@@ -12,6 +12,35 @@ import * as Storage from './Storage.js'
 const address = '0x0000000000000000000000000000000000000001'
 
 describe('eth_fillTransaction', () => {
+  test.each([true, [{ sources: [] }]] as const)(
+    'behavior: forwards funding intent to the relay: %j',
+    async (requireFunds) => {
+      const requests: unknown[] = []
+      const provider = Provider.create({
+        chains: [tempo],
+        storage: Storage.memory(),
+        transports: {
+          [tempo.id]: custom(
+            {
+              async request(request) {
+                if (request.method === 'eth_fillTransaction') requests.push(request.params?.[0])
+                throw new Error('capture complete')
+              },
+            },
+            { retryCount: 0 },
+          ),
+        },
+      })
+      await expect(
+        provider.request({
+          method: 'eth_fillTransaction',
+          params: [{ from: address, to: address, requireFunds }],
+        }),
+      ).rejects.toThrow('capture complete')
+      expect(requests).toMatchObject([{ requireFunds }])
+    },
+  )
+
   test('behavior: forwards Tempo-formatted request capabilities', async () => {
     const capabilities: unknown[] = []
     const request = tempo.formatters.transactionRequest.format(
