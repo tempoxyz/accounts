@@ -71,16 +71,16 @@ minimumReleaseAgeExclude:
   - mppx
   - ox
   - dompurify@3.4.13
-  - fast-uri@3.1.5
+  - fast-uri@3.1.7
   - hono@4.13.5
-  - ip-address@10.3.1
+  - ip-address@10.5.1
   - js-yaml@3.15.2
   - js-yaml@4.3.2
   - nanoid@3.3.18
   - postcss@8.5.23
   - socket.io-parser@4.2.7
-  - undici@7.29.0
-  - undici@8.9.0
+  - undici@7.29.1
+  - undici@8.10.2
   - react@19.2.8
   - react-dom@19.2.8
   - react-server-dom-webpack@19.2.8
@@ -121,8 +121,8 @@ overrides:
   # GHSA-vcc3-ghjq-m6fr: decode-uri-component malformed-input DoS; the advisory's 0.4.3 floor is unpublished.
   'decode-uri-component@<=0.4.2': '0.5.0'
   esbuild: '0.28.1'
-  # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname and scheme confusion.
-  'fast-uri@>=3.0.0 <3.1.6': '3.1.6'
+  # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname, scheme, and authority confusion.
+  'fast-uri@>=3.0.0 <3.1.7': '3.1.7'
   viem: 2.56.9
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
@@ -130,7 +130,8 @@ overrides:
   'form-data@>=4.0.0 <4.0.6': '4.0.6'
   # Patch Hono static-generation traversal, body-parser exhaustion, and query parsing advisories.
   'hono@>=4.0.0 <4.13.5': '4.13.5'
-  'ip-address@<=10.3.0': '10.3.1'
+  # GHSA-rpw4-54j3-4h4q + GHSA-2vr4-cq9g-pvrc: ip-address trust-boundary bypasses.
+  'ip-address@<10.5.1': '10.5.1'
   # GHSA-v6wh-96g9-6wx3: launch-editor NTLMv2 hash disclosure via UNC path (dev tooling).
   'launch-editor@<=2.14.0': '2.14.1'
   'js-cookie@<=3.0.5': '3.0.7'
@@ -160,9 +161,9 @@ overrides:
   # GHSA-82x6-q7mm-w9cf and GHSA-v5mp-jgw5-2x6j: prototype pollution in dotted key paths.
   'toml@<4.2.0': '4.2.0'
   'tmp@<0.2.7': '0.2.7'
-  # GHSA-vmh5-mc38-953g + GHSA-38rv-x7px-6hhq + GHSA-pr7r-676h-xcf6: undici proxy TLS/cache/WebSocket advisories.
-  'undici@>=7.0.0 <7.29.0': '7.29.0'
-  'undici@>=8.0.0 <8.9.0': '8.9.0'
+  # GHSA-vmh5-mc38-953g et al: undici proxy TLS/cache/WebSocket advisories.
+  'undici@>=7.0.0 <7.29.1': '7.29.1'
+  'undici@>=8.0.0 <8.10.2': '8.10.2'
   'uuid@<11.1.1': '11.1.1'
   valibot: '1.4.2'
   # GHSA-6gmq-8vp8-gcm6: xmldom XML namespace confusion.
