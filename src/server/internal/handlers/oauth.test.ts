@@ -1,5 +1,5 @@
 import { Base64, Bytes, Hash } from 'ox'
-import { describe, expect, test } from 'vp/test'
+import { describe, expect, test, vi } from 'vp/test'
 
 import { compose } from '../../Handler.js'
 import { deviceCode } from './deviceCode.js'
@@ -13,7 +13,7 @@ const address = '0x1111111111111111111111111111111111111111'
 
 const cimd = 'https://client.example.com/oauth/client.json'
 
-function createApp() {
+function createApp(options: { fetch?: typeof globalThis.fetch } = {}) {
   const app = compose([
     deviceCode({ html: { render: () => new Response('verify') }, validate: () => undefined }),
     oauth({
@@ -35,17 +35,19 @@ function createApp() {
               : { status: options.status },
           ),
       },
-      fetch: async (input) =>
-        String(input) === cimd
-          ? Response.json({
-              client_id: cimd,
-              client_name: 'CIMD Client',
-              redirect_uris: [redirect_uri],
-            })
-          : Response.json({
-              client_id: 'https://other.example.com',
-              redirect_uris: [redirect_uri],
-            }),
+      fetch:
+        options.fetch ??
+        (async (input) =>
+          String(input) === cimd
+            ? Response.json({
+                client_id: cimd,
+                client_name: 'CIMD Client',
+                redirect_uris: [redirect_uri],
+              })
+            : Response.json({
+                client_id: 'https://other.example.com',
+                redirect_uris: [redirect_uri],
+              })),
       secret,
     }),
   ])
@@ -167,6 +169,30 @@ describe('oauth', () => {
       redirect_uri,
     })
     expect(tokens.status).toMatchInlineSnapshot(`200`)
+  })
+
+  test('behavior: rejects redirected client metadata without following it', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(new Response(null, { headers: { location: cimd }, status: 302 }))
+    const app = createApp({ fetch })
+    const url = new URL(`${origin}/oauth/authorize`)
+    url.search = new URLSearchParams({
+      client_id: cimd,
+      code_challenge: 'a'.repeat(43),
+      code_challenge_method: 'S256',
+      redirect_uri,
+      response_type: 'code',
+    }).toString()
+    const response = await app.fetch(new Request(url))
+    expect({ body: await response.text(), status: response.status }).toMatchInlineSnapshot(`
+      {
+        "body": "Unknown client or redirect URI.",
+        "status": 400,
+      }
+    `)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch.mock.calls[0]?.[1]?.redirect).toMatchInlineSnapshot(`"manual"`)
   })
 
   test('behavior: rejects a metadata document for another client ID', async () => {
