@@ -11,6 +11,8 @@ const verifier = 'test-oauth-code-verifier-0123456789abcdefghij'
 const redirect_uri = 'https://client.example.com/callback'
 const address = '0x1111111111111111111111111111111111111111'
 
+const cimd = 'https://client.example.com/oauth/client.json'
+
 function createApp() {
   const app = compose([
     deviceCode({ html: { render: () => new Response('verify') }, validate: () => undefined }),
@@ -33,6 +35,17 @@ function createApp() {
               : { status: options.status },
           ),
       },
+      fetch: async (input) =>
+        String(input) === cimd
+          ? Response.json({
+              client_id: cimd,
+              client_name: 'CIMD Client',
+              redirect_uris: [redirect_uri],
+            })
+          : Response.json({
+              client_id: 'https://other.example.com',
+              redirect_uris: [redirect_uri],
+            }),
       secret,
     }),
   ])
@@ -140,6 +153,41 @@ describe('oauth', () => {
     expect(refreshed.status).toMatchInlineSnapshot(`200`)
   })
 
+  test('behavior: accepts HTTPS client ID metadata documents', async () => {
+    const app = createApp()
+    const pending = await authorize(app, cimd)
+    expect(pending.status).toMatchInlineSnapshot(`"pending"`)
+    await approve(app, pending.userCode, { accounts: [{ address, capabilities: {} }] })
+    const redirect = await app.fetch(new Request(pending.refreshUrl))
+    const tokens = await exchange(app, {
+      client_id: cimd,
+      code: new URL(redirect.headers.get('location')!).searchParams.get('code')!,
+      code_verifier: verifier,
+      grant_type: 'authorization_code',
+      redirect_uri,
+    })
+    expect(tokens.status).toMatchInlineSnapshot(`200`)
+  })
+
+  test('behavior: rejects a metadata document for another client ID', async () => {
+    const app = createApp()
+    const url = new URL(`${origin}/oauth/authorize`)
+    url.search = new URLSearchParams({
+      client_id: 'https://evil.example.com/client.json',
+      code_challenge: 'a'.repeat(43),
+      code_challenge_method: 'S256',
+      redirect_uri,
+      response_type: 'code',
+    }).toString()
+    const response = await app.fetch(new Request(url))
+    expect({ body: await response.text(), status: response.status }).toMatchInlineSnapshot(`
+      {
+        "body": "Unknown client or redirect URI.",
+        "status": 400,
+      }
+    `)
+  })
+
   test('behavior: rejects a wrong PKCE verifier', async () => {
     const app = createApp()
     const { client_id } = await registerClient(app)
@@ -212,6 +260,7 @@ describe('oauth', () => {
     expect(await response.json()).toMatchInlineSnapshot(`
       {
         "authorization_endpoint": "https://wallet.example.com/oauth/authorize",
+        "client_id_metadata_document_supported": true,
         "code_challenge_methods_supported": [
           "S256",
         ],

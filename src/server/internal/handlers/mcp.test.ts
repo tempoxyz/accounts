@@ -1,6 +1,7 @@
 import { Base64, Bytes, Hash } from 'ox'
 import { describe, expect, test } from 'vp/test'
 
+import * as Rpc from '../../../core/zod/rpc.js'
 import { compose } from '../../Handler.js'
 import { deviceCode } from './deviceCode.js'
 import { mcp } from './mcp.js'
@@ -44,7 +45,7 @@ function createApp() {
           ),
       },
     }),
-    mcp(options),
+    mcp({ ...options, schemas: { personal_sign: Rpc.personal_sign.schema } }),
   ])
   return { app, pending }
 }
@@ -247,6 +248,51 @@ describe('mcp', () => {
         "method": "personal_sign",
         "result": "0xsignature",
         "status": "approved",
+      }
+    `)
+  })
+
+  test('behavior: derives tool inputs from zod schemas and validates params', async () => {
+    const { app } = createApp()
+    const token = await connect(app)
+    const listed = await rpc(app, token, 'tools/list')
+    const { tools } = (
+      (await listed.json()) as {
+        result: { tools: { inputSchema: Record<string, unknown>; name: string }[] }
+      }
+    ).result
+    expect(tools.find((tool) => tool.name === 'personal_sign')?.inputSchema).toMatchInlineSnapshot(`
+      {
+        "properties": {
+          "params": {
+            "description": "JSON-RPC params for \`personal_sign\`, identical to the wallet provider interface.",
+            "prefixItems": [
+              {
+                "pattern": "^0x[\\s\\S]{0,}$",
+                "type": "string",
+              },
+              {
+                "pattern": "^0x[0-9a-fA-F]{40}$",
+                "type": "string",
+              },
+            ],
+            "readOnly": true,
+            "type": "array",
+          },
+        },
+        "required": [
+          "params",
+        ],
+        "type": "object",
+      }
+    `)
+    await expect(callTool(app, token, 'personal_sign', { params: ['hello', address] })).resolves
+      .toMatchInlineSnapshot(`
+      {
+        "error": {
+          "code": "invalid_params",
+          "message": "0: Expected hex value",
+        },
       }
     `)
   })
