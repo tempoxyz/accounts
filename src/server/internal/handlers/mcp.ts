@@ -1,4 +1,5 @@
 import { Hex } from 'ox'
+import * as z from 'zod/mini'
 
 import { type Handler, from } from '../../Handler.js'
 import * as DeviceCodeClient from '../deviceCodeClient.js'
@@ -55,6 +56,7 @@ export function mcp(options: mcp.Options): Handler {
     methods = approvalMethods,
     name = 'tempo-wallet',
     path = '/mcp',
+    schemas = {},
     secret,
     title = 'Tempo Wallet',
     version = '0.1.0',
@@ -82,7 +84,7 @@ export function mcp(options: mcp.Options): Handler {
       tool(
         method,
         `Use to send a \`${method}\` wallet JSON-RPC request. Pass the method's JSON-RPC params array unchanged as \`params\`. Nothing executes until the user approves on the returned approval page: show \`approval_url\` and \`user_code\` to the user, then call ${requestTool} with \`request_id\`.`,
-        true,
+        schemas[method]?.params ?? null,
       ),
     ),
     {
@@ -198,6 +200,17 @@ export function mcp(options: mcp.Options): Handler {
       return error('unknown_tool', `Unknown tool: ${String(tool_name)}`)
     if (input.params !== undefined && !Array.isArray(input.params))
       return error('invalid_params', '`params` must be the JSON-RPC params array.')
+    const schema = schemas[tool_name]?.params
+    if (schema) {
+      const parsed = z.safeParse(schema, input.params ?? [])
+      if (!parsed.success)
+        return error(
+          'invalid_params',
+          parsed.error.issues
+            .map((issue) => `${issue.path.join('.') || 'params'}: ${issue.message}`)
+            .join('; '),
+        )
+    }
 
     const registered = await DeviceCodeClient.register({
       ...device(request),
@@ -249,6 +262,12 @@ export declare namespace mcp {
     }
     /** Approval-backed JSON-RPC methods exposed as tools. @default approvalMethods */
     methods?: readonly string[] | undefined
+    /**
+     * Zod schemas keyed by method, for example `{ personal_sign: Rpc.personal_sign.schema }`
+     * from `accounts`. Their `params` become each tool's JSON Schema input and
+     * validate calls before a request is registered. Encoded params are forwarded unchanged.
+     */
+    schemas?: Partial<Record<string, { params: z.ZodMiniType }>> | undefined
     /** MCP server name. @default "tempo-wallet" */
     name?: string | undefined
     /** MCP endpoint path. @default "/mcp" */
@@ -268,24 +287,34 @@ type ToolResult = {
   structuredContent: Record<string, unknown>
 }
 
-function tool(name: string, description: string, approval = false) {
+/**
+ * Describes one tool. `params` is `undefined` for free reads, `null` for an
+ * approval method without a schema, or the method's Zod params schema.
+ */
+function tool(name: string, description: string, params?: z.ZodMiniType | null) {
+  if (params === undefined)
+    return {
+      annotations: { openWorldHint: false, readOnlyHint: true },
+      description,
+      inputSchema: { properties: {}, type: 'object' },
+      name,
+    }
+  const { $schema: _, ...schema } = params
+    ? (z.toJSONSchema(params, { io: 'input', unrepresentable: 'any' }) as Record<string, unknown>)
+    : { items: {}, type: 'array' }
   return {
-    annotations: approval
-      ? { destructiveHint: false, openWorldHint: true, readOnlyHint: false }
-      : { openWorldHint: false, readOnlyHint: true },
+    annotations: { destructiveHint: false, openWorldHint: true, readOnlyHint: false },
     description,
-    inputSchema: approval
-      ? {
-          properties: {
-            params: {
-              description: `JSON-RPC params for \`${name}\`, identical to the wallet provider interface.`,
-              items: {},
-              type: 'array',
-            },
-          },
-          type: 'object',
-        }
-      : { properties: {}, type: 'object' },
+    inputSchema: {
+      properties: {
+        params: {
+          ...schema,
+          description: `JSON-RPC params for \`${name}\`, identical to the wallet provider interface.`,
+        },
+      },
+      ...(params ? { required: ['params'] } : {}),
+      type: 'object',
+    },
     name,
   }
 }

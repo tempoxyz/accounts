@@ -15,6 +15,14 @@ const registerRequest = z.object({
     .check(z.minLength(1), z.maxLength(10)),
 })
 
+const clientMetadata = z.object({
+  client_id: z.string(),
+  client_name: z.optional(z.string().check(z.maxLength(200))),
+  redirect_uris: z
+    .array(z.string().check(z.maxLength(2_000)))
+    .check(z.minLength(1), z.maxLength(10)),
+})
+
 const authorizeRequest = z.object({
   client_id: z.string(),
   code_challenge: z.string().check(z.minLength(43), z.maxLength(128)),
@@ -50,8 +58,9 @@ export type Grant = {
  * Instantiates an OAuth 2.1 authorization server whose consent step is a
  * `wallet_connect` request on the host's standalone device-code approval page.
  *
- * Supports dynamic client registration (RFC 7591), authorization code with
- * S256 PKCE, and refresh tokens, as required by MCP clients. The handler keeps
+ * Supports dynamic client registration (RFC 7591), HTTPS client ID metadata
+ * documents (CIMD), authorization code with S256 PKCE, and refresh tokens, as
+ * required by MCP clients. The handler keeps
  * no state of its own: client IDs, codes, and tokens are sealed with `secret`.
  * Tokens only identify the connected account; every wallet action made with
  * them still requires approval on the host's approval page.
@@ -71,6 +80,7 @@ export function oauth(options: oauth.Options): Handler {
     baseUrl,
     chainId,
     deviceCode,
+    fetch = globalThis.fetch,
     html = { render: renderPage },
     path = '/oauth',
     refreshTokenTtl = 30 * 24 * 3_600,
@@ -90,6 +100,7 @@ export function oauth(options: oauth.Options): Handler {
     const issuer = origin(c.req.raw)
     return c.json({
       authorization_endpoint: `${issuer}${path}/authorize`,
+      client_id_metadata_document_supported: true,
       code_challenge_methods_supported: ['S256'],
       grant_types_supported: ['authorization_code', 'refresh_token'],
       issuer,
@@ -136,7 +147,7 @@ export function oauth(options: oauth.Options): Handler {
     const parsed = z.safeParse(authorizeRequest, c.req.query())
     if (!parsed.success) return c.text('Invalid authorization request.', 400)
     const { client_id, code_challenge, redirect_uri, resource, state } = parsed.data
-    const client = await Sealed.unseal<Client>({ kind: 'oauth-client', secret, value: client_id })
+    const client = await resolveClient(client_id)
     if (!client || !client.redirect_uris.includes(redirect_uri))
       return c.text('Unknown client or redirect URI.', 400)
 
@@ -175,6 +186,32 @@ export function oauth(options: oauth.Options): Handler {
     })
   })
 
+  /**
+   * Resolves a sealed DCR client ID, or an HTTPS client ID metadata document
+   * (CIMD) whose `client_id` matches its URL.
+   */
+  async function resolveClient(client_id: string): Promise<Client | undefined> {
+    if (!client_id.startsWith('https://'))
+      return await Sealed.unseal<Client>({ kind: 'oauth-client', secret, value: client_id })
+    try {
+      const response = await fetch(client_id, {
+        headers: { accept: 'application/json' },
+        redirect: 'error',
+        signal: AbortSignal.timeout(5_000),
+      })
+      if (!response.ok) return undefined
+      const text = await response.text()
+      if (text.length > 65_536) return undefined
+      const parsed = z.safeParse(clientMetadata, JSON.parse(text))
+      if (!parsed.success || parsed.data.client_id !== client_id) return undefined
+      const { client_name, redirect_uris } = parsed.data
+      if (!redirect_uris.every(isAllowedRedirect)) return undefined
+      return { name: client_name ?? new URL(client_id).host, redirect_uris }
+    } catch {
+      return undefined
+    }
+  }
+
   async function resume(request: Request, id: string) {
     const authorization = await Sealed.unseal<Authorization>({
       kind: 'oauth-authorization',
@@ -182,11 +219,7 @@ export function oauth(options: oauth.Options): Handler {
       value: id,
     })
     if (!authorization) return await html.render({ client: undefined, request, status: 'expired' })
-    const client = await Sealed.unseal<Client>({
-      kind: 'oauth-client',
-      secret,
-      value: authorization.client_id,
-    })
+    const client = await resolveClient(authorization.client_id)
     const { code, url, user_code, verifier } = authorization.device
     const state = await DeviceCodeClient.poll({ ...device(request), deviceCode: code, verifier })
 
@@ -305,6 +338,8 @@ export declare namespace oauth {
       /** Base URL of the device-code endpoints (for example `https://wallet.example.com/auth/device`). */
       url: string | ((request: Request) => string)
     }
+    /** Fetch implementation for client ID metadata documents. */
+    fetch?: typeof globalThis.fetch | undefined
     /** Pairing page hooks. */
     html?: { render: (options: render.Options) => Promise<Response> | Response } | undefined
     /** OAuth endpoint prefix. @default "/oauth" */
