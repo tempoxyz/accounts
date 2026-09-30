@@ -2,4 +2,15 @@
 'accounts': patch
 ---
 
-Added `Handler.oauth` and `Handler.mcp` to `accounts/server`. `Handler.oauth` is an OAuth 2.1 authorization server whose consent step is a `wallet_connect` request on the device-code approval page. `Handler.mcp` is a Streamable HTTP MCP server whose tools mirror wallet JSON-RPC methods and route each request through that approval page.
+Added OAuth and MCP handlers with schema-derived wallet approval tools and an optional `rpc_request` tool for non-wallet JSON-RPC methods.
+
+```ts
+Handler.mcp({
+  deviceCode: { url: 'https://wallet.example.com/auth/device' },
+  secret,
+  rpc: {
+    methods: Schema.schema.flatMap((item) => item.method.def.values),
+    request: ({ chainId, ...request }) => provider.getClient({ chainId }).transport.request(request),
+  },
+})
+```

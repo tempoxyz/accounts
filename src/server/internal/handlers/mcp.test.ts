@@ -1,5 +1,5 @@
 import { Base64, Bytes, Hash } from 'ox'
-import { describe, expect, test } from 'vp/test'
+import { describe, expect, test, vi } from 'vp/test'
 
 import * as Rpc from '../../../core/zod/rpc.js'
 import { compose } from '../../Handler.js'
@@ -13,7 +13,7 @@ const verifier = 'test-oauth-code-verifier-0123456789abcdefghij'
 const redirect_uri = 'http://localhost:4567/callback'
 const address = '0x1111111111111111111111111111111111111111'
 
-function createApp() {
+function createApp(settings: { rpc?: mcp.Options['rpc']; chainId?: number | null } = {}) {
   const options = {
     deviceCode: {
       fetch: async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
@@ -35,7 +35,7 @@ function createApp() {
     }),
     oauth({
       ...options,
-      chainId: 4217,
+      ...(settings.chainId === null ? {} : { chainId: settings.chainId ?? 4217 }),
       html: {
         render: (options) =>
           Response.json(
@@ -45,7 +45,7 @@ function createApp() {
           ),
       },
     }),
-    mcp({ ...options, schemas: { personal_sign: Rpc.personal_sign.schema } }),
+    mcp({ ...options, rpc: settings.rpc, schemas: { personal_sign: Rpc.personal_sign.schema } }),
   ])
   return { app, pending }
 }
@@ -295,6 +295,197 @@ describe('mcp', () => {
         },
       }
     `)
+  })
+
+  test('rpc: forwards unchanged params on the granted chain', async () => {
+    const request = vi.fn().mockResolvedValue('0x2a')
+    const { app } = createApp({ rpc: { methods: ['eth_signTransaction'], request } })
+    const token = await connect(app)
+    const listed = await rpc(app, token, 'tools/list')
+    const { tools } = (
+      (await listed.json()) as {
+        result: { tools: { name: string; inputSchema: unknown; annotations: unknown }[] }
+      }
+    ).result
+    expect(tools.find((tool) => tool.name === 'rpc_request')).toMatchInlineSnapshot(`
+      {
+        "annotations": {
+          "openWorldHint": true,
+          "readOnlyHint": false,
+        },
+        "description": "Send a JSON-RPC request to the connected chain. Pass method and params unchanged. Wallet methods use their existing approval flow; other methods execute immediately. This can submit already-signed transactions.",
+        "inputSchema": {
+          "properties": {
+            "method": {
+              "minLength": 1,
+              "type": "string",
+            },
+            "params": {
+              "items": {},
+              "type": "array",
+            },
+          },
+          "required": [
+            "method",
+          ],
+          "type": "object",
+        },
+        "name": "rpc_request",
+      }
+    `)
+    await expect(
+      callTool(app, token, 'rpc_request', {
+        method: 'eth_call',
+        params: [{ to: address, data: '0x1234' }, 'latest'],
+      }),
+    ).resolves.toMatchInlineSnapshot(`
+      {
+        "result": "0x2a",
+      }
+    `)
+    await callTool(app, token, 'rpc_request', { method: 'custom_status' })
+    expect(request.mock.calls).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "chainId": 4217,
+            "method": "eth_call",
+            "params": [
+              {
+                "data": "0x1234",
+                "to": "0x1111111111111111111111111111111111111111",
+              },
+              "latest",
+            ],
+          },
+        ],
+        [
+          {
+            "chainId": 4217,
+            "method": "custom_status",
+          },
+        ],
+      ]
+    `)
+  })
+
+  test('rpc: preserves node errors and hides transport details', async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValue({ cause: { code: -32000, message: 'execution reverted', data: '0xdead' } })
+    const { app } = createApp({ rpc: { methods: [], request } })
+    const token = await connect(app)
+    await expect(callTool(app, token, 'rpc_request', { method: 'eth_call' })).resolves
+      .toMatchInlineSnapshot(`
+      {
+        "error": {
+          "code": -32000,
+          "data": "0xdead",
+          "message": "execution reverted",
+        },
+      }
+    `)
+    request.mockRejectedValue(new Error('Transport failed at a private URL'))
+    await expect(callTool(app, token, 'rpc_request', { method: 'eth_call' })).resolves
+      .toMatchInlineSnapshot(`
+      {
+        "error": {
+          "code": "rpc_error",
+          "message": "RPC request failed.",
+        },
+      }
+    `)
+  })
+
+  test('rpc: keeps wallet methods on their existing handlers', async () => {
+    const request = vi.fn()
+    const { app, pending } = createApp({ rpc: { methods: ['eth_signTransaction'], request } })
+    const token = await connect(app)
+    const approval = await callTool(app, token, 'rpc_request', {
+      method: 'personal_sign',
+      params: ['0x68656c6c6f', address],
+    })
+    expect(approval.status).toMatchInlineSnapshot(`"approval_required"`)
+    await app.fetch(new Request(approval.approval_url as string))
+    expect(pending.request).toMatchObject({
+      method: 'personal_sign',
+      params: ['0x68656c6c6f', address],
+    })
+    await expect(callTool(app, token, 'rpc_request', { method: 'eth_accounts' })).resolves
+      .toMatchInlineSnapshot(`
+      {
+        "result": [
+          "0x1111111111111111111111111111111111111111",
+        ],
+      }
+    `)
+    await expect(callTool(app, token, 'rpc_request', { method: 'eth_chainId' })).resolves
+      .toMatchInlineSnapshot(`
+      {
+        "result": "0x1079",
+      }
+    `)
+    await expect(callTool(app, token, 'rpc_request', { method: 'eth_signTransaction' })).resolves
+      .toMatchInlineSnapshot(`
+      {
+        "error": {
+          "code": "unsupported_method",
+          "message": "Wallet method is not exposed: eth_signTransaction",
+        },
+      }
+    `)
+    await expect(
+      callTool(app, token, 'rpc_request', { method: 'personal_sign', params: ['hello', address] }),
+    ).resolves.toMatchInlineSnapshot(`
+      {
+        "error": {
+          "code": "invalid_params",
+          "message": "0: Expected hex value",
+        },
+      }
+    `)
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  test('rpc: rejects malformed requests before dispatch', async () => {
+    const request = vi.fn()
+    const { app } = createApp({ rpc: { methods: [], request } })
+    const token = await connect(app)
+    for (const method of [undefined, '', 1])
+      await expect(callTool(app, token, 'rpc_request', { method })).resolves.toMatchInlineSnapshot(`
+        {
+          "error": {
+            "code": "invalid_params",
+            "message": "\`method\` must be a nonempty string.",
+          },
+        }
+      `)
+    await expect(callTool(app, token, 'rpc_request', { method: 'eth_call', params: {} })).resolves
+      .toMatchInlineSnapshot(`
+      {
+        "error": {
+          "code": "invalid_params",
+          "message": "\`params\` must be the JSON-RPC params array.",
+        },
+      }
+    `)
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  test('rpc: requires a chain in the grant', async () => {
+    const request = vi.fn()
+    const { app } = createApp({ chainId: null, rpc: { methods: [], request } })
+    const token = await connect(app)
+    await expect(callTool(app, token, 'rpc_request', { method: 'eth_blockNumber' })).resolves
+      .toMatchInlineSnapshot(`
+      {
+        "error": {
+          "code": "chain_unavailable",
+          "message": "This connection has no configured chain.",
+        },
+      }
+    `)
+    expect(request).not.toHaveBeenCalled()
   })
 
   test('behavior: rejects request IDs from another account', async () => {
