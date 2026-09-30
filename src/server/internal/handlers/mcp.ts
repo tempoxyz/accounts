@@ -38,6 +38,7 @@ type PendingRequest = {
  * method's `params` array unchanged.
  *
  * - `eth_accounts` and `eth_chainId` answer from the OAuth grant.
+ * - `rpc_request`, when configured, forwards non-wallet methods to the RPC node.
  * - Approval methods register the exact JSON-RPC request with the host's
  *   device-code endpoints and return a standalone approval URL. Call
  *   `wallet_getRequest` with the returned `request_id` for the result.
@@ -57,6 +58,7 @@ export function mcp(options: mcp.Options): Handler {
     name = 'tempo-wallet',
     path = '/mcp',
     schemas = {},
+    rpc: passthrough,
     secret,
     title = 'Tempo Wallet',
     version = '0.1.0',
@@ -80,6 +82,24 @@ export function mcp(options: mcp.Options): Handler {
   const tools = [
     tool('eth_accounts', 'Use to read the connected account address. Free; no approval.'),
     tool('eth_chainId', 'Use to read the chain ID applied to wallet requests. Free; no approval.'),
+    ...(passthrough
+      ? [
+          {
+            annotations: { openWorldHint: true, readOnlyHint: false },
+            description:
+              'Send a JSON-RPC request to the connected chain. Pass method and params unchanged. Wallet methods use their existing approval flow; other methods execute immediately. This can submit already-signed transactions.',
+            inputSchema: {
+              properties: {
+                method: { type: 'string', minLength: 1 },
+                params: { type: 'array', items: {} },
+              },
+              required: ['method'],
+              type: 'object',
+            },
+            name: 'rpc_request',
+          },
+        ]
+      : []),
     ...methods.map((method) =>
       tool(
         method,
@@ -166,7 +186,55 @@ export function mcp(options: mcp.Options): Handler {
     tool_name: unknown,
     args: unknown,
   ): Promise<ToolResult> {
-    const input = (args ?? {}) as { params?: unknown; request_id?: unknown }
+    if (args !== undefined && (args === null || typeof args !== 'object' || Array.isArray(args)))
+      return error('invalid_params', 'Tool arguments must be an object.')
+    const input = (args ?? {}) as { method?: unknown; params?: unknown; request_id?: unknown }
+    if (tool_name === 'rpc_request' && passthrough) {
+      const { method, params } = input
+      if (typeof method !== 'string' || method.length === 0)
+        return error('invalid_params', '`method` must be a nonempty string.')
+      if (params !== undefined && !Array.isArray(params))
+        return error('invalid_params', '`params` must be the JSON-RPC params array.')
+      if (method === 'eth_accounts' || method === 'eth_chainId' || methods.includes(method))
+        return await call(request, grant, method, { params })
+      // Known wallet methods cannot bypass their handler when MCP does not expose them.
+      if (method === requestTool || passthrough.methods.includes(method))
+        return error('unsupported_method', `Wallet method is not exposed: ${method}`)
+      if (grant.chainId === undefined)
+        return error('chain_unavailable', 'This connection has no configured chain.')
+      try {
+        return result({
+          result: await passthrough.request({
+            chainId: grant.chainId,
+            method,
+            ...(params !== undefined ? { params } : {}),
+          }),
+        })
+      } catch (failure) {
+        let cause = failure
+        while (cause && typeof cause === 'object' && 'cause' in cause && cause.cause)
+          cause = cause.cause
+        if (
+          cause &&
+          typeof cause === 'object' &&
+          'code' in cause &&
+          typeof cause.code === 'number' &&
+          'message' in cause &&
+          typeof cause.message === 'string'
+        )
+          return {
+            ...result({
+              error: {
+                code: cause.code,
+                message: cause.message,
+                ...('data' in cause ? { data: cause.data } : {}),
+              },
+            }),
+            isError: true,
+          }
+        return error('rpc_error', 'RPC request failed.')
+      }
+    }
     if (tool_name === 'eth_accounts') return result({ result: [grant.address] })
     if (tool_name === 'eth_chainId')
       return grant.chainId === undefined
@@ -268,6 +336,22 @@ export declare namespace mcp {
      * validate calls before a request is registered. Encoded params are forwarded unchanged.
      */
     schemas?: Partial<Record<string, { params: z.ZodMiniType }>> | undefined
+    /** Non-wallet JSON-RPC passthrough. Enables the `rpc_request` tool when configured. */
+    rpc?:
+      | {
+          /** All provider-handled wallet methods, including methods not exposed by MCP. */
+          methods: readonly string[]
+          /** Forwards a request to the granted chain's RPC node, returning its result or throwing its error. */
+          request: (request: {
+            /** Chain bound to the OAuth grant. */
+            chainId: number
+            /** JSON-RPC method. */
+            method: string
+            /** Unchanged JSON-RPC params, omitted when absent. */
+            params?: readonly unknown[] | undefined
+          }) => Promise<unknown>
+        }
+      | undefined
     /** MCP server name. @default "tempo-wallet" */
     name?: string | undefined
     /** MCP endpoint path. @default "/mcp" */
