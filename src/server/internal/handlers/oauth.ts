@@ -196,7 +196,7 @@ export function oauth(options: oauth.Options): Handler {
     try {
       const response = await fetch(client_id, {
         headers: { accept: 'application/json' },
-        redirect: 'error',
+        redirect: 'manual',
         signal: AbortSignal.timeout(5_000),
       })
       if (!response.ok) return undefined
