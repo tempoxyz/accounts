@@ -1,7 +1,7 @@
 {
   "scripts": {
     "build": "zile",
-    "changeset:publish": "zile publish:prepare && changeset publish && zile publish:post",
+    "changeset:publish": "zile publish:prepare && node scripts/publish.mjs && changeset git-tag && zile publish:post",
     "changeset:version": "changeset version && pnpm check",
     "check": "vp lint --fix --ignore-pattern package.json && vp fmt src examples playgrounds ref-impls scripts test",
     "dev": "docker compose up -d",
@@ -32,7 +32,7 @@
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.6.0",
-    "@changesets/cli": "^2.31.0",
+    "@changesets/cli": "^3.0.3",
     "@privy-io/react-auth": "3.25.0",
     "@remix-run/route-pattern": "^0.20.0",
     "@types/express": "^5.0.6",
@@ -43,7 +43,7 @@
     "@vitejs/devtools": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@wagmi/core": "^3.6.0",
-    "elysia": "^1.4.28",
+    "elysia": "^1.4.29",
     "expo-secure-store": "^55.0.13",
     "expo-web-browser": "^55.0.14",
     "express": "^5.2.1",
@@ -73,14 +73,14 @@
   "name": "accounts",
   "description": "Tempo Accounts SDK",
   "type": "module",
-  "version": "0.18.5",
+  "version": "0.19.0",
   "dependencies": {
     "hono": "catalog:",
     "idb-keyval": "^6.2.2",
     "jose": "^6.2.3",
     "mipd": "^0.0.7",
     "mppx": "catalog:",
-    "ox": "~0.14.34",
+    "ox": "~0.14.45",
     "wata": "0.4.1",
     "webauthx": "~0.1.2",
     "zod": "^4.4.3",
@@ -95,7 +95,7 @@
     "react": ">=18",
     "react-native-mmkv": "^4.3.1",
     "react-native-nitro-modules": "^0.35.9",
-    "viem": ">=2.56.0",
+    "viem": ">=2.57.1",
     "wagmi": ">=0.0.0"
   },
   "peerDependenciesMeta": {

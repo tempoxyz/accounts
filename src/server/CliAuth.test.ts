@@ -1,5 +1,5 @@
 import { Base64, Hex } from 'ox'
-import { KeyAuthorization } from 'ox/tempo'
+import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { createClient, custom, encodeErrorResult, encodeFunctionResult } from 'viem'
 import { Abis, Account as TempoAccount } from 'viem/tempo'
 import { describe, expect, test } from 'vp/test'
@@ -89,6 +89,7 @@ async function authorize(
     code,
     keyAuthorization: z.decode(CliAuth.keyAuthorization, {
       ...keyAuthorization,
+      keyType: key.keyType,
       address: keyAuthorization.keyId,
     }),
   } satisfies z.output<typeof CliAuth.authorizeRequest>
@@ -126,6 +127,7 @@ async function authorizeWebAuthn(
     code,
     keyAuthorization: z.decode(CliAuth.keyAuthorization, {
       ...keyAuthorization,
+      keyType: key.keyType,
       address: keyAuthorization.keyId,
     }),
   } satisfies z.output<typeof CliAuth.authorizeRequest>
@@ -1199,7 +1201,7 @@ describe('poll', () => {
             keyAuthorization: {
               ...first.keyAuthorization,
               signature: {
-                type: first.keyAuthorization.signature.type,
+                type: SignatureEnvelope.fromRpc(first.keyAuthorization.signature).type,
               },
             },
           }
@@ -1727,7 +1729,7 @@ describe('authorize', () => {
         ? {
             ...polled.keyAuthorization,
             signature: {
-              type: polled.keyAuthorization.signature.type,
+              type: SignatureEnvelope.fromRpc(polled.keyAuthorization.signature).type,
             },
           }
         : undefined

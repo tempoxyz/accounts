@@ -23,11 +23,11 @@ jobs:
     name: Version
     needs: verify
     outputs:
-      hasChangesets: ${{ steps.changesets.outputs.hasChangesets }}
-    # The release commits (commitMode: github-api) and the release pull
-    # request are created with a short-lived GitHub App token minted via the
-    # github-sts action (authorized by .github/sts/changesets.sts.yaml); the
-    # built-in GITHUB_TOKEN is not allowed to create pull requests.
+      hasChangesets: ${{ steps.changesets.outputs['has-changesets'] }}
+    # The release commits and pull request are created through the GitHub API
+    # with a short-lived GitHub App token minted via the github-sts action
+    # (authorized by .github/sts/changesets.sts.yaml); the built-in
+    # GITHUB_TOKEN is not allowed to create pull requests.
     permissions:
       contents: read # to clone repository contents
       id-token: write # to request the OIDC token the STS exchange verifies
@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@d39baa2b43f5eba5d261c047521a4fbd56101129 # 2026-09-23T04-31-11Z-d39baa2b
+        uses: tempoxyz/gh-actions/actions/secure-runner@5ae61ca34df8d8f1ae4de8da1a498444864d8563 # 2026-10-01T06-46-26Z-5ae61ca3
 
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -50,27 +50,25 @@ jobs:
 
       - name: Fetch GitHub token via STS
         id: sts
-        uses: tempoxyz/gh-actions/actions/github-sts@d39baa2b43f5eba5d261c047521a4fbd56101129 # 2026-09-23T04-31-11Z-d39baa2b
+        uses: tempoxyz/gh-actions/actions/github-sts@5ae61ca34df8d8f1ae4de8da1a498444864d8563 # 2026-10-01T06-46-26Z-5ae61ca3
         with:
           policy: changesets
 
       - name: Create or update release pull request
         id: changesets
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        uses: tempoxyz/gh-actions/vendor/changesets/action@5ae61ca34df8d8f1ae4de8da1a498444864d8563 # 2026-10-01T06-46-26Z-5ae61ca3
         with:
-          commitMode: github-api
-          title: 'chore: version packages'
-          commit: 'chore: version packages'
-          version: pnpm changeset:version
-        env:
-          GITHUB_TOKEN: ${{ steps.sts.outputs.token }}
+          github-token: ${{ steps.sts.outputs.token }}
+          pr-title: 'chore: version packages'
+          commit-message: 'chore: version packages'
+          version-script: pnpm changeset:version
 
   publish:
     name: Publish
     if: needs.version.outputs.hasChangesets == 'false'
     needs: version
     permissions:
-      contents: write # to create releases and tags through changesets/action
+      contents: write # to create the GitHub release and tag
       id-token: write # to use npm trusted publishing through OIDC
     runs-on: ubuntu-latest
     environment: npm
@@ -78,7 +76,7 @@ jobs:
 
     steps:
       - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@d39baa2b43f5eba5d261c047521a4fbd56101129 # 2026-09-23T04-31-11Z-d39baa2b
+        uses: tempoxyz/gh-actions/actions/secure-runner@5ae61ca34df8d8f1ae4de8da1a498444864d8563 # 2026-10-01T06-46-26Z-5ae61ca3
 
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -91,8 +89,9 @@ jobs:
           skip-cache: 'true' # avoid cache poisoning attacks
 
       - name: Publish to npm
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
-        with:
-          publish: pnpm changeset:publish
+        uses: tempoxyz/gh-actions/vendor/changesets/action@5ae61ca34df8d8f1ae4de8da1a498444864d8563 # 2026-10-01T06-46-26Z-5ae61ca3
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_IGNORE_SCRIPTS: 'true'
+        with:
+          create-github-releases: true
+          publish-script: pnpm changeset:publish
