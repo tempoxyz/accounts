@@ -26,6 +26,7 @@ import { type Handler, from } from '../../Handler.js'
 import * as Kv from '../../Kv.js'
 import { cached } from '../kv.js'
 import * as Tokenlist from '../tokenlist.js'
+import * as FeeLiquidity from './feeLiquidity.js'
 import * as Sponsorship from './sponsorship.js'
 import * as Utils from './utils.js'
 
@@ -210,6 +211,72 @@ export function relay(options: relay.Options = {}): Handler {
             ),
           ]
 
+          async function fillUnsponsored() {
+            const excluded = new Set<string>()
+            const balances = new Map<string, Promise<bigint>>()
+            const liquidity = new Map<string, ReturnType<typeof FeeLiquidity.prepare>>()
+            function prepareFeeToken(token: Address) {
+              const key = token.toLowerCase()
+              let pending = liquidity.get(key)
+              if (!pending) {
+                pending = FeeLiquidity.prepare(client, { token, kv })
+                liquidity.set(key, pending)
+                void pending.catch(() => {})
+              }
+              return pending
+            }
+            let liquidityError: Error | undefined
+            for (;;) {
+              const token = features.feeTokenResolution
+                ? await resolveFeeToken(client, {
+                    account: from,
+                    feeToken: requestFeeToken,
+                    kv,
+                    tokens: unsponsoredTokens,
+                    excluded,
+                    balances,
+                    prepareFeeToken,
+                  })
+                : requestFeeToken
+              if (!token && liquidityError) throw liquidityError
+              try {
+                const result = await fill(client, {
+                  autoSwap,
+                  feeToken: token,
+                  kv,
+                  resolveFeeToken: resolveFeeTokenForSwap,
+                  transaction: { ...normalized, chainId, ...(token ? { feeToken: token } : {}) },
+                })
+                // Estimation can succeed even when the fee AMM cannot settle
+                // the fee. Check the filled maximum fee before asking for a signature.
+                if (token && !requestFeeToken && features.feeTokenResolution) {
+                  const { gas, maxFeePerGas } = result.transaction
+                  if (
+                    gas &&
+                    maxFeePerGas &&
+                    !(await (
+                      await prepareFeeToken(token)
+                    )((gas * maxFeePerGas + 10n ** 12n - 1n) / 10n ** 12n))
+                  )
+                    throw new Error('Insufficient liquidity in FeeAMM pool for transaction fee.')
+                }
+                return { result, token }
+              } catch (error) {
+                // Never change an explicit fee-token choice or retry unrelated failures.
+                if (
+                  !token ||
+                  requestFeeToken ||
+                  !features.feeTokenResolution ||
+                  !(error instanceof Error) ||
+                  !/insufficient liquidity in FeeAMM pool/i.test(error.message)
+                )
+                  throw error
+                excluded.add(token.toLowerCase())
+                liquidityError = error
+              }
+            }
+          }
+
           // When the app provides its own fee payer URL, route the fill
           // through that service so it can sign the transaction.
           const fillClient = externalFeePayerUrl
@@ -299,44 +366,16 @@ export function relay(options: relay.Options = {}): Handler {
                 filled = fill_sponsored
               } else {
                 // Sponsor rejected — resolve fee token and fill unsponsored.
-                const feeToken_unsponsored = features.feeTokenResolution
-                  ? await resolveFeeToken(client, {
-                      account: from,
-                      feeToken: requestFeeToken,
-                      kv,
-                      tokens: unsponsoredTokens,
-                    })
-                  : requestFeeToken
-                const tx_unsponsored = {
-                  ...baseTx,
-                  ...(feeToken_unsponsored ? { feeToken: feeToken_unsponsored } : {}),
-                }
-                filled = await fill(client, {
-                  ...options,
-                  feeToken: feeToken_unsponsored,
-                  transaction: tx_unsponsored,
-                })
-                feeToken = feeToken_unsponsored
+                const { result, token } = await fillUnsponsored()
+                filled = result
+                feeToken = token
               }
             }
           } else {
             // Path C: no sponsorship configured — resolve fee token, fill once.
-            feeToken = features.feeTokenResolution
-              ? await resolveFeeToken(client, {
-                  account: from,
-                  feeToken: requestFeeToken,
-                  kv,
-                  tokens: unsponsoredTokens,
-                })
-              : requestFeeToken
-            const transaction = { ...baseTx, ...(feeToken ? { feeToken } : {}) }
-            filled = await fill(client, {
-              autoSwap,
-              feeToken,
-              kv,
-              resolveFeeToken: resolveFeeTokenForSwap,
-              transaction,
-            })
+            const { result, token } = await fillUnsponsored()
+            filled = result
+            feeToken = token
           }
 
           const transaction_filled = filled.transaction
@@ -859,6 +898,20 @@ async function resolveFeeToken(
   const { feeToken, account, kv, tokens } = options
   if (feeToken) return feeToken
   if (!account) return undefined
+  const sender = account
+
+  function getBalance(token: Address) {
+    options.prepareFeeToken?.(token)
+    const key = token.toLowerCase()
+    const pending = options.balances?.get(key)
+    if (pending) return pending
+    const balance = Actions.token
+      .getBalance(client, { account: sender, token })
+      .then(({ amount }) => amount)
+      .catch(() => 0n)
+    options.balances?.set(key, balance)
+    return balance
+  }
 
   // Cache the user's preferred fee token for `userTokenCacheTtl` seconds.
   // The on-chain preference rarely changes; a short TTL avoids the
@@ -885,17 +938,14 @@ async function resolveFeeToken(
       ? Promise.all(
           tokens.map(async (token) => ({
             address: token,
-            balance: await Actions.token
-              .getBalance(client, { account, token })
-              .then(({ amount }) => amount)
-              .catch(() => 0n),
+            balance: await getBalance(token),
           })),
         )
       : [],
   ])
 
   // If on-chain preference is set and user has balance, use it.
-  if (userToken) {
+  if (userToken && !options.excluded?.has(userToken.address.toLowerCase())) {
     const match = balances.find(
       (b) => b.address.toLowerCase() === userToken.address.toLowerCase() && b.balance > 0n,
     )
@@ -904,11 +954,7 @@ async function resolveFeeToken(
     // Token list may not include the preference — check on-chain directly.
     if (!match) {
       try {
-        const balance = await Actions.token.getBalance(client, {
-          account,
-          token: userToken.address,
-        })
-        if (balance.amount > 0n) return userToken.address
+        if ((await getBalance(userToken.address)) > 0n) return userToken.address
       } catch {}
     }
   }
@@ -917,6 +963,7 @@ async function resolveFeeToken(
   let best: { address: Address; balance: bigint } | undefined
   for (const asset of balances) {
     if (asset.balance <= 0n) continue
+    if (options.excluded?.has(asset.address.toLowerCase())) continue
     if (!best || asset.balance > best.balance) best = asset
   }
   if (best) return best.address
@@ -928,6 +975,9 @@ declare namespace resolveFeeToken {
     account?: Address | undefined
     kv?: Kv.Kv | undefined
     tokens?: readonly Address[] | undefined
+    excluded?: Set<string> | undefined
+    balances?: Map<string, Promise<bigint>> | undefined
+    prepareFeeToken?: ((token: Address) => void) | undefined
     /** TTL in seconds for the cached `userTokens` lookup. @default 60 */
     userTokenCacheTtl?: number | undefined
   }

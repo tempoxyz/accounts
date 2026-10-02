@@ -86,6 +86,8 @@
 - **Unit and type tests as you go** — write unit tests and `.test-d.ts` type tests alongside implementation for each module. Save high-level integration tests (with and without browser) for the end.
 - **Validate `.test-d.ts` with TypeScript** — `pnpm test <file>.test-d.ts` does not match the Vitest project includes; use `pnpm exec tsc -b --noEmit` for type-test coverage.
 - **Mark localnet tests explicitly** — tests that touch RPC/localnet should use the `*.localnet.test.ts` suffix so only those files inherit `test/setup.ts`; pure `*.test.ts` files run in the no-setup `lib/pure` project.
+- **Exercise fee selection on real localnet** — use real TIP-20 balances, funded FeeAMM pools, and signed broadcasts instead of mocked RPC responses. Transport gates can prove overlapping requests while forwarding every response unchanged. Select the matching hardfork for two-hop routing; viem's localnet chain defaults to T3.
+- **Confirm fee preferences before testing selection** — `Actions.fee.setUserToken` returns a transaction hash before inclusion. Send `Actions.fee.setUserToken.call` with `sendTransactionSync` in dependent fixtures so the relay cannot cache a missing preference while its setup transaction is pending. This also avoids requiring a `UserTokenSet` event when an unchanged preference emits none.
 
 ## Git Conventions
 
@@ -98,6 +100,9 @@
 - **Understand full request flow before changing CLI UX** — trace the complete path (CLI → server → browser → server → CLI polling) before modifying feedback or error handling in CLI scripts.
 
 ## Learned Workspace Facts
+
+- **Fee-token balances do not prove FeeAMM eligibility** — transaction filling can succeed for tokens that pool admission rejects. For automatic selection, check reserves against the maximum fee, including quote-token routing, and exclude failed candidates even when they are the user's funded on-chain preference. Keep explicit fee-token choices and swap funding-source selection separate.
+- **Prefetch fee reserves with balance discovery** — overlap reserve reads with automatic unsponsored token discovery and reuse request-scoped balance/reserve promises across retries. Evaluate reserves against the filled maximum fee, and consume speculative errors only when the corresponding candidate or route is needed.
 
 - **Fill-transaction capabilities must survive request decoding** — `Provider` forwards decoded `eth_fillTransaction` parameters, so the transaction request schema must retain capabilities such as `errors` for relay recovery.
 - **Expo/Metro should get built entrypoints via `react-native` export conditions** — React Native consumers may resolve package `exports` before `default`, and loading `src/*.ts` directly can fail on `.js`-suffixed relative imports. For mobile consumers, add a `react-native` condition that points at `dist/*` entrypoints.
