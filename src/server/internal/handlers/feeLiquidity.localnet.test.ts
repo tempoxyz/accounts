@@ -52,10 +52,11 @@ async function fixture() {
       }),
     ],
   })
-  await Actions.fee.setUserTokenSync(rpc, {
+  await sendTransactionSync(rpc, {
     account: sender,
     feeToken: addresses.alphaUsd,
-    token,
+    calls: [Actions.fee.setUserToken.call({ token })],
+    throwOnReceiptRevert: true,
   })
   const calls = [
     Actions.token.transfer.call({
