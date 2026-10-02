@@ -1,5 +1,13 @@
 # accounts
 
+## 0.19.1
+
+### Patch Changes
+
+- 9cf6d39: Updated `mppx` to `0.12.0` and raised the `viem` peer dependency to `>=2.57.1`.
+- f06dd91: Updated `wata` to `0.4.2`. This fixes device-code `/token` polls overwriting the user's approval on eventually-consistent stores like Cloudflare KV.
+- bdf2170: Check fee AMM liquidity before automatically selecting a transaction fee token, falling back to another funded token when the preferred or highest-balance token cannot settle the fee.
+
 ## 0.19.0
 
 ### Minor Changes
