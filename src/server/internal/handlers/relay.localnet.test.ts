@@ -84,7 +84,7 @@ beforeAll(async () => {
     amount: parseUnits('100', 6),
     to: userAccount.address,
   })
-  await Actions.fee.setUserToken(rpc, { account: userAccount, token: addresses.alphaUsd })
+  await Actions.fee.setUserTokenSync(rpc, { account: userAccount, token: addresses.alphaUsd })
 })
 
 describe('default', () => {
@@ -621,7 +621,9 @@ describe('behavior: with app-provided feePayer URL + autoSwap', () => {
       amount: parseUnits('1000', 6),
       to: sender.address,
     })
-    await Actions.fee.setUserToken(getClient({ account: sender }), { token: addresses.alphaUsd })
+    await Actions.fee.setUserTokenSync(getClient({ account: sender }), {
+      token: addresses.alphaUsd,
+    })
 
     // Sender attempts to transfer base via the wallet relay, which forwards
     // to the app relay. The app relay returns 200 with capabilities.error =
@@ -809,7 +811,7 @@ describe('behavior: capabilities', () => {
       to: sender.address,
     })
     // Set fee token so relay doesn't need pathUSD balance.
-    await Actions.fee.setUserToken(rpc, { account: sender, token })
+    await Actions.fee.setUserTokenSync(rpc, { account: sender, token })
 
     const { data, to: callTo } = Actions.token.transfer.call({
       token,
@@ -938,7 +940,9 @@ describe('behavior: capabilities', () => {
       amount: parseUnits('1000', 6),
       to: sender.address,
     })
-    await Actions.fee.setUserToken(getClient({ account: sender }), { token: addresses.alphaUsd })
+    await Actions.fee.setUserTokenSync(getClient({ account: sender }), {
+      token: addresses.alphaUsd,
+    })
 
     const buyAmount = parseUnits('10', 6)
     const result = await fillTransaction(client, {
@@ -965,6 +969,9 @@ describe('behavior: capabilities', () => {
     const meta = result.capabilities
 
     const diffs = findDiffs(meta?.balanceDiffs, sender.address)!
+    expect(result.transaction.feeToken).toMatchInlineSnapshot(
+      `"0x20c0000000000000000000000000000000000001"`,
+    )
     expect(diffs).toHaveLength(1)
 
     const quoteDiff = diffs[0]!
@@ -1108,7 +1115,9 @@ describe('behavior: AMM resolution', () => {
       amount: parseUnits('1000', 6),
       to: sender.address,
     })
-    await Actions.fee.setUserToken(getClient({ account: sender }), { token: addresses.alphaUsd })
+    await Actions.fee.setUserTokenSync(getClient({ account: sender }), {
+      token: addresses.alphaUsd,
+    })
 
     // Sender tries to transfer base tokens they don't have.
     // Relay should detect InsufficientBalance, swap alphaUsd → base via DEX, and retry.
@@ -1202,7 +1211,9 @@ describe('behavior: AMM resolution', () => {
       amount: parseUnits('1000', 6),
       to: sender.address,
     })
-    await Actions.fee.setUserToken(getClient({ account: sender }), { token: addresses.alphaUsd })
+    await Actions.fee.setUserTokenSync(getClient({ account: sender }), {
+      token: addresses.alphaUsd,
+    })
 
     // Create relay with custom 2% slippage.
     const customServer = await createServer(
@@ -1272,7 +1283,9 @@ describe('behavior: AMM resolution', () => {
       amount: parseUnits('1000', 6),
       to: sender.address,
     })
-    await Actions.fee.setUserToken(getClient({ account: sender }), { token: addresses.alphaUsd })
+    await Actions.fee.setUserTokenSync(getClient({ account: sender }), {
+      token: addresses.alphaUsd,
+    })
 
     // Create relay with autoSwap disabled.
     const customServer = await createServer(
@@ -1340,7 +1353,7 @@ describe('behavior: conditional sponsoring', () => {
       amount: parseUnits('100', 6),
       to: accounts[3]!.address,
     })
-    await Actions.fee.setUserToken(rpc, { account: accounts[3]!, token: addresses.alphaUsd })
+    await Actions.fee.setUserTokenSync(rpc, { account: accounts[3]!, token: addresses.alphaUsd })
 
     server = await createServer(
       relay({
@@ -1516,7 +1529,7 @@ describe('behavior: path B — conditional sponsorship (validate)', () => {
       amount: parseUnits('100', 6),
       to: rejectedSender.address,
     })
-    await Actions.fee.setUserToken(rpc, { account: rejectedSender, token: addresses.alphaUsd })
+    await Actions.fee.setUserTokenSync(rpc, { account: rejectedSender, token: addresses.alphaUsd })
 
     server = await createServer(
       relay({
@@ -1661,7 +1674,7 @@ describe('behavior: fee token resolution', () => {
     })
 
     // Set on-chain fee token preference.
-    await Actions.fee.setUserToken(rpc, { account: feeTokenAccount, token: preferredToken })
+    await Actions.fee.setUserTokenSync(rpc, { account: feeTokenAccount, token: preferredToken })
 
     server = await createServer(
       relay({

@@ -52,7 +52,7 @@ async function fixture() {
       }),
     ],
   })
-  await Actions.fee.setUserToken(rpc, {
+  await Actions.fee.setUserTokenSync(rpc, {
     account: sender,
     feeToken: addresses.alphaUsd,
     token,
