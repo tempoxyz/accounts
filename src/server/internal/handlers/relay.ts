@@ -243,6 +243,7 @@ export function relay(options: relay.Options = {}): Handler {
                     !(await FeeLiquidity.has(client, {
                       token,
                       amount: (gas * maxFeePerGas + 10n ** 12n - 1n) / 10n ** 12n,
+                      kv,
                     }))
                   )
                     throw new Error('Insufficient liquidity in FeeAMM pool for transaction fee.')

@@ -1,12 +1,12 @@
-import { createClient, custom } from 'viem'
+import { type Address, createClient, custom } from 'viem'
 import * as core_Actions from 'viem/actions'
 import { Actions, Addresses } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
+import { vi } from 'vitest'
 import { afterEach, expect, test } from 'vp/test'
 
+import * as Kv from '../../Kv.js'
 import * as FeeLiquidity from './feeLiquidity.js'
-
-declare const vi: typeof import('vp/test').vi
 
 vi.mock('viem/actions', async (original) => ({
   ...(await original<typeof core_Actions>()),
@@ -27,6 +27,7 @@ vi.mock('viem/tempo', async (original) => {
 
 const token = '0x20c000000000000000000000f37de3740ADec032'
 const quote = '0x20c000000000000000000000b9537d11c60e8b50'
+const other = '0x20c0000000000000000000000000000000000001'
 const client = createClient({ chain: tempo, transport: custom({ request: vi.fn() }) })
 
 afterEach(() => {
@@ -35,7 +36,10 @@ afterEach(() => {
 })
 
 function setup(reserve: bigint) {
-  vi.spyOn(core_Actions, 'getBlock').mockResolvedValue({ miner: Addresses.pathUsd } as never)
+  vi.spyOn(core_Actions, 'getBlock').mockResolvedValue({
+    miner: Addresses.pathUsd,
+    number: 0n,
+  } as never)
   vi.spyOn(Actions.fee, 'getValidatorToken').mockResolvedValue(null)
   vi.spyOn(core_Actions, 'readContract').mockResolvedValue(quote)
   return vi.spyOn(Actions.amm, 'getPool').mockResolvedValue({
@@ -43,6 +47,23 @@ function setup(reserve: bigint) {
     reserveValidatorToken: reserve,
     totalSupply: 1000n,
   })
+}
+
+/** The latest producer prefers `other`; an earlier one in the window uses pathUSD. */
+function setupMixedProducers() {
+  const pool = setup(0n)
+  const latest = '0x0000000000000000000000000000000000000a01'
+  vi.spyOn(core_Actions, 'getBlock').mockImplementation(
+    async (_, parameters) =>
+      ({
+        miner: parameters?.blockNumber === undefined ? latest : Addresses.pathUsd,
+        number: 20n,
+      }) as never,
+  )
+  vi.spyOn(Actions.fee, 'getValidatorToken').mockImplementation(async (_, { validator }) =>
+    validator === latest ? { address: other as Address, id: 1n } : null,
+  )
+  return pool
 }
 
 test('validator token needs no fee pool', async () => {
@@ -80,6 +101,29 @@ test('two-hop route needs sufficient output reserves on both legs', async () => 
     totalSupply: 1000n,
   }))
   expect(await FeeLiquidity.has(client, { token, amount: 206n })).toMatchInlineSnapshot(`false`)
+})
+
+test('accepts a token any recent producer can settle, not only the latest', async () => {
+  const pool = setupMixedProducers()
+  // pathUSD is an earlier producer's own token, so it needs no pool.
+  expect(
+    await FeeLiquidity.has(client, { token: Addresses.pathUsd, amount: 206n }),
+  ).toMatchInlineSnapshot(`true`)
+  // Only the earlier producer's pool is funded.
+  pool.mockImplementation(async (_, { validatorToken }) => ({
+    reserveUserToken: 0n,
+    reserveValidatorToken: validatorToken === Addresses.pathUsd ? 205n : 0n,
+    totalSupply: 1000n,
+  }))
+  expect(await FeeLiquidity.has(client, { token, amount: 206n })).toMatchInlineSnapshot(`true`)
+})
+
+test('reuses cached producer tokens across checks', async () => {
+  setup(205n)
+  const kv = Kv.memory()
+  await FeeLiquidity.has(client, { token, amount: 206n, kv })
+  await FeeLiquidity.has(client, { token, amount: 206n, kv })
+  expect(core_Actions.getBlock).toHaveBeenCalledTimes(1)
 })
 
 test('pool read failures propagate instead of being treated as missing liquidity', async () => {

@@ -2,12 +2,11 @@ import { type Address, custom } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { Actions, Addresses } from 'viem/tempo'
 import { tempo } from 'viem/tempo/chains'
+import { vi } from 'vitest'
 import { afterEach, expect, test } from 'vp/test'
 
 import * as FeeLiquidity from './feeLiquidity.js'
 import { relay } from './relay.js'
-
-declare const vi: typeof import('vp/test').vi
 
 vi.mock('viem/tempo', async (original) => {
   const module = await original<typeof import('viem/tempo')>()
