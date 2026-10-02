@@ -86,6 +86,7 @@
 - **Unit and type tests as you go** — write unit tests and `.test-d.ts` type tests alongside implementation for each module. Save high-level integration tests (with and without browser) for the end.
 - **Validate `.test-d.ts` with TypeScript** — `pnpm test <file>.test-d.ts` does not match the Vitest project includes; use `pnpm exec tsc -b --noEmit` for type-test coverage.
 - **Mark localnet tests explicitly** — tests that touch RPC/localnet should use the `*.localnet.test.ts` suffix so only those files inherit `test/setup.ts`; pure `*.test.ts` files run in the no-setup `lib/pure` project.
+- **Exercise fee selection on real localnet** — use real TIP-20 balances, funded FeeAMM pools, and signed broadcasts instead of mocked RPC responses. Transport gates can prove overlapping requests while forwarding every response unchanged. Select the matching hardfork for two-hop routing; viem's localnet chain defaults to T3.
 
 ## Git Conventions
 
