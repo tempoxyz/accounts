@@ -246,7 +246,7 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
 
   // Warm the wallet page and start the session before the first request.
   // `start()` connects in the background; failures surface on the next send.
-  if (typeof window !== 'undefined' && !target && document.body)
+  if (typeof window !== 'undefined' && typeof document !== 'undefined' && !target && document.body)
     try {
       ensure()
     } catch {}
