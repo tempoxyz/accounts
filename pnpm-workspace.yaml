@@ -37,16 +37,16 @@ catalog:
   '@vitejs/devtools': ^0.2.0
   '@vitejs/plugin-react': ^5.2.0
   '@wagmi/core': ^3.6.0
-  hono: ^4.13.5
-  mppx: ^0.9.0
-  ox: 0.14.34
+  hono: ^4.13.7
+  mppx: ^0.12.0
+  ox: 0.14.45
   prool: ~0.2.4
   react: ^19.2.8
   react-dom: ^19.2.8
   tsx: ^4.21.0
   typed-query-selector: ^2.12.1
   typescript: ^5.9.3
-  viem: 2.56.0
+  viem: 2.57.1
   vite: ^8.0.16
   vite-plus: ~0.1.24
   vp: npm:vite-plus@~0.1.24
@@ -62,25 +62,18 @@ minimumReleaseAgeExclude:
   - '@voidzero-dev/*'
   - '@wagmi/connectors'
   - '@wagmi/core'
-  - brace-expansion@1.1.18
-  - brace-expansion@2.1.4
-  - brace-expansion@5.0.9
   - esbuild
   - incur
   - mermaid
   - mppx
   - ox
-  - dompurify@3.4.13
-  - fast-uri@3.1.5
-  - hono@4.13.5
-  - ip-address@10.3.1
   - js-yaml@3.15.2
   - js-yaml@4.3.2
   - nanoid@3.3.18
   - postcss@8.5.23
   - socket.io-parser@4.2.7
-  - undici@7.29.0
-  - undici@8.9.0
+  - undici@7.29.1
+  - undici@8.10.2
   - react@19.2.8
   - react-dom@19.2.8
   - react-server-dom-webpack@19.2.8
@@ -104,33 +97,34 @@ overrides:
   '@babel/core@<=7.29.0': '7.29.6'
   # GHSA-c83g-rgw3-j3cx and GHSA-73wf-gq98-2v4g: Browserslist path traversal and ReDoS.
   'browserslist@<=4.28.6': '4.28.7'
-  '@grpc/grpc-js': '1.14.4'
+  '@grpc/grpc-js': '1.14.5'
   # GHSA-frvp-7c67-39w9 and GHSA-9mqv-5hh9-4cgg: v2 preserves the getRequestListener API used by wata.
   '@hono/node-server@>=1.0.0 <2.0.10': '2.0.10'
   '@sinclair/typebox': '^0.34.0'
   # GHSA-p95v-992w-h6c3: prototype pollution via nested decoder keys.
   '@toon-format/toon@<2.3.1': '2.3.1'
-  'axios@>=1.0.0 <1.18.0': '1.18.0'
+  'axios@>=1.0.0 <1.20.0': '1.20.0'
   'body-parser@>=2.0.0 <2.3.0': '2.3.0'
   # GHSA-3jxr-9vmj-r5cp and GHSA-mh99-v99m-4gvg: brace-expansion DoS.
-  'brace-expansion@<1.1.18': '1.1.18'
-  'brace-expansion@>=2.0.0 <2.1.4': '2.1.4'
-  'brace-expansion@>=3.0.0 <5.0.9': '5.0.9'
+  'brace-expansion@<1.1.21': '1.1.21'
+  'brace-expansion@>=2.0.0 <2.1.7': '2.1.7'
+  'brace-expansion@>=3.0.0 <5.0.12': '5.0.12'
   # GHSA-rp9w-3fw7-7cwq et al: DOMPurify hook/config sanitization bypasses.
-  'dompurify@<=3.4.12': '3.4.13'
+  'dompurify@<=3.4.15': '3.4.16'
   # GHSA-vcc3-ghjq-m6fr: decode-uri-component malformed-input DoS; the advisory's 0.4.3 floor is unpublished.
   'decode-uri-component@<=0.4.2': '0.5.0'
   esbuild: '0.28.1'
-  # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname and scheme confusion.
-  'fast-uri@>=3.0.0 <3.1.6': '3.1.6'
-  viem: 2.56.0
+  # GHSA-v2hh-gcrm-f6hx et al: fast-uri hostname, scheme, and authority confusion.
+  'fast-uri@>=3.0.0 <3.1.8': '3.1.8'
+  viem: 2.57.1
   file-type: '22.0.1'
   follow-redirects: '1.16.0'
   # GHSA-hmw2-7cc7-3qxx: form-data CRLF injection via unescaped field names.
   'form-data@>=4.0.0 <4.0.6': '4.0.6'
   # Patch Hono static-generation traversal, body-parser exhaustion, and query parsing advisories.
-  'hono@>=4.0.0 <4.13.5': '4.13.5'
-  'ip-address@<=10.3.0': '10.3.1'
+  'hono@>=4.0.0 <4.13.7': '4.13.7'
+  # GHSA-rpw4-54j3-4h4q + GHSA-2vr4-cq9g-pvrc: ip-address trust-boundary bypasses.
+  'ip-address@<10.7.1': '10.7.1'
   # GHSA-v6wh-96g9-6wx3: launch-editor NTLMv2 hash disclosure via UNC path (dev tooling).
   'launch-editor@<=2.14.0': '2.14.1'
   'js-cookie@<=3.0.5': '3.0.7'
@@ -139,7 +133,7 @@ overrides:
   js-yaml@4: '4.3.2'
   mermaid: '11.16.1'
   'nanoid@<3.3.18': '3.3.18'
-  ox: 0.14.34
+  ox: 0.14.45
   postcss: '8.5.23'
   protobufjs: '7.6.5'
   '@protobufjs/utf8': '1.1.1'
@@ -160,9 +154,9 @@ overrides:
   # GHSA-82x6-q7mm-w9cf and GHSA-v5mp-jgw5-2x6j: prototype pollution in dotted key paths.
   'toml@<4.2.0': '4.2.0'
   'tmp@<0.2.7': '0.2.7'
-  # GHSA-vmh5-mc38-953g + GHSA-38rv-x7px-6hhq + GHSA-pr7r-676h-xcf6: undici proxy TLS/cache/WebSocket advisories.
-  'undici@>=7.0.0 <7.29.0': '7.29.0'
-  'undici@>=8.0.0 <8.9.0': '8.9.0'
+  # GHSA-vmh5-mc38-953g et al: undici proxy TLS/cache/WebSocket advisories.
+  'undici@>=7.0.0 <7.29.1': '7.29.1'
+  'undici@>=8.0.0 <8.10.2': '8.10.2'
   'uuid@<11.1.1': '11.1.1'
   valibot: '1.4.2'
   # GHSA-6gmq-8vp8-gcm6: xmldom XML namespace confusion.

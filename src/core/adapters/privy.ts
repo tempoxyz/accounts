@@ -578,6 +578,9 @@ export function privy<const client extends privy.Client>(
                 account: account as never,
                 accessKey: parameters.accessKeyAddress,
                 ...(feePayer ? { feePayer: true } : {}),
+                ...(parameters.keyAuthorization
+                  ? { keyAuthorization: parameters.keyAuthorization }
+                  : {}),
               },
             )
           } catch (error) {

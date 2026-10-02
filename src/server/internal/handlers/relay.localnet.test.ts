@@ -1983,13 +1983,16 @@ describe('behavior: mainnet autoSwap with USDC.e → PathUSD', () => {
   const mainnetUsdce = '0x20c000000000000000000000b9537d11c60e8b50' as const
   const mainnetPathUsd = '0x20c0000000000000000000000000000000000000' as const
   const mainnetSender = '0xb472f3ca15f34Db22d43FA503043F1e6541AC085' as const
+  const mainnetRpcUrl = 'https://rpc.presto.tempo.xyz'
+  // Keep the swap small: this runs against live mainnet DEX liquidity.
+  const amount = parseUnits('0.001', 6)
 
   beforeAll(async () => {
     server = await createServer(
       relay({
         chains: [tempo],
         features: 'all',
-        transports: { [tempo.id]: http('https://rpc.presto.tempo.xyz') },
+        transports: { [tempo.id]: http(mainnetRpcUrl) },
       }).listener,
     )
     mainnetClient = getClient({ chain: tempo, transport: http(server.url) })
@@ -1999,14 +2002,27 @@ describe('behavior: mainnet autoSwap with USDC.e → PathUSD', () => {
     server.close()
   })
 
-  test('behavior: auto-swaps USDC.e → PathUSD when sender has USDC.e but no PathUSD', async () => {
+  test('behavior: auto-swaps USDC.e → PathUSD when sender has USDC.e but no PathUSD', async (context) => {
+    // Skip rather than fail when live mainnet DEX liquidity can't cover the swap.
+    const quotable = await Actions.dex
+      .getBuyQuote(getClient({ chain: tempo, transport: http(mainnetRpcUrl) }), {
+        amountOut: amount,
+        tokenIn: mainnetUsdce,
+        tokenOut: mainnetPathUsd,
+      })
+      .then(
+        () => true,
+        () => false,
+      )
+    if (!quotable) context.skip('mainnet DEX has insufficient USDC.e → PathUSD liquidity')
+
     const result = await fillTransaction(mainnetClient, {
       account: mainnetSender,
       calls: [
         Actions.token.transfer.call({
           token: mainnetPathUsd,
           to: recipient.address,
-          amount: parseUnits('0.5', 6),
+          amount,
         }),
       ],
     })

@@ -18,6 +18,7 @@ export default defineConfig({
         test: {
           include: [
             './src/**/*.test.ts',
+            './scripts/**/*.test.ts',
             '!./src/**/*.browser.test.ts',
             '!./src/**/*.localnet.test.ts',
           ],

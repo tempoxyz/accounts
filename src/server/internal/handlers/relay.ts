@@ -27,7 +27,6 @@ import * as Kv from '../../Kv.js'
 import { cached } from '../kv.js'
 import * as Tokenlist from '../tokenlist.js'
 import * as FeeLiquidity from './feeLiquidity.js'
-import * as Multisig from './multisig.js'
 import * as Sponsorship from './sponsorship.js'
 import * as Utils from './utils.js'
 
@@ -85,7 +84,6 @@ export function relay(options: relay.Options = {}): Handler {
     ...rest
   } = options
   const feePayerOptions = options.feePayer
-  const multisigOptions = options.multisig
 
   // Resolves the verified tokenlist for `chainId`, sharing the KV cache with
   // `Handler.exchange` so a single `kv: Kv.cloudflare(env.KV)` covers both.
@@ -545,33 +543,6 @@ export function relay(options: relay.Options = {}): Handler {
       case 'eth_sendRawTransactionSync': {
         try {
           const serialized = params[0]
-          if (
-            multisigOptions &&
-            (request.method === 'eth_sendRawTransaction' ||
-              request.method === 'eth_sendRawTransactionSync') &&
-            typeof serialized === 'string' &&
-            Multisig.isMultisigTransaction(serialized as Hex.Hex)
-          ) {
-            const result = await Multisig.handleRawTransaction({
-              claimTtl: multisigOptions.claimTtl,
-              finalize: multisigOptions.finalize,
-              getClient,
-              method: request.method,
-              request: { params: 'params' in request ? request.params : undefined },
-              resolveConfig: multisigOptions.resolveConfig,
-              sponsor: feePayerOptions
-                ? {
-                    account: feePayerOptions.account,
-                    feeToken: feePayerOptions.feeToken,
-                    resolveFeeToken: async (chainId) => (await getTokens(chainId))[0],
-                    validate: feePayerOptions.validate,
-                  }
-                : undefined,
-              store: multisigOptions.store,
-            })
-            return RpcResponse.from({ result } as never, { request } as never)
-          }
-
           if (!feePayerOptions) {
             // eth_signRawTransaction is a signing method that only the
             // relay can fulfill — forwarding it to the RPC node returns
@@ -611,27 +582,6 @@ export function relay(options: relay.Options = {}): Handler {
             validate: feePayerOptions.validate,
           })
           return RpcResponse.from({ result } as never, { request } as never)
-        } catch (error) {
-          return Utils.rpcErrorJson(request, error)
-        }
-      }
-
-      case 'eth_getTransactionByHash':
-      case 'eth_getTransactionReceipt': {
-        try {
-          if (multisigOptions) {
-            const aliased = await Multisig.handleGetTransaction({
-              getClient,
-              method: request.method,
-              request: { params: 'params' in request ? request.params : undefined },
-              store: multisigOptions.store,
-            })
-            if (aliased)
-              return RpcResponse.from({ result: aliased.result } as never, { request } as never)
-          }
-
-          const result = await client.request(request as never)
-          return RpcResponse.from({ result }, { request })
         } catch (error) {
           return Utils.rpcErrorJson(request, error)
         }
@@ -722,12 +672,6 @@ export namespace relay {
           url?: string | undefined
         }
       | undefined
-    /**
-     * Native multisig configuration. When provided, the relay collects owner
-     * approvals from multisig raw transaction submissions and broadcasts once
-     * collected owner weight meets the configured threshold.
-     */
-    multisig?: Multisig.Options | undefined
     /**
      * Relay features.
      *

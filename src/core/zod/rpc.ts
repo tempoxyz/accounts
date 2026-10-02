@@ -51,6 +51,7 @@ type KeyAuthorizationRpcDecoded = Omit<KeyAuthorization.Rpc, 'chainId' | 'expiry
   address?: KeyAuthorization.Rpc['keyId'] | undefined
   chainId: bigint
   expiry: number | null | undefined
+  keyType: z.output<typeof keyType>
   limits?:
     | readonly {
         token: KeyAuthorization.RpcTokenLimit['token']
@@ -133,7 +134,7 @@ export const keyAuthorization = z.codec(keyAuthorizationRpc, z.custom<KeyAuthori
       chainId: keyAuthorization.chainId === '0x' ? 0n : Hex.toBigInt(keyAuthorization.chainId),
       expiry: keyAuthorization.expiry == null ? null : Hex.toNumber(keyAuthorization.expiry),
       keyId: keyAuthorization.keyId,
-      keyType: keyAuthorization.keyType,
+      keyType: z.parse(keyType, keyAuthorization.keyType),
       limits: keyAuthorization.limits?.map(({ limit, period, token }) => ({
         token,
         limit: Hex.toBigInt(limit),
@@ -548,6 +549,8 @@ export namespace wallet_revokeAccessKey {
     accessKeyAddress: u.address(),
     /** App-provided fee sponsorship for the revocation transaction. */
     feePayer: z.optional(z.union([z.boolean(), z.string()])),
+    /** Signed authorization for an access key that has not been published on-chain. */
+    keyAuthorization: z.optional(keyAuthorization),
   })
 
   export const schema = Schema.defineItem({

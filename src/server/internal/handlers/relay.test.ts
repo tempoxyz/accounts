@@ -77,7 +77,7 @@ function setup(options: { preferred?: Address; liquid?: boolean; sponsor?: boole
         }
       : {}),
     resolveTokens: () =>
-      [mach, usdc].map((address) => ({
+      ([mach, usdc] as const).map((address) => ({
         address,
         decimals: 6,
         symbol: '',

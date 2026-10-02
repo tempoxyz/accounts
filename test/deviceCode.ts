@@ -242,7 +242,7 @@ async function replacePendingAccessKey(
   const authorization = await account.signKeyAuthorization(
     {
       accessKeyAddress: parameters.accessKeyAddress,
-      keyType: current.type,
+      keyType: z.parse(Rpc.keyType, current.type),
     },
     {
       chainId: parameters.chainId ?? current.chainId,

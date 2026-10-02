@@ -1,5 +1,25 @@
 # accounts
 
+## 0.19.0
+
+### Minor Changes
+
+- f059161: Removed multisig relay support and updated Viem to 2.56.9.
+
+### Patch Changes
+
+- 90c760a: Mark newly recorded access-key permissions so consumers can distinguish omitted and empty fields from legacy metadata.
+
+## 0.18.5
+
+### Patch Changes
+
+- d726b78: Allow unpublished access keys to be revoked atomically.
+- 77280cf: Added `mercator.sh` to the list of trusted hosts.
+- f541ab9: Upgraded `mppx` to 0.11.0.
+- a578c58: Applied remote color schemes to wallet theme selectors.
+- c47231a: Allow applications to sponsor access-key revocation transactions.
+
 ## 0.18.4
 
 ### Patch Changes

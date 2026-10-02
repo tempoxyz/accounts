@@ -1,4 +1,5 @@
 import type { RpcSchema } from 'ox'
+import type { KeyAuthorization } from 'ox/tempo'
 import type { Hex } from 'viem'
 import { describe, expectTypeOf, test } from 'vp/test'
 
@@ -316,6 +317,7 @@ describe('Request', () => {
           accessKeyAddress: Hex
           address: Hex
           feePayer?: boolean | string | undefined
+          keyAuthorization?: KeyAuthorization.Signed | undefined
         },
       ]
     >()
