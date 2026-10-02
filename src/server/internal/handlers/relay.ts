@@ -213,6 +213,18 @@ export function relay(options: relay.Options = {}): Handler {
 
           async function fillUnsponsored() {
             const excluded = new Set<string>()
+            const balances = new Map<string, Promise<bigint>>()
+            const liquidity = new Map<string, ReturnType<typeof FeeLiquidity.prepare>>()
+            function prepareFeeToken(token: Address) {
+              const key = token.toLowerCase()
+              let pending = liquidity.get(key)
+              if (!pending) {
+                pending = FeeLiquidity.prepare(client, { token, kv })
+                liquidity.set(key, pending)
+                void pending.catch(() => {})
+              }
+              return pending
+            }
             let liquidityError: Error | undefined
             for (;;) {
               const token = features.feeTokenResolution
@@ -222,6 +234,8 @@ export function relay(options: relay.Options = {}): Handler {
                     kv,
                     tokens: unsponsoredTokens,
                     excluded,
+                    balances,
+                    prepareFeeToken,
                   })
                 : requestFeeToken
               if (!token && liquidityError) throw liquidityError
@@ -240,11 +254,9 @@ export function relay(options: relay.Options = {}): Handler {
                   if (
                     gas &&
                     maxFeePerGas &&
-                    !(await FeeLiquidity.has(client, {
-                      token,
-                      amount: (gas * maxFeePerGas + 10n ** 12n - 1n) / 10n ** 12n,
-                      kv,
-                    }))
+                    !(await (
+                      await prepareFeeToken(token)
+                    )((gas * maxFeePerGas + 10n ** 12n - 1n) / 10n ** 12n))
                   )
                     throw new Error('Insufficient liquidity in FeeAMM pool for transaction fee.')
                 }
@@ -886,6 +898,20 @@ async function resolveFeeToken(
   const { feeToken, account, kv, tokens } = options
   if (feeToken) return feeToken
   if (!account) return undefined
+  const sender = account
+
+  function getBalance(token: Address) {
+    options.prepareFeeToken?.(token)
+    const key = token.toLowerCase()
+    const pending = options.balances?.get(key)
+    if (pending) return pending
+    const balance = Actions.token
+      .getBalance(client, { account: sender, token })
+      .then(({ amount }) => amount)
+      .catch(() => 0n)
+    options.balances?.set(key, balance)
+    return balance
+  }
 
   // Cache the user's preferred fee token for `userTokenCacheTtl` seconds.
   // The on-chain preference rarely changes; a short TTL avoids the
@@ -912,10 +938,7 @@ async function resolveFeeToken(
       ? Promise.all(
           tokens.map(async (token) => ({
             address: token,
-            balance: await Actions.token
-              .getBalance(client, { account, token })
-              .then(({ amount }) => amount)
-              .catch(() => 0n),
+            balance: await getBalance(token),
           })),
         )
       : [],
@@ -931,11 +954,7 @@ async function resolveFeeToken(
     // Token list may not include the preference — check on-chain directly.
     if (!match) {
       try {
-        const balance = await Actions.token.getBalance(client, {
-          account,
-          token: userToken.address,
-        })
-        if (balance.amount > 0n) return userToken.address
+        if ((await getBalance(userToken.address)) > 0n) return userToken.address
       } catch {}
     }
   }
@@ -957,6 +976,8 @@ declare namespace resolveFeeToken {
     kv?: Kv.Kv | undefined
     tokens?: readonly Address[] | undefined
     excluded?: Set<string> | undefined
+    balances?: Map<string, Promise<bigint>> | undefined
+    prepareFeeToken?: ((token: Address) => void) | undefined
     /** TTL in seconds for the cached `userTokens` lookup. @default 60 */
     userTokenCacheTtl?: number | undefined
   }

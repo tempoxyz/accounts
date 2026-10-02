@@ -14,12 +14,17 @@ const producerWindow = 10
  * token is only rejected here when the node would reject it too.
  */
 export async function has(client: Client, options: has.Options): Promise<boolean> {
-  const { amount, kv, token } = options
-  const validatorTokens = await getValidatorTokens(client, { kv })
-  if (validatorTokens.some((validatorToken) => isAddressEqual(validatorToken, token))) return true
+  const check = await prepare(client, options)
+  return check(options.amount)
+}
 
-  // FeeAMM takes 30 bps on each hop, rounding down in token base units.
-  const output = (amount * 9970n) / 10000n
+/** Reads fee reserves ahead of filling and returns a reusable maximum-fee check. */
+export async function prepare(client: Client, options: prepare.Options) {
+  const { kv, token } = options
+  const validatorTokens = await getValidatorTokens(client, { kv })
+  if (validatorTokens.some((validatorToken) => isAddressEqual(validatorToken, token)))
+    return async (_amount: bigint) => true
+
   const hardfork = (client.chain as { hardfork?: string } | undefined)?.hardfork
   const twoHop = !hardfork || !Hardfork.lt(hardfork, 't5')
 
@@ -33,20 +38,33 @@ export async function has(client: Client, options: has.Options): Promise<boolean
       ? readContract(client, { address: token, abi: Abis.tip20, functionName: 'quoteToken' })
       : undefined,
   ])
-  if (direct.some((pool) => pool.reserveValidatorToken >= output)) return true
-  if (!quote || quote === zeroAddress) return false
+  const targets = quote
+    ? validatorTokens.filter((validatorToken) => !isAddressEqual(validatorToken, quote))
+    : []
+  const route =
+    quote && quote !== zeroAddress && targets.length > 0
+      ? Promise.all([
+          Actions.amm.getPool(client, { userToken: token, validatorToken: quote }),
+          ...targets.map((validatorToken) =>
+            Actions.amm.getPool(client, { userToken: quote, validatorToken }),
+          ),
+        ])
+      : undefined
+  void route?.catch(() => {})
+  return async (amount: bigint) => {
+    const output = (amount * 9970n) / 10000n
+    if (direct.some((pool) => pool.reserveValidatorToken >= output)) return true
+    if (!route) return false
+    const [first, ...second] = await route
+    if (first!.reserveValidatorToken < output) return false
+    return second.some((pool) => pool.reserveValidatorToken >= (output * 9970n) / 10000n)
+  }
+}
 
-  const targets = validatorTokens.filter((validatorToken) => !isAddressEqual(validatorToken, quote))
-  if (targets.length === 0) return false
-  const [first, ...second] = await Promise.all([
-    Actions.amm.getPool(client, { userToken: token, validatorToken: quote }),
-    ...targets.map((validatorToken) =>
-      Actions.amm.getPool(client, { userToken: quote, validatorToken }),
-    ),
-  ])
-  if (first!.reserveValidatorToken < output) return false
-  const output_second = (output * 9970n) / 10000n
-  return second.some((pool) => pool.reserveValidatorToken >= output_second)
+/** Parameters for prefetching a token's fee reserves. */
+export declare namespace prepare {
+  /** Fee token and producer-preference cache. */
+  type Options = Pick<has.Options, 'token' | 'kv'>
 }
 
 /** Parameters for the fee-liquidity check. */

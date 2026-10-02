@@ -143,3 +143,67 @@ test('respects a configured pre-T5 hardfork', async () => {
   expect(pool).toHaveBeenCalledTimes(1)
   expect(core_Actions.readContract).not.toHaveBeenCalled()
 })
+
+test('checks multiple maximum fees against prefetched reserves without more RPCs', async () => {
+  const pool = setup(205n)
+  vi.spyOn(core_Actions, 'readContract').mockResolvedValue(Addresses.pathUsd)
+  const check = await FeeLiquidity.prepare(client, { token })
+  expect({ covered: await check(206n), insufficient: await check(207n) }).toMatchInlineSnapshot(`
+    {
+      "covered": true,
+      "insufficient": false,
+    }
+  `)
+  expect({
+    blocks: vi.mocked(core_Actions.getBlock).mock.calls.length,
+    pools: pool.mock.calls.length,
+  }).toMatchInlineSnapshot(`
+    {
+      "blocks": 1,
+      "pools": 1,
+    }
+  `)
+})
+
+test('prefetches both route legs before the maximum fee is known', async () => {
+  const pool = setup(0n)
+  pool.mockImplementation(async (_, { userToken, validatorToken }) => ({
+    reserveUserToken: 0n,
+    reserveValidatorToken: validatorToken === quote ? 205n : userToken === quote ? 204n : 0n,
+    totalSupply: 1000n,
+  }))
+  const check = await FeeLiquidity.prepare(client, { token })
+  expect(pool).toHaveBeenCalledTimes(3)
+  expect(await check(206n)).toMatchInlineSnapshot(`true`)
+  expect(pool).toHaveBeenCalledTimes(3)
+})
+
+test('a failed speculative two-hop read does not reject a sufficient direct route', async () => {
+  const pool = setup(205n)
+  pool.mockImplementation(async (_, { userToken, validatorToken }) => {
+    if (userToken === quote || validatorToken === quote) throw new Error('Two-hop RPC unavailable')
+    return { reserveUserToken: 0n, reserveValidatorToken: 205n, totalSupply: 1000n }
+  })
+  const check = await FeeLiquidity.prepare(client, { token })
+  expect(await check(206n)).toMatchInlineSnapshot(`true`)
+  await expect(check(207n)).rejects.toThrowErrorMatchingInlineSnapshot(
+    `[Error: Two-hop RPC unavailable]`,
+  )
+})
+
+test('concurrent candidate prefetches share recent-producer discovery', async () => {
+  setup(205n)
+  const kv = Kv.memory()
+  const checks = await Promise.all([
+    FeeLiquidity.prepare(client, { token, kv }),
+    FeeLiquidity.prepare(client, { token: quote, kv }),
+  ])
+  expect(await Promise.all(checks.map((check) => check(206n)))).toMatchInlineSnapshot(`
+    [
+      true,
+      true,
+    ]
+  `)
+  expect(core_Actions.getBlock).toHaveBeenCalledTimes(1)
+  expect(Actions.fee.getValidatorToken).toHaveBeenCalledTimes(1)
+})
