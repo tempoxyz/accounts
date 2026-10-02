@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@55fe3b63d9612623cc51e6c62d9d62fbcb175fb0 # 2026-09-29T01-25-15Z-55fe3b63
+        uses: tempoxyz/gh-actions/actions/secure-runner@5ae61ca34df8d8f1ae4de8da1a498444864d8563 # 2026-10-01T06-46-26Z-5ae61ca3
 
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -50,13 +50,13 @@ jobs:
 
       - name: Fetch GitHub token via STS
         id: sts
-        uses: tempoxyz/gh-actions/actions/github-sts@55fe3b63d9612623cc51e6c62d9d62fbcb175fb0 # 2026-09-29T01-25-15Z-55fe3b63
+        uses: tempoxyz/gh-actions/actions/github-sts@5ae61ca34df8d8f1ae4de8da1a498444864d8563 # 2026-10-01T06-46-26Z-5ae61ca3
         with:
           policy: changesets
 
       - name: Create or update release pull request
         id: changesets
-        uses: tempoxyz/gh-actions/vendor/changesets/action@55fe3b63d9612623cc51e6c62d9d62fbcb175fb0 # 2026-09-29T01-25-15Z-55fe3b63
+        uses: tempoxyz/gh-actions/vendor/changesets/action@5ae61ca34df8d8f1ae4de8da1a498444864d8563 # 2026-10-01T06-46-26Z-5ae61ca3
         with:
           github-token: ${{ steps.sts.outputs.token }}
           pr-title: 'chore: version packages'
@@ -76,7 +76,7 @@ jobs:
 
     steps:
       - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@55fe3b63d9612623cc51e6c62d9d62fbcb175fb0 # 2026-09-29T01-25-15Z-55fe3b63
+        uses: tempoxyz/gh-actions/actions/secure-runner@5ae61ca34df8d8f1ae4de8da1a498444864d8563 # 2026-10-01T06-46-26Z-5ae61ca3
 
       - name: Clone repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -89,7 +89,7 @@ jobs:
           skip-cache: 'true' # avoid cache poisoning attacks
 
       - name: Publish to npm
-        uses: tempoxyz/gh-actions/vendor/changesets/action@55fe3b63d9612623cc51e6c62d9d62fbcb175fb0 # 2026-09-29T01-25-15Z-55fe3b63
+        uses: tempoxyz/gh-actions/vendor/changesets/action@5ae61ca34df8d8f1ae4de8da1a498444864d8563 # 2026-10-01T06-46-26Z-5ae61ca3
         env:
           NPM_CONFIG_IGNORE_SCRIPTS: 'true'
         with:

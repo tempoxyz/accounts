@@ -17,7 +17,7 @@ jobs:
   scan:
     name: Scan GitHub Actions
     if: ${{ github.event_name != 'schedule' || github.repository == 'tempoxyz/accounts' }}
-    uses: tempoxyz/gh-actions/.github/workflows/scan-github-actions.yml@55fe3b63d9612623cc51e6c62d9d62fbcb175fb0 # 2026-09-29T01-25-15Z-55fe3b63
+    uses: tempoxyz/gh-actions/.github/workflows/scan-github-actions.yml@5ae61ca34df8d8f1ae4de8da1a498444864d8563 # 2026-10-01T06-46-26Z-5ae61ca3
     permissions:
       actions: read
       contents: read
