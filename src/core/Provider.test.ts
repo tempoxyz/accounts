@@ -773,6 +773,67 @@ describe('wallet_connect', () => {
   })
 })
 
+describe('EIP-6963 announcement', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  // An explicit adapter sidesteps `Provider.create`'s default `dialog` adapter, which reads
+  // `window.location`/`window.isSecureContext` for unrelated reasons — this suite only exercises
+  // the EIP-6963 announcement guard. `rdns` must be unique per call: Provider.ts dedupes
+  // announcements through a module-level `announced` Set, so a fixed rdns would let one call (or
+  // vitest's automatic retry of a previous attempt) mask a later call's guard behavior.
+  function testAdapter(rdns: string) {
+    return Adapter.define({ name: 'Test Wallet', rdns }, () => ({
+      actions: {
+        async createAccount() {
+          return { accounts: [{ address }] }
+        },
+        async loadAccounts() {
+          return { accounts: [{ address }] }
+        },
+      },
+    }))
+  }
+
+  function uniqueRdns() {
+    return `com.example.test.${Math.random().toString(36).slice(2)}`
+  }
+
+  test('behavior: skips announcement in a partial window-like runtime (e.g. React Native)', () => {
+    // `window` aliased to an object without DOM event APIs, but with `CustomEvent`/
+    // `crypto.randomUUID` polyfilled for unrelated reasons — mirrors the reported React Native
+    // (Expo) environment.
+    vi.stubGlobal('window', {})
+    vi.stubGlobal('CustomEvent', class {})
+    vi.stubGlobal('crypto', { randomUUID: () => 'test-uuid' })
+
+    expect(() =>
+      Provider.create({ adapter: testAdapter(uniqueRdns()), storage: Storage.memory() }),
+    ).not.toThrow()
+  })
+
+  test('behavior: announces via mipd in a real browser-like window', () => {
+    const addEventListener = vi.fn()
+    const dispatchEvent = vi.fn()
+    vi.stubGlobal('window', { addEventListener, dispatchEvent })
+    vi.stubGlobal(
+      'CustomEvent',
+      class {
+        detail: unknown
+        type: string
+        constructor(type: string, options?: { detail?: unknown }) {
+          this.type = type
+          this.detail = options?.detail
+        }
+      },
+    )
+    vi.stubGlobal('crypto', { randomUUID: () => 'test-uuid' })
+
+    Provider.create({ adapter: testAdapter(uniqueRdns()), storage: Storage.memory() })
+
+    expect(dispatchEvent).toHaveBeenCalled()
+  })
+})
+
 describe('adapter actions', () => {
   test('behavior: explicit adapter action overrides provider default', async () => {
     const getAccount = vi.fn(() => {
