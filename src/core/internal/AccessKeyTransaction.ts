@@ -1,4 +1,4 @@
-import { Address, Hex } from 'ox'
+import { Address, Hash, Hex } from 'ox'
 import type { Client, Transport } from 'viem'
 import { prepareTransactionRequest } from 'viem/actions'
 import type { PrepareTransactionRequestReturnType } from 'viem/actions'
@@ -22,6 +22,26 @@ const removalErrorNames = new Set([
   'KeyNotFound',
   'SignatureTypeMismatch',
 ])
+
+/** Signals that a signed transaction was handed to the transport before an error was returned. */
+export class DispatchedError extends Error {
+  /** Hash of the signed transaction that may still be pending. */
+  transactionHash: Hex.Hex
+
+  constructor(error: unknown, options: { transactionHash: Hex.Hex }) {
+    super(error instanceof Error ? error.message : 'Access-key transaction dispatch failed.', {
+      cause: error,
+    })
+    this.name = 'AccessKeyTransaction.DispatchedError'
+    this.transactionHash = options.transactionHash
+  }
+}
+
+/** Returns whether an error occurred after a signed transaction was handed to the transport. */
+export function isDispatchedError(error: unknown): error is DispatchedError {
+  if (error instanceof DispatchedError) return true
+  return error instanceof Error && error.name === 'AccessKeyTransaction.DispatchedError'
+}
 
 /** Creates a transaction helper for a matching locally-signable access key. */
 export async function create(options: create.Options): Promise<create.ReturnType> {
@@ -163,27 +183,27 @@ function createPreparedTransaction(options: {
     request,
     sign,
     async send() {
+      const signed = await sign()
       try {
-        const signed = await sign()
         return (await client.request({
           method: 'eth_sendRawTransaction' as never,
           params: [signed],
         })) as Hex.Hex
       } catch (error) {
         removeForError(error, { account, address, chainId, store })
-        throw error
+        throw new DispatchedError(error, { transactionHash: Hash.keccak256(signed) })
       }
     },
     async sendSync() {
+      const signed = await sign()
       try {
-        const signed = await sign()
         return (await client.request({
           method: 'eth_sendRawTransactionSync' as never,
           params: [signed],
         })) as create.SendSyncReturnType
       } catch (error) {
         removeForError(error, { account, address, chainId, store })
-        throw error
+        throw new DispatchedError(error, { transactionHash: Hash.keccak256(signed) })
       }
     },
   }
