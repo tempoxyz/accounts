@@ -107,6 +107,48 @@ describe('challenge', () => {
     `)
   })
 
+  test.each([11, 65, 256])('preserves all %i requested resources in order', async (count) => {
+    const { app } = setup()
+    const resources = Array.from({ length: count }, (_, index) => `urn:tempo:resource:${index}`)
+
+    const { status, body } = await getChallenge(app, { chainId: 1, resources })
+
+    expect(status).toMatchInlineSnapshot('200')
+    expect(parseSiweMessage(body.message!).resources).toEqual(resources)
+  })
+
+  test.each([
+    [2_048, 200],
+    [2_049, 400],
+  ])('validates a resource of length %i in a large list', async (length, status) => {
+    const { app } = setup()
+    const resources = Array.from({ length: 65 }, (_, index) => `urn:tempo:resource:${index}`)
+    resources.push('urn:tempo:' + 'a'.repeat(length - 'urn:tempo:'.length))
+
+    const result = await getChallenge(app, { chainId: 1, resources })
+
+    expect(result.status).toBe(status)
+    if (status === 200) expect(parseSiweMessage(result.body.message!).resources).toEqual(resources)
+  })
+
+  test.each(['\n', '\r', '\r\n'])(
+    'rejects a line break %j after 65 resources',
+    async (separator) => {
+      const { app } = setup()
+      const resources = Array.from({ length: 65 }, (_, index) => `urn:tempo:resource:${index}`)
+      resources.push(`urn:tempo:one${separator}two`)
+
+      expect(await getChallenge(app, { chainId: 1, resources })).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "resources must not include line breaks",
+        },
+        "status": 400,
+      }
+    `)
+    },
+  )
+
   test('uses statement callback output in the challenge message', async () => {
     const resources = ['https://api.example.com/signing-keys/1']
     let params_seen:
@@ -300,6 +342,41 @@ describe('verify (EOA, cookie mode)', () => {
     expect(await store.get(`session:${token}`)).toBeDefined()
   })
 
+  test('authenticates all 256 signed resources and rejects replay', async () => {
+    const onAuthenticate = vi.fn<NonNullable<auth.Options['onAuthenticate']>>()
+    const { app, handler } = setup({ onAuthenticate })
+    const resources = Array.from({ length: 256 }, (_, index) => `urn:tempo:resource:${index}`)
+    const challenge = await getChallenge(app, { chainId: 1, resources })
+    expect(challenge.status).toMatchInlineSnapshot('200')
+    const message = challenge.body.message!
+    const signature = await account.signMessage({ message })
+    const body = { address: account.address, message, signature }
+
+    const res = await postVerify(app, body)
+
+    expect(res.status).toMatchInlineSnapshot('200')
+    expect(onAuthenticate).toHaveBeenCalledExactlyOnceWith(expect.objectContaining(body))
+    expect(parseSiweMessage(onAuthenticate.mock.calls[0]![0].message).resources).toEqual(resources)
+    const session = await handler.getSession(
+      new Request('http://wallet.example/', {
+        headers: { cookie: res.headers.get('set-cookie')!.split(';')[0]! },
+      }),
+    )
+    expect(session).toMatchObject({ address: account.address, chainId: 1 })
+
+    const replay = await postVerify(app, body)
+
+    expect({ status: replay.status, body: await replay.json() }).toMatchInlineSnapshot(`
+      {
+        "body": {
+          "error": "invalid or replayed nonce",
+        },
+        "status": 409,
+      }
+    `)
+    expect(onAuthenticate).toHaveBeenCalledTimes(1)
+  })
+
   test('rejects replayed nonce with 409', async () => {
     const { app } = setup()
 
@@ -480,18 +557,16 @@ describe('verify (EOA, cookie mode)', () => {
     `)
   })
 
-  test('rejects tampered message resources with 400', async () => {
+  test('rejects tampering with a resource beyond the first 64 with 400', async () => {
     const { app } = setup()
+    const resources = Array.from({ length: 128 }, (_, index) => `urn:tempo:resource:${index}`)
 
     const { body: challengeBody } = await getChallenge(app, {
       chainId: 1,
-      resources: ['https://api.example.com/signing-keys/1'],
+      resources,
     })
     const message = challengeBody.message!
-    const tampered = message.replace(
-      'https://api.example.com/signing-keys/1',
-      'https://api.example.com/signing-keys/2',
-    )
+    const tampered = message.replace('urn:tempo:resource:127', 'urn:tempo:resource:tampered')
     expect(tampered).not.toBe(message)
     const signature = await account.signMessage({ message: tampered })
 

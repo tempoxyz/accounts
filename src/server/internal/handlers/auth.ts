@@ -21,7 +21,6 @@ const defaults = {
     session: 24 * 60 * 60, // 24 hours
   },
 } as const
-const maxResources = 10
 const maxResourceLength = 2_048
 const lineBreak = /[\r\n]/
 
@@ -88,7 +87,7 @@ export namespace schema {
     export const parameters = z.object({
       chainId: z.optional(z.number()),
       /** SIWE resources to bind into the issued challenge message. */
-      resources: z.optional(z.readonly(z.array(resource).check(z.maxLength(maxResources)))),
+      resources: z.optional(z.readonly(z.array(resource))),
     })
 
     /** Response body schema. */

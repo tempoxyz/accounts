@@ -7,6 +7,7 @@ auditConfig:
     - GHSA-qjx8-664m-686j # transitive Privy js-cookie usage in playground.
     - GHSA-h67p-54hq-rp68 # over-broad <=4.1.1 range flags terminal js-yaml@3.14.2 (v3 has no merge-key DoS, no later v3 to upgrade to); v4 deps already pinned to patched 4.2.0.
     - GHSA-86w9-cpqp-85rv # transitive Expo CLI code-signing node-forge usage; patched 1.4.1 is not published on npm.
+    - GHSA-vfj7-8cjw-p6xm # transitive glob/watch tooling DoS; patched braces 3.0.4 is not published on npm. Remove when available.
 
 allowBuilds:
   '@reown/appkit': false
