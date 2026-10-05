@@ -206,6 +206,9 @@ describe('Encoded', () => {
   })
 
   test('wallet_deposit', () => {
+    expectTypeOf<
+      NonNullable<Rpc.wallet_deposit.Encoded['params']>[0]['destinationToken']
+    >().toEqualTypeOf<string | undefined>()
     expectTypeOf<Rpc.wallet_deposit.Encoded>().toMatchTypeOf<{
       method: 'wallet_deposit'
       params:
@@ -215,6 +218,7 @@ describe('Encoded', () => {
               amount?: string | undefined
               chainId?: Hex | undefined
               displayName?: string | undefined
+              destinationToken?: string | undefined
               intent?:
                 | 'applePay'
                 | 'credits'

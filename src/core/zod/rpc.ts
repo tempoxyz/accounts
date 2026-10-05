@@ -1041,6 +1041,12 @@ export namespace wallet_deposit {
             amount: z.optional(z.string()),
             chainId: z.optional(u.number()),
             displayName: z.optional(z.string()),
+            /**
+             * Destination address or symbol for crypto deposits; independent of the source `token` hint.
+             * Omit for the wallet's default asset. Check the wallet host's `/api/bridge/destinations`
+             * endpoint before use: older wallets may discard unknown parameters.
+             */
+            destinationToken: z.optional(z.string()),
             /** Preferred funding path to show first. */
             intent: z.optional(depositIntent),
             /**
