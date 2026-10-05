@@ -9,7 +9,7 @@ Opens the wallet's deposit flow so the user can fund an account. The wallet rend
 
 The wallet picks the deposit path it supports for the requested token and chain. For paths that move funds onchain (such as a testnet faucet drop), the wallet returns the resulting receipts. For offchain paths like Apple Pay, funds arrive asynchronously and `receipts` is omitted.
 
-This method is only supported by adapters that opt in to the `deposit` action (typically the [`dialog`](/docs/api/dialog) adapter). Other adapters reject the request as an unsupported method.
+This method is supported by Tempo Wallet's browser, mobile web authentication, and CLI device-code adapters. Local signing adapters without a deposit UI reject the request as unsupported.
 
 ## Request
 
@@ -25,10 +25,10 @@ type Request = {
     displayName?: string
     /** Preferred funding path to show first. */
     intent?: 'applePay' | 'credits' | 'crypto' | 'faucet' | 'mach' | 'referralCode' | 'x'
-    /** Token contract address to pre-fill. Omit to let the user choose. */
-    token?: `0x${string}`
+    /** Token symbol or contract address to pre-fill. */
+    token?: string
     /** Human-readable amount to pre-fill (e.g. `"1.5"`). */
-    value?: string
+    amount?: string
   }]
 }
 ```
@@ -48,13 +48,41 @@ type Response = {
 
 ## Example
 
-Request the wallet's MACH purchase path with the `mach` intent.
+Use `Mach.fund` to open MACH checkout for the connected account. The helper selects the mainnet MACH token and validates the amount before requesting checkout. The user reviews and confirms the payment in Tempo Wallet.
 
 ```ts
-const result = await provider.request({
+import { Mach } from 'accounts'
+
+await Mach.fund(provider, { amount: '5' })
+```
+
+For a terminal or another device that cannot display the wallet, generate a link bound to the intended account:
+
+```ts
+import { Mach } from 'accounts'
+
+const url = Mach.getFundingUrl({
+  address: '0x0000000000000000000000000000000000000001',
+  amount: '5',
+})
+```
+
+The same helpers are exported from `accounts/cli`. `Mach.fund` uses the CLI provider's device-code browser handoff when called with a CLI provider.
+
+The underlying request is also available directly:
+
+```ts
+await provider.request({
   method: 'wallet_deposit',
   params: [{
     intent: 'mach',
+    token: Mach.token.address,
+    chainId: '0x1079',
+    amount: '5',
   }],
 })
 ```
+
+MACH checkout currently supports Tempo mainnet (4217). Amounts are USD decimal strings with at most two decimal places; the checkout applies its current purchase limits. The deprecated `credits` intent remains accepted for older clients and opens MACH checkout in updated wallets. Existing MPP Credits remain a separate balance and are not converted by opening checkout.
+
+Opening a link, closing the wallet, or receiving an empty response does not confirm a purchase. Check the resulting MACH balance or confirmed funding receipt before spending.

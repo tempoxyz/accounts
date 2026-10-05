@@ -120,6 +120,23 @@ export function Deposit() {
 
 ## Best Practices
 
+### Buy MACH from Any Device
+
+Call `Mach.fund` with a browser, mobile, or CLI provider to request MACH checkout for the connected account. Use `Mach.getFundingUrl` when the user needs to continue on another device. Both paths preserve the intended account and requested amount.
+
+```ts
+import { Mach } from 'accounts'
+
+await Mach.fund(provider, { amount: '5' })
+
+const checkoutUrl = Mach.getFundingUrl({
+  address: '0x0000000000000000000000000000000000000001',
+  amount: '5',
+})
+```
+
+Checkout requires the user's confirmation. Its completion response does not by itself confirm that funds arrived. MACH is supported on Tempo mainnet; legacy MPP Credits are a separate balance.
+
 ### Deposit on Connection
 
 If adding funds is part of onboarding, show the deposit picker immediately after
@@ -160,8 +177,9 @@ connect.connect({
   connector,
   capabilities: { // [!code focus]
     showDeposit: { // [!code focus]
+      intent: 'mach',
       amount: '10', // [!code focus]
-      token: 'USDC.e', // [!code focus]
+      token: 'MACH', // [!code focus]
     }, // [!code focus]
   }, // [!code focus]
 })
