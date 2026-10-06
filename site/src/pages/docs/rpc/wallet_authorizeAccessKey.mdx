@@ -50,6 +50,8 @@ type Request = {
 }
 
 type ShowDeposit = boolean | {
+  /** Funding path to open. Use mach for MACH checkout. */
+  intent?: 'applePay' | 'credits' | 'crypto' | 'faucet' | 'mach' | 'referralCode' | 'x'
   /** Human-readable amount to pre-fill (e.g. `"50"`). */
   amount?: string
   /** Display name shown in the deposit UI. */

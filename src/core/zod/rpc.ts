@@ -449,6 +449,18 @@ export namespace wallet_getCapabilities {
   export type Decoded = Schema.Decoded<typeof schema>
 }
 
+/** Funding path shared by standalone deposits and post-authorization prompts. */
+const depositIntent = z.union([
+  z.literal('applePay'),
+  // Legacy links remain valid; wallets route this alias to MACH checkout.
+  z.literal('credits'),
+  z.literal('crypto'),
+  z.literal('faucet'),
+  z.literal('mach'),
+  z.literal('referralCode'),
+  z.literal('x'),
+])
+
 export namespace wallet_authorizeAccessKey {
   /**
    * Shows an optional funding prompt after `wallet_authorizeAccessKey`
@@ -464,6 +476,8 @@ export namespace wallet_authorizeAccessKey {
         amount: z.optional(z.string()),
         /** Display name shown in the deposit UI (e.g. the app name). */
         displayName: z.optional(z.string()),
+        /** Preferred funding path. Use `mach` to open MACH checkout. */
+        intent: z.optional(depositIntent),
         /**
          * Token to pre-fill, accepted as either a contract address or a
          * supported deposit token symbol (case-insensitive, e.g. `"USDC"`).
@@ -599,6 +613,8 @@ export namespace wallet_connect {
         amount: z.optional(z.string()),
         /** Display name shown in the deposit UI (e.g. the app name). */
         displayName: z.optional(z.string()),
+        /** Preferred funding path. Use `mach` to open MACH checkout. */
+        intent: z.optional(depositIntent),
         /** Auth event that should show the deposit prompt. Defaults to any event. */
         on: z.optional(z.union([z.literal('login'), z.literal('register')])),
         /**
@@ -1025,18 +1041,14 @@ export namespace wallet_deposit {
             amount: z.optional(z.string()),
             chainId: z.optional(u.number()),
             displayName: z.optional(z.string()),
+            /**
+             * Destination address or symbol for crypto deposits; independent of the source `token` hint.
+             * Omit for the wallet's default asset. Check the wallet host's `/api/bridge/destinations`
+             * endpoint before use: older wallets may discard unknown parameters.
+             */
+            destinationToken: z.optional(z.string()),
             /** Preferred funding path to show first. */
-            intent: z.optional(
-              z.union([
-                z.literal('applePay'),
-                z.literal('credits'),
-                z.literal('crypto'),
-                z.literal('faucet'),
-                z.literal('mach'),
-                z.literal('referralCode'),
-                z.literal('x'),
-              ]),
-            ),
+            intent: z.optional(depositIntent),
             /**
              * Token to pre-fill, accepted as either a contract address or a
              * supported deposit token symbol (case-insensitive, e.g. `"USDC"`).
