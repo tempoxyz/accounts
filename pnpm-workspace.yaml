@@ -79,7 +79,6 @@ minimumReleaseAgeExclude:
   - react@19.2.8
   - react-dom@19.2.8
   - react-server-dom-webpack@19.2.8
-  - seroval@1.5.3
   - tar@7.5.21
   - valibot@1.4.2
   - wata
@@ -95,6 +94,23 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 
 overrides:
   accounts: 'workspace:*'
+  # GHSA-hp3w-g68c-fv3c: remove unpatched sprintf-js via js-yaml's argparse v1.
+  # load-nyc-config uses load(), which remains supported by js-yaml v4.
+  '@istanbuljs/load-nyc-config>js-yaml': '4.3.2'
+  # GHSA-g2v6-rqmx-r4w6: keep Vue's renderer and runtime on matching patched versions.
+  'vue@>=3.5.0 <3.5.42': '3.5.42'
+  # GHSA-vc2v-76pw-4v95: memory leak on premature response close.
+  'compression@<1.8.2': '1.8.2'
+  # GHSA-jggr-w7fw-pc2j: stack exhaustion when copying nested values.
+  'fast-copy@>=3.0.0 <3.1.0': '3.1.0'
+  # GHSA-238p-pmpm-9mq7: KaTeX trust bypass under prototype pollution.
+  'katex@<0.18.2': '0.18.2'
+  # GHSA-jqcg-44mw-7w3h: proxy address trust validation.
+  'proxy-addr@<2.0.8': '2.0.8'
+  # GHSA-68fv-2mgg-jv7q: indexed source-map denial of service.
+  'source-map-js@<1.2.2': '1.2.2'
+  # GHSA-5gmw-xhrv-c9v3 and GHSA-85c8-ppgw-ccpr: worker option prototype-pollution gadgets.
+  'tinypool@>=2.0.0 <2.1.2': '2.1.2'
   # GHSA-4x5r-pxfx-6jf8: @babel/core arbitrary file read via sourceMappingURL (7.29.1 unpublished; 7.29.6 is first patched release).
   '@babel/core@<=7.29.0': '7.29.6'
   # GHSA-c83g-rgw3-j3cx and GHSA-73wf-gq98-2v4g: Browserslist path traversal and ReDoS.
@@ -144,7 +160,8 @@ overrides:
   react-server-dom-webpack: '19.2.8'
   # Pin to last version with npm provenance — 5.1.1 lost trust evidence.
   reselect: '5.1.0'
-  seroval: '1.5.3'
+  # GHSA-p6vx-979v-rg4c and GHSA-jp82-f5mq-hwhp: unsafe deserialization and memory exhaustion.
+  seroval: '1.6.3'
   'socket.io-parser@>=4.0.0 <4.2.7': '4.2.7'
   # GHSA-rgj7-g3m4-5g8c: inherited libheif vulnerabilities.
   'sharp@<0.35.4': '0.35.4'

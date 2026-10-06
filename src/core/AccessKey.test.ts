@@ -49,7 +49,11 @@ function createRevert(errorName: string) {
 
 function createMetadataClient(
   accessKey: Hex.Hex,
-  options: { isRevoked?: boolean | undefined; keyId?: Hex.Hex | undefined } = {},
+  options: {
+    expiry?: bigint | undefined
+    isRevoked?: boolean | undefined
+    keyId?: Hex.Hex | undefined
+  } = {},
 ) {
   return {
     call: async () => ({
@@ -58,7 +62,7 @@ function createMetadataClient(
         functionName: 'getKey',
         result: {
           enforceLimits: false,
-          expiry: 0n,
+          expiry: options.expiry ?? 0n,
           isRevoked: options.isRevoked ?? false,
           keyId: options.keyId ?? accessKey,
           signatureType: 1,
@@ -1154,4 +1158,131 @@ describe('getStatus', () => {
 
     expect(result).toMatchInlineSnapshot(`"missing"`)
   })
+})
+
+describe('non-expiring authorizations', () => {
+  test.each(['privateKey', 'address', 'keystore'] as const)(
+    'prepares canonical expiry for %s keys',
+    async (source) => {
+      const prepared = await AccessKey.prepareAuthorization({
+        chainId: 1,
+        expiry: 0,
+        ...(source === 'privateKey' ? { privateKey: privateKeys[1] } : {}),
+        ...(source === 'address' ? { address: accounts[1].address } : {}),
+        ...(source === 'keystore' ? { keystores: { p256: testKeystore() } } : {}),
+      })
+      expect(prepared.keyAuthorization.expiry).toBeUndefined()
+      expect(
+        KeyAuthorization.fromTuple(KeyAuthorization.toTuple(prepared.keyAuthorization)).expiry,
+      ).toBeUndefined()
+    },
+  )
+
+  test('imports legacy zero and normalizes manager updates without changing the signed payload', async () => {
+    const store = createStore()
+    const authorization = createKeyAuthorization(accounts[1].address, {
+      expiry: 0,
+      keyType: 'secp256k1',
+    })
+    const record = store.accessKeys.add({
+      account: rootAddress,
+      authorization,
+      privateKey: privateKeys[1],
+    })
+    expect(record.expiry).toBeUndefined()
+    expect(record.keyAuthorization!.expiry).toBeUndefined()
+    expect(KeyAuthorization.getSignPayload(record.keyAuthorization!)).toBe(
+      KeyAuthorization.getSignPayload(authorization),
+    )
+    const account = await store.accessKeys.select({
+      account: rootAddress,
+      chainId: 1,
+      now: 10_000_000_000,
+    })
+    const key = { address: rootAddress, accessKey: authorization.address, chainId: 1 }
+    await account!.keyAuthorizationManager!.set(key, { ...authorization, limits: [], scopes: [] })
+    const updated = store.getState().accessKeys[0]!
+    expect(updated.expiry).toBeUndefined()
+    expect(updated.keyAuthorization!.expiry).toBeUndefined()
+    expect(updated.limits).toEqual([])
+    expect(updated.scopes).toEqual([])
+    expect(
+      await store.accessKeys.select({
+        account: rootAddress,
+        chainId: 1,
+        calls: [{ to: rootAddress }],
+      }),
+    ).toBeUndefined()
+  })
+
+  test.each([true, false])(
+    'rehydrates stored zero with pending authorization: %s',
+    async (pending) => {
+      const storage = Storage.memory()
+      const authorization = createKeyAuthorization(accounts[1].address, {
+        expiry: 0,
+        keyType: 'secp256k1',
+      })
+      await storage.setItem('store', {
+        version: 0,
+        state: {
+          accessKeys: [
+            {
+              access: rootAddress,
+              address: accounts[1].address,
+              chainId: 1,
+              expiry: 0,
+              keyType: 'secp256k1',
+              privateKey: privateKeys[1],
+              permissionSemantics: 1,
+              ...(pending ? { keyAuthorization: authorization } : {}),
+            },
+          ],
+        },
+      })
+      const store = Store.create({ chainId: 1, storage })
+      await Store.waitForHydration(store)
+      const record = store.getState().accessKeys[0]!
+      expect(record.expiry).toBeUndefined()
+      expect(record.keyAuthorization?.expiry).toBeUndefined()
+      const query = { account: rootAddress, chainId: 1, now: 10_000_000_000 }
+      expect(await store.accessKeys.select(query)).toBeDefined()
+      expect(await store.accessKeys.get({ ...query, accessKey: accounts[1].address })).toBeDefined()
+      expect(
+        await AccessKey.hasReusableAuthorization({
+          store: { state: store, keystores: Keystore.defaults },
+          ...query,
+          parameters: { expiry: 0, reuse: { minExpiry: query.now } },
+        }),
+      ).toBe(true)
+      expect(store.getState().accessKeys).toHaveLength(1)
+    },
+  )
+})
+
+test('perpetual on-chain metadata retains uint64 precision and revoked publication is missing', async () => {
+  const store = createStore()
+  const authorization = createKeyAuthorization(accounts[1].address, {
+    expiry: 0,
+    keyType: 'secp256k1',
+  })
+  store.accessKeys.add({ account: rootAddress, authorization, privateKey: privateKeys[1] })
+  const query = { account: rootAddress, chainId: 1, now: 10_000_000_000 }
+  expect(
+    await store.accessKeys.getStatus({ ...query, client: createMissingClient() as never }),
+  ).toBe('pending')
+  expect(
+    await store.accessKeys.getStatus({
+      ...query,
+      client: createMetadataClient(authorization.address, { expiry: 2n ** 64n - 1n }) as never,
+    }),
+  ).toBe('published')
+  expect(store.getState().accessKeys[0]!.keyAuthorization).toBeUndefined()
+  expect(await store.accessKeys.select(query)).toBeDefined()
+  expect(
+    await store.accessKeys.getStatus({
+      ...query,
+      client: createMetadataClient(authorization.address, { isRevoked: true }) as never,
+    }),
+  ).toBe('missing')
 })

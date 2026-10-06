@@ -154,7 +154,7 @@ function createProvider(
 }
 
 export declare namespace createDeviceCodeHost {
-  type ProviderOptions = Pick<core_Provider.create.Options, 'feePayer' | 'identity'>
+  type ProviderOptions = Pick<core_Provider.create.Options, 'adapter' | 'feePayer' | 'identity'>
 
   type Options = {
     /** Omits the optional complete verification URI from registration responses. */
