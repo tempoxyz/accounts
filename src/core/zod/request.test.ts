@@ -6,6 +6,25 @@ import * as RpcRequest from './request.js'
 import * as Rpc from './rpc.js'
 
 describe('validate', () => {
+  test('preserves destinationToken separately from the source hint', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_deposit',
+      params: [{ chainId: '0x1079', token: 'USDC', destinationToken: 'OUSD', intent: 'crypto' }],
+    })
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_deposit",
+        "params": [
+          {
+            "chainId": 4217,
+            "destinationToken": "OUSD",
+            "intent": "crypto",
+            "token": "USDC",
+          },
+        ],
+      }
+    `)
+  })
   test('default: validates eth_accounts', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'eth_accounts',

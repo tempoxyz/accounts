@@ -865,63 +865,71 @@ describe('mount', () => {
     await expect(pending).rejects.toMatchObject({ code: 4001 })
   })
 
-  test('behavior: dismissing the mount cancels the in-flight request', async () => {
-    const { consumerRealm } = installBrowser()
-    const events: string[] = []
-    const scripted = scriptedMount(events, consumerRealm)
+  test.each([undefined, 'OUSD'])(
+    'behavior: dismissing the mount cancels the in-flight request with destination %s',
+    async (destinationToken) => {
+      const { consumerRealm } = installBrowser()
+      const events: string[] = []
+      const scripted = scriptedMount(events, consumerRealm)
 
-    const provider = Provider.create({
-      adapter: postMessage({
-        host: `${walletOrigin}/post-message`,
-        mount: scripted.factory,
-        name: 'Accounts Web Test',
-        rdns: 'xyz.tempo.accounts.playground',
-      }),
-      chains: [chain],
-      storage: Storage.memory(),
-    })
+      const provider = Provider.create({
+        adapter: postMessage({
+          host: `${walletOrigin}/post-message`,
+          mount: scripted.factory,
+          name: 'Accounts Web Test',
+          rdns: 'xyz.tempo.accounts.playground',
+        }),
+        chains: [chain],
+        storage: Storage.memory(),
+      })
 
-    // wallet_deposit stays pending wallet-side until cancelled.
-    const denied = provider.request({
-      method: 'wallet_deposit',
-      params: [{ amount: '25', token: 'USDC' }],
-    })
-    await vi.waitFor(() => expect(events).toContain('show'))
-    await vi.waitFor(() => expect(events).toContain('target'))
+      // wallet_deposit stays pending wallet-side until cancelled.
+      const denied = provider.request({
+        method: 'wallet_deposit',
+        params: [{ amount: '25', token: 'USDC', destinationToken }],
+      })
+      await vi.waitFor(() => expect(events).toContain('show'))
+      await vi.waitFor(() => expect(events).toContain('target'))
 
-    scripted.dismiss()
-    await expect(denied).rejects.toMatchObject({ code: 4001 })
-    await vi.waitFor(() => expect(events.at(-1)).toBe('hide'))
-  })
+      scripted.dismiss()
+      await expect(denied).rejects.toMatchObject({ code: 4001 })
+      await vi.waitFor(() => expect(events.at(-1)).toBe('hide'))
+    },
+  )
 
-  test('behavior: dismissing rejects locally even when the wallet ignores the cancel', async () => {
-    const { consumerRealm } = installBrowser()
-    const events: string[] = []
-    // Wallet accepts the request but never answers and ignores notifications
-    // (a wedged iframe). Dismiss must still reject — there is no closed poll.
-    const scripted = scriptedMount(events, consumerRealm, (session) => session.onRequest(() => {}))
+  test.each([undefined, 'OUSD'])(
+    'behavior: dismissing rejects locally even when the wallet ignores the cancel with destination %s',
+    async (destinationToken) => {
+      const { consumerRealm } = installBrowser()
+      const events: string[] = []
+      // Wallet accepts the request but never answers and ignores notifications
+      // (a wedged iframe). Dismiss must still reject — there is no closed poll.
+      const scripted = scriptedMount(events, consumerRealm, (session) =>
+        session.onRequest(() => {}),
+      )
 
-    const provider = Provider.create({
-      adapter: postMessage({
-        host: `${walletOrigin}/post-message`,
-        mount: scripted.factory,
-        name: 'Accounts Web Test',
-        rdns: 'xyz.tempo.accounts.playground',
-      }),
-      chains: [chain],
-      storage: Storage.memory(),
-    })
+      const provider = Provider.create({
+        adapter: postMessage({
+          host: `${walletOrigin}/post-message`,
+          mount: scripted.factory,
+          name: 'Accounts Web Test',
+          rdns: 'xyz.tempo.accounts.playground',
+        }),
+        chains: [chain],
+        storage: Storage.memory(),
+      })
 
-    const denied = provider.request({
-      method: 'wallet_deposit',
-      params: [{ amount: '25', token: 'USDC' }],
-    })
-    await vi.waitFor(() => expect(events).toContain('show'))
+      const denied = provider.request({
+        method: 'wallet_deposit',
+        params: [{ amount: '25', token: 'USDC', destinationToken }],
+      })
+      await vi.waitFor(() => expect(events).toContain('show'))
 
-    scripted.dismiss()
-    await expect(denied).rejects.toMatchObject({ code: 4001 })
-    await vi.waitFor(() => expect(events.at(-1)).toBe('hide'))
-  })
+      scripted.dismiss()
+      await expect(denied).rejects.toMatchObject({ code: 4001 })
+      await vi.waitFor(() => expect(events.at(-1)).toBe('hide'))
+    },
+  )
 
   test('behavior: switch notification remounts in a popup and replays the request', async () => {
     const { consumerRealm, opened } = installBrowser()
