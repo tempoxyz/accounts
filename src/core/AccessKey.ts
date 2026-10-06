@@ -237,18 +237,10 @@ export declare namespace createManager {
 export async function prepareAuthorization(
   options: prepareAuthorization.Options,
 ): Promise<prepareAuthorization.ReturnType> {
-  const {
-    address,
-    chainId,
-    expiry,
-    keystores,
-    keyType,
-    limits,
-    privateKey,
-    publicKey,
-    scopes,
-    witness,
-  } = options
+  const { address, chainId, keystores, keyType, limits, privateKey, publicKey, scopes, witness } =
+    options
+
+  const expiry = options.expiry === 0 ? undefined : options.expiry
 
   if (privateKey) {
     const type = keyType ?? 'secp256k1'
@@ -317,7 +309,7 @@ export declare namespace prepareAuthorization {
     address?: Address.Address | undefined
     /** Chain ID the key authorization is scoped to. */
     chainId: bigint | number
-    /** Unix timestamp when the key expires. */
+    /** Unix timestamp when the key expires. Use `0` for no expiry. */
     expiry: number
     /**
      * Keystores used to create key material when none is provided.
@@ -553,7 +545,11 @@ function createKeyAuthorizationManager(store: ManagerOptions) {
 
 /** Adds a signed access key authorization. */
 export function add(options: add.Options): add.ReturnType {
-  const { account, authorization, handle, keyPair, privateKey, publicKey } = options
+  const { account, handle, keyPair, privateKey, publicKey } = options
+  const authorization =
+    options.authorization.expiry === 0
+      ? { ...options.authorization, expiry: undefined }
+      : options.authorization
   const { store } = options
   const base = {
     address: authorization.address,
@@ -623,7 +619,9 @@ function clearAuthorization(options: Key & { store: ManagerOptions }): void {
 }
 
 function updateAuthorization(options: updateAuthorization.Options): void {
-  const { authorization, store, ...key } = options
+  const { authorization: authorization_, store, ...key } = options
+  const authorization =
+    authorization_.expiry === 0 ? { ...authorization_, expiry: undefined } : authorization_
   patch({
     ...key,
     patch: {
@@ -881,7 +879,7 @@ async function hydrate(
 }
 
 function isExpired(expiry: number | undefined, now: number): boolean {
-  return typeof expiry === 'number' && expiry < now
+  return typeof expiry === 'number' && expiry !== 0 && expiry < now
 }
 
 async function getPublishedStatus(

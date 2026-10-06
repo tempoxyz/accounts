@@ -216,24 +216,32 @@ declare namespace hydrate {
 
 function normalizeAccessKeys(accessKeys: Persisted['accessKeys']) {
   if (!accessKeys) return undefined
-  return accessKeys.filter((key): key is core_AccessKey.AccessKey => {
-    if (!key || typeof key !== 'object') return false
-    const value = key as {
-      access?: unknown
-      address?: unknown
-      chainId?: unknown
-      keyType?: unknown
-    }
-    return (
-      typeof value.access === 'string' &&
-      typeof value.address === 'string' &&
-      typeof value.chainId === 'number' &&
-      (value.keyType === 'secp256k1' ||
-        value.keyType === 'p256' ||
-        value.keyType === 'webAuthn' ||
-        value.keyType === 'webCrypto')
-    )
-  })
+  return accessKeys
+    .filter((key): key is core_AccessKey.AccessKey => {
+      if (!key || typeof key !== 'object') return false
+      const value = key as {
+        access?: unknown
+        address?: unknown
+        chainId?: unknown
+        keyType?: unknown
+      }
+      return (
+        typeof value.access === 'string' &&
+        typeof value.address === 'string' &&
+        typeof value.chainId === 'number' &&
+        (value.keyType === 'secp256k1' ||
+          value.keyType === 'p256' ||
+          value.keyType === 'webAuthn' ||
+          value.keyType === 'webCrypto')
+      )
+    })
+    .map((key) => ({
+      ...key,
+      expiry: key.expiry === 0 ? undefined : key.expiry,
+      ...(key.keyAuthorization?.expiry === 0
+        ? { keyAuthorization: { ...key.keyAuthorization, expiry: undefined } }
+        : {}),
+    }))
 }
 
 function isStoredAccount(account: unknown): account is Account {
