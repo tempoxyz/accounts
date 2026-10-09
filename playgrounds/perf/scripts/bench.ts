@@ -51,11 +51,19 @@ async function authenticate(context: BrowserContext, page: Page, credentials: un
 /** Clicks an app button, approves in the wallet UI and times each phase. */
 async function step(context: BrowserContext, page: Page, selector: string, approve: RegExp) {
   const count = await page.evaluate(() => (window as never as { __perf: Perf[] }).__perf.length)
-  const popup = context.waitForEvent('page', { timeout: 2_000 }).catch(() => undefined)
+  const frame = page.frameLocator('iframe[data-testid="tempo-wallet-postmessage"]')
   const start = Date.now()
+  const popup = context.waitForEvent('page', { timeout: 30_000 })
   await page.click(selector)
-  const wallet =
-    (await popup) ?? page.frameLocator('iframe[data-testid="tempo-wallet-postmessage"]')
+  // Whichever surfaces first: a popup window or the overlay iframe's approval button.
+  const wallet = await Promise.race([
+    popup,
+    frame
+      .getByRole('button', { name: approve })
+      .waitFor({ state: 'visible', timeout: 30_000 })
+      .then(() => frame),
+  ])
+  void popup.catch(() => {})
   const button = wallet.getByRole('button', { name: approve })
   await button.waitFor({ state: 'visible', timeout: 30_000 })
   const interactive = Date.now() - start
