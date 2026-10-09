@@ -72,6 +72,9 @@ minimumReleaseAgeExclude:
   - js-yaml@3.15.2
   - js-yaml@4.3.2
   - nanoid@3.3.18
+  - '@modelcontextprotocol/sdk@1.31.0'
+  - sharp@0.35.5
+  - shell-quote@1.11.0
   - postcss@8.5.23
   - socket.io-parser@4.2.7
   - undici@7.29.1
@@ -94,6 +97,8 @@ nodeOptions: '--disable-warning=ExperimentalWarning --disable-warning=Deprecatio
 
 overrides:
   accounts: 'workspace:*'
+  # GHSA-6qxp-vccf-f47h: prevent OAuth client credentials reaching an untrusted authorization server.
+  '@modelcontextprotocol/sdk@>=1.12.0 <1.31.0': '1.31.0'
   # GHSA-hp3w-g68c-fv3c: remove unpatched sprintf-js via js-yaml's argparse v1.
   # load-nyc-config uses load(), which remains supported by js-yaml v4.
   '@istanbuljs/load-nyc-config>js-yaml': '4.3.2'
@@ -163,10 +168,10 @@ overrides:
   # GHSA-p6vx-979v-rg4c and GHSA-jp82-f5mq-hwhp: unsafe deserialization and memory exhaustion.
   seroval: '1.6.3'
   'socket.io-parser@>=4.0.0 <4.2.7': '4.2.7'
-  # GHSA-rgj7-g3m4-5g8c: inherited libheif vulnerabilities.
-  'sharp@<0.35.4': '0.35.4'
-  # GHSA-395f-4hp3-45gv: quadratic-complexity DoS in shell-quote parse().
-  'shell-quote@>=1.1.0 <1.9.0': '1.9.0'
+  # GHSA-rgj7-g3m4-5g8c and GHSA-wq5f-xc86-pv6w: inherited image-library vulnerabilities.
+  'sharp@<0.35.5': '0.35.5'
+  # GHSA-395f-4hp3-45gv and GHSA-pqg4-j6r4-53mv: parse() DoS and quote() command injection.
+  'shell-quote@>=1.1.0 <1.11.0': '1.11.0'
   react: 'catalog:'
   react-dom: 'catalog:'
   tar: '7.5.21'
