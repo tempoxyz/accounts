@@ -13,6 +13,9 @@ import * as Rpc from '../zod/rpc.js'
 import * as u from '../zod/utils.js'
 import { local } from './local.js'
 
+/** How long a registration's server session backs the local signing shortcut. */
+const ttl_registration = 5 * 60 * 1_000
+
 const schema = z.object({
   address: u.address(),
   credential: z.object({
@@ -54,11 +57,22 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       options.ceremony ??
       (url ? WebAuthnCeremony.server({ url }) : WebAuthnCeremony.local({ storage }))
 
-    // Credentials registered by this instance. Registration already started the
-    // server session, so a follow-up connect for the same credential (e.g. an
-    // access key authorized right after sign-up) can sign locally instead of
-    // running a second server-verified authentication.
-    const registered = new Map<string, { publicKey: Hex.Hex; rpId: string; username?: string }>()
+    // The credential this instance most recently registered. Its registration
+    // started the current server session, so a follow-up connect for the same
+    // credential shortly after (e.g. an access key authorized right after
+    // sign-up) can sign locally instead of running a second server-verified
+    // authentication. Any later registration or server login takes over the
+    // session and replaces or clears it.
+    let registered:
+      | { credentialId: string; publicKey: Hex.Hex; rpId: string; time: number; username?: string }
+      | undefined
+
+    /** Returns the latest registration if it still owns a fresh server session. */
+    function current(credentialId: string) {
+      if (registered?.credentialId !== credentialId) return undefined
+      if (Date.now() - registered.time > ttl_registration) return undefined
+      return registered
+    }
 
     const base = local({
       async createAccount(parameters) {
@@ -82,7 +96,13 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           name: parameters.name,
         })
         await storage.setItem('lastCredentialId', credential.id)
-        registered.set(credential.id, { publicKey, rpId, ...(username ? { username } : {}) })
+        registered = {
+          credentialId: credential.id,
+          publicKey,
+          rpId,
+          time: Date.now(),
+          ...(username ? { username } : {}),
+        }
         const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
         return {
           accounts: [
@@ -106,8 +126,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
             (await storage.getItem<string>('lastCredentialId')) ??
             undefined)
 
-        const fresh =
-          digest && typeof credentialId === 'string' ? registered.get(credentialId) : undefined
+        const fresh = digest && typeof credentialId === 'string' ? current(credentialId) : undefined
         if (fresh && typeof credentialId === 'string') {
           const { publicKey, rpId, username } = fresh
           const account = Account.fromWebAuthnP256({ id: credentialId, publicKey }, { rpId })
@@ -155,6 +174,8 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           return await Authentication.sign({ options })
         })()
         const { publicKey, username } = await ceremony.verifyAuthentication(response)
+        // The server session now belongs to this login.
+        registered = undefined
 
         await storage.setItem('lastCredentialId', response.id)
 
@@ -186,10 +207,9 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       },
     })(parameters)
 
-    /** Looks up a credential's RP ID from this session's registrations or stored accounts. */
+    /** Looks up a credential's RP ID from the latest registration or stored accounts. */
     function find(credentialId: string): { rpId: string } | undefined {
-      const fresh = registered.get(credentialId)
-      if (fresh) return { rpId: fresh.rpId }
+      if (registered?.credentialId === credentialId) return { rpId: registered.rpId }
       for (const account of store.getState().accounts)
         if ('credential' in account && account.credential?.id === credentialId)
           return { rpId: account.credential.rpId }
@@ -201,9 +221,9 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     // `accounts_webauthn` cookie persists past `wallet_disconnect`
     // and follow-up authenticated requests still succeed.
     async function disconnect() {
-      // Forget credentials registered this session so the next connect
-      // authenticates with the server again.
-      registered.clear()
+      // Forget the latest registration so the next connect authenticates with
+      // the server again.
+      registered = undefined
       if (!url) return
       await fetch(`${url}/logout`, {
         method: 'POST',

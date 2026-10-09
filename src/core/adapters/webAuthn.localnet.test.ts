@@ -184,6 +184,79 @@ describe('wallet_connect register, then register + authorizeAccessKey', () => {
     `)
   })
 
+  test('behavior: re-authenticates when a later registration took over the session', async () => {
+    const { authenticator, provider } = setup()
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'frank' } }],
+    })
+    // Registering another credential replaces the server session.
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'grace' } }],
+    })
+    requests.length = 0
+    authenticator.calls.length = 0
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: {
+            authorizeAccessKey: { expiry: Expiry.days(1) },
+            method: 'register',
+            name: 'frank',
+          },
+        },
+      ],
+    })
+
+    expect(paths()).toMatchInlineSnapshot(`
+      [
+        "/login/options",
+        "/login",
+      ]
+    `)
+  })
+
+  test('behavior: re-authenticates once the registration is no longer fresh', async () => {
+    const { authenticator, provider } = setup()
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'heidi' } }],
+    })
+    requests.length = 0
+    authenticator.calls.length = 0
+
+    const now = Date.now()
+    vi.spyOn(Date, 'now').mockReturnValue(now + 6 * 60 * 1_000)
+    try {
+      await provider.request({
+        method: 'wallet_connect',
+        params: [
+          {
+            capabilities: {
+              authorizeAccessKey: { expiry: Expiry.days(1) },
+              method: 'register',
+              name: 'heidi',
+            },
+          },
+        ],
+      })
+    } finally {
+      vi.restoreAllMocks()
+    }
+
+    expect(paths()).toMatchInlineSnapshot(`
+      [
+        "/login/options",
+        "/login",
+      ]
+    `)
+  })
+
   test('behavior: re-authenticates with the server after disconnect', async () => {
     const { authenticator, provider } = setup()
 
