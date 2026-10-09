@@ -4,6 +4,7 @@
  *
  * Usage: node --import tsx scripts/bench.ts <url> [runs]
  *   CHROME_PATH=/path/to/chrome to override the browser binary.
+ *   BENCH_NO_SANDBOX=1 disables Chrome's sandbox (only for containers that need it).
  *   Append `?mode=popup` or `?mode=iframe` to the URL to force a mount.
  */
 import { type BrowserContext, chromium, type Page } from 'playwright-core'
@@ -17,7 +18,9 @@ const browser = await chromium.launch({
   ...(process.env.HTTPS_PROXY
     ? { proxy: { bypass: '127.0.0.1,localhost', server: process.env.HTTPS_PROXY } }
     : {}),
-  args: ['--no-sandbox'],
+  // Keep Chrome's sandbox: the bench loads remote previews. Containers that can't
+  // run it (e.g. as root) opt out with BENCH_NO_SANDBOX=1.
+  ...(process.env.BENCH_NO_SANDBOX === '1' ? { args: ['--no-sandbox'] } : {}),
   headless: true,
 })
 
