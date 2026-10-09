@@ -1,4 +1,4 @@
-import { PublicKey, Signature } from 'ox'
+import { type Hex, PublicKey, Signature } from 'ox'
 import { SignatureEnvelope } from 'ox/tempo'
 import { Account } from 'viem/tempo'
 import { Authentication, Registration } from 'webauthx/client'
@@ -53,16 +53,35 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       options.ceremony ??
       (url ? WebAuthnCeremony.server({ url }) : WebAuthnCeremony.local({ storage }))
 
+    // Credentials registered by this instance. Registration already started the
+    // server session, so a follow-up connect for the same credential (e.g. an
+    // access key authorized right after sign-up) can sign locally instead of
+    // running a second server-verified authentication.
+    const registered = new Map<string, { publicKey: Hex.Hex; rpId: string; username?: string }>()
+
     const base = local({
       async createAccount(parameters) {
         const { options } = await ceremony.getRegistrationOptions(parameters)
         const rpId = options.publicKey?.rp.id
         if (!rpId) throw new Error('rpId is required')
         const credential = await Registration.create({ options })
+        // A registration ceremony can't sign an arbitrary digest (e.g. a SIWE
+        // message), so it takes a second prompt. It only needs the new
+        // credential, so run it alongside server verification instead of after.
+        const signature = parameters.digest
+          ? Account.fromWebAuthnP256(
+              { id: credential.id, publicKey: credential.publicKey },
+              { rpId },
+            ).sign({ hash: parameters.digest })
+          : undefined
+        // Keep a failed prompt from surfacing as an unhandled rejection while
+        // verification is still pending; it rethrows from the `await` below.
+        signature?.catch(() => {})
         const { publicKey, username } = await ceremony.verifyRegistration(credential, {
           name: parameters.name,
         })
         await storage.setItem('lastCredentialId', credential.id)
+        registered.set(credential.id, { publicKey, rpId, ...(username ? { username } : {}) })
         const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
         return {
           accounts: [
@@ -73,6 +92,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
               credential: { id: credential.id, publicKey, rpId },
             },
           ],
+          ...(signature ? { signature: await signature } : {}),
           username,
         }
       },
@@ -84,6 +104,24 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           : (parameters?.credentialId ??
             (await storage.getItem<string>('lastCredentialId')) ??
             undefined)
+
+        const fresh =
+          digest && typeof credentialId === 'string' ? registered.get(credentialId) : undefined
+        if (fresh && typeof credentialId === 'string') {
+          const { publicKey, rpId, username } = fresh
+          const account = Account.fromWebAuthnP256({ id: credentialId, publicKey }, { rpId })
+          return {
+            accounts: [
+              {
+                address: account.address,
+                keyType: 'webAuthn',
+                credential: { id: credentialId, publicKey, rpId },
+              },
+            ],
+            signature: await account.sign({ hash: digest! }),
+            username,
+          }
+        }
 
         const { options } = await ceremony.getAuthenticationOptions({
           ...parameters,
@@ -131,18 +169,20 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     // `Handler.webAuthn` session on disconnect — otherwise the
     // `accounts_webauthn` cookie persists past `wallet_disconnect`
     // and follow-up authenticated requests still succeed.
-    const disconnect = url
-      ? async () => {
-          await fetch(`${url}/logout`, {
-            method: 'POST',
-            credentials: 'include',
-          }).catch(() => {})
-        }
-      : undefined
+    async function disconnect() {
+      // Forget credentials registered this session so the next connect
+      // authenticates with the server again.
+      registered.clear()
+      if (!url) return
+      await fetch(`${url}/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      }).catch(() => {})
+    }
 
     return {
       ...base,
-      actions: { ...base.actions, ...(disconnect ? { disconnect } : {}) },
+      actions: { ...base.actions, disconnect },
       persistAccounts: true,
     }
   })

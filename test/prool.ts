@@ -6,6 +6,22 @@ import { http } from 'viem'
 import { fetchOptions, getClient } from './config.js'
 
 export async function setupServer({ port }: { port: number }) {
+  const args = {
+    blockTime: '2ms',
+    log: import.meta.env.VITE_NODE_LOG,
+    port,
+  } satisfies Instance.tempo.Parameters
+
+  // A local `tempo` binary runs localnet without Docker.
+  if (import.meta.env.VITE_NODE_BINARY) {
+    const server = Server.create({
+      instance: Instance.tempo({ ...args, binary: import.meta.env.VITE_NODE_BINARY }),
+      port,
+    })
+    await server.start()
+    return async () => await server.stop()
+  }
+
   const tag = await (async () => {
     if (!import.meta.env.VITE_NODE_TAG?.startsWith('http'))
       return import.meta.env.VITE_NODE_TAG || 'latest'
@@ -31,12 +47,6 @@ export async function setupServer({ port }: { port: number }) {
       return match[1]!
     }
   })()
-
-  const args = {
-    blockTime: '2ms',
-    log: import.meta.env.VITE_NODE_LOG,
-    port,
-  } satisfies Instance.tempo.Parameters
 
   const server = Server.create({
     instance: TestContainers.Instance.tempo({
