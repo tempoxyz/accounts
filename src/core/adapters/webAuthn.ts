@@ -59,6 +59,18 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         const rpId = options.publicKey?.rp.id
         if (!rpId) throw new Error('rpId is required')
         const credential = await Registration.create({ options })
+        // A registration ceremony can't sign an arbitrary digest (e.g. a SIWE
+        // message), so it takes a second prompt. It only needs the new
+        // credential, so run it alongside server verification instead of after.
+        const signature = parameters.digest
+          ? Account.fromWebAuthnP256(
+              { id: credential.id, publicKey: credential.publicKey },
+              { rpId },
+            ).sign({ hash: parameters.digest })
+          : undefined
+        // Keep a failed prompt from surfacing as an unhandled rejection while
+        // verification is still pending; it rethrows from the `await` below.
+        signature?.catch(() => {})
         const { publicKey, username } = await ceremony.verifyRegistration(credential, {
           name: parameters.name,
         })
@@ -73,6 +85,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
               credential: { id: credential.id, publicKey, rpId },
             },
           ],
+          ...(signature ? { signature: await signature } : {}),
           username,
         }
       },
