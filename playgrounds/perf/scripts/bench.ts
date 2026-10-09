@@ -18,9 +18,9 @@ const browser = await chromium.launch({
   ...(process.env.HTTPS_PROXY
     ? { proxy: { bypass: '127.0.0.1,localhost', server: process.env.HTTPS_PROXY } }
     : {}),
-  // Keep Chrome's sandbox: the bench loads remote previews. Containers that can't
-  // run it (e.g. as root) opt out with BENCH_NO_SANDBOX=1.
-  ...(process.env.BENCH_NO_SANDBOX === '1' ? { args: ['--no-sandbox'] } : {}),
+  // Keep Chrome's sandbox (Playwright disables it by default): the bench loads
+  // remote previews. Containers that can't run it opt out with BENCH_NO_SANDBOX=1.
+  chromiumSandbox: process.env.BENCH_NO_SANDBOX !== '1',
   headless: true,
 })
 
