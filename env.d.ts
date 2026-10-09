@@ -4,6 +4,7 @@ interface ImportMetaEnv {
   readonly VITE_HTTP_LOG: 'true' | 'false'
   readonly VITE_NODE_ENV: 'localnet' | 'testnet' | 'devnet'
   readonly VITE_NODE_TAG: string
+  readonly VITE_NODE_BINARY: string | undefined
   readonly VITE_RPC_CREDENTIALS: string
 }
 
