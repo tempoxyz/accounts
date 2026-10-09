@@ -891,7 +891,7 @@ importers:
     devDependencies:
       vite-plus:
         specifier: ~0.1.24
-        version: 0.1.24(@types/node@26.6.3)(@vitejs/devtools@0.2.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(@pnpm/logger@1001.0.1)(bufferutil@4.1.0)(idb-keyval@6.2.2)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.16))(bufferutil@4.1.0)(esbuild@0.28.1)(jiti@2.7.0)(publint@0.3.21)(terser@5.48.0)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.16(@types/node@26.6.3)(@vitejs/devtools@0.2.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(@pnpm/logger@1001.0.1)(bufferutil@4.1.0)(idb-keyval@6.2.2)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.16))(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0))(yaml@2.9.0)
+        version: 0.1.24(@types/node@26.6.3)(@vitejs/devtools@0.2.0(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(@pnpm/logger@1001.0.1)(bufferutil@4.1.0)(idb-keyval@6.2.2)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.16))(bufferutil@4.1.0)(esbuild@0.28.1)(jiti@2.7.0)(publint@0.3.21)(terser@5.48.0)(tsx@4.21.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.16(@types/node@26.6.3)(@vitejs/devtools@0.2.0(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(@pnpm/logger@1001.0.1)(bufferutil@4.1.0)(idb-keyval@6.2.2)(typescript@5.9.3)(utf-8-validate@5.0.10)(vite@8.0.16))(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0))(yaml@2.9.0)
       wrangler:
         specifier: ^4.98.0
         version: 4.98.0(@types/node@26.6.3)(bufferutil@4.1.0)(utf-8-validate@5.0.10)
@@ -1162,7 +1162,7 @@ importers:
         version: 8.0.16(@types/node@25.9.3)(@vitejs/devtools@0.2.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0)
       vocs:
         specifier: 2.0.0
-        version: 2.0.0(patch_hash=0749dd43af96e1423a849f589c6b765ac71042c00b84c5d521e0af05bf159b6e)(43919e8ed5be70daa420674d71ec29d7)
+        version: 2.0.0(patch_hash=0749dd43af96e1423a849f589c6b765ac71042c00b84c5d521e0af05bf159b6e)(9c13195511cdfcfc398598ca42e1d76e)
       wagmi:
         specifier: 'catalog:'
         version: 3.7.0(@coinbase/wallet-sdk@4.3.6(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.8)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@19.2.8))(utf-8-validate@5.0.10)(zod@4.4.3))(@safe-global/safe-apps-provider@0.18.6(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(@safe-global/safe-apps-sdk@9.1.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(@tanstack/query-core@5.100.10)(@tanstack/react-query@5.100.10(react@19.2.8))(@types/react@19.2.14)(@walletconnect/ethereum-provider@2.22.4(@react-native-async-storage/async-storage@3.0.2(react-native@0.85.1(@babel/core@7.29.6)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(react@19.2.8))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.8)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(accounts@)(porto@0.2.35)(react@19.2.8)(typescript@5.9.3)(viem@2.57.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))
@@ -7104,7 +7104,7 @@ packages:
   devframe@0.4.1:
     resolution: {integrity: sha512-9HTn7CITFmyd7lj14YAUX7z1PbWEDVcXLtI0UUApBkCP1QgHEVOUTvgbXyuZr4EUw1vNSdeo0nW1UyimpsDSFA==}
     peerDependencies:
-      '@modelcontextprotocol/sdk': ^1.0.0
+      '@modelcontextprotocol/sdk': 1.31.0
     peerDependenciesMeta:
       '@modelcontextprotocol/sdk':
         optional: true
@@ -8904,7 +8904,7 @@ packages:
     resolution: {integrity: sha512-BEbDwmxOQUMImYQrkfAicD4qwgKHZkPOw8+NgiqJS5/DyFtyKX/0YK/Oz0y/LwyYGQn3KdOB6WmvwAWfOsR/rw==}
     hasBin: true
     peerDependencies:
-      '@modelcontextprotocol/sdk': '>=1.25.0'
+      '@modelcontextprotocol/sdk': 1.31.0
       '@x402/core': '>=2.22.0'
       '@x402/express': '>=2.22.0'
       '@x402/hono': '>=2.22.0'
@@ -14889,7 +14889,7 @@ snapshots:
   '@react-native/codegen@0.85.1(@babel/core@7.29.6)':
     dependencies:
       '@babel/core': 7.29.6
-      '@babel/parser': 7.29.7
+      '@babel/parser': 7.29.9
       hermes-parser: 0.33.3
       invariant: 2.2.4
       nullthrows: 1.1.1
@@ -22089,7 +22089,7 @@ snapshots:
   metro-source-map@0.84.4:
     dependencies:
       '@babel/traverse': 7.29.7
-      '@babel/types': 7.29.7
+      '@babel/types': 7.29.8
       flow-enums-runtime: 0.0.6
       invariant: 2.2.4
       metro-symbolicate: 0.84.4
@@ -22168,8 +22168,8 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.6
       '@babel/generator': 7.29.7
-      '@babel/parser': 7.29.7
-      '@babel/types': 7.29.7
+      '@babel/parser': 7.29.9
+      '@babel/types': 7.29.8
       flow-enums-runtime: 0.0.6
       metro: 0.84.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       metro-babel-transformer: 0.84.4
@@ -22236,10 +22236,10 @@ snapshots:
       '@babel/code-frame': 7.29.7
       '@babel/core': 7.29.6
       '@babel/generator': 7.29.7
-      '@babel/parser': 7.29.7
+      '@babel/parser': 7.29.9
       '@babel/template': 7.29.7
       '@babel/traverse': 7.29.7
-      '@babel/types': 7.29.7
+      '@babel/types': 7.29.8
       accepts: 2.0.0
       ci-info: 2.0.0
       connect: 3.7.0
@@ -25473,7 +25473,7 @@ snapshots:
 
   vlq@1.0.1: {}
 
-  vocs@2.0.0(patch_hash=0749dd43af96e1423a849f589c6b765ac71042c00b84c5d521e0af05bf159b6e)(43919e8ed5be70daa420674d71ec29d7):
+  vocs@2.0.0(patch_hash=0749dd43af96e1423a849f589c6b765ac71042c00b84c5d521e0af05bf159b6e)(9c13195511cdfcfc398598ca42e1d76e):
     dependencies:
       '@base-ui/react': 1.5.0(@types/react@19.2.14)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@codesandbox/sandpack-react': 2.20.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
