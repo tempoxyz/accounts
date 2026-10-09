@@ -1,7 +1,8 @@
-import { type Hex, PublicKey, Signature } from 'ox'
+import { Hex, PublicKey, Signature } from 'ox'
 import { SignatureEnvelope } from 'ox/tempo'
 import { Account } from 'viem/tempo'
 import { Authentication, Registration } from 'webauthx/client'
+import { Authentication as core_Authentication } from 'webauthx/server'
 import type * as core_z from 'zod'
 import * as z from 'zod/mini'
 
@@ -47,7 +48,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
   })()
 
   return Adapter.define({ icon, name, rdns, schema }, (parameters) => {
-    const { storage } = parameters
+    const { storage, store } = parameters
 
     const ceremony =
       options.ceremony ??
@@ -123,16 +124,36 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           }
         }
 
+        // A known credential's request options are deterministic (challenge,
+        // credential and RP ID), so build them locally and prompt for the
+        // passkey while the ceremony registers the challenge, not after.
+        const known = typeof credentialId === 'string' ? find(credentialId) : undefined
+        const challenge = digest ?? (known ? Hex.random(32) : undefined)
+        const options_local =
+          known && typeof credentialId === 'string'
+            ? core_Authentication.getOptions({ challenge, credentialId, rpId: known.rpId }).options
+            : undefined
+        const signed = options_local ? Authentication.sign({ options: options_local }) : undefined
+        // Rethrown from the `await` below; avoid an unhandled rejection meanwhile.
+        signed?.catch(() => {})
+
         const { options } = await ceremony.getAuthenticationOptions({
           ...parameters,
-          challenge: digest,
+          challenge,
           credentialId,
         })
 
         const rpId = options.publicKey?.rpId
         if (!rpId) throw new Error('rpId is required')
 
-        const response = await Authentication.sign({ options })
+        const response = await (async () => {
+          if (!signed) return await Authentication.sign({ options })
+          if (matches(options, options_local!)) return await signed
+          // The ceremony answered with different options (e.g. its own
+          // challenge); sign those instead once the first prompt settles.
+          await signed.catch(() => {})
+          return await Authentication.sign({ options })
+        })()
         const { publicKey, username } = await ceremony.verifyAuthentication(response)
 
         await storage.setItem('lastCredentialId', response.id)
@@ -164,6 +185,16 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
         }
       },
     })(parameters)
+
+    /** Looks up a credential's RP ID from this session's registrations or stored accounts. */
+    function find(credentialId: string): { rpId: string } | undefined {
+      const fresh = registered.get(credentialId)
+      if (fresh) return { rpId: fresh.rpId }
+      for (const account of store.getState().accounts)
+        if ('credential' in account && account.credential?.id === credentialId)
+          return { rpId: account.credential.rpId }
+      return undefined
+    }
 
     // When a server-backed ceremony is used, also revoke the
     // `Handler.webAuthn` session on disconnect — otherwise the
@@ -214,4 +245,18 @@ export declare namespace webAuthn {
     /** Reverse DNS identifier. @default `com.{lowercase name}` */
     rdns?: string | undefined
   }
+}
+
+/** Whether two credential request options ask the authenticator for the same assertion. */
+function matches(
+  options: core_Authentication.Options,
+  options_local: core_Authentication.Options,
+): boolean {
+  const a = options.publicKey
+  const b = options_local.publicKey
+  if (!a || !b) return false
+  if (a.challenge !== b.challenge || a.rpId !== b.rpId) return false
+  if (a.userVerification !== b.userVerification) return false
+  const ids = (options: typeof a) => (options.allowCredentials ?? []).map((c) => c.id).join(',')
+  return ids(a) === ids(b)
 }
