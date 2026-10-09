@@ -1,0 +1,19 @@
+{
+  "name": "perf-playground",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview"
+  },
+  "dependencies": {
+    "accounts": "workspace:*",
+    "viem": "catalog:"
+  },
+  "devDependencies": {
+    "vite-plus": "latest",
+    "wrangler": "catalog:"
+  }
+}
