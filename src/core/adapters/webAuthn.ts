@@ -169,19 +169,20 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     // `Handler.webAuthn` session on disconnect — otherwise the
     // `accounts_webauthn` cookie persists past `wallet_disconnect`
     // and follow-up authenticated requests still succeed.
-    const disconnect = url
-      ? async () => {
-          registered.clear()
-          await fetch(`${url}/logout`, {
-            method: 'POST',
-            credentials: 'include',
-          }).catch(() => {})
-        }
-      : undefined
+    async function disconnect() {
+      // Forget credentials registered this session so the next connect
+      // authenticates with the server again.
+      registered.clear()
+      if (!url) return
+      await fetch(`${url}/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      }).catch(() => {})
+    }
 
     return {
       ...base,
-      actions: { ...base.actions, ...(disconnect ? { disconnect } : {}) },
+      actions: { ...base.actions, disconnect },
       persistAccounts: true,
     }
   })
