@@ -1,4 +1,4 @@
-import { PublicKey, Signature } from 'ox'
+import { type Hex, PublicKey, Signature } from 'ox'
 import { SignatureEnvelope } from 'ox/tempo'
 import { Account } from 'viem/tempo'
 import { Authentication, Registration } from 'webauthx/client'
@@ -53,6 +53,12 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
       options.ceremony ??
       (url ? WebAuthnCeremony.server({ url }) : WebAuthnCeremony.local({ storage }))
 
+    // Credentials registered by this instance. Registration already started the
+    // server session, so a follow-up connect for the same credential (e.g. an
+    // access key authorized right after sign-up) can sign locally instead of
+    // running a second server-verified authentication.
+    const registered = new Map<string, { publicKey: Hex.Hex; rpId: string; username?: string }>()
+
     const base = local({
       async createAccount(parameters) {
         const { options } = await ceremony.getRegistrationOptions(parameters)
@@ -75,6 +81,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           name: parameters.name,
         })
         await storage.setItem('lastCredentialId', credential.id)
+        registered.set(credential.id, { publicKey, rpId, ...(username ? { username } : {}) })
         const account = Account.fromWebAuthnP256({ id: credential.id, publicKey })
         return {
           accounts: [
@@ -97,6 +104,24 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
           : (parameters?.credentialId ??
             (await storage.getItem<string>('lastCredentialId')) ??
             undefined)
+
+        const fresh =
+          digest && typeof credentialId === 'string' ? registered.get(credentialId) : undefined
+        if (fresh && typeof credentialId === 'string') {
+          const { publicKey, rpId, username } = fresh
+          const account = Account.fromWebAuthnP256({ id: credentialId, publicKey }, { rpId })
+          return {
+            accounts: [
+              {
+                address: account.address,
+                keyType: 'webAuthn',
+                credential: { id: credentialId, publicKey, rpId },
+              },
+            ],
+            signature: await account.sign({ hash: digest! }),
+            username,
+          }
+        }
 
         const { options } = await ceremony.getAuthenticationOptions({
           ...parameters,
@@ -146,6 +171,7 @@ export function webAuthn(options: webAuthn.Options = {}): Adapter.Adapter {
     // and follow-up authenticated requests still succeed.
     const disconnect = url
       ? async () => {
+          registered.clear()
           await fetch(`${url}/logout`, {
             method: 'POST',
             credentials: 'include',
