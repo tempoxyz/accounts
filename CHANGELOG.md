@@ -1,5 +1,19 @@
 # accounts
 
+## 0.20.0
+
+### Minor Changes
+
+- 56efdd1: Add an optional `destinationToken` to `wallet_deposit` for destination-aware crypto deposits. Keep the existing `token` source hint and omitted-parameter behavior unchanged. Callers must check the wallet host's destination support before using the new parameter.
+- 56efdd1: Add `Mach.fund` and `Mach.getFundingUrl` to open wallet-bound MACH checkout from browser, mobile, and CLI contexts. Support a funding intent in post-connect and access-key approval deposit prompts. MACH remains distinct from legacy MPP Credits; checkout initiation does not imply payment completion.
+
+### Patch Changes
+
+- e348647: Sign a requested `wallet_connect` digest (for example a `personalSign` SIWE message) during WebAuthn registration while the server verifies the new credential, instead of after verification returns.
+- ceaf876: Remove the authentication challenge resource-count limit while preserving per-resource length and line-break validation.
+- e348647: Sign locally when `wallet_connect` re-authenticates a credential the WebAuthn adapter registered in the same session (for example authorizing an access key right after sign-up), skipping the server authentication options and verification round trips. Disconnecting clears this.
+- 232cc59: Treat access-key authorization expiry `0` as non-expiring when signing, importing, updating, and restoring stored grants. Preserve omitted unrestricted permissions and explicit empty restrictions.
+
 ## 0.19.1
 
 ### Patch Changes
