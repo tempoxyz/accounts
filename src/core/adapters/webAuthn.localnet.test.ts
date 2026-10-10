@@ -11,6 +11,7 @@ import * as Kv from '../../server/Kv.js'
 import * as Expiry from '../Expiry.js'
 import * as Provider from '../Provider.js'
 import * as Storage from '../Storage.js'
+import * as Store from '../Store.js'
 import * as WebAuthnCeremony from '../WebAuthnCeremony.js'
 import { webAuthn } from './webAuthn.js'
 
@@ -47,8 +48,14 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function setup() {
-  const authenticator = Authenticator.create({ origin, rpId: 'localhost' })
+function setup(
+  options: {
+    authenticator?: ReturnType<typeof Authenticator.create> | undefined
+    storage?: Storage.Storage | undefined
+  } = {},
+) {
+  const authenticator = options.authenticator ?? Authenticator.create({ origin, rpId: 'localhost' })
+  const storage = options.storage ?? Storage.memory()
   const window = Object.assign(new EventTarget(), {
     location: { hostname: 'localhost', origin },
     navigator: { credentials: authenticator.credentials },
@@ -57,9 +64,9 @@ function setup() {
   const provider = Provider.create({
     adapter: webAuthn({ ceremony: WebAuthnCeremony.server({ url: `${server.url}/webauthn` }) }),
     chains: [chain],
-    storage: Storage.memory(),
+    storage,
   })
-  return { authenticator, provider }
+  return { authenticator, provider, storage }
 }
 
 async function fund(address: Address) {
@@ -177,6 +184,79 @@ describe('wallet_connect register, then register + authorizeAccessKey', () => {
     `)
   })
 
+  test('behavior: re-authenticates when a later registration took over the session', async () => {
+    const { authenticator, provider } = setup()
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'frank' } }],
+    })
+    // Registering another credential replaces the server session.
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'grace' } }],
+    })
+    requests.length = 0
+    authenticator.calls.length = 0
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [
+        {
+          capabilities: {
+            authorizeAccessKey: { expiry: Expiry.days(1) },
+            method: 'register',
+            name: 'frank',
+          },
+        },
+      ],
+    })
+
+    expect(paths()).toMatchInlineSnapshot(`
+      [
+        "/login/options",
+        "/login",
+      ]
+    `)
+  })
+
+  test('behavior: re-authenticates once the registration is no longer fresh', async () => {
+    const { authenticator, provider } = setup()
+
+    await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'heidi' } }],
+    })
+    requests.length = 0
+    authenticator.calls.length = 0
+
+    const now = Date.now()
+    vi.spyOn(Date, 'now').mockReturnValue(now + 6 * 60 * 1_000)
+    try {
+      await provider.request({
+        method: 'wallet_connect',
+        params: [
+          {
+            capabilities: {
+              authorizeAccessKey: { expiry: Expiry.days(1) },
+              method: 'register',
+              name: 'heidi',
+            },
+          },
+        ],
+      })
+    } finally {
+      vi.restoreAllMocks()
+    }
+
+    expect(paths()).toMatchInlineSnapshot(`
+      [
+        "/login/options",
+        "/login",
+      ]
+    `)
+  })
+
   test('behavior: re-authenticates with the server after disconnect', async () => {
     const { authenticator, provider } = setup()
 
@@ -199,5 +279,54 @@ describe('wallet_connect register, then register + authorizeAccessKey', () => {
         "/login",
       ]
     `)
+  })
+})
+
+describe('wallet_connect login with a stored credential', () => {
+  test('behavior: prompts for the passkey while the server registers the challenge', async () => {
+    const first = setup()
+    const registered = await first.provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'register', name: 'erin' } }],
+    })
+
+    // A reload: a new provider over the same storage, with the account restored.
+    const { authenticator, provider } = setup({
+      authenticator: first.authenticator,
+      storage: first.storage,
+    })
+    await Store.waitForHydration(provider.store)
+    requests.length = 0
+    authenticator.calls.length = 0
+
+    const message = 'Sign in to localhost\nNonce: 5678'
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [{ capabilities: { method: 'login', personalSign: { message } } }],
+    })
+
+    expect(paths()).toMatchInlineSnapshot(`
+      [
+        "/login/options",
+        "/login",
+      ]
+    `)
+    expect(authenticator.calls.map((call) => call.method)).toMatchInlineSnapshot(`
+      [
+        "get",
+      ]
+    `)
+    // The prompt opens before `/login/options` responds.
+    const options = requests.find((request) => request.path.endsWith('/login/options'))!
+    expect(authenticator.calls[0]!.time < options.end).toMatchInlineSnapshot(`true`)
+
+    const account = result.accounts[0]!
+    expect(account.address).toBe(registered.accounts[0]!.address)
+    const valid = await verifyMessage(getClient(), {
+      address: account.address,
+      message,
+      signature: account.capabilities.signature!,
+    })
+    expect(valid).toMatchInlineSnapshot(`true`)
   })
 })
