@@ -15,20 +15,27 @@ permissions: {}
 
 jobs:
   pr-audit:
-    if: contains(fromJSON('["pull_request","pull_request_target","pull_request_review","merge_group"]'), github.event_name)
+    if: >-
+      github.event_name == 'pull_request' ||
+      (
+        github.event_name == 'pull_request_target' &&
+        github.event.pull_request.head.repo.full_name == github.repository
+      ) ||
+      github.event_name == 'pull_request_review' ||
+      github.event_name == 'merge_group'
     permissions:
       contents: read
       id-token: write
       pull-requests: read
       statuses: write
-    uses: tempoxyz/gh-actions/.github/workflows/pr-audit.yml@ff385914926ea9e9d9647597b9cc501fb7b6d69a
+    uses: tempoxyz/gh-actions/.github/workflows/pr-audit.yml@252d87d9636b94551796b4b8a5cb4e27b8916cf6 # 2026-10-12T22-06-06Z-252d87d9
     with:
-      audit-on-command: true
       required-labels: |
         cyclops
         agentic-audit
       require-completed-audit: false
       audit-on-push: true
+      audit-on-command: true
     secrets:
       EVENTS_KEY: ${{ secrets.EVENTS_KEY }}
       EVENTS_CERT: ${{ secrets.EVENTS_CERT }}
@@ -53,10 +60,10 @@ jobs:
       pull-requests: write
     steps:
       - name: Secure runner
-        uses: tempoxyz/gh-actions/actions/secure-runner@d3efa0f3c3121a949e342d9a52240f988fbfd4ee # 2026-10-01T21-14-33Z-d3efa0f3
+        uses: tempoxyz/gh-actions/actions/secure-runner@252d87d9636b94551796b4b8a5cb4e27b8916cf6 # 2026-10-12T22-06-06Z-252d87d9
 
       - name: Handle audit command
-        uses: tempoxyz/gh-actions/actions/pr-audit-comment@ff385914926ea9e9d9647597b9cc501fb7b6d69a
+        uses: tempoxyz/gh-actions/actions/pr-audit-comment@252d87d9636b94551796b4b8a5cb4e27b8916cf6 # 2026-10-12T22-06-06Z-252d87d9
         with:
           command-regex: '^(?:@decofe\s+)?(?:cyclops\s+(?:private\s+)?audit|derek\s+audit)\b'
           permission-check-mode: association
