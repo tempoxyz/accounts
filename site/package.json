@@ -4,9 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "node --import tsx scripts/copy-vocs-theme.ts && NODE_OPTIONS='--import tsx' vite",
-    "build": "node --import tsx scripts/copy-vocs-theme.ts && vite build",
+    "build": "pnpm check:markdown && node --import tsx scripts/copy-vocs-theme.ts && vite build",
     "preview": "vite preview",
-    "sync:vocs": "node --import tsx scripts/copy-vocs-theme.ts"
+    "sync:vocs": "node --import tsx scripts/copy-vocs-theme.ts",
+    "check:markdown": "node --import tsx scripts/check-markdown.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.4",

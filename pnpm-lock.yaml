@@ -120,7 +120,7 @@ overrides:
   wrangler: ^4.98.0
 
 patchedDependencies:
-  vocs@2.0.0: 0749dd43af96e1423a849f589c6b765ac71042c00b84c5d521e0af05bf159b6e
+  vocs@2.0.0: ad4c958133d1848185429eda04ee291fc195567481ec6874699b6279ecfdcf9c
 
 importers:
 
@@ -1146,7 +1146,7 @@ importers:
         version: 8.0.16(@types/node@25.9.3)(@vitejs/devtools@0.2.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0)
       vocs:
         specifier: 2.0.0
-        version: 2.0.0(patch_hash=0749dd43af96e1423a849f589c6b765ac71042c00b84c5d521e0af05bf159b6e)(43919e8ed5be70daa420674d71ec29d7)
+        version: 2.0.0(patch_hash=ad4c958133d1848185429eda04ee291fc195567481ec6874699b6279ecfdcf9c)(43919e8ed5be70daa420674d71ec29d7)
       wagmi:
         specifier: 'catalog:'
         version: 3.7.0(@coinbase/wallet-sdk@4.3.6(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.8)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@19.2.8))(utf-8-validate@5.0.10)(zod@4.4.3))(@safe-global/safe-apps-provider@0.18.6(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(@safe-global/safe-apps-sdk@9.1.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(@tanstack/query-core@5.100.10)(@tanstack/react-query@5.100.10(react@19.2.8))(@types/react@19.2.14)(@walletconnect/ethereum-provider@2.22.4(@react-native-async-storage/async-storage@3.0.2(react-native@0.85.1(@babel/core@7.29.6)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(react@19.2.8))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.8)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(accounts@)(porto@0.2.35)(react@19.2.8)(typescript@5.9.3)(viem@2.57.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))
@@ -25457,7 +25457,7 @@ snapshots:
 
   vlq@1.0.1: {}
 
-  vocs@2.0.0(patch_hash=0749dd43af96e1423a849f589c6b765ac71042c00b84c5d521e0af05bf159b6e)(43919e8ed5be70daa420674d71ec29d7):
+  vocs@2.0.0(patch_hash=ad4c958133d1848185429eda04ee291fc195567481ec6874699b6279ecfdcf9c)(43919e8ed5be70daa420674d71ec29d7):
     dependencies:
       '@base-ui/react': 1.5.0(@types/react@19.2.14)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@codesandbox/sandpack-react': 2.20.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

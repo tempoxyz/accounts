@@ -1,5 +1,7 @@
 import { type Config, defineConfig, McpSource } from 'vocs/config'
 
+import remarkMarkdown from './scripts/remark-markdown.js'
+
 const baseUrl = (() => {
   if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'production') return ''
   if (process.env.VITE_BASE_URL && URL.canParse(process.env.VITE_BASE_URL))
@@ -18,6 +20,7 @@ const config: Config = defineConfig({
     link: 'https://github.com/tempoxyz/accounts/edit/main/site/src/pages/:path',
     text: 'Suggest changes to this page',
   },
+  markdown: { outputRemarkPlugins: [remarkMarkdown] },
   mcp: {
     enabled: true,
     sources: [

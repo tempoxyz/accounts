@@ -1,3 +1,28 @@
+diff --git a/dist/internal/config.d.ts b/dist/internal/config.d.ts
+index 6839281b169707a6b627bff7a1a86ded03f56798..9ce24539593e54f173722a9fd23c3f479d460a26 100644
+--- a/dist/internal/config.d.ts
++++ b/dist/internal/config.d.ts
+@@ -168,7 +168,7 @@ export type Config<partial extends boolean = false> = MaybePartial<partial, {
+     /**
+      * Markdown configuration.
+      */
+-    markdown?: MdxRollup.Options | undefined;
++    markdown?: (MdxRollup.Options & { outputRemarkPlugins?: import('unified').PluggableList }) | undefined;
+     /**
+      * MCP (Model Context Protocol) server configuration.
+      * Enables LLMs to navigate documentation and source code.
+diff --git a/dist/internal/mdx.js b/dist/internal/mdx.js
+index 56036a8a0fa31d792695ca357105755b26a0c33f..02a0e75f8aab45edafc4620f6aebd062d1945554 100644
+--- a/dist/internal/mdx.js
++++ b/dist/internal/mdx.js
+@@ -126,6 +126,7 @@ export function getCompileOptions(type, config) {
+                     remarkExtractFrontmatter,
+                     remarkStripFrontmatter,
+                     remarkStripJs,
++          ...(markdown?.outputRemarkPlugins ?? []),
+                 ],
+             };
+         if (type === 'react')
 diff --git a/dist/react/Tabs.js b/dist/react/Tabs.js
 index 3d5ccdb5618b24c1d99c42aca2a0a3879e9e4919..38d5c06e809ceddd5b61b9f9a5e3fbdf47925e6d 100644
 --- a/dist/react/Tabs.js
@@ -44,6 +69,31 @@ index 1d2ce10029664071d7b58be43ce500de28807ee7..e618d42147b9889a14ac6df7d2a5a090
          return () => observer.disconnect();
      }, [router.path, minLevel, maxLevel]);
      React.useEffect(() => {
+diff --git a/src/internal/config.ts b/src/internal/config.ts
+index c2a2a1a8533cae3116b8a462affa9316e4895d82..e36bcce35572074ef8c7c7d992f67fbf69c2cb15 100644
+--- a/src/internal/config.ts
++++ b/src/internal/config.ts
+@@ -186,7 +186,7 @@ export type Config<partial extends boolean = false> = MaybePartial<
+     /**
+      * Markdown configuration.
+      */
+-    markdown?: MdxRollup.Options | undefined
++    markdown?: (MdxRollup.Options & { outputRemarkPlugins?: import('unified').PluggableList }) | undefined
+     /**
+      * MCP (Model Context Protocol) server configuration.
+      * Enables LLMs to navigate documentation and source code.
+diff --git a/src/internal/mdx.ts b/src/internal/mdx.ts
+index 678e659ef73ae35749481b094e20ebcc13e61f21..b842b15642d3955b5fb757b4582fb863ad8137f9 100644
+--- a/src/internal/mdx.ts
++++ b/src/internal/mdx.ts
+@@ -166,6 +166,7 @@ export function getCompileOptions(
+           remarkExtractFrontmatter,
+           remarkStripFrontmatter,
+           remarkStripJs,
++          ...(markdown?.outputRemarkPlugins ?? []),
+         ],
+       }
+     if (type === 'react')
 diff --git a/src/react/Tabs.tsx b/src/react/Tabs.tsx
 index 24ae4d397ccf5603f1429512ab3cea87e2c12404..28adf545eb286b954c15e0aab731b6fc54a61e14 100644
 --- a/src/react/Tabs.tsx

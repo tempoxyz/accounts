@@ -35,6 +35,9 @@ jobs:
       - name: Check code
         run: pnpm -w check
 
+      - name: Check documentation Markdown
+        run: pnpm --filter site check:markdown
+
       - name: Check build
         run: pnpm -w build
 
