@@ -64,7 +64,8 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     /**
      * Resolves once the provider has loaded its persisted state from `storage`.
      * Rejects with `Store.HydrationError` when the load fails or takes longer than
-     * `hydrationTimeout`. `request` waits for this itself; await it before `getAccount`.
+     * `hydrationTimeout`. `request` waits for this itself and rejects with an
+     * `RpcResponse.InternalError` caused by that error; await it before `getAccount`.
      */
     ready(): Promise<void>
     /** Reactive state store. */
@@ -1979,8 +1980,9 @@ export declare namespace create {
     /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */
     feePayer?: Client.fromChainId.Options['feePayer']
     /**
-     * Milliseconds to wait for persisted state to load from `storage` before
-     * `request` and `ready` reject with `Store.HydrationError`.
+     * Milliseconds to wait for persisted state to load from `storage`. Past this,
+     * `ready` rejects with `Store.HydrationError`, and `request` with an
+     * `RpcResponse.InternalError` caused by it.
      * @default 10_000
      */
     hydrationTimeout?: number | undefined

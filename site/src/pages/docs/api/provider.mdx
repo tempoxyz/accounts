@@ -77,7 +77,7 @@ if (status === 'pending') {
 
 ### Waiting for Stored State
 
-The provider loads its stored state from [`storage`](#storage) in the background. `request` waits for it, but `getAccount` reads it synchronously and throws until it has loaded, so await `ready` first.
+The provider loads its stored state from [`storage`](#storage) in the background. `request` waits for it, but `getAccount` reads it synchronously and throws `Store.HydrationError` until it has loaded, so await `ready` first.
 
 ```ts twoslash
 import { Provider } from 'accounts'
@@ -311,7 +311,7 @@ const provider = Provider.create({
 - **Type:** `number`
 - **Default:** `10_000`
 
-Milliseconds to wait for stored state to load from [`storage`](#storage). `request` and `ready` reject with `Store.HydrationError` when the load fails or takes longer than this.
+Milliseconds to wait for stored state to load from [`storage`](#storage). When the load fails or takes longer than this, `ready` rejects with `Store.HydrationError`, and `request` rejects with an `RpcResponse.InternalError` whose `cause` is that `Store.HydrationError`.
 
 ```ts twoslash
 import { Provider } from 'accounts'

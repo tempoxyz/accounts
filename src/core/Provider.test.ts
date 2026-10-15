@@ -8,6 +8,7 @@ import { accounts, privateKeys } from '../../test/config.js'
 import * as Adapter from './Adapter.js'
 import * as Provider from './Provider.js'
 import * as Storage from './Storage.js'
+import * as Store from './Store.js'
 
 const address = '0x0000000000000000000000000000000000000001'
 
@@ -420,6 +421,10 @@ describe('ready', () => {
       provider.request({ method: 'eth_accounts' }),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[RpcResponse.InternalError: Failed to load persisted state from storage.]`,
+    )
+    await expect(provider.request({ method: 'eth_accounts' })).rejects.toHaveProperty(
+      'cause',
+      expect.any(Store.HydrationError),
     )
     expect(() => provider.getAccount()).toThrowErrorMatchingInlineSnapshot(
       `[Store.HydrationError: Failed to load persisted state from storage.]`,
