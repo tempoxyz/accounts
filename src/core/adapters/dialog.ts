@@ -141,6 +141,25 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           })
         },
 
+        // The embed switches to the chain a request is synced with, so the
+        // revocation is queued on the key's chain rather than the active one.
+        async revokeAccessKey(params, request) {
+          const chainId = Number(params.chainId ?? store.getState().chainId)
+          await RemoteRequests.request(host, {
+            account: { address: params.address },
+            chainId,
+            request: {
+              ...request,
+              params: [z.encode(Rpc.wallet_revokeAccessKey.parameters, params)],
+            },
+          })
+          store.accessKeys.remove({
+            accessKey: params.accessKeyAddress,
+            account: params.address,
+            chainId,
+          })
+        },
+
         async disconnect() {
           store.disconnect()
         },

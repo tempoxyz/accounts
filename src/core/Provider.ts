@@ -569,6 +569,13 @@ export function create(options: create.Options = {}): create.ReturnType {
       transport: selected.transport,
     })
     if (selected.account.type === 'json-rpc') {
+      // A wallet reached only through the account transport acts on the
+      // active chain, so this path cannot route a revocation elsewhere.
+      const { chainId: active } = store.getState()
+      if (chainId !== active)
+        throw new ox_Provider.UnsupportedChainIdError({
+          message: `Revoking on chain ${chainId} requires it to be the active chain (${active}).`,
+        })
       await client.request({
         method: 'wallet_revokeAccessKey' as never,
         params: [z.encode(Rpc.wallet_revokeAccessKey.parameters, parameters)] as never,

@@ -97,6 +97,21 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
           // chain selection is local state the provider handles itself, and
           // forwarding it would open a wallet session for nothing.
           ...(close ? { disconnect: close } : {}),
+          // The wallet revokes on the chain named in the request context, so
+          // the context carries the key's chain rather than the active one.
+          async revokeAccessKey(parameters) {
+            const chainId = Number(parameters.chainId ?? store.getState().chainId)
+            await requestRemote({
+              context: { account: parameters.address, chainId },
+              method: 'wallet_revokeAccessKey',
+              params: [z.encode(Rpc.wallet_revokeAccessKey.parameters, parameters)],
+            })
+            store.accessKeys.remove({
+              accessKey: parameters.accessKeyAddress,
+              account: parameters.address,
+              chainId,
+            })
+          },
           async swap(_parameters, request) {
             return (await provider.request(request)) as Rpc.wallet_swap.Encoded['returns']
           },

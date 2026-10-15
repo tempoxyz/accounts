@@ -7,7 +7,7 @@ description: Revoke a previously authorized access key.
 
 Revokes a previously authorized access key.
 
-Access keys are scoped to a chain. Pass `chainId` to revoke a key on a specific chain; otherwise the provider's active chain is used. The chain must be one of the chains the provider was configured with — an unknown chain throws an `UnsupportedChainId` error.
+Access keys are scoped to a chain. Pass `chainId` to revoke a key on a specific chain; otherwise the provider's active chain is used. The chain must be one of the chains the provider was configured with — an unknown chain throws an `UnsupportedChainId` error. A custom adapter that can only reach its wallet on the active chain rejects any other `chainId` with the same error; switch chains with [`wallet_switchEthereumChain`](/docs/rpc/wallet_switchEthereumChain) first.
 
 ## Request
 

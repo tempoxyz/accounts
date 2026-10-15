@@ -773,6 +773,106 @@ describe('wallet_connect', () => {
   })
 })
 
+describe('wallet_revokeAccessKey', () => {
+  const accessKeyAddress = '0x0000000000000000000000000000000000000002'
+
+  /** Creates a provider whose json-rpc account reaches its wallet only through the account transport. */
+  function setup() {
+    const requests: unknown[] = []
+    const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+      actions: {
+        async createAccount() {
+          return { accounts: [{ address }] }
+        },
+        async loadAccounts() {
+          return { accounts: [{ address }] }
+        },
+      },
+      getAccount: () => ({
+        account: { address, type: 'json-rpc' as const },
+        transport: custom(
+          {
+            async request(request) {
+              requests.push(request)
+              return null
+            },
+          },
+          { retryCount: 0 },
+        ),
+      }),
+    }))
+    const provider = Provider.create({
+      adapter,
+      chains: [tempo, tempoModerato],
+      storage: Storage.memory(),
+    })
+    provider.store.setState({
+      accounts: [{ address }],
+      activeAccount: 0,
+      accessKeys: [tempo.id, tempoModerato.id].map(
+        (chainId) =>
+          ({ access: address, address: accessKeyAddress, chainId, keyType: 'secp256k1' }) as never,
+      ),
+    })
+    return { provider, requests }
+  }
+
+  test.each([
+    { case: 'omitted', chainId: undefined },
+    { case: 'the active chain', chainId: tempo.id },
+  ])(
+    'behavior: forwards through the account transport when chainId is $case',
+    async ({ chainId }) => {
+      const { provider, requests } = setup()
+
+      await provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [
+          {
+            accessKeyAddress,
+            address,
+            ...(chainId ? { chainId: Hex.fromNumber(chainId) } : {}),
+          },
+        ],
+      })
+
+      expect(requests).toEqual([
+        {
+          method: 'wallet_revokeAccessKey',
+          params: [
+            {
+              accessKeyAddress,
+              address,
+              ...(chainId ? { chainId: Hex.fromNumber(chainId) } : {}),
+            },
+          ],
+        },
+      ])
+      expect(provider.store.getState().accessKeys.map((key) => key.chainId)).toEqual([
+        tempoModerato.id,
+      ])
+    },
+  )
+
+  test('error: rejects a chainId off the active chain without forwarding', async () => {
+    const { provider, requests } = setup()
+
+    await expect(
+      provider.request({
+        method: 'wallet_revokeAccessKey',
+        params: [{ accessKeyAddress, address, chainId: Hex.fromNumber(tempoModerato.id) }],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnsupportedChainIdError: Revoking on chain 42431 requires it to be the active chain (4217).]`,
+    )
+    expect(requests).toEqual([])
+    expect(provider.store.getState().accessKeys.map((key) => key.chainId)).toEqual([
+      tempo.id,
+      tempoModerato.id,
+    ])
+  })
+})
+
 describe('adapter actions', () => {
   test('behavior: explicit adapter action overrides provider default', async () => {
     const getAccount = vi.fn(() => {

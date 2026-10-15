@@ -77,22 +77,6 @@ export function cli(options: cli.Options): Adapter.Adapter {
               chainId,
             })
         },
-
-        // The wallet revokes on the chain named in the request context, so
-        // the context carries the key's chain rather than the active one.
-        async revokeAccessKey(parameters) {
-          const chainId = Number(parameters.chainId ?? store.getState().chainId)
-          await request({
-            context: { account: parameters.address, chainId },
-            method: 'wallet_revokeAccessKey',
-            params: [z.encode(Rpc.wallet_revokeAccessKey.parameters, parameters)],
-          })
-          store.accessKeys.remove({
-            accessKey: parameters.accessKeyAddress,
-            account: parameters.address,
-            chainId,
-          })
-        },
       }
     },
     // The CLI persists to string-based filesystem storage, so its p256
