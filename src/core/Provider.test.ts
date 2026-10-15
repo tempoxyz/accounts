@@ -305,6 +305,19 @@ describe('getMppxParameters', () => {
 })
 
 describe('ready', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+    actions: {
+      async createAccount() {
+        return { accounts: [{ address }] }
+      },
+      async loadAccounts() {
+        return { accounts: [{ address }] }
+      },
+    },
+  }))
+
   const stored = {
     state: { accounts: [{ address }], activeAccount: 0, chainId: tempo.id },
     version: 0,
@@ -361,6 +374,33 @@ describe('ready', () => {
         "type": "json-rpc",
       }
     `)
+  })
+
+  test('behavior: default storage is memory where window has no IndexedDB', async () => {
+    // React Native exposes `window` without `indexedDB`.
+    vi.stubGlobal('window', new EventTarget())
+    const provider = Provider.create({ adapter })
+
+    await provider.ready()
+    expect(await provider.request({ method: 'eth_accounts' })).toMatchInlineSnapshot(`[]`)
+  })
+
+  test('behavior: default storage falls back to memory when IndexedDB fails', async () => {
+    vi.stubGlobal('window', new EventTarget())
+    vi.stubGlobal('indexedDB', {
+      open() {
+        const request: { error?: Error; onerror?: () => void } = {}
+        queueMicrotask(() => {
+          request.error = new Error('IndexedDB unavailable')
+          request.onerror?.()
+        })
+        return request
+      },
+    })
+    const provider = Provider.create({ adapter })
+
+    await provider.ready()
+    expect(await provider.request({ method: 'eth_accounts' })).toMatchInlineSnapshot(`[]`)
   })
 
   test('error: rejects when the storage read fails', async () => {

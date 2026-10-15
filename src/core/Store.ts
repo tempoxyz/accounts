@@ -119,8 +119,9 @@ export function create(options: Options): Store {
     maxAccounts,
     persistCredentials = true,
     schema,
-    storage = typeof window !== 'undefined'
-      ? Storage.idb({ key: 'tempo' })
+    // Matches the `Provider.create` default.
+    storage = typeof window !== 'undefined' && typeof indexedDB !== 'undefined'
+      ? Storage.combine(Storage.idb({ key: 'tempo' }), Storage.memory({ key: 'tempo' }))
       : Storage.memory({ key: 'tempo' }),
   } = options
 

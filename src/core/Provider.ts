@@ -110,7 +110,11 @@ export function create(options: create.Options = {}): create.ReturnType {
     persistCredentials,
     relay,
     testnet,
-    storage = typeof window !== 'undefined' ? Storage.idb() : Storage.memory(),
+    // React Native can expose `window` without `indexedDB`. Where IndexedDB exists but
+    // fails, memory keeps the default usable instead of failing every request.
+    storage = typeof window !== 'undefined' && typeof indexedDB !== 'undefined'
+      ? Storage.combine(Storage.idb(), Storage.memory())
+      : Storage.memory(),
   } = options
   const authorizeAccessKey_default = options.accessKey?.authorize ?? options.authorizeAccessKey
   // Filled in below once the adapter instance exists (adapters may supply
@@ -2024,7 +2028,10 @@ export declare namespace create {
      * ```
      */
     relay?: string | undefined
-    /** Storage adapter for persistence. @default Storage.idb() in browser, Storage.memory() otherwise. */
+    /**
+     * Storage adapter for persistence.
+     * @default Storage.idb() with a Storage.memory() fallback where IndexedDB is available, Storage.memory() otherwise.
+     */
     storage?: Storage.Storage | undefined
     /**
      * Use testnet.

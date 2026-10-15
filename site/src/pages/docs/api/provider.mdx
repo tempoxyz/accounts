@@ -427,9 +427,9 @@ const provider = Provider.create({
 ### storage
 
 - **Type:** `Storage`
-- **Default:** `Storage.idb()` in browser, `Storage.memory()` otherwise
+- **Default:** `Storage.idb()` with a `Storage.memory()` fallback where IndexedDB is available, `Storage.memory()` otherwise
 
-Storage adapter for persistence. The default uses IndexedDB in browsers (via `Storage.idb()`) and an in-memory map elsewhere.
+Storage adapter for persistence. The default uses IndexedDB in browsers (via `Storage.idb()`) and an in-memory map elsewhere, including React Native. When IndexedDB exists but fails, the default keeps state in memory for the session. A storage adapter you pass yourself has no fallback, so its failures reach `ready`, `request` and `getAccount`.
 
 ```ts twoslash
 import { Provider, Storage } from 'accounts'
