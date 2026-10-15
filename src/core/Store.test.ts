@@ -568,6 +568,42 @@ describe('waitForHydration', () => {
     `)
   })
 
+  test('behavior: only the newest overlapping load settles hydration', async () => {
+    const { reads, storage } = createPendingStorage()
+    const store = Store.create({ chainId: 123, storage })
+
+    let settled = false
+    const hydration = Store.waitForHydration(store).finally(() => (settled = true))
+    void store.persist.rehydrate()
+    reads[0]!.resolve(stored)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(settled).toMatchInlineSnapshot(`false`)
+
+    reads[1]!.reject(new Error('disk unavailable'))
+    await expect(hydration).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Store.HydrationError: Failed to load persisted state from storage.]`,
+    )
+    expect(() => Store.assertHydrated(store)).toThrowErrorMatchingInlineSnapshot(
+      `[Store.HydrationError: Failed to load persisted state from storage.]`,
+    )
+  })
+
+  test('behavior: ignores a second report from a settled load', async () => {
+    const { reads, storage } = createPendingStorage()
+    const store = Store.create({ chainId: 123, storage })
+    // zustand reports a throwing finish listener as a failed load after the success.
+    store.persist.onFinishHydration(() => {
+      throw new Error('listener failed')
+    })
+
+    reads[0]!.resolve(stored)
+    await Store.waitForHydration(store)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(Store.assertHydrated(store)).toMatchInlineSnapshot(`undefined`)
+    await Store.waitForHydration(store)
+  })
+
   test('behavior: stays loaded while a later load refreshes it', async () => {
     const { reads, storage } = createPendingStorage()
     const store = Store.create({ chainId: 123, storage })

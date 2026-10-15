@@ -77,8 +77,6 @@ type Hydration = {
   error?: HydrationError | undefined
   /** Settles when the latest load finishes. */
   promise: Promise<void>
-  /** Settles {@link Hydration.promise}: rejects with `error`, resolves without one. */
-  settle: (error?: HydrationError | undefined) => void
   /** Load status. Stays `'success'` once persisted state has loaded. */
   status: 'pending' | 'success' | 'error'
 }
@@ -126,7 +124,9 @@ export function create(options: Options): Store {
       : Storage.memory({ key: 'tempo' }),
   } = options
 
-  const hydration = pending()
+  // The load in progress. Only it can settle `hydration`.
+  let load: ReturnType<typeof deferred> | undefined = deferred()
+  const hydration: Hydration = { promise: load.promise, status: 'pending' }
   const state = createStore(
     subscribeWithSelector(
       persist<State, [], [], Persisted>(
@@ -139,26 +139,30 @@ export function create(options: Options): Store {
         {
           merge: (persisted, current) => hydrate(persisted, current, { schema }),
           name: 'store',
-          // Runs as each load starts. zustand only reports the result of the latest
-          // load, and `onFinishHydration` never fires for a failed one.
+          // Runs as each load starts. Unlike `onFinishHydration`, it also reports failed loads.
           onRehydrateStorage() {
             // Later loads (e.g. `persist.rehydrate()`) refresh state the store already holds.
             if (hydration.status === 'success') return
-            // A failed load can be retried. A pending load settles with the load that replaces it.
-            if (hydration.status === 'error')
-              Object.assign(hydration, pending(), { error: undefined })
-            const { settle } = hydration
+            // Each load gets its own promise. Waiters on a load this one replaces follow
+            // it, and a load after a failed one retries it.
+            const next = deferred()
+            load?.resolve(next.promise)
+            load = next
+            Object.assign(hydration, { error: undefined, promise: next.promise, status: 'pending' })
             return (state, cause) => {
+              // Only the newest load settles hydration, and only once.
+              if (load !== next) return
+              load = undefined
               // zustand passes the state only when the load succeeds.
               if (state) {
                 hydration.status = 'success'
-                return settle()
+                return next.resolve()
               }
               const error = new HydrationError('Failed to load persisted state from storage.', {
                 cause,
               })
               Object.assign(hydration, { error, status: 'error' })
-              settle(error)
+              next.reject(error)
             }
           },
           partialize: (state) =>
@@ -182,14 +186,16 @@ export function create(options: Options): Store {
   return store
 }
 
-function pending(): Hydration {
-  let settle: Hydration['settle'] = () => {}
-  const promise = new Promise<void>((resolve, reject) => {
-    settle = (error) => (error ? reject(error) : resolve())
+function deferred() {
+  let resolve: (value: void | Promise<void>) => void = () => {}
+  let reject: (error: HydrationError) => void = () => {}
+  const promise = new Promise<void>((resolve_, reject_) => {
+    resolve = resolve_
+    reject = reject_
   })
   // Waiters observe failures; a failed load nobody waits on is not an unhandled rejection.
   promise.catch(() => {})
-  return { promise, settle, status: 'pending' }
+  return { promise, reject, resolve }
 }
 
 function getHydration(store: Store): Hydration {
