@@ -58,6 +58,7 @@ const cli = Cli.create('example', {
 }).command('update-access-key', {
   description: 'Update the connected access key spend limit',
   async run() {
+    await provider.ready()
     const account = provider.getAccount()
     const accessKey = await provider.store.accessKeys.select({
       account: account.address,

@@ -264,7 +264,12 @@ export function postMessage(options: postMessage.Options): Adapter.Adapter {
         // The wallet can assert before the store finishes rehydrating its
         // persisted accounts; wait so we both see the cached account and
         // win against the hydration that would otherwise re-add it.
-        await Store.waitForHydration(store)
+        try {
+          await Store.waitForHydration(store)
+        } catch {
+          // A store that failed to load holds no cached session to drop.
+          return
+        }
         const cached = store.getState().accounts
         if (cached.length === 0) return
         const asserted = new Set(accounts.map((address) => address.toLowerCase()))

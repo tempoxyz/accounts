@@ -298,7 +298,8 @@ export function turnkey<const client extends turnkey.Client>(
       return typeof value === 'object' && value !== null
     }
 
-    void restore()
+    // Warm-up only: account lookups call `restore` again and surface its errors.
+    void restore().catch(() => {})
 
     return {
       cleanup() {

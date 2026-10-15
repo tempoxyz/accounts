@@ -61,6 +61,12 @@ export type Provider = ox_Provider.Provider<{ schema: Schema.Ox }> &
     }): ViemClient<Transport, typeof tempo>
     /** Returns mppx Tempo client parameters backed by this provider. */
     getMppxParameters(options?: getMppxParameters.Options | undefined): MppxParameters
+    /**
+     * Resolves once the provider has loaded its persisted state from `storage`.
+     * Rejects with `Store.HydrationError` when the load fails or takes longer than
+     * `hydrationTimeout`. `request` waits for this itself; await it before `getAccount`.
+     */
+    ready(): Promise<void>
     /** Reactive state store. */
     store: Store.Store
   }
@@ -99,6 +105,7 @@ export function create(options: create.Options = {}): create.ReturnType {
   const {
     adapter = dialog(),
     chains = [tempo, tempoModerato, tempoDevnet],
+    hydrationTimeout,
     maxAccounts,
     persistCredentials,
     relay,
@@ -147,7 +154,11 @@ export function create(options: create.Options = {}): create.ReturnType {
     storage,
   })
 
-  const getAccount: Account.Find = (options = {}) => Account.find({ ...options, store }) as never
+  const getAccount: Account.Find = (options = {}) => {
+    // An unloaded store holds no accounts yet, so reading it would report none.
+    Store.assertHydrated(store)
+    return Account.find({ ...options, store }) as never
+  }
   // Lazy reference — assigned after the provider is created so the client
   // transport can route provider methods (wallet_connect, etc.) through it.
   let providerRef: ox_Provider.Provider | undefined
@@ -912,7 +923,7 @@ export function create(options: create.Options = {}): create.ReturnType {
       {
         ...(emitter as unknown as ox_Provider.Emitter),
         async request({ method, params }: { method: string; params?: any }) {
-          await Store.waitForHydration(store)
+          await Store.waitForHydration(store, { timeout: hydrationTimeout })
 
           const shouldDedupe = [
             'eth_accounts',
@@ -1844,6 +1855,7 @@ export function create(options: create.Options = {}): create.ReturnType {
         })
       },
       getMppxParameters,
+      ready: () => Store.waitForHydration(store, { timeout: hydrationTimeout }),
       store,
     },
   )
@@ -1962,6 +1974,12 @@ export declare namespace create {
     chains?: readonly [Chain, ...Chain[]] | undefined
     /** Fee payer configuration. @see {@link Client.fromChainId.Options.feePayer} */
     feePayer?: Client.fromChainId.Options['feePayer']
+    /**
+     * Milliseconds to wait for persisted state to load from `storage` before
+     * `request` and `ready` reject with `Store.HydrationError`.
+     * @default 10_000
+     */
+    hydrationTimeout?: number | undefined
     /**
      * Identity (verified email) token minting for local adapters. When a
      * `wallet_connect` request asks for `identity.email` and the adapter

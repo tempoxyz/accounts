@@ -10,6 +10,7 @@ import * as core_Keystore from './Keystore.js'
 import * as Storage from './Storage.js'
 
 const supportsStructuredClone = Symbol.for('accounts.storage.supportsStructuredClone')
+const hydration_key = Symbol.for('accounts.store.hydration')
 
 export type { Account }
 
@@ -70,6 +71,26 @@ export type Store = ZustandStore & {
   disconnect: () => void
 }
 
+/** Progress of a store loading its persisted state from storage. */
+type Hydration = {
+  /** Error the latest load failed with. */
+  error?: HydrationError | undefined
+  /** Settles when the latest load finishes. */
+  promise: Promise<void>
+  /** Settles {@link Hydration.promise}: rejects with `error`, resolves without one. */
+  settle: (error?: HydrationError | undefined) => void
+  /** Load status. Stays `'success'` once persisted state has loaded. */
+  status: 'pending' | 'success' | 'error'
+}
+
+/** Thrown when a store has not loaded, or failed to load, its persisted state from storage. */
+export class HydrationError extends Error {
+  constructor(message: string, options?: { cause?: unknown | undefined }) {
+    super(message, options)
+    this.name = 'Store.HydrationError'
+  }
+}
+
 /** Options for {@link create}. */
 export type Options = {
   /**
@@ -105,6 +126,7 @@ export function create(options: Options): Store {
       : Storage.memory({ key: 'tempo' }),
   } = options
 
+  const hydration = pending()
   const state = createStore(
     subscribeWithSelector(
       persist<State, [], [], Persisted>(
@@ -117,6 +139,28 @@ export function create(options: Options): Store {
         {
           merge: (persisted, current) => hydrate(persisted, current, { schema }),
           name: 'store',
+          // Runs as each load starts. zustand only reports the result of the latest
+          // load, and `onFinishHydration` never fires for a failed one.
+          onRehydrateStorage() {
+            // Later loads (e.g. `persist.rehydrate()`) refresh state the store already holds.
+            if (hydration.status === 'success') return
+            // A failed load can be retried. A pending load settles with the load that replaces it.
+            if (hydration.status === 'error')
+              Object.assign(hydration, pending(), { error: undefined })
+            const { settle } = hydration
+            return (state, cause) => {
+              // zustand passes the state only when the load succeeds.
+              if (state) {
+                hydration.status = 'success'
+                return settle()
+              }
+              const error = new HydrationError('Failed to load persisted state from storage.', {
+                cause,
+              })
+              Object.assign(hydration, { error, status: 'error' })
+              settle(error)
+            }
+          },
           partialize: (state) =>
             serialize(state, {
               keystores,
@@ -134,7 +178,22 @@ export function create(options: Options): Store {
   store.accessKeys = core_AccessKey.createManager({ keystores, state })
   store.disconnect = () =>
     state.setState({ accessKeys: [], accounts: [], activeAccount: 0, auth: undefined })
+  Object.assign(store, { [hydration_key]: hydration })
   return store
+}
+
+function pending(): Hydration {
+  let settle: Hydration['settle'] = () => {}
+  const promise = new Promise<void>((resolve, reject) => {
+    settle = (error) => (error ? reject(error) : resolve())
+  })
+  // Waiters observe failures; a failed load nobody waits on is not an unhandled rejection.
+  promise.catch(() => {})
+  return { promise, settle, status: 'pending' }
+}
+
+function getHydration(store: Store): Hydration {
+  return (store as Store & { [hydration_key]: Hydration })[hydration_key]
 }
 
 /** Converts runtime provider state into the persisted refresh snapshot. */
@@ -283,15 +342,56 @@ function canStructuredClone(storage: Storage.Storage): boolean {
 }
 
 /**
- * Waits for the store to finish hydrating from storage.
- *
- * Returns immediately if the store has already hydrated. Otherwise, waits
- * for the `onFinishHydration` callback with a 100ms safety timeout fallback.
+ * Throws {@link HydrationError} unless the store has loaded its persisted state
+ * from storage. Use before reading persisted state synchronously.
  */
-export async function waitForHydration(store: Store): Promise<void> {
-  if (store.persist.hasHydrated()) return
-  await new Promise<void>((resolve) => {
-    store.persist.onFinishHydration(() => resolve())
-    setTimeout(() => resolve(), 100)
-  })
+export function assertHydrated(store: Store): void {
+  const { error, status } = getHydration(store)
+  if (status === 'success') return
+  throw (
+    error ??
+    new HydrationError(
+      'Persisted state is still loading from storage. Await `provider.ready()` first.',
+    )
+  )
+}
+
+/**
+ * Waits for the store to load its persisted state from storage.
+ *
+ * Resolves once the store has loaded. Rejects with {@link HydrationError} when
+ * the load fails or does not finish within `timeout`. Never starts a load.
+ */
+export async function waitForHydration(
+  store: Store,
+  options: waitForHydration.Options = {},
+): Promise<void> {
+  const { timeout = 10_000 } = options
+  const { promise, status } = getHydration(store)
+  if (status !== 'pending') return await promise
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new HydrationError(`Persisted state did not load from storage within ${timeout}ms.`),
+            ),
+          timeout,
+        )
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export declare namespace waitForHydration {
+  /** Options for {@link waitForHydration}. */
+  type Options = {
+    /** Milliseconds to wait for persisted state to load. @default 10_000 */
+    timeout?: number | undefined
+  }
 }

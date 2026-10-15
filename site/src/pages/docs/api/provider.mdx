@@ -7,7 +7,7 @@ description: Create an EIP-1193 provider for managing accounts on Tempo.
 
 Creates an EIP-1193 provider with a pluggable adapter for managing accounts on Tempo.
 
-The returned object implements [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193) (`request`, `on`, `removeListener`, `emit`, ...) and exposes a few convenience helpers (`getAccount`, `getAccessKeyStatus`, `getClient`, `getMppxParameters`, `store`, `chains`). See [Return Type](#return-type) for the full surface.
+The returned object implements [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193) (`request`, `on`, `removeListener`, `emit`, ...) and exposes a few convenience helpers (`getAccount`, `getAccessKeyStatus`, `getClient`, `getMppxParameters`, `ready`, `store`, `chains`). See [Return Type](#return-type) for the full surface.
 
 ## Usage
 
@@ -73,6 +73,19 @@ const status = await provider.getAccessKeyStatus({ // [!code focus]
 if (status === 'pending') {
   // The next matching transaction will publish the key authorization.
 }
+```
+
+### Waiting for Stored State
+
+The provider loads its stored state from [`storage`](#storage) in the background. `request` waits for it, but `getAccount` reads it synchronously and throws until it has loaded, so await `ready` first.
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create()
+
+await provider.ready() // [!code focus]
+const account = provider.getAccount() // [!code focus]
 ```
 
 ## Parameters
@@ -293,6 +306,21 @@ const provider = Provider.create({
 })
 ```
 
+### hydrationTimeout
+
+- **Type:** `number`
+- **Default:** `10_000`
+
+Milliseconds to wait for stored state to load from [`storage`](#storage). `request` and `ready` reject with `Store.HydrationError` when the load fails or takes longer than this.
+
+```ts twoslash
+import { Provider } from 'accounts'
+
+const provider = Provider.create({
+  hydrationTimeout: 30_000, // [!code focus]
+})
+```
+
 ### identity
 
 - **Type:** `{ audience?: string; issuer: string }`
@@ -479,6 +507,8 @@ export type Provider = ox_Provider.Provider & ox_Provider.Emitter & {
     getClient: NonNullable<mppx_tempo.Parameters['getClient']>
     resolveAccount: NonNullable<mppx_tempo.Parameters['resolveAccount']>
   }
+  /** Resolves once the provider has loaded its stored state. */
+  ready(): Promise<void>
   /** Reactive state store. */
   store: Store
 }
