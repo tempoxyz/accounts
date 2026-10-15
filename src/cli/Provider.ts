@@ -13,6 +13,7 @@ export function create(options: create.Options): create.ReturnType {
     open,
     pollingInterval,
     rdns,
+    retryCount,
     storage = Storage.filesystem(),
     timeout,
     ...rest
@@ -33,6 +34,7 @@ export function create(options: create.Options): create.ReturnType {
       ...(open ? { open } : {}),
       ...(pollingInterval !== undefined ? { pollingInterval } : {}),
       ...(rdns ? { rdns } : {}),
+      ...(retryCount !== undefined ? { retryCount } : {}),
       ...(timeout !== undefined ? { timeout } : {}),
     }),
     ...(mpp ? { mpp } : {}),

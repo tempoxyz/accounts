@@ -30,3 +30,28 @@ test('defaults to the Tempo Wallet device-code endpoint', () => {
     ]
   `)
 })
+
+test('forwards retryCount to the CLI adapter', () => {
+  create({ retryCount: 2 })
+
+  expect(mock.cli.mock.calls).toMatchInlineSnapshot(`
+    [
+      [
+        {
+          "host": "https://wallet.tempo.xyz/api/auth/device",
+          "retryCount": 2,
+        },
+      ],
+    ]
+  `)
+  expect(mock.create.mock.calls).toMatchInlineSnapshot(`
+    [
+      [
+        {
+          "adapter": {},
+          "storage": {},
+        },
+      ],
+    ]
+  `)
+})

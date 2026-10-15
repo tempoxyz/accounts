@@ -22,6 +22,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
     open = defaultOpen,
     pollingInterval,
     rdns = 'xyz.tempo.cli',
+    retryCount,
     timeout,
   } = options
 
@@ -98,6 +99,7 @@ export function cli(options: cli.Options): Adapter.Adapter {
     },
     rdns,
     ...(pollingInterval !== undefined ? { pollingInterval } : {}),
+    ...(retryCount !== undefined ? { retryCount } : {}),
     ...(timeout !== undefined ? { timeout } : {}),
     url: host,
   })
@@ -115,6 +117,12 @@ export declare namespace cli {
     pollingInterval?: number | undefined
     /** Reverse-DNS provider identifier. @default "xyz.tempo.cli" */
     rdns?: string | undefined
+    /**
+     * Max retries for a failed or timed-out wallet request. Each attempt starts
+     * a new device-code approval, so requests are sent once by default.
+     * @default 0
+     */
+    retryCount?: number | undefined
     /** Overall wait for user approval in milliseconds. @default 300000 */
     timeout?: number | undefined
   }
