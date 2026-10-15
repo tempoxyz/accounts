@@ -694,6 +694,15 @@ export function create(options: create.Options = {}): create.ReturnType {
     parameters: Adapter.updateAccessKey.Parameters,
     request: Pick<Rpc.wallet_updateAccessKey.Encoded, 'method' | 'params'>,
   ) {
+    // Clients fall back to the default chain for unknown chain IDs, which
+    // would update a key on a chain the caller did not name.
+    if (
+      parameters.chainId !== undefined &&
+      !chains.some((chain) => chain.id === Number(parameters.chainId))
+    )
+      throw new ox_Provider.UnsupportedChainIdError({
+        message: `Chain ${parameters.chainId} not configured.`,
+      })
     if (actions.updateAccessKey) return await actions.updateAccessKey(parameters, request)
     if (instance.getAccount) return await updateAccessKey(parameters)
     unsupported('updateAccessKey')

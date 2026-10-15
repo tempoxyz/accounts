@@ -6,6 +6,7 @@ import { Hex as ox_Hex } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
 import { type Address as ViemAddress, hashMessage, parseUnits } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
+import { tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test, vi } from 'vp/test'
 import type * as z from 'zod/mini'
 
@@ -938,6 +939,62 @@ describe('Provider.create', () => {
       await server.closeAsync()
     }
   })
+
+  test.each([{ chainId: 1 }, { chainId: tempoModerato.id }])(
+    'error: wallet_updateAccessKey rejects unconfigured chain $chainId before approval',
+    async ({ chainId }) => {
+      const host = createDeviceCodeHost()
+      const server = await createServer(host.listener)
+
+      try {
+        const provider = Provider.create({
+          chains: [chain],
+          open: async (_url, prompt) => {
+            await submitVerify(prompt)
+          },
+          host: `${server.url}/auth/device`,
+          storage: createJsonStorage(),
+        })
+
+        const result = await provider.request({
+          method: 'wallet_connect',
+          params: [
+            {
+              capabilities: {
+                authorizeAccessKey: {
+                  expiry: expiry_2,
+                  limits: [{ limit: ox_Hex.fromNumber(1n), token: Addresses.pathUsd }],
+                },
+              },
+            },
+          ],
+        })
+        const account = result.accounts[0]!
+        const accessKeys = provider.store.getState().accessKeys
+
+        await expect(
+          provider.request({
+            method: 'wallet_updateAccessKey',
+            params: [
+              {
+                address: account.address,
+                accessKeyAddress: account.capabilities.keyAuthorization!.keyId,
+                chainId: ox_Hex.fromNumber(chainId),
+                limits: [{ limit: ox_Hex.fromNumber(9n), token: Addresses.pathUsd }],
+              },
+            ],
+          }),
+        ).rejects.toMatchObject({
+          message: `Chain ${chainId} not configured.`,
+          name: 'Provider.UnsupportedChainIdError',
+        })
+        expect(host.requests().map(({ method }) => method)).toEqual(['wallet_connect'])
+        expect(provider.store.getState().accessKeys).toEqual(accessKeys)
+      } finally {
+        await server.closeAsync()
+      }
+    },
+  )
 
   test('behavior: regenerates a managed key when the requested key type changes', async () => {
     const host = createDeviceCodeHost()

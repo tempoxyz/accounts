@@ -2193,6 +2193,53 @@ describe.each(adapters)('$name', ({ adapter, name }: (typeof adapters)[number]) 
         }),
       ).rejects.toThrow(/key.*not.*found|KeyNotFound/i)
     })
+
+    test.each([{ chainId: 1 }, { chainId: tempoModerato.id }])(
+      'error: rejects unconfigured chain $chainId without updating',
+      async ({ chainId }) => {
+        const provider = Provider.create({ adapter: adapter(), chains: [chain] })
+        const address = await connect(provider)
+        await fund(address)
+
+        const { keyAuthorization } = await provider.request({
+          method: 'wallet_authorizeAccessKey',
+          params: [
+            {
+              expiry: Expiry.days(1),
+              limits: [{ token: Addresses.pathUsd, limit: Hex.fromNumber(parseUnits('5', 6)) }],
+            },
+          ],
+        })
+        // Publish the key.
+        await provider.request({
+          method: 'eth_sendTransactionSync',
+          params: [{ calls: [transferCall] }],
+        })
+        const accessKey = keyAuthorization.address!
+        const query = { account: address, accessKey, token: Addresses.pathUsd } as const
+        const before = await Actions.accessKey.getRemainingLimit(getClient(), query)
+        const accessKeys = provider.store.getState().accessKeys
+
+        await expect(
+          provider.request({
+            method: 'wallet_updateAccessKey',
+            params: [
+              {
+                address,
+                accessKeyAddress: accessKey,
+                chainId: Hex.fromNumber(chainId),
+                limits: [{ token: Addresses.pathUsd, limit: Hex.fromNumber(parseUnits('9', 6)) }],
+              },
+            ],
+          }),
+        ).rejects.toMatchObject({
+          message: `Chain ${chainId} not configured.`,
+          name: 'Provider.UnsupportedChainIdError',
+        })
+        expect(await Actions.accessKey.getRemainingLimit(getClient(), query)).toEqual(before)
+        expect(provider.store.getState().accessKeys).toEqual(accessKeys)
+      },
+    )
   })
 
   describe('wallet_revokeAccessKey', () => {
