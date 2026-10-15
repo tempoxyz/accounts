@@ -323,6 +323,53 @@ describe('privy', () => {
     expect(store.getState().accessKeys).toMatchInlineSnapshot(`[]`)
   })
 
+  test('behavior: revokeAccessKey targets an explicit chainId', async () => {
+    const { adapter, client, store } = setup()
+    store.setState({
+      accounts: [{ address }],
+      activeAccount: 0,
+      accessKeys: [1, 4217].map(
+        (chainId) =>
+          ({
+            access: address,
+            address: other,
+            chainId,
+            keyType: 'secp256k1',
+          }) as never,
+      ),
+    })
+
+    await adapter.actions.revokeAccessKey!(
+      { accessKeyAddress: other, address, chainId: 4217n },
+      {
+        method: 'wallet_revokeAccessKey',
+        params: [{ accessKeyAddress: other, address, chainId: '0x1079' }],
+      },
+    )
+
+    expect({
+      accessKeys: store.getState().accessKeys,
+      clientOptions: client.clientOptions,
+    }).toMatchInlineSnapshot(`
+      {
+        "accessKeys": [
+          {
+            "access": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+            "address": "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+            "chainId": 1,
+            "keyType": "secp256k1",
+          },
+        ],
+        "clientOptions": [
+          {
+            "chainId": 4217,
+            "feePayer": undefined,
+          },
+        ],
+      }
+    `)
+  })
+
   test('behavior: revokeAccessKey forwards a fee payer URL', async () => {
     const { adapter, client, store } = setup()
     store.setState({ accounts: [{ address }], activeAccount: 0 })
@@ -342,6 +389,7 @@ describe('privy', () => {
       {
         "clientOptions": [
           {
+            "chainId": 1,
             "feePayer": "https://example.com/fee-payer",
           },
         ],
@@ -436,6 +484,7 @@ describe('privy', () => {
       {
         "clientOptions": [
           {
+            "chainId": 1,
             "feePayer": undefined,
           },
         ],

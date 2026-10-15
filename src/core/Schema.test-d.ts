@@ -314,12 +314,13 @@ describe('Request', () => {
     expectTypeOf<SwitchChain['params']>().toEqualTypeOf<readonly [{ chainId: number }]>()
   })
 
-  test('wallet_revokeAccessKey supports app-provided fee sponsorship', () => {
+  test('wallet_revokeAccessKey supports chain selection and app-provided fee sponsorship', () => {
     expectTypeOf<Rpc.wallet_revokeAccessKey.Decoded['params']>().toEqualTypeOf<
       readonly [
         {
           accessKeyAddress: Hex
           address: Hex
+          chainId?: bigint | undefined
           feePayer?: boolean | string | undefined
           keyAuthorization?: KeyAuthorization.Signed | undefined
         },

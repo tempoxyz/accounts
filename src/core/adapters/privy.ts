@@ -571,9 +571,10 @@ export function privy<const client extends privy.Client>(
         async revokeAccessKey(parameters) {
           const account = await getSigningAccount(parameters.address)
           const { feePayer } = parameters
+          const chainId = Number(parameters.chainId ?? store.getState().chainId)
           try {
             await Actions.accessKey.revoke(
-              getClient({ feePayer: feePayer === true ? undefined : feePayer }),
+              getClient({ chainId, feePayer: feePayer === true ? undefined : feePayer }),
               {
                 account: account as never,
                 accessKey: parameters.accessKeyAddress,
@@ -589,7 +590,7 @@ export function privy<const client extends privy.Client>(
           store.accessKeys.remove({
             accessKey: parameters.accessKeyAddress,
             account: account.address,
-            chainId: store.getState().chainId,
+            chainId,
           })
         },
         async signPersonalMessage(parameters) {

@@ -561,8 +561,10 @@ export function create(options: create.Options = {}): create.ReturnType {
   async function revokeAccessKey(parameters: Adapter.revokeAccessKey.Parameters) {
     const selected = await getAdapterAccount({ address: parameters.address })
     const feePayer = parameters.feePayer
+    const chainId = Number(parameters.chainId ?? store.getState().chainId)
     const client = getWalletClient({
       account: selected.account,
+      chainId,
       feePayer: feePayer === true ? undefined : feePayer,
       transport: selected.transport,
     })
@@ -586,7 +588,7 @@ export function create(options: create.Options = {}): create.ReturnType {
     store.accessKeys.remove({
       accessKey: parameters.accessKeyAddress,
       account: parameters.address,
-      chainId: store.getState().chainId,
+      chainId,
     })
   }
 
@@ -684,6 +686,15 @@ export function create(options: create.Options = {}): create.ReturnType {
     )
       throw new RpcResponse.InvalidParamsError({
         message: '`keyAuthorization` must authorize `accessKeyAddress`.',
+      })
+    // Clients fall back to the default chain for unknown chain IDs, which
+    // would revoke on a chain the caller did not name.
+    if (
+      parameters.chainId !== undefined &&
+      !chains.some((chain) => chain.id === Number(parameters.chainId))
+    )
+      throw new ox_Provider.UnsupportedChainIdError({
+        message: `Chain ${parameters.chainId} not configured.`,
       })
     if (actions.revokeAccessKey) return await actions.revokeAccessKey(parameters, request)
     if (instance.getAccount) return await revokeAccessKey(parameters)

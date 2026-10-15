@@ -114,6 +114,32 @@ describe('validate', () => {
     `)
   })
 
+  test('behavior: decodes access-key revocation chainId', () => {
+    const result = RpcRequest.validate(Schema.Request, {
+      method: 'wallet_revokeAccessKey',
+      params: [
+        {
+          accessKeyAddress: '0x2222222222222222222222222222222222222222',
+          address: '0x1111111111111111111111111111111111111111',
+          chainId: '0xa5bf',
+        },
+      ],
+    })
+
+    expect(result._decoded).toMatchInlineSnapshot(`
+      {
+        "method": "wallet_revokeAccessKey",
+        "params": [
+          {
+            "accessKeyAddress": "0x2222222222222222222222222222222222222222",
+            "address": "0x1111111111111111111111111111111111111111",
+            "chainId": 42431n,
+          },
+        ],
+      }
+    `)
+  })
+
   test('default: validates wallet_switchEthereumChain with hex chainId', () => {
     const result = RpcRequest.validate(Schema.Request, {
       method: 'wallet_switchEthereumChain',

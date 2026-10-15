@@ -443,6 +443,8 @@ export declare namespace revokeAccessKey {
     address: Address
     /** Address of the access key to revoke. */
     accessKeyAddress: Address
+    /** Chain ID the access key is scoped to. Defaults to the active chain. */
+    chainId?: bigint | undefined
     /** App-provided fee sponsorship for the revocation transaction. */
     feePayer?: boolean | string | undefined
     /** Signed authorization for an access key that has not been published on-chain. */

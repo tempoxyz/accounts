@@ -561,6 +561,8 @@ export namespace wallet_revokeAccessKey {
     address: u.address(),
     /** Address of the access key to revoke. */
     accessKeyAddress: u.address(),
+    /** Chain ID the access key is scoped to. Defaults to the active chain. */
+    chainId: z.optional(u.bigint()),
     /** App-provided fee sponsorship for the revocation transaction. */
     feePayer: z.optional(z.union([z.boolean(), z.string()])),
     /** Signed authorization for an access key that has not been published on-chain. */
