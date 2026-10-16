@@ -1,5 +1,7 @@
 import { Hex } from 'ox'
 import { KeyAuthorization, SignatureEnvelope } from 'ox/tempo'
+import { Addresses } from 'viem/tempo'
+import { tempoModerato } from 'viem/tempo/chains'
 import { afterEach, expect, test, vi } from 'vp/test'
 
 import { accounts, chain } from '../../../../test/config.js'
@@ -217,3 +219,66 @@ test.each(['deny', 'timeout'] as const)(
     }
   },
 )
+
+test.each([
+  { case: 'the active chain by default', chainId: undefined },
+  { case: 'an explicit chainId', chainId: tempoModerato.id },
+])('wallet_updateAccessKey runs on $case', async ({ chainId }) => {
+  const host = createDeviceCodeHost()
+  const server = await createServer(host.listener)
+
+  // Record the chain the wallet is on when it updates.
+  const updates: { chainId: number; parameters: unknown }[] = []
+  host.setProviderOptions({
+    adapter: Adapter.define({}, ({ store }) => ({
+      actions: {
+        createAccount: async () => ({ accounts: [root] }),
+        loadAccounts: async () => ({ accounts: [root] }),
+        async updateAccessKey(parameters) {
+          updates.push({ chainId: store.getState().chainId, parameters })
+        },
+      },
+    })),
+  })
+
+  try {
+    const provider = Provider.create({
+      adapter: deviceCode({
+        name: 'Accounts Test CLI',
+        rdns: 'xyz.tempo.accounts.test',
+        onPrompt: (prompt) => void submitVerify(prompt),
+        url: `${server.url}/auth/device`,
+      }),
+      chains: [chain, tempoModerato],
+      storage: Storage.memory(),
+    })
+    provider.store.setState({ accounts: [{ address: root.address }], activeAccount: 0 })
+    const accessKeyAddress = accounts[1]!.address
+
+    await provider.request({
+      method: 'wallet_updateAccessKey',
+      params: [
+        {
+          accessKeyAddress,
+          address: root.address,
+          limits: [{ limit: Hex.fromNumber(1n), token: Addresses.pathUsd }],
+          ...(chainId ? { chainId: Hex.fromNumber(chainId) } : {}),
+        },
+      ],
+    })
+
+    expect(updates).toEqual([
+      {
+        chainId: chainId ?? chain.id,
+        parameters: {
+          accessKeyAddress,
+          address: root.address,
+          limits: [{ limit: 1n, token: Addresses.pathUsd }],
+          ...(chainId ? { chainId: BigInt(chainId) } : {}),
+        },
+      },
+    ])
+  } finally {
+    await server.closeAsync()
+  }
+})

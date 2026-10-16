@@ -160,6 +160,18 @@ export function dialog(options: dialog.Options = {}): Adapter.Adapter {
           })
         },
 
+        // Queued on the key's chain for the same reason as revocations.
+        async updateAccessKey(params, request) {
+          await RemoteRequests.request(host, {
+            account: { address: params.address },
+            chainId: Number(params.chainId ?? store.getState().chainId),
+            request: {
+              ...request,
+              params: [z.encode(Rpc.wallet_updateAccessKey.parameters, params)],
+            },
+          })
+        },
+
         async disconnect() {
           store.disconnect()
         },

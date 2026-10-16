@@ -544,4 +544,64 @@ describe('dialog', () => {
       expect(store.getState().accessKeys.map((key) => key.chainId)).toEqual(chainIds)
     })
   })
+
+  describe('updateAccessKey', () => {
+    const limits = [{ token: address, limit: 1n }] as const
+    const request = {
+      method: 'wallet_updateAccessKey',
+      params: [
+        { accessKeyAddress: accessKey, address, limits: [{ token: address, limit: '0x1' }] },
+      ],
+    } as const
+
+    test.each([
+      { case: 'the active chain by default', chainId: undefined, synced: tempoLocalnet.id },
+      { case: 'an explicit chainId', chainId: tempoModerato.id, synced: tempoModerato.id },
+    ])('behavior: queues the update on $case', async ({ chainId, synced }) => {
+      const { adapter, dialog } = setup()
+
+      const promise = adapter.actions.updateAccessKey!(
+        {
+          accessKeyAddress: accessKey,
+          address,
+          limits,
+          ...(chainId ? { chainId: BigInt(chainId) } : {}),
+        },
+        request,
+      )
+      const queued = await dialog.takeRequest()
+      dialog.success(queued, null)
+      await promise
+
+      expect({
+        account: dialog.syncs[0]!.account,
+        chainId: dialog.syncs[0]!.chainId,
+        params: queued.request.params,
+      }).toEqual({
+        account: { address },
+        chainId: synced,
+        params: [
+          {
+            ...request.params[0],
+            ...(chainId ? { chainId: Hex.fromNumber(chainId) } : {}),
+          },
+        ],
+      })
+    })
+
+    test('error: rejects when the dialog rejects', async () => {
+      const { adapter, dialog } = setup()
+
+      const promise = adapter.actions.updateAccessKey!(
+        { accessKeyAddress: accessKey, address, chainId: BigInt(tempoModerato.id), limits },
+        request,
+      )
+      const queued = await dialog.takeRequest()
+      dialog.failure(queued, { code: 4001, message: 'Rejected' })
+
+      await expect(promise).rejects.toThrowErrorMatchingInlineSnapshot(
+        `[Provider.UserRejectedRequestError: Rejected]`,
+      )
+    })
+  })
 })

@@ -131,6 +131,18 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
               params: [z.encode(Rpc.wallet_transfer.parameters, parameters)] as const,
             })) as Rpc.wallet_transfer.Encoded['returns']
           },
+          // The wallet updates on the chain named in the request context, so
+          // the context carries the key's chain rather than the active one.
+          async updateAccessKey(parameters) {
+            await requestRemote({
+              context: {
+                account: parameters.address,
+                chainId: Number(parameters.chainId ?? store.getState().chainId),
+              },
+              method: 'wallet_updateAccessKey',
+              params: [z.encode(Rpc.wallet_updateAccessKey.parameters, parameters)],
+            })
+          },
           async withdrawZone(parameters, request) {
             return (await provider.request({
               ...request,

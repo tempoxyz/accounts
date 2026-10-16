@@ -916,57 +916,57 @@ describe('wallet_connect', () => {
   })
 })
 
-describe('wallet_revokeAccessKey', () => {
-  const accessKeyAddress = '0x0000000000000000000000000000000000000002'
+const accessKeyAddress = '0x0000000000000000000000000000000000000002'
 
-  /** Creates a provider whose json-rpc account reaches its wallet only through the account transport. */
-  function setup() {
-    const requests: unknown[] = []
-    const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
-      actions: {
-        async createAccount() {
-          return { accounts: [{ address }] }
-        },
-        async loadAccounts() {
-          return { accounts: [{ address }] }
-        },
+/** Creates a provider whose json-rpc account reaches its wallet only through the account transport. */
+function setupTransportWallet() {
+  const requests: unknown[] = []
+  const adapter = Adapter.define({ name: 'Test Wallet', rdns: 'com.example.test' }, () => ({
+    actions: {
+      async createAccount() {
+        return { accounts: [{ address }] }
       },
-      getAccount: () => ({
-        account: { address, type: 'json-rpc' as const },
-        transport: custom(
-          {
-            async request(request) {
-              requests.push(request)
-              return null
-            },
+      async loadAccounts() {
+        return { accounts: [{ address }] }
+      },
+    },
+    getAccount: () => ({
+      account: { address, type: 'json-rpc' as const },
+      transport: custom(
+        {
+          async request(request) {
+            requests.push(request)
+            return null
           },
-          { retryCount: 0 },
-        ),
-      }),
-    }))
-    const provider = Provider.create({
-      adapter,
-      chains: [tempo, tempoModerato],
-      storage: Storage.memory(),
-    })
-    provider.store.setState({
-      accounts: [{ address }],
-      activeAccount: 0,
-      accessKeys: [tempo.id, tempoModerato.id].map(
-        (chainId) =>
-          ({ access: address, address: accessKeyAddress, chainId, keyType: 'secp256k1' }) as never,
+        },
+        { retryCount: 0 },
       ),
-    })
-    return { provider, requests }
-  }
+    }),
+  }))
+  const provider = Provider.create({
+    adapter,
+    chains: [tempo, tempoModerato],
+    storage: Storage.memory(),
+  })
+  provider.store.setState({
+    accounts: [{ address }],
+    activeAccount: 0,
+    accessKeys: [tempo.id, tempoModerato.id].map(
+      (chainId) =>
+        ({ access: address, address: accessKeyAddress, chainId, keyType: 'secp256k1' }) as never,
+    ),
+  })
+  return { provider, requests }
+}
 
+describe('wallet_revokeAccessKey', () => {
   test.each([
     { case: 'omitted', chainId: undefined },
     { case: 'the active chain', chainId: tempo.id },
   ])(
     'behavior: forwards through the account transport when chainId is $case',
     async ({ chainId }) => {
-      const { provider, requests } = setup()
+      const { provider, requests } = setupTransportWallet()
 
       await provider.request({
         method: 'wallet_revokeAccessKey',
@@ -998,7 +998,7 @@ describe('wallet_revokeAccessKey', () => {
   )
 
   test('error: rejects a chainId off the active chain without forwarding', async () => {
-    const { provider, requests } = setup()
+    const { provider, requests } = setupTransportWallet()
 
     await expect(
       provider.request({
@@ -1013,6 +1013,46 @@ describe('wallet_revokeAccessKey', () => {
       tempo.id,
       tempoModerato.id,
     ])
+  })
+})
+
+describe('wallet_updateAccessKey', () => {
+  const limits = [{ token: '0x20c0000000000000000000000000000000000000', limit: '0x1' }] as const
+
+  test.each([
+    { case: 'omitted', chainId: undefined },
+    { case: 'the active chain', chainId: tempo.id },
+  ])(
+    'behavior: forwards through the account transport when chainId is $case',
+    async ({ chainId }) => {
+      const { provider, requests } = setupTransportWallet()
+      const parameters = {
+        accessKeyAddress,
+        address,
+        limits,
+        ...(chainId ? { chainId: Hex.fromNumber(chainId) } : {}),
+      } as const
+
+      await provider.request({ method: 'wallet_updateAccessKey', params: [parameters] })
+
+      expect(requests).toEqual([{ method: 'wallet_updateAccessKey', params: [parameters] }])
+    },
+  )
+
+  test('error: rejects a chainId off the active chain without forwarding', async () => {
+    const { provider, requests } = setupTransportWallet()
+    const accessKeys = provider.store.getState().accessKeys
+
+    await expect(
+      provider.request({
+        method: 'wallet_updateAccessKey',
+        params: [{ accessKeyAddress, address, chainId: Hex.fromNumber(tempoModerato.id), limits }],
+      }),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Provider.UnsupportedChainIdError: Updating on chain 42431 requires it to be the active chain (4217).]`,
+    )
+    expect(requests).toEqual([])
+    expect(provider.store.getState().accessKeys).toEqual(accessKeys)
   })
 })
 
