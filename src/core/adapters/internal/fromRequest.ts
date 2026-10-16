@@ -53,6 +53,22 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
         },
       })
 
+      /**
+       * Returns a transport for access-key requests that name their own
+       * account and chain in the request context. It is viem's `custom`
+       * transport, so `retryCount` applies as it does to requests sent
+       * through the account transport.
+       */
+      function getTransport(context: { account: string; chainId: number }) {
+        return custom(
+          {
+            request: (args: Parameters<typeof requestRemote>[0]) =>
+              requestRemote({ ...args, context }),
+          },
+          { retryCount },
+        )({})
+      }
+
       // Connect capabilities are read from the first account only: the remote
       // wallet connects a single account per exchange.
       function toConnectReturn(result: Rpc.wallet_connect.Encoded['returns']) {
@@ -102,17 +118,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
           // the context carries the key's chain rather than the active one.
           async revokeAccessKey(parameters) {
             const chainId = Number(parameters.chainId ?? store.getState().chainId)
-            const context = { account: parameters.address, chainId }
-            // Sent through viem's `custom` transport so `retryCount` applies as
-            // it does to requests sent through the account transport.
-            const transport = custom(
-              {
-                request: (args: Parameters<typeof requestRemote>[0]) =>
-                  requestRemote({ ...args, context }),
-              },
-              { retryCount },
-            )({})
-            await transport.request({
+            await getTransport({ account: parameters.address, chainId }).request({
               method: 'wallet_revokeAccessKey',
               params: [z.encode(Rpc.wallet_revokeAccessKey.parameters, parameters)],
             })
@@ -134,11 +140,8 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
           // The wallet updates on the chain named in the request context, so
           // the context carries the key's chain rather than the active one.
           async updateAccessKey(parameters) {
-            await requestRemote({
-              context: {
-                account: parameters.address,
-                chainId: Number(parameters.chainId ?? store.getState().chainId),
-              },
+            const chainId = Number(parameters.chainId ?? store.getState().chainId)
+            await getTransport({ account: parameters.address, chainId }).request({
               method: 'wallet_updateAccessKey',
               params: [z.encode(Rpc.wallet_updateAccessKey.parameters, parameters)],
             })

@@ -10,9 +10,9 @@ import { fromRequest } from './fromRequest.js'
 const root = accounts[0]!
 const accessKey = accounts[1]!
 
-/** Connects a request-based adapter whose wallet rejects every revocation. */
+/** Connects a request-based adapter whose wallet rejects every access-key request. */
 async function connect(retryCount: number) {
-  const requests: unknown[] = []
+  const requests: { context: unknown; method: string }[] = []
   const provider = Provider.create({
     adapter: fromRequest({
       name: 'Test',
@@ -21,7 +21,7 @@ async function connect(retryCount: number) {
         if (method === 'wallet_connect')
           return { accounts: [{ address: root.address, capabilities: {} }] }
         requests.push({ context, method })
-        throw new Error('revocation rejected')
+        throw new Error('request rejected')
       },
       retryCount,
     }),
@@ -32,66 +32,58 @@ async function connect(retryCount: number) {
   return { provider, requests }
 }
 
-function revoke(provider: Provider.Provider) {
-  return provider.request({
-    method: 'wallet_revokeAccessKey',
-    params: [
-      {
-        accessKeyAddress: accessKey.address,
-        address: root.address,
-        chainId: Hex.fromNumber(tempoModerato.id),
-      },
-    ],
-  })
-}
+const parameters = {
+  accessKeyAddress: accessKey.address,
+  address: root.address,
+  chainId: Hex.fromNumber(tempoModerato.id),
+} as const
 
-describe('revokeAccessKey', () => {
-  test('behavior: sends a failed revocation once on the target chain with retryCount 0', async () => {
+describe.each([
+  { method: 'wallet_revokeAccessKey', params: [parameters] },
+  {
+    method: 'wallet_updateAccessKey',
+    params: [{ ...parameters, limits: [{ limit: '0x1', token: accessKey.address }] }],
+  },
+] as const)('$method', (request) => {
+  test('behavior: sends a failed request once on the target chain with retryCount 0', async () => {
     const { provider, requests } = await connect(0)
 
-    await expect(revoke(provider)).rejects.toThrowErrorMatchingInlineSnapshot(`
+    await expect(provider.request(request)).rejects.toThrowErrorMatchingInlineSnapshot(`
       [RpcResponse.InternalError: An unknown RPC error occurred.
 
-      Details: revocation rejected
+      Details: request rejected
       Version: viem@2.57.1]
     `)
-    expect(requests).toMatchInlineSnapshot(`
+    expect(requests.map(({ method }) => method)).toEqual([request.method])
+    expect(requests.map(({ context }) => context)).toMatchInlineSnapshot(`
       [
         {
-          "context": {
-            "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-            "chainId": 42431,
-          },
-          "method": "wallet_revokeAccessKey",
+          "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+          "chainId": 42431,
         },
       ]
     `)
   })
 
-  test('behavior: sends a failed revocation twice on the target chain with retryCount 1', async () => {
+  test('behavior: sends a failed request twice on the target chain with retryCount 1', async () => {
     const { provider, requests } = await connect(1)
 
-    await expect(revoke(provider)).rejects.toThrowErrorMatchingInlineSnapshot(`
+    await expect(provider.request(request)).rejects.toThrowErrorMatchingInlineSnapshot(`
       [RpcResponse.InternalError: An unknown RPC error occurred.
 
-      Details: revocation rejected
+      Details: request rejected
       Version: viem@2.57.1]
     `)
-    expect(requests).toMatchInlineSnapshot(`
+    expect(requests.map(({ method }) => method)).toEqual([request.method, request.method])
+    expect(requests.map(({ context }) => context)).toMatchInlineSnapshot(`
       [
         {
-          "context": {
-            "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-            "chainId": 42431,
-          },
-          "method": "wallet_revokeAccessKey",
+          "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+          "chainId": 42431,
         },
         {
-          "context": {
-            "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-            "chainId": 42431,
-          },
-          "method": "wallet_revokeAccessKey",
+          "account": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+          "chainId": 42431,
         },
       ]
     `)
