@@ -54,7 +54,12 @@ export function mobileWebAuth(options: mobileWebAuth.Options): Adapter.Adapter {
         ],
       })
       const session = wata.start()
-      return (await session.send({ method: request.method, params: request.params ?? [] })).result
+      const { result } = await session.send({
+        method: request.method,
+        params: request.params ?? [],
+        ...(request.context ? { context: request.context } : {}),
+      })
+      return result
     },
   })
 }

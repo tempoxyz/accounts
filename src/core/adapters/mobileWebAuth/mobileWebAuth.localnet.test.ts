@@ -2,6 +2,7 @@ import { Address, Base64, Bytes, Hex, Json, PublicKey } from 'ox'
 import { KeyAuthorization } from 'ox/tempo'
 import { parseUnits, type Address as viem_Address } from 'viem'
 import { Actions, Addresses } from 'viem/tempo'
+import { tempoModerato } from 'viem/tempo/chains'
 import { describe, expect, test } from 'vp/test'
 import { Identity, type MobileWebAuth } from 'wata'
 import { Wata as HostWata, mobileWebAuth as hostMobileWebAuth } from 'wata/host'
@@ -60,9 +61,11 @@ function createWallet() {
   let calls = 0
   const fetches: string[] = []
   const requests: { method: string; params: unknown }[] = []
+  const contexts: { method: string; context: unknown }[] = []
 
   return {
     calls: () => calls,
+    contexts: () => contexts,
     fetch: async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const request = input instanceof Request ? input : new Request(input, init)
       fetches.push(request.url)
@@ -83,14 +86,17 @@ function createWallet() {
     requests: () => requests,
     openAuthSession: (async ({ authorizationUrl }) => {
       calls += 1
-      const host = await createHost(requests)
+      const host = await createHost(requests, contexts)
       const response = await host.fetch(new Request(authorizationUrl))
       return response.headers.get('location') ?? undefined
     }) satisfies NonNullable<MobileWebAuth.Options['openAuthSession']>,
   }
 }
 
-async function createHost(requests: { method: string; params: unknown }[]) {
+async function createHost(
+  requests: { method: string; params: unknown }[],
+  contexts: { method: string; context: unknown }[],
+) {
   const host = HostWata.create({
     baseUrl: hostOrigin,
     identity: Identity.fromPrivateKey(
@@ -122,6 +128,7 @@ async function createHost(requests: { method: string; params: unknown }[]) {
   const session = await host.start()
   session.onRequest(async (event) => {
     requests.push({ method: event.method, params: event.params })
+    contexts.push({ method: event.method, context: event.context })
     if (event.method === 'wallet_connect') {
       const [parameters] = z.decode(Rpc.wallet_connect.schema.params!, event.params as never) ?? []
       const capabilities = parameters?.capabilities
@@ -166,7 +173,7 @@ async function createHost(requests: { method: string; params: unknown }[]) {
       await event.respond({ receipts: [] })
       return
     }
-    if (event.method === 'wallet_revokeAccessKey') {
+    if (event.method === 'wallet_revokeAccessKey' || event.method === 'wallet_updateAccessKey') {
       await event.respond(null)
     }
   })
@@ -234,7 +241,7 @@ type AdapterAuthorizeParameters = NonNullable<
 
 function createProvider(
   wallet: ReturnType<typeof createWallet>,
-  options: Omit<Provider.create.Options, 'adapter' | 'chains'> &
+  options: Omit<Provider.create.Options, 'adapter'> &
     Partial<
       Pick<
         mobileWebAuth.Options,
@@ -614,4 +621,44 @@ describe('create', () => {
       ]
     `)
   })
+
+  test.each([
+    { method: 'wallet_revokeAccessKey', chainId: undefined },
+    { method: 'wallet_revokeAccessKey', chainId: tempoModerato.id },
+    { method: 'wallet_updateAccessKey', chainId: undefined },
+    { method: 'wallet_updateAccessKey', chainId: tempoModerato.id },
+  ] as const)(
+    'behavior: sends $method with the target chain in context (chainId: $chainId)',
+    async ({ method, chainId }) => {
+      const wallet = createWallet()
+      const provider = createProvider(wallet, {
+        chains: [chain, tempoModerato],
+        storage: Storage.memory(),
+      })
+      await provider.request({
+        method: 'wallet_connect',
+        params: [{ capabilities: { method: 'login' } }],
+      })
+
+      const parameters = {
+        accessKeyAddress: root.address,
+        address: root.address,
+        ...(chainId ? { chainId: Hex.fromNumber(chainId) } : {}),
+      }
+      if (method === 'wallet_revokeAccessKey')
+        await provider.request({ method, params: [parameters] })
+      else
+        await provider.request({
+          method,
+          params: [
+            { ...parameters, limits: [{ limit: Hex.fromNumber(1n), token: Addresses.pathUsd }] },
+          ],
+        })
+
+      expect(wallet.contexts()[1]).toEqual({
+        method,
+        context: { account: root.address, chainId: chainId ?? chain.id },
+      })
+    },
+  )
 })
