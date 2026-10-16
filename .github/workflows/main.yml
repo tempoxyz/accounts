@@ -32,7 +32,7 @@ jobs:
       contents: read # to clone repository contents
       id-token: write # to request the OIDC token the STS exchange verifies
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - name: Secure runner
@@ -72,7 +72,7 @@ jobs:
       id-token: write # to use npm trusted publishing through OIDC
     runs-on: ubuntu-latest
     environment: npm
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - name: Secure runner
