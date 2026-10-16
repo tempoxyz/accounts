@@ -53,6 +53,18 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
         },
       })
 
+      // Sends a wallet request with its own session context through viem's
+      // `custom` transport, so `retryCount` applies as it does to requests
+      // sent through the account transport.
+      async function send(request: Parameters<typeof requestRemote>[0]) {
+        const { context, ...rest } = request
+        const transport = custom(
+          { request: (args: typeof rest) => requestRemote({ ...args, context }) },
+          { retryCount },
+        )({})
+        return await transport.request(rest)
+      }
+
       // Connect capabilities are read from the first account only: the remote
       // wallet connects a single account per exchange.
       function toConnectReturn(result: Rpc.wallet_connect.Encoded['returns']) {
@@ -102,7 +114,7 @@ export function fromRequest(options: fromRequest.Options): Adapter.Adapter {
           // the context carries the key's chain rather than the active one.
           async revokeAccessKey(parameters) {
             const chainId = Number(parameters.chainId ?? store.getState().chainId)
-            await requestRemote({
+            await send({
               context: { account: parameters.address, chainId },
               method: 'wallet_revokeAccessKey',
               params: [z.encode(Rpc.wallet_revokeAccessKey.parameters, parameters)],
@@ -201,9 +213,9 @@ export declare namespace fromRequest {
       context?: { account?: string | undefined; chainId?: number | undefined } | undefined
     }) => Promise<unknown>
     /**
-     * Max retries for a failed wallet request sent through the account
-     * transport (e.g. signing or sending a transaction). Defaults to viem's
-     * transport default.
+     * Max retries for a failed wallet request sent through viem's transport
+     * (e.g. signing, sending a transaction, or revoking an access key).
+     * Defaults to viem's transport default.
      */
     retryCount?: number | undefined
   }
